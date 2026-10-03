@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c1aa7001.js";
+            window.path_to_searchindex_js = "searchindex-182db767.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-57b6db41.js"></script>
+        <script src="toc-8e9cc5d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -234,7 +234,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
 <code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
@@ -8259,6 +8259,9 @@ and locals can all use them.</li>
 <li>Name the type arguments whenever you use the struct: <code>Stack&lt;int&gt;()</code>,
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
+<li>A type argument is a type. The one exception is a number, which only
+the lane count of a <a href="#simd-vectors">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>); a
+struct of your own cannot compute with a number parameter.</li>
 <li>Each type argument makes a separate copy of the struct, so a struct whose
 copy needs a copy with a larger argument never ends: <code>struct Foo&lt;T&gt;</code> with
 a field <code>var inner: Foo&lt;Array&lt;T&gt;&gt;</code> makes <code>Foo&lt;int&gt;</code> need
@@ -15355,6 +15358,153 @@ caller); at <code>-O0</code> they cost a call and do nothing.</p>
 <p><code>hint.likely(condition)</code> and <code>hint.unlikely(condition)</code> are deprecated:
 each use warns and suggests the attribute.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="simd-vectors"><a class="header" href="#simd-vectors">SIMD vectors</a></h1>
+<p>A SIMD vector holds several numbers of one type, its <strong>lanes</strong>, and computes
+on all of them with one instruction. The <code>simd</code> module has two types:</p>
+<ul>
+<li><code>Vector&lt;T, N&gt;</code>: <code>N</code> lanes of the number type <code>T</code>.</li>
+<li><code>Mask&lt;N&gt;</code>: <code>N</code> booleans, what a lane-wise comparison gives.</li>
+</ul>
+<pre><code class="language-pepper">import simd;
+
+# The index of the first byte of `text` that is not ASCII, or its size:
+# sixteen bytes per step, then one at a time for the rest.
+first_non_ascii(text: String): ulong {
+    var bytes = unsafe_cast&lt;__ptr&lt;byte&gt;&gt;(text.c_str());
+    ulong i = 0;
+    while (i + 16 &lt;= text.size) {
+        var high = simd.Vector&lt;byte, 16&gt;.load(bytes + i).greater_equal(0x80 as byte).to_bits();
+        if (high != 0) {
+            return i + high.trailing_zeros();
+        }
+        i = i + 16;
+    }
+    while (i &lt; text.size &amp;&amp; bytes[i] &lt; 0x80) {
+        i = i + 1;
+    }
+    return i;
+}
+
+main(): int {
+    # A vector holds `N` lanes and computes on all of them at once.
+    var a = simd.Vector&lt;int, 4&gt;(10);
+    a[1] = 20;
+    var b = a * 2 + 1;
+    assert(b[0] == 21 &amp;&amp; b[1] == 41 &amp;&amp; b.sum() == 104, "lane-wise arithmetic");
+
+    # A comparison gives a mask, one bool per lane.
+    var big = b.greater(30);
+    assert(big.to_bits() == 2 &amp;&amp; big.any() &amp;&amp; !big.all(), "a mask");
+    var capped = big.select(simd.Vector&lt;int, 4&gt;(30), b);
+    assert(capped.maximum() == 30, "select");
+
+    # Floats, and conversions between lane types.
+    var halves = a.convert&lt;float&gt;() * 0.5;
+    assert(halves[1] == 10.0 &amp;&amp; halves.square_root()[0] &lt; 2.3, "floats");
+
+    assert(first_non_ascii("plain ascii, then caf\u{e9}") == 21, "a scan");
+    assert(first_non_ascii("short") == 5, "no match");
+    return 0;
+}
+</code></pre>
+<p>Bring them in with <code>import simd;</code> and write <code>simd.Vector&lt;byte, 16&gt;</code>, or
+<code>import [Vector, Mask] from simd;</code> and write <code>Vector&lt;byte, 16&gt;</code>.</p>
+<h2 id="lane-types-and-counts"><a class="header" href="#lane-types-and-counts">Lane types and counts</a></h2>
+<ul>
+<li>
+<p><code>T</code> is an integer or floating-point type: <code>byte</code>, <code>char</code>, <code>short</code>,
+<code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code>, <code>float</code> or <code>double</code>. These
+conform to the module’s <code>Lane</code> trait; any other type is an error at the
+type argument:</p>
+<pre><code class="language-text">main.pep:3:25: error: 'String' does not conform to trait 'Lane', required by 'T' in 'Vector'
+</code></pre>
+</li>
+<li>
+<p><code>N</code> is written as a number, a power of two from 1 to 64:</p>
+<pre><code class="language-text">main.pep:3:30: error: lane count of 'Vector&lt;int, 3&gt;' must be a power of two from 1 to 64, not '3'
+</code></pre>
+<p>A number is a type argument only here, for a lane count; it is not a
+general constant parameter, so code cannot compute with <code>N</code> (use the
+<code>count</code> property for the lane count as a value).</p>
+</li>
+<li>
+<p>Sixteen bytes (<code>Vector&lt;byte, 16&gt;</code>, <code>Vector&lt;short, 8&gt;</code>, <code>Vector&lt;int, 4&gt;</code>,
+<code>Vector&lt;float, 4&gt;</code>, <code>Vector&lt;double, 2&gt;</code>) fits a vector register on every
+target Pepper supports and is the width to reach for first. A wider vector
+works everywhere: where the target’s registers are narrower, each
+operation takes several instructions.</p>
+</li>
+</ul>
+<p>A vector is a <a href="#value-structs">value struct</a>: it is stored inline, copied
+like a number, and safe to share between threads (a <code>[Shared]</code> struct’s
+field, a module constant).</p>
+<h2 id="operations"><a class="header" href="#operations">Operations</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th></th></tr>
+</thead>
+<tbody>
+<tr><td>Make</td><td><code>Vector&lt;T, N&gt;()</code> (every lane 0), <code>Vector&lt;T, N&gt;(x)</code> (every lane <code>x</code>)</td></tr>
+<tr><td>Lanes</td><td><code>v[i]</code>, <code>v[i] = x</code> (panics when <code>i &gt;= N</code>), <code>v.count</code></td></tr>
+<tr><td>Arithmetic</td><td><code>+ - *</code>, unary <code>-</code>, with a vector or a scalar: <code>v * 2</code></td></tr>
+<tr><td>Division</td><td><code>/ %</code>: integer lanes panic on a zero divisor lane, and on the lowest value divided by -1; float lanes follow IEEE</td></tr>
+<tr><td>Bitwise (integers)</td><td><code>&amp; | ^ ~</code>, <code>&lt;&lt; &gt;&gt;</code> by an <code>int</code> count (panics outside <code>0..</code> the lane width; <code>&gt;&gt;</code> is arithmetic for signed <code>T</code>), <code>rotate_left</code>, <code>rotate_right</code></td></tr>
+<tr><td>Floats</td><td><code>square_root</code>, <code>floor</code>, <code>ceiling</code></td></tr>
+<tr><td>Both</td><td><code>min</code>, <code>max</code>, <code>abs</code></td></tr>
+<tr><td>Horizontal</td><td><code>sum</code>, <code>minimum</code>, <code>maximum</code></td></tr>
+<tr><td>Comparisons</td><td><code>equal</code>, <code>not_equal</code>, <code>less</code>, <code>less_equal</code>, <code>greater</code>, <code>greater_equal</code>, with a vector or a scalar, giving a <code>Mask&lt;N&gt;</code></td></tr>
+<tr><td>Whole vector</td><td><code>==</code> (every lane equal), <code>!=</code> (some lane differs)</td></tr>
+<tr><td>Rearranging</td><td><code>shuffle(indices)</code>, <code>reverse</code>, <code>interleave_low</code>, <code>interleave_high</code></td></tr>
+<tr><td>Types</td><td><code>convert&lt;U&gt;()</code> (lane by lane, like <code>as</code>), <code>reinterpret&lt;U, M&gt;()</code> (the same bits)</td></tr>
+<tr><td>Memory</td><td><code>Vector&lt;T, N&gt;.load(array, index)</code>, <code>v.store(array, index)</code> (panic unless <code>index + N &lt;= array.count</code>); <code>load</code>, <code>store</code>, <code>load_aligned</code>, <code>store_aligned</code> on a <code>__ptr&lt;T&gt;</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>A mask has <code>any()</code>, <code>all()</code>, <code>&amp; | ^ ~</code>, <code>m[i]</code>, <code>select(a, b)</code> (each lane
+from <code>a</code> where the mask is true, else from <code>b</code>) and <code>to_bits()</code>, which packs
+lane <code>i</code> into bit <code>i</code> of a <code>ulong</code>. With <code>trailing_zeros()</code> (see
+<a href="#types-and-variables">integer bit methods</a>) that finds the first true
+lane, which is how a scan for a byte, or for a byte that is not ASCII, finds
+its match sixteen bytes at a time.</p>
+<p>Some differences from scalar arithmetic are deliberate:</p>
+<ul>
+<li>
+<p>Integer lanes <strong>wrap around</strong> on overflow in <code>+</code>, <code>-</code>, <code>*</code>, unary <code>-</code> and
+<code>abs</code>, as vector instructions do; scalar arithmetic panics instead.</p>
+</li>
+<li>
+<p>Comparisons that give a lane per lane are methods, because a comparison
+operator must return <code>bool</code> (see <a href="#operators-1">operators</a>). <code>==</code>
+and <code>!=</code> compare whole vectors.</p>
+</li>
+<li>
+<p><code>shuffle</code> takes each index modulo <code>N</code>, so every index picks a lane. With
+constant indices an optimized build makes it one shuffle instruction.</p>
+</li>
+<li>
+<p><code>convert</code> from float to integer saturates: a lane outside the target
+type’s range becomes its nearest value, and NaN becomes 0.</p>
+</li>
+<li>
+<p>The bitwise operators, shifts and rotates exist only for integer lanes,
+and <code>square_root</code>, <code>floor</code> and <code>ceiling</code> only for float lanes:</p>
+<pre><code class="language-text">main.pep:4:15: error: no member named 'square_root' in 'Vector&lt;int, 4&gt;'
+</code></pre>
+</li>
+</ul>
+<h2 id="targets-and-optimization"><a class="header" href="#targets-and-optimization">Targets and optimization</a></h2>
+<p>The operations compile to LLVM vector instructions, which the target turns
+into its own: SSE2 on x86-64 (wider with <code>-march=x86-64-v3</code> for AVX2, see
+<a href="#the-compiler-pep-build">pep-build</a>), NEON on arm64, and WebAssembly’s
+<code>simd128</code> with <code>-msimd128</code>. A target without vector instructions, such as
+<code>wasm32-wasip1</code> without <code>-msimd128</code>, computes the same results one lane at a
+time. Nothing picks instructions at run time: the <code>-m</code> options decide.</p>
+<p>Each operation is a small method that the compiler always inlines, so an
+optimized build (<code>-O2</code>) of a loop over vectors has no calls in it, only the
+vector instructions. At <code>-O0</code> it still runs, more slowly, like the rest of
+an unoptimized program.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="backtraces-and-the-debugger"><a class="header" href="#backtraces-and-the-debugger">Backtraces and the debugger</a></h1>
 <p>The <code>debug</code> module walks the call stack and talks to a debugger. Bring it in
 with <code>import debug</code>.</p>
@@ -20747,6 +20897,819 @@ value is swapped in, and the old one released.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>whether the product overflows</li>
+</ul>
+<h2 id="__simd"><a class="header" href="#__simd">__simd</a></h2>
+<pre><code class="language-pepper">struct __simd&lt;T, N&gt;
+</code></pre>
+<p>A vector of <code>N</code> lanes of the number type <code>T</code>, as LLVM’s <code>&lt;N x T&gt;</code>: what
+<code>simd.Vector&lt;T, N&gt;</code> and <code>simd.Mask&lt;N&gt;</code> (with <code>bool</code> lanes) hold. The
+<code>__simd_</code> functions below compute on it, each lane at once. It is a value,
+with no references inside.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the lane type: an integer, floating-point or <code>bool</code> type</li>
+<li><code>N</code> — the lane count, written as a number (<code>__simd&lt;byte, 16&gt;</code>)</li>
+</ul>
+<h2 id="__simd_splat"><a class="header" href="#__simd_splat">__simd_splat</a></h2>
+<pre><code class="language-pepper">__simd_splat&lt;V&gt;(value: T): V
+</code></pre>
+<p>A vector <code>V</code> with every lane <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value of every lane</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the vector</li>
+</ul>
+<h2 id="__simd_add"><a class="header" href="#__simd_add">__simd_add</a></h2>
+<pre><code class="language-pepper">__simd_add&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Adds lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_subtract"><a class="header" href="#__simd_subtract">__simd_subtract</a></h2>
+<pre><code class="language-pepper">__simd_subtract&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Subtracts lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_multiply"><a class="header" href="#__simd_multiply">__simd_multiply</a></h2>
+<pre><code class="language-pepper">__simd_multiply&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Multiplies lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_divide"><a class="header" href="#__simd_divide">__simd_divide</a></h2>
+<pre><code class="language-pepper">__simd_divide&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Divides lane-wise. An integer lane of <code>rhs</code> that is 0, or a signed <code>MIN / -1</code>, is undefined: <code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_remainder"><a class="header" href="#__simd_remainder">__simd_remainder</a></h2>
+<pre><code class="language-pepper">__simd_remainder&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise remainder, with the same undefined cases as <code>__simd_divide</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_and"><a class="header" href="#__simd_and">__simd_and</a></h2>
+<pre><code class="language-pepper">__simd_and&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise and (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_or"><a class="header" href="#__simd_or">__simd_or</a></h2>
+<pre><code class="language-pepper">__simd_or&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise or (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_xor"><a class="header" href="#__simd_xor">__simd_xor</a></h2>
+<pre><code class="language-pepper">__simd_xor&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise exclusive or (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_shift_left"><a class="header" href="#__simd_shift_left">__simd_shift_left</a></h2>
+<pre><code class="language-pepper">__simd_shift_left&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Shifts every integer lane left. A count of at least the lane width is
+undefined: <code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to shift</li>
+<li><code>count</code> — the bits to shift by, less than the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<h2 id="__simd_shift_right"><a class="header" href="#__simd_shift_right">__simd_shift_right</a></h2>
+<pre><code class="language-pepper">__simd_shift_right&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Shifts every integer lane right: arithmetic for signed lanes, logical for
+unsigned. A count of at least the lane width is undefined.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to shift</li>
+<li><code>count</code> — the bits to shift by, less than the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<h2 id="__simd_negate"><a class="header" href="#__simd_negate">__simd_negate</a></h2>
+<pre><code class="language-pepper">__simd_negate&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Negates every lane; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_not"><a class="header" href="#__simd_not">__simd_not</a></h2>
+<pre><code class="language-pepper">__simd_not&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Flips every bit of every integer or <code>bool</code> lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_equal"><a class="header" href="#__simd_equal">__simd_equal</a></h2>
+<pre><code class="language-pepper">__simd_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise for equality (ordered for floats).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_not_equal"><a class="header" href="#__simd_not_equal">__simd_not_equal</a></h2>
+<pre><code class="language-pepper">__simd_not_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise for inequality (true for a NaN lane).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_less"><a class="header" href="#__simd_less">__simd_less</a></h2>
+<pre><code class="language-pepper">__simd_less&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_less_equal"><a class="header" href="#__simd_less_equal">__simd_less_equal</a></h2>
+<pre><code class="language-pepper">__simd_less_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_greater"><a class="header" href="#__simd_greater">__simd_greater</a></h2>
+<pre><code class="language-pepper">__simd_greater&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_greater_equal"><a class="header" href="#__simd_greater_equal">__simd_greater_equal</a></h2>
+<pre><code class="language-pepper">__simd_greater_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_select"><a class="header" href="#__simd_select">__simd_select</a></h2>
+<pre><code class="language-pepper">__simd_select&lt;V&gt;(mask: __simd&lt;bool, N&gt;, if_true: V, if_false: V): V
+</code></pre>
+<p>Picks each lane from <code>if_true</code> or <code>if_false</code> by <code>mask</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — which lanes to take from <code>if_true</code></li>
+<li><code>if_true</code> — the lanes where <code>mask</code> is true</li>
+<li><code>if_false</code> — the lanes where <code>mask</code> is false</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the selected lanes</li>
+</ul>
+<h2 id="__simd_minimum"><a class="header" href="#__simd_minimum">__simd_minimum</a></h2>
+<pre><code class="language-pepper">__simd_minimum&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise minimum (<code>llvm.minnum</code> for floats: a NaN lane gives the
+other).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_maximum"><a class="header" href="#__simd_maximum">__simd_maximum</a></h2>
+<pre><code class="language-pepper">__simd_maximum&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise maximum (<code>llvm.maxnum</code> for floats).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_abs"><a class="header" href="#__simd_abs">__simd_abs</a></h2>
+<pre><code class="language-pepper">__simd_abs&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The lane-wise absolute value; the lowest signed value stays itself.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_rotate_left"><a class="header" href="#__simd_rotate_left">__simd_rotate_left</a></h2>
+<pre><code class="language-pepper">__simd_rotate_left&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Rotates every integer lane left (<code>llvm.fshl</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to rotate</li>
+<li><code>count</code> — the bits to rotate by, modulo the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h2 id="__simd_rotate_right"><a class="header" href="#__simd_rotate_right">__simd_rotate_right</a></h2>
+<pre><code class="language-pepper">__simd_rotate_right&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Rotates every integer lane right (<code>llvm.fshr</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to rotate</li>
+<li><code>count</code> — the bits to rotate by, modulo the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h2 id="__simd_square_root"><a class="header" href="#__simd_square_root">__simd_square_root</a></h2>
+<pre><code class="language-pepper">__simd_square_root&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The square root of every float lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_floor"><a class="header" href="#__simd_floor">__simd_floor</a></h2>
+<pre><code class="language-pepper">__simd_floor&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Every float lane rounded down.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_ceiling"><a class="header" href="#__simd_ceiling">__simd_ceiling</a></h2>
+<pre><code class="language-pepper">__simd_ceiling&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Every float lane rounded up.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_sum"><a class="header" href="#__simd_sum">__simd_sum</a></h2>
+<pre><code class="language-pepper">__simd_sum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The sum of the lanes: wrapping for integers, in lane order for floats.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum</li>
+</ul>
+<h2 id="__simd_reduce_minimum"><a class="header" href="#__simd_reduce_minimum">__simd_reduce_minimum</a></h2>
+<pre><code class="language-pepper">__simd_reduce_minimum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The smallest lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the minimum</li>
+</ul>
+<h2 id="__simd_reduce_maximum"><a class="header" href="#__simd_reduce_maximum">__simd_reduce_maximum</a></h2>
+<pre><code class="language-pepper">__simd_reduce_maximum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The largest lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the maximum</li>
+</ul>
+<h2 id="__simd_any"><a class="header" href="#__simd_any">__simd_any</a></h2>
+<pre><code class="language-pepper">__simd_any&lt;V&gt;(mask: V): bool
+</code></pre>
+<p>Whether any lane of a <code>bool</code> vector is true.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether a lane is true</li>
+</ul>
+<h2 id="__simd_all"><a class="header" href="#__simd_all">__simd_all</a></h2>
+<pre><code class="language-pepper">__simd_all&lt;V&gt;(mask: V): bool
+</code></pre>
+<p>Whether every lane of a <code>bool</code> vector is true.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether every lane is true</li>
+</ul>
+<h2 id="__simd_to_bits"><a class="header" href="#__simd_to_bits">__simd_to_bits</a></h2>
+<pre><code class="language-pepper">__simd_to_bits&lt;V&gt;(mask: V): ulong
+</code></pre>
+<p>Packs a <code>bool</code> vector into bits: bit <code>i</code> is lane <code>i</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector of at most 64 lanes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lanes as bits</li>
+</ul>
+<h2 id="__simd_extract"><a class="header" href="#__simd_extract">__simd_extract</a></h2>
+<pre><code class="language-pepper">__simd_extract&lt;V&gt;(vector: V, index: ulong): T
+</code></pre>
+<p>Reads one lane. An index of at least <code>N</code> gives an undefined value:
+<code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector</li>
+<li><code>index</code> — the lane, less than <code>N</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane’s value</li>
+</ul>
+<h2 id="__simd_insert"><a class="header" href="#__simd_insert">__simd_insert</a></h2>
+<pre><code class="language-pepper">__simd_insert&lt;V&gt;(vector: V, index: ulong, value: T): V
+</code></pre>
+<p>Replaces one lane. An index of at least <code>N</code> is undefined: <code>simd.Vector</code>
+checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector</li>
+<li><code>index</code> — the lane, less than <code>N</code></li>
+<li><code>value</code> — the lane’s new value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the vector with the lane replaced</li>
+</ul>
+<h2 id="__simd_shuffle"><a class="header" href="#__simd_shuffle">__simd_shuffle</a></h2>
+<pre><code class="language-pepper">__simd_shuffle&lt;V&gt;(vector: V, indices: __simd&lt;int, N&gt;): V
+</code></pre>
+<p>Picks lanes by index, each taken modulo <code>N</code>. Constant indices fold to one
+<code>shufflevector</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to pick from</li>
+<li><code>indices</code> — the lane to pick for each lane, modulo <code>N</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the picked lanes</li>
+</ul>
+<h2 id="__simd_reverse"><a class="header" href="#__simd_reverse">__simd_reverse</a></h2>
+<pre><code class="language-pepper">__simd_reverse&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The lanes in reverse order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_interleave_low"><a class="header" href="#__simd_interleave_low">__simd_interleave_low</a></h2>
+<pre><code class="language-pepper">__simd_interleave_low&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Interleaves the low halves: <code>lhs[0], rhs[0], lhs[1], ...</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the even lanes’ source</li>
+<li><code>rhs</code> — the odd lanes’ source</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h2 id="__simd_interleave_high"><a class="header" href="#__simd_interleave_high">__simd_interleave_high</a></h2>
+<pre><code class="language-pepper">__simd_interleave_high&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Interleaves the high halves: <code>lhs[N / 2], rhs[N / 2], ...</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the even lanes’ source</li>
+<li><code>rhs</code> — the odd lanes’ source</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h2 id="__simd_load"><a class="header" href="#__simd_load">__simd_load</a></h2>
+<pre><code class="language-pepper">__simd_load&lt;V&gt;(pointer: __ptr&lt;T&gt;): V
+</code></pre>
+<p>Reads <code>N</code> values from memory aligned to <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the values</li>
+</ul>
+<h2 id="__simd_load_aligned"><a class="header" href="#__simd_load_aligned">__simd_load_aligned</a></h2>
+<pre><code class="language-pepper">__simd_load_aligned&lt;V&gt;(pointer: __ptr&lt;T&gt;): V
+</code></pre>
+<p>Reads <code>N</code> values from memory aligned to the vector’s size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values, aligned to the vector’s size</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the values</li>
+</ul>
+<h2 id="__simd_store"><a class="header" href="#__simd_store">__simd_store</a></h2>
+<pre><code class="language-pepper">__simd_store&lt;V&gt;(pointer: __ptr&lt;T&gt;, vector: V)
+</code></pre>
+<p>Writes the lanes to memory aligned to <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values</li>
+<li><code>vector</code> — the lanes to write</li>
+</ul>
+<h2 id="__simd_store_aligned"><a class="header" href="#__simd_store_aligned">__simd_store_aligned</a></h2>
+<pre><code class="language-pepper">__simd_store_aligned&lt;V&gt;(pointer: __ptr&lt;T&gt;, vector: V)
+</code></pre>
+<p>Writes the lanes to memory aligned to the vector’s size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values, aligned to the vector’s size</li>
+<li><code>vector</code> — the lanes to write</li>
+</ul>
+<h2 id="__simd_convert"><a class="header" href="#__simd_convert">__simd_convert</a></h2>
+<pre><code class="language-pepper">__simd_convert&lt;R&gt;(vector: __simd&lt;U, N&gt;): R
+</code></pre>
+<p>Converts every lane to <code>R</code>’s lane type, as <code>as</code> does; float to integer
+saturates (<code>llvm.fptosi.sat</code>), and NaN gives 0.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — the vector type, <code>__simd&lt;T, N&gt;</code> of the result</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the converted lanes</li>
+</ul>
+<h2 id="__simd_reinterpret"><a class="header" href="#__simd_reinterpret">__simd_reinterpret</a></h2>
+<pre><code class="language-pepper">__simd_reinterpret&lt;R&gt;(vector: __simd&lt;U, M&gt;): R
+</code></pre>
+<p>Reads a vector’s bits as another vector type of the same size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — the vector type, <code>__simd&lt;T, N&gt;</code> of the result</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector, the same size as <code>R</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same bits as <code>R</code></li>
+</ul>
+<h2 id="__simd_lanes"><a class="header" href="#__simd_lanes">__simd_lanes</a></h2>
+<pre><code class="language-pepper">__simd_lanes&lt;V&gt;(): int
+</code></pre>
+<p>The lane count of <code>V</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>N</code></li>
+</ul>
+<h2 id="__simd_lane_bits"><a class="header" href="#__simd_lane_bits">__simd_lane_bits</a></h2>
+<pre><code class="language-pepper">__simd_lane_bits&lt;V&gt;(): int
+</code></pre>
+<p>The width of <code>V</code>’s lane type in bits.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane’s width in bits</li>
+</ul>
+<h2 id="__simd_is_signed"><a class="header" href="#__simd_is_signed">__simd_is_signed</a></h2>
+<pre><code class="language-pepper">__simd_is_signed&lt;V&gt;(): bool
+</code></pre>
+<p>Whether <code>V</code>’s lanes are a signed integer type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the lanes are signed integers</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="arguments-and-exit-deprecated"><a class="header" href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a></h1>
@@ -37464,6 +38427,1031 @@ where the CPU has no prefetch instruction.</p>
 <ul>
 <li><code>address</code> — memory that will be written soon</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/simd/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-simd-module"><a class="header" href="#the-simd-module">The simd module</a></h1>
+<p>SIMD vectors: <code>Vector&lt;T, N&gt;</code> holds <code>N</code> numbers of type <code>T</code> and computes
+on all of them at once, in the CPU’s vector registers.</p>
+<p>Bring it in with <code>import simd</code>. <code>T</code> is an integer or floating-point type
+(<code>byte</code>, <code>char</code>, <code>short</code>, <code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code>,
+<code>float</code>, <code>double</code>) and <code>N</code>, the lane count, is a power of two from 1 to
+64, written as a number: <code>simd.Vector&lt;byte, 16&gt;</code>. A vector is a value
+(<code>[Value]</code>): it is stored inline, copied like a number, and safe to share
+between threads.</p>
+<p>The operations compile to the target’s vector instructions: SSE2 on
+x86-64 (AVX2 with <code>-march=x86-64-v3</code>), NEON on arm64, and <code>simd128</code> on
+WebAssembly with <code>-msimd128</code>. A target without vector registers gets the
+same results from scalar code. Sixteen bytes (<code>Vector&lt;byte, 16&gt;</code>,
+<code>Vector&lt;int, 4&gt;</code>, <code>Vector&lt;double, 2&gt;</code>) is the width every target handles
+well; wider vectors use several registers where the target has no wider
+ones.</p>
+<p>Lane-wise comparisons (<code>less</code>, <code>equal</code>, …) give a <code>Mask&lt;N&gt;</code>, which
+selects lanes (<code>select</code>), answers <code>any</code> and <code>all</code>, and packs into a bit
+mask with <code>to_bits</code>, whose <code>trailing_zeros</code> finds the first match.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import simd;
+
+main(): int {
+    var a = simd.Vector&lt;int, 4&gt;(10);
+    var b = a + simd.Vector&lt;int, 4&gt;(5);
+    assert(b[0] == 15 &amp;&amp; b.sum() == 60, "lane-wise add");
+    var over = b.greater(12);
+    assert(over.all() &amp;&amp; over.to_bits() == 0xF, "a mask per lane");
+    return 0;
+}
+</code></pre>
+<p>Source: <code>runtime/simd/module.pep</code></p>
+<h2 id="lane"><a class="header" href="#lane">Lane</a></h2>
+<pre><code class="language-pepper">trait Lane
+</code></pre>
+<p>The number types a <code>Vector</code> holds: every integer and floating-point
+type. The runtime declares the conformances; another type cannot be a
+lane.</p>
+<h2 id="integerlane"><a class="header" href="#integerlane">IntegerLane</a></h2>
+<pre><code class="language-pepper">trait IntegerLane
+</code></pre>
+<p>The integer lane types, whose vectors have checked division, the bitwise
+operators, shifts and rotates.</p>
+<h2 id="floatlane"><a class="header" href="#floatlane">FloatLane</a></h2>
+<pre><code class="language-pepper">trait FloatLane
+</code></pre>
+<p>The floating-point lane types, whose vectors have floating-point
+division, <code>square_root</code>, <code>floor</code> and <code>ceiling</code>.</p>
+<h2 id="vector"><a class="header" href="#vector">Vector</a></h2>
+<pre><code class="language-pepper">[Value] struct Vector&lt;T: Lane, N&gt;
+</code></pre>
+<p><code>N</code> lanes of the number type <code>T</code>, computed on together.</p>
+<p>Integer <code>+</code>, <code>-</code> and <code>*</code> wrap around on overflow in each lane, as vector
+instructions do, where scalar arithmetic panics. Integer <code>/</code> and <code>%</code>
+panic on a zero divisor lane; shifts panic on a count outside the lane’s
+width. Every other operation is defined for every input.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the lane type: an integer or floating-point type</li>
+<li><code>N</code> — the lane count: a power of two from 1 to 64</li>
+</ul>
+<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h4 id="count-6"><a class="header" href="#count-6">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of lanes, <code>N</code>.</p>
+<h3 id="constructors-5"><a class="header" href="#constructors-5">Constructors</a></h3>
+<h4 id="vector-1"><a class="header" href="#vector-1">Vector()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a vector with every lane 0.</p>
+<h4 id="vector-2"><a class="header" href="#vector-2">Vector()</a></h4>
+<pre><code class="language-pepper">construct(value: T)
+</code></pre>
+<p>Makes a vector with every lane <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value of every lane</li>
+</ul>
+<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
+<h4 id="load-1"><a class="header" href="#load-1">load</a></h4>
+<pre><code class="language-pepper">static load(pointer: __ptr&lt;T&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Reads <code>N</code> values from <code>pointer</code>, which need not be aligned.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> readable values</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a vector of the values, the first in lane 0</li>
+</ul>
+<h4 id="load_aligned"><a class="header" href="#load_aligned">load_aligned</a></h4>
+<pre><code class="language-pepper">static load_aligned(pointer: __ptr&lt;T&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Reads <code>N</code> values from <code>pointer</code>, which must be aligned to the
+vector’s size (<code>N</code> times the size of <code>T</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> readable values</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a vector of the values, the first in lane 0</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pointer</code> is not aligned to the vector’s size</li>
+</ul>
+<h4 id="load-1-1"><a class="header" href="#load-1-1">load</a></h4>
+<pre><code class="language-pepper">static load(array: Array&lt;T&gt;, index: ulong): Vector&lt;T, N&gt;
+</code></pre>
+<p>Reads the <code>N</code> elements of <code>array</code> from <code>index</code> on.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>array</code> — the array to read</li>
+<li><code>index</code> — the element that goes in lane 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a vector of <code>array[index]</code> through <code>array[index + N - 1]</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
+</ul>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h4 id="store-1"><a class="header" href="#store-1">store</a></h4>
+<pre><code class="language-pepper">store(pointer: __ptr&lt;T&gt;)
+</code></pre>
+<p>Writes the lanes to the <code>N</code> values at <code>pointer</code>, which need not be
+aligned.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> writable values</li>
+</ul>
+<h4 id="store_aligned"><a class="header" href="#store_aligned">store_aligned</a></h4>
+<pre><code class="language-pepper">store_aligned(pointer: __ptr&lt;T&gt;)
+</code></pre>
+<p>Writes the lanes to the <code>N</code> values at <code>pointer</code>, which must be
+aligned to the vector’s size.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> writable values</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>pointer</code> is not aligned to the vector’s size</li>
+</ul>
+<h4 id="store-1-1"><a class="header" href="#store-1-1">store</a></h4>
+<pre><code class="language-pepper">store(array: Array&lt;T&gt;, index: ulong)
+</code></pre>
+<p>Writes the lanes to the <code>N</code> elements of <code>array</code> from <code>index</code> on.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>array</code> — the array to write</li>
+<li><code>index</code> — the element lane 0 goes to</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
+</ul>
+<h4 id="operator--37"><a class="header" href="#operator--37">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): T
+</code></pre>
+<p>Returns lane <code>index</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the lane to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value in lane <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>N</code></li>
+</ul>
+<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong, value: T): T
+</code></pre>
+<p>Sets lane <code>index</code> to <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the lane to write</li>
+<li><code>value</code> — the new value of the lane</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>value</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>N</code></li>
+</ul>
+<h4 id="operator--2-7"><a class="header" href="#operator--2-7">operator +</a></h4>
+<pre><code class="language-pepper">+(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Adds each lane of <code>other</code> to the same lane of this vector. Integer
+lanes wrap around on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise sums</li>
+</ul>
+<h4 id="operator--3-6"><a class="header" href="#operator--3-6">operator +</a></h4>
+<pre><code class="language-pepper">+(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>Adds <code>other</code> to every lane. Integer lanes wrap around on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise sums</li>
+</ul>
+<h4 id="operator---4"><a class="header" href="#operator---4">operator -</a></h4>
+<pre><code class="language-pepper">-(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Subtracts each lane of <code>other</code> from the same lane of this vector.
+Integer lanes wrap around on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise differences</li>
+</ul>
+<h4 id="operator---1-2"><a class="header" href="#operator---1-2">operator -</a></h4>
+<pre><code class="language-pepper">-(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>Subtracts <code>other</code> from every lane. Integer lanes wrap around on
+overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise differences</li>
+</ul>
+<h4 id="operator--4-4"><a class="header" href="#operator--4-4">operator *</a></h4>
+<pre><code class="language-pepper">*(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Multiplies each lane by the same lane of <code>other</code>. Integer lanes wrap
+around on overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise products</li>
+</ul>
+<h4 id="operator--5-3"><a class="header" href="#operator--5-3">operator *</a></h4>
+<pre><code class="language-pepper">*(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>Multiplies every lane by <code>other</code>. Integer lanes wrap around on
+overflow.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to multiply by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise products</li>
+</ul>
+<h4 id="operator---2-1"><a class="header" href="#operator---2-1">operator -</a></h4>
+<pre><code class="language-pepper">-(): Vector&lt;T, N&gt;
+</code></pre>
+<p>Negates every lane. Integer lanes wrap around: the lowest value stays
+itself.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the negated lanes</li>
+</ul>
+<h4 id="operator--6-2"><a class="header" href="#operator--6-2">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: Vector&lt;T, N&gt;): bool
+</code></pre>
+<p>Whether every lane equals the same lane of <code>other</code>. A NaN lane equals
+nothing. For a mask per lane, use <code>equal</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when all lanes are equal</li>
+</ul>
+<h4 id="operator--7-2"><a class="header" href="#operator--7-2">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: Vector&lt;T, N&gt;): bool
+</code></pre>
+<p>Whether some lane differs from the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when any lane differs</li>
+</ul>
+<h4 id="equal"><a class="header" href="#equal">equal</a></h4>
+<pre><code class="language-pepper">equal(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Compares each lane with the same lane of <code>other</code> for equality.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that is equal</li>
+</ul>
+<h4 id="equal-1"><a class="header" href="#equal-1">equal</a></h4>
+<pre><code class="language-pepper">equal(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Compares every lane with <code>other</code> for equality.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane equal to <code>other</code></li>
+</ul>
+<h4 id="not_equal"><a class="header" href="#not_equal">not_equal</a></h4>
+<pre><code class="language-pepper">not_equal(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Compares each lane with the same lane of <code>other</code> for inequality. A
+NaN lane differs from everything.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that differs</li>
+</ul>
+<h4 id="not_equal-1"><a class="header" href="#not_equal-1">not_equal</a></h4>
+<pre><code class="language-pepper">not_equal(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Compares every lane with <code>other</code> for inequality.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that differs from <code>other</code></li>
+</ul>
+<h4 id="less"><a class="header" href="#less">less</a></h4>
+<pre><code class="language-pepper">less(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether each lane is less than the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that is less</li>
+</ul>
+<h4 id="less-1"><a class="header" href="#less-1">less</a></h4>
+<pre><code class="language-pepper">less(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether every lane is less than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane less than <code>other</code></li>
+</ul>
+<h4 id="less_equal"><a class="header" href="#less_equal">less_equal</a></h4>
+<pre><code class="language-pepper">less_equal(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether each lane is less than or equal to the same lane of
+<code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that is less or equal</li>
+</ul>
+<h4 id="less_equal-1"><a class="header" href="#less_equal-1">less_equal</a></h4>
+<pre><code class="language-pepper">less_equal(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether every lane is less than or equal to <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane less than or equal to <code>other</code></li>
+</ul>
+<h4 id="greater"><a class="header" href="#greater">greater</a></h4>
+<pre><code class="language-pepper">greater(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether each lane is greater than the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that is greater</li>
+</ul>
+<h4 id="greater-1"><a class="header" href="#greater-1">greater</a></h4>
+<pre><code class="language-pepper">greater(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether every lane is greater than <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane greater than <code>other</code></li>
+</ul>
+<h4 id="greater_equal"><a class="header" href="#greater_equal">greater_equal</a></h4>
+<pre><code class="language-pepper">greater_equal(other: Vector&lt;T, N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether each lane is greater than or equal to the same lane of
+<code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane that is greater or equal</li>
+</ul>
+<h4 id="greater_equal-1"><a class="header" href="#greater_equal-1">greater_equal</a></h4>
+<pre><code class="language-pepper">greater_equal(other: T): Mask&lt;N&gt;
+</code></pre>
+<p>Tests whether every lane is greater than or equal to <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a mask, true in each lane greater than or equal to <code>other</code></li>
+</ul>
+<h4 id="min-10"><a class="header" href="#min-10">min</a></h4>
+<pre><code class="language-pepper">min(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The smaller of each lane and the same lane of <code>other</code>. For floats, a
+NaN lane gives the other lane.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise minimums</li>
+</ul>
+<h4 id="max-10"><a class="header" href="#max-10">max</a></h4>
+<pre><code class="language-pepper">max(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The larger of each lane and the same lane of <code>other</code>. For floats, a
+NaN lane gives the other lane.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise maximums</li>
+</ul>
+<h4 id="abs-6"><a class="header" href="#abs-6">abs</a></h4>
+<pre><code class="language-pepper">abs(): Vector&lt;T, N&gt;
+</code></pre>
+<p>The absolute value of every lane. For a signed integer <code>T</code> the lowest
+value has no positive counterpart and stays itself.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise absolute values</li>
+</ul>
+<h4 id="sum"><a class="header" href="#sum">sum</a></h4>
+<pre><code class="language-pepper">sum(): T
+</code></pre>
+<p>The sum of the lanes. Integer lanes wrap around on overflow; float
+lanes are added in lane order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum of all lanes</li>
+</ul>
+<h4 id="minimum"><a class="header" href="#minimum">minimum</a></h4>
+<pre><code class="language-pepper">minimum(): T
+</code></pre>
+<p>The smallest lane.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the minimum over all lanes</li>
+</ul>
+<h4 id="maximum"><a class="header" href="#maximum">maximum</a></h4>
+<pre><code class="language-pepper">maximum(): T
+</code></pre>
+<p>The largest lane.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the maximum over all lanes</li>
+</ul>
+<h4 id="shuffle"><a class="header" href="#shuffle">shuffle</a></h4>
+<pre><code class="language-pepper">shuffle(indices: Vector&lt;int, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Picks lanes by index: lane <code>i</code> of the result is lane <code>indices[i]</code> of
+this vector. Each index is taken modulo <code>N</code>, so every index picks a
+lane. When the indices are constants, an optimized build compiles this
+to one shuffle instruction.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>indices</code> — the lane to pick for each lane of the result</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the picked lanes</li>
+</ul>
+<h4 id="reverse-1"><a class="header" href="#reverse-1">reverse</a></h4>
+<pre><code class="language-pepper">reverse(): Vector&lt;T, N&gt;
+</code></pre>
+<p>The lanes in reverse order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a vector whose lane <code>i</code> is lane <code>N - 1 - i</code> of this one</li>
+</ul>
+<h4 id="interleave_low"><a class="header" href="#interleave_low">interleave_low</a></h4>
+<pre><code class="language-pepper">interleave_low(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Interleaves the low halves of this vector and <code>other</code>: lanes
+<code>this[0], other[0], this[1], other[1], ...</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector whose lanes go in the odd lanes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h4 id="interleave_high"><a class="header" href="#interleave_high">interleave_high</a></h4>
+<pre><code class="language-pepper">interleave_high(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Interleaves the high halves of this vector and <code>other</code>: lanes
+<code>this[N / 2], other[N / 2], this[N / 2 + 1], ...</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector whose lanes go in the odd lanes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h4 id="convert"><a class="header" href="#convert">convert</a></h4>
+<pre><code class="language-pepper">convert&lt;U: Lane&gt;(): Vector&lt;U, N&gt;
+</code></pre>
+<p>Converts every lane to <code>U</code>, as <code>as</code> converts a number: integers
+truncate or extend, and floats round toward zero into integers. A
+float lane outside <code>U</code>’s range gives <code>U</code>’s nearest value, and NaN
+gives 0.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the new lane type</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the converted lanes</li>
+</ul>
+<h4 id="reinterpret"><a class="header" href="#reinterpret">reinterpret</a></h4>
+<pre><code class="language-pepper">reinterpret&lt;U: Lane, M&gt;(): Vector&lt;U, M&gt;
+</code></pre>
+<p>Reads the vector’s bits as <code>M</code> lanes of type <code>U</code>. The two must have
+the same size in bytes, or it is a compile-time error.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the new lane type</li>
+<li><code>M</code> — the new lane count</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same bits as a vector of <code>U</code></li>
+</ul>
+<h2 id="extend-vectort-n"><a class="header" href="#extend-vectort-n">extend Vector&lt;T, N&gt;</a></h2>
+<pre><code class="language-pepper">extend Vector&lt;T: IntegerLane, N&gt;
+</code></pre>
+<p>The operations of vectors of integers: checked division, the bitwise
+operators, shifts and rotates.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the integer lane type</li>
+<li><code>N</code> — the lane count</li>
+</ul>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h4 id="operator--8-2"><a class="header" href="#operator--8-2">operator /</a></h4>
+<pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Divides each lane by the same lane of <code>other</code>. Division truncates
+toward zero.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise quotients</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a lane of <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
+</ul>
+<h4 id="operator--9-2"><a class="header" href="#operator--9-2">operator /</a></h4>
+<pre><code class="language-pepper">/(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>Divides every lane by <code>other</code>. Division truncates toward zero.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise quotients</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
+</ul>
+<h4 id="operator--10-2"><a class="header" href="#operator--10-2">operator %</a></h4>
+<pre><code class="language-pepper">%(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The remainder of dividing each lane by the same lane of <code>other</code>, with
+the sign of this vector’s lane.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise remainders</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if a lane of <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
+</ul>
+<h4 id="operator--11-2"><a class="header" href="#operator--11-2">operator %</a></h4>
+<pre><code class="language-pepper">%(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>The remainder of dividing every lane by <code>other</code>, with the sign of the
+lane.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise remainders</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>other</code> is 0, or <code>T</code> is signed and a lane divides the lowest value by -1</li>
+</ul>
+<h4 id="operator--12-2"><a class="header" href="#operator--12-2">operator &amp;</a></h4>
+<pre><code class="language-pepper">&amp;(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise AND of each lane with the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise ANDs</li>
+</ul>
+<h4 id="operator--13-2"><a class="header" href="#operator--13-2">operator &amp;</a></h4>
+<pre><code class="language-pepper">&amp;(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise AND of every lane with <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise ANDs</li>
+</ul>
+<h4 id="operator--14-2"><a class="header" href="#operator--14-2">operator |</a></h4>
+<pre><code class="language-pepper">|(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise OR of each lane with the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise ORs</li>
+</ul>
+<h4 id="operator--15-2"><a class="header" href="#operator--15-2">operator |</a></h4>
+<pre><code class="language-pepper">|(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise OR of every lane with <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise ORs</li>
+</ul>
+<h4 id="operator--16-2"><a class="header" href="#operator--16-2">operator ^</a></h4>
+<pre><code class="language-pepper">^(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise XOR of each lane with the same lane of <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise XORs</li>
+</ul>
+<h4 id="operator--17-1"><a class="header" href="#operator--17-1">operator ^</a></h4>
+<pre><code class="language-pepper">^(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>The bitwise XOR of every lane with <code>other</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise XORs</li>
+</ul>
+<h4 id="operator--18-1"><a class="header" href="#operator--18-1">operator &lt;&lt;</a></h4>
+<pre><code class="language-pepper">&lt;&lt;(count: int): Vector&lt;T, N&gt;
+</code></pre>
+<p>Shifts every lane left by <code>count</code> bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bits to shift by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is negative or not less than the lane’s width in bits</li>
+</ul>
+<h4 id="operator--19-1"><a class="header" href="#operator--19-1">operator &gt;&gt;</a></h4>
+<pre><code class="language-pepper">&gt;&gt;(count: int): Vector&lt;T, N&gt;
+</code></pre>
+<p>Shifts every lane right by <code>count</code> bits: arithmetic (copying the sign
+bit) for a signed <code>T</code>, logical (filling with zeros) for an unsigned one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bits to shift by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>count</code> is negative or not less than the lane’s width in bits</li>
+</ul>
+<h4 id="operator--20-1"><a class="header" href="#operator--20-1">operator ~</a></h4>
+<pre><code class="language-pepper">~(): Vector&lt;T, N&gt;
+</code></pre>
+<p>Flips every bit of every lane.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the complemented lanes</li>
+</ul>
+<h4 id="rotate_left-8"><a class="header" href="#rotate_left-8">rotate_left</a></h4>
+<pre><code class="language-pepper">rotate_left(count: int): Vector&lt;T, N&gt;
+</code></pre>
+<p>Rotates the bits of every lane left by <code>count</code>, taken modulo the
+lane’s width (a negative count rotates right).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bits to rotate by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h4 id="rotate_right-8"><a class="header" href="#rotate_right-8">rotate_right</a></h4>
+<pre><code class="language-pepper">rotate_right(count: int): Vector&lt;T, N&gt;
+</code></pre>
+<p>Rotates the bits of every lane right by <code>count</code>, taken modulo the
+lane’s width (a negative count rotates left).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of bits to rotate by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h2 id="extend-vectort-n-1"><a class="header" href="#extend-vectort-n-1">extend Vector&lt;T, N&gt;</a></h2>
+<pre><code class="language-pepper">extend Vector&lt;T: FloatLane, N&gt;
+</code></pre>
+<p>The operations of vectors of floating-point numbers: division and
+rounding.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the floating-point lane type</li>
+<li><code>N</code> — the lane count</li>
+</ul>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h4 id="operator--21-1"><a class="header" href="#operator--21-1">operator /</a></h4>
+<pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Divides each lane by the same lane of <code>other</code>, as floating-point
+division does: a zero divisor gives an infinity or NaN.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise quotients</li>
+</ul>
+<h4 id="operator--22-1"><a class="header" href="#operator--22-1">operator /</a></h4>
+<pre><code class="language-pepper">/(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>Divides every lane by <code>other</code>, as floating-point division does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise quotients</li>
+</ul>
+<h4 id="operator--23-1"><a class="header" href="#operator--23-1">operator %</a></h4>
+<pre><code class="language-pepper">%(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>The remainder of dividing each lane by the same lane of <code>other</code>
+(C’s <code>fmod</code>), with the sign of this vector’s lane.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the vector to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise remainders</li>
+</ul>
+<h4 id="operator--24-1"><a class="header" href="#operator--24-1">operator %</a></h4>
+<pre><code class="language-pepper">%(other: T): Vector&lt;T, N&gt;
+</code></pre>
+<p>The remainder of dividing every lane by <code>other</code> (C’s <code>fmod</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise remainders</li>
+</ul>
+<h4 id="square_root-2"><a class="header" href="#square_root-2">square_root</a></h4>
+<pre><code class="language-pepper">square_root(): Vector&lt;T, N&gt;
+</code></pre>
+<p>The square root of every lane (NaN for a negative lane).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise square roots</li>
+</ul>
+<h4 id="floor-2"><a class="header" href="#floor-2">floor</a></h4>
+<pre><code class="language-pepper">floor(): Vector&lt;T, N&gt;
+</code></pre>
+<p>Every lane rounded down to a whole number.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise floors</li>
+</ul>
+<h4 id="ceiling-2"><a class="header" href="#ceiling-2">ceiling</a></h4>
+<pre><code class="language-pepper">ceiling(): Vector&lt;T, N&gt;
+</code></pre>
+<p>Every lane rounded up to a whole number.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise ceilings</li>
+</ul>
+<h2 id="mask"><a class="header" href="#mask">Mask</a></h2>
+<pre><code class="language-pepper">[Value] struct Mask&lt;N&gt;
+</code></pre>
+<p><code>N</code> booleans, one per vector lane: what lane-wise comparisons give.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>N</code> — the lane count: a power of two from 1 to 64</li>
+</ul>
+<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h4 id="count-1-3"><a class="header" href="#count-1-3">count</a></h4>
+<pre><code class="language-pepper">var count: int { get; }
+</code></pre>
+<p>The number of lanes, <code>N</code>.</p>
+<h3 id="constructors-1-1"><a class="header" href="#constructors-1-1">Constructors</a></h3>
+<h4 id="mask-1"><a class="header" href="#mask-1">Mask()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Makes a mask with every lane false.</p>
+<h4 id="mask-2"><a class="header" href="#mask-2">Mask()</a></h4>
+<pre><code class="language-pepper">construct(value: bool)
+</code></pre>
+<p>Makes a mask with every lane <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value of every lane</li>
+</ul>
+<h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
+<h4 id="operator--25-1"><a class="header" href="#operator--25-1">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): bool
+</code></pre>
+<p>Returns lane <code>index</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the lane to read</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value in lane <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>N</code></li>
+</ul>
+<h4 id="any"><a class="header" href="#any">any</a></h4>
+<pre><code class="language-pepper">any(): bool
+</code></pre>
+<p>Whether any lane is true.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when at least one lane is true</li>
+</ul>
+<h4 id="all"><a class="header" href="#all">all</a></h4>
+<pre><code class="language-pepper">all(): bool
+</code></pre>
+<p>Whether every lane is true.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when no lane is false</li>
+</ul>
+<h4 id="to_bits"><a class="header" href="#to_bits">to_bits</a></h4>
+<pre><code class="language-pepper">to_bits(): ulong
+</code></pre>
+<p>The lanes packed into bits: bit <code>i</code> is lane <code>i</code>. Its
+<code>trailing_zeros()</code> is the first true lane (64 when none is), and its
+<code>count_ones()</code> the number of true lanes.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lanes as a bit mask</li>
+</ul>
+<h4 id="operator--26-1"><a class="header" href="#operator--26-1">operator &amp;</a></h4>
+<pre><code class="language-pepper">&amp;(other: Mask&lt;N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>The lane-wise AND of the two masks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the mask to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true in each lane true in both</li>
+</ul>
+<h4 id="operator--27-1"><a class="header" href="#operator--27-1">operator |</a></h4>
+<pre><code class="language-pepper">|(other: Mask&lt;N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>The lane-wise OR of the two masks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the mask to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true in each lane true in either</li>
+</ul>
+<h4 id="operator--28-1"><a class="header" href="#operator--28-1">operator ^</a></h4>
+<pre><code class="language-pepper">^(other: Mask&lt;N&gt;): Mask&lt;N&gt;
+</code></pre>
+<p>The lane-wise XOR of the two masks.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the mask to combine with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true in each lane true in exactly one</li>
+</ul>
+<h4 id="operator--29-1"><a class="header" href="#operator--29-1">operator ~</a></h4>
+<pre><code class="language-pepper">~(): Mask&lt;N&gt;
+</code></pre>
+<p>The lane-wise negation of the mask.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true in each lane that is false here</li>
+</ul>
+<h4 id="select-3"><a class="header" href="#select-3">select</a></h4>
+<pre><code class="language-pepper">select&lt;T: Lane&gt;(if_true: Vector&lt;T, N&gt;, if_false: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
+</code></pre>
+<p>Picks each lane from <code>if_true</code> where this mask is true, and from
+<code>if_false</code> where it is false.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the lane type of the vectors</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>if_true</code> — the lanes to take where the mask is true</li>
+<li><code>if_false</code> — the lanes to take where the mask is false</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the selected lanes</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/debug/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-debug-module"><a class="header" href="#the-debug-module">The debug module</a></h1>
 <p>Stack walking, panic backtraces, and talking to a debugger.</p>
@@ -37566,7 +39554,7 @@ position yet.</p>
 <ul>
 <li><code>address</code> — the return address</li>
 </ul>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -37604,7 +39592,7 @@ includes the frames of <code>capture</code> itself, which <code>frames()</code> 
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty Backtrace. Use <code>capture()</code> to record the stack.</p>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="frames"><a class="header" href="#frames">frames</a></h4>
 <pre><code class="language-pepper">frames(): Array&lt;StackFrame&gt;
 </code></pre>
@@ -37772,7 +39760,7 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
 var bytes = text.Utf8.encode("hi");
 assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-23"><a class="header" href="#static-methods-23">Static methods</a></h3>
+<h3 id="static-methods-24"><a class="header" href="#static-methods-24">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]
 </code></pre>
@@ -37926,7 +39914,7 @@ var bytes = text.Utf16.encode("hi");
 assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
 assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
-<h3 id="static-methods-24"><a class="header" href="#static-methods-24">Static methods</a></h3>
+<h3 id="static-methods-25"><a class="header" href="#static-methods-25">Static methods</a></h3>
 <h4 id="encode-1"><a class="header" href="#encode-1">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String, big_endian: bool = false): u8[]
 </code></pre>
@@ -37983,7 +39971,7 @@ points below 128 have an ASCII byte.</p>
 assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
 assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 </code></pre>
-<h3 id="static-methods-25"><a class="header" href="#static-methods-25">Static methods</a></h3>
+<h3 id="static-methods-26"><a class="header" href="#static-methods-26">Static methods</a></h3>
 <h4 id="encode-2"><a class="header" href="#encode-2">encode</a></h4>
 <pre><code class="language-pepper">static encode(value: String): u8[]?
 </code></pre>
@@ -38099,7 +40087,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructors-5"><a class="header" href="#constructors-5">Constructors</a></h3>
+<h3 id="constructors-6"><a class="header" href="#constructors-6">Constructors</a></h3>
 <h4 id="regex-1"><a class="header" href="#regex-1">Regex()</a></h4>
 <pre><code class="language-pepper">construct(pattern: String)
 </code></pre>
@@ -38121,7 +40109,7 @@ constructor is for the runtime.</p>
 <ul>
 <li><code>program</code> — the compiled pattern</li>
 </ul>
-<h3 id="static-methods-26"><a class="header" href="#static-methods-26">Static methods</a></h3>
+<h3 id="static-methods-27"><a class="header" href="#static-methods-27">Static methods</a></h3>
 <h4 id="parse-12"><a class="header" href="#parse-12">parse</a></h4>
 <pre><code class="language-pepper">static parse(pattern: String): Result&lt;Regex&gt;
 </code></pre>
@@ -38158,7 +40146,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
 assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -38350,7 +40338,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
 <h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -38458,7 +40446,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
 <h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -38601,7 +40589,7 @@ text or the code wrote them, so a document round-trips unchanged.</p>
 <ul>
 <li><code>members</code> — the members, by key</li>
 </ul>
-<h3 id="static-methods-27"><a class="header" href="#static-methods-27">Static methods</a></h3>
+<h3 id="static-methods-28"><a class="header" href="#static-methods-28">Static methods</a></h3>
 <h4 id="object-1"><a class="header" href="#object-1">object</a></h4>
 <pre><code class="language-pepper">static object(): JsonValue
 </code></pre>
@@ -38636,8 +40624,8 @@ var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
 list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
-<h4 id="operator--37"><a class="header" href="#operator--37">operator []</a></h4>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h4 id="operator--38"><a class="header" href="#operator--38">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
 <p>Reads <code>value[key]</code>: the member named <code>key</code> of an object.</p>
@@ -38649,7 +40637,7 @@ assert(list.to_string() == "[1,2]", "two elements");
 <ul>
 <li>the member, or <code>Null</code> when this is not an object or has no member named <code>key</code></li>
 </ul>
-<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
+<h4 id="operator--1-11"><a class="header" href="#operator--1-11">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String, member: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of an
@@ -38667,7 +40655,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>if this is not an object (“JsonValue[key] = value needs an object”)</li>
 </ul>
-<h4 id="operator--2-7"><a class="header" href="#operator--2-7">operator []</a></h4>
+<h4 id="operator--2-8"><a class="header" href="#operator--2-8">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): JsonValue
 </code></pre>
 <p>Reads <code>value[index]</code>: an element of an array.</p>
@@ -38679,7 +40667,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>the element, or <code>Null</code> when this is not an array or <code>index</code> is not less than its count</li>
 </ul>
-<h4 id="operator--3-6"><a class="header" href="#operator--3-6">operator []</a></h4>
+<h4 id="operator--3-7"><a class="header" href="#operator--3-7">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong, element: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[index] = element</code>: replaces an element of an array.</p>
@@ -38912,7 +40900,7 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -39003,7 +40991,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <ul>
 <li><code>root</code> — the document’s value</li>
 </ul>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="comments-1"><a class="header" href="#comments-1">comments</a></h4>
 <pre><code class="language-pepper">comments(path: String): Array&lt;String&gt;
 </code></pre>
@@ -39422,7 +41410,7 @@ var data = "abcabcabcabc".bytes();
 var packed = compress.Deflate.compress(data);
 assert(compress.Deflate.decompress(packed).value() == data, "round trip");
 </code></pre>
-<h3 id="static-methods-28"><a class="header" href="#static-methods-28">Static methods</a></h3>
+<h3 id="static-methods-29"><a class="header" href="#static-methods-29">Static methods</a></h3>
 <h4 id="compress"><a class="header" href="#compress">compress</a></h4>
 <pre><code class="language-pepper">static compress(data: u8[], level: int = 6): u8[]
 </code></pre>
@@ -39571,7 +41559,7 @@ for (var line in reader.lines()) {
 <li><code>source</code> — the stream of compressed bytes</li>
 <li><code>format</code> — the framing of the compressed data</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
 <h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -39627,7 +41615,7 @@ file.close();
 <ul>
 <li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
 </ul>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -39688,7 +41676,7 @@ crc.update("world".bytes());
 assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
 assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 </code></pre>
-<h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
+<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
 <h4 id="value-6"><a class="header" href="#value-6">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
@@ -39698,7 +41686,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Makes a checksum of no data yet (<code>value</code> is 0).</p>
-<h3 id="static-methods-29"><a class="header" href="#static-methods-29">Static methods</a></h3>
+<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
 <h4 id="of"><a class="header" href="#of">of</a></h4>
 <pre><code class="language-pepper">static of(data: u8[]): uint
 </code></pre>
@@ -39711,7 +41699,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
 <h4 id="update"><a class="header" href="#update">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -39734,7 +41722,7 @@ over data given in one or more pieces.</p>
 
 assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 </code></pre>
-<h3 id="properties-1-4"><a class="header" href="#properties-1-4">Properties</a></h3>
+<h3 id="properties-1-5"><a class="header" href="#properties-1-5">Properties</a></h3>
 <h4 id="value-1-2"><a class="header" href="#value-1-2">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
@@ -39757,7 +41745,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
 <h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -39913,7 +41901,7 @@ while (true) {
 <ul>
 <li><code>source</code> — the stream of the archive</li>
 </ul>
-<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
 <pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
 </code></pre>
@@ -40007,7 +41995,7 @@ assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 <ul>
 <li><code>sink</code> — the stream the archive is written to</li>
 </ul>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
 <pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
 </code></pre>
@@ -40169,7 +42157,7 @@ assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
+<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
 <h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -40276,7 +42264,7 @@ assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git b
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
+<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
 <h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -40374,7 +42362,7 @@ assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
+<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -40536,7 +42524,7 @@ main(args: String[]): int {
     return 0;
 }
 </code></pre>
-<h3 id="properties-13"><a class="header" href="#properties-13">Properties</a></h3>
+<h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
 <h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
 <pre><code class="language-pepper">var is_selected: bool { get; }
 </code></pre>
@@ -40554,7 +42542,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
 </code></pre>
@@ -40806,7 +42794,7 @@ var best = cli.closest("buidl", names);   # some("build")
 <pre><code class="language-pepper">struct Flag
 </code></pre>
 <p>An option that takes no value, from <code>Parser.flag</code>.</p>
-<h3 id="properties-1-5"><a class="header" href="#properties-1-5">Properties</a></h3>
+<h3 id="properties-1-6"><a class="header" href="#properties-1-6">Properties</a></h3>
 <h4 id="is_set-2"><a class="header" href="#is_set-2">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
@@ -40846,7 +42834,7 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
 <h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
@@ -40892,7 +42880,7 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
+<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
 <h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;String&gt;
 </code></pre>
@@ -41024,8 +43012,8 @@ headers.add("Accept", "text/html");
 headers["accept"] = "application/json";   # replaces it
 assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
-<h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
-<h4 id="count-6"><a class="header" href="#count-6">count</a></h4>
+<h3 id="properties-15"><a class="header" href="#properties-15">Properties</a></h3>
+<h4 id="count-7"><a class="header" href="#count-7">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
@@ -41034,7 +43022,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
+<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -41105,7 +43093,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--38"><a class="header" href="#operator--38">operator []</a></h4>
+<h4 id="operator--39"><a class="header" href="#operator--39">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
@@ -41119,7 +43107,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-11"><a class="header" href="#operator--1-11">operator []</a></h4>
+<h4 id="operator--1-12"><a class="header" href="#operator--1-12">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -41170,7 +43158,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
+<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -41279,7 +43267,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
+<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -41360,7 +43348,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructors-6"><a class="header" href="#constructors-6">Constructors</a></h3>
+<h3 id="constructors-7"><a class="header" href="#constructors-7">Constructors</a></h3>
 <h4 id="client-2"><a class="header" href="#client-2">Client()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -41376,7 +43364,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
+<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
 <h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -41471,7 +43459,7 @@ main(): int {
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-30"><a class="header" href="#static-methods-30">Static methods</a></h3>
+<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -41498,7 +43486,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
+<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -41598,7 +43586,7 @@ stream.write_all("ping");
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-31"><a class="header" href="#static-methods-31">Static methods</a></h3>
+<h3 id="static-methods-32"><a class="header" href="#static-methods-32">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -41607,7 +43595,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
+<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -41701,7 +43689,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
+<h3 id="methods-1-32"><a class="header" href="#methods-1-32">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -41752,7 +43740,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
+<h3 id="methods-2-18"><a class="header" href="#methods-2-18">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -41911,7 +43899,7 @@ status 124 and a message on standard error.</li>
 <ul>
 <li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it</li>
 </ul>
-<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
+<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
 <h4 id="add-1"><a class="header" href="#add-1">add</a></h4>
 <pre><code class="language-pepper">add(name: String, body: () =&gt; void, line: int)
 </code></pre>

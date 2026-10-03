@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c1aa7001.js";
+            window.path_to_searchindex_js = "../searchindex-182db767.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-57b6db41.js"></script>
+        <script src="../toc-8e9cc5d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -256,6 +256,9 @@ and locals can all use them.</li>
 <li>Name the type arguments whenever you use the struct: <code>Stack&lt;int&gt;()</code>,
 <code>var s: Stack&lt;String&gt;;</code>.</li>
 <li><code>Stack&lt;int&gt;</code> and <code>Stack&lt;String&gt;</code> are different types.</li>
+<li>A type argument is a type. The one exception is a number, which only
+the lane count of a <a href="simd.html">SIMD vector</a> accepts (<code>Vector&lt;int, 4&gt;</code>); a
+struct of your own cannot compute with a number parameter.</li>
 <li>Each type argument makes a separate copy of the struct, so a struct whose
 copy needs a copy with a larger argument never ends: <code>struct Foo&lt;T&gt;</code> with
 a field <code>var inner: Foo&lt;Array&lt;T&gt;&gt;</code> makes <code>Foo&lt;int&gt;</code> need

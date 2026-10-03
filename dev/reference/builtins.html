@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c1aa7001.js";
+            window.path_to_searchindex_js = "../searchindex-182db767.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-57b6db41.js"></script>
+        <script src="../toc-8e9cc5d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -758,6 +758,819 @@ value is swapped in, and the old one released.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>whether the product overflows</li>
+</ul>
+<h2 id="__simd"><a class="header" href="#__simd">__simd</a></h2>
+<pre><code class="language-pepper">struct __simd&lt;T, N&gt;
+</code></pre>
+<p>A vector of <code>N</code> lanes of the number type <code>T</code>, as LLVM’s <code>&lt;N x T&gt;</code>: what
+<code>simd.Vector&lt;T, N&gt;</code> and <code>simd.Mask&lt;N&gt;</code> (with <code>bool</code> lanes) hold. The
+<code>__simd_</code> functions below compute on it, each lane at once. It is a value,
+with no references inside.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the lane type: an integer, floating-point or <code>bool</code> type</li>
+<li><code>N</code> — the lane count, written as a number (<code>__simd&lt;byte, 16&gt;</code>)</li>
+</ul>
+<h2 id="__simd_splat"><a class="header" href="#__simd_splat">__simd_splat</a></h2>
+<pre><code class="language-pepper">__simd_splat&lt;V&gt;(value: T): V
+</code></pre>
+<p>A vector <code>V</code> with every lane <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value of every lane</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the vector</li>
+</ul>
+<h2 id="__simd_add"><a class="header" href="#__simd_add">__simd_add</a></h2>
+<pre><code class="language-pepper">__simd_add&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Adds lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_subtract"><a class="header" href="#__simd_subtract">__simd_subtract</a></h2>
+<pre><code class="language-pepper">__simd_subtract&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Subtracts lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_multiply"><a class="header" href="#__simd_multiply">__simd_multiply</a></h2>
+<pre><code class="language-pepper">__simd_multiply&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Multiplies lane-wise; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_divide"><a class="header" href="#__simd_divide">__simd_divide</a></h2>
+<pre><code class="language-pepper">__simd_divide&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Divides lane-wise. An integer lane of <code>rhs</code> that is 0, or a signed <code>MIN / -1</code>, is undefined: <code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_remainder"><a class="header" href="#__simd_remainder">__simd_remainder</a></h2>
+<pre><code class="language-pepper">__simd_remainder&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise remainder, with the same undefined cases as <code>__simd_divide</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_and"><a class="header" href="#__simd_and">__simd_and</a></h2>
+<pre><code class="language-pepper">__simd_and&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise and (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_or"><a class="header" href="#__simd_or">__simd_or</a></h2>
+<pre><code class="language-pepper">__simd_or&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise or (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_xor"><a class="header" href="#__simd_xor">__simd_xor</a></h2>
+<pre><code class="language-pepper">__simd_xor&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise bitwise exclusive or (integer or <code>bool</code> lanes).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_shift_left"><a class="header" href="#__simd_shift_left">__simd_shift_left</a></h2>
+<pre><code class="language-pepper">__simd_shift_left&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Shifts every integer lane left. A count of at least the lane width is
+undefined: <code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to shift</li>
+<li><code>count</code> — the bits to shift by, less than the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<h2 id="__simd_shift_right"><a class="header" href="#__simd_shift_right">__simd_shift_right</a></h2>
+<pre><code class="language-pepper">__simd_shift_right&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Shifts every integer lane right: arithmetic for signed lanes, logical for
+unsigned. A count of at least the lane width is undefined.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to shift</li>
+<li><code>count</code> — the bits to shift by, less than the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the shifted lanes</li>
+</ul>
+<h2 id="__simd_negate"><a class="header" href="#__simd_negate">__simd_negate</a></h2>
+<pre><code class="language-pepper">__simd_negate&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Negates every lane; integer lanes wrap around.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_not"><a class="header" href="#__simd_not">__simd_not</a></h2>
+<pre><code class="language-pepper">__simd_not&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Flips every bit of every integer or <code>bool</code> lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_equal"><a class="header" href="#__simd_equal">__simd_equal</a></h2>
+<pre><code class="language-pepper">__simd_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise for equality (ordered for floats).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_not_equal"><a class="header" href="#__simd_not_equal">__simd_not_equal</a></h2>
+<pre><code class="language-pepper">__simd_not_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise for inequality (true for a NaN lane).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_less"><a class="header" href="#__simd_less">__simd_less</a></h2>
+<pre><code class="language-pepper">__simd_less&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_less_equal"><a class="header" href="#__simd_less_equal">__simd_less_equal</a></h2>
+<pre><code class="language-pepper">__simd_less_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_greater"><a class="header" href="#__simd_greater">__simd_greater</a></h2>
+<pre><code class="language-pepper">__simd_greater&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_greater_equal"><a class="header" href="#__simd_greater_equal">__simd_greater_equal</a></h2>
+<pre><code class="language-pepper">__simd_greater_equal&lt;V&gt;(lhs: V, rhs: V): __simd&lt;bool, N&gt;
+</code></pre>
+<p>Compares lane-wise, signed or unsigned by the lane type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>bool</code> vector of the results</li>
+</ul>
+<h2 id="__simd_select"><a class="header" href="#__simd_select">__simd_select</a></h2>
+<pre><code class="language-pepper">__simd_select&lt;V&gt;(mask: __simd&lt;bool, N&gt;, if_true: V, if_false: V): V
+</code></pre>
+<p>Picks each lane from <code>if_true</code> or <code>if_false</code> by <code>mask</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — which lanes to take from <code>if_true</code></li>
+<li><code>if_true</code> — the lanes where <code>mask</code> is true</li>
+<li><code>if_false</code> — the lanes where <code>mask</code> is false</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the selected lanes</li>
+</ul>
+<h2 id="__simd_minimum"><a class="header" href="#__simd_minimum">__simd_minimum</a></h2>
+<pre><code class="language-pepper">__simd_minimum&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise minimum (<code>llvm.minnum</code> for floats: a NaN lane gives the
+other).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_maximum"><a class="header" href="#__simd_maximum">__simd_maximum</a></h2>
+<pre><code class="language-pepper">__simd_maximum&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>The lane-wise maximum (<code>llvm.maxnum</code> for floats).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_abs"><a class="header" href="#__simd_abs">__simd_abs</a></h2>
+<pre><code class="language-pepper">__simd_abs&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The lane-wise absolute value; the lowest signed value stays itself.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_rotate_left"><a class="header" href="#__simd_rotate_left">__simd_rotate_left</a></h2>
+<pre><code class="language-pepper">__simd_rotate_left&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Rotates every integer lane left (<code>llvm.fshl</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to rotate</li>
+<li><code>count</code> — the bits to rotate by, modulo the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h2 id="__simd_rotate_right"><a class="header" href="#__simd_rotate_right">__simd_rotate_right</a></h2>
+<pre><code class="language-pepper">__simd_rotate_right&lt;V&gt;(vector: V, count: int): V
+</code></pre>
+<p>Rotates every integer lane right (<code>llvm.fshr</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to rotate</li>
+<li><code>count</code> — the bits to rotate by, modulo the lane width</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the rotated lanes</li>
+</ul>
+<h2 id="__simd_square_root"><a class="header" href="#__simd_square_root">__simd_square_root</a></h2>
+<pre><code class="language-pepper">__simd_square_root&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The square root of every float lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_floor"><a class="header" href="#__simd_floor">__simd_floor</a></h2>
+<pre><code class="language-pepper">__simd_floor&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Every float lane rounded down.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_ceiling"><a class="header" href="#__simd_ceiling">__simd_ceiling</a></h2>
+<pre><code class="language-pepper">__simd_ceiling&lt;V&gt;(vector: V): V
+</code></pre>
+<p>Every float lane rounded up.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_sum"><a class="header" href="#__simd_sum">__simd_sum</a></h2>
+<pre><code class="language-pepper">__simd_sum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The sum of the lanes: wrapping for integers, in lane order for floats.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum</li>
+</ul>
+<h2 id="__simd_reduce_minimum"><a class="header" href="#__simd_reduce_minimum">__simd_reduce_minimum</a></h2>
+<pre><code class="language-pepper">__simd_reduce_minimum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The smallest lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the minimum</li>
+</ul>
+<h2 id="__simd_reduce_maximum"><a class="header" href="#__simd_reduce_maximum">__simd_reduce_maximum</a></h2>
+<pre><code class="language-pepper">__simd_reduce_maximum&lt;V&gt;(vector: V): T
+</code></pre>
+<p>The largest lane.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the maximum</li>
+</ul>
+<h2 id="__simd_any"><a class="header" href="#__simd_any">__simd_any</a></h2>
+<pre><code class="language-pepper">__simd_any&lt;V&gt;(mask: V): bool
+</code></pre>
+<p>Whether any lane of a <code>bool</code> vector is true.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether a lane is true</li>
+</ul>
+<h2 id="__simd_all"><a class="header" href="#__simd_all">__simd_all</a></h2>
+<pre><code class="language-pepper">__simd_all&lt;V&gt;(mask: V): bool
+</code></pre>
+<p>Whether every lane of a <code>bool</code> vector is true.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether every lane is true</li>
+</ul>
+<h2 id="__simd_to_bits"><a class="header" href="#__simd_to_bits">__simd_to_bits</a></h2>
+<pre><code class="language-pepper">__simd_to_bits&lt;V&gt;(mask: V): ulong
+</code></pre>
+<p>Packs a <code>bool</code> vector into bits: bit <code>i</code> is lane <code>i</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mask</code> — a <code>bool</code> vector of at most 64 lanes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lanes as bits</li>
+</ul>
+<h2 id="__simd_extract"><a class="header" href="#__simd_extract">__simd_extract</a></h2>
+<pre><code class="language-pepper">__simd_extract&lt;V&gt;(vector: V, index: ulong): T
+</code></pre>
+<p>Reads one lane. An index of at least <code>N</code> gives an undefined value:
+<code>simd.Vector</code> checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector</li>
+<li><code>index</code> — the lane, less than <code>N</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane’s value</li>
+</ul>
+<h2 id="__simd_insert"><a class="header" href="#__simd_insert">__simd_insert</a></h2>
+<pre><code class="language-pepper">__simd_insert&lt;V&gt;(vector: V, index: ulong, value: T): V
+</code></pre>
+<p>Replaces one lane. An index of at least <code>N</code> is undefined: <code>simd.Vector</code>
+checks first.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector</li>
+<li><code>index</code> — the lane, less than <code>N</code></li>
+<li><code>value</code> — the lane’s new value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the vector with the lane replaced</li>
+</ul>
+<h2 id="__simd_shuffle"><a class="header" href="#__simd_shuffle">__simd_shuffle</a></h2>
+<pre><code class="language-pepper">__simd_shuffle&lt;V&gt;(vector: V, indices: __simd&lt;int, N&gt;): V
+</code></pre>
+<p>Picks lanes by index, each taken modulo <code>N</code>. Constant indices fold to one
+<code>shufflevector</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to pick from</li>
+<li><code>indices</code> — the lane to pick for each lane, modulo <code>N</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the picked lanes</li>
+</ul>
+<h2 id="__simd_reverse"><a class="header" href="#__simd_reverse">__simd_reverse</a></h2>
+<pre><code class="language-pepper">__simd_reverse&lt;V&gt;(vector: V): V
+</code></pre>
+<p>The lanes in reverse order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane-wise results</li>
+</ul>
+<h2 id="__simd_interleave_low"><a class="header" href="#__simd_interleave_low">__simd_interleave_low</a></h2>
+<pre><code class="language-pepper">__simd_interleave_low&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Interleaves the low halves: <code>lhs[0], rhs[0], lhs[1], ...</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the even lanes’ source</li>
+<li><code>rhs</code> — the odd lanes’ source</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h2 id="__simd_interleave_high"><a class="header" href="#__simd_interleave_high">__simd_interleave_high</a></h2>
+<pre><code class="language-pepper">__simd_interleave_high&lt;V&gt;(lhs: V, rhs: V): V
+</code></pre>
+<p>Interleaves the high halves: <code>lhs[N / 2], rhs[N / 2], ...</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the even lanes’ source</li>
+<li><code>rhs</code> — the odd lanes’ source</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the interleaved lanes</li>
+</ul>
+<h2 id="__simd_load"><a class="header" href="#__simd_load">__simd_load</a></h2>
+<pre><code class="language-pepper">__simd_load&lt;V&gt;(pointer: __ptr&lt;T&gt;): V
+</code></pre>
+<p>Reads <code>N</code> values from memory aligned to <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the values</li>
+</ul>
+<h2 id="__simd_load_aligned"><a class="header" href="#__simd_load_aligned">__simd_load_aligned</a></h2>
+<pre><code class="language-pepper">__simd_load_aligned&lt;V&gt;(pointer: __ptr&lt;T&gt;): V
+</code></pre>
+<p>Reads <code>N</code> values from memory aligned to the vector’s size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values, aligned to the vector’s size</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the values</li>
+</ul>
+<h2 id="__simd_store"><a class="header" href="#__simd_store">__simd_store</a></h2>
+<pre><code class="language-pepper">__simd_store&lt;V&gt;(pointer: __ptr&lt;T&gt;, vector: V)
+</code></pre>
+<p>Writes the lanes to memory aligned to <code>T</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values</li>
+<li><code>vector</code> — the lanes to write</li>
+</ul>
+<h2 id="__simd_store_aligned"><a class="header" href="#__simd_store_aligned">__simd_store_aligned</a></h2>
+<pre><code class="language-pepper">__simd_store_aligned&lt;V&gt;(pointer: __ptr&lt;T&gt;, vector: V)
+</code></pre>
+<p>Writes the lanes to memory aligned to the vector’s size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — the first of <code>N</code> values, aligned to the vector’s size</li>
+<li><code>vector</code> — the lanes to write</li>
+</ul>
+<h2 id="__simd_convert"><a class="header" href="#__simd_convert">__simd_convert</a></h2>
+<pre><code class="language-pepper">__simd_convert&lt;R&gt;(vector: __simd&lt;U, N&gt;): R
+</code></pre>
+<p>Converts every lane to <code>R</code>’s lane type, as <code>as</code> does; float to integer
+saturates (<code>llvm.fptosi.sat</code>), and NaN gives 0.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — the vector type, <code>__simd&lt;T, N&gt;</code> of the result</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the lanes to convert</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the converted lanes</li>
+</ul>
+<h2 id="__simd_reinterpret"><a class="header" href="#__simd_reinterpret">__simd_reinterpret</a></h2>
+<pre><code class="language-pepper">__simd_reinterpret&lt;R&gt;(vector: __simd&lt;U, M&gt;): R
+</code></pre>
+<p>Reads a vector’s bits as another vector type of the same size.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — the vector type, <code>__simd&lt;T, N&gt;</code> of the result</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>vector</code> — the vector, the same size as <code>R</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same bits as <code>R</code></li>
+</ul>
+<h2 id="__simd_lanes"><a class="header" href="#__simd_lanes">__simd_lanes</a></h2>
+<pre><code class="language-pepper">__simd_lanes&lt;V&gt;(): int
+</code></pre>
+<p>The lane count of <code>V</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>N</code></li>
+</ul>
+<h2 id="__simd_lane_bits"><a class="header" href="#__simd_lane_bits">__simd_lane_bits</a></h2>
+<pre><code class="language-pepper">__simd_lane_bits&lt;V&gt;(): int
+</code></pre>
+<p>The width of <code>V</code>’s lane type in bits.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the lane’s width in bits</li>
+</ul>
+<h2 id="__simd_is_signed"><a class="header" href="#__simd_is_signed">__simd_is_signed</a></h2>
+<pre><code class="language-pepper">__simd_is_signed&lt;V&gt;(): bool
+</code></pre>
+<p>Whether <code>V</code>’s lanes are a signed integer type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>V</code> — the vector type, <code>__simd&lt;T, N&gt;</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the lanes are signed integers</li>
 </ul>
 
                     </main>
