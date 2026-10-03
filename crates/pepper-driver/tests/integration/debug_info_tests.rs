@@ -93,6 +93,28 @@ fn g_emits_subprograms_and_line_locations() {
 }
 
 #[test]
+fn frame_pointers_are_kept_only_when_asked() {
+    let kept = ir("frame_pointers", &["-O2", "--frame-pointers"]);
+    assert!(kept.contains("\"frame-pointer\"=\"all\""), "no frame-pointer attribute with --frame-pointers");
+    let plain = ir("no_frame_pointers", &["-O2"]);
+    assert!(!plain.contains("\"frame-pointer\"=\"all\""), "a frame-pointer attribute without --frame-pointers");
+}
+
+#[test]
+fn a_closure_is_named_for_where_it_is_written() {
+    let dir = scratch("closure");
+    std::fs::write(
+        dir.join("main.pep"),
+        "apply(f: (int) => int, x: int): int {\n    return f(x);\n}\n\nmain(): int {\n    var k = 2;\n    return apply((x: int) => x * k, 3) - 6;\n}\n",
+    )
+    .unwrap();
+    compile(&dir, &["--emit-llvm", "-g"]);
+    let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+    assert!(ir.contains("!DISubprogram(name: \"closure at main.pep:7\""), "no subprogram named for the closure");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn g_describes_variables_and_struct_types() {
     let ir = g_ir();
     // The runtime declares variables of the same names elsewhere.

@@ -66,7 +66,8 @@ The `.pdb` beside the executable is found automatically.
 - **Functions** under the names you wrote: `total`, `Point.length`,
   `Array<int>.append`. Methods the compiler writes for a struct, such as
   `__acquire` and `__release`, are marked artificial and placed on the
-  struct's line.
+  struct's line. A closure is named for where it is written: `closure at
+  main.pep:14`.
 - **Structs.** A variable of a struct type holds a reference, so the
   debugger shows an address. Dereference it (`print *first`) to see the
   fields. The fields include the `__refcount` and `__weakcount` head, which

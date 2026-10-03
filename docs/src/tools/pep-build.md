@@ -32,6 +32,7 @@ short, and `pepper help build` runs it.
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
 | `-g`, `--emit-debug` | Emit debug info | off |
+| `--frame-pointers` | Keep every function's frame pointer, for profilers | off |
 | `--target <triple>` | Compile for another platform | the machine compiling |
 | `--sysroot <dir>` | The target's system libraries | `PEPPER_SYSROOT_<TRIPLE>` |
 | `-l <lib>` | Link a C library | the platform's defaults |
@@ -193,6 +194,16 @@ program is built for the Mac it runs on. It works with `-O`. See
 A Windows build without `-g` also writes `<output>.pdb`, holding only the
 program's function names, which is where [backtraces](../language/debug.md)
 read them.
+
+### `--frame-pointers`
+
+Keeps the frame pointer in every function, even when optimizing, as clang's
+`-fno-omit-frame-pointer` does. A sampling profiler then walks the stack of
+each sample by following frame pointers, which is fast and finds every
+frame of Pepper code; without them, optimized code reuses the register and
+a profiler loses the callers of whatever was running. It costs a register
+and a few instructions per call. [pep-profile](pep-profile.md) builds with
+it, `-O` and `-g`. It is part of the build cache's key.
 
 ## Targets and cross-compiling
 

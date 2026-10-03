@@ -116,6 +116,9 @@ fn run_for_target(options: Options) -> Result<i32, String> {
         timer.stage("codegen");
         let cpu = options.effective_cpu()?;
         cpu.stamp(&generator.module);
+        if options.frame_pointers {
+            pepper_codegen::target::keep_frame_pointers(&generator.module);
+        }
         pepper_codegen::target::optimize_with(&generator.module, options.effective_opt_level()?, pepper_codegen::target::Pipeline::Default, &cpu)?;
         timer.stage("optimize");
         let ir_path = build_dir.join(format!("{}.ll", module_name));

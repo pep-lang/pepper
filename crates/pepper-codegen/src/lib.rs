@@ -2445,9 +2445,16 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn codegen_function(&mut self, function: &FunctionDef) -> Result<(), String> {
         if let (Some(debug), Some(fn_value)) = (self.debug.as_mut(), self.functions.get(&function.name)) {
-            let name = pepper_parser::namespace::demangle_name(&function.name);
             let declared = if function.loc.is_none() { self.debug_struct_loc } else { function.loc };
-            debug.begin_function(*fn_value, name, declared, function.loc.is_none());
+            // A closure's body is named for where it is written (`closure at
+            // main.pep:12`), as debuggers and profilers show it.
+            use pepper_sema::passes::closures::{is_closure_struct, CALL_METHOD};
+            let closure = function.parent.as_deref().is_some_and(is_closure_struct) && function.name.ends_with(CALL_METHOD);
+            let name = match closure.then(|| debug.closure_name(declared)).flatten() {
+                Some(name) => name,
+                None => pepper_parser::namespace::display_name(&function.name),
+            };
+            debug.begin_function(*fn_value, &name, declared, function.loc.is_none());
         }
         // The prologue (parameter slots, the parameters' acquires) is left
         // unstamped, as clang leaves it (`DebugInfo::finish` puts its calls on

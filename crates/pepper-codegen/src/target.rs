@@ -332,6 +332,18 @@ impl Cpu {
     }
 }
 
+/// Keep the frame pointer in every function `module` defines
+/// (`"frame-pointer"="all"`, as clang's `-fno-omit-frame-pointer` gives),
+/// so a profiler walks an optimized program's stack by following frame
+/// pointers instead of unwinding it from tables (`--frame-pointers`).
+pub fn keep_frame_pointers(module: &inkwell::module::Module<'_>) {
+    use inkwell::attributes::AttributeLoc;
+    let attribute = module.get_context().create_string_attribute("frame-pointer", "all");
+    for function in module.get_functions().filter(|f| f.count_basic_blocks() > 0) {
+        function.add_attribute(AttributeLoc::Function, attribute);
+    }
+}
+
 fn is_x86(triple: &str) -> bool {
     triple.starts_with("x86_64") || triple.starts_with("amd64")
 }

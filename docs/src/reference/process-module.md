@@ -17,6 +17,8 @@ in the prelude, and the module passes them on as well.
   and its `ExitStatus`
 - [The running process](process-current.md): `id()` and
   `executable_path()`
+- [Finding programs](process-find.md): `find_executable()` looks a
+  program up on the `PATH`, and `is_executable()` checks a file
 
 **Example**
 ```pepper

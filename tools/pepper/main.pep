@@ -114,7 +114,7 @@ find_tool(command: String): Path? {
     var file_name = "pep-" + command + executable_suffix();
     for (var directory in search_directories()) {
         var candidate = directory.join(file_name);
-        if (is_executable(candidate)) {
+        if (process.is_executable(candidate)) {
             return Optional<Path>.Value(candidate);
         }
     }
@@ -144,7 +144,7 @@ find_commands(): Array<String> {
                 continue;
             }
             var command = name.substr_bytes(4, name.size - 4 - suffix.size);
-            if (is_command_name(command) and !commands.contains(command) and is_executable(entry.path)) {
+            if (is_command_name(command) and !commands.contains(command) and process.is_executable(entry.path)) {
                 commands.append(command);
             }
         }
@@ -174,16 +174,6 @@ search_directories(): Array<Path> {
         }
     }
     return directories;
-}
-
-# Whether `path` is a file this process may run: on POSIX, one with an
-# execute permission bit set.
-is_executable(path: Path): bool {
-    var metadata = path.metadata();
-    if (metadata.is_err() or !metadata.value().is_file) {
-        return false;
-    }
-    return is_windows() or (metadata.value().permissions & 73) != 0;  # 0111
 }
 
 is_windows(): bool {

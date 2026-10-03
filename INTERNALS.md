@@ -37,6 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
+| `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/pepper` | `pepper`, the entry point written in Pepper: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler). Tested by `pepper_entry_tests.rs`. |
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
@@ -144,7 +145,7 @@ and build, sema passes, codegen and emission, link), `-T passes`, which
 prints each sema pass's time summed over its runs (`sema/src/pass_timer.rs`,
 fed by `transform_pass`'s `step!`), and `-T cache`, which
 prints how the cache supplied each unit's object (`hit`, `hit (same code)`
-or `miss`). `-g` emits debug info (see
+or `miss`). `-g` emits debug info and `--frame-pointers` keeps frame pointers (see
 [4.4](#44-debug-info-codegensrcdebugrs-debug_typesrs)). `-v` and the
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `-T` channels are listed in `TRACE_CHANNELS`
@@ -1783,8 +1784,10 @@ else the module's name), with the module flags `Debug Info Version` and
 into one gdb rejects). Modules carry the host triple, which CodeView needs.
 
 - **Subprograms.** `codegen_function` calls `begin_function`, which gives
-  the function a `DISubprogram` named as written (`demangle_name`), with
-  no linkage name (a debugger would show the linker spelling,
+  the function a `DISubprogram` named as written (`display_name`, which
+  drops every file namespace: `Point@geo.length` is `Point.length`; a
+  closure's `__call` is `closure at main.pep:14`, `DebugInfo::closure_name`),
+  with no linkage name (a debugger would show the linker spelling,
   `partition::symbol_name`, instead). A method with no location (the
   synthesized `__acquire`, a constructor) is artificial and placed at its
   struct (`debug_struct_loc`).
@@ -1820,6 +1823,11 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
   a location on every call in a function with a subprogram), adds
   `uwtable` to every definition so debuggers can unwind through it, and
   finalizes the builder.
+- **Frame pointers.** `--frame-pointers` (`cache::Build::frame_pointers`,
+  `-fp` in the cache directory name) puts `"frame-pointer"="all"` on every
+  definition (`target::keep_frame_pointers`, in `cache::emit` beside the
+  CPU stamp), so profilers walk optimized stacks; `pep-profile` builds with
+  it.
 - **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
   chains itself, and `docs_examples_tests` builds every example at
   `-O2 -g`, so the verifier checks them.

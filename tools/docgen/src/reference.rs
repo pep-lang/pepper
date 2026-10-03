@@ -65,6 +65,7 @@ const PAGES: &[(&str, &str)] = &[
     ("process/command.pep", "Command"),
     ("process/child.pep", "Child"),
     ("process/current.pep", "The running process"),
+    ("process/find.pep", "Finding programs"),
     ("os/module.pep", "The os module"),
     ("os/environment.pep", "Environment"),
     ("os/time.pep", "Time"),

@@ -9,6 +9,7 @@
 //! | `pep-build` | `Options::command()`, `TRACE_CHANNELS`, the environment variables the compiler reads | `docs/src/tools/pep-build.md` |
 //! | `pepper` | `pepper --help` (built from `tools/pepper`) | `docs/src/tools/pepper.md` |
 //! | `pep-fmt` | `pep-fmt --help` (built from `tools/pep-fmt`) | `docs/src/tools/pep-fmt.md` |
+//! | `pep-profile` | `pep-profile --help` (built from `tools/pep-profile`) | `docs/src/tools/pep-profile.md` |
 //! | `pep-doc` | `tools/docgen/src/help.txt`, which it prints | `docs/src/tools/pep-doc.md` |
 //! | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 //! | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
@@ -190,6 +191,13 @@ fn pep_fmt_options_are_documented() {
     let output = Command::new(support::pepper_tool("pep-fmt")).arg("--help").output().expect("run pep-fmt --help");
     let help = stdout_of(&output);
     assert_documented(undocumented("pep-fmt", "docs/src/tools/pep-fmt.md", "option", &help_options(&help), mentions));
+}
+
+#[test]
+fn pep_profile_options_are_documented() {
+    let output = Command::new(support::pepper_tool("pep-profile")).arg("--help").output().expect("run pep-profile --help");
+    let help = stdout_of(&output);
+    assert_documented(undocumented("pep-profile", "docs/src/tools/pep-profile.md", "option", &help_options(&help), mentions));
 }
 
 #[test]

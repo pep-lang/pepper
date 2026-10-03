@@ -44,12 +44,13 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | --- | --- | --- |
 | `pepper build` | `pep-build` | Compiles a program ([The compiler: pep-build](pep-build.md)) |
 | `pepper fmt` | `pep-fmt` | Formats source ([Formatting with pep-fmt](pep-fmt.md)) |
+| `pepper profile` | `pep-profile` | Profiles a program and draws a flame graph ([Profiling with pep-profile](pep-profile.md)) |
 | `pepper lsp` | `pep-lsp` | Runs the language server, which editors start ([The language server: pep-lsp](pep-lsp.md)) |
 | `pepper doc` | `pep-doc` | Generates the library reference and builds this book ([The documentation builder: pep-doc](pep-doc.md)) |
 
 `cargo build --release --workspace` builds `pep-build`, `pep-lsp` and `pep-doc` into
-`target/release`; `pep-fmt` and `pepper` are Pepper programs, built with
-`pep-build`.
+`target/release`; `pep-fmt`, `pep-profile` and `pepper` are Pepper
+programs, built with `pep-build`.
 
 ## Building it
 

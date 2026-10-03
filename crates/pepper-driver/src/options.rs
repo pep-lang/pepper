@@ -104,6 +104,12 @@ pub struct Options {
     #[arg(short = 'g', long = "emit-debug")]
     pub emit_debug: bool,
 
+    /// Keep the frame pointer in every function, even when optimizing, so
+    /// profilers and stack walkers unwind the stack cheaply (clang's
+    /// `-fno-omit-frame-pointer`). `pep-profile` builds with it.
+    #[arg(long = "frame-pointers")]
+    pub frame_pointers: bool,
+
     /// Accepted for compatibility; prints nothing more yet.
     #[arg(short = 'v', long = "verbose")]
     pub verbose: bool,
@@ -204,6 +210,7 @@ impl Options {
             opt_level,
             lto,
             debug: self.emit_debug,
+            frame_pointers: self.frame_pointers,
             cpu: self.effective_cpu()?,
             runtime_checks,
             build_options: self.effective_build_options(),

@@ -38,6 +38,17 @@ pub fn demangle_name(name: &str) -> &str {
     name.split_once([SEPARATOR, OVERLOAD_SEPARATOR]).map_or(name, |(base, _)| base)
 }
 
+/// A whole mangled name as the user would write it, with every namespace and
+/// overload member number removed wherever it appears:
+/// `Box<Point@geo/shapes>.area$2` is `Box<Point>.area`. For names (symbols,
+/// debug info), not messages: a message's paths keep their `@` only through
+/// [`demangle`].
+pub fn display_name(name: &str) -> String {
+    let quoted = format!("'{}'", name);
+    let shown = demangle(&quoted);
+    shown[1..shown.len() - 1].to_string()
+}
+
 /// The message `text` with every mangled name inside single quotes spelled
 /// as the user wrote it: `no member named 'x' in 'Box<Point@geo/shapes>'`
 /// becomes `no member named 'x' in 'Box<Point>'`. An apostrophe inside a
@@ -131,6 +142,13 @@ mod tests {
         assert_eq!(demangle("cannot find \"nope@x.pep\""), "cannot find \"nope@x.pep\"");
         // An apostrophe inside a word opens no quote.
         assert_eq!(demangle("the runtime's files, like 'f@a'"), "the runtime's files, like 'f'");
+    }
+
+    #[test]
+    fn display_name_strips_every_namespace() {
+        assert_eq!(display_name("Box<Point@geo/shapes>.area$2"), "Box<Point>.area");
+        assert_eq!(display_name("__closure_0@hot.__call"), "__closure_0.__call");
+        assert_eq!(display_name("main"), "main");
     }
 
     #[test]

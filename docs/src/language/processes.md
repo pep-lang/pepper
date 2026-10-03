@@ -109,4 +109,18 @@ directory. The running process reads its own environment with
 `arguments()` and `exit()` without `import process` still work, but are
 deprecated and warn.
 
+## Finding a program
+
+`process.find_executable(name)` looks a program up on the `PATH` as a shell
+does, returning the path of the first match that may be run, or none, so a
+tool can say what to install before trying to run it.
+`process.is_executable(path)` tells whether a file may be run.
+
+```pepper
+var perf = process.find_executable("perf");
+if (perf.is_empty()) {
+    print("perf is not installed");
+}
+```
+
 See the [process module reference](../reference/process-module.md).

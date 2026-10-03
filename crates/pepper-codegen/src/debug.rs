@@ -130,6 +130,15 @@ impl<'ctx> DebugInfo<'ctx> {
         Some((line as u32, offset - starts[line - 1] + 1))
     }
 
+    /// The name a closure's body takes in debug info: `closure at
+    /// main.pep:12`, for the closure written at `loc`.
+    pub fn closure_name(&self, loc: Loc) -> Option<String> {
+        let (name, _) = self.lines.get(&loc.known()?.file)?;
+        let (line, _) = self.line_column(loc)?;
+        let file = name.rsplit(['/', '\\']).next().unwrap_or(name);
+        Some(format!("closure at {}:{}", file, line))
+    }
+
     /// The builder, for `debug_types`.
     pub(crate) fn builder(&self) -> &DebugInfoBuilder<'ctx> {
         &self.builder

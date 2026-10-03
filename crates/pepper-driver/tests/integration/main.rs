@@ -75,6 +75,7 @@ mod pepper_entry_tests;
 mod platform_tests;
 mod os_tests;
 mod process_tests;
+mod profile_tests;
 mod propagation_tests;
 mod property_tests;
 mod ptr_syntax_tests;

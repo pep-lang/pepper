@@ -81,6 +81,8 @@ pub struct Build {
     pub cpu: Cpu,
     /// Debug info (`-g`).
     pub debug: bool,
+    /// Every function keeps its frame pointer (`--frame-pointers`).
+    pub frame_pointers: bool,
     /// The runtime checks the code performs (`--no-runtime-checks`).
     pub runtime_checks: pepper_codegen::checks::RuntimeChecks,
     /// The build options (`-D`), which choose what code exists.
@@ -94,7 +96,7 @@ impl Build {
     }
 
     /// How the options appear in the cache: `O2-x86-64@generic`,
-    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`, `O2-nrc-overflow-x86-64@generic`,
+    /// `O2-lto-apple-m1`, `O2-g-x86-64@generic`, `O2-g-fp-x86-64@generic`, `O2-nrc-overflow-x86-64@generic`,
     /// `O0-D1a2b3c4d5e6f-x86-64@generic`. A CPU name that is not a plain file name (from
     /// `-march=native`'s features, say) is hashed.
     pub(crate) fn name(&self) -> String {
@@ -121,7 +123,16 @@ impl Build {
             }
             format!("-D{}", &hasher.finalize().to_hex()[..12])
         };
-        format!("O{}{}{}{}{}-{}", self.opt_level.number(), if self.lto { "-lto" } else { "" }, if self.debug { "-g" } else { "" }, removed, options, cpu)
+        format!(
+            "O{}{}{}{}{}{}-{}",
+            self.opt_level.number(),
+            if self.lto { "-lto" } else { "" },
+            if self.debug { "-g" } else { "" },
+            if self.frame_pointers { "-fp" } else { "" },
+            removed,
+            options,
+            cpu
+        )
     }
 }
 
@@ -613,6 +624,9 @@ pub fn emit(module: &Module<'_>, path: &Path, build: &Build) -> Result<(), Strin
         std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
     }
     build.cpu.stamp(module);
+    if build.frame_pointers {
+        pepper_codegen::target::keep_frame_pointers(module);
+    }
     if build.lto {
         pepper_codegen::target::optimize_with(module, build.opt_level, pepper_codegen::target::Pipeline::PreLink, &build.cpu)?;
         return match module.write_bitcode_to_path(path) {

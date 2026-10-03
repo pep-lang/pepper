@@ -232,8 +232,8 @@ itself or on the `PATH` (see the book's
 Every option and environment variable the compiler reads is described in
 the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
 other tools' options are in [The pepper command](docs/src/tools/pepper.md),
-[pep-fmt](docs/src/tools/pep-fmt.md), [pep-lsp](docs/src/tools/pep-lsp.md)
-and [pep-doc](docs/src/tools/pep-doc.md).
+[pep-fmt](docs/src/tools/pep-fmt.md), [pep-profile](docs/src/tools/pep-profile.md),
+[pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
 From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash
@@ -373,6 +373,23 @@ book's [Formatting with pep-fmt](docs/src/tools/pep-fmt.md) chapter.
 `runtime/` and `tools/` are kept formatted: `pep_fmt_sources_are_formatted`
 fails when a file there is not, so run `./pep-fmt -w runtime tools` before
 committing a change to them.
+
+## Profile a program with pep-profile
+
+`pep-profile` runs a program under a sampling profiler that is already
+installed ([samply](https://github.com/mstange/samply) on any platform,
+else perf on Linux or `sample` on macOS) and writes a flame graph SVG. Given
+a `.pep` file it first builds it with `-O -g --frame-pointers`. It is
+written in Pepper (`tools/pep-profile`):
+
+```bash
+cargo run --release -- -I tools tools/pep-profile/main.pep -o target/release/pep-profile
+target/release/pep-profile main.pep          # writes main.svg
+target/release/pep-profile --pid 4242 -d 10  # a running process, for 10 seconds
+```
+
+Its options are in the book's
+[Profiling with pep-profile](docs/src/tools/pep-profile.md) chapter.
 
 ## VS Code extension from any branch
 
