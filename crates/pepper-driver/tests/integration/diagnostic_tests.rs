@@ -640,11 +640,11 @@ fn exported_variable_not_thread_safe() {
 #[test]
 fn module_scope_variable_with_inferred_type_not_thread_safe() {
     // No written type: the error points at the name.
-    let error = error_of("global_inferred", "const greeting = \"hi\";\nmain(): int { return 0; }\n");
+    let error = error_of("global_inferred", "const greeting = String(\"hi\");\nmain(): int { return 0; }\n");
     assert!(
         error.starts_with(
             "main.pep:1:7: error: module-scope variable 'greeting' has type 'String', which is not thread-safe\n\
-             \x20   1 | const greeting = \"hi\";\n\
+             \x20   1 | const greeting = String(\"hi\");\n\
              \x20     |       ^~~~~~~~\n"
         ),
         "{error}"

@@ -3,7 +3,9 @@
 //! `StringConstant` slot is that value and allocates nothing; a literal
 //! where a `String` is expected is a `String` as before; a
 //! `StringConstant` converts to a `String` through `String`'s `[Implicit]`
-//! constructor; and it has `String`'s read API.
+//! constructor; and it has `String`'s read API. A `const` with no
+//! written type initialized from a literal is one (#516), and it compares
+//! with a `String` either way round (#516).
 
 use crate::support::{jit_cases, sema};
 use pepper_sema::model::{Expression, Module};
@@ -28,6 +30,9 @@ import io;
 extern ulong strlen(char* text);
 
 const GREETING: StringConstant = "hello";
+
+# No written type: a `const` initialized from a literal is a StringConstant.
+const INFERRED = "inferred";
 
 struct Label {
     StringConstant text;
@@ -214,6 +219,42 @@ builders(): int {
     return 0;
 }
 
+inferred_constants(): int {
+    const LOCAL = "local";
+    # Each assignment compiles only if the constant is a StringConstant.
+    StringConstant global = INFERRED;
+    StringConstant local = LOCAL;
+    if (which(INFERRED) != 1 || which(LOCAL) != 1 || global.size != 8 || local.size != 5) {
+        return 1;
+    }
+    if (takes_string(INFERRED) != "inferred" || strlen(INFERRED) != 8) {
+        return 2;
+    }
+    return 0;
+}
+
+mixed_comparisons(): int {
+    String same = "hello";
+    String before = "a";
+    String after = "z";
+    if (!(GREETING == same) || GREETING != same || !(same == GREETING) || same != GREETING) {
+        return 1;
+    }
+    if (GREETING == after || !(GREETING != after)) {
+        return 2;
+    }
+    if (!(GREETING < after) || !(GREETING <= after) || GREETING > after || GREETING >= after) {
+        return 3;
+    }
+    if (GREETING < before || GREETING <= before || !(GREETING > before) || !(GREETING >= before)) {
+        return 4;
+    }
+    if (GREETING < same || !(GREETING <= same) || GREETING > same || !(GREETING >= same)) {
+        return 5;
+    }
+    return 0;
+}
+
 hash_keys(): int {
     var counts = HashMap<StringConstant, int>();
     counts["a"] = 1;
@@ -245,7 +286,7 @@ hash_keys(): int {
 fn string_constants_run() {
     jit_cases(
         PROGRAM,
-        &["literals_are_constants", "literals_are_strings", "overloads_prefer_constants", "converts_to_string", "read_api", "builders", "hash_keys"],
+        &["literals_are_constants", "literals_are_strings", "overloads_prefer_constants", "converts_to_string", "read_api", "builders", "inferred_constants", "mixed_comparisons", "hash_keys"],
     );
 }
 
@@ -257,5 +298,25 @@ fn a_literal_in_a_constant_slot_is_its_constant_bytes() {
     assert_eq!(constants_in(&module, "literals_are_constants"), 4);
     // Both returns and both arms of the ternary.
     assert_eq!(constants_in(&module, "returns_constant"), 3);
-    assert_eq!(constants_in(&module, "literals_are_strings"), 0);
+    // Only the five right sides of `!=` (a `String`'s operators take a
+    // `StringConstant` too); the stored and passed literals stay `String`s.
+    assert_eq!(constants_in(&module, "literals_are_strings"), 5);
+}
+
+#[test]
+fn mixed_comparisons_copy_nothing() {
+    let module = sema(PROGRAM).expect("compile");
+    // `GREETING` on the left calls a `String` overload; it never becomes a
+    // `String` through `to_string()`.
+    let function = module.functions.iter().find(|f| f.name == "mixed_comparisons").expect("mixed_comparisons");
+    let mut copies = 0;
+    pepper_sema::passes::visit_function(function, &mut |e| {
+        if matches!(e, Expression::MethodCall { method, .. } if method == "to_string") {
+            copies += 1;
+        }
+    });
+    assert_eq!(copies, 0);
+    // `const INFERRED = "inferred"` holds the literal's constant bytes.
+    let global = module.globals.iter().find(|g| g.name == "INFERRED").expect("INFERRED");
+    assert_eq!(global.ty.to_string(), "StringConstant");
 }

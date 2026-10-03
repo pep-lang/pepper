@@ -2,7 +2,8 @@
 # allocation and no reference count.
 extern ulong strlen(char* text);
 
-const GREETING: StringConstant = "hello";
+# A `const` initialized from a literal is a StringConstant.
+const GREETING = "hello";
 
 shout(text: String): String {
     return text.upper() + "!";
@@ -21,6 +22,10 @@ main(): int {
     copy.append("!");
     assert(copy == "pepper!" && name == "pepper", "the copy has its own bytes");
     print(shout(GREETING));
+
+    # Compared with a String either way round, with no copy.
+    String typed = "pepper";
+    assert(name == typed && typed == name && GREETING < typed, "mixed comparisons");
 
     # Copying a StringConstant copies a pointer.
     var also = name;

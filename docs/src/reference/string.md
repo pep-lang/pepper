@@ -248,6 +248,22 @@ comparing bytes. Runs in O(size).
 **Returns**
 - true when both hold the same bytes
 
+#### operator ==
+
+```pepper
+==(rhs: StringConstant): bool
+```
+
+Returns whether this String holds the same bytes as the
+`StringConstant` `rhs`, a literal included. Runs in O(size) and
+copies nothing.
+
+**Parameters**
+- `rhs` — the text to compare with
+
+**Returns**
+- true when both hold the same bytes
+
 #### operator +=
 
 ```pepper
@@ -604,6 +620,20 @@ of `==`. Runs in O(size).
 **Returns**
 - true when the contents differ
 
+#### operator !=
+
+```pepper
+!=(rhs: StringConstant): bool
+```
+
+Returns whether this String differs from the `StringConstant` `rhs`.
+
+**Parameters**
+- `rhs` — the text to compare with
+
+**Returns**
+- true when the contents differ
+
 #### operator +
 
 ```pepper
@@ -730,6 +760,21 @@ Returns whether this String orders before `other`, as `compare` does.
 **Returns**
 - true when `compare(other) < 0`
 
+#### operator <
+
+```pepper
+<(other: StringConstant): bool
+```
+
+Returns whether this String orders before the `StringConstant` `other`,
+byte by byte, a literal included. Copies nothing.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is negative
+
 #### operator <=
 
 ```pepper
@@ -745,6 +790,21 @@ Returns whether this String orders before `other` or equals it, as
 **Returns**
 - true when `compare(other) <= 0`
 
+#### operator <=
+
+```pepper
+<=(other: StringConstant): bool
+```
+
+Returns whether this String orders before or equals the `StringConstant` `other`,
+byte by byte, a literal included. Copies nothing.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not positive
+
 #### operator >
 
 ```pepper
@@ -758,6 +818,21 @@ Returns whether this String orders after `other`, as `compare` does.
 
 **Returns**
 - true when `compare(other) > 0`
+
+#### operator >
+
+```pepper
+>(other: StringConstant): bool
+```
+
+Returns whether this String orders after the `StringConstant` `other`,
+byte by byte, a literal included. Copies nothing.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is positive
 
 #### operator >=
 
@@ -773,6 +848,21 @@ Returns whether this String orders after `other` or equals it, as
 
 **Returns**
 - true when `compare(other) >= 0`
+
+#### operator >=
+
+```pepper
+>=(other: StringConstant): bool
+```
+
+Returns whether this String orders after or equals the `StringConstant` `other`,
+byte by byte, a literal included. Copies nothing.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not negative
 
 #### trim_end
 
@@ -920,8 +1010,10 @@ var indent = " ".repeat(8);   # eight spaces
 
 The text of a string literal: a pointer to its bytes, which never change
 and are never freed, with their byte size and code-point length. A string
-literal's type is `StringConstant`; where a `String` is expected, the
-literal is a `String` (see the Strings chapter of the book).
+literal's type is `StringConstant`, and so is a `const` with no written
+type initialized from one (`const NAME = "pepper";`); where a `String` is
+expected, the literal is a `String` (see the Strings chapter of the
+book).
 
 A `StringConstant` is a `[Value]` type: copying one copies the pointer
 and steps no reference count, and any thread may read it. Its bytes
@@ -1060,8 +1152,7 @@ counts from the end. Runs in O(idx).
 ```
 
 Returns whether two texts hold the same bytes, a literal `rhs`
-included. Runs in O(size). To compare with a `String`, put the
-`String` on the left (`name == constant`).
+included. Runs in O(size).
 
 **Parameters**
 - `rhs` — the text to compare with
@@ -1079,6 +1170,35 @@ Returns whether two texts differ.
 
 **Parameters**
 - `rhs` — the text to compare with
+
+**Returns**
+- true when the bytes differ
+
+#### operator ==
+
+```pepper
+==(rhs: String): bool
+```
+
+Returns whether this text holds the same bytes as the String `rhs`.
+Runs in O(size) and copies nothing.
+
+**Parameters**
+- `rhs` — the String to compare with
+
+**Returns**
+- true when both hold the same bytes
+
+#### operator !=
+
+```pepper
+!=(rhs: String): bool
+```
+
+Returns whether this text differs from the String `rhs`.
+
+**Parameters**
+- `rhs` — the String to compare with
 
 **Returns**
 - true when the bytes differ
@@ -1254,6 +1374,20 @@ Returns whether this text sorts before `other`, byte by byte.
 **Returns**
 - true when the byte-by-byte order is negative
 
+#### operator <
+
+```pepper
+<(other: String): bool
+```
+
+Returns whether this text sorts before the String `other`, byte by byte.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when the byte-by-byte order is negative
+
 #### operator <=
 
 ```pepper
@@ -1264,6 +1398,20 @@ Returns whether this text sorts before or the same as `other`, byte by byte.
 
 **Parameters**
 - `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not positive
+
+#### operator <=
+
+```pepper
+<=(other: String): bool
+```
+
+Returns whether this text sorts before or the same as the String `other`, byte by byte.
+
+**Parameters**
+- `other` — the String to compare with
 
 **Returns**
 - true when the byte-by-byte order is not positive
@@ -1282,6 +1430,20 @@ Returns whether this text sorts after `other`, byte by byte.
 **Returns**
 - true when the byte-by-byte order is positive
 
+#### operator >
+
+```pepper
+>(other: String): bool
+```
+
+Returns whether this text sorts after the String `other`, byte by byte.
+
+**Parameters**
+- `other` — the String to compare with
+
+**Returns**
+- true when the byte-by-byte order is positive
+
 #### operator >=
 
 ```pepper
@@ -1292,6 +1454,20 @@ Returns whether this text sorts after or the same as `other`, byte by byte.
 
 **Parameters**
 - `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not negative
+
+#### operator >=
+
+```pepper
+>=(other: String): bool
+```
+
+Returns whether this text sorts after or the same as the String `other`, byte by byte.
+
+**Parameters**
+- `other` — the String to compare with
 
 **Returns**
 - true when the byte-by-byte order is not negative

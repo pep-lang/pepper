@@ -131,6 +131,10 @@ pub struct CodeGenerator<'ctx> {
     /// by name; the generic `hash<T>`'s specializations, which hash by
     /// identity, are not among them.
     hash_overrides: HashSet<String>,
+    /// Each struct's `==` taking its own type, by struct name: `String.==`,
+    /// or the member of an overloaded `==` set that takes it
+    /// (`String.==$1` beside `==(rhs: StringConstant)`).
+    equality_methods: HashMap<String, String>,
     /// A unit's value struct `__acquire`/`__release` thunks, declared but
     /// not yet defined: `codegen_unit` defines the ones its code calls, so
     /// the program's other instantiations do not reach the unit's code.
@@ -274,6 +278,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             tuple_order: Vec::new(),
             values: HashMap::new(),
             hash_overrides: HashSet::new(),
+            equality_methods: HashMap::new(),
             pending_value_thunks: Vec::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
@@ -355,6 +360,18 @@ impl<'ctx> CodeGenerator<'ctx> {
             .iter()
             .filter(|f| f.name.starts_with("hash<") && f.generic_params.is_empty())
             .map(|f| f.name.clone())
+            .collect();
+        self.equality_methods = module
+            .structs
+            .iter()
+            .filter_map(|st| {
+                let own = st.method_members.iter().find(|m| {
+                    pepper_sema::passes::overloads::set_name(&m.name) == "=="
+                        && m.parameters.len() == 1
+                        && m.parameters[0].ty.to_string() == st.ty.to_string()
+                })?;
+                Some((st.name.clone(), format!("{}.{}", st.name, own.name)))
+            })
             .collect();
         if self.debug_info {
             let unit_name = self.debug_unit_name(module);
@@ -1651,6 +1668,13 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(all)
     }
 
+    /// The function `a == b` calls for two values of struct type `ty`: its
+    /// `==` taking a `ty`, picked from an overload set if it has several.
+    /// `ty.==` when it has none, which no function is named.
+    fn equality_method(&self, ty: &str) -> String {
+        self.equality_methods.get(ty).cloned().unwrap_or_else(|| format!("{}.==", ty))
+    }
+
     /// `a == b` for two values of sema type `ty`, as an `i1`: a tuple
     /// element-wise, a struct through its `==` when it declares one (else by
     /// identity), a trait value by object, anything else by value.
@@ -1660,7 +1684,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         a: BasicValueEnum<'ctx>,
         b: BasicValueEnum<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
-        let method = format!("{}.==", ty);
+        let method = self.equality_method(ty);
         // A value struct without its own `==` compares field by field.
         if self.tuples.contains_key(ty) || (self.values.contains_key(ty) && !self.functions.contains_key(&method)) {
             return self.tuple_equal(ty, a, b);
@@ -1752,7 +1776,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let pointer = self.object_pointer(item)?;
                 let zero = self.context.i64_type().const_zero();
                 self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&derived, vec![item])?.into_int_value()))?
-            } else if !own_hash && self.functions.contains_key(&format!("{}.==", element)) && matches!(item, BasicValueEnum::PointerValue(_)) {
+            } else if !own_hash && self.functions.contains_key(&self.equality_method(element)) && matches!(item, BasicValueEnum::PointerValue(_)) {
                 // An object compared by its `==` but hashed by identity
                 // (an `Array`): equal elements would hash apart, so it
                 // adds nothing to the hash.

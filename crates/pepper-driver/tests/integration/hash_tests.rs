@@ -923,3 +923,34 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn overloaded_equality_in_tuples_and_equatable_fields() {
+    // A tuple element or `[Equatable]` field whose struct overloads `==`
+    // compares through the member taking its own type, not by identity.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+struct A {
+    int v;
+    construct(int v) { this.v = v; }
+    ==(rhs: int): bool { return v == rhs; }
+    ==(rhs: A): bool { return v == rhs.v; }
+}
+[Equatable]
+struct Holder {
+    A a;
+    construct(A a) { this.a = a; }
+}
+test(): int {
+    if ((A(1), 2) != (A(1), 2)) { return -1; }
+    if ((A(1), 2) == (A(3), 2)) { return -2; }
+    if (Holder(A(4)) != Holder(A(4))) { return -3; }
+    var some = Optional<A>.Value(A(5));
+    if (some != Optional<A>.Value(A(5))) { return -4; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

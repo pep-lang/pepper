@@ -143,7 +143,7 @@ Every place a literal is stored (a variable, a field, an array element, a
 function's result) gets a new `String`, so changing it never changes the
 literal: after `var s = "a"; s.append("b");` the next `"a"` is still `"a"`.
 Where a literal is only read, passed to a parameter that the function
-neither keeps nor changes (`builder.append("x")`, `name == "x"`), every
+neither keeps nor changes (`builder.append("x")`, `name.contains("x")`), every
 evaluation shares one constant object and allocates nothing.
 
 #### String constants
@@ -172,17 +172,18 @@ picks a `String` parameter last, as an implicit conversion.
 ```
 
 - **Where a literal is a `StringConstant`**: a variable, field, parameter or
-  return value of type `StringConstant`, and a `HashMap<StringConstant, V>`
-  key. Everywhere else a literal is a `String`, as before.
+  return value of type `StringConstant`, a `HashMap<StringConstant, V>` key,
+  and a `const` with no written type (`const GREETING = "hello";`), so a
+  module-scope text constant allocates nothing and any thread may read it.
+  Everywhere else, `var s = "x"` included, a literal is a `String`, as
+  before.
 - **Converting chains once**: a literal reaches a type that converts from
   `String` (`io.Path`, `Error`) directly, but a `StringConstant` variable
   does not, since conversions never chain. Write `String(text)` or pass a
   literal.
-- **Comparing**: `==`, `!=`, `<`, `<=`, `>` and `>=` on a `StringConstant`
-  take another `StringConstant` (a literal included), so generic code such
-  as a `HashMap<StringConstant, V>` compares two keys with no conversion. To
-  compare with a `String`, put the `String` on the left (`name == constant`)
-  or call `compare`, which takes a `String`.
+- **Comparing**: `==`, `!=`, `<`, `<=`, `>` and `>=` compare a
+  `StringConstant` with another `StringConstant` (a literal included) or
+  with a `String`, either way round, and copy nothing.
 - **A literal method call** (`"a,b".split(",")`) calls the `String` method.
 
 `to_string` turns any integer into its decimal text. For parsing and

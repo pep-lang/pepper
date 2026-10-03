@@ -1450,7 +1450,9 @@ reference held per reference element.
   `_` elements stay in the hidden tuple until its scope exits.
 - **Comparing and hashing.** `codegen_binary` sends a tuple `==`/`!=`
   to `tuple_equal`, which compares element by element (`value_equal`: an
-  element's own `==` when its type has one, else by value or identity).
+  element's own `==` when its type has one, else by value or identity; of
+  an overloaded `==`, the member taking the element's own type, found by
+  `equality_method`).
   `Expression::Address` on a tuple (what `hash<T>` uses) is `tuple_hash`,
   which folds each element's `hash<E>` (or its bytes) with FNV-1a, so a tuple
   is a `HashMap` key. Its text comes from the runtime's `to_string<A, B, ...>`

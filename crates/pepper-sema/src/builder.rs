@@ -655,7 +655,15 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
 fn variable_in_context(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
     check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
-    let ty = type_name_from(&decl.type_name);
+    let mut ty = type_name_from(&decl.type_name);
+    // `const X = "text";` is a `StringConstant`: it never changes, so it
+    // keeps the literal's constant bytes and allocates nothing.
+    if decl.is_const
+        && ty.is_auto()
+        && matches!(decl.default_value, Some(ast::Expression::Literal { value: ast::Literal::String(_), .. }))
+    {
+        ty = TypeName::new(crate::passes::convert_to_traits::STRING_CONSTANT);
+    }
     if let Some(value) = &decl.default_value {
         check_literal_labels(&decl.type_name, value)?;
     }

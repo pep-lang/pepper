@@ -321,6 +321,16 @@ export struct String {
         return _pep_utf8_compare(_data, _size, rhs._data, rhs._size, _size);
     }
 
+    ## Returns whether this String holds the same bytes as the
+    ## `StringConstant` `rhs`, a literal included. Runs in O(size) and
+    ## copies nothing.
+    ##
+    ## @param rhs the text to compare with
+    ## @returns true when both hold the same bytes
+    ==(rhs: StringConstant): bool {
+        return _string_equals(_data, _size, _length, rhs._data, rhs._size, rhs._length);
+    }
+
     ## Appends `rhs` in place, like `append`, and returns this same String,
     ## not a copy. `s += t` modifies the object that every reference to `s`
     ## shares, and invalidates running iterators.
@@ -575,6 +585,14 @@ export struct String {
         return !(this == rhs);
     }
 
+    ## Returns whether this String differs from the `StringConstant` `rhs`.
+    ##
+    ## @param rhs the text to compare with
+    ## @returns true when the contents differ
+    !=(rhs: StringConstant): bool {
+        return !(this == rhs);
+    }
+
     ## Returns a new String that holds this String followed by `rhs`. Neither
     ## operand is modified. Runs in O(size + rhs.size).
     ##
@@ -662,6 +680,15 @@ export struct String {
         return compare(other) < 0;
     }
 
+    ## Returns whether this String orders before the `StringConstant` `other`,
+    ## byte by byte, a literal included. Copies nothing.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is negative
+    <(other: StringConstant): bool {
+        return _string_compare(_data, _size, other._data, other._size) < 0;
+    }
+
     ## Returns whether this String orders before `other` or equals it, as
     ## `compare` does.
     ##
@@ -669,6 +696,15 @@ export struct String {
     ## @returns true when `compare(other) <= 0`
     <=(other: String): bool {
         return compare(other) <= 0;
+    }
+
+    ## Returns whether this String orders before or equals the `StringConstant` `other`,
+    ## byte by byte, a literal included. Copies nothing.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is not positive
+    <=(other: StringConstant): bool {
+        return _string_compare(_data, _size, other._data, other._size) <= 0;
     }
 
     ## Returns whether this String orders after `other`, as `compare` does.
@@ -679,6 +715,15 @@ export struct String {
         return compare(other) > 0;
     }
 
+    ## Returns whether this String orders after the `StringConstant` `other`,
+    ## byte by byte, a literal included. Copies nothing.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is positive
+    >(other: StringConstant): bool {
+        return _string_compare(_data, _size, other._data, other._size) > 0;
+    }
+
     ## Returns whether this String orders after `other` or equals it, as
     ## `compare` does.
     ##
@@ -686,6 +731,15 @@ export struct String {
     ## @returns true when `compare(other) >= 0`
     >=(other: String): bool {
         return compare(other) >= 0;
+    }
+
+    ## Returns whether this String orders after or equals the `StringConstant` `other`,
+    ## byte by byte, a literal included. Copies nothing.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is not negative
+    >=(other: StringConstant): bool {
+        return _string_compare(_data, _size, other._data, other._size) >= 0;
     }
 
     ## Returns a new String without the whitespace at the end: spaces, tabs,
@@ -779,8 +833,10 @@ export struct String {
 
 ## The text of a string literal: a pointer to its bytes, which never change
 ## and are never freed, with their byte size and code-point length. A string
-## literal's type is `StringConstant`; where a `String` is expected, the
-## literal is a `String` (see the Strings chapter of the book).
+## literal's type is `StringConstant`, and so is a `const` with no written
+## type initialized from one (`const NAME = "pepper";`); where a `String` is
+## expected, the literal is a `String` (see the Strings chapter of the
+## book).
 ##
 ## A `StringConstant` is a `[Value]` type: copying one copies the pointer
 ## and steps no reference count, and any thread may read it. Its bytes
@@ -889,13 +945,13 @@ export struct StringConstant {
         return _string_index(c_str(), _size, _length, idx, location);
     }
 
-    # The operators take a `StringConstant`, so generic code comparing two
-    # values of one type (`HashMap<StringConstant, V>`, `sort`) needs no
-    # conversion. A `String` on the left compares with either type.
+    # Each operator has a `StringConstant` overload, so generic code
+    # comparing two values of one type (`HashMap<StringConstant, V>`, `sort`)
+    # needs no conversion, and a `String` overload, which compares with no
+    # copy. A literal picks the `StringConstant` one.
 
     ## Returns whether two texts hold the same bytes, a literal `rhs`
-    ## included. Runs in O(size). To compare with a `String`, put the
-    ## `String` on the left (`name == constant`).
+    ## included. Runs in O(size).
     ##
     ## @param rhs the text to compare with
     ## @returns true when both hold the same bytes
@@ -908,6 +964,23 @@ export struct StringConstant {
     ## @param rhs the text to compare with
     ## @returns true when the bytes differ
     !=(rhs: StringConstant): bool {
+        return !(this == rhs);
+    }
+
+    ## Returns whether this text holds the same bytes as the String `rhs`.
+    ## Runs in O(size) and copies nothing.
+    ##
+    ## @param rhs the String to compare with
+    ## @returns true when both hold the same bytes
+    ==(rhs: String): bool {
+        return _string_equals(c_str(), _size, _length, rhs._data, rhs._size, rhs._length);
+    }
+
+    ## Returns whether this text differs from the String `rhs`.
+    ##
+    ## @param rhs the String to compare with
+    ## @returns true when the bytes differ
+    !=(rhs: String): bool {
         return !(this == rhs);
     }
 
@@ -1005,7 +1078,7 @@ export struct StringConstant {
     ## @returns a negative number, 0, or a positive number when this text
     ##   sorts before, the same as, or after `other`
     compare(other: String): int {
-        return _string_compare(c_str(), _size, other.c_str(), other.size);
+        return _string_compare(c_str(), _size, other._data, other._size);
     }
 
     ## Returns whether this text sorts before `other`, byte by byte.
@@ -1016,12 +1089,28 @@ export struct StringConstant {
         return _string_compare(c_str(), _size, other.c_str(), other._size) < 0;
     }
 
+    ## Returns whether this text sorts before the String `other`, byte by byte.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when the byte-by-byte order is negative
+    <(other: String): bool {
+        return _string_compare(c_str(), _size, other._data, other._size) < 0;
+    }
+
     ## Returns whether this text sorts before or the same as `other`, byte by byte.
     ##
     ## @param other the text to compare with
     ## @returns true when the byte-by-byte order is not positive
     <=(other: StringConstant): bool {
         return _string_compare(c_str(), _size, other.c_str(), other._size) <= 0;
+    }
+
+    ## Returns whether this text sorts before or the same as the String `other`, byte by byte.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when the byte-by-byte order is not positive
+    <=(other: String): bool {
+        return _string_compare(c_str(), _size, other._data, other._size) <= 0;
     }
 
     ## Returns whether this text sorts after `other`, byte by byte.
@@ -1032,12 +1121,28 @@ export struct StringConstant {
         return _string_compare(c_str(), _size, other.c_str(), other._size) > 0;
     }
 
+    ## Returns whether this text sorts after the String `other`, byte by byte.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when the byte-by-byte order is positive
+    >(other: String): bool {
+        return _string_compare(c_str(), _size, other._data, other._size) > 0;
+    }
+
     ## Returns whether this text sorts after or the same as `other`, byte by byte.
     ##
     ## @param other the text to compare with
     ## @returns true when the byte-by-byte order is not negative
     >=(other: StringConstant): bool {
         return _string_compare(c_str(), _size, other.c_str(), other._size) >= 0;
+    }
+
+    ## Returns whether this text sorts after or the same as the String `other`, byte by byte.
+    ##
+    ## @param other the String to compare with
+    ## @returns true when the byte-by-byte order is not negative
+    >=(other: String): bool {
+        return _string_compare(c_str(), _size, other._data, other._size) >= 0;
     }
 
     ## Returns a new String without the whitespace at the end.
