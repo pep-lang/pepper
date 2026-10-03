@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182db767.js";
+            window.path_to_searchindex_js = "../searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -186,7 +186,9 @@
 <p>Compression: DEFLATE (RFC 1951) with its zlib and gzip framings, in one
 call or as streams, and the CRC-32 and Adler-32 checksums.</p>
 <p>Bring it in with <code>import compress</code>. It is written in Pepper, so it needs
-no zlib. Corrupt data is an <code>io.IoError</code> whose <code>is_invalid_input()</code> holds.</p>
+no zlib, unless the program is built with <code>-D USE_ZLIB</code>, which makes it
+use zlib with the same API. Corrupt data is an <code>io.IoError</code> whose
+<code>is_invalid_input()</code> holds.</p>
 <ul>
 <li><a href="compress-format.html">Formats and streams</a>: <code>Format</code>, <code>Deflate</code>, <code>Zlib</code>,
 <code>Gzip</code>, <code>DecompressReader</code>, <code>CompressWriter</code></li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182db767.js";
+            window.path_to_searchindex_js = "../searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -259,6 +259,19 @@ _sha256_compress(...) { ... }   # the portable fallback
 import "linux_trace";
 </code></pre>
 <p>Several attributes on one item combine with “and”, as <code>[Target]</code> does.</p>
+<h2 id="options-the-runtime-reads"><a class="header" href="#options-the-runtime-reads">Options the runtime reads</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>USE_LIBCRYPTO</code></td><td><code>digest</code>’s SHA-256 and SHA-1 use libcrypto (CNG on Windows); see <a href="digest.html#using-the-systems-crypto-library">Cryptographic hashes</a></td></tr>
+<tr><td><code>USE_ZLIB</code></td><td><code>compress</code> uses zlib; see <a href="compression.html#using-zlib">Compression</a></td></tr>
+<tr><td><code>TEST</code></td><td>defined by <code>pep-build --test</code>; see <a href="testing.html#test-builds">Unit tests</a></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="comparing-values"><a class="header" href="#comparing-values">Comparing values</a></h2>
 <p><code>BuildOption(NAME)</code> may be compared with a literal using <code>==</code>, <code>!=</code>, <code>&lt;</code>,
 <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>, on either side. The literal’s type says how the value

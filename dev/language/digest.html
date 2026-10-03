@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182db767.js";
+            window.path_to_searchindex_js = "../searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -254,11 +254,34 @@ object ids.</li>
 <p>None of these is the hash for a hash table: <code>HashMap</code> and <code>HashSet</code> use
 <a href="hashing.html"><code>hash&lt;T&gt;</code></a>, which is much faster but neither cryptographic nor
 stable between versions.</p>
+<h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system’s crypto library</a></h2>
+<p>By default the hashes are written in Pepper, so a program that uses them
+links no extra library. Building with <code>-D USE_LIBCRYPTO</code> (see
+<a href="build-options.html">Build options</a>) makes SHA-256 and SHA-1 call the
+platform’s crypto library instead, which uses the CPU’s SHA instructions
+where it has them: several times faster (about 1.7 GB/s instead of
+250 MB/s for SHA-256 on an x86-64 with SHA-NI).</p>
+<pre><code class="language-sh">pep-build main.pep -D USE_LIBCRYPTO -o app
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Library</th><th>What it needs</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>OpenSSL’s libcrypto (<code>EVP_Digest*</code>), linked as <code>-lcrypto</code></td><td>the development package (<code>libssl-dev</code>, <code>openssl-devel</code>)</td></tr>
+<tr><td>macOS</td><td>OpenSSL’s libcrypto, linked as <code>-lcrypto</code></td><td>Homebrew’s <code>openssl@3</code>, and its <code>lib</code> folder named with <code>-L</code> or <code>PEPPER_LIBRARY_PATH</code> (<code>-L $(brew --prefix openssl@3)/lib</code>)</td></tr>
+<tr><td>Windows</td><td>CNG (<code>BCryptHash*</code>), linked as <code>bcrypt.lib</code></td><td>nothing: CNG is part of Windows 10 and later</td></tr>
+</tbody>
+</table>
+</div>
+<p>The API and the digests are the same either way. <code>Blake3</code> stays portable
+Pepper, since libcrypto has no BLAKE3.</p>
 <h2 id="limitations"><a class="header" href="#limitations">Limitations</a></h2>
 <ul>
-<li>The hashes are written in Pepper, with no link dependency. They run at a
-few hundred megabytes per second, below OpenSSL’s SHA-256 with CPU SHA
-instructions and the official BLAKE3, which uses SIMD and threads.</li>
+<li>Without <code>USE_LIBCRYPTO</code>, SHA-256 and SHA-1 run at a few hundred
+megabytes per second. BLAKE3 is always the portable code, below the
+official BLAKE3, which uses SIMD and threads.</li>
 <li>BLAKE3’s keyed hashing, key derivation and extended output are not
 supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
 <li>The code is not hardened against timing side channels, which matters only

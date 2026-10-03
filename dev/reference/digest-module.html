@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182db767.js";
+            window.path_to_searchindex_js = "../searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -195,9 +195,11 @@ such as git object ids</li>
 <li><a href="digest-blake3.html">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code></li>
 <li><a href="digest-hex.html">Hexadecimal</a>: <code>to_hex</code></li>
 </ul>
-<p>The implementations are portable Pepper with no link dependency; they
-are not hardened against timing side channels, which matters only when
-hashing secrets.</p>
+<p>The implementations are portable Pepper with no link dependency, unless
+the program is built with <code>-D USE_LIBCRYPTO</code>: then SHA-256 and SHA-1 call
+OpenSSL’s libcrypto (CNG on Windows), which uses the CPU’s SHA
+instructions. They are not hardened against timing side channels, which
+matters only when hashing secrets.</p>
 <p>For the hash tables of <code>HashMap</code> and <code>HashSet</code>, use <code>hash&lt;T&gt;</code> instead:
 it is much faster, but neither cryptographic nor stable between
 versions.</p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-182db767.js";
+            window.path_to_searchindex_js = "../searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -185,7 +185,8 @@
 <p>The <code>compress</code> module compresses and decompresses DEFLATE data, plain or
 in its zlib and gzip framings, and the <code>archive</code> module reads and writes
 tar archives. Together they handle <code>.gz</code> and <code>.tar.gz</code> files. Both are
-written in Pepper, so a program that uses them links no extra library.</p>
+written in Pepper, so a program that uses them links no extra library,
+unless it is built to use zlib (see <a href="#using-zlib">Using zlib</a>).</p>
 <pre><code class="language-pepper"># Compress and decompress bytes in one call, or as streams.
 import compress;
 import io;
@@ -272,6 +273,24 @@ compresses what is written and writes the result to <code>sink</code>. Call
 the writer does not finish it, and <code>finish()</code> does not close the sink.</p>
 <p><code>io.ByteReader(bytes)</code> and <code>io.ByteWriter()</code> stand in for a stream when
 the data is in memory.</p>
+<h2 id="using-zlib"><a class="header" href="#using-zlib">Using zlib</a></h2>
+<p>Building with <code>-D USE_ZLIB</code> (see <a href="build-options.html">Build options</a>) makes
+<code>compress</code> use zlib, the reference DEFLATE library, for compressing,
+decompressing, CRC-32 and Adler-32, in place of its Pepper code:</p>
+<pre><code class="language-sh">pep-build main.pep -D USE_ZLIB -o app
+</code></pre>
+<ul>
+<li>The API is the same, and so are the errors for damaged data, worded as
+the Pepper code words them where zlib tells the causes apart. Compressed
+output can differ byte for byte (zlib’s gzip header names the operating
+system), but each side decompresses the other’s.</li>
+<li>Linux links <code>-lz</code>, from the development package (<code>zlib1g-dev</code>,
+<code>zlib-devel</code>). macOS has zlib already. Windows has none: install it
+(<code>vcpkg install zlib</code>) and name the folder holding <code>zlib.lib</code> with <code>-L</code>
+or <code>PEPPER_LIBRARY_PATH</code>.</li>
+<li>zlib compresses faster than the Pepper code at the same level, and
+makes output of about the same size.</li>
+</ul>
 <h2 id="tar-archives"><a class="header" href="#tar-archives">Tar archives</a></h2>
 <pre><code class="language-pepper"># Write a .tar.gz, list it, and extract it.
 import archive;

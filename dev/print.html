@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-182db767.js";
+            window.path_to_searchindex_js = "searchindex-2e8d6deb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8e9cc5d7.js"></script>
@@ -2877,7 +2877,8 @@ its properties do.</li>
 <p>The <code>compress</code> module compresses and decompresses DEFLATE data, plain or
 in its zlib and gzip framings, and the <code>archive</code> module reads and writes
 tar archives. Together they handle <code>.gz</code> and <code>.tar.gz</code> files. Both are
-written in Pepper, so a program that uses them links no extra library.</p>
+written in Pepper, so a program that uses them links no extra library,
+unless it is built to use zlib (see <a href="#using-zlib">Using zlib</a>).</p>
 <pre><code class="language-pepper"># Compress and decompress bytes in one call, or as streams.
 import compress;
 import io;
@@ -2964,6 +2965,24 @@ compresses what is written and writes the result to <code>sink</code>. Call
 the writer does not finish it, and <code>finish()</code> does not close the sink.</p>
 <p><code>io.ByteReader(bytes)</code> and <code>io.ByteWriter()</code> stand in for a stream when
 the data is in memory.</p>
+<h2 id="using-zlib"><a class="header" href="#using-zlib">Using zlib</a></h2>
+<p>Building with <code>-D USE_ZLIB</code> (see <a href="#build-options">Build options</a>) makes
+<code>compress</code> use zlib, the reference DEFLATE library, for compressing,
+decompressing, CRC-32 and Adler-32, in place of its Pepper code:</p>
+<pre><code class="language-sh">pep-build main.pep -D USE_ZLIB -o app
+</code></pre>
+<ul>
+<li>The API is the same, and so are the errors for damaged data, worded as
+the Pepper code words them where zlib tells the causes apart. Compressed
+output can differ byte for byte (zlib’s gzip header names the operating
+system), but each side decompresses the other’s.</li>
+<li>Linux links <code>-lz</code>, from the development package (<code>zlib1g-dev</code>,
+<code>zlib-devel</code>). macOS has zlib already. Windows has none: install it
+(<code>vcpkg install zlib</code>) and name the folder holding <code>zlib.lib</code> with <code>-L</code>
+or <code>PEPPER_LIBRARY_PATH</code>.</li>
+<li>zlib compresses faster than the Pepper code at the same level, and
+makes output of about the same size.</li>
+</ul>
 <h2 id="tar-archives"><a class="header" href="#tar-archives">Tar archives</a></h2>
 <pre><code class="language-pepper"># Write a .tar.gz, list it, and extract it.
 import archive;
@@ -15302,11 +15321,34 @@ object ids.</li>
 <p>None of these is the hash for a hash table: <code>HashMap</code> and <code>HashSet</code> use
 <a href="#hashing-and-equality"><code>hash&lt;T&gt;</code></a>, which is much faster but neither cryptographic nor
 stable between versions.</p>
+<h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system’s crypto library</a></h2>
+<p>By default the hashes are written in Pepper, so a program that uses them
+links no extra library. Building with <code>-D USE_LIBCRYPTO</code> (see
+<a href="#build-options">Build options</a>) makes SHA-256 and SHA-1 call the
+platform’s crypto library instead, which uses the CPU’s SHA instructions
+where it has them: several times faster (about 1.7 GB/s instead of
+250 MB/s for SHA-256 on an x86-64 with SHA-NI).</p>
+<pre><code class="language-sh">pep-build main.pep -D USE_LIBCRYPTO -o app
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Library</th><th>What it needs</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>OpenSSL’s libcrypto (<code>EVP_Digest*</code>), linked as <code>-lcrypto</code></td><td>the development package (<code>libssl-dev</code>, <code>openssl-devel</code>)</td></tr>
+<tr><td>macOS</td><td>OpenSSL’s libcrypto, linked as <code>-lcrypto</code></td><td>Homebrew’s <code>openssl@3</code>, and its <code>lib</code> folder named with <code>-L</code> or <code>PEPPER_LIBRARY_PATH</code> (<code>-L $(brew --prefix openssl@3)/lib</code>)</td></tr>
+<tr><td>Windows</td><td>CNG (<code>BCryptHash*</code>), linked as <code>bcrypt.lib</code></td><td>nothing: CNG is part of Windows 10 and later</td></tr>
+</tbody>
+</table>
+</div>
+<p>The API and the digests are the same either way. <code>Blake3</code> stays portable
+Pepper, since libcrypto has no BLAKE3.</p>
 <h2 id="limitations-1"><a class="header" href="#limitations-1">Limitations</a></h2>
 <ul>
-<li>The hashes are written in Pepper, with no link dependency. They run at a
-few hundred megabytes per second, below OpenSSL’s SHA-256 with CPU SHA
-instructions and the official BLAKE3, which uses SIMD and threads.</li>
+<li>Without <code>USE_LIBCRYPTO</code>, SHA-256 and SHA-1 run at a few hundred
+megabytes per second. BLAKE3 is always the portable code, below the
+official BLAKE3, which uses SIMD and threads.</li>
 <li>BLAKE3’s keyed hashing, key derivation and extended output are not
 supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
 <li>The code is not hardened against timing side channels, which matters only
@@ -16963,6 +17005,19 @@ _sha256_compress(...) { ... }   # the portable fallback
 import "linux_trace";
 </code></pre>
 <p>Several attributes on one item combine with “and”, as <code>[Target]</code> does.</p>
+<h2 id="options-the-runtime-reads"><a class="header" href="#options-the-runtime-reads">Options the runtime reads</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>USE_LIBCRYPTO</code></td><td><code>digest</code>’s SHA-256 and SHA-1 use libcrypto (CNG on Windows); see <a href="#using-the-systems-crypto-library">Cryptographic hashes</a></td></tr>
+<tr><td><code>USE_ZLIB</code></td><td><code>compress</code> uses zlib; see <a href="#using-zlib">Compression</a></td></tr>
+<tr><td><code>TEST</code></td><td>defined by <code>pep-build --test</code>; see <a href="#test-builds">Unit tests</a></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="comparing-values"><a class="header" href="#comparing-values">Comparing values</a></h2>
 <p><code>BuildOption(NAME)</code> may be compared with a literal using <code>==</code>, <code>!=</code>, <code>&lt;</code>,
 <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code>, on either side. The literal’s type says how the value
@@ -41350,7 +41405,9 @@ enum Size {
 <p>Compression: DEFLATE (RFC 1951) with its zlib and gzip framings, in one
 call or as streams, and the CRC-32 and Adler-32 checksums.</p>
 <p>Bring it in with <code>import compress</code>. It is written in Pepper, so it needs
-no zlib. Corrupt data is an <code>io.IoError</code> whose <code>is_invalid_input()</code> holds.</p>
+no zlib, unless the program is built with <code>-D USE_ZLIB</code>, which makes it
+use zlib with the same API. Corrupt data is an <code>io.IoError</code> whose
+<code>is_invalid_input()</code> holds.</p>
 <ul>
 <li><a href="#formats-and-streams">Formats and streams</a>: <code>Format</code>, <code>Deflate</code>, <code>Zlib</code>,
 <code>Gzip</code>, <code>DecompressReader</code>, <code>CompressWriter</code></li>
@@ -42115,9 +42172,11 @@ such as git object ids</li>
 <li><a href="#blake3">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code></li>
 <li><a href="#hexadecimal">Hexadecimal</a>: <code>to_hex</code></li>
 </ul>
-<p>The implementations are portable Pepper with no link dependency; they
-are not hardened against timing side channels, which matters only when
-hashing secrets.</p>
+<p>The implementations are portable Pepper with no link dependency, unless
+the program is built with <code>-D USE_LIBCRYPTO</code>: then SHA-256 and SHA-1 call
+OpenSSL’s libcrypto (CNG on Windows), which uses the CPU’s SHA
+instructions. They are not hardened against timing side channels, which
+matters only when hashing secrets.</p>
 <p>For the hash tables of <code>HashMap</code> and <code>HashSet</code>, use <code>hash&lt;T&gt;</code> instead:
 it is much faster, but neither cryptographic nor stable between
 versions.</p>
