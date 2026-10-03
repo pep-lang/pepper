@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
+            window.path_to_searchindex_js = "../searchindex-f5c7fdc0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f60afe02.js"></script>
+        <script src="../toc-0a7546a5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -417,7 +417,9 @@ C++. Any other pointer conversion reinterprets memory, so it is spelled
 <code>unsafe_cast</code> (see <a href="types-and-variables.html#reinterpreting-with-unsafe_cast">Reinterpreting with
 <code>unsafe_cast</code></a>).</p>
 <p><code>__null</code> is the null pointer. <code>sizeof&lt;T&gt;()</code> gives the size of a type in bytes,
-which you need to allocate memory for C.</p>
+which you need to allocate memory for C. The
+<a href="../reference/builtins.html">compiler built-ins</a> reference lists these and the
+other <code>__</code> intrinsics.</p>
 <p><code>T*</code> spelling is for extern prototypes only, since they mirror C. Everywhere
 else (parameters, return types, struct fields, locals, globals, type aliases,
 generic arguments and casts) you write <code>__ptr&lt;T&gt;</code>, and <code>T*</code> is a compile error:</p>

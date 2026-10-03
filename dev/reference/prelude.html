@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
+            window.path_to_searchindex_js = "../searchindex-f5c7fdc0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f60afe02.js"></script>
+        <script src="../toc-0a7546a5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,6 +188,7 @@
 <li><a href="internals.html">Built-in functions</a>: <code>assert</code> and <code>panic</code>, which every program can call without an import.</li>
 <li><a href="attributes.html">Built-in attributes</a>: The built-in attributes, declared as <code>[Attribute]</code> structs so a <code>static</code> block can read them like its own: <code>field.has_attribute&lt;Deprecated&gt;()</code> tests for one and <code>function.attribute&lt;Deprecated&gt;().message</code> reads its value (see the reflection chapter).</li>
 <li><a href="reflect.html">The reflect module (compile time)</a>: <code>reflect</code> exists only inside a <a href="../language/reflection.html"><code>static</code> block</a>, which runs while compiling.</li>
+<li><a href="builtins.html">Compiler built-ins</a>: The types and functions the compiler provides itself: raw pointers, weak references, atomics, checked arithmetic and the other <code>__</code> intrinsics the runtime is built on.</li>
 <li><a href="process.html">Arguments and exit (deprecated)</a>: The running program’s arguments and exit, kept for the deprecated prelude <code>arguments()</code> and <code>exit()</code>; the <code>process</code> module has them now.</li>
 <li><a href="string.html">String</a>: A mutable, reference-counted string of UTF-8 text.</li>
 <li><a href="number.html">Numbers</a>: Reading numbers from text, and arithmetic that says what to do on overflow.</li>

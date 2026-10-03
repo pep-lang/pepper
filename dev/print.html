@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b94e91e4.js";
+            window.path_to_searchindex_js = "searchindex-f5c7fdc0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-f60afe02.js"></script>
+        <script src="toc-0a7546a5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -15480,7 +15480,9 @@ C++. Any other pointer conversion reinterprets memory, so it is spelled
 <code>unsafe_cast</code> (see <a href="#reinterpreting-with-unsafe_cast">Reinterpreting with
 <code>unsafe_cast</code></a>).</p>
 <p><code>__null</code> is the null pointer. <code>sizeof&lt;T&gt;()</code> gives the size of a type in bytes,
-which you need to allocate memory for C.</p>
+which you need to allocate memory for C. The
+<a href="#compiler-built-ins">compiler built-ins</a> reference lists these and the
+other <code>__</code> intrinsics.</p>
 <p><code>T*</code> spelling is for extern prototypes only, since they mirror C. Everywhere
 else (parameters, return types, struct fields, locals, globals, type aliases,
 generic arguments and casts) you write <code>__ptr&lt;T&gt;</code>, and <code>T*</code> is a compile error:</p>
@@ -18184,6 +18186,7 @@ of the page to read the reference for another release.</p>
 <li><a href="#built-in-functions">Built-in functions</a>: <code>assert</code> and <code>panic</code>, which every program can call without an import.</li>
 <li><a href="#built-in-attributes">Built-in attributes</a>: The built-in attributes, declared as <code>[Attribute]</code> structs so a <code>static</code> block can read them like its own: <code>field.has_attribute&lt;Deprecated&gt;()</code> tests for one and <code>function.attribute&lt;Deprecated&gt;().message</code> reads its value (see the reflection chapter).</li>
 <li><a href="#the-reflect-module-compile-time">The reflect module (compile time)</a>: <code>reflect</code> exists only inside a <a href="#reflection-and-attributes"><code>static</code> block</a>, which runs while compiling.</li>
+<li><a href="#compiler-built-ins">Compiler built-ins</a>: The types and functions the compiler provides itself: raw pointers, weak references, atomics, checked arithmetic and the other <code>__</code> intrinsics the runtime is built on.</li>
 <li><a href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a>: The running program’s arguments and exit, kept for the deprecated prelude <code>arguments()</code> and <code>exit()</code>; the <code>process</code> module has them now.</li>
 <li><a href="#string">String</a>: A mutable, reference-counted string of UTF-8 text.</li>
 <li><a href="#numbers">Numbers</a>: Reading numbers from text, and arithmetic that says what to do on overflow.</li>
@@ -18473,6 +18476,19 @@ it may use the locked value.</p>
 </code></pre>
 <p>The C symbol, when it differs from the function’s name; empty
 otherwise.</p>
+<h2 id="__builtin"><a class="header" href="#__builtin">__BuiltIn</a></h2>
+<pre><code class="language-pepper">[Attribute] struct __BuiltIn
+</code></pre>
+<p>Declares a compiler built-in in the runtime, for the reference and the
+editor: the compiler ignores the declaration, whose functions end in <code>;</code>.
+<code>[__BuiltIn("reflect.name")]</code> names the built-in when it is not the
+declaration’s own name. Only the runtime may use it.</p>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<pre><code class="language-pepper">const name: String = ""
+</code></pre>
+<p>The built-in’s name, when it differs from the declaration’s; empty
+otherwise.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/reflect.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-reflect-module-compile-time"><a class="header" href="#the-reflect-module-compile-time">The reflect module (compile time)</a></h1>
 <p><code>reflect</code> exists only inside a <a href="#reflection-and-attributes"><code>static</code> block</a>,
@@ -18724,8 +18740,8 @@ which pass printed it. See
 </code></pre>
 <p>A field or property, from <code>properties</code> or <code>fields</code>. A compile-time value:
 no program can name its type.</p>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
-<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
 <pre><code class="language-pepper">const name: String
 </code></pre>
 <p>Its name.</p>
@@ -19040,6 +19056,584 @@ name its type.</p>
 <ul>
 <li>the joined string</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/builtins.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="compiler-built-ins"><a class="header" href="#compiler-built-ins">Compiler built-ins</a></h1>
+<p>The types and functions the compiler provides itself: raw pointers, weak
+references, atomics, checked arithmetic and the other <code>__</code> intrinsics the
+runtime is built on. Every program can use them without an import, but
+most code should not: the runtime wraps each in a safe API (<code>Atomic&lt;T&gt;</code>,
+<code>Weak&lt;T&gt;</code>, <code>math.checked_add</code>, …).</p>
+<p>The compiler provides these itself; this file only declares them, with
+<code>[__BuiltIn]</code>, for this reference and the editor.</p>
+<p>Source: <code>runtime/builtins.pep</code></p>
+<h2 id="__ptr"><a class="header" href="#__ptr">__ptr</a></h2>
+<pre><code class="language-pepper">struct __ptr&lt;T&gt;
+</code></pre>
+<p>A raw pointer to a <code>T</code> in memory the program manages itself, as C’s <code>T*</code>.
+It is how the runtime and C interop reach memory directly; nothing checks
+that it is valid.</p>
+<p><code>p[i]</code> reads or writes the <code>i</code>th element, <code>p + n</code> and <code>p - n</code> move by <code>n</code>
+elements (bytes for <code>__ptr&lt;void&gt;</code>), and <code>==</code> and <code>!=</code> compare addresses.
+A pointer is true when it is not null (<code>__null</code>). <code>as</code> converts to and
+from <code>__ptr&lt;void&gt;</code>; <code>unsafe_cast</code> converts to any other pointer or to an
+integer. A string literal converts to <code>__ptr&lt;char&gt;</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type pointed at; <code>void</code> for untyped memory</li>
+</ul>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="operator--2"><a class="header" href="#operator--2">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): T
+</code></pre>
+<p>The element <code>index</code> places after the one pointed at, as a place that
+can be read or assigned.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — how many elements past the pointer</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element</li>
+</ul>
+<h4 id="operator--1-1"><a class="header" href="#operator--1-1">operator +</a></h4>
+<pre><code class="language-pepper">+(n: long): __ptr&lt;T&gt;
+</code></pre>
+<p>A pointer <code>n</code> elements further on (bytes for <code>__ptr&lt;void&gt;</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>n</code> — how many elements to move</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the moved pointer</li>
+</ul>
+<h4 id="operator--"><a class="header" href="#operator--">operator -</a></h4>
+<pre><code class="language-pepper">-(n: long): __ptr&lt;T&gt;
+</code></pre>
+<p>A pointer <code>n</code> elements back (bytes for <code>__ptr&lt;void&gt;</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>n</code> — how many elements to move</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the moved pointer</li>
+</ul>
+<h4 id="operator--2-1"><a class="header" href="#operator--2-1">operator ==</a></h4>
+<pre><code class="language-pepper">==(other: __ptr&lt;T&gt;): bool
+</code></pre>
+<p>Whether both point at the same address.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the pointer to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the addresses are equal</li>
+</ul>
+<h4 id="operator--3"><a class="header" href="#operator--3">operator !=</a></h4>
+<pre><code class="language-pepper">!=(other: __ptr&lt;T&gt;): bool
+</code></pre>
+<p>Whether they point at different addresses.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the pointer to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the addresses differ</li>
+</ul>
+<h2 id="__weak"><a class="header" href="#__weak">__weak</a></h2>
+<pre><code class="language-pepper">struct __weak&lt;T&gt;
+</code></pre>
+<p>A weak reference to a struct object, like C++’s <code>std::weak_ptr&lt;T&gt;</code>: it
+keeps the object’s memory but not the object alive. Copies step the weak
+count; make one with <code>__weak_from</code>, read it with <code>__weak_upgrade</code>. Use
+<code>Weak&lt;T&gt;</code>, which wraps it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or trait type pointed at</li>
+</ul>
+<h2 id="__null"><a class="header" href="#__null">__null</a></h2>
+<pre><code class="language-pepper">const __null: __ptr&lt;void&gt;
+</code></pre>
+<p>The null pointer or reference: a <code>__ptr&lt;T&gt;</code> that points nowhere, or an
+empty slot of a struct type.</p>
+<h2 id="sizeof"><a class="header" href="#sizeof">sizeof</a></h2>
+<pre><code class="language-pepper">sizeof&lt;T&gt;(): ulong
+</code></pre>
+<p>The size of <code>T</code> in bytes, as C’s <code>sizeof</code>; a struct reference is the size
+of a pointer. Written <code>sizeof&lt;T&gt;</code> or <code>sizeof&lt;T&gt;()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to measure</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its size in bytes</li>
+</ul>
+<h2 id="unsafe_cast"><a class="header" href="#unsafe_cast">unsafe_cast</a></h2>
+<pre><code class="language-pepper">unsafe_cast&lt;T, TFrom&gt;(value: TFrom): T
+</code></pre>
+<p>Reinterprets <code>value</code> as a <code>T</code>: a pointer as another pointer or an integer,
+an integer as a pointer, or a number as another of the same width. It
+never applies to a reference-counted type. Prefer <code>as</code>, which checks the
+conversion.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to reinterpret as</li>
+<li><code>TFrom</code> — the type of <code>value</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to reinterpret</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the same bits as a <code>T</code></li>
+</ul>
+<h2 id="__caller_location"><a class="header" href="#__caller_location">__caller_location</a></h2>
+<pre><code class="language-pepper">__caller_location(): __ptr&lt;char&gt;
+</code></pre>
+<p>The place of the call, as <code>"file:line:col"</code>. As a parameter’s default
+(<code>location: __ptr&lt;char&gt; = __caller_location()</code>) it is the place of the
+call that left the parameter out, which <code>assert</code> and <code>panic</code> report.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the location, a NUL-terminated string that lives as long as the program</li>
+</ul>
+<h2 id="__function_pointer"><a class="header" href="#__function_pointer">__function_pointer</a></h2>
+<pre><code class="language-pepper">__function_pointer&lt;F&gt;(function: F): __ptr&lt;void&gt;
+</code></pre>
+<p>The C-callable address of <code>function</code>: a free function, a static method of
+the enclosing struct, or <code>this.m</code>. It is how a C library is handed a
+callback.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>F</code> — the function’s type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>function</code> — the function, by name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its address</li>
+</ul>
+<h2 id="__weak_from"><a class="header" href="#__weak_from">__weak_from</a></h2>
+<pre><code class="language-pepper">__weak_from&lt;T&gt;(target: T): __weak&lt;T&gt;
+</code></pre>
+<p>Makes a weak reference to <code>target</code>’s object, stepping its weak count.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or trait type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the object; null makes a reference that is always expired</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the weak reference</li>
+</ul>
+<h2 id="__weak_upgrade"><a class="header" href="#__weak_upgrade">__weak_upgrade</a></h2>
+<pre><code class="language-pepper">__weak_upgrade&lt;T&gt;(weak: __weak&lt;T&gt;): T
+</code></pre>
+<p>A strong reference to the object <code>weak</code> points at, or null once it has
+been destroyed.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or trait type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>weak</code> — the weak reference</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new reference to the object, or null</li>
+</ul>
+<h2 id="__weak_expired"><a class="header" href="#__weak_expired">__weak_expired</a></h2>
+<pre><code class="language-pepper">__weak_expired&lt;T&gt;(weak: __weak&lt;T&gt;): bool
+</code></pre>
+<p>Whether the object <code>weak</code> points at has been destroyed (or <code>weak</code> is
+null).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or trait type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>weak</code> — the weak reference</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the object is gone</li>
+</ul>
+<h2 id="__default"><a class="header" href="#__default">__default</a></h2>
+<pre><code class="language-pepper">__default&lt;T&gt;(): T
+</code></pre>
+<p>The zero value of <code>T</code>: 0, <code>false</code>, null, a value struct with every field
+zero, or an enum’s default case.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its zero value</li>
+</ul>
+<h2 id="__is_pod"><a class="header" href="#__is_pod">__is_pod</a></h2>
+<pre><code class="language-pepper">__is_pod&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is plain data, with no reference counts to step (a number,
+<code>bool</code> or pointer, say). Decided while compiling.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is plain data</li>
+</ul>
+<h2 id="__refcount"><a class="header" href="#__refcount">__refcount</a></h2>
+<pre><code class="language-pepper">__refcount&lt;T&gt;(value: T): uint
+</code></pre>
+<p>The reference count of <code>value</code>’s object; 0 for plain data or null. For
+tests and debugging.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>its strong count</li>
+</ul>
+<h2 id="__address"><a class="header" href="#__address">__address</a></h2>
+<pre><code class="language-pepper">__address&lt;T&gt;(value: T): ulong
+</code></pre>
+<p>A hash of <code>value</code>’s identity: an object’s address, the fields of an
+<code>[Equatable]</code> struct, or the bits of plain data.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hash</li>
+</ul>
+<h2 id="__copy"><a class="header" href="#__copy">__copy</a></h2>
+<pre><code class="language-pepper">__copy&lt;T&gt;(value: T, copies: _Copies): T
+</code></pre>
+<p>A deep copy of <code>value</code>, made in the copy context <code>copies</code> so that an
+object reached twice is copied once. <code>copy(value)</code> calls it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to copy</li>
+<li><code>copies</code> — the copy context</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="__copy_object"><a class="header" href="#__copy_object">__copy_object</a></h2>
+<pre><code class="language-pepper">__copy_object&lt;T&gt;(value: T): T
+</code></pre>
+<p>A field-by-field copy of struct object <code>value</code>, through its generated
+<code>__copy()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the object to copy</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the copy</li>
+</ul>
+<h2 id="__census"><a class="header" href="#__census">__census</a></h2>
+<pre><code class="language-pepper">__census&lt;T&gt;(slot: __ptr&lt;T&gt;, waiting: ulong): __ptr&lt;T&gt;
+</code></pre>
+<p>Under <code>PEP_CHECK_SYNC</code>, checks that a <code>Mutex&lt;T&gt;</code>’s value at <code>slot</code> is not
+reachable from outside the lock; otherwise does nothing.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the locked type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>slot</code> — where the value is stored</li>
+<li><code>waiting</code> — how many threads are waiting on the lock</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>slot</code></li>
+</ul>
+<h2 id="__construct_at"><a class="header" href="#__construct_at">__construct_at</a></h2>
+<pre><code class="language-pepper">__construct_at&lt;T&gt;(slot: T, value: T)
+</code></pre>
+<p>Stores <code>value</code> into <code>slot</code>, a raw element (<code>p[i]</code>) known to be empty: it
+takes a reference to <code>value</code> and does not release what the slot held.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>slot</code> — the empty element, written <code>p[i]</code></li>
+<li><code>value</code> — the value to store</li>
+</ul>
+<h2 id="__atomic_load"><a class="header" href="#__atomic_load">__atomic_load</a></h2>
+<pre><code class="language-pepper">__atomic_load&lt;T&gt;(pointer: __ptr&lt;T&gt;): T
+</code></pre>
+<p>Reads <code>*pointer</code> atomically, with acquire ordering. A struct value comes
+with a new reference.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a number, <code>bool</code>, pointer or struct type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value</li>
+</ul>
+<h2 id="__atomic_store"><a class="header" href="#__atomic_store">__atomic_store</a></h2>
+<pre><code class="language-pepper">__atomic_store&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T)
+</code></pre>
+<p>Writes <code>value</code> to <code>*pointer</code> atomically, with release ordering. A struct
+value is swapped in, and the old one released.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a number, <code>bool</code>, pointer or struct type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where to store</li>
+<li><code>value</code> — the value to store</li>
+</ul>
+<h2 id="__atomic_cmpxchg"><a class="header" href="#__atomic_cmpxchg">__atomic_cmpxchg</a></h2>
+<pre><code class="language-pepper">__atomic_cmpxchg&lt;T&gt;(pointer: __ptr&lt;T&gt;, expected: T, desired: T): bool
+</code></pre>
+<p>Replaces <code>*pointer</code> with <code>desired</code> if it holds <code>expected</code>, atomically
+(acquire-release).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a number, <code>bool</code>, pointer or struct type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>expected</code> — the value it must hold</li>
+<li><code>desired</code> — the value to store</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it was replaced</li>
+</ul>
+<h2 id="__atomic_fetch_add"><a class="header" href="#__atomic_fetch_add">__atomic_fetch_add</a></h2>
+<pre><code class="language-pepper">__atomic_fetch_add&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T): T
+</code></pre>
+<p>Adds <code>value</code> to <code>*pointer</code> atomically.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>value</code> — the amount to add</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value before the addition</li>
+</ul>
+<h2 id="__atomic_fetch_sub"><a class="header" href="#__atomic_fetch_sub">__atomic_fetch_sub</a></h2>
+<pre><code class="language-pepper">__atomic_fetch_sub&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T): T
+</code></pre>
+<p>Subtracts <code>value</code> from <code>*pointer</code> atomically.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>value</code> — the amount to subtract</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value before the subtraction</li>
+</ul>
+<h2 id="__atomic_fetch_and"><a class="header" href="#__atomic_fetch_and">__atomic_fetch_and</a></h2>
+<pre><code class="language-pepper">__atomic_fetch_and&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T): T
+</code></pre>
+<p>Sets <code>*pointer</code> to its bitwise and with <code>value</code>, atomically.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>value</code> — the bits to keep</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value before the change</li>
+</ul>
+<h2 id="__atomic_fetch_or"><a class="header" href="#__atomic_fetch_or">__atomic_fetch_or</a></h2>
+<pre><code class="language-pepper">__atomic_fetch_or&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T): T
+</code></pre>
+<p>Sets <code>*pointer</code> to its bitwise or with <code>value</code>, atomically.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>value</code> — the bits to set</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value before the change</li>
+</ul>
+<h2 id="__atomic_fetch_xor"><a class="header" href="#__atomic_fetch_xor">__atomic_fetch_xor</a></h2>
+<pre><code class="language-pepper">__atomic_fetch_xor&lt;T&gt;(pointer: __ptr&lt;T&gt;, value: T): T
+</code></pre>
+<p>Sets <code>*pointer</code> to its bitwise exclusive or with <code>value</code>, atomically.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>pointer</code> — where the value is</li>
+<li><code>value</code> — the bits to flip</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value before the change</li>
+</ul>
+<h2 id="__wrapping_add"><a class="header" href="#__wrapping_add">__wrapping_add</a></h2>
+<pre><code class="language-pepper">__wrapping_add&lt;T&gt;(lhs: T, rhs: T): T
+</code></pre>
+<p><code>lhs + rhs</code>, wrapping around on overflow instead of panicking.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, modulo the type’s range</li>
+</ul>
+<h2 id="__wrapping_sub"><a class="header" href="#__wrapping_sub">__wrapping_sub</a></h2>
+<pre><code class="language-pepper">__wrapping_sub&lt;T&gt;(lhs: T, rhs: T): T
+</code></pre>
+<p><code>lhs - rhs</code>, wrapping around on overflow instead of panicking.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the difference, modulo the type’s range</li>
+</ul>
+<h2 id="__wrapping_mul"><a class="header" href="#__wrapping_mul">__wrapping_mul</a></h2>
+<pre><code class="language-pepper">__wrapping_mul&lt;T&gt;(lhs: T, rhs: T): T
+</code></pre>
+<p><code>lhs * rhs</code>, wrapping around on overflow instead of panicking.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the product, modulo the type’s range</li>
+</ul>
+<h2 id="__add_overflows"><a class="header" href="#__add_overflows">__add_overflows</a></h2>
+<pre><code class="language-pepper">__add_overflows&lt;T&gt;(lhs: T, rhs: T): bool
+</code></pre>
+<p>Whether <code>lhs + rhs</code> overflows <code>lhs</code>’s type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the sum overflows</li>
+</ul>
+<h2 id="__sub_overflows"><a class="header" href="#__sub_overflows">__sub_overflows</a></h2>
+<pre><code class="language-pepper">__sub_overflows&lt;T&gt;(lhs: T, rhs: T): bool
+</code></pre>
+<p>Whether <code>lhs - rhs</code> overflows <code>lhs</code>’s type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the difference overflows</li>
+</ul>
+<h2 id="__mul_overflows"><a class="header" href="#__mul_overflows">__mul_overflows</a></h2>
+<pre><code class="language-pepper">__mul_overflows&lt;T&gt;(lhs: T, rhs: T): bool
+</code></pre>
+<p>Whether <code>lhs * rhs</code> overflows <code>lhs</code>’s type.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — an integer type, taken from <code>lhs</code></li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>lhs</code> — the first operand</li>
+<li><code>rhs</code> — the second operand</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether the product overflows</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="arguments-and-exit-deprecated"><a class="header" href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a></h1>
 <p>The running program’s arguments and exit, kept for the deprecated
@@ -19173,7 +19767,7 @@ whole count 0.</p>
 <ul>
 <li>the number of code points, or 0 for invalid UTF-8</li>
 </ul>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="bytes"><a class="header" href="#bytes">bytes</a></h4>
 <pre><code class="language-pepper">bytes(): u8[]
 </code></pre>
@@ -19217,7 +19811,7 @@ this String sees the change. Runs in O(size + rhs.size).</p>
 <pre><code class="language-pepper">var s = "TEST";
 s.append("ING");   # s == "TESTING"
 </code></pre>
-<h4 id="operator--2"><a class="header" href="#operator--2">operator []</a></h4>
+<h4 id="operator--4"><a class="header" href="#operator--4">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: int): String
 </code></pre>
 <p>Returns the code point at code-point index <code>idx</code> as a new
@@ -19244,7 +19838,7 @@ visit every code point in O(size).</p>
 assert(s[0] == "T", "first");
 assert(s[-1] == "T", "last");
 </code></pre>
-<h4 id="operator--1-1"><a class="header" href="#operator--1-1">operator ==</a></h4>
+<h4 id="operator--1-2"><a class="header" href="#operator--1-2">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> have the same content, compared
@@ -19258,7 +19852,7 @@ comparing bytes. Runs in O(size).</p>
 <ul>
 <li>true when both hold the same bytes</li>
 </ul>
-<h4 id="operator--2-1"><a class="header" href="#operator--2-1">operator +=</a></h4>
+<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator +=</a></h4>
 <pre><code class="language-pepper">+=(rhs: String): String
 </code></pre>
 <p>Appends <code>rhs</code> in place, like <code>append</code>, and returns this same String,
@@ -19536,7 +20130,7 @@ assert(s.substr(1, 2) == "ES", "middle");
 assert(s.substr(0, 99) == "TEST", "count is clamped");
 assert(s.substr(4, 5) == "", "start past the end");
 </code></pre>
-<h4 id="operator--3"><a class="header" href="#operator--3">operator !=</a></h4>
+<h4 id="operator--3-1"><a class="header" href="#operator--3-1">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> differ in content, the negation
@@ -19549,7 +20143,7 @@ of <code>==</code>. Runs in O(size).</p>
 <ul>
 <li>true when the contents differ</li>
 </ul>
-<h4 id="operator--4"><a class="header" href="#operator--4">operator +</a></h4>
+<h4 id="operator--4-1"><a class="header" href="#operator--4-1">operator +</a></h4>
 <pre><code class="language-pepper">+(rhs: String): String
 </code></pre>
 <p>Returns a new String that holds this String followed by <code>rhs</code>. Neither
@@ -20844,7 +21438,7 @@ are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="is_digit"><a class="header" href="#is_digit">is_digit</a></h4>
 <pre><code class="language-pepper">is_digit(): bool
 </code></pre>
@@ -23480,7 +24074,7 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
 </code></pre>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h3 id="methods-7-1"><a class="header" href="#methods-7-1">Methods</a></h3>
 <h4 id="wrapping_add-7"><a class="header" href="#wrapping_add-7">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: ulong): ulong
 </code></pre>
@@ -24132,7 +24726,7 @@ for (var i in 1..&gt;4) {
 var r = 0..10;
 assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="start"><a class="header" href="#start">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -24347,7 +24941,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var first = a[0];
 </code></pre>
-<h4 id="operator--1-2"><a class="header" href="#operator--1-2">operator []</a></h4>
+<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong, value: T): T
 </code></pre>
 <p>Replaces the element at <code>idx</code> with <code>value</code>; this is the indexer write
@@ -24668,7 +25262,7 @@ copying the elements.</p>
 names.append("ada");
 var copied = copy(names);   # calls this method
 </code></pre>
-<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator ==</a></h4>
+<h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Array&lt;T&gt;): bool
 </code></pre>
 <p>Reports whether both Arrays have the same count and pairwise equal
@@ -24683,7 +25277,7 @@ equal. <code>capacity</code> is not compared.</p>
 <ul>
 <li>true when the Arrays are element-wise equal</li>
 </ul>
-<h4 id="operator--3-1"><a class="header" href="#operator--3-1">operator !=</a></h4>
+<h4 id="operator--3-2"><a class="header" href="#operator--3-2">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: Array&lt;T&gt;): bool
 </code></pre>
 <p>Reports whether the Arrays differ in count or in any element; the
@@ -24696,7 +25290,7 @@ negation of <code>==</code>.</p>
 <ul>
 <li>true when the Arrays are not element-wise equal</li>
 </ul>
-<h4 id="operator--4-1"><a class="header" href="#operator--4-1">operator +=</a></h4>
+<h4 id="operator--4-2"><a class="header" href="#operator--4-2">operator +=</a></h4>
 <pre><code class="language-pepper">+=(rhs: Array&lt;T&gt;): Array&lt;T&gt;
 </code></pre>
 <p>Appends every element of <code>rhs</code> to this Array in place (<code>a += b</code>); the
@@ -25080,7 +25674,7 @@ same as <code>get</code>. A missing key is not inserted.</p>
 <pre><code class="language-pepper">var m = HashMap&lt;String, int&gt;();
 var n = m["missing"];   # 0; m is still empty
 </code></pre>
-<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator []</a></h4>
+<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: inserts <code>key</code> or overwrites its value, the
@@ -25253,7 +25847,7 @@ tombstone (see <code>_tombstones</code>). Expected O(1).</p>
 <ul>
 <li>true when <code>key</code> was a member and was removed, false otherwise</li>
 </ul>
-<h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator []</a></h4>
+<h4 id="operator--2-4"><a class="header" href="#operator--2-4">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): K
 </code></pre>
 <p>Reads <code>s[key]</code>: returns the stored member equal to <code>key</code>, or the
@@ -25270,7 +25864,7 @@ element is not inserted.</p>
 <ul>
 <li>the stored member equal to <code>key</code>, or the default of <code>K</code></li>
 </ul>
-<h4 id="operator--3-2"><a class="header" href="#operator--3-2">operator []</a></h4>
+<h4 id="operator--3-3"><a class="header" href="#operator--3-3">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: K): K
 </code></pre>
 <p>Writes <code>s[key] = value</code>: makes <code>key</code> a member, the same as
@@ -25619,7 +26213,7 @@ of <code>V</code> and is not inserted.</p>
 <ul>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
-<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator []</a></h4>
+<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
@@ -26170,7 +26764,7 @@ of <code>V</code> and is not inserted.</p>
 <ul>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
-<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator []</a></h4>
+<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
@@ -26884,7 +27478,7 @@ holding its value or <code>Err</code> holding its error, like Rust’s <code>Res
 <pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 var n = r.error().message.length;   # 4
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
@@ -27421,7 +28015,7 @@ assert(uri.path == "/a%20b", "the path keeps its escapes");
 assert(Uri.decode(uri.path).value() == "/a b", "decoded");
 assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -27812,7 +28406,7 @@ if (r.is_err()) {
     }
 }
 </code></pre>
-<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
 <pre><code class="language-pepper">ErrorCode code
 </code></pre>
@@ -28748,7 +29342,7 @@ results to ignore spelling differences.</p>
 <ul>
 <li>true when both paths’ texts are equal</li>
 </ul>
-<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator !=</a></h4>
+<h4 id="operator--1-7"><a class="header" href="#operator--1-7">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths differ in their text: the opposite of <code>==</code>,
@@ -29033,7 +29627,7 @@ if (m.is_ok() &amp;&amp; m.value().is_file) {
     var bytes = m.value().size;
 }
 </code></pre>
-<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
+<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
 <h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
@@ -29751,13 +30345,13 @@ while (i &lt; list.count) {
     i = i + 1;
 }
 </code></pre>
-<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
+<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
 <p>The entry’s full path: the listed directory’s path joined with
 <code>name</code> (relative when the directory’s path was relative).</p>
-<h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
+<h4 id="name-5"><a class="header" href="#name-5">name</a></h4>
 <pre><code class="language-pepper">String name
 </code></pre>
 <p>The entry’s own file name, without any directory part.</p>
@@ -30302,7 +30896,7 @@ address that maps it.</p>
 <ul>
 <li>true when both are equal</li>
 </ul>
-<h4 id="operator--1-7"><a class="header" href="#operator--1-7">operator !=</a></h4>
+<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator !=</a></h4>
 <pre><code class="language-pepper">!=(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses differ.</p>
@@ -30410,7 +31004,7 @@ IPv6.</p>
 <ul>
 <li>the text form, which <code>SocketAddress.parse</code> reads back</li>
 </ul>
-<h4 id="operator--2-4"><a class="header" href="#operator--2-4">operator ==</a></h4>
+<h4 id="operator--2-5"><a class="header" href="#operator--2-5">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: SocketAddress): bool
 </code></pre>
 <p>Returns whether two socket addresses have equal IP addresses and the
@@ -30423,7 +31017,7 @@ same port.</p>
 <ul>
 <li>true when both are equal</li>
 </ul>
-<h4 id="operator--3-3"><a class="header" href="#operator--3-3">operator !=</a></h4>
+<h4 id="operator--3-4"><a class="header" href="#operator--3-4">operator !=</a></h4>
 <pre><code class="language-pepper">!=(other: SocketAddress): bool
 </code></pre>
 <p>Returns whether two socket addresses differ.</p>
@@ -31545,7 +32139,7 @@ out.print("n = ");
 out.print_line(3);
 assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
-<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
+<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
 <h4 id="bytes-2"><a class="header" href="#bytes-2">bytes</a></h4>
 <pre><code class="language-pepper">var bytes: u8[]
 </code></pre>
@@ -32062,7 +32656,7 @@ early.</p>
 <ul>
 <li>the thread’s id</li>
 </ul>
-<h4 id="name-5"><a class="header" href="#name-5">name</a></h4>
+<h4 id="name-6"><a class="header" href="#name-6">name</a></h4>
 <pre><code class="language-pepper">name(): String
 </code></pre>
 <p>Returns the name the thread was given.</p>
@@ -32437,7 +33031,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
     totals.requests.fetch_add(1);
 }   # unlocked here
 </code></pre>
-<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
+<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
 <h4 id="locked-1"><a class="header" href="#locked-1">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -33162,7 +33756,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
+<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
 <h4 id="message-3"><a class="header" href="#message-3">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
@@ -33939,7 +34533,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
+<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -34680,7 +35274,7 @@ down.</p>
 <ul>
 <li>if the sum does not fit in a <code>ulong</code> of nanoseconds</li>
 </ul>
-<h4 id="operator--"><a class="header" href="#operator--">operator -</a></h4>
+<h4 id="operator---1"><a class="header" href="#operator---1">operator -</a></h4>
 <pre><code class="language-pepper">-(other: Duration): Duration
 </code></pre>
 <p>Returns this duration less <code>other</code>.</p>
@@ -34696,7 +35290,7 @@ down.</p>
 <ul>
 <li>if <code>other</code> is longer than this duration: a duration is never negative</li>
 </ul>
-<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator *</a></h4>
+<h4 id="operator--1-9"><a class="header" href="#operator--1-9">operator *</a></h4>
 <pre><code class="language-pepper">*(times: ulong): Duration
 </code></pre>
 <p>Returns this duration <code>times</code> times over.</p>
@@ -34712,7 +35306,7 @@ down.</p>
 <ul>
 <li>if the product does not fit in a <code>ulong</code> of nanoseconds</li>
 </ul>
-<h4 id="operator--2-5"><a class="header" href="#operator--2-5">operator /</a></h4>
+<h4 id="operator--2-6"><a class="header" href="#operator--2-6">operator /</a></h4>
 <pre><code class="language-pepper">/(parts: ulong): Duration
 </code></pre>
 <p>Returns this duration split into <code>parts</code> equal parts, rounded down to
@@ -34729,7 +35323,7 @@ a whole nanosecond.</p>
 <ul>
 <li>if <code>parts</code> is zero</li>
 </ul>
-<h4 id="operator--3-4"><a class="header" href="#operator--3-4">operator &lt;</a></h4>
+<h4 id="operator--3-5"><a class="header" href="#operator--3-5">operator &lt;</a></h4>
 <pre><code class="language-pepper">&lt;(other: Duration): bool
 </code></pre>
 <p>Returns whether this duration is shorter than <code>other</code>.</p>
@@ -34741,7 +35335,7 @@ a whole nanosecond.</p>
 <ul>
 <li>true when this one is shorter</li>
 </ul>
-<h4 id="operator--4-2"><a class="header" href="#operator--4-2">operator &lt;=</a></h4>
+<h4 id="operator--4-3"><a class="header" href="#operator--4-3">operator &lt;=</a></h4>
 <pre><code class="language-pepper">&lt;=(other: Duration): bool
 </code></pre>
 <p>Returns whether this duration is shorter than or as long as <code>other</code>.</p>
@@ -34836,7 +35430,7 @@ clock.</p>
 <ul>
 <li>the time since this instant</li>
 </ul>
-<h4 id="operator---1"><a class="header" href="#operator---1">operator -</a></h4>
+<h4 id="operator---1-1"><a class="header" href="#operator---1-1">operator -</a></h4>
 <pre><code class="language-pepper">-(earlier: Instant): Duration
 </code></pre>
 <p>Returns the time from <code>earlier</code> to this instant.</p>
@@ -36346,7 +36940,7 @@ assert(list.to_string() == "[1,2]", "two elements");
 <ul>
 <li>the member, or <code>Null</code> when this is not an object or has no member named <code>key</code></li>
 </ul>
-<h4 id="operator--1-9"><a class="header" href="#operator--1-9">operator []</a></h4>
+<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String, member: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of an
@@ -36364,7 +36958,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>if this is not an object (“JsonValue[key] = value needs an object”)</li>
 </ul>
-<h4 id="operator--2-6"><a class="header" href="#operator--2-6">operator []</a></h4>
+<h4 id="operator--2-7"><a class="header" href="#operator--2-7">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): JsonValue
 </code></pre>
 <p>Reads <code>value[index]</code>: an element of an array.</p>
@@ -36376,7 +36970,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>the element, or <code>Null</code> when this is not an array or <code>index</code> is not less than its count</li>
 </ul>
-<h4 id="operator--3-5"><a class="header" href="#operator--3-5">operator []</a></h4>
+<h4 id="operator--3-6"><a class="header" href="#operator--3-6">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong, element: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[index] = element</code>: replaces an element of an array.</p>
@@ -36566,7 +37160,7 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
 <h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
@@ -36686,7 +37280,7 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
@@ -36978,7 +37572,7 @@ struct ServerConfig {
 }
 </code></pre>
 <p>Source: <code>runtime/serialize/module.pep</code></p>
-<h2 id="name-6"><a class="header" href="#name-6">Name</a></h2>
+<h2 id="name-7"><a class="header" href="#name-7">Name</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Name
 </code></pre>
 <p>Writes a property, or an enum case, under <code>value</code> rather than under its
@@ -36991,7 +37585,7 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
 <h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
@@ -37538,7 +38132,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -38619,7 +39213,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -38628,7 +39222,7 @@ struct Options {
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
 <p>What the option does, for the help.</p>
-<h4 id="name-7"><a class="header" href="#name-7">name</a></h4>
+<h4 id="name-8"><a class="header" href="#name-8">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The long name, without <code>--</code>; empty for the field’s name with each
@@ -38816,7 +39410,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
+<h4 id="operator--1-11"><a class="header" href="#operator--1-11">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -38842,7 +39436,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
+<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -39669,16 +40263,19 @@ not match the runtime, and CI runs it.</p>
 <p>What the compiler provides rather than the runtime declares is still
 declared in the runtime, marked <code>[__BuiltIn]</code>: <code>runtime/reflect.pep</code>
 declares the <code>reflect</code> functions of <code>static</code> blocks and the values they
-return. The compiler ignores such a declaration (its functions and methods end in
+return, and <code>runtime/builtins.pep</code> the raw pointer and weak reference
+types, <code>__null</code>, <code>sizeof</code>, <code>unsafe_cast</code> and the <code>__</code> intrinsics. The compiler ignores such a declaration (its functions and methods end in
 <code>;</code>, with no body), so
 it costs nothing and cannot clash with the built-in; the reference, the doc
 comment check and the language server read it like any other. A string
 argument names the built-in when it is not the declaration’s own name:
 <code>[__BuiltIn("reflect.name")]</code> titles the entry and its signature
 <code>reflect.name</code>, and hover and go-to-definition on a use of <code>reflect.name</code>
-lead to it. Only the runtime may use the attribute. A docgen test fails
+lead to it. Only the runtime may use the attribute. Docgen tests fail
 when the compiler gains a <code>reflect</code> function or property that
-<code>runtime/reflect.pep</code> does not declare, or loses one it does.</p>
+<code>runtime/reflect.pep</code> does not declare, or loses one it does, and when
+<code>runtime/builtins.pep</code> declares an intrinsic the compiler does not have (or
+with another argument count), or misses one <code>convert_intrinsics</code> converts.</p>
 <p>Each reference page’s title and place in the table of contents come from
 <code>PAGES</code> in <code>tools/docgen/src/reference.rs</code>. A new runtime file with public
 declarations must be added there, under its module’s <code>module.pep</code>; until it

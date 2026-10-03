@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
+            window.path_to_searchindex_js = "../searchindex-f5c7fdc0.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-f60afe02.js"></script>
+        <script src="../toc-0a7546a5.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -363,6 +363,19 @@ it may use the locked value.</p>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The C symbol, when it differs from the function’s name; empty
+otherwise.</p>
+<h2 id="__builtin"><a class="header" href="#__builtin">__BuiltIn</a></h2>
+<pre><code class="language-pepper">[Attribute] struct __BuiltIn
+</code></pre>
+<p>Declares a compiler built-in in the runtime, for the reference and the
+editor: the compiler ignores the declaration, whose functions end in <code>;</code>.
+<code>[__BuiltIn("reflect.name")]</code> names the built-in when it is not the
+declaration’s own name. Only the runtime may use it.</p>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<pre><code class="language-pepper">const name: String = ""
+</code></pre>
+<p>The built-in’s name, when it differs from the declaration’s; empty
 otherwise.</p>
 
                     </main>
