@@ -5091,3 +5091,13 @@ fn build_option_with_an_invalid_name() {
          \x20     |              ^~~~~~~"
     );
 }
+
+#[test]
+fn built_in_outside_the_runtime() {
+    assert_eq!(
+        error_of("built_in_outside", "[__BuiltIn(\"reflect.mine\")]\nexport mine(): int {}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:2: error: '__BuiltIn' declares a compiler built-in and is allowed only in the runtime\n\
+         \x20   1 | [__BuiltIn(\"reflect.mine\")]\n\
+         \x20     |  ^~~~~~~~~"
+    );
+}

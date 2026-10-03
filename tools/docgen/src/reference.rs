@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use pepper_parser::ast::{Declaration, FunctionDecl, Import, Module, PropertyDecl, VariableDecl};
+use pepper_parser::ast::{BUILT_IN_ATTRIBUTE, Declaration, FunctionDecl, Import, Module, PropertyDecl, VariableDecl};
 use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_doc, is_caller_location, is_public_member, member_name};
 
 /// Page titles for the runtime files, in the order the reference lists them.
@@ -20,6 +20,7 @@ use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_do
 const PAGES: &[(&str, &str)] = &[
     ("internals.pep", "Built-in functions"),
     ("attributes.pep", "Built-in attributes"),
+    ("reflect.pep", "The reflect module (compile time)"),
     ("process.pep", "Arguments and exit (deprecated)"),
     ("string.pep", "String"),
     ("number.pep", "Numbers"),
@@ -103,11 +104,6 @@ const PAGES: &[(&str, &str)] = &[
     ("tls/module.pep", "The tls module"),
     ("tls/stream.pep", "Connectors and streams"),
 ];
-
-/// Reference pages written by hand, for what the compiler provides rather
-/// than the runtime declares: `(file under reference/, title)`. The summary
-/// lists them after the prelude's pages, before the modules.
-const HAND_WRITTEN: &[(&str, &str)] = &[("reflect.md", "The reflect module (compile time)")];
 
 /// A generated page: its path under `reference/` and its Markdown.
 pub struct Page {
@@ -405,6 +401,30 @@ fn reexports(module: &Module, file: &str) -> String {
     if out.is_empty() { out } else { format!("\n## Re-exports\n\n{}", out) }
 }
 
+/// `signature` of a `[__BuiltIn]` declaration named `name`, which declares
+/// the built-in `built_in`: without the attribute, and with the built-in's
+/// name in place of its own (`reflect.name<T>(): String`).
+fn built_in_signature(signature: &str, name: &str, built_in: &str) -> String {
+    let mut text = signature.to_string();
+    if let Some(start) = text.find(&format!("[{}", BUILT_IN_ATTRIBUTE)) {
+        let end = text[start..].find(']').map_or(text.len(), |i| start + i + 1);
+        let end = end + text[end..].len() - text[end..].trim_start().len();
+        text.replace_range(start..end, "");
+    }
+    let is_word = |c: char| c.is_alphanumeric() || c == '_';
+    let mut from = 0;
+    while let Some(i) = text[from..].find(name).map(|i| from + i) {
+        let before = text[..i].chars().next_back();
+        let after = text[i + name.len()..].chars().next();
+        if !before.is_some_and(is_word) && !after.is_some_and(is_word) {
+            text.replace_range(i..i + name.len(), built_in);
+            break;
+        }
+        from = i + name.len();
+    }
+    text
+}
+
 fn page_body(module: &Module, source: &str) -> String {
     let mut out = String::new();
     for decl in &module.declarations {
@@ -413,13 +433,22 @@ fn page_body(module: &Module, source: &str) -> String {
         }
         let doc = doc_comment_of(source, decl);
         let start = first_attribute(decl.attributes(), decl.span().start);
+        // A `[__BuiltIn]` declaration is public whatever its name (`__ptr`),
+        // and reads as the built-in it declares.
+        let built_in = decl.built_in_name();
+        let public = |name: &str| built_in.is_some() || is_public(name);
+        let title = |name: &str| built_in.clone().unwrap_or_else(|| name.to_string());
+        let shown = |signature: String| match &built_in {
+            Some(built_in) => built_in_signature(&signature, decl.name(), built_in),
+            None => signature,
+        };
         match decl {
-            Declaration::Function(f) if is_public(&f.name) => {
-                entry(&mut out, 2, &f.name, &function_signature(source, f), doc);
+            Declaration::Function(f) if public(&f.name) => {
+                entry(&mut out, 2, &title(&f.name), &shown(function_signature(source, f)), doc);
             }
-            Declaration::Struct(s) if is_public(&s.name) => {
+            Declaration::Struct(s) if public(&s.name) => {
                 let end = source[s.name_span.end..].find('{').map_or(s.span.end, |i| s.name_span.end + i);
-                entry(&mut out, 2, &s.name, &signature(source, start, end), doc);
+                entry(&mut out, 2, &title(&s.name), &shown(signature(source, start, end)), doc);
                 let cases = s.enumeration.iter().flat_map(|e| &e.cases).collect::<Vec<_>>();
                 if !cases.is_empty() {
                     out.push_str("\n### Cases\n");
@@ -431,9 +460,9 @@ fn page_body(module: &Module, source: &str) -> String {
                 }
                 members(&mut out, source, &s.name, &s.fields, &s.properties, &s.constructors, &s.methods);
             }
-            Declaration::Trait(t) if is_public(&t.name) => {
+            Declaration::Trait(t) if public(&t.name) => {
                 let end = source[t.name_span.end..].find('{').map_or(t.span.end, |i| t.name_span.end + i);
-                entry(&mut out, 2, &t.name, &signature(source, start, end), doc);
+                entry(&mut out, 2, &title(&t.name), &shown(signature(source, start, end)), doc);
                 members(&mut out, source, &t.name, &[], &t.properties, &[], &t.methods);
             }
             Declaration::Extend(e) => {
@@ -441,11 +470,11 @@ fn page_body(module: &Module, source: &str) -> String {
                 entry(&mut out, 2, &format!("extend {}", e.target), &signature(source, start, end), doc);
                 members(&mut out, source, &e.target.name, &[], &e.properties, &[], &e.methods);
             }
-            Declaration::TypeAlias(t) if is_public(&t.name) => {
-                entry(&mut out, 2, &t.name, &signature(source, start, t.span.end), doc);
+            Declaration::TypeAlias(t) if public(&t.name) => {
+                entry(&mut out, 2, &title(&t.name), &shown(signature(source, start, t.span.end)), doc);
             }
-            Declaration::Variable(v) if is_public(&v.name) => {
-                entry(&mut out, 2, &v.name, &signature(source, start, v.span.end), doc);
+            Declaration::Variable(v) if public(&v.name) => {
+                entry(&mut out, 2, &title(&v.name), &shown(signature(source, start, v.span.end)), doc);
             }
             _ => {}
         }
@@ -457,7 +486,6 @@ fn page_body(module: &Module, source: &str) -> String {
 /// `reference/README.md`.
 pub fn summary_lines(pages: &[Page]) -> String {
     let mut out = String::new();
-    let mut hand_written_listed = false;
     for p in pages {
         // A module's other files (`io-path.md`) nest under its
         // `module.pep` page (`io-module.md`).
@@ -469,12 +497,6 @@ pub fn summary_lines(pages: &[Page]) -> String {
             }
             None => p.file != PRELUDE_PAGE,
         };
-        if module.is_some() && !hand_written_listed {
-            for (file, title) in HAND_WRITTEN {
-                out.push_str(&format!("  - [{}](reference/{})\n", title, file));
-            }
-            hand_written_listed = true;
-        }
         out.push_str(&format!("{}- [{}](reference/{})\n", if nested { "    " } else { "  " }, p.title, p.file));
     }
     out
@@ -580,24 +602,51 @@ mod tests {
         names
     }
 
+    /// The `[__BuiltIn]` declarations of `runtime/reflect.pep` and what
+    /// each declares: its built-in name, with its fields and methods.
+    fn reflect_declarations(root: &Path) -> Vec<(String, Vec<String>)> {
+        let source = std::fs::read_to_string(root.join("runtime/reflect.pep")).unwrap();
+        let module = pepper_parser::parser::parse_source("runtime/reflect.pep", &source).unwrap();
+        module
+            .declarations
+            .iter()
+            .map(|d| {
+                let built_in = d.built_in_name().unwrap_or_else(|| panic!("runtime/reflect.pep: '{}' is not [__BuiltIn]", d.name()));
+                let members = match d {
+                    Declaration::Struct(s) => {
+                        s.fields.iter().map(|f| f.name.clone()).chain(s.methods.iter().map(|m| m.name.clone())).collect()
+                    }
+                    _ => vec![],
+                };
+                (built_in, members)
+            })
+            .collect()
+    }
+
+    /// `runtime/reflect.pep` declares every `reflect` function the
+    /// compiler has, and every property of what they return, and nothing
+    /// the compiler does not have.
     #[test]
-    fn reflect_reference_names_every_function() {
+    fn reflect_declarations_match_the_compiler() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         let source = std::fs::read_to_string(root.join("crates/pepper-sema/src/passes/static_blocks.rs")).unwrap();
-        let page = std::fs::read_to_string(root.join("docs/src/reference/reflect.md")).unwrap();
+        let declared = reflect_declarations(&root);
         let functions = arm_names(&source, "fn reflect(");
         assert!(functions.contains(&"properties".to_string()), "{:?}", functions);
-        for name in functions {
-            assert!(
-                page.contains(&format!("reflect.{}", name)),
-                "docs/src/reference/reflect.md does not document 'reflect.{}'; add it",
-                name
-            );
+        let declared_functions: Vec<&str> =
+            declared.iter().filter_map(|(name, _)| name.strip_prefix("reflect.")).filter(|n| n.starts_with(char::is_lowercase)).collect();
+        for name in &functions {
+            assert!(declared_functions.contains(&name.as_str()), "runtime/reflect.pep does not declare 'reflect.{}'; add it", name);
         }
-        let properties = arm_names(&source, "fn member(");
+        for name in &declared_functions {
+            assert!(functions.iter().any(|f| f == name), "runtime/reflect.pep declares 'reflect.{}', which the compiler does not have", name);
+        }
+        let mut properties = arm_names(&source, "fn member(");
+        properties.extend(arm_names(&source, "fn method("));
         assert!(properties.contains(&"is_last".to_string()), "{:?}", properties);
-        for name in properties {
-            assert!(page.contains(&format!("`{}`", name)), "docs/src/reference/reflect.md does not document the property '{}'; add it", name);
+        let members: Vec<&String> = declared.iter().flat_map(|(_, members)| members).collect();
+        for name in &properties {
+            assert!(members.contains(&name), "runtime/reflect.pep does not declare the property or method '{}'; add it", name);
         }
     }
 

@@ -162,18 +162,24 @@ const KEPT_RUNTIMES: usize = 8;
 /// files under a runtime folder. `None` when the runtime cannot be checked
 /// alone because another file overrides a runtime declaration.
 pub fn runtime_files(program: &Program) -> Option<Vec<bool>> {
-    let (_, _, runtime_dirs) = pepper_files::runtime::discover();
-    let dirs: Vec<String> = runtime_dirs.iter().map(|d| pepper_files::imports::path_key(d)).collect();
-    let in_runtime: Vec<bool> = program
-        .files
-        .iter()
-        .map(|f| f.prelude || f.prelude_part || dirs.iter().any(|d| pepper_files::imports::path_key(Path::new(&f.name)).starts_with(d.as_str())))
-        .collect();
+    let in_runtime = in_runtime(program);
     let overrides = program.files.iter().enumerate().any(|(i, f)| !in_runtime[i] && crate::program::declares_override(&f.module));
     // A runtime file that imports a file outside it (a module nested in a
     // forced one) cannot be checked without that file.
     let reaches_out = program.files.iter().enumerate().any(|(i, f)| in_runtime[i] && f.imports.iter().flatten().any(|&j| !in_runtime[j]));
     (in_runtime.iter().any(|&r| r) && !overrides && !reaches_out).then_some(in_runtime)
+}
+
+/// For each file of `program`, whether it belongs to the runtime: the
+/// prelude, a forced import, or a file under a runtime folder.
+pub fn in_runtime(program: &Program) -> Vec<bool> {
+    let (_, _, runtime_dirs) = pepper_files::runtime::discover();
+    let dirs: Vec<String> = runtime_dirs.iter().map(|d| pepper_files::imports::path_key(d)).collect();
+    program
+        .files
+        .iter()
+        .map(|f| f.prelude || f.prelude_part || dirs.iter().any(|d| pepper_files::imports::path_key(Path::new(&f.name)).starts_with(d.as_str())))
+        .collect()
 }
 
 /// The sema passes, as the driver runs them on a merged module.

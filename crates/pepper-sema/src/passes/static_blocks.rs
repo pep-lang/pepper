@@ -49,6 +49,7 @@ pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
     "Shared",
     "Target",
     "Value",
+    "__BuiltIn",
 ];
 
 /// The attribute that makes a struct an attribute.

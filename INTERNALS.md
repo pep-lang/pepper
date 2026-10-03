@@ -766,7 +766,14 @@ struct/trait/extension members, and attributed blocks whose predicate is
 false. Every predicate is validated before anything is dropped, so a typo in
 code that another platform would compile is still reported. Attributes other
 than `Target` are ignored here. `keep(&attrs)` is the reusable evaluator;
-the loader, linking, and visibility all call it.
+the loader, linking, and visibility all call it. It is also false for
+`[__BuiltIn]` (`ast::is_built_in`), which marks a runtime declaration of a
+compiler built-in (`runtime/reflect.pep`): the builder skips such a
+top-level declaration (`build_module`), so it declares, links and generates
+nothing, while docgen, `doc::check_documented` and the language server
+read it under the built-in's name (`ast::built_in_name`, `reflect.name`).
+`Program::built_in_errors` rejects the attribute outside the runtime
+(`checked::in_runtime`).
 The target is a `platform::Target` (`os`, `arch`, and the LLVM triple, or
 `None` for the host's own): `Target::parse` reads a `--target` triple (the
 supported ones are `SUPPORTED_TRIPLES`), and `with_target(target, f)` runs
@@ -2097,7 +2104,9 @@ diagnostics"). The mechanics:
   (`cargo run -p pepper-docgen -- check`). A page's title and place in the
   table of contents come from `PAGES` in `tools/docgen/src/reference.rs`,
   which must name every runtime file with public declarations; `check`
-  also lints the chapters (`tools/docgen/src/book.rs`). See
+  also lints the chapters (`tools/docgen/src/book.rs`). A compiler built-in
+  is documented by a `[__BuiltIn]` declaration in the runtime (see
+  section 2.5), never by a hand-written page. See
   `docs/src/contributing/docs.md` for the book.
 
 ---
@@ -2200,8 +2209,12 @@ diagnostics"). The mechanics:
   `in_expression`, `in_type`), which reads the `FileScope.named` and
   `imported` maps that linking recorded. Hover text includes the
   declaration's doc comment (`declaration_doc`, `member_doc` →
-  `DocComment::to_markdown`). Definition of a member of any expression
-  (`x.y.z`, `f().m()`) asks the sema model:
+  `DocComment::to_markdown`). A use of a compiler built-in
+  (`reflect.name<T>()`, spelled by `built_in_spelled`) leads to its
+  `[__BuiltIn]` declaration in the runtime: `collect_globals` lists such a
+  declaration under the built-in's name, so `imports::declaration_named`
+  finds it, and a plain name (`assert`) never does. Definition of a member
+  of any expression (`x.y.z`, `f().m()`) asks the sema model:
   `pepper_sema::member_lookup::member_declaration` finds the innermost
   `MemberRef` or `MethodCall` whose name covers the offset, types its owner
   with `static_type::of`, and returns the field's or method's location.

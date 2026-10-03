@@ -205,6 +205,24 @@ fn prelude_function_leads_to_the_runtime() {
 }
 
 #[test]
+fn built_in_leads_to_its_declaration_in_the_runtime() {
+    let main = "struct P { var x: int; }\ntest(): int {\n    static {\n        for (var f in reflect.properties<P>()) {\n            reflect.print(f.name);\n        }\n    }\n    assert(true, \"ok\");\n    return 0;\n}\n";
+    let (uri, text, program) = load("built_in", main, "main.pep");
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "properties", 0, 2));
+    assert_eq!(file, "runtime/reflect.pep");
+    assert!(rest.starts_with("properties<T>()"), "{}", rest);
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "print", 0, 1));
+    assert_eq!(file, "runtime/reflect.pep");
+    assert!(rest.starts_with("print<T>(value"), "{}", rest);
+    let shown = hover(&uri, &text, &program, at(&text, "properties", 0, 2));
+    assert!(shown.starts_with("`reflect.properties` — `reflect.properties<T>(): List<Member>`"), "{}", shown);
+    assert!(shown.contains("The public fields"), "{}", shown);
+    // The plain `assert` is still the runtime's, not `reflect.assert`.
+    let (file, _) = definition(&uri, &text, &program, at(&text, "assert", 0, 0));
+    assert_eq!(file, "runtime/internals.pep");
+}
+
+#[test]
 fn hover_spells_a_private_type_as_written() {
     // util's private `Tally` is mangled in the linked program.
     let main = "import \"util\";\ntest(): int { var t = tally(); return t.n; }\n";

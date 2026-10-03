@@ -318,10 +318,10 @@ pub fn member_name(f: &FunctionDecl) -> &str {
 
 /// Errors for every public declaration of `module` (parsed from `source`)
 /// that does not meet the documentation standard (see the module docs):
-/// exported, non-`_` declarations and their non-`_` members need a doc
-/// comment with a description, `@typeParam` for each generic parameter,
-/// `@param` for each parameter, and `@returns` when they return a value; and
-/// no tag may name a parameter that does not exist.
+/// exported, non-`_` (or `[__BuiltIn]`) declarations and their non-`_`
+/// members need a doc comment with a description, `@typeParam` for each
+/// generic parameter, `@param` for each parameter, and `@returns` when they
+/// return a value; and no tag may name a parameter that does not exist.
 pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
     let mut checker = Checker { source, errors: vec![] };
     for decl in &module.declarations {
@@ -329,6 +329,9 @@ pub fn check_documented(module: &Module, source: &str) -> Vec<Diagnostic> {
             continue;
         }
         let doc = doc_comment_of(source, decl);
+        // A `[__BuiltIn]` declaration is public whatever its name (`__ptr`).
+        let built_in = crate::ast::is_built_in(decl.attributes());
+        let is_public = |name: &str| built_in || is_public(name);
         match decl {
             Declaration::Function(f) => {
                 if is_public(&f.name) {

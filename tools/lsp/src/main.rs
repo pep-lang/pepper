@@ -216,38 +216,42 @@ fn variable_type(v: &ast::VariableDecl) -> String {
 fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
     let mut out = vec![];
     for decl in &module.declarations {
+        // A `[__BuiltIn]` declaration goes by the built-in it declares
+        // (`reflect.name`), so a use of the built-in finds it and a
+        // declaration of the same plain name elsewhere does not.
+        let name = decl.built_in_name().unwrap_or_else(|| decl.name().to_string());
         match decl {
             ast::Declaration::Variable(v) => out.push(Symbol {
-                name: v.name.clone(),
+                name,
                 name_span: v.name_span,
                 ty: variable_type(v),
             }),
             ast::Declaration::Function(f) => out.push(Symbol {
-                name: f.name.clone(),
+                ty: format!("{}{}", name, function_signature(f).strip_prefix(f.name.as_str()).unwrap_or_default()),
+                name,
                 name_span: f.name_span,
-                ty: function_signature(f),
             }),
             ast::Declaration::Struct(s) => out.push(Symbol {
-                name: s.name.clone(),
-                name_span: s.name_span,
                 ty: format!(
                     "{} {}{}",
                     if s.enumeration.is_some() { "enum" } else { "struct" },
-                    s.name,
+                    name,
                     generics_string(&s.generic_params)
                 ),
+                name,
+                name_span: s.name_span,
             }),
             ast::Declaration::Trait(t) => out.push(Symbol {
-                name: t.name.clone(),
+                ty: format!("trait {}{}", name, generics_string(&t.generic_params)),
+                name,
                 name_span: t.name_span,
-                ty: format!("trait {}{}", t.name, generics_string(&t.generic_params)),
             }),
             // Its constants are declared beside it, as variables.
             ast::Declaration::Extend(_) | ast::Declaration::Static(_) => {}
             ast::Declaration::TypeAlias(t) => {
-                let ty = format!("type {}{} = {}", t.name, generics_string(&t.generic_params), t.target);
+                let ty = format!("type {}{} = {}", name, generics_string(&t.generic_params), t.target);
                 out.push(Symbol {
-                    name: t.name.clone(),
+                    name,
                     name_span: t.name_span,
                     ty,
                 });
@@ -255,6 +259,21 @@ fn collect_globals(module: &ast::Module) -> Vec<Symbol> {
         }
     }
     out
+}
+
+/// The built-in a use at `offset` names, spelled as its `[__BuiltIn]`
+/// declaration names it: `reflect.name` in `reflect.name<T>()`. `None`
+/// when the expression there is not `q.name` with `q` a bare name.
+fn built_in_spelled(module: &ast::Module, offset: usize) -> Option<String> {
+    let spelled = match find_expr(module, offset)? {
+        ast::Expression::MemberAccess { lhs, name, .. } => match lhs.as_ref() {
+            ast::Expression::SymbolRef { id, .. } => format!("{}.{}", id, name),
+            _ => return None,
+        },
+        ast::Expression::TypeLiteral(ty) if ty.name.contains('.') => ty.name.clone(),
+        _ => return None,
+    };
+    Some(spelled.split('<').next().unwrap_or(&spelled).to_string())
 }
 
 /// Local declarations visible at `offset` inside `block`, in source order.
@@ -2091,6 +2110,14 @@ impl PepperLsp {
         {
             return imported(found);
         }
+        // A use of a compiler built-in, which its `[__BuiltIn]` declaration
+        // in the runtime documents (`reflect.name<T>()`).
+        if let Some(program) = program
+            && let Some(spelled) = built_in_spelled(&ast, offset)
+            && let Some(target) = imports::declaration_named(program, &spelled)
+        {
+            return imported((spelled, target));
+        }
         // A name that resolved to one overload of a set shows that member.
         if let Some(program) = program
             && let Some((function, others)) = sema.and_then(|m| overload_at(m, offset))
@@ -2425,6 +2452,14 @@ Returns a fresh value: it shares nothing with the arguments.");
                 imports::in_imports(program, &ast, offset).or_else(|| imports::named_type(program, &ast, offset))
         {
             return imported(found);
+        }
+        // A use of a compiler built-in, which its `[__BuiltIn]` declaration
+        // in the runtime documents (`reflect.name<T>()`).
+        if let Some(program) = program
+            && let Some(spelled) = built_in_spelled(&ast, offset)
+            && let Some(target) = imports::declaration_named(program, &spelled)
+        {
+            return imported((spelled, target));
         }
         // A name that resolved to one overload of a set goes to that member.
         if let Some(program) = program

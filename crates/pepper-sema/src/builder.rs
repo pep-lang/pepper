@@ -2717,7 +2717,9 @@ pub fn build_file(module: &ast::Module, file: FileId) -> Result<Module, Diagnost
 fn build_module(module: &ast::Module) -> Result<Module, Diagnostic> {
     let mut out = Module::default();
     out.imports = module.imports.clone();
-    for decl in &module.declarations {
+    // A `[__BuiltIn]` declaration documents a compiler built-in; the
+    // compiler never reads it (see `platform::keep`).
+    for decl in module.declarations.iter().filter(|d| !ast::is_built_in(d.attributes())) {
         with_attributes(decl.attributes(), || declare(decl, &mut out))?;
     }
     Ok(out)

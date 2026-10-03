@@ -582,8 +582,12 @@ fn arch_matches(arguments: &[Expression], attr: &ast::Attribute) -> Result<bool,
 
 /// Keep a node iff every attribute on it evaluates true (AND semantics).
 /// Attributes that are not `Target(...)` selections (`[Export]`, `[Align(8)]`)
-/// never drop anything.
+/// never drop anything, except `[__BuiltIn]`: a declaration of a compiler
+/// built-in, which only the tools read, is dropped everywhere.
 pub fn keep(attributes: &[ast::Attribute]) -> Result<bool, String> {
+    if ast::is_built_in(attributes) {
+        return Ok(false);
+    }
     for attr in attributes {
         if !contains_platform_predicate(&attr.body) {
             continue;

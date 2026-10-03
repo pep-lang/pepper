@@ -75,12 +75,39 @@ impl Program {
         if !self.errors.is_empty() {
             return Err(self.render(&self.errors));
         }
+        let built_in = self.built_in_errors();
+        if !built_in.is_empty() {
+            return Err(built_in.iter().map(|e| e.render(self)).collect::<Vec<_>>().join("\n"));
+        }
         let sources = self.source_files();
         let errors = check_visibility(&sources);
         if errors.is_empty() {
             return Ok(());
         }
         Err(errors.iter().map(|e| e.render(&sources)).collect::<Vec<_>>().join("\n"))
+    }
+
+    /// A `[__BuiltIn]` declaration outside the runtime: only the runtime
+    /// declares the compiler's built-ins, so a program cannot hide one of
+    /// its own declarations from the compiler.
+    pub fn built_in_errors(&self) -> Vec<Diagnostic> {
+        let in_runtime = crate::checked::in_runtime(self);
+        let mut out = vec![];
+        for (i, f) in self.files.iter().enumerate().filter(|(i, _)| !in_runtime[*i]) {
+            for d in &f.module.declarations {
+                if let Some(a) = d.attributes().iter().find(|a| a.name() == Some(pepper_parser::ast::BUILT_IN_ATTRIBUTE)) {
+                    let name = match &a.body {
+                        pepper_parser::ast::Expression::FunctionCall { function, .. } => function.span(),
+                        body => body.span(),
+                    };
+                    out.push(
+                        Diagnostic::error("'__BuiltIn' declares a compiler built-in and is allowed only in the runtime")
+                            .at(Loc::new(FileId(i as u32), name)),
+                    );
+                }
+            }
+        }
+        out
     }
 
     /// Warnings the parser found in every file (deprecated syntax, ...),

@@ -234,6 +234,29 @@ pub fn branch_hint(attributes: &[Attribute]) -> Option<bool> {
     })
 }
 
+/// The attribute that declares a compiler built-in in the runtime
+/// (`[__BuiltIn]`, `[__BuiltIn("reflect.name")]`): the compiler ignores the
+/// declaration, and the reference, the documentation check and the language
+/// server read it like any other.
+pub const BUILT_IN_ATTRIBUTE: &str = "__BuiltIn";
+
+/// Whether `attributes` mark a declaration `[__BuiltIn]`.
+pub fn is_built_in(attributes: &[Attribute]) -> bool {
+    attributes.iter().any(|a| a.name() == Some(BUILT_IN_ATTRIBUTE))
+}
+
+/// The name of the built-in a `[__BuiltIn]` declaration named `name`
+/// declares: the attribute's string argument (`reflect.name`), else `name`
+/// itself. `None` when `attributes` do not mark it `[__BuiltIn]`.
+pub fn built_in_name(attributes: &[Attribute], name: &str) -> Option<String> {
+    let attribute = attributes.iter().find(|a| a.name() == Some(BUILT_IN_ATTRIBUTE))?;
+    let spelled = attribute.arguments().into_iter().find_map(|argument| match argument.value {
+        Expression::Literal { value: Literal::String(text), .. } => Some(text.clone()),
+        _ => None,
+    });
+    Some(spelled.unwrap_or_else(|| name.to_string()))
+}
+
 // ── Expressions ───────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -704,6 +727,12 @@ impl Declaration {
             Declaration::TypeAlias(t) => &t.name,
             Declaration::Static(_) => "",
         }
+    }
+
+    /// The name of the compiler built-in a `[__BuiltIn]` declaration
+    /// declares (see [`built_in_name`]); `None` for any other declaration.
+    pub fn built_in_name(&self) -> Option<String> {
+        built_in_name(self.attributes(), self.name())
     }
 
     /// Span of the declared name token (for the extend target: the target type).
