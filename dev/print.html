@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e5d9f19e.js";
+            window.path_to_searchindex_js = "searchindex-d18c1299.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c0ee600d.js"></script>
+        <script src="toc-c779880d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -240,7 +240,8 @@ programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the c
 flame graph, and <a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every
 tool, are themselves written in Pepper. A <a href="#projects-peptoml"><code>pep.toml</code></a>
 project builds with <code>pepper build</code> alone and imports the packages it depends
-on by name; fetching them with <code>pepper package</code> is not available yet.
+on by name, which <a href="#the-package-manager-pep-package"><code>pepper package</code></a> fetches from
+GitHub, GitLab or Codeberg.
 Some things you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,
@@ -17585,6 +17586,7 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </thead>
 <tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program, or with no file the project (<a href="#the-compiler-pep-build">The compiler: pep-build</a>, <a href="#projects-peptoml">Projects: pep.toml</a>)</td></tr>
+<tr><td><code>pepper package</code></td><td><code>pep-package</code></td><td>Adds, removes, updates and fetches a project’s dependencies (<a href="#the-package-manager-pep-package">The package manager: pep-package</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="#formatting-with-pep-fmt">Formatting with pep-fmt</a>)</td></tr>
 <tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="#profiling-with-pep-profile">Profiling with pep-profile</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>)</td></tr>
@@ -17593,8 +17595,8 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code> and <code>pepper</code> are Pepper
-programs, built with <code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code> and <code>pepper</code> are
+Pepper programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>
@@ -17707,6 +17709,12 @@ pepper build              # builds my_app/pep.toml's program into my_app/
 <p>An entry file inside a project (under a folder with a <code>pep.toml</code>) imports the
 project’s dependencies, and its <code>[build]</code> table’s <code>include</code> folders and
 <code>link</code> libraries apply to it as well.</p>
+<p>Before compiling a program in a project, the compiler fetches whatever
+<code>pep.lock</code> lists and the project’s <code>.pep/deps</code> lacks, and the dependencies
+<code>pep.toml</code> names that <code>pep.lock</code> does not list yet, by running
+<code>pep-package fetch</code> (beside <code>pep-build</code>, else on the <code>PATH</code>). Without
+<code>pep-package</code>, it checks the locked commits out with <code>git</code> itself. See
+<a href="#the-package-manager-pep-package">The package manager: pep-package</a>.</p>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
 looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
@@ -17944,6 +17952,7 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project’s locked dependencies clones that host’s repositories from, when <code>pep-package</code> is not installed (see <a href="#environment-variables-2">pep-package</a>)</td><td></td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
 </tbody>
 </table>
@@ -18077,9 +18086,15 @@ fast_json = { github = "other/json" }
 each package’s own <code>pep.toml</code> names the packages it needs under its own
 keys, and an import in one of its files resolves against those keys, to the
 same copies.</p>
-<p>Fetching dependencies with <code>pepper package</code> is not available yet. Until it
-is, put a package’s files in its <code>.pep/deps</code> folder yourself (for example
-with <code>git clone</code>), or use a <code>path</code> dependency.</p>
+<p><code>pepper package</code> fetches them there and records the commit of each, the
+dependencies’ dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
+<code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
+<code>.pep/deps</code> lacks, so a fresh clone builds with <code>pepper build</code> alone. See
+<a href="#the-package-manager-pep-package">The package manager: pep-package</a>, which also says how
+versions are chosen when several packages need one.</p>
+<pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
+pepper build
+</code></pre>
 <h2 id="errors-4"><a class="header" href="#errors-4">Errors</a></h2>
 <p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
 <pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports
@@ -18102,6 +18117,129 @@ or more than one of <code>version</code>, <code>branch</code>, <code>tag</code> 
 </code></pre>
 <p>The language server reads <code>pep.toml</code> the same way, so imports of fetched
 dependencies resolve in the editor with no <code>-I</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="the-package-manager-pep-package"><a class="header" href="#the-package-manager-pep-package">The package manager: pep-package</a></h1>
+<p><code>pep-package</code> fetches a project’s dependencies and keeps its <code>pep.toml</code> and
+<code>pep.lock</code>. <code>pepper package</code> runs it with the same arguments:</p>
+<pre><code class="language-bash">pepper package add someone/geometry          # the newest version, imported as 'geometry'
+pepper package add other/json@2.x --name fast_json
+pepper package remove geometry
+pepper package update                        # every dependency, as far as the ranges allow
+pepper package update --verify               # one at a time, keeping the updates that build
+pepper package fetch                         # what pep.lock lists
+</code></pre>
+<pre><code class="language-text">pep-package [-C &lt;dir&gt;] &lt;command&gt; [arguments]
+</code></pre>
+<p>It works on the project whose <code>pep.toml</code> is in the current folder or the
+nearest folder above it (see <a href="#projects-peptoml">Projects: pep.toml</a>). Packages
+are fetched with <code>git</code>, which must be on the <code>PATH</code>; signing in to a private
+repository is git’s concern (its credential helpers and SSH keys), so
+whatever lets <code>git clone</code> reach a repository lets <code>pep-package</code> fetch it.</p>
+<p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
+lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.</p>
+<h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Command or option</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>-C &lt;dir&gt;</code>, <code>--directory &lt;dir&gt;</code></td><td>Works on the project at or above <code>&lt;dir&gt;</code> instead of the current folder</td></tr>
+<tr><td><code>fetch</code></td><td>Fetches what <code>pep.lock</code> lists, and resolves what <code>pep.toml</code> changed since <code>pep.lock</code> was written</td></tr>
+<tr><td><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></td><td>Adds a dependency at its newest version, or at a range</td></tr>
+<tr><td><code>add ... --name &lt;name&gt;</code>, <code>-n &lt;name&gt;</code></td><td>The name source code imports it by</td></tr>
+<tr><td><code>remove &lt;name&gt;</code></td><td>Removes a dependency, by its name or its <code>owner/name</code></td></tr>
+<tr><td><code>update [&lt;name&gt;...]</code></td><td>Moves dependencies to the newest versions their ranges allow; every one when none is named</td></tr>
+<tr><td><code>update --verify</code></td><td>Updates one dependency at a time and builds after each, keeping only the updates that build</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Prints the options; after a command, that command’s</td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
+</tbody>
+</table>
+</div>
+<p>The exit status is 0 on success, 1 when a command fails, and 2 for a
+mistake on the command line.</p>
+<h3 id="fetch"><a class="header" href="#fetch"><code>fetch</code></a></h3>
+<p>Fetches every package in <code>pep.lock</code> into the project’s <code>.pep/deps</code> at its
+locked commit. When <code>pep.toml</code> names a dependency <code>pep.lock</code> does not list,
+or asks for a revision the locked one does not satisfy, <code>fetch</code> resolves it
+and updates <code>pep.lock</code>; everything else keeps its locked revision.</p>
+<h3 id="add-ownernamerange"><a class="header" href="#add-ownernamerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></a></h3>
+<p>Adds a dependency to <code>pep.toml</code>’s <code>[dependencies]</code> and fetches it, keeping
+the file’s comments and layout. The repository is on GitHub unless the
+argument starts with <code>gitlab:</code> or <code>codeberg:</code> (<code>gitlab:group/pepper-json</code>).</p>
+<pre><code class="language-bash">pepper package add someone/geometry        # geometry = { github = "someone/geometry", version = "1.4.2" }
+pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
+</code></pre>
+<p>Without a range, the dependency gets the newest version tag (as a range
+that accepts compatible later versions: <code>1.4.2</code> accepts 1.4.2 up to, not
+including, 2.0.0); a repository with no version tags follows its default
+branch. The name source code imports defaults to the repository’s last part,
+with <code>-</code> and <code>.</code> turned into <code>_</code> (<code>other/json</code> adds <code>json</code>); <code>--name</code> gives
+another. A name already in <code>pep.toml</code>, or the name of a runtime module
+(<code>io</code>, <code>async</code>), is an error that suggests <code>--name</code>.</p>
+<h3 id="remove-name"><a class="header" href="#remove-name"><code>remove &lt;name&gt;</code></a></h3>
+<p>Removes the dependency with that name (or that <code>owner/name</code>) from
+<code>pep.toml</code>, and drops from <code>pep.lock</code> every package nothing needs any more.</p>
+<h3 id="update-name"><a class="header" href="#update-name"><code>update [&lt;name&gt;...]</code></a></h3>
+<p>Moves the named dependencies (every one, when none is named) to the newest
+version their ranges allow, and says which other package holds one back
+when one does:</p>
+<pre><code class="language-text">pep-package: github:other/numbers stays at 1.3.1, not 2.0.0: geometry 1.1.0 wants 1
+</code></pre>
+<p>A dependency on a branch moves to the branch’s newest commit.</p>
+<h3 id="update---verify"><a class="header" href="#update---verify"><code>update --verify</code></a></h3>
+<p>Updates one dependency at a time and runs <code>pep-build</code> (beside
+<code>pep-package</code>, else on the <code>PATH</code>) on the project after each. An update
+that does not build is rolled back, and the command lists those it rolled
+back.</p>
+<h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
+<p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
+the dependency graph, its dependencies’ dependencies included. Commit it
+with <code>pep.toml</code>: it is what makes a fresh clone build the same code.</p>
+<pre><code class="language-toml">version = 1
+
+[[package]]
+name = "geometry"
+source = "github:someone/geometry"
+version = "1.1.0"
+commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
+</code></pre>
+<h2 id="resolving-versions"><a class="header" href="#resolving-versions">Resolving versions</a></h2>
+<p>The whole project uses one version of each package: one checkout of
+<code>github:other/numbers</code> serves every package that depends on it, whatever
+name each imports it by.</p>
+<ul>
+<li>A version range picks the newest version tag (<code>v1.2.3</code> or <code>1.2.3</code>) that
+every package’s range accepts. When none does, resolution fails and names
+each package’s requirement and the versions the repository offers.</li>
+<li>A branch, tag or commit must be the same in every package that names it.</li>
+<li>The project’s own <code>pep.toml</code> overrides its dependencies: a package it
+names gets the revision it asks for, even outside the range a dependency
+declares, and <code>pep-package</code> says which requirement it overrode.</li>
+<li>A locked revision stays while it still satisfies every requirement;
+<code>update</code> is what moves it.</li>
+</ul>
+<h2 id="environment-variables-2"><a class="header" href="#environment-variables-2">Environment variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host’s repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
+<tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="building-it-1"><a class="header" href="#building-it-1">Building it</a></h2>
+<p><code>pep-package</code> is written in Pepper (<code>tools/pep-package</code>) and depends on the
+<a href="https://github.com/justinboswell/pepper-toml">toml package</a>. Its
+<code>pep.toml</code> and <code>pep.lock</code> name it, and building it fetches it:</p>
+<pre><code class="language-bash">cargo build --release
+target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
+</code></pre>
+<p>Not yet: fetching without git (downloading a host’s archive over HTTPS),
+and <code>add</code> looking a name up on several hosts.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="formatting-with-pep-fmt"><a class="header" href="#formatting-with-pep-fmt">Formatting with pep-fmt</a></h1>
 <p><code>pep-fmt</code> rewrites Pepper source in one standard style, so that every Pepper
@@ -41197,7 +41335,7 @@ with no environment variables set;</li>
 <p>Of <code>--devtools</code> and <code>--no-devtools</code>, the last one given wins. <code>--check</code> wins
 over everything else. An unknown argument is an error that prints the
 options and exits with status 1.</p>
-<h2 id="environment-variables-2"><a class="header" href="#environment-variables-2">Environment variables</a></h2>
+<h2 id="environment-variables-3"><a class="header" href="#environment-variables-3">Environment variables</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>

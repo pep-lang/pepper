@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e5d9f19e.js";
+            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c0ee600d.js"></script>
+        <script src="../toc-c779880d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,6 +227,7 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </thead>
 <tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program, or with no file the project (<a href="pep-build.html">The compiler: pep-build</a>, <a href="projects.html">Projects: pep.toml</a>)</td></tr>
+<tr><td><code>pepper package</code></td><td><code>pep-package</code></td><td>Adds, removes, updates and fetches a project’s dependencies (<a href="pep-package.html">The package manager: pep-package</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="pep-fmt.html">Formatting with pep-fmt</a>)</td></tr>
 <tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="pep-profile.html">Profiling with pep-profile</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="pep-lsp.html">The language server: pep-lsp</a>)</td></tr>
@@ -235,8 +236,8 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code> and <code>pepper</code> are Pepper
-programs, built with <code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code> and <code>pepper</code> are
+Pepper programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>

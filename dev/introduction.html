@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e5d9f19e.js";
+            window.path_to_searchindex_js = "searchindex-d18c1299.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c0ee600d.js"></script>
+        <script src="toc-c779880d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -242,7 +242,8 @@ programs, but expect gaps. <a href="tools/pep-fmt.html">pep-fmt</a>, the code fo
 flame graph, and <a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every
 tool, are themselves written in Pepper. A <a href="tools/projects.html"><code>pep.toml</code></a>
 project builds with <code>pepper build</code> alone and imports the packages it depends
-on by name; fetching them with <code>pepper package</code> is not available yet.
+on by name, which <a href="tools/pep-package.html"><code>pepper package</code></a> fetches from
+GitHub, GitLab or Codeberg.
 Some things you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,

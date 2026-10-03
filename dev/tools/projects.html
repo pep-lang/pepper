@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e5d9f19e.js";
+            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c0ee600d.js"></script>
+        <script src="../toc-c779880d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -304,9 +304,15 @@ fast_json = { github = "other/json" }
 each package’s own <code>pep.toml</code> names the packages it needs under its own
 keys, and an import in one of its files resolves against those keys, to the
 same copies.</p>
-<p>Fetching dependencies with <code>pepper package</code> is not available yet. Until it
-is, put a package’s files in its <code>.pep/deps</code> folder yourself (for example
-with <code>git clone</code>), or use a <code>path</code> dependency.</p>
+<p><code>pepper package</code> fetches them there and records the commit of each, the
+dependencies’ dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
+<code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
+<code>.pep/deps</code> lacks, so a fresh clone builds with <code>pepper build</code> alone. See
+<a href="pep-package.html">The package manager: pep-package</a>, which also says how
+versions are chosen when several packages need one.</p>
+<pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
+pepper build
+</code></pre>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
 <pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports
@@ -338,7 +344,7 @@ dependencies resolve in the editor with no <code>-I</code>.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/pep-fmt.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/pep-package.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -352,7 +358,7 @@ dependencies resolve in the editor with no <code>-I</code>.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/pep-fmt.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/pep-package.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

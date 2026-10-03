@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e5d9f19e.js";
+            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c0ee600d.js"></script>
+        <script src="../toc-c779880d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -254,6 +254,12 @@ pepper build              # builds my_app/pep.toml's program into my_app/
 <p>An entry file inside a project (under a folder with a <code>pep.toml</code>) imports the
 project’s dependencies, and its <code>[build]</code> table’s <code>include</code> folders and
 <code>link</code> libraries apply to it as well.</p>
+<p>Before compiling a program in a project, the compiler fetches whatever
+<code>pep.lock</code> lists and the project’s <code>.pep/deps</code> lacks, and the dependencies
+<code>pep.toml</code> names that <code>pep.lock</code> does not list yet, by running
+<code>pep-package fetch</code> (beside <code>pep-build</code>, else on the <code>PATH</code>). Without
+<code>pep-package</code>, it checks the locked commits out with <code>git</code> itself. See
+<a href="pep-package.html">The package manager: pep-package</a>.</p>
 <h3 id="-i-dir"><a class="header" href="#-i-dir"><code>-I &lt;dir&gt;</code></a></h3>
 <p>Adds a folder to search for modules imported by name (<code>import geometry;</code>
 looks for <code>geometry/module.pep</code>). The <code>-I</code> folders are searched in the order
@@ -491,6 +497,7 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project’s locked dependencies clones that host’s repositories from, when <code>pep-package</code> is not installed (see <a href="pep-package.html#environment-variables">pep-package</a>)</td><td></td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
 </tbody>
 </table>
