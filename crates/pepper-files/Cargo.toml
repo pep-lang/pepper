@@ -4,5 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 # File-level helpers shared by the driver and tooling (LSP server).
-# Deliberately dependency-free so consumers never pull in LLVM.
+# Kept light (only `toml`, for pep.toml) so consumers never pull in LLVM.
 [dependencies]
+toml = { version = "0.9", default-features = false, features = ["parse", "preserve_order"] }

@@ -5133,3 +5133,49 @@ fn function_without_a_body() {
          \x20     |     ^"
     );
 }
+
+#[test]
+fn pep_toml_problem() {
+    assert_eq!(
+        error_of_files(
+            "pep_toml_problem",
+            "main(): int {\n    return 0;\n}\n",
+            &[("pep.toml", "[package]\nname = \"app\"\n\n[dependencies]\njson = { github = \"json\" }\n")]
+        ),
+        "pep.toml:5:19: error: 'github' must name a repository as 'owner/name', not 'json'\n\
+         \x20   5 | json = { github = \"json\" }\n\
+         \x20     |                   ^~~~~~"
+    );
+}
+
+#[test]
+fn dependency_named_like_a_runtime_module() {
+    assert_eq!(
+        error_of_files(
+            "dependency_named_like_runtime",
+            "main(): int {\n    return 0;\n}\n",
+            &[("pep.toml", "[package]\nname = \"app\"\n\n[dependencies]\nio = { github = \"someone/io\" }\n")]
+        ),
+        "pep.toml:5:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports\n\
+         \x20   5 | io = { github = \"someone/io\" }\n\
+         \x20     | ^~"
+    );
+}
+
+#[test]
+fn dependency_not_fetched() {
+    let missing = std::path::Path::new(".pep").join("deps").join("github.com").join("someone").join("geometry");
+    assert_eq!(
+        error_of_files(
+            "dependency_not_fetched",
+            "import geo;\n\nmain(): int {\n    return 0;\n}\n",
+            &[("pep.toml", "[package]\nname = \"app\"\n\n[dependencies]\ngeo = { github = \"someone/geometry\" }\n")]
+        ),
+        format!(
+            "main.pep:1:8: error: dependency 'geo' is not fetched: no {}\n\
+             \x20   1 | import geo;\n\
+             \x20     |        ^~~",
+            missing.display()
+        )
+    );
+}

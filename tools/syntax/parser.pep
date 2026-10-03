@@ -2532,6 +2532,16 @@ struct Parser {
             if (_failed) {
                 return node;
             }
+            # `import http.client`: a module inside a package, which binds
+            # its last name.
+            while (_at(".")) {
+                _take(node);
+                name = _peek();
+                _expect_name(node, "module name");
+                if (_failed) {
+                    return node;
+                }
+            }
         }
         ulong position = _position;
         if (!reexport and _at_word("as")) {

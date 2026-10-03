@@ -229,6 +229,9 @@ runs `pep-fmt`, and `pepper help` lists the `pep-*` commands it finds next to
 itself or on the `PATH` (see the book's
 [pepper command](https://justinboswell.github.io/pepper/tools/pepper.html)).
 `pepper main.pep` still runs the compiler, with a deprecation warning.
+`pepper build` with no file builds the project a `pep.toml` describes, with
+its dependencies (see the book's
+[Projects: pep.toml](docs/src/tools/projects.md)).
 Every option and environment variable the compiler reads is described in
 the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
 other tools' options are in [The pepper command](docs/src/tools/pepper.md),

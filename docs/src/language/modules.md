@@ -236,6 +236,26 @@ The standard library's [io module](../reference/io-module.md) is found this
 way, in the runtime directory: `import io;` then `io.File`, or
 `import [File, Path] from io;`.
 
+A module nested in another module's folder is imported with a dotted name:
+`import geometry.solids;` finds `geometry/solids/module.pep` and binds its
+last name, so its declarations are `solids.volume` (or, with
+`import geometry.solids as s;`, `s.volume`).
+
+### Projects and packages
+
+A project's `pep.toml` lists the packages it depends on, and each key is the
+name source code imports:
+
+```toml
+[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+```
+
+`import geometry;` then finds the package's root `module.pep` in the
+project's `.pep/deps`, with no `-I`, and `import geometry.solids;` the module
+in its `solids` folder. `pepper build` with no file builds the project. See
+[Projects: pep.toml](../tools/projects.md).
+
 ### The runtime prelude and `--import`
 
 The runtime itself is not a module: its files are loaded into every program,

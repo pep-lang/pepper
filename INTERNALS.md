@@ -27,7 +27,7 @@ names and the pass order come from that implementation.
 | --- | --- |
 | `src/main.rs` | The compiler binary, `pep-build` (run as `pepper build`): parses `Options`, calls `pepper_driver::run`, prints errors (colored on a TTY unless `NO_COLOR`). |
 | `crates/pepper-parser` | winnow grammar → AST (`ast.rs`, `parser.rs`, `parser/parsers.rs`), clang-style diagnostics (`diagnostic.rs`), doc-comment parsing and the documentation check (`doc.rs`). No LLVM. |
-| `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`) and runtime discovery (`runtime.rs`). No LLVM. |
+| `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`), projects (`project.rs`: `pep.toml` parsed with the `toml` crate, and `Packages`, which resolves an import of a dependency against the `pep.toml` of the importing file's package to `.pep/deps/<host>/<repository>`), and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), `exports.rs` (the C entry points of `[Export]`ed functions, see 4.1), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)). Holds nearly all integration tests (`tests/*.rs`). |
@@ -63,9 +63,12 @@ pep-build main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]   (p
 compiler::compile → compile_sources                               (driver/src/compiler.rs)
   program::load_program                                           (sema/src/program.rs)
     runtime::discover()           PEPPER_RUNTIME, else runtime/ near cwd or exe
+    project::find_project         pep.toml above the root (outside .pep): load_manifest
+                                  checks it; its [build] include dirs follow -I
     imports::search_paths         -I dirs, then runtime dirs
     resolve_forced                --import NAME → prelude, ahead of the runtime
     program::load                 parse_source every reachable file; resolve imports
+                                  (a dependency through Packages, else the search paths)
     modules::link                 bind imports/exports; rewrite m.x, aliases; mangle
                                   private names (helper@io/file) → FileScope
   compiler::merge

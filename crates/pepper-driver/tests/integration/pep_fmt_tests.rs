@@ -190,6 +190,11 @@ fn pep_fmt_breaks_before_operators_and_dots() {
 }
 
 #[test]
+fn pep_fmt_keeps_a_dotted_import_together() {
+    assert_formats("import  geo.solids   as s;\nimport http.client;\n", "import http.client;\nimport geo.solids as s;\n");
+}
+
+#[test]
 fn pep_fmt_sorts_imports_and_aligns_trailing_comments() {
     assert_formats(
         "import \"zeta\";\nimport \"alpha\"; # a file\nimport io;\n\nconst A = 1; # one\nconst LONGER = 2;   # two\n",

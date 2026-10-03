@@ -183,9 +183,17 @@ pub enum Placement {
     OutsideFolder,
 }
 
-/// `import x` -> the first `<search path>/x/module.pep` that exists.
+/// `import x` -> the first `<search path>/x/module.pep` that exists;
+/// `import x.y` -> `<search path>/x/y/module.pep`.
 pub fn resolve_module(module_name: &str, search_paths: &[PathBuf]) -> Option<PathBuf> {
-    search_paths.iter().map(|dir| dir.join(module_name).join(MODULE_FILE)).find(|p| p.is_file())
+    search_paths
+        .iter()
+        .map(|dir| {
+            let mut module = dir.clone();
+            module.extend(module_name.split('.'));
+            module.join(MODULE_FILE)
+        })
+        .find(|p| p.is_file())
 }
 
 /// `--import NAME`: a module `NAME`, else a file `NAME.pep` on the search

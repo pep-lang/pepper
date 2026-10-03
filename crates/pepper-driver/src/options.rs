@@ -7,7 +7,8 @@ use std::path::PathBuf;
 #[command(name = "pep-build", version, about = "Pepper compiler")]
 pub struct Options {
     /// The program's entry file. The files it imports are found on their
-    /// own; only the first file named is compiled.
+    /// own; only the first file named is compiled. With none, builds the
+    /// project whose `pep.toml` is in the current directory or above it.
     pub source_files: Vec<PathBuf>,
 
     /// Add a directory to the import search path.
@@ -156,6 +157,15 @@ pub struct Options {
     /// Use the MSVC linker. Not ported: always an error.
     #[arg(long = "MSVC")]
     pub msvc: bool,
+
+    /// The project being built (the folder of its `pep.toml`) when no
+    /// source file is given: its `.pep` holds the build and the cache.
+    #[arg(skip)]
+    pub project_dir: Option<PathBuf>,
+
+    /// That project's package name, which names its output by default.
+    #[arg(skip)]
+    pub project_name: Option<String>,
 }
 
 /// The channels `-T` turns on (`--Tall` turns on all of them). The book's
@@ -186,6 +196,73 @@ pub fn normalize_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> Vec
 }
 
 impl Options {
+    /// Apply the project's `pep.toml`. With no source file, the project is
+    /// the nearest `pep.toml` at or above the current directory, and its
+    /// `[build]` table names the entry file and (unless `-o`) the output.
+    /// With one, it is the `pep.toml` above that file, if any. Either way,
+    /// `[build]`'s `link` libraries are linked; its `include` folders join
+    /// the search paths when the program loads.
+    pub fn apply_project(&mut self) -> Result<(), String> {
+        self.apply_project_in(&std::env::current_dir().unwrap_or_default())
+    }
+
+    /// [`Options::apply_project`], as if run in the folder `cwd`.
+    pub fn apply_project_in(&mut self, cwd: &std::path::Path) -> Result<(), String> {
+        use pepper_files::project::{MANIFEST_FILE, Manifest, ManifestFailure, find_manifest, find_project};
+        let manifest_path = match self.source_files.first() {
+            Some(file) => find_project(&cwd.join(file)).map(|dir| dir.join(MANIFEST_FILE)),
+            None => {
+                Some(find_manifest(cwd).ok_or_else(|| {
+                    format!("no source files provided, and no {} in {} or a folder above it", MANIFEST_FILE, cwd.display())
+                })?)
+            }
+        };
+        let Some(manifest_path) = manifest_path else { return Ok(()) };
+        let manifest = Manifest::read(&manifest_path).map_err(|failure| match failure {
+            ManifestFailure::Unreadable(message) => message,
+            ManifestFailure::Invalid { path, text, errors } => pepper_sema::program::render_manifest_errors(&path, &text, &errors),
+        })?;
+        if self.source_files.is_empty() {
+            let entry = manifest.entry();
+            if !entry.is_file() {
+                return Err(format!(
+                    "cannot find the project's entry file {}; set 'entry' in '[build]' of {}",
+                    entry.display(),
+                    manifest.path.display()
+                ));
+            }
+            self.source_files.push(entry);
+            if self.output.is_none() && self.library_kind().is_none() {
+                let mut output = manifest.output();
+                // A Windows executable needs its extension to run.
+                if self.targets_windows() && output.extension().is_none() {
+                    output.set_extension("exe");
+                }
+                self.output = Some(output);
+            }
+            self.project_dir = Some(manifest.dir().to_path_buf());
+            self.project_name = Some(manifest.package.name.clone());
+        }
+        for library in &manifest.build.link {
+            if !self.libraries.contains(library) {
+                self.libraries.push(library.clone());
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the program is built for Windows (an unsupported `--target`
+    /// is reported later, when the build reads it).
+    fn targets_windows(&self) -> bool {
+        self.effective_target().map(|target| target.os == "windows").unwrap_or(cfg!(windows))
+    }
+
+    /// Where `.pep` goes: the project's folder when building a project,
+    /// else the current directory.
+    fn work_dir(&self) -> PathBuf {
+        self.project_dir.clone().unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+    }
+
     /// The optimization level: `-O`, else `$PEPPER_OPT_LEVEL`, else `-O0`.
     pub fn effective_opt_level(&self) -> Result<pepper_codegen::target::OptLevel, String> {
         match self.opt_level {
@@ -275,7 +352,7 @@ impl Options {
     pub fn effective_build_dir(&self) -> PathBuf {
         self.build_dir
             .clone()
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default().join(".pep").join("build"))
+            .unwrap_or_else(|| self.work_dir().join(".pep").join("build"))
     }
 
     /// The build cache directory, or `None` with `--no-cache`: `--cache`,
@@ -290,7 +367,7 @@ impl Options {
         if let Some(dir) = std::env::var_os("PEPPER_CACHE_DIR").filter(|d| !d.is_empty()) {
             return Some(PathBuf::from(dir));
         }
-        Some(std::env::current_dir().unwrap_or_default().join(".pep").join("cache"))
+        Some(self.work_dir().join(".pep").join("cache"))
     }
 
     /// Whether cache hits are checked (`--verify-cache`, or
@@ -317,20 +394,19 @@ impl Options {
         if let Some(out) = &self.output {
             return Ok(out.clone());
         }
-        let primary = self
-            .source_files
-            .first()
-            .ok_or_else(|| "no source files".to_string())?;
-        let stem = primary
-            .file_stem()
-            .ok_or_else(|| format!("invalid source path {:?}", primary))?;
+        // A project's output is named after its package.
+        let stem = match &self.project_name {
+            Some(name) => std::ffi::OsString::from(name),
+            None => {
+                let primary = self.source_files.first().ok_or_else(|| "no source files".to_string())?;
+                primary.file_stem().ok_or_else(|| format!("invalid source path {:?}", primary))?.to_os_string()
+            }
+        };
         let name = match self.library_kind() {
             Some(kind) => std::ffi::OsString::from(kind.file_name(&stem.to_string_lossy())),
-            None => stem.to_os_string(),
+            None => stem,
         };
-        Ok(std::env::current_dir()
-            .unwrap_or_default()
-            .join(name))
+        Ok(self.work_dir().join(name))
     }
 
     /// Main module name: output filename stem.
@@ -373,6 +449,21 @@ mod tests {
         assert_ne!(options.effective_build().unwrap().name(), parse(&["pepper", "main.pep"]).effective_build().unwrap().name());
         let error = Options::try_parse_from(["pepper", "-D", "2FAST", "main.pep"]).unwrap_err().to_string();
         assert!(error.contains("invalid build option name '2FAST' in '-D 2FAST'"), "{error}");
+    }
+
+    #[test]
+    fn a_project_built_for_windows_is_an_exe() {
+        let dir = std::env::temp_dir().join(format!("pepper_options_exe_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("pep.toml"), "[package]\nname = \"demo\"\n").unwrap();
+        std::fs::write(dir.join("main.pep"), "main(): int {\n    return 0;\n}\n").unwrap();
+        let mut windows = parse(&["pepper", "--target", "x86_64-pc-windows-msvc"]);
+        windows.apply_project_in(&dir).unwrap();
+        assert_eq!(windows.output, Some(dir.join("demo.exe")));
+        let mut linux = parse(&["pepper", "--target", "x86_64-unknown-linux-gnu"]);
+        linux.apply_project_in(&dir).unwrap();
+        assert_eq!(linux.output, Some(dir.join("demo")));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

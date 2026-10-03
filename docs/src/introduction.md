@@ -64,7 +64,9 @@ TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsin
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter,
 [pep-profile](tools/pep-profile.md), which profiles a program and draws a
 flame graph, and [`pepper`](tools/pepper.md), the entry point that runs every
-tool, are themselves written in Pepper.
+tool, are themselves written in Pepper. A [`pep.toml`](tools/projects.md)
+project builds with `pepper build` alone and imports the packages it depends
+on by name; fetching them with `pepper package` is not available yet.
 Some things you will meet quickly:
 
 - Functions are values: a named function, an `extern` C function, a method (`p.norm`,

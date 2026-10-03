@@ -579,9 +579,12 @@ export struct Formatter {
             first = false;
             i += 1;
         }
+        bool dotted = false;
         while (i < item.count) {
             var child = item.child(i);
-            if (child.is_token(";")) {
+            # `import http.client`: the dot and the name after it stay tight.
+            if (child.is_token(";") or child.is_token(".") or dotted) {
+                dotted = child.is_token(".");
                 result.add(_leaf(child));
             } else {
                 if (!first) {

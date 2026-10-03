@@ -6,6 +6,7 @@ are: `pepper <command> [arguments]` runs a separate program named
 
 ```bash
 pepper build main.pep -o main     # runs pep-build main.pep -o main
+pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
@@ -42,7 +43,7 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 
 | Command | Program | What it does |
 | --- | --- | --- |
-| `pepper build` | `pep-build` | Compiles a program ([The compiler: pep-build](pep-build.md)) |
+| `pepper build` | `pep-build` | Compiles a program, or with no file the project ([The compiler: pep-build](pep-build.md), [Projects: pep.toml](projects.md)) |
 | `pepper fmt` | `pep-fmt` | Formats source ([Formatting with pep-fmt](pep-fmt.md)) |
 | `pepper profile` | `pep-profile` | Profiles a program and draws a flame graph ([Profiling with pep-profile](pep-profile.md)) |
 | `pepper lsp` | `pep-lsp` | Runs the language server, which editors start ([The language server: pep-lsp](pep-lsp.md)) |

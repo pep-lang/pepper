@@ -1141,14 +1141,15 @@ impl Import {
     }
 
     /// The qualifier this import binds (`m` in `m.sqrt`), if any: the alias,
-    /// or a bare module import's own name.
+    /// or a bare module import's own name (its last part: `client` for
+    /// `import http.client`).
     pub fn qualifier(&self) -> Option<&str> {
         if self.symbols.is_some() || self.reexport {
             return None;
         }
         match &self.alias {
             Some(a) => Some(a),
-            None if !self.is_local => Some(&self.name),
+            None if !self.is_local => self.name.rsplit('.').next(),
             None => None,
         }
     }

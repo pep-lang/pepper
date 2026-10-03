@@ -4998,7 +4998,14 @@ fn source_import(input: &mut &str, reexport: bool) -> Result<Import> {
             _ => return Err(cut(input)),
         }
     } else {
-        (identifier(input).map_err(|_| cut(input))?, false)
+        // `import http.client`: a module inside a package.
+        let mut name = identifier(input).map_err(|_| cut(input))?;
+        while input.starts_with('.') {
+            *input = &input[1..];
+            name.push('.');
+            name.push_str(&identifier(input).map_err(|_| cut_expecting(input, "a module name after '.'"))?);
+        }
+        (name, false)
     };
     let name_span = Span { start: name_span_start, end: pos(input) };
     let mut end = pos(input);
@@ -6229,6 +6236,15 @@ mod tests {
         assert_eq!(m.imports.len(), 1);
         assert!(!m.imports[0].is_local);
         assert_eq!(m.imports[0].name, "mylib");
+    }
+
+    #[test]
+    fn test_module_with_dotted_package_import() {
+        let m = parse("import http.client;\nimport a.b.c as d;\nfoo() {}");
+        assert_eq!(m.imports[0].name, "http.client");
+        assert_eq!(m.imports[0].qualifier(), Some("client"));
+        assert_eq!(m.imports[1].name, "a.b.c");
+        assert_eq!(m.imports[1].qualifier(), Some("d"));
     }
 
     #[test]

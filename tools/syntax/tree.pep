@@ -16,7 +16,7 @@ export enum NodeKind {
     Token,
     ## A whole file: its items, then the end token.
     Module,
-    ## `[attribute]... import [list from] name [as alias] [;]`, or a re-export
+    ## `[attribute]... import [list from] name[.name]... [as alias] [;]`, or a re-export
     ## `[attribute]... export (* | list) from name [;]`.
     Import,
     ## `[ symbol, ... ]` in an import: `IMPORT_SYMBOL`s separated by `,`.

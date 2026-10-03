@@ -8,6 +8,7 @@ use crate::passes::platform::keep;
 use pepper_files::imports::{
     LocalImport, ModuleRoots, Placement, path_key, resolve_forced, resolve_local, resolve_module, search_paths,
 };
+use pepper_files::project::{Manifest, ManifestError, ManifestFailure, Packages, Resolution, find_project};
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc, Sources};
 use pepper_parser::parser::parse_source;
 use std::collections::HashMap;
@@ -427,7 +428,18 @@ pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
             ),
         });
     }
-    let search_paths = search_paths(setup.import_dirs, &runtime_dirs);
+    // The project's `pep.toml`: its `[build]` include folders follow the
+    // `-I` ones. An editor (lenient) loads the program even when it is
+    // broken; the compiler reports it.
+    let mut import_dirs = setup.import_dirs.to_vec();
+    if let Some(project) = find_project(&root.path) {
+        match load_manifest(&project.join(pepper_files::project::MANIFEST_FILE), &runtime_dirs) {
+            Ok(manifest) => import_dirs.extend(manifest.include_dirs()),
+            Err(e) if setup.mode == Mode::Strict => return Err(e),
+            Err(_) => {}
+        }
+    }
+    let search_paths = search_paths(&import_dirs, &runtime_dirs);
     // Forced imports join the prelude ahead of the runtime: where one
     // redefines a runtime export (`panic`), the merged program keeps the
     // first definition, so the forced import's wins.
@@ -450,6 +462,48 @@ pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
     load_with(root, &prelude, &search_paths, setup.mode, setup.parsed)
 }
 
+/// Read the project file at `path` and check it against the runtime in
+/// `runtime_dirs`: a dependency may not be named like a runtime module,
+/// which it would otherwise hide. Problems are rendered clang-style.
+pub fn load_manifest(path: &Path, runtime_dirs: &[PathBuf]) -> Result<Manifest, String> {
+    let manifest = match Manifest::read(path) {
+        Ok(m) => m,
+        Err(ManifestFailure::Unreadable(message)) => return Err(message),
+        Err(ManifestFailure::Invalid { path, text, errors }) => return Err(render_manifest_errors(&path, &text, &errors)),
+    };
+    let errors: Vec<ManifestError> = manifest
+        .dependencies
+        .iter()
+        .filter(|d| runtime_dirs.iter().any(|dir| dir.join(&d.name).join(pepper_files::imports::MODULE_FILE).is_file()))
+        .map(|d| ManifestError {
+            message: format!(
+                "dependency '{}' has the name of the runtime module '{}'; give it another name, which source code then imports",
+                d.name, d.name
+            ),
+            span: d.name_span.clone(),
+        })
+        .collect();
+    if errors.is_empty() {
+        Ok(manifest)
+    } else {
+        Err(render_manifest_errors(&manifest.path, &manifest.text, &errors))
+    }
+}
+
+/// `errors` in the `pep.toml` at `path`, whose text is `text`, rendered
+/// clang-style.
+pub fn render_manifest_errors(path: &Path, text: &str, errors: &[ManifestError]) -> String {
+    let name = path.to_string_lossy();
+    errors
+        .iter()
+        .map(|e| {
+            let span = pepper_parser::ast::Span { start: e.span.start, end: e.span.end };
+            Diagnostic::error(e.message.clone()).at(Loc::new(FileId(0), span)).render_in(&name, text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Load `root`, the `prelude` files, and everything their imports reach,
 /// resolving module imports against `search_paths`; then link. The root is
 /// `files[0]`, followed by the files it reaches, then the prelude.
@@ -468,8 +522,13 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
     // Lenient mode: files that could not be loaded, by key -> why.
     let mut failed: HashMap<String, String> = HashMap::new();
     let mut failed_paths: Vec<PathBuf> = vec![];
-    // Module folders, looked up once per directory for this load.
-    let roots = ModuleRoots::for_project(std::env::current_dir().ok().as_deref());
+    // The `pep.toml` each file falls under, for the dependencies it imports.
+    let packages = Packages::for_root(&root.path);
+    // Module folders, looked up once per directory for this load. A file
+    // outside any module is named by its path from the project, else from
+    // the current directory.
+    let cwd = std::env::current_dir().ok();
+    let roots = ModuleRoots::for_project(packages.project().or(cwd.as_deref()));
 
     // A stack: the root is popped first, and each file's imports are loaded
     // before the prelude.
@@ -571,7 +630,17 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
                     }
                 }
             } else {
-                resolve_module(&imp.name, search_paths)
+                match packages.resolve(&path, &imp.name) {
+                    Resolution::Found(p) => Some(p),
+                    Resolution::NotADependency => resolve_module(&imp.name, search_paths),
+                    Resolution::Missing(message) | Resolution::BadManifest(message) => {
+                        // Fetching the dependency, or fixing the
+                        // `pep.toml`, resolves it.
+                        errors.push(ModuleError { note: None, unresolved: true, file, span: imp.name_span, message });
+                        targets.push(None);
+                        continue;
+                    }
+                }
             };
             match found {
                 Some(p) => {
@@ -592,7 +661,7 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
                         format!(
                             "cannot find module '{}': no {}/module.pep in {}",
                             imp.name,
-                            imp.name,
+                            imp.name.replace('.', "/"),
                             describe_paths(search_paths)
                         )
                     };

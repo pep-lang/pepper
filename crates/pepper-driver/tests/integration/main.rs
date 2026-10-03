@@ -76,6 +76,7 @@ mod platform_tests;
 mod os_tests;
 mod process_tests;
 mod profile_tests;
+mod project_tests;
 mod propagation_tests;
 mod property_tests;
 mod ptr_syntax_tests;

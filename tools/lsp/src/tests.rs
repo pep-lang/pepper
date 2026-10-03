@@ -125,6 +125,37 @@ fn qualifier_leads_to_the_module() {
 }
 
 #[test]
+fn a_project_dependency_leads_to_its_fetched_files() {
+    // No `-I`: the project's `pep.toml` names the dependency, fetched into
+    // its `.pep/deps`, and a module inside the package (`geo.solids`).
+    let dir = std::env::temp_dir().join(format!("pepper_lsp_project_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let package = dir.join(".pep/deps/github.com/someone/geometry");
+    let files = [
+        (dir.join("pep.toml"), "[package]\nname = \"app\"\n\n[dependencies]\ngeo = { github = \"someone/geometry\" }\n"),
+        (dir.join("main.pep"), "import geo;\nimport geo.solids;\ntest(): int {\n    return geo.area(2, 3) + solids.volume(2);\n}\n"),
+        (package.join("module.pep"), "export area(w: int, h: int): int { return w * h; }\n"),
+        (package.join("solids/module.pep"), "export volume(s: int): int { return s * s * s; }\n"),
+    ];
+    for (path, text) in &files {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let path = dir.join("main.pep");
+    let uri = Url::from_file_path(&path).unwrap();
+    let text = std::fs::read_to_string(&path).unwrap();
+    let setup = Setup { mode: Mode::Lenient, ..Default::default() };
+    let program = load_program(Root { name: uri.to_string(), source: text.clone(), path }, &setup).unwrap();
+    assert!(program.errors.is_empty(), "{}", program.render(&program.errors));
+    let (file, rest) = definition(&uri, &text, &program, at(&text, "geo.area", 0, 4));
+    assert!(file.ends_with("geometry/module.pep"), "{}", file);
+    assert!(rest.starts_with("area(w: int"), "{}", rest);
+    let (file, _) = definition(&uri, &text, &program, at(&text, "solids.volume", 0, 7));
+    assert!(file.ends_with("solids/module.pep"), "{}", file);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn qualified_types_lead_to_their_declarations() {
     let (uri, text, program) = load("qualified_types", ALIAS, "main.pep");
     let point = at(&text, "g.Point", 0, 2);

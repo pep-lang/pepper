@@ -4,11 +4,13 @@ use pepper_driver::parser_diagnostic::{colorize, is_rendered};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let options = Options::parse_from(pepper_driver::options::normalize_args(std::env::args_os()));
+    let mut options = Options::parse_from(pepper_driver::options::normalize_args(std::env::args_os()));
     let color = pepper_driver::stderr_color();
 
-    if options.source_files.is_empty() {
-        eprintln!("error: no source files provided");
+    // With no source file, build the project whose pep.toml is here or above.
+    if let Err(e) = options.apply_project() {
+        let e = if is_rendered(&e) { e } else { format!("error: {}", e) };
+        eprintln!("{}", if color { colorize(&e) } else { e });
         return ExitCode::FAILURE;
     }
 

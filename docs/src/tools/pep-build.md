@@ -9,7 +9,7 @@ pepper build main.pep -o main          # the same as: pep-build main.pep -o main
 ```
 
 ```text
-pep-build [OPTIONS] <entry.pep>
+pep-build [OPTIONS] [<entry.pep>]
 ```
 
 This page lists every option. `pep-build --help` prints the same list in
@@ -19,13 +19,13 @@ short, and `pepper help build` runs it.
 
 | Option | What it does | Default |
 | --- | --- | --- |
-| `<entry.pep>` | The program's entry file | required |
+| `<entry.pep>` | The program's entry file | the project's, from `pep.toml` |
 | `-I <dir>` | Add a folder to search for imported modules | the runtime's folder only |
 | `--import <name>` | Load a module into every file of the program | none |
 | `--no-runtime` | Compile without the standard library | the runtime is used |
-| `-o <file>` | Name the executable or library | `<entry stem>` in the current folder |
+| `-o <file>` | Name the executable or library | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
-| `--build <dir>` | Folder for intermediate files | `.pep/build` |
+| `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-ast` | Print the syntax tree instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
@@ -41,7 +41,7 @@ short, and `pepper help build` runs it.
 | `-D <name>[=<value>]` | Define a build option | none |
 | `--no-runtime-checks=<list>` | Remove kinds of runtime check | every check on |
 | `--no-cache` | Do not use the build cache | the cache is used |
-| `--cache <dir>` | Folder for the build cache | `PEPPER_CACHE_DIR`, else `.pep/cache` |
+| `--cache <dir>` | Folder for the build cache | `PEPPER_CACHE_DIR`, else `.pep/cache` (in a project's folder when building it) |
 | `--verify-cache` | Check cache hits against fresh code | off, or `PEPPER_CACHE_VERIFY` |
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
@@ -66,14 +66,31 @@ pepper build main.pep
 The file that holds `main`. The compiler finds the files it imports on its
 own (see [Modules and imports](../language/modules.md)), so a program of many
 files is compiled by naming its entry file alone. Only the first file named
-is compiled; any others are ignored. With no file, the compiler stops with
-`error: no source files provided`.
+is compiled; any others are ignored.
+
+With no file, the compiler builds the project whose `pep.toml` is in the
+current folder or the nearest folder above it: its `[build]` table names the
+entry file and the output, and the build goes in the project's `.pep` (see
+[Projects: pep.toml](projects.md)). With no file and no `pep.toml`, it stops
+with `error: no source files provided, and no pep.toml in <folder> or a
+folder above it`.
+
+```bash
+cd my_app/src
+pepper build              # builds my_app/pep.toml's program into my_app/
+```
+
+An entry file inside a project (under a folder with a `pep.toml`) imports the
+project's dependencies, and its `[build]` table's `include` folders and
+`link` libraries apply to it as well.
 
 ### `-I <dir>`
 
 Adds a folder to search for modules imported by name (`import geometry;`
 looks for `geometry/module.pep`). The `-I` folders are searched in the order
-given, before the runtime's folder. See
+given, then a project's `[build]` `include` folders, then the runtime's
+folder. A project's dependencies are found through its `pep.toml` instead.
+See
 [Dependencies and search paths](../language/modules.md#dependencies-and-search-paths).
 
 ```bash
@@ -107,8 +124,11 @@ describes, and `PEPPER_RUNTIME` names its folder outright.
 The path of the executable, or with `--lib` of the library. Without it, the
 output goes to the current folder, named after the entry file with no
 extension (`main` for `main.pep`); with `--lib`, the library's usual file
-name for that stem (`libmain.a`). Windows runs only files ending in `.exe`,
-so name the output there: `-o main.exe`.
+name for that stem (`libmain.a`). Building a project with no file, it is the
+`[build]` table's `output`, else the package's `name` in the project's
+folder (`libname.a` with `--lib`), with `.exe` added when building for
+Windows and the name has no extension. Windows runs only files ending in
+`.exe`, so otherwise name the output there: `-o main.exe`.
 
 ### `--lib static`, `--lib shared`
 
@@ -125,7 +145,8 @@ See [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
 ### `--build <dir>`
 
 The folder for intermediate files: the program's objects and, with
-`--emit-llvm`, its IR. The default is `.pep/build` in the current folder.
+`--emit-llvm`, its IR. The default is `.pep/build` in the current folder, or
+in the project's folder when building a project with no file.
 
 ### `--emit-llvm`
 
@@ -231,7 +252,7 @@ for each character that is not a letter or digit
 ### `-l <lib>`
 
 Links a C library, as `-l` does for clang: `-l m` links `libm`. Repeat it
-for more libraries. A program's `[Link]` attributes name libraries from the
+for more libraries. A project's `[build]` table adds its `link` libraries. A program's `[Link]` attributes name libraries from the
 source instead. See [Linking](../language/linking.md).
 
 ### `-L <dir>`
@@ -312,7 +333,8 @@ Compiles every file without reading or writing the build cache.
 
 Keeps the build cache in `<dir>`. Without it, the folder named by
 `PEPPER_CACHE_DIR` when that is set and not empty, else `.pep/cache` in the
-current folder.
+current folder, or in the project's folder when building a project with no
+file.
 
 ### `--verify-cache`, `--no-verify-cache`
 
