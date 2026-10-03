@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-85679aa9.js";
+            window.path_to_searchindex_js = "../searchindex-3b035b99.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-57b6db41.js"></script>
@@ -296,8 +296,9 @@ declares, and <code>pep-package</code> says which requirement it overrode.</li>
 </div>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p><code>pep-package</code> is written in Pepper (<code>tools/pep-package</code>) and depends on the
-<a href="https://github.com/justinboswell/pepper-toml">toml package</a>. Its
-<code>pep.toml</code> and <code>pep.lock</code> name it, and building it fetches it:</p>
+<a href="https://github.com/justinboswell/pepper-toml">toml package</a> through a
+<code>path</code> dependency on its copy in <code>tools/toml</code>, so building it needs no
+network:</p>
 <pre><code class="language-bash">cargo build --release
 target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
 </code></pre>
