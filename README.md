@@ -12,9 +12,48 @@ See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; 
 ## Install
 
 Each release has the toolchain prebuilt for Linux (x64), macOS (arm64, x64)
-and Windows (x64). The install scripts download it, check it, put `bin` on
-the `PATH`, and offer to install what linking needs (clang, Xcode's command
-line tools, or LLVM and the Visual Studio Build Tools):
+and Windows (x64). An install script downloads the right archive, checks its
+SHA-256, unpacks it into `~/.pepper` (`%LOCALAPPDATA%\pepper` on Windows),
+puts its `bin` on the `PATH`, checks that programs can be linked, and builds
+and runs a small program to prove the install works.
+
+### Prerequisites
+
+Pepper needs no Rust, cargo or LLVM development install. It does link
+programs with `clang`, which needs the platform's linker and C library:
+
+| Platform | Needs | The script offers to install it with |
+| --- | --- | --- |
+| Linux | glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu 18.10 and later; not musl/Alpine), `clang` and the C library's development files | `apt-get install clang build-essential`, `dnf`/`yum install clang gcc glibc-devel`, `pacman -S clang gcc` or `zypper install clang gcc glibc-devel` |
+| macOS | Xcode's command line tools | `xcode-select --install` |
+| Windows | LLVM (`clang`), and the MSVC libraries and Windows SDK | `scoop`, `winget` or `choco install llvm`, else LLVM's own installer; the Visual Studio Build Tools' C++ workload with `winget` |
+
+The script asks before installing anything (`--yes` / `-Yes` skips asking;
+with no terminal it installs nothing and says what is missing). Programs
+that use the `tls` module also need OpenSSL 3 (`libssl.so.3` on Linux,
+Homebrew's `openssl@3` on macOS; Windows uses SChannel). The macOS binaries
+are not signed; the script clears the quarantine flag.
+
+### Running the script
+
+While the repository is private, the release downloads need a GitHub token
+that can read it, and so does the raw script URL. With the
+[GitHub CLI](https://cli.github.com) signed in:
+
+```sh
+# Linux, macOS
+gh api repos/justinboswell/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" > install.sh
+GITHUB_TOKEN=$(gh auth token) sh install.sh
+```
+
+```powershell
+# Windows (PowerShell)
+gh api repos/justinboswell/pepper/contents/scripts/install.ps1 -H "Accept: application/vnd.github.raw" > install.ps1
+$env:GITHUB_TOKEN = gh auth token
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Once the repository is public, these one-liners do the same:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh   # Linux, macOS
@@ -24,8 +63,18 @@ curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/i
 irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex       # Windows
 ```
 
-While the repository is private, set `GITHUB_TOKEN` to a token that can read
-it. Options, the layout, uninstalling and how releases are built
+Then open a new terminal and check it with `pepper --version`.
+
+Common options (`install.sh` / `install.ps1`):
+
+- `--version <x.y.z>` / `-Version`: install that release instead of the newest.
+- `--prefix <dir>` / `-Prefix`: install somewhere other than `~/.pepper`
+  (or set `PEPPER_HOME`).
+- `--no-modify-path` / `-NoModifyPath`: leave the `PATH` alone.
+- `--no-prerequisites` / `-NoPrerequisites`: skip the linking checks.
+- `--uninstall` / `-Uninstall`: remove the install and its `PATH` entries.
+
+Every option, the install layout and how releases are built
 (`.github/workflows/release.yml`) are in the book's
 [Installing Pepper](docs/src/tools/install.md). The rest of this file is for
 building Pepper from source.
