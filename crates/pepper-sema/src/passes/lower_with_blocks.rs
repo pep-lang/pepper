@@ -165,7 +165,7 @@ fn lower_statement(stmt: &mut Statement, types: &Types) {
             }
         }
         Statement::While(wh) => lower_block(&mut wh.block, types),
-        Statement::Expression(_) | Statement::Declaration(_) | Statement::Return(_) | Statement::LoopBreak(_) | Statement::Static(_) => {}
+        Statement::Expression(_) | Statement::Declaration(_) | Statement::Return(_) | Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
     }
 }
 

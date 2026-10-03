@@ -92,6 +92,47 @@ The `.pdb` beside the executable is found automatically.
 Not yet supported: an enum with payloads shows its tag and every payload
 field, rather than the active case and its payload alone.
 
+## Stepping through a `static` block
+
+A [`static` block](../language/reflection.md) unrolls its compile-time
+loops into one pass per element, and the debugger steps through those
+passes as it would a loop that runs: it stops on the `for` (or `while`)
+line at the start of each pass, then on each line of the body. A
+compile-time `if` stops once on its line, then in the branch it kept. The
+compile-time variables (the loop's `field`, a `var` of the block) are
+locals of each pass, so the debugger shows which pass it is in:
+
+```pepper
+{{#include ../../examples/debugging-static.pep}}
+```
+
+```text
+$ pepper build -g debugging-static.pep -o debugging-static
+$ gdb ./debugging-static
+(gdb) break total
+(gdb) run
+(gdb) next
+11	    var sum = 0;
+(gdb) next
+13	        for (var field in reflect.properties<Point>()) {
+(gdb) next
+14	            sum = sum + field.get(p);
+(gdb) print field
+$1 = {name = 0x55555559073f "x", type_name = 0x555555590a57 "int", index = 0, is_last = false, is_const = false, is_property = false}
+(gdb) next
+13	        for (var field in reflect.properties<Point>()) {
+(gdb) next
+14	            sum = sum + field.get(p);
+(gdb) print field.name
+$2 = 0x5555555909ba "y"
+```
+
+A breakpoint on a line of the body stops in every pass. A member or case
+shows as a structure of what `reflect` reads from it (`name`, `index`,
+`is_last`, and so on); a list does not show. The stop on the header is a
+`nop` the compiler adds only to unoptimized `-g` builds; optimized code
+steps through the body's lines without it.
+
 ## Formatters for the runtime's types
 
 The runtime ships formatters for each debugger in `runtime/debuggers/`.

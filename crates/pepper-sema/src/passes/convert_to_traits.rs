@@ -698,7 +698,7 @@ impl Converter {
                         self.convert(expr, returns, current, loc);
                     }
                 }
-                Statement::LoopBreak(_) | Statement::Static(_) => {}
+                Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
             }
         }
     }

@@ -923,6 +923,36 @@ pub enum Statement {
     /// written in a generic base, and expanded in each specialization once
     /// its type arguments are known. Never reaches codegen.
     Static(Box<StaticBlock>),
+    /// The start of one pass of an unrolled compile-time loop, or of the
+    /// branch a compile-time `if` kept: the first statement of each, put
+    /// there by `passes::static_blocks`. It does nothing; under `-g` it is
+    /// where the debugger stops and how it sees the compile-time values.
+    StaticPass(StaticPass),
+}
+
+/// See [`Statement::StaticPass`].
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct StaticPass {
+    /// The loop's or the `if`'s header: under `-g -O0`, codegen emits one
+    /// instruction there, so stepping stops on the header once per pass,
+    /// as it does for a runtime loop.
+    pub loc: Loc,
+    /// The compile-time variables in scope, by name, with their values in
+    /// this pass, which codegen declares for the debugger in the pass's
+    /// scope.
+    pub values: Vec<(String, StaticConstant)>,
+}
+
+/// A compile-time value as the debugger shows it.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum StaticConstant {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    String(String),
+    /// A value with members, such as a `reflect.Member`: the type's name
+    /// for the debugger and each member.
+    Record { name: String, fields: Vec<(String, StaticConstant)> },
 }
 
 /// A `static (captures) { ... }` block: the compile-time steps, and the

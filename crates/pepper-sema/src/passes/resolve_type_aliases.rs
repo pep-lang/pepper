@@ -239,7 +239,7 @@ fn subst_stmt(stmt: &mut Statement, aliases: &HashMap<String, &TypeAliasDef>, va
         Statement::Static(block) => {
             block.for_each_emitted_mut(&mut |s| subst_stmt(s, aliases, values), &mut |e| subst_expr(e, aliases, values))
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
         _ => {}
     }
 }

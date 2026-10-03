@@ -16,6 +16,7 @@ pub mod ops;
 pub mod partition;
 pub mod types;
 pub mod target;
+mod static_debug;
 
 use address::{Address, Frame};
 use inkwell::context::Context;
@@ -2794,6 +2795,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             Statement::While(wh) => self.codegen_while(wh)?,
             Statement::LoopBreak(lb) => self.codegen_loop_break(lb)?,
             Statement::Static(_) => return Err("internal error: unexpanded 'static' block".to_string()),
+            Statement::StaticPass(pass) => self.codegen_static_pass(pass)?,
             Statement::Return(ret) => {
                 let return_block = self
                     .frame
@@ -7656,6 +7658,7 @@ fn statement_loc(stmt: &Statement) -> Loc {
         Statement::Declaration(Declaration::Variable(var)) => var.loc,
         Statement::Declaration(_) | Statement::Block(_) | Statement::LoopBreak(_) => Loc::NONE,
         Statement::Static(block) => block.loc,
+        Statement::StaticPass(pass) => pass.loc,
     }
 }
 

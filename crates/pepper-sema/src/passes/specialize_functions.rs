@@ -165,7 +165,7 @@ fn replace_stmt_types(stmt: &mut Statement, type_map: &[(String, TypeName)]) {
             block.substitute(type_map);
             block.for_each_emitted_mut(&mut |s| replace_stmt_types(s, type_map), &mut |e| replace_expr_types(e, type_map));
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
     }
 }
 

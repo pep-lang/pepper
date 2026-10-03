@@ -361,7 +361,7 @@ pub fn walk_statement(stmt: &mut Statement, f: &mut impl FnMut(&mut Expression))
                 walk_expression(expr, f);
             }
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
         // The statements a `static` block emits, so a generic base's are
         // lowered with the rest of it.
         Statement::Static(block) => walk_static_items(&mut block.items, f),
@@ -517,7 +517,7 @@ pub fn visit_statement<'e>(stmt: &'e Statement, f: &mut impl FnMut(&'e Expressio
                 visit_expression(expr, f);
             }
         }
-        Statement::LoopBreak(_) => {}
+        Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
         Statement::Static(block) => visit_static_items(&block.items, f),
     }
 }

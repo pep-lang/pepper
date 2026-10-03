@@ -259,7 +259,7 @@ impl<'a> Lifter<'a> {
                     self.walk_expression(e);
                 }
             }
-            Statement::LoopBreak(_) | Statement::Static(_) => {}
+            Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
         }
     }
 
@@ -1117,7 +1117,7 @@ fn block_creates_closure(block: &Block, closures: &HashSet<String>) -> bool {
         Statement::Expression(e) => expr(e),
         Statement::Block(b) => block_creates_closure(b, closures),
         Statement::Declaration(Declaration::Variable(var)) => var.default.as_ref().is_some_and(expr),
-        Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) => false,
+        Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => false,
         Statement::Branch(branch) => {
             expr(&branch.condition)
                 || block_creates_closure(&branch.if_block, closures)
@@ -1252,7 +1252,7 @@ fn sites_in_block(
                     sites_in_expression(e, Some(ret), table, current, visit);
                 }
             }
-            Statement::LoopBreak(_) | Statement::Static(_) => {}
+            Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
         }
     }
     locals.pop();

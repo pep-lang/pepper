@@ -1316,7 +1316,7 @@ fn lower_statement(
                 lower_expressions(e, enums, subjects, coverage);
             }
         }
-        Statement::LoopBreak(_) | Statement::Static(_) => {}
+        Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
     }
 }
 

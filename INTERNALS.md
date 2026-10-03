@@ -977,7 +977,11 @@ language side.
   strings, enum cases, members, functions, lists and attribute values),
   unrolls each `For` into one block per element and each `While` into one
   per iteration (at most `MAX_ITERATIONS`; a `Jump` sets
-  `Expander::jump`, which skips the rest of the pass), and fills in the emitted
+  `Expander::jump`, which skips the rest of the pass), starts each pass
+  that emits anything, and the branch a compile-time `If` kept, with a
+  `Statement::StaticPass` at the header holding the compile-time variables
+  in scope (`Expander::debug_values`, as `StaticConstant`s; see §4.4),
+  and fills in the emitted
   statements: `x.Type` types first (`replace_body_types`), then each
   placeholder (`fill`). `transform_pass` calls it at the start (concrete
   code, `lowered = false`), after the first specialization, inside the
@@ -1871,6 +1875,18 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
   definition (`target::keep_frame_pointers`, in `cache::emit` beside the
   CPU stamp), so profilers walk optimized stacks; `pep-profile` builds with
   it.
+- **`static` blocks** (`static_debug.rs`). Each pass of an unrolled
+  compile-time loop, and the branch a compile-time `if` kept, starts with
+  a `Statement::StaticPass` (§2.8), which emits nothing without `-g`.
+  Under `-g -O0` it is a `nop` (sideeffect inline asm; an empty one leaves
+  no instruction) at the loop's header: the passes' bodies share their
+  lines, and a debugger steps until the line changes, so without it every
+  pass ran in one step. Its compile-time variables get slots stored in the
+  entry block (so they hold their values from the header on) and are
+  declared in the pass's `DILexicalBlock`: numbers and `bool` as `long`,
+  `double`, `bool`, a string as a `char*` to a constant, and a member,
+  case, function or attribute as a structure of what `reflect` reads from
+  it (`reflect.Member`, ...; `static_record_type`).
 - **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
   chains itself, and `docs_examples_tests` builds every example at
   `-O2 -g`, so the verifier checks them.

@@ -161,9 +161,11 @@ These show what the block computes:
   block emits keeps the source line of the statement it came from, so a
   runtime `print` it emits shows values as the program runs, and a
   [debugger](../tools/debugging.md) breakpoint on that line (with `-g`)
-  stops there. The passes of an unrolled loop share the lines of its body,
-  so a breakpoint on one stops only in the first pass, and stepping over
-  the line runs the rest.
+  stops there, in every pass. Stepping goes through an unrolled loop pass
+  by pass, stopping on the `for` line and then on the body, and the
+  debugger shows the compile-time variables, such as the loop's `field`
+  (see [Stepping through a `static`
+  block](../tools/debugging.md#stepping-through-a-static-block)).
 - **`--emit-static`** writes the program's source with each block
   replaced by what it emits (see the next section).
 - **`--emit-llvm`** writes the program's LLVM IR into the build directory

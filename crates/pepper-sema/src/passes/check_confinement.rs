@@ -817,7 +817,7 @@ impl<'p, 'a> Walk<'p, 'a> {
                 }
                 self.returns.push((value, ret.loc));
             }
-            Statement::LoopBreak(_) | Statement::Static(_) => {}
+            Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
         }
     }
 
@@ -1704,7 +1704,7 @@ fn mentions(function: &FunctionDef, names: &std::collections::HashSet<String>) -
             }
             Statement::While(wh) => expression(&wh.condition, names) || block(&wh.block, names),
             Statement::Return(ret) => ret.expr.as_ref().is_some_and(|e| expression(e, names)),
-            Statement::LoopBreak(_) | Statement::Static(_) => false,
+            Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => false,
         })
     }
     function.parameters.iter().any(|p| names.contains(&p.ty.to_string())) || function.body.as_ref().is_some_and(|b| block(b, names))
@@ -1959,7 +1959,7 @@ impl Checks<'_, '_> {
                         self.expression(e, false);
                     }
                 }
-                Statement::LoopBreak(_) | Statement::Static(_) => {}
+                Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
             }
         }
         self.walk.scopes.pop();
@@ -2248,7 +2248,7 @@ impl Moves {
                 }
                 return Ok(Some(Exit::Leave));
             }
-            Statement::Static(_) => {}
+            Statement::Static(_) | Statement::StaticPass(_) => {}
             Statement::LoopBreak(b) => {
                 return Ok(Some(if b.kind == LoopBreakKind::Continue { Exit::Continue } else { Exit::Leave }));
             }

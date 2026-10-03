@@ -363,7 +363,7 @@ impl Uses<'_, '_> {
                     self.expression(expr, false);
                 }
             }
-            Statement::LoopBreak(_) => {}
+            Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
             // Never reaches codegen.
             Statement::Static(_) => self.kept = true,
         }
@@ -504,7 +504,7 @@ impl Shared<'_, '_> {
                 }
                 self.scope.declare(var);
             }
-            Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) => {}
+            Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
             Statement::Branch(branch) => {
                 self.expression(&branch.condition);
                 self.block(&branch.if_block);

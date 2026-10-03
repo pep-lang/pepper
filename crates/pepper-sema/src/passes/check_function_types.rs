@@ -699,7 +699,7 @@ impl<'a> Checker<'a> {
                         }
                     }
                 }
-                Statement::LoopBreak(_) | Statement::Static(_) => {}
+                Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
             }
         }
     }

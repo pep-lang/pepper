@@ -329,6 +329,47 @@ struct Attribute {
 }
 
 impl Value {
+    /// The value as the debugger shows it (a member or case as a record of
+    /// what `reflect` reads from it), or `None` for a list.
+    fn debug_constant(&self) -> Option<StaticConstant> {
+        let record = |name: &str, fields: Vec<(&str, StaticConstant)>| StaticConstant::Record {
+            name: name.to_string(),
+            fields: fields.into_iter().map(|(field, value)| (field.to_string(), value)).collect(),
+        };
+        Some(match self {
+            Value::Int(value) => StaticConstant::Int(*value),
+            Value::Float(value) => StaticConstant::Float(*value),
+            Value::Bool(value) => StaticConstant::Bool(*value),
+            Value::String(value) => StaticConstant::String(value.clone()),
+            Value::Member(m) => record(
+                "reflect.Member",
+                vec![
+                    ("name", StaticConstant::String(m.name.clone())),
+                    ("type_name", StaticConstant::String(demangle(&m.ty.display()).into_owned())),
+                    ("index", StaticConstant::Int(m.index as i64)),
+                    ("is_last", StaticConstant::Bool(m.index + 1 == m.count)),
+                    ("is_const", StaticConstant::Bool(m.is_const)),
+                    ("is_property", StaticConstant::Bool(m.is_property)),
+                ],
+            ),
+            Value::Case(c) => record(
+                "reflect.Case",
+                vec![
+                    ("name", StaticConstant::String(c.name.clone())),
+                    ("value", StaticConstant::Int(c.value)),
+                    ("index", StaticConstant::Int(c.index as i64)),
+                    ("is_last", StaticConstant::Bool(c.index + 1 == c.count)),
+                ],
+            ),
+            Value::Function(f) => record("reflect.Function", vec![("name", StaticConstant::String(demangle_name(&f.symbol).to_string()))]),
+            Value::Attribute(a) => StaticConstant::Record {
+                name: demangle_name(&a.ty).to_string(),
+                fields: a.fields.iter().filter_map(|(field, value)| Some((field.clone(), value.debug_constant()?))).collect(),
+            },
+            Value::List(_) => return None,
+        })
+    }
+
     /// What the value is, for messages.
     fn kind(&self) -> &'static str {
         match self {
@@ -578,10 +619,12 @@ impl<'m> Expander<'m> {
                         let mut pass_text = vec![];
                         let pass = self.scoped(|this| {
                             this.scopes.last_mut().unwrap().insert(name.clone(), element.clone());
-                            this.items(body, &mut pass_text)
+                            let values = this.debug_values();
+                            this.items(body, &mut pass_text).map(|items| (values, items))
                         });
                         self.passes.pop();
-                        out.push(Statement::Block(block_of(pass?)));
+                        let (values, pass) = pass?;
+                        out.push(Statement::Block(block_of(with_stop(*loc, values, pass))));
                         text.push(Rendered::Block(pass_text));
                         if self.jump.take() == Some(ast::LoopBreakKind::Break) {
                             break;
@@ -605,12 +648,13 @@ impl<'m> Expander<'m> {
                             return Err(self.with_passes(Diagnostic::error(message).at(*loc)));
                         }
                         self.passes.push((*loc, iteration, 0, String::new()));
+                        let values = self.debug_values();
                         let mut pass_text = vec![];
                         let pass = self.scoped(|this| this.items(body, &mut pass_text));
                         self.passes.pop();
                         let pass = pass?;
                         if !pass.is_empty() {
-                            out.push(Statement::Block(block_of(pass)));
+                            out.push(Statement::Block(block_of(with_stop(*loc, values, pass))));
                             text.push(Rendered::Block(pass_text));
                         }
                         iteration += 1;
@@ -623,15 +667,16 @@ impl<'m> Expander<'m> {
                     self.jump = Some(*kind);
                     return Ok(out);
                 }
-                StaticItem::If { condition, then_items, else_items, .. } => {
+                StaticItem::If { condition, then_items, else_items, loc } => {
                     let taken = match self.evaluate(condition)? {
                         Value::Bool(value) => value,
                         other => return Err(self.error(format!("a compile-time condition must be a 'bool', not a {}", other.kind()), condition.span())),
                     };
                     let branch = if taken { then_items } else { else_items };
+                    let values = self.debug_values();
                     let mut branch_text = vec![];
                     let expanded = self.scoped(|this| this.items(branch, &mut branch_text))?;
-                    out.push(Statement::Block(block_of(expanded)));
+                    out.push(Statement::Block(block_of(with_stop(*loc, values, expanded))));
                     text.push(Rendered::Block(branch_text));
                 }
                 StaticItem::EmitIf { condition, then_items, else_items, span } => {
@@ -674,6 +719,26 @@ impl<'m> Expander<'m> {
             }
         }
         Ok(out)
+    }
+
+    /// The compile-time variables in scope and their values, as the
+    /// debugger shows them, sorted by name: what a [`StaticPass`] declares.
+    fn debug_values(&self) -> Vec<(String, StaticConstant)> {
+        // An inner scope's name hides an outer one's, even when it has
+        // nothing to show (a list).
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut values: Vec<(String, StaticConstant)> = vec![];
+        for scope in self.scopes.iter().rev() {
+            for (name, value) in scope {
+                if seen.insert(name) {
+                    if let Some(constant) = value.debug_constant() {
+                        values.push((name.clone(), constant));
+                    }
+                }
+            }
+        }
+        values.sort_by(|a, b| a.0.cmp(&b.0));
+        values
     }
 
     /// When recording, the source at `span` (an emitted statement, or a
@@ -1554,6 +1619,18 @@ fn case_of(def: &EnumDef, index: usize) -> Case {
         attributes: case.attributes.clone(),
         file: case.loc.file,
     }
+}
+
+/// A pass's statements, after a [`StaticPass`] at `loc` declaring `values`
+/// when it emits any: a pass that emits nothing has nowhere to stop.
+fn with_stop(loc: Loc, values: Vec<(String, StaticConstant)>, items: Vec<Statement>) -> Vec<Statement> {
+    if items.is_empty() {
+        return items;
+    }
+    let mut out = Vec::with_capacity(items.len() + 1);
+    out.push(Statement::StaticPass(StaticPass { loc, values }));
+    out.extend(items);
+    out
 }
 
 fn block_of(items: Vec<Statement>) -> Block {

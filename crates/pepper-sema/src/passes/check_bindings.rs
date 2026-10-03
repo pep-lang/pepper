@@ -122,7 +122,7 @@ fn check_statement(stmt: &Statement, scopes: &mut Scopes) {
                 check_expression(expr, scopes);
             }
         }
-        Statement::LoopBreak(_) | Statement::Static(_) => {}
+        Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
     }
 }
 

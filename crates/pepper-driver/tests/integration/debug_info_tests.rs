@@ -265,3 +265,123 @@ fn jit_code_with_debug_info_runs_and_is_registered() {
         assert_ne!(first_entry, 0, "the JIT registered no code with the GDB JIT interface");
     }
 }
+
+/// A `static` block whose compile-time `for`, `while` and `if` each unroll
+/// into passes (#521). 1 + 2 + 3, plus 0 + 1, times 2: `total` returns 14.
+const STATIC: &str = "struct Point {
+    var x: int = 1;
+    var y: int = 2;
+    var z: int = 3;
+}
+
+total(p: Point): int {
+    var sum = 0;
+    static (sum, p) {
+        for (var field in reflect.properties<Point>()) {
+            sum = sum + field.get(p);
+        }
+        var n = 0;
+        while (n < 2) {
+            sum = sum + n;
+            n += 1;
+        }
+        if (reflect.is_struct<Point>()) {
+            sum = sum * 2;
+        }
+    }
+    return sum;
+}
+
+main(): int {
+    return total(Point()) - 14;
+}
+";
+
+/// `STATIC` compiled with `extra` options in a fresh directory, which is
+/// returned.
+fn compile_static(name: &str, extra: &[&str]) -> PathBuf {
+    let dir = scratch(name);
+    std::fs::write(dir.join("main.pep"), STATIC).unwrap();
+    compile(&dir, extra);
+    dir
+}
+
+/// Each pass of a compile-time loop, and the branch a compile-time `if`
+/// keeps, starts with a `nop` on the header's line under `-g -O0`, so a
+/// debugger stops there once per pass; its compile-time variables are
+/// declared in the pass's scope.
+#[test]
+fn g_gives_each_static_pass_a_stop_and_its_compile_time_variables() {
+    let dir = compile_static("static", &["--emit-llvm", "-g"]);
+    let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    // The `nop`s' lines: three passes of the `for` (line 10), two of the
+    // `while` (14), and the `if` (18).
+    let lines: Vec<u32> = ir
+        .lines()
+        .filter(|l| l.contains("call void asm sideeffect \"nop\""))
+        .map(|l| {
+            let id = l.rsplit("!dbg ").next().unwrap().trim();
+            let location = ir.lines().find(|d| d.starts_with(&format!("{id} = !DILocation("))).unwrap();
+            location.split("line: ").nth(1).unwrap().split(',').next().unwrap().parse().unwrap()
+        })
+        .collect();
+    assert_eq!(lines, [10, 10, 10, 14, 14, 18], "the nops' lines");
+    // `field` once per pass, as a `reflect.Member`, and `n` in each
+    // `while` pass and in the `if` (the runtime has variables of these
+    // names too, on other lines).
+    let declared = |name: &str, line: u32| {
+        ir.lines().filter(|l| l.contains(&format!("!DILocalVariable(name: \"{name}\",")) && l.contains(&format!("line: {line},"))).count()
+    };
+    assert_eq!(declared("field", 10), 3);
+    assert_eq!(declared("n", 14) + declared("n", 18), 3);
+    assert!(ir.contains("!DICompositeType(tag: DW_TAG_structure_type, name: \"reflect.Member\""), "no 'reflect.Member' type");
+    assert!(ir.contains("c\"y\\00\""), "no constant for the member name 'y'");
+
+    // Optimized code has no stops, and code without `-g` nothing at all.
+    for (name, extra) in [("static_o2", &["--emit-llvm", "-g", "-O2"][..]), ("static_no_g", &["--emit-llvm"][..])] {
+        let dir = compile_static(name, extra);
+        let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!ir.contains("asm sideeffect \"nop\""), "a nop with {extra:?}");
+    }
+}
+
+/// gdb steps through the passes of `STATIC`'s `static` block one by one,
+/// alternating between each loop's header and body as in a runtime loop,
+/// and prints the compile-time loop variable. Skipped where gdb is not
+/// installed or cannot run the program.
+#[test]
+fn gdb_steps_through_static_passes() {
+    if !cfg!(target_os = "linux") || std::process::Command::new("gdb").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = scratch("static_gdb");
+    std::fs::write(dir.join("main.pep"), STATIC).unwrap();
+    let exe = dir.join("main");
+    compile(&dir, &["-g", "-o", exe.to_str().unwrap()]);
+    let mut script = String::from("break total\nrun\nnext\nnext\nnext\nprint field.name\nnext\nnext\nprint field.name\n");
+    script.push_str(&"next\n".repeat(10));
+    std::fs::write(dir.join("gdb.cmd"), script).unwrap();
+    let output = std::process::Command::new("gdb").arg("-nx").arg("-batch").arg("-x").arg(dir.join("gdb.cmd")).arg(&exe).output().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let text = String::from_utf8_lossy(&output.stdout);
+    // A host that forbids tracing (some containers) never reaches the
+    // breakpoint.
+    if !text.contains("Breakpoint 1, total") {
+        return;
+    }
+    // The source lines gdb stopped on, and what it printed.
+    let stops: Vec<&str> = text
+        .lines()
+        .filter_map(|l| match l.split_once('\t') {
+            Some((line, _)) if line.parse::<u32>().is_ok() => Some(line),
+            _ => l.starts_with('$').then(|| l.rsplit(' ').next().unwrap()),
+        })
+        .collect();
+    assert_eq!(
+        stops,
+        ["7", "8", "10", "11", "\"x\"", "10", "11", "\"y\"", "10", "11", "14", "15", "14", "15", "18", "19", "22"],
+        "{text}"
+    );
+}
