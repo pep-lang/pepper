@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
+            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d36e6a4.js"></script>
+        <script src="../toc-0e50370a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -450,7 +450,10 @@ and atomics still work, as long as nothing waits for another thread.</li>
 <li>Sockets, TLS, HTTP connections and starting processes return an
 <code>IoError</code> saying they are not supported on WASI.</li>
 <li>Files work through the directories the runtime grants. <code>Metadata</code> has no
-permission bits (<code>read_only</code> is false) and no creation time.</li>
+permission bits (<code>read_only</code> is false) and no creation time, and
+<code>set_permissions</code> and <code>set_read_only</code> return an error;
+<code>set_executable</code> and the <code>mode</code> of <code>OpenOptions</code> and <code>Directory.create</code>
+do nothing. Timestamps and symlinks work.</li>
 <li><code>os</code> reports <code>OperatingSystem.Wasi</code>, <code>"wasm32"</code>, an empty host name and
 version, and no total memory.</li>
 <li>Pointers and C’s <code>long</code> and <code>size_t</code> are 32 bits; see

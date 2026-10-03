@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f0339ea3.js";
+            window.path_to_searchindex_js = "searchindex-68267aa4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0d36e6a4.js"></script>
+        <script src="toc-0e50370a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -238,7 +238,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>, <code>StringConstant</code> for literals’ constant bytes,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
+that take turns on a few worker threads, parking on sockets and timeouts), file-system access (see <a href="#files-and-directories">files</a>), text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
 TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
 <code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
@@ -3081,10 +3081,20 @@ for an unsafe path.</li>
 <li><code>strip_components</code> drops leading path components, as tar’s
 <code>--strip-components</code> does. A GitHub snapshot puts everything under
 <code>name-version/</code>, which <code>strip_components = 1</code> removes.</li>
-<li>Files and directories are created. A hard link becomes a copy of the
-file it names. Symlinks, devices and FIFOs are skipped.</li>
-<li>Permission bits and modification times are not applied yet: extracted
-files get the default permissions, so a script loses its executable bit.</li>
+<li>Files and directories are created, replacing a file already there. A
+hard link becomes a copy of the file it names. Devices and FIFOs are
+skipped.</li>
+<li>Each file and directory gets the entry’s modification time and, on Linux
+and macOS, its permission bits less the umask, as <code>tar</code> does, so a
+script keeps its executable bit. Setuid, setgid and sticky bits are
+never applied. A directory gets its mode and time after its contents are
+written, so a read-only directory can still be filled; one that already
+existed keeps its own. Windows and WASI apply no permission bits.</li>
+<li>Symlinks are made after everything else, so no file is written through
+one. A link whose target is absolute or climbs out of <code>target</code> with
+<code>..</code>, or that would be made inside another symlink, is skipped. Windows,
+where making a symlink needs Developer Mode or an administrator, skips
+every symlink.</li>
 </ul>
 <p><code>archive.TarWriter(sink)</code> writes an archive: <code>append_file(path, data)</code>,
 <code>append_directory(path)</code>, <code>append_symlink(path, target)</code>, <code>append(entry, data)</code> for any header, and <code>append_stream(entry, source)</code> to copy
@@ -14285,6 +14295,187 @@ built on fiber local storage); elsewhere the tasks of a thread share it.</li>
 </ul>
 <p>The <a href="#tasks-1">reference page</a> documents every function.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="files-and-directories"><a class="header" href="#files-and-directories">Files and directories</a></h1>
+<p>The <code>io</code> module reads and writes files, lists and creates directories, and
+inspects and changes what the file system records about them: permission
+bits, timestamps and symbolic links. Every call that touches the file
+system returns an <code>IoResult</code>, whose error says what went wrong portably
+(<code>is_not_found()</code>, <code>is_permission_denied()</code>, <code>is_already_exists()</code>, …;
+see <a href="#error-handling-with-result">Error handling with Result</a>).</p>
+<ul>
+<li><code>Path</code> is a file-system path. Joining, <code>parent()</code>, <code>file_name()</code>,
+<code>extension()</code> and <code>normalize()</code> work on its text alone; <code>exists()</code>,
+<code>metadata()</code>, <code>canonicalize()</code> and the <code>set_*</code> methods below ask the file
+system.</li>
+<li><code>File</code> is an open file. <code>File.open</code> reads, <code>File.create</code> writes a new or
+emptied file, and <code>OpenOptions</code> describes anything else (append, create
+only if missing, …). <code>read_to_string</code>, <code>write_text</code>, <code>read_bytes</code>,
+<code>write_bytes</code>, <code>copy</code>, <code>rename</code> and <code>remove</code> work on a whole file by path.</li>
+<li><code>Directory</code> creates and removes directories (<code>create</code>, <code>create_all</code>,
+<code>remove</code>, <code>remove_all</code>) and lists one, all at once with <code>entries()</code> or
+one entry at a time with <code>for</code>.</li>
+<li><code>Metadata</code> is a snapshot of a path’s kind, size, permission bits and
+timestamps, from <code>Path.metadata()</code> (which follows symlinks),
+<code>Path.symlink_metadata()</code> (which does not) or <code>File.metadata()</code>.</li>
+</ul>
+<pre><code class="language-pepper"># Write, read, list and remove files with io.
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-files-basics-example");
+    io.Directory.remove_all(folder);
+    io.Directory.create_all(folder.join("notes")).value();
+
+    # Whole files at once.
+    var path = folder.join("notes").join("today.txt");
+    io.File.write_text(path, "buy milk\n").value();
+    assert(io.File.read_to_string(path).value() == "buy milk\n", "read back");
+
+    # An open File, with OpenOptions for anything but read or replace.
+    var log = io.OpenOptions().append(true).create(true).open(folder.join("log.txt")).value();
+    log.write_all("started\n").value();
+    log.close().value();
+
+    # Metadata, and a directory's entries.
+    var m = path.metadata().value();
+    assert(m.is_file &amp;&amp; m.size == 9, "a 9-byte file");
+    var names = Array&lt;String&gt;();
+    for (var entry in io.Directory.open(folder).value()) {
+        names.append(entry.value().name);
+    }
+    assert(names.count == 2, "log.txt and notes");
+
+    io.Directory.remove_all(folder).value();
+    return 0;
+}
+</code></pre>
+<h2 id="permissions"><a class="header" href="#permissions">Permissions</a></h2>
+<p>A file’s permission bits say who may read, write and run it. They are the
+platform’s own bits, as <code>Metadata.permissions</code> reports them:</p>
+<ul>
+<li>On Linux and macOS, the POSIX <code>mode_t</code> bits: read, write and execute for
+the owner, the group and everyone else, plus setuid, setgid and sticky.
+Pepper has no octal literals, so <code>rwxr-xr-x</code> (octal 755) is written 493,
+and a comment gives the octal. On a directory, read lets one list it,
+write lets one add and remove entries, and execute lets one reach
+anything inside it.</li>
+<li>On Windows, the <code>FILE_ATTRIBUTE_*</code> word. Only <code>FILE_ATTRIBUTE_READONLY</code>
+is a permission; whether a file runs depends on its extension.</li>
+<li>WASI has no permission bits.</li>
+</ul>
+<p>Three ways to change them:</p>
+<ul>
+<li><code>set_permissions(mode)</code> on a <code>Path</code> or an open <code>File</code> sets the raw bits
+(<code>chmod</code> and <code>fchmod</code>). On Windows it applies only the read-only bit of
+<code>mode</code>, and on WASI it returns an error.</li>
+<li><code>set_read_only(bool)</code> is the portable read-only switch. On POSIX,
+read-only clears every write bit and writable sets only the owner’s, so
+this never opens a file to others. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>.</li>
+<li><code>set_executable(bool)</code> adds an execute bit wherever there is a read bit,
+as <code>chmod +x</code> does, or clears them all. It does nothing on Windows and
+WASI.</li>
+</ul>
+<p>A file or directory can also be created with its bits, so that it never
+exists with the default ones even for a moment: <code>OpenOptions.mode(m)</code> for a
+new file, and <code>Directory.create(path, mode = m)</code> or <code>create_all(path, mode = m)</code> for a directory. The process umask still applies, as it does to <code>open</code>
+and <code>mkdir</code>. These are ignored on Windows and WASI.</p>
+<h2 id="timestamps"><a class="header" href="#timestamps">Timestamps</a></h2>
+<p><code>Metadata.modified</code> and <code>Metadata.accessed</code> are nanoseconds since
+1970-01-01 UTC. <code>set_modified(time)</code> and <code>set_accessed(time)</code> on a <code>Path</code>
+or an open <code>File</code> set one and leave the other (<code>utimensat</code> and <code>futimens</code>;
+<code>SetFileTime</code> on Windows, which keeps 100 ns). Writing to a file sets its
+modification time, and adding or removing an entry sets a directory’s, so
+set a time after the contents are final.</p>
+<pre><code class="language-pepper"># Permission bits and timestamps: make a script executable, protect a file,
+# and copy a modification time.
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-files-permissions-example");
+    io.Directory.remove_all(folder);
+    # 448 is octal 700: only the owner may list or enter it (POSIX only).
+    io.Directory.create(folder, mode = 448).value();
+
+    # Created with mode 493 (octal 755, rwxr-xr-x) less the umask, so the
+    # script is never readable by others without being executable.
+    var script = folder.join("run.sh");
+    var file = io.OpenOptions().write(true).create_new(true).mode(493).open(script).value();
+    file.write_all("#!/bin/sh\necho hello\n").value();
+    file.close().value();
+
+    # The portable way: add an execute bit where there is a read bit.
+    var notes = folder.join("notes.sh");
+    io.File.write_text(notes, "#!/bin/sh\n").value();
+    notes.set_executable(true).value();
+    [Target(OS(Linux) || OS(Mac))] {
+        assert((notes.metadata().value().permissions &amp; 64) != 0, "the owner may run it");
+    }
+
+    # Read-only: no write bits on POSIX, FILE_ATTRIBUTE_READONLY on Windows.
+    [Target(!OS(Wasi))] {
+        notes.set_read_only(true).value();
+        assert(notes.metadata().value().read_only, "read-only");
+        notes.set_read_only(false).value();
+    }
+
+    # Give the script the same modification time as the notes.
+    var modified = notes.metadata().value().modified;
+    script.set_modified(modified).value();
+    assert(script.metadata().value().modified == modified, "same time");
+
+    io.Directory.remove_all(folder).value();
+    return 0;
+}
+</code></pre>
+<p>On Windows, an open <code>File</code> must have been opened for writing to change its
+read-only bit or its times.</p>
+<h2 id="symbolic-links"><a class="header" href="#symbolic-links">Symbolic links</a></h2>
+<p><code>File.symlink(target, link)</code> and <code>Directory.symlink(target, link)</code> create
+a symbolic link at <code>link</code> pointing to <code>target</code>. POSIX makes one kind of
+link either way; Windows makes a file link and a directory link
+differently, and a file link to a directory does not open, so use the one
+that matches the target. The target is stored as given and need not exist;
+a relative target is resolved from the directory holding the link.</p>
+<p><code>Path.read_link()</code> returns the target a link stores, without following it.
+<code>Path.symlink_metadata()</code> describes the link itself, and <code>metadata()</code> what
+it points to. <code>Directory.remove_all</code> removes links and never follows them.</p>
+<pre><code class="language-pepper"># Symbolic links: make one to a file and one to a directory, and read them.
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-files-symlinks-example");
+    io.Directory.remove_all(folder);
+    io.Directory.create_all(folder.join("releases").join("1.2")).value();
+    io.File.write_text(folder.join("app-1.2.conf"), "port = 80\n").value();
+
+    # Windows needs Developer Mode or an administrator to make symlinks.
+    [Target(!OS(Windows))] {
+        # A relative target is resolved from the folder holding the link.
+        var config = folder.join("app.conf");
+        io.File.symlink(io.Path("app-1.2.conf"), config).value();
+        assert(io.File.read_to_string(config).value() == "port = 80\n", "read through the link");
+        assert(config.read_link().value() == io.Path("app-1.2.conf"), "the stored target");
+        assert(config.symlink_metadata().value().is_symlink, "the link itself");
+
+        var current = folder.join("current");
+        io.Directory.symlink(io.Path("releases").join("1.2"), current).value();
+        assert(current.is_directory(), "a directory through the link");
+    }
+
+    # remove_all removes links, never what they point to.
+    io.Directory.remove_all(folder).value();
+    return 0;
+}
+</code></pre>
+<p>Making a symlink on Windows needs Developer Mode or an administrator;
+without either it fails with <code>is_permission_denied()</code>.</p>
+<h2 id="archives"><a class="header" href="#archives">Archives</a></h2>
+<p><code>archive.TarReader.extract</code> uses all of the above: it restores each file’s
+mode and modification time and makes the archive’s symlinks, as long as
+they stay inside the directory it extracts into. See
+<a href="#compression-and-archives">Compression and archives</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="networking"><a class="header" href="#networking">Networking</a></h1>
 <p>The <code>io</code> module has TCP, UDP and Unix domain sockets, IP and socket
 addresses, and host name lookup; the <code>tls</code> module encrypts TCP connections,
@@ -17280,7 +17471,10 @@ and atomics still work, as long as nothing waits for another thread.</li>
 <li>Sockets, TLS, HTTP connections and starting processes return an
 <code>IoError</code> saying they are not supported on WASI.</li>
 <li>Files work through the directories the runtime grants. <code>Metadata</code> has no
-permission bits (<code>read_only</code> is false) and no creation time.</li>
+permission bits (<code>read_only</code> is false) and no creation time, and
+<code>set_permissions</code> and <code>set_read_only</code> return an error;
+<code>set_executable</code> and the <code>mode</code> of <code>OpenOptions</code> and <code>Directory.create</code>
+do nothing. Timestamps and symlinks work.</li>
 <li><code>os</code> reports <code>OperatingSystem.Wasi</code>, <code>"wasm32"</code>, an empty host name and
 version, and no total memory.</li>
 <li>Pointers and C’s <code>long</code> and <code>size_t</code> are 32 bits; see
@@ -32525,6 +32719,160 @@ if (real.is_ok()) {
     print(real.value().to_string());
 }
 </code></pre>
+<h4 id="read_link"><a class="header" href="#read_link">read_link</a></h4>
+<pre><code class="language-pepper">read_link(): IoResult&lt;Path&gt;
+</code></pre>
+<p>Returns the target a symbolic link points to, as stored in the link
+(<code>readlink</code> on POSIX; on Windows the reparse point’s target, junctions
+included). Only the link itself is read: a relative target stays
+relative to the directory holding the link, and the target need not
+exist.</p>
+<p>On Windows the <code>\??\</code> prefix of an absolute target is removed
+(<code>\??\UNC\server\share</code> becomes <code>\\server\share</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the link’s target; an error with <code>is_invalid_input()</code> when the path is not a symlink, <code>is_not_found()</code> when it is missing or empty, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.symlink</code></li>
+<li><code>Directory.symlink</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var target = io.Path("current").read_link();
+if (target.is_ok()) {
+    print(target.value().to_string());
+}
+</code></pre>
+<h4 id="set_permissions"><a class="header" href="#set_permissions">set_permissions</a></h4>
+<pre><code class="language-pepper">set_permissions(mode: Mode): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the permission bits of the file or directory at this path,
+following symlinks (<code>chmod</code> on POSIX).</p>
+<p><code>mode</code> holds the raw platform bits, as <code>Metadata.permissions</code> reports
+them: on POSIX the <code>mode_t</code> bits <code>mode &amp; 07777</code> (493, octal 755, for
+<code>rwxr-xr-x</code>). A directory’s bits control listing it (r), creating and
+removing entries in it (w) and reaching anything inside it (x). On
+Windows <code>mode</code> is the <code>FILE_ATTRIBUTE_*</code> word, and only
+<code>FILE_ATTRIBUTE_READONLY</code> (1) is applied. WASI has no permission
+bits, and this fails. <code>set_read_only</code> and <code>set_executable</code> change one
+property portably.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the new permission bits</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once they are set; an error with <code>is_not_found()</code> when the path is missing or empty, <code>is_permission_denied()</code> when the caller does not own it, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.Path("deploy.sh").set_permissions(493);   # octal 755: rwxr-xr-x
+</code></pre>
+<h4 id="set_read_only"><a class="header" href="#set_read_only">set_read_only</a></h4>
+<pre><code class="language-pepper">set_read_only(read_only: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the file or directory at this path read-only, or writable
+again, following symlinks: the portable part of <code>set_permissions</code>.</p>
+<p>On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner’s (octal 200), so nothing becomes writable by
+group or others this way. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>, which Windows ignores on a directory. Fails
+on WASI, which has no permission bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>read_only</code> — true to make it read-only, false to make it writable by its owner</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once it is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata.read_only</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var config = io.Path("settings.toml");
+config.set_read_only(true);
+var ro = config.metadata().value().read_only;   # true
+</code></pre>
+<h4 id="set_executable"><a class="header" href="#set_executable">set_executable</a></h4>
+<pre><code class="language-pepper">set_executable(executable: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the file at this path executable, or not, following symlinks,
+without raw permission bits.</p>
+<p>On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as <code>chmod +x</code> does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as <code>.exe</code> decides) and WASI no permission bits, so
+there this does nothing and succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>executable</code> — true to make the file executable, false to stop it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once it is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.File.write_text(io.Path("hello.sh"), "#!/bin/sh\necho hello\n");
+io.Path("hello.sh").set_executable(true);
+</code></pre>
+<h4 id="set_modified"><a class="header" href="#set_modified">set_modified</a></h4>
+<pre><code class="language-pepper">set_modified(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the modification time of the file or directory at this path,
+following symlinks and leaving its access time alone (<code>utimensat</code> on
+POSIX, <code>SetFileTime</code> on Windows, where the time is kept to 100 ns).</p>
+<p>A directory’s modification time changes whenever an entry is added or
+removed, so set it after its contents are final.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.modified</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error with <code>is_not_found()</code> when the path is missing or empty, <code>is_permission_denied()</code> when the caller may not change it, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_modified</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var source = io.Path("a.txt").metadata().value();
+io.Path("b.txt").set_modified(source.modified);
+</code></pre>
+<h4 id="set_accessed"><a class="header" href="#set_accessed">set_accessed</a></h4>
+<pre><code class="language-pepper">set_accessed(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the access time of the file or directory at this path, following
+symlinks and leaving its modification time alone (<code>utimensat</code> on
+POSIX, <code>SetFileTime</code> on Windows, where the time is kept to 100 ns).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.accessed</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error as for <code>set_modified</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>File.set_accessed</code></li>
+</ul>
 <h4 id="operator--34"><a class="header" href="#operator--34">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Path): bool
 </code></pre>
@@ -32582,8 +32930,8 @@ Windows); <code>create</code> is then irrelevant.</li>
 <li>Without <code>create</code> or <code>create_new</code>, a missing file fails with
 <code>is_not_found()</code>.</li>
 </ul>
-<p>On POSIX a created file gets mode 0666 less the process umask, and the
-descriptor is opened close-on-exec. On Windows every file is opened
+<p>On POSIX a created file gets mode 0666 (or the <code>mode</code> set) less the
+process umask, and the descriptor is opened close-on-exec. On Windows every file is opened
 sharing read, write and delete access with other openers.</p>
 <p><strong>See also</strong></p>
 <ul>
@@ -32683,6 +33031,25 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
+<h4 id="mode-2"><a class="header" href="#mode-2">mode</a></h4>
+<pre><code class="language-pepper">mode(mode: Mode): OpenOptions
+</code></pre>
+<p>Sets the permission bits a file gets when this open creates it, so it
+never exists with the default mode: on POSIX the <code>mode_t</code> bits passed
+to <code>open</code>, less the process umask, as <code>Metadata.permissions</code> reports
+them (493, octal 755, for <code>rwxr-xr-x</code>). An existing file keeps its
+mode. Ignored on Windows and WASI; use <code>File.set_read_only</code> there.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the permission bits for a new file; 438 (octal 666) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var script = OpenOptions().write(true).create_new(true).mode(493).open(Path("run.sh"));
+</code></pre>
 <h4 id="open"><a class="header" href="#open">open</a></h4>
 <pre><code class="language-pepper">open(path: Path): IoResult&lt;File&gt;
 </code></pre>
@@ -32873,7 +33240,7 @@ includes junctions.</p>
 <p>The creation (birth) time, in nanoseconds since the Unix epoch; none
 where the platform does not report one, such as on Linux file systems
 that do not record it.</p>
-<h4 id="permissions"><a class="header" href="#permissions">permissions</a></h4>
+<h4 id="permissions-1"><a class="header" href="#permissions-1">permissions</a></h4>
 <pre><code class="language-pepper">Mode permissions
 </code></pre>
 <p>The raw permission bits: on POSIX the <code>mode_t</code> permission bits
@@ -33197,6 +33564,34 @@ fails rather than copying.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
+<h4 id="symlink-1"><a class="header" href="#symlink-1">symlink</a></h4>
+<pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a symbolic link at <code>link</code> that points to the file <code>target</code>
+(<code>symlink</code> on POSIX, <code>CreateSymbolicLinkW</code> on Windows). Use
+<code>Directory.symlink</code> for a link to a directory: Windows makes the two
+kinds differently, and a file link to a directory does not open
+there. POSIX makes the same link either way.</p>
+<p><code>target</code> is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with <code>is_permission_denied()</code> otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the path the link points to</li>
+<li><code>link</code> — where to create the link</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the link exists; an error with <code>is_already_exists()</code> when something is already at <code>link</code>, <code>is_not_found()</code> when its parent is missing or a path is empty, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.read_link</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.symlink(Path("app-1.2.so"), Path("lib/app.so"));
+</code></pre>
 <h4 id="remove-4"><a class="header" href="#remove-4">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
 </code></pre>
@@ -33498,6 +33893,115 @@ permission bits and timestamps.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var size = f.metadata().value().size;
 </code></pre>
+<h4 id="set_permissions-1"><a class="header" href="#set_permissions-1">set_permissions</a></h4>
+<pre><code class="language-pepper">set_permissions(mode: Mode): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the permission bits of the open file (<code>fchmod</code> on POSIX).</p>
+<p><code>mode</code> holds the raw platform bits, as <code>Metadata.permissions</code> reports
+them: on POSIX the <code>mode_t</code> bits <code>mode &amp; 07777</code> (493, octal 755, for
+<code>rwxr-xr-x</code>). On Windows it is the <code>FILE_ATTRIBUTE_*</code> word, and only
+<code>FILE_ATTRIBUTE_READONLY</code> (1) is applied; the File needs write access
+there. WASI has no permission bits, and this fails. <code>set_read_only</code>
+and <code>set_executable</code> change one property portably.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the new permission bits</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once they are set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.set_permissions(493);   # octal 755: rwxr-xr-x
+</code></pre>
+<h4 id="set_read_only-1"><a class="header" href="#set_read_only-1">set_read_only</a></h4>
+<pre><code class="language-pepper">set_read_only(read_only: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file read-only, or writable again: the portable part
+of <code>set_permissions</code>.</p>
+<p>On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner’s (octal 200), so a file never becomes writable
+by group or others this way. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>, and the File needs write access. Fails on
+WASI, which has no permission bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>read_only</code> — true to make the file read-only, false to make it writable by its owner</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata.read_only</code></li>
+</ul>
+<h4 id="set_executable-1"><a class="header" href="#set_executable-1">set_executable</a></h4>
+<pre><code class="language-pepper">set_executable(executable: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file executable, or not, without raw permission bits.</p>
+<p>On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as <code>chmod +x</code> does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as <code>.exe</code> decides) and WASI no permission bits, so
+there this does nothing and succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>executable</code> — true to make the file executable, false to stop it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.write_all("#!/bin/sh\necho hi\n");
+f.set_executable(true);
+</code></pre>
+<h4 id="set_modified-1"><a class="header" href="#set_modified-1">set_modified</a></h4>
+<pre><code class="language-pepper">set_modified(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s modification time, leaving its access time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns. A later write to the file sets its modification time again, so
+call this after the last write.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.modified</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_modified</code></li>
+</ul>
+<h4 id="set_accessed-1"><a class="header" href="#set_accessed-1">set_accessed</a></h4>
+<pre><code class="language-pepper">set_accessed(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s access time, leaving its modification time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.accessed</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error as for <code>set_modified</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_accessed</code></li>
+</ul>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
 </code></pre>
@@ -33651,13 +34155,18 @@ if (d.is_err() &amp;&amp; d.error().is_not_a_directory()) {
 }
 </code></pre>
 <h4 id="create-2"><a class="header" href="#create-2">create</a></h4>
-<pre><code class="language-pepper">static create(path: Path): IoResult&lt;void&gt;
+<pre><code class="language-pepper">static create(path: Path, mode: Mode = 511): IoResult&lt;void&gt;
 </code></pre>
-<p>Creates one directory (<code>mkdir</code> on POSIX, with mode 0777 less the
+<p>Creates one directory (<code>mkdir</code> on POSIX, with <code>mode</code> less the
 umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.</p>
+<p>Giving the mode here means the directory never exists with another
+one. <code>mode</code> is the POSIX <code>mode_t</code> permission bits (448, octal 700,
+for a directory only its owner may use); it is ignored on Windows
+and WASI.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>path</code> — the directory to create</li>
+<li><code>mode</code> — the permission bits on POSIX, less the umask; 511 (octal 777) by default</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -33667,8 +34176,13 @@ umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.
 <ul>
 <li><code>create_all</code></li>
 </ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var keys = io.Directory.create(io.Path("keys"), mode = 448);   # octal 700
+</code></pre>
 <h4 id="create_all"><a class="header" href="#create_all">create_all</a></h4>
-<pre><code class="language-pepper">static create_all(path: Path): IoResult&lt;void&gt;
+<pre><code class="language-pepper">static create_all(path: Path, mode: Mode = 511): IoResult&lt;void&gt;
 </code></pre>
 <p>Creates a directory and any missing parents, like <code>mkdir -p</code>.
 Succeeds without doing anything when <code>path</code> is empty or already a
@@ -33676,9 +34190,14 @@ directory (or a symlink to one). Parents are found lexically with
 <code>Path.parent()</code>; a relative path is created under the current
 directory. It is safe against another process creating the same
 directories at the same time.</p>
+<p><code>mode</code> applies to <code>path</code> itself when it is created, as <code>mkdir -p -m</code>
+does: missing parents get the default, 511 (octal 777) less the
+umask, so the new directory can always be made inside them. An
+existing directory keeps its mode. Ignored on Windows and WASI.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>path</code> — the directory to create, with its parents</li>
+<li><code>mode</code> — the permission bits of <code>path</code> on POSIX, less the umask; 511 (octal 777) by default</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -33688,6 +34207,36 @@ directories at the same time.</p>
 <pre><code class="language-pepper">import io;
 
 var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
+</code></pre>
+<h4 id="symlink-2"><a class="header" href="#symlink-2">symlink</a></h4>
+<pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a symbolic link at <code>link</code> that points to the directory
+<code>target</code> (<code>symlink</code> on POSIX; <code>CreateSymbolicLinkW</code> with
+<code>SYMBOLIC_LINK_FLAG_DIRECTORY</code> on Windows). Use <code>File.symlink</code> for a
+link to a file: Windows makes the two kinds differently. POSIX makes
+the same link either way.</p>
+<p><code>target</code> is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with <code>is_permission_denied()</code> otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the directory the link points to</li>
+<li><code>link</code> — where to create the link</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the link exists; an error with <code>is_already_exists()</code> when something is already at <code>link</code>, <code>is_not_found()</code> when its parent is missing or a path is empty, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.read_link</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.Directory.symlink(io.Path("releases/1.2"), io.Path("current"));
 </code></pre>
 <h4 id="remove-5"><a class="header" href="#remove-5">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
@@ -44212,7 +44761,7 @@ extracted safely into a directory, or written.</p>
 <pre><code class="language-pepper">Directory
 </code></pre>
 <p>A directory.</p>
-<h4 id="symlink-1"><a class="header" href="#symlink-1">Symlink</a></h4>
+<h4 id="symlink-3"><a class="header" href="#symlink-3">Symlink</a></h4>
 <pre><code class="language-pepper">Symlink
 </code></pre>
 <p>A symbolic link to <code>TarEntry.link_target</code>.</p>
@@ -44248,7 +44797,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var size: ulong
 </code></pre>
 <p>The length of the contents in bytes; 0 for anything but a file.</p>
-<h4 id="mode-2"><a class="header" href="#mode-2">mode</a></h4>
+<h4 id="mode-3"><a class="header" href="#mode-3">mode</a></h4>
 <pre><code class="language-pepper">var mode: uint
 </code></pre>
 <p>The permission bits, such as 420 (octal 644, <code>rw-r--r--</code>).</p>
@@ -44350,8 +44899,22 @@ outside <code>target</code>: an absolute path, a <code>..</code> component, a <c
 (which Windows would read as a separator or a drive) is an
 <code>is_invalid_input()</code> error. Files are written (replacing a file
 already there) and directories created; a hard link becomes a copy of
-the file it names, which must be an earlier entry. Symlinks, devices
-and FIFOs are skipped, as are permission bits and modification times.</p>
+the file it names, which must be an earlier entry. Devices and FIFOs
+are skipped.</p>
+<p>Each file and directory gets the entry’s modification time and, on
+Linux and macOS, its permission bits less the process umask, as
+<code>tar</code> gives them by default, so a script keeps its executable bit;
+the setuid, setgid and sticky bits are never applied. A directory’s
+mode and time are set once everything inside it is written, so a
+read-only directory can still be filled. A directory that already
+exists keeps its own. On Windows and WASI permission bits are not
+applied.</p>
+<p>Symlinks are made after every other entry, so no file is ever
+written through one, and only when they stay inside <code>target</code>: a link
+whose target is absolute or climbs out of <code>target</code> with <code>..</code>, or that
+would be made inside another symlink, is skipped. Windows, where
+making a symlink needs Developer Mode or an administrator, skips them
+all.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>target</code> — the directory to extract into</li>

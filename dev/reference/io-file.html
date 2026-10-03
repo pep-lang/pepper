@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
+            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d36e6a4.js"></script>
+        <script src="../toc-0e50370a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,8 +209,8 @@ Windows); <code>create</code> is then irrelevant.</li>
 <li>Without <code>create</code> or <code>create_new</code>, a missing file fails with
 <code>is_not_found()</code>.</li>
 </ul>
-<p>On POSIX a created file gets mode 0666 less the process umask, and the
-descriptor is opened close-on-exec. On Windows every file is opened
+<p>On POSIX a created file gets mode 0666 (or the <code>mode</code> set) less the
+process umask, and the descriptor is opened close-on-exec. On Windows every file is opened
 sharing read, write and delete access with other openers.</p>
 <p><strong>See also</strong></p>
 <ul>
@@ -310,6 +310,25 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <ul>
 <li>this <code>OpenOptions</code>, for chaining</li>
 </ul>
+<h4 id="mode"><a class="header" href="#mode">mode</a></h4>
+<pre><code class="language-pepper">mode(mode: Mode): OpenOptions
+</code></pre>
+<p>Sets the permission bits a file gets when this open creates it, so it
+never exists with the default mode: on POSIX the <code>mode_t</code> bits passed
+to <code>open</code>, less the process umask, as <code>Metadata.permissions</code> reports
+them (493, octal 755, for <code>rwxr-xr-x</code>). An existing file keeps its
+mode. Ignored on Windows and WASI; use <code>File.set_read_only</code> there.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the permission bits for a new file; 438 (octal 666) by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this <code>OpenOptions</code>, for chaining</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var script = OpenOptions().write(true).create_new(true).mode(493).open(Path("run.sh"));
+</code></pre>
 <h4 id="open"><a class="header" href="#open">open</a></h4>
 <pre><code class="language-pepper">open(path: Path): IoResult&lt;File&gt;
 </code></pre>
@@ -824,6 +843,34 @@ fails rather than copying.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
+<h4 id="symlink-1"><a class="header" href="#symlink-1">symlink</a></h4>
+<pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a symbolic link at <code>link</code> that points to the file <code>target</code>
+(<code>symlink</code> on POSIX, <code>CreateSymbolicLinkW</code> on Windows). Use
+<code>Directory.symlink</code> for a link to a directory: Windows makes the two
+kinds differently, and a file link to a directory does not open
+there. POSIX makes the same link either way.</p>
+<p><code>target</code> is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with <code>is_permission_denied()</code> otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the path the link points to</li>
+<li><code>link</code> — where to create the link</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the link exists; an error with <code>is_already_exists()</code> when something is already at <code>link</code>, <code>is_not_found()</code> when its parent is missing or a path is empty, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.read_link</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">File.symlink(Path("app-1.2.so"), Path("lib/app.so"));
+</code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
 </code></pre>
@@ -1125,6 +1172,115 @@ permission bits and timestamps.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var size = f.metadata().value().size;
 </code></pre>
+<h4 id="set_permissions"><a class="header" href="#set_permissions">set_permissions</a></h4>
+<pre><code class="language-pepper">set_permissions(mode: Mode): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the permission bits of the open file (<code>fchmod</code> on POSIX).</p>
+<p><code>mode</code> holds the raw platform bits, as <code>Metadata.permissions</code> reports
+them: on POSIX the <code>mode_t</code> bits <code>mode &amp; 07777</code> (493, octal 755, for
+<code>rwxr-xr-x</code>). On Windows it is the <code>FILE_ATTRIBUTE_*</code> word, and only
+<code>FILE_ATTRIBUTE_READONLY</code> (1) is applied; the File needs write access
+there. WASI has no permission bits, and this fails. <code>set_read_only</code>
+and <code>set_executable</code> change one property portably.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mode</code> — the new permission bits</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once they are set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.set_permissions(493);   # octal 755: rwxr-xr-x
+</code></pre>
+<h4 id="set_read_only"><a class="header" href="#set_read_only">set_read_only</a></h4>
+<pre><code class="language-pepper">set_read_only(read_only: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file read-only, or writable again: the portable part
+of <code>set_permissions</code>.</p>
+<p>On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner’s (octal 200), so a file never becomes writable
+by group or others this way. On Windows it sets or clears
+<code>FILE_ATTRIBUTE_READONLY</code>, and the File needs write access. Fails on
+WASI, which has no permission bits.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>read_only</code> — true to make the file read-only, false to make it writable by its owner</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Metadata.read_only</code></li>
+</ul>
+<h4 id="set_executable"><a class="header" href="#set_executable">set_executable</a></h4>
+<pre><code class="language-pepper">set_executable(executable: bool): IoResult&lt;void&gt;
+</code></pre>
+<p>Makes the open file executable, or not, without raw permission bits.</p>
+<p>On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as <code>chmod +x</code> does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as <code>.exe</code> decides) and WASI no permission bits, so
+there this does nothing and succeeds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>executable</code> — true to make the file executable, false to stop it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the file is changed; an error as for <code>metadata()</code> or <code>set_permissions</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = File.create(Path("run.sh")).value();
+f.write_all("#!/bin/sh\necho hi\n");
+f.set_executable(true);
+</code></pre>
+<h4 id="set_modified"><a class="header" href="#set_modified">set_modified</a></h4>
+<pre><code class="language-pepper">set_modified(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s modification time, leaving its access time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns. A later write to the file sets its modification time again, so
+call this after the last write.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.modified</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error when the File is closed, <code>is_permission_denied()</code> when the caller does not own the file (or on Windows the File was opened without write access), or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_modified</code></li>
+</ul>
+<h4 id="set_accessed"><a class="header" href="#set_accessed">set_accessed</a></h4>
+<pre><code class="language-pepper">set_accessed(time: long): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the open file’s access time, leaving its modification time
+alone (<code>futimens</code> on POSIX, <code>SetFileTime</code> on Windows).</p>
+<p>On Windows the File needs write access, and the time is kept to 100
+ns.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>time</code> — the new time, in nanoseconds since the Unix epoch, as <code>Metadata.accessed</code> reports it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the time is set; an error as for <code>set_modified</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.set_accessed</code></li>
+</ul>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
 </code></pre>

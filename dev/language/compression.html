@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
+            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d36e6a4.js"></script>
+        <script src="../toc-0e50370a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -358,10 +358,20 @@ for an unsafe path.</li>
 <li><code>strip_components</code> drops leading path components, as tar’s
 <code>--strip-components</code> does. A GitHub snapshot puts everything under
 <code>name-version/</code>, which <code>strip_components = 1</code> removes.</li>
-<li>Files and directories are created. A hard link becomes a copy of the
-file it names. Symlinks, devices and FIFOs are skipped.</li>
-<li>Permission bits and modification times are not applied yet: extracted
-files get the default permissions, so a script loses its executable bit.</li>
+<li>Files and directories are created, replacing a file already there. A
+hard link becomes a copy of the file it names. Devices and FIFOs are
+skipped.</li>
+<li>Each file and directory gets the entry’s modification time and, on Linux
+and macOS, its permission bits less the umask, as <code>tar</code> does, so a
+script keeps its executable bit. Setuid, setgid and sticky bits are
+never applied. A directory gets its mode and time after its contents are
+written, so a read-only directory can still be filled; one that already
+existed keeps its own. Windows and WASI apply no permission bits.</li>
+<li>Symlinks are made after everything else, so no file is written through
+one. A link whose target is absolute or climbs out of <code>target</code> with
+<code>..</code>, or that would be made inside another symlink, is skipped. Windows,
+where making a symlink needs Developer Mode or an administrator, skips
+every symlink.</li>
 </ul>
 <p><code>archive.TarWriter(sink)</code> writes an archive: <code>append_file(path, data)</code>,
 <code>append_directory(path)</code>, <code>append_symlink(path, target)</code>, <code>append(entry, data)</code> for any header, and <code>append_stream(entry, source)</code> to copy

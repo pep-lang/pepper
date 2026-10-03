@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f0339ea3.js";
+            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0d36e6a4.js"></script>
+        <script src="../toc-0e50370a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -313,13 +313,18 @@ if (d.is_err() &amp;&amp; d.error().is_not_a_directory()) {
 }
 </code></pre>
 <h4 id="create"><a class="header" href="#create">create</a></h4>
-<pre><code class="language-pepper">static create(path: Path): IoResult&lt;void&gt;
+<pre><code class="language-pepper">static create(path: Path, mode: Mode = 511): IoResult&lt;void&gt;
 </code></pre>
-<p>Creates one directory (<code>mkdir</code> on POSIX, with mode 0777 less the
+<p>Creates one directory (<code>mkdir</code> on POSIX, with <code>mode</code> less the
 umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.</p>
+<p>Giving the mode here means the directory never exists with another
+one. <code>mode</code> is the POSIX <code>mode_t</code> permission bits (448, octal 700,
+for a directory only its owner may use); it is ignored on Windows
+and WASI.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>path</code> — the directory to create</li>
+<li><code>mode</code> — the permission bits on POSIX, less the umask; 511 (octal 777) by default</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -329,8 +334,13 @@ umask; <code>CreateDirectoryW</code> on Windows). Its parent must already exist.
 <ul>
 <li><code>create_all</code></li>
 </ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var keys = io.Directory.create(io.Path("keys"), mode = 448);   # octal 700
+</code></pre>
 <h4 id="create_all"><a class="header" href="#create_all">create_all</a></h4>
-<pre><code class="language-pepper">static create_all(path: Path): IoResult&lt;void&gt;
+<pre><code class="language-pepper">static create_all(path: Path, mode: Mode = 511): IoResult&lt;void&gt;
 </code></pre>
 <p>Creates a directory and any missing parents, like <code>mkdir -p</code>.
 Succeeds without doing anything when <code>path</code> is empty or already a
@@ -338,9 +348,14 @@ directory (or a symlink to one). Parents are found lexically with
 <code>Path.parent()</code>; a relative path is created under the current
 directory. It is safe against another process creating the same
 directories at the same time.</p>
+<p><code>mode</code> applies to <code>path</code> itself when it is created, as <code>mkdir -p -m</code>
+does: missing parents get the default, 511 (octal 777) less the
+umask, so the new directory can always be made inside them. An
+existing directory keeps its mode. Ignored on Windows and WASI.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>path</code> — the directory to create, with its parents</li>
+<li><code>mode</code> — the permission bits of <code>path</code> on POSIX, less the umask; 511 (octal 777) by default</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -350,6 +365,36 @@ directories at the same time.</p>
 <pre><code class="language-pepper">import io;
 
 var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
+</code></pre>
+<h4 id="symlink"><a class="header" href="#symlink">symlink</a></h4>
+<pre><code class="language-pepper">static symlink(target: Path, link: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Creates a symbolic link at <code>link</code> that points to the directory
+<code>target</code> (<code>symlink</code> on POSIX; <code>CreateSymbolicLinkW</code> with
+<code>SYMBOLIC_LINK_FLAG_DIRECTORY</code> on Windows). Use <code>File.symlink</code> for a
+link to a file: Windows makes the two kinds differently. POSIX makes
+the same link either way.</p>
+<p><code>target</code> is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with <code>is_permission_denied()</code> otherwise.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>target</code> — the directory the link points to</li>
+<li><code>link</code> — where to create the link</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the link exists; an error with <code>is_already_exists()</code> when something is already at <code>link</code>, <code>is_not_found()</code> when its parent is missing or a path is empty, <code>is_permission_denied()</code>, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Path.read_link</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+io.Directory.symlink(io.Path("releases/1.2"), io.Path("current"));
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
