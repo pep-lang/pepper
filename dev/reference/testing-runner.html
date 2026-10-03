@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
+            window.path_to_searchindex_js = "../searchindex-b0fb79ad.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0e50370a.js"></script>
+        <script src="../toc-4d1777b9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,6 +186,31 @@
 <p>The <code>main</code> of a test program: <code>TestRunner</code> holds the entry file’s tests
 and answers <code>pep-test</code>’s <code>--list</code> and <code>--run NAME</code>.</p>
 <p>Source: <code>runtime/testing/runner.pep</code></p>
+<h2 id="keep_for_the_program"><a class="header" href="#keep_for_the_program">keep_for_the_program</a></h2>
+<pre><code class="language-pepper">keep_for_the_program(body: () =&gt; void)
+</code></pre>
+<p>Runs <code>body</code> and lets what it leaves allocated stay without failing the
+test’s leak check: for what a program makes once, on first use, and keeps
+until it ends, such as a lazily made global (<code>async.Lazy</code>), when a test is
+the first to use it.</p>
+<p>Call it at the start of the test, with the first use alone, so the rest
+of the test is still checked.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the code that makes what the program keeps</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import tls;
+
+[Test]
+connects() {
+    # The first connector loads the TLS library, which stays loaded.
+    keep_for_the_program(() =&gt; {
+        tls.TlsConnector.create();
+    });
+    # ... the checks, under the leak check as usual
+}
+</code></pre>
 <h2 id="testmain"><a class="header" href="#testmain">TestMain</a></h2>
 <pre><code class="language-pepper">[Attribute] struct TestMain
 </code></pre>
@@ -202,7 +227,8 @@ then runs with the program’s arguments.</p>
 name, <code>file:line</code>, <code>returns</code> or <code>panics</code> (for <code>[ShouldPanic]</code>), and the
 text the panic must contain (empty for any panic or none).</li>
 <li><code>--run NAME [--timeout SECONDS]</code> runs the test <code>NAME</code> and exits with 0
-when it returns; a panic aborts the program. With a timeout above 0, a
+when it returns, or with 1 when it left an allocation behind (or
+released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
 status 124 and a message on standard error.</li>
 </ul>
@@ -259,7 +285,7 @@ panics with a message containing <code>message</code>.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../contributing/setup.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/testing-temp_folder.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -273,7 +299,7 @@ panics with a message containing <code>message</code>.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../contributing/setup.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/testing-temp_folder.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

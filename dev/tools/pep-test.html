@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
+            window.path_to_searchindex_js = "../searchindex-b0fb79ad.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0e50370a.js"></script>
+        <script src="../toc-4d1777b9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -217,6 +217,7 @@ finds it and it finds the compiler:</p>
 <tr><td><code>-j &lt;count&gt;</code>, <code>--jobs &lt;count&gt;</code></td><td>How many tests run at once</td><td>one per logical CPU</td></tr>
 <tr><td><code>-t &lt;seconds&gt;</code>, <code>--timeout &lt;seconds&gt;</code></td><td>Fail a test still running after this long; <code>0</code> for no limit</td><td>60</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
+<tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
 <tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="../language/build-options.html">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
@@ -260,7 +261,9 @@ which <code>pep-test</code> runs with one of two requests:</p>
 <code>file:line</code>, <code>returns</code> or <code>panics</code> (a <code>[ShouldPanic]</code> test), and the text
 the panic must contain.</li>
 <li><code>--run NAME [--timeout SECONDS]</code> runs one test and exits with 0 when it
-returns. A panic aborts the program; a test that runs past the timeout
+returns having released everything it allocated; a test that leaves an
+allocation behind (or releases one too many) exits with 1 and says so on
+standard error. A panic aborts the program; a test that runs past the timeout
 ends it with exit status 124.</li>
 </ul>
 <p>On Windows, a test program turns off Windows Error Reporting for its

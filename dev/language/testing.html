@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
+            window.path_to_searchindex_js = "../searchindex-b0fb79ad.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0e50370a.js"></script>
+        <script src="../toc-4d1777b9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -268,9 +268,35 @@ test that never ends fails only that test, and the others carry on. Tests
 run in parallel, one per logical CPU (<code>--jobs 1</code> runs them one at a time,
 in order), and a test still running after 60 seconds fails (<code>--timeout</code>
 changes the limit). Tests share no state: each process starts fresh.</p>
+<p>A test also fails when it leaks: the test program counts the live
+allocations before and after the test, and a test that returns with more
+(or fewer) than it started with fails, saying how many it left behind:</p>
+<pre><code class="language-text">error: test 'counts_the_words' left 1 allocation behind
+</code></pre>
+<p>What a program makes once and keeps until it ends, such as a global made
+on first use, is not a leak. A test that is first to use it wraps that
+use in <code>keep_for_the_program</code>, which runs it and leaves what it allocates
+out of the count:</p>
+<pre><code class="language-pepper">keep_for_the_program(() =&gt; {
+    tls.TlsConnector.create();   # loads the TLS library, which stays loaded
+});
+</code></pre>
 <p>There is no setup or teardown: a fixture is a plain function that a test
 calls, and what it makes is released when the test’s scope ends, as
-everywhere else.</p>
+everywhere else. A struct whose destructor cleans up makes a fixture that
+tears itself down. <code>TempFolder</code>, which every test file can use, is one: a
+fresh folder under the system’s temporary folder, removed with what is in
+it when the test returns:</p>
+<pre><code class="language-pepper">import io;
+
+[Test]
+writes_a_file() {
+    var folder = TempFolder("writes_a_file");
+    var path = folder.path.join("notes.txt");
+    io.File.write_text(path, "hello");
+    expect_equal(io.File.read_to_string(path).value(), "hello");
+}
+</code></pre>
 <h2 id="where-tests-live"><a class="header" href="#where-tests-live">Where tests live</a></h2>
 <p>A test can sit beside the code it tests, where it can call the file’s
 private functions, as above. Or tests can live in their own files, such as

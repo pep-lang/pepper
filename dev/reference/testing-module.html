@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-68267aa4.js";
+            window.path_to_searchindex_js = "../searchindex-b0fb79ad.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-0e50370a.js"></script>
+        <script src="../toc-4d1777b9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,7 +189,9 @@ entry file’s <code>[Test]</code> functions or runs one of them.</p>
 would, and adds to the entry file a <code>main</code> (marked <code>[TestMain]</code>, which
 replaces the file’s own) that registers each <code>[Test]</code> function with a
 <code>TestRunner</code> and calls <code>run</code>. Test files do not import it themselves:
-the checks they call, such as <code>expect_equal</code>, are in the prelude.</p>
+the checks they call, such as <code>expect_equal</code>, are in the prelude, and
+the fixture <code>TempFolder</code> (a scratch folder removed when released) is
+here.</p>
 <p><code>pep-test</code> (<code>pepper test</code>) drives the program: it lists the tests with
 <code>--list</code> and runs each in a child process of its own with <code>--run NAME</code>
 (see the testing chapter).</p>

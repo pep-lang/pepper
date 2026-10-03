@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68267aa4.js";
+            window.path_to_searchindex_js = "searchindex-b0fb79ad.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-0e50370a.js"></script>
+        <script src="toc-4d1777b9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -16273,9 +16273,35 @@ test that never ends fails only that test, and the others carry on. Tests
 run in parallel, one per logical CPU (<code>--jobs 1</code> runs them one at a time,
 in order), and a test still running after 60 seconds fails (<code>--timeout</code>
 changes the limit). Tests share no state: each process starts fresh.</p>
+<p>A test also fails when it leaks: the test program counts the live
+allocations before and after the test, and a test that returns with more
+(or fewer) than it started with fails, saying how many it left behind:</p>
+<pre><code class="language-text">error: test 'counts_the_words' left 1 allocation behind
+</code></pre>
+<p>What a program makes once and keeps until it ends, such as a global made
+on first use, is not a leak. A test that is first to use it wraps that
+use in <code>keep_for_the_program</code>, which runs it and leaves what it allocates
+out of the count:</p>
+<pre><code class="language-pepper">keep_for_the_program(() =&gt; {
+    tls.TlsConnector.create();   # loads the TLS library, which stays loaded
+});
+</code></pre>
 <p>There is no setup or teardown: a fixture is a plain function that a test
 calls, and what it makes is released when the test’s scope ends, as
-everywhere else.</p>
+everywhere else. A struct whose destructor cleans up makes a fixture that
+tears itself down. <code>TempFolder</code>, which every test file can use, is one: a
+fresh folder under the system’s temporary folder, removed with what is in
+it when the test returns:</p>
+<pre><code class="language-pepper">import io;
+
+[Test]
+writes_a_file() {
+    var folder = TempFolder("writes_a_file");
+    var path = folder.path.join("notes.txt");
+    io.File.write_text(path, "hello");
+    expect_equal(io.File.read_to_string(path).value(), "hello");
+}
+</code></pre>
 <h2 id="where-tests-live"><a class="header" href="#where-tests-live">Where tests live</a></h2>
 <p>A test can sit beside the code it tests, where it can call the file’s
 private functions, as above. Or tests can live in their own files, such as
@@ -20063,6 +20089,7 @@ finds it and it finds the compiler:</p>
 <tr><td><code>-j &lt;count&gt;</code>, <code>--jobs &lt;count&gt;</code></td><td>How many tests run at once</td><td>one per logical CPU</td></tr>
 <tr><td><code>-t &lt;seconds&gt;</code>, <code>--timeout &lt;seconds&gt;</code></td><td>Fail a test still running after this long; <code>0</code> for no limit</td><td>60</td></tr>
 <tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
+<tr><td><code>-L &lt;dir&gt;</code>, <code>--library-path &lt;dir&gt;</code></td><td>A folder the linker searches for libraries, for <code>pep-build</code>; repeatable</td><td></td></tr>
 <tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="#build-options">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
@@ -20106,7 +20133,9 @@ which <code>pep-test</code> runs with one of two requests:</p>
 <code>file:line</code>, <code>returns</code> or <code>panics</code> (a <code>[ShouldPanic]</code> test), and the text
 the panic must contain.</li>
 <li><code>--run NAME [--timeout SECONDS]</code> runs one test and exits with 0 when it
-returns. A panic aborts the program; a test that runs past the timeout
+returns having released everything it allocated; a test that leaves an
+allocation behind (or releases one too many) exits with 1 and says so on
+standard error. A panic aborts the program; a test that runs past the timeout
 ends it with exit status 124.</li>
 </ul>
 <p>On Windows, a test program turns off Windows Error Reporting for its
@@ -46860,7 +46889,9 @@ entry file’s <code>[Test]</code> functions or runs one of them.</p>
 would, and adds to the entry file a <code>main</code> (marked <code>[TestMain]</code>, which
 replaces the file’s own) that registers each <code>[Test]</code> function with a
 <code>TestRunner</code> and calls <code>run</code>. Test files do not import it themselves:
-the checks they call, such as <code>expect_equal</code>, are in the prelude.</p>
+the checks they call, such as <code>expect_equal</code>, are in the prelude, and
+the fixture <code>TempFolder</code> (a scratch folder removed when released) is
+here.</p>
 <p><code>pep-test</code> (<code>pepper test</code>) drives the program: it lists the tests with
 <code>--list</code> and runs each in a child process of its own with <code>--run NAME</code>
 (see the testing chapter).</p>
@@ -46870,6 +46901,31 @@ the checks they call, such as <code>expect_equal</code>, are in the prelude.</p>
 <p>The <code>main</code> of a test program: <code>TestRunner</code> holds the entry file’s tests
 and answers <code>pep-test</code>’s <code>--list</code> and <code>--run NAME</code>.</p>
 <p>Source: <code>runtime/testing/runner.pep</code></p>
+<h2 id="keep_for_the_program"><a class="header" href="#keep_for_the_program">keep_for_the_program</a></h2>
+<pre><code class="language-pepper">keep_for_the_program(body: () =&gt; void)
+</code></pre>
+<p>Runs <code>body</code> and lets what it leaves allocated stay without failing the
+test’s leak check: for what a program makes once, on first use, and keeps
+until it ends, such as a lazily made global (<code>async.Lazy</code>), when a test is
+the first to use it.</p>
+<p>Call it at the start of the test, with the first use alone, so the rest
+of the test is still checked.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>body</code> — the code that makes what the program keeps</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import tls;
+
+[Test]
+connects() {
+    # The first connector loads the TLS library, which stays loaded.
+    keep_for_the_program(() =&gt; {
+        tls.TlsConnector.create();
+    });
+    # ... the checks, under the leak check as usual
+}
+</code></pre>
 <h2 id="testmain"><a class="header" href="#testmain">TestMain</a></h2>
 <pre><code class="language-pepper">[Attribute] struct TestMain
 </code></pre>
@@ -46886,7 +46942,8 @@ then runs with the program’s arguments.</p>
 name, <code>file:line</code>, <code>returns</code> or <code>panics</code> (for <code>[ShouldPanic]</code>), and the
 text the panic must contain (empty for any panic or none).</li>
 <li><code>--run NAME [--timeout SECONDS]</code> runs the test <code>NAME</code> and exits with 0
-when it returns; a panic aborts the program. With a timeout above 0, a
+when it returns, or with 1 when it left an allocation behind (or
+released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
 status 124 and a message on standard error.</li>
 </ul>
@@ -46933,6 +46990,47 @@ panics with a message containing <code>message</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the program’s exit status: 0 when the request succeeded, 2 for a request it does not understand or a test it does not have</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/testing/temp_folder.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="tempfolder"><a class="header" href="#tempfolder">TempFolder</a></h1>
+<p><code>TempFolder</code>, a test fixture: a fresh folder that is removed with
+everything in it when the fixture is released.</p>
+<p>Source: <code>runtime/testing/temp_folder.pep</code></p>
+<h2 id="tempfolder-1"><a class="header" href="#tempfolder-1">TempFolder</a></h2>
+<pre><code class="language-pepper">struct TempFolder
+</code></pre>
+<p>A fresh, empty folder under the system’s temporary folder, for a test
+that writes files. The folder and everything in it are removed when the
+last reference to the fixture is released, so a test that holds it in a
+local cleans up when it returns.</p>
+<p>Its name joins the name the test gives with the process id, so tests
+running at once, each in a process of its own, never share a folder.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">[Test]
+writes_a_file() {
+    var folder = TempFolder("writes_a_file");
+    var path = folder.path.join("notes.txt");
+    io.File.write_text(path, "hello");
+    expect_equal(io.File.read_to_string(path).value(), "hello");
+}
+</code></pre>
+<h3 id="fields-29"><a class="header" href="#fields-29">Fields</a></h3>
+<h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
+<pre><code class="language-pepper">const path: io.Path
+</code></pre>
+<p>The folder’s path.</p>
+<h3 id="constructor-52"><a class="header" href="#constructor-52">Constructor</a></h3>
+<h4 id="tempfolder-2"><a class="header" href="#tempfolder-2">TempFolder()</a></h4>
+<pre><code class="language-pepper">construct(name: String)
+</code></pre>
+<p>Makes the folder, removing what a crashed run left at its path.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — a name for the folder, such as the test’s</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the folder cannot be made</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="setting-up-llvm-cargo-setup"><a class="header" href="#setting-up-llvm-cargo-setup">Setting up LLVM: cargo setup</a></h1>
@@ -47076,6 +47174,66 @@ page, when a page does not mention one. It also checks <code>pep-build</code>’
 channels and environment variables, and <code>pep-lsp</code>’s initialization options
 and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
 <code>help.txt</code> / <code>usage.txt</code>) and on its page in the same PR.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-the-runtime-and-the-compiler"><a class="header" href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a></h1>
+<p>The repository has two kinds of tests, split by what they check.</p>
+<ul>
+<li><strong>The runtime and the Pepper tools</strong> are tested in Pepper: <code>[Test]</code>
+functions (see <a href="#unit-tests">Unit tests</a>) that
+<a href="#testing-with-pep-test"><code>pep-test</code></a> builds and runs.</li>
+<li><strong>The compiler</strong> is tested in Rust: diagnostics, codegen and IR facts,
+reference-count order, optimization, linking, cross-compiling, debug
+info, the build cache, the documentation checks, and the drivers. These
+live in <code>crates/*/tests/</code> and the root package’s <code>tests/*.rs</code> (see
+<code>INTERNALS.md</code>, section 9).</li>
+</ul>
+<p>A test that checks a library function’s result belongs with the runtime; a
+test that checks what the compiler emits or reports stays in Rust.</p>
+<h2 id="where-runtime-tests-live"><a class="header" href="#where-runtime-tests-live">Where runtime tests live</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code under test</th><th>Its tests</th></tr>
+</thead>
+<tbody>
+<tr><td>A module, <code>runtime/&lt;module&gt;/</code></td><td><code>runtime/&lt;module&gt;/test/&lt;topic&gt;_test.pep</code>, which imports the module</td></tr>
+<tr><td>A prelude file, <code>runtime/&lt;name&gt;.pep</code></td><td><code>runtime/test/&lt;topic&gt;_test.pep</code></td></tr>
+<tr><td>A file’s private functions</td><td><code>[Test]</code> functions in that file itself</td></tr>
+</tbody>
+</table>
+</div>
+<p>A <code>test/</code> folder holds no <code>module.pep</code>, so it is never part of the module:
+no program that imports the module sees it. Prefer it to tests inside a
+source file, which only a test of private internals needs. The reference
+generator and the doc-comment check skip <code>test/</code> folders, so a test file
+needs no <code>##</code> comments.</p>
+<h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
+<pre><code class="language-bash">cargo build --release
+target/release/pep-build -I tools tools/pep-test/main.pep -o target/release/pep-test
+cd runtime
+../target/release/pep-test                       # every runtime test
+../target/release/pep-test json/test             # one module's
+../target/release/pep-test -f parses test        # by name
+</code></pre>
+<p>Tests run with <code>runtime/</code> as the current folder, so a test reads data
+files kept beside it by a path from there (<code>archive/test/gnu.tar.gz</code>).
+The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writes
+files uses a fresh folder under the system’s temporary folder
+(<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
+<p><code>cargo test --workspace</code> runs them all too, on every platform CI runs:
+<code>the_runtime_tests_pass</code> in the root package’s <code>tests/pep_test_tool.rs</code>
+builds <code>pep-test</code> with this source’s <code>pep-build</code> and runs it in
+<code>runtime/</code>.</p>
+<h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
+<p>Each test counts the runtime’s live allocations before and after it runs,
+and fails when they differ:</p>
+<pre><code class="language-text">error: test 'parses_components' left 2 allocations behind
+</code></pre>
+<p>So a test needs no census of its own: every object it made must be
+released by the time it returns. What the program keeps for good, such as
+a global made on first use (<code>async.Lazy</code>), is made inside
+<code>keep_for_the_program(() =&gt; { ... })</code> at the start of the test, which
+leaves it out of the count.</p>
 
                     </main>
 
