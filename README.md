@@ -322,6 +322,16 @@ and for the JIT the tests run, so the whole suite can run optimized:
 PEPPER_OPT_LEVEL=2 cargo test --workspace
 ```
 
+With a [wasi-sdk](https://github.com/WebAssembly/wasi-sdk) and
+[wasmtime](https://wasmtime.dev), the suite also builds every docs example
+and corpus fixture for `wasm32-wasip1` and runs it under wasmtime (except
+those needing threads, tasks, sockets or processes, listed as `NOT_ON_WASI`
+in each test). Without them those tests print why they skipped and pass:
+
+```bash
+WASI_SDK_PATH=/opt/wasi-sdk WASMTIME=/opt/wasmtime/wasmtime cargo test --workspace
+```
+
 `-g` emits debug info: DWARF 4 on Linux and macOS, CodeView on Windows,
 where the linker writes `<output>.pdb` beside the executable. Break on a
 `file:line`, step, print a backtrace and inspect variables in gdb
@@ -430,9 +440,9 @@ Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
   sysroot (`--sysroot`), which is untested so far.
 - **WebAssembly** (`--target wasm32-wasip1`): links with `wasm-ld` and
   wasi-sdk 25 (`--sysroot` or `WASI_SDK_PATH`) and runs under wasmtime.
-  Tested on Linux x64 with LLVM 20: the docs examples pass except those
-  that need threads, tasks, sockets or processes, which WASI preview 1
-  lacks.
+  Tested on Linux x64 with LLVM 20: the docs examples and the corpus pass
+  except those that need threads, tasks, sockets or processes, which WASI
+  preview 1 lacks (run them with `WASI_SDK_PATH`, see Build and test).
 - **macOS x86_64** is untested. Homebrew serves it, which is the path that
   works on macOS anyway; of the supported majors only LLVM 19 publishes a
   `macOS-X64` archive, and the fallback reports that the version has no build

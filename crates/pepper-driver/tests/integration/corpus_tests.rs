@@ -115,3 +115,35 @@ fn corpus_files_compile_and_run() {
     );
 }
 
+
+/// Fixtures that need what WASI preview 1 lacks (see
+/// docs/src/language/platform-selection.md#webassembly).
+const NOT_ON_WASI: &[&str] = &[
+    "Generic.SharedConstraint", // tasks
+];
+
+/// Every fixture WASI can run, built for `wasm32-wasip1` (with `-I tests`)
+/// and run under wasmtime, when `WASI_SDK_PATH` names a wasi-sdk and
+/// wasmtime is on the PATH (or `WASMTIME` names it); skipped otherwise.
+#[test]
+fn corpus_files_run_under_wasmtime() {
+    let Some(wasi) = support::wasi_tools() else {
+        eprintln!("skipped: set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it");
+        return;
+    };
+    std::env::set_current_dir(support::repo_root()).unwrap();
+    let fixtures: Vec<_> = corpus_fixtures().into_iter().filter(|(name, _)| !NOT_ON_WASI.contains(&name.as_str())).collect();
+    let include = tests_dir().to_string_lossy().into_owned();
+    let failures: Vec<String> = support::parallel_map(&fixtures, |(name, test_path)| {
+        let build = std::env::temp_dir().join(format!("pepper_corpus_wasm_{}_{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        std::fs::create_dir_all(&build).unwrap();
+        let result = support::run_under_wasmtime(&wasi, test_path, &["-I", &include], &build);
+        let _ = std::fs::remove_dir_all(&build);
+        result.err().map(|e| format!("{}: {}", name, e))
+    })
+    .into_iter()
+    .flatten()
+    .collect();
+    assert!(failures.is_empty(), "{} corpus failures under wasmtime:\n{}", failures.len(), failures.join("\n"));
+}

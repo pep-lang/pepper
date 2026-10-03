@@ -131,6 +131,56 @@ pub fn build_executable(main: &Path, import_paths: &[&Path], out: &Path, build: 
     assert_eq!(code, 0, "the compiler exited with {}", code);
 }
 
+/// A wasi-sdk and a wasmtime, for the tests that build WebAssembly
+/// (`--target wasm32-wasip1`) and run it.
+pub struct Wasi {
+    /// The wasi-sdk directory, passed as `--sysroot`.
+    pub sdk: String,
+    /// The wasmtime executable.
+    pub wasmtime: String,
+}
+
+/// The wasi-sdk `WASI_SDK_PATH` names and the wasmtime `WASMTIME` names
+/// (else `wasmtime` on the PATH); `None` when either is missing, as on
+/// most test machines, and the WebAssembly tests skip.
+pub fn wasi_tools() -> Option<Wasi> {
+    let sdk = std::env::var("WASI_SDK_PATH").ok()?;
+    let wasmtime = std::env::var("WASMTIME").unwrap_or_else(|_| "wasmtime".to_string());
+    let works = Command::new(&wasmtime).arg("--version").output().ok()?.status.success();
+    works.then_some(Wasi { sdk, wasmtime })
+}
+
+/// Compiles `entry` for `wasm32-wasip1` (with `extra` options) in `build`,
+/// then runs it under wasmtime there, with `build` as its `.`, the host's
+/// temp directory as its `/tmp`, and the environment inherited: Err with the compile error or, when it fails,
+/// the program's output.
+pub fn run_under_wasmtime(wasi: &Wasi, entry: &Path, extra: &[&str], build: &Path) -> Result<Output, String> {
+    use clap::Parser;
+    let module = build.join("main.wasm");
+    let mut argv = vec!["pep-build".to_string(), entry.to_string_lossy().into_owned()];
+    argv.extend(["--target", "wasm32-wasip1", "--sysroot", &wasi.sdk].map(String::from));
+    argv.extend(["-o".to_string(), module.to_string_lossy().into_owned()]);
+    argv.extend(["--build".to_string(), build.join("obj").to_string_lossy().into_owned()]);
+    argv.extend(extra.iter().map(|a| a.to_string()));
+    let code = pepper_driver::run(pepper_driver::Options::parse_from(argv)).map_err(|e| format!("compile failed:\n{}", e))?;
+    if code != 0 {
+        return Err(format!("the compiler exited with {}", code));
+    }
+    // The host's temp directory is the program's `/tmp`, which
+    // `Directory.temp()` names on WASI.
+    let temp = format!("{}::/tmp", std::env::temp_dir().display());
+    let output = Command::new(&wasi.wasmtime)
+        .args(["run", "--dir", ".", "--dir", &temp, "-S", "inherit-env", "--env", "TMPDIR=/tmp"])
+        .arg(&module)
+        .current_dir(build)
+        .output()
+        .map_err(|e| e.to_string())?;
+    if !output.status.success() {
+        return Err(format!("exited with {}\n{}", output.status, output_text(&output)));
+    }
+    Ok(output)
+}
+
 /// The repository root, two levels above this crate.
 pub fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().to_path_buf()

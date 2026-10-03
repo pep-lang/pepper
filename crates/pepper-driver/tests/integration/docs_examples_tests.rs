@@ -77,3 +77,46 @@ fn run_examples(examples: Vec<(String, PathBuf)>, extra: &[&str]) {
             .collect();
     assert!(failures.is_empty(), "{} of {} examples failed:\n\n{}", failures.len(), examples.len(), failures.join("\n\n"));
 }
+
+/// Examples that need what WASI preview 1 lacks (threads, tasks, sockets,
+/// processes; see docs/src/language/platform-selection.md#webassembly), as
+/// name prefixes.
+const NOT_ON_WASI: &[&str] = &[
+    "threads-",
+    "tasks-",
+    "networking-",
+    "processes-",
+    "function-types-shared",  // a thread
+    "generics-shared",        // a thread
+    "http-basics",            // tasks
+    "platform-declarations",  // asserts a 64-bit target
+];
+
+/// Every example that WASI can run, built for `wasm32-wasip1` and run under
+/// wasmtime, when `WASI_SDK_PATH` names a wasi-sdk and wasmtime is on the
+/// PATH (or `WASMTIME` names it); skipped otherwise.
+#[test]
+fn documentation_examples_run_under_wasmtime() {
+    let Some(wasi) = support::wasi_tools() else {
+        eprintln!("skipped: set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it");
+        return;
+    };
+    std::env::set_current_dir(repo_root()).unwrap();
+    let only = std::env::var("PEPPER_DOCS_EXAMPLE").unwrap_or_default();
+    let examples: Vec<_> = support::docs_examples()
+        .into_iter()
+        .filter(|(name, _)| name.starts_with(&only) && !NOT_ON_WASI.iter().any(|prefix| name.starts_with(prefix)))
+        .collect();
+    let failures: Vec<String> = support::parallel_map(&examples, |(name, entry)| {
+        let build = std::env::temp_dir().join(format!("pepper_docs_example_wasm_{}_{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&build);
+        std::fs::create_dir_all(&build).unwrap();
+        let result = support::run_under_wasmtime(&wasi, entry, &[], &build);
+        let _ = std::fs::remove_dir_all(&build);
+        result.err().map(|e| format!("docs/examples/{}: {}", name, e))
+    })
+    .into_iter()
+    .flatten()
+    .collect();
+    assert!(failures.is_empty(), "{} of {} examples failed:\n\n{}", failures.len(), examples.len(), failures.join("\n\n"));
+}

@@ -7,7 +7,7 @@ use clap::Parser;
 use pepper_sema::passes::platform::SUPPORTED_TRIPLES;
 use std::path::{Path, PathBuf};
 
-use crate::support::{parallel_map, repo_root};
+use crate::support::{parallel_map, repo_root, run_under_wasmtime, wasi_tools};
 
 const PROGRAM: &str = "main(): int {
     [Target(OS(Windows))]
@@ -194,25 +194,46 @@ fn every_wasi_spelling_means_wasm32_wasip1() {
     }
 }
 
-/// The wasi-sdk and wasmtime a WebAssembly run needs, from `WASI_SDK_PATH`
-/// and `WASMTIME` (else `wasmtime` on the PATH); `None` when either is
-/// missing, as on most test machines.
-fn wasi_tools() -> Option<(String, String)> {
-    let sdk = std::env::var("WASI_SDK_PATH").ok()?;
-    let wasmtime = std::env::var("WASMTIME").unwrap_or_else(|_| "wasmtime".to_string());
-    std::process::Command::new(&wasmtime).arg("--version").output().ok()?.status.success().then_some((sdk, wasmtime))
-}
-
 #[test]
 fn a_webassembly_program_runs_under_wasmtime() {
-    let Some((sdk, wasmtime)) = wasi_tools() else {
+    let Some(wasi) = wasi_tools() else {
         eprintln!("skipped: set WASI_SDK_PATH and put wasmtime on the PATH (or set WASMTIME) to run it");
         return;
     };
     let dir = scratch("wasmtime");
-    compile(&dir, "wasm32-wasip1", &["--sysroot", &sdk]).unwrap_or_else(|e| panic!("{}", e));
-    let output = std::process::Command::new(&wasmtime).arg("run").arg(dir.join("main")).output().unwrap();
+    std::env::set_current_dir(repo_root()).unwrap();
+    let output = run_under_wasmtime(&wasi, &dir.join("main.pep"), &["--no-cache"], &dir).unwrap_or_else(|e| panic!("{}", e));
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(output.status.success(), "exit {:?}: {}", output.status, String::from_utf8_lossy(&output.stderr));
     assert_eq!(String::from_utf8_lossy(&output.stdout), "built for wasi\n");
+}
+
+/// What C sees on a 32-bit target, read from the IR so any machine checks
+/// it: a struct slot is pointer-sized (4 bytes), and a Pepper function
+/// taking or returning `ulong` reaches C through an adapter with C's
+/// 32-bit `size_t`.
+#[test]
+fn webassembly_code_follows_the_32_bit_c_abi() {
+    let dir = scratch("wasm_abi");
+    std::fs::write(
+        dir.join("main.pep"),
+        "struct Box { int value; }
+slot_size(): ulong {
+    return sizeof<Box>();
+}
+measure(text: __ptr<char>): ulong {
+    return 5;
+}
+main(): int {
+    var length: extern (__ptr<char>) => ulong = measure;
+    return length(\"hello\") == slot_size() + 1 ? 0 : 1;
+}
+",
+    )
+    .unwrap();
+    compile(&dir, "wasm32-wasip1", &["--emit-llvm"]).unwrap_or_else(|e| panic!("{}", e));
+    let ir = std::fs::read_to_string(dir.join("build").join("main.ll")).unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
+    let slot_size = ir.split("@slot_size()").nth(1).expect("slot_size in the IR");
+    assert!(slot_size[..slot_size.find("\n}").unwrap()].contains("store i64 4, ptr %retval"), "a struct slot is not 4 bytes:\n{}", slot_size);
+    assert!(ir.contains("define private i32 @__c_abi.measure(ptr"), "no C adapter for 'measure' in:\n{}", ir);
 }

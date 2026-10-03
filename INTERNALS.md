@@ -1332,7 +1332,11 @@ How the language lowers:
   `extern_narrow_results`), in direct calls, extern function values and
   calls through C function pointers; a void extern is declared `void`.
   WebAssembly traps on any signature mismatch, so every declaration and
-  call must agree exactly. Vtable type ids fold to 32 bits there
+  call must agree exactly. A Pepper function whose address goes to C
+  (`Expression::FunctionPointer`: `__function_pointer`, an `extern`
+  function value) with a `long`/`ulong` parameter or result is reached
+  through `__c_abi.<name>` (`c_abi_adapter`), which has C's signature.
+  `sizeof` of a struct slot is the target's pointer size. Vtable type ids fold to 32 bits there
   (`type_id_value`), since a vtable slot is pointer-sized.
 - **Runtime on WASI.** Each platform module (`os`, `io`, `async`,
   `process`, `tls`) has a `*_wasi.pep` beside its `*_posix.pep`, whose
@@ -2350,10 +2354,10 @@ root package's test runs. The suite has roughly 810 `#[test]` functions.
 | Codegen JIT | `crates/pepper-codegen/tests/codegen_tests.rs`; `target.rs` unit test | JIT `test()`, check the returned `i32`. |
 | Driver integration | `crates/pepper-driver/tests/integration/*_tests.rs` (arrays, strings, hashes, io, modules, visibility, platform, atomics, function values, iterators, `with` blocks, shared_ptr semantics, C arithmetic semantics, store types (`store_type_tests.rs`), edge cases, docs-audit regressions in `audit_fixes_tests.rs`, …) | Usual shape: `compiler::compile_with_runtime("test.pep", src)` → `CodeGenerator::jit_execute(&mut m, "test")`, asserting 0 (each check returns a distinct negative code). `compile_with_runtime` checks the program against the checked runtime (§2), as the CLI does. Multi-file tests (`module_tests.rs`, `diagnostic_tests.rs`) write a tree to `temp_dir()` and compile through `Options::parse_from` + `compiler::compile`. `platform_tests.rs` uses `with_simulated_host`. `corpus_tests.rs` and `link_tests.rs` link real executables. |
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
-| Corpus | `tests/*/test.pep` | `corpus_tests.rs::corpus_files_compile_and_run` checks (visibility included), compiles, links, and runs each fixture with `-I tests`. `pep_fmt_tests.rs` parses and formats every file under `tests/`. |
+| Corpus | `tests/*/test.pep` | `corpus_tests.rs::corpus_files_compile_and_run` checks (visibility included), compiles, links, and runs each fixture with `-I tests`; `corpus_files_run_under_wasmtime` builds each for `wasm32-wasip1` and runs it under wasmtime (`support::run_under_wasmtime`, when `support::wasi_tools` finds `WASI_SDK_PATH` and wasmtime; `NOT_ON_WASI` lists what needs threads or tasks). `pep_fmt_tests.rs` parses and formats every file under `tests/`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
 | Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
-| Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
+| Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`, and again under wasmtime for `wasm32-wasip1` when a wasi-sdk and wasmtime are present (`documentation_examples_run_under_wasmtime`, skipping `NOT_ON_WASI`). Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |

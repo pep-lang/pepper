@@ -182,7 +182,8 @@ compiler finds as it finds `lld` (also as `wasm-ld-20`). Name the SDK
 directory, or its `share/wasi-sysroot`, with `--sysroot`, or set
 `PEPPER_SYSROOT_WASM32_WASIP1` or `WASI_SDK_PATH`. wasi-sdk 25 is the version
 tested. The program needs a runtime's `--dir` to reach a directory and
-`-S inherit-env` (wasmtime) to see the environment.
+`-S inherit-env` (wasmtime) to see the environment. `Directory.temp()` is
+`TMPDIR`, else `/tmp`, so grant one (`--dir /tmp`) to use it.
 
 WASI preview 1 is a small system, and `wasm32` is a 32-bit target, so some
 things work differently:

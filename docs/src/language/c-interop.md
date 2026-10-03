@@ -47,7 +47,8 @@ On a 32-bit target (`wasm32-wasip1`, see
 pointer-sized `long`/`ssize_t` and `unsigned long`/`size_t`: the call passes
 the low 32 bits and widens the result back to 64 (sign-extending a `long`,
 zero-extending a `ulong`), so `extern ulong strlen(char* s);` works
-unchanged. `i64` and `u64` stay 64 bits on every target; use them for C's
+unchanged. A Pepper function passed to C as a callback is converted the same
+way in the other direction. `i64` and `u64` stay 64 bits on every target; use them for C's
 `long long`, `int64_t` and `off_t`. WebAssembly checks every call's
 signature, so a prototype with the wrong width traps instead of returning
 garbage.

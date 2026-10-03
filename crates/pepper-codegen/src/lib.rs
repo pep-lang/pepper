@@ -4447,10 +4447,11 @@ impl<'ctx> CodeGenerator<'ctx> {
                     // Struct elements are stored as pointers, so a struct's
                     // slot (and its `sizeof`) is exactly pointer-sized,
                     // independent of the struct's own ABI size (matches
-                    // `slot_stride`).
-                    Ok(BasicValueEnum::IntValue(
-                        self.context.i64_type().const_int(std::mem::size_of::<usize>() as u64, false),
-                    ))
+                    // `slot_stride`): the target's pointer size, not the
+                    // compiler's.
+                    let machine = crate::target::target_machine()?;
+                    let size = machine.get_target_data().get_pointer_byte_size(None) as u64;
+                    Ok(BasicValueEnum::IntValue(self.context.i64_type().const_int(size, false)))
                 } else if let Some(ty) = self.types.get(&name) {
                     // Scalar/pointer ABI size: `AnyType::size_of` is an
                     // unfolded ptrtoint under opaque pointers (None for
@@ -4529,6 +4530,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .module
                     .get_function(&name)
                     .ok_or_else(|| format!("use of undeclared identifier '{}'", function))?;
+                let target = self.c_abi_adapter(&name, target)?;
                 Ok(target.as_global_value().as_pointer_value().into())
             }
             Expression::RefCount(ty, arg) => {
@@ -6165,6 +6167,83 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// A 32-bit C `size_t` or `ssize_t` result (see [`c_abi_type`]) widened
     /// to Pepper's `ulong` or `long`: sign-extended when `signed`.
+    /// The function C calls through a pointer to Pepper function `name`. On a
+    /// 32-bit target C passes and returns `long`/`ulong` as its 32-bit
+    /// `ssize_t`/`size_t` (see `c_abi_type`), so a Pepper function with such
+    /// a parameter or result is called through an adapter with the C
+    /// signature, which widens the arguments and narrows the result.
+    /// WebAssembly traps on a call whose signature does not match. Elsewhere,
+    /// and for a function whose signature is already C's, `target` itself.
+    fn c_abi_adapter(&mut self, name: &str, target: FunctionValue<'ctx>) -> Result<FunctionValue<'ctx>, String> {
+        if !crate::target::is_32_bit() {
+            return Ok(target);
+        }
+        let wide = self.context.i64_type();
+        let is_c_long = |ty: &str| matches!(ty, "long" | "ulong");
+        let parameter_types = self.fn_param_types.get(name).cloned().unwrap_or_default();
+        let fn_type = target.get_type();
+        let llvm_parameters = fn_type.get_param_types();
+        let narrows_parameter = |index: usize| {
+            parameter_types.get(index).is_some_and(|ty| is_c_long(ty))
+                && llvm_parameters.get(index).is_some_and(|ty| ty.is_int_type() && ty.into_int_type() == wide)
+        };
+        let result_type = self.fn_returns.get(name).cloned().unwrap_or_default();
+        let narrows_result = is_c_long(&result_type) && fn_type.get_return_type().is_some_and(|ty| ty.is_int_type() && ty.into_int_type() == wide);
+        if !narrows_result && !(0..llvm_parameters.len()).any(narrows_parameter) {
+            return Ok(target);
+        }
+        let adapter_name = format!("__c_abi.{}", name);
+        if let Some(adapter) = self.module.get_function(&adapter_name) {
+            return Ok(adapter);
+        }
+        let narrow = self.context.i32_type();
+        let parameters: Vec<inkwell::types::BasicMetadataTypeEnum<'ctx>> = llvm_parameters
+            .iter()
+            .enumerate()
+            .map(|(index, ty)| if narrows_parameter(index) { narrow.into() } else { (*ty).into() })
+            .collect();
+        let adapter_type = match fn_type.get_return_type() {
+            Some(_) if narrows_result => narrow.fn_type(&parameters, false),
+            Some(ty) => inkwell::types::BasicType::fn_type(&ty, &parameters, false),
+            None => self.context.void_type().fn_type(&parameters, false),
+        };
+        let adapter = self.module.add_function(&adapter_name, adapter_type, Some(inkwell::module::Linkage::Private));
+        let saved = self.builder.get_insert_block();
+        let entry = self.context.append_basic_block(adapter, "entry");
+        self.builder.position_at_end(entry);
+        let mut arguments: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> = vec![];
+        for (index, argument) in adapter.get_param_iter().enumerate() {
+            if narrows_parameter(index) {
+                let value = argument.into_int_value();
+                let widened = if parameter_types[index] == "long" {
+                    self.builder.build_int_s_extend(value, wide, "c_argument")
+                } else {
+                    self.builder.build_int_z_extend(value, wide, "c_argument")
+                };
+                arguments.push(widened.map_err(|e| e.to_string())?.into());
+            } else {
+                arguments.push(argument.into());
+            }
+        }
+        let call = self.builder.build_call(target, &arguments, "forward").map_err(|e| e.to_string())?;
+        match call.try_as_basic_value().basic() {
+            Some(BasicValueEnum::IntValue(value)) if narrows_result => {
+                let narrowed = self.builder.build_int_truncate(value, narrow, "c_result").map_err(|e| e.to_string())?;
+                self.builder.build_return(Some(&narrowed)).map_err(|e| e.to_string())?;
+            }
+            Some(value) => {
+                self.builder.build_return(Some(&value)).map_err(|e| e.to_string())?;
+            }
+            None => {
+                self.builder.build_return(None).map_err(|e| e.to_string())?;
+            }
+        }
+        if let Some(block) = saved {
+            self.builder.position_at_end(block);
+        }
+        Ok(adapter)
+    }
+
     fn widen_c_result(&self, result: Option<BasicValueEnum<'ctx>>, signed: bool) -> Result<BasicValueEnum<'ctx>, String> {
         let Some(BasicValueEnum::IntValue(value)) = result else {
             return Ok(result.unwrap_or_else(|| self.context.i32_type().const_zero().into()));
