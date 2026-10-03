@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-19b4dea8.js";
+            window.path_to_searchindex_js = "searchindex-b497d6a9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6599482c.js"></script>
@@ -15142,7 +15142,8 @@ below for an example).</p>
 pointer-sized <code>long</code>/<code>ssize_t</code> and <code>unsigned long</code>/<code>size_t</code>: the call passes
 the low 32 bits and widens the result back to 64 (sign-extending a <code>long</code>,
 zero-extending a <code>ulong</code>), so <code>extern ulong strlen(char* s);</code> works
-unchanged. <code>i64</code> and <code>u64</code> stay 64 bits on every target; use them for C’s
+unchanged. A Pepper function passed to C as a callback is converted the same
+way in the other direction. <code>i64</code> and <code>u64</code> stay 64 bits on every target; use them for C’s
 <code>long long</code>, <code>int64_t</code> and <code>off_t</code>. WebAssembly checks every call’s
 signature, so a prototype with the wrong width traps instead of returning
 garbage.</p>
@@ -16170,7 +16171,8 @@ compiler finds as it finds <code>lld</code> (also as <code>wasm-ld-20</code>). N
 directory, or its <code>share/wasi-sysroot</code>, with <code>--sysroot</code>, or set
 <code>PEPPER_SYSROOT_WASM32_WASIP1</code> or <code>WASI_SDK_PATH</code>. wasi-sdk 25 is the version
 tested. The program needs a runtime’s <code>--dir</code> to reach a directory and
-<code>-S inherit-env</code> (wasmtime) to see the environment.</p>
+<code>-S inherit-env</code> (wasmtime) to see the environment. <code>Directory.temp()</code> is
+<code>TMPDIR</code>, else <code>/tmp</code>, so grant one (<code>--dir /tmp</code>) to use it.</p>
 <p>WASI preview 1 is a small system, and <code>wasm32</code> is a 32-bit target, so some
 things work differently:</p>
 <ul>
