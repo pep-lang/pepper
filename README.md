@@ -229,6 +229,7 @@ runs `pep-fmt`, and `pepper help` lists the `pep-*` commands it finds next to
 itself or on the `PATH` (see the book's
 [pepper command](https://justinboswell.github.io/pepper/tools/pepper.html)).
 `pepper main.pep` still runs the compiler, with a deprecation warning.
+`pepper -C <dir> <command>` runs the command in `<dir>`, like `git -C`.
 `pepper build` with no file builds the project a `pep.toml` describes, with
 its dependencies, which `pepper package` adds and fetches (see the book's
 [Projects: pep.toml](docs/src/tools/projects.md) and

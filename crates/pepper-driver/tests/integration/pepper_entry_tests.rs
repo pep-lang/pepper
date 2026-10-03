@@ -15,15 +15,22 @@ use std::time::Duration;
 use crate::support;
 use crate::support::stdout_of;
 
-/// Prints its arguments joined by `|`, and exits with the number after an
-/// argument `exit`, or 0.
+/// Prints its arguments joined by `|`, with an argument `cwd` replaced by
+/// the current directory, and exits with the number after an argument
+/// `exit`, or 0.
 const ECHO: &str = r#"
+import process;
+
 main(args: String[]): int {
     var shown = Array<String>();
     ulong index = 1;
     var code = 0;
     while (index < args.count) {
-        shown.append(args[index]);
+        if (args[index] == "cwd") {
+            shown.append(process.working_directory().value().to_string());
+        } else {
+            shown.append(args[index]);
+        }
         if (args[index] == "exit" and index + 1 < args.count) {
             code = int.parse(args[index + 1]).value();
         }
@@ -169,7 +176,7 @@ fn pepper_help_lists_every_command_it_finds() {
     let output = pepper(&["help"]);
     assert_eq!(output.status.code(), Some(0));
     let text = stdout_of(&output);
-    assert!(text.starts_with("usage: pepper <command> [arguments]\n"), "{}", text);
+    assert!(text.starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"), "{}", text);
     assert!(text.ends_with("Commands:\n  ask\n  build\n  echo\n  elsewhere\n"), "{}", text);
 }
 
@@ -199,5 +206,60 @@ fn pepper_version_is_the_workspace_version() {
 fn pepper_without_arguments_prints_usage() {
     let output = pepper(&[]);
     assert_eq!(output.status.code(), Some(2));
-    assert!(stderr_of(&output).starts_with("usage: pepper <command> [arguments]\n"));
+    assert!(stderr_of(&output).starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"));
+}
+
+/// The directories `-C` tests change to: `<root>/c/d`, created once.
+fn nested_directory() -> PathBuf {
+    let dir = layout().bin.parent().unwrap().join("c").join("d");
+    std::fs::create_dir_all(&dir).unwrap();
+    dir.canonicalize().unwrap()
+}
+
+fn canonical_line(output: &Output) -> PathBuf {
+    PathBuf::from(stdout_of(output).trim_end()).canonicalize().unwrap()
+}
+
+#[test]
+fn pepper_dash_c_runs_the_tool_in_that_directory() {
+    let dir = nested_directory();
+    let output = pepper(&["-C", dir.to_str().unwrap(), "echo", "cwd"]);
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr_of(&output));
+    assert_eq!(canonical_line(&output), dir);
+}
+
+#[test]
+fn pepper_repeated_dash_c_is_relative_to_the_one_before() {
+    let dir = nested_directory();
+    let parent = dir.parent().unwrap().to_str().unwrap().to_string();
+    let output = pepper(&["-C", &parent, "-C", "", "-C", "d", "echo", "cwd"]);
+    assert_eq!(output.status.code(), Some(0), "stderr: {}", stderr_of(&output));
+    assert_eq!(canonical_line(&output), dir);
+}
+
+#[test]
+fn pepper_dash_c_passes_later_options_to_the_tool() {
+    let dir = nested_directory();
+    let output = pepper(&["-C", dir.to_str().unwrap(), "echo", "-C", "x"]);
+    assert_eq!(stdout_of(&output), "-C|x\n", "stderr: {}", stderr_of(&output));
+}
+
+#[test]
+fn pepper_dash_c_reports_a_missing_directory() {
+    let missing = layout().bin.parent().unwrap().join("missing");
+    let output = pepper(&["-C", missing.to_str().unwrap(), "echo"]);
+    assert_eq!(output.status.code(), Some(1));
+    let expected = format!("pepper: error: cannot change to '{}': ", missing.display());
+    assert!(stderr_of(&output).starts_with(&expected), "{}", stderr_of(&output));
+}
+
+#[test]
+fn pepper_dash_c_without_a_directory_or_command_is_a_usage_error() {
+    let output = pepper(&["-C"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(stderr_of(&output), "pepper: error: option '-C' requires a directory\n");
+    let dir = nested_directory();
+    let output = pepper(&["-C", dir.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(stderr_of(&output).starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"));
 }

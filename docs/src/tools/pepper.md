@@ -8,6 +8,7 @@ are: `pepper <command> [arguments]` runs a separate program named
 pepper build main.pep -o main     # runs pep-build main.pep -o main
 pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
+pepper -C my_app build            # runs pep-build in my_app
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -20,7 +21,7 @@ compiler does (see [The compiler: pep-build](pep-build.md)).
 ## Usage and options
 
 ```text
-pepper <command> [arguments]
+pepper [-C <dir>]... <command> [arguments]
 pepper help [<command>]
 pepper --version [-v]
 ```
@@ -28,14 +29,16 @@ pepper --version [-v]
 | Form | What it does |
 | --- | --- |
 | `pepper <command> [arguments]` | Runs `pep-<command>` with the arguments (see [How it finds a command](#how-it-finds-a-command)) |
+| `-C <dir>` | Changes to `<dir>` before running the command (see [Running in another folder](#running-in-another-folder)) |
 | `pepper help`, `-h`, `--help` | Prints the usage, these options, and the commands it can find |
 | `pepper help <command>` | Runs `pep-<command> --help` |
 | `--version` | Prints `pepper` and its version |
 | `--version -v`, `--version --verbose` | Also prints the version each command reports (its `--version`'s first line, or `(no version)`) |
 
 Options go before the command: everything after the command belongs to it,
-so `pepper fmt --help` is `pep-fmt --help`. `pepper` with no arguments prints
-the usage to standard error and exits with status 2; an option other than
+so `pepper fmt --help` is `pep-fmt --help`. `pepper` with no arguments, or
+with only `-C` options, prints the usage to standard error and exits with
+status 2; so does a `-C` with no folder after it; an option other than
 `-v` or `--verbose` after `--version` is an error that exits with 2. An
 unknown command exits with 1. Otherwise the exit status is the command's.
 
@@ -95,6 +98,22 @@ Commands:
   build
   fmt
 ```
+
+## Running in another folder
+
+`-C <dir>` runs the command as if `pepper` had been started in `<dir>`, like
+`git -C`: `pepper -C my_app build` builds the project in `my_app` from
+anywhere. Repeated, each `-C` is relative to the one before, so
+`pepper -C a -C b build` runs in `a/b`; an empty `-C ""` changes nothing.
+A folder that cannot be entered is an error that exits with status 1:
+
+```text
+$ pepper -C nowhere build
+pepper: error: cannot change to 'nowhere': No such file or directory
+```
+
+`-C` is the only option that goes before a command. It works with
+`help` and the old form too.
 
 ## The old form
 

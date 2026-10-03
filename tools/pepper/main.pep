@@ -2,6 +2,7 @@
 #
 #     pepper build main.pep -o main     # runs pep-build main.pep -o main
 #     pepper fmt -w src                 # runs pep-fmt -w src
+#     pepper -C src fmt -w .            # runs pep-fmt -w . in src
 #     pepper help                       # lists the commands it can find
 #     pepper help build                 # runs pep-build --help
 #     pepper --version                  # this version; with -v, each tool's
@@ -12,6 +13,10 @@
 # streams, in place of pepper (on Windows, pepper waits for it and exits
 # with its exit status). Installing a `pep-<name>` program
 # adds the command `<name>`.
+#
+# `-C <dir>` before the command changes to `dir` first, like `git -C`;
+# repeated, each is relative to the one before. It is the only option
+# that goes before a command.
 #
 # A first argument that is a `.pep` file or an option is the old way of
 # running the compiler (`pepper main.pep -o main`): it still runs
@@ -33,13 +38,30 @@ version(): String {
 }
 
 main(args: String[]): int {
-    if (args.count < 2) {
+    ulong index = 1;
+    while (index < args.count and args[index] == "-C") {
+        if (index + 1 >= args.count) {
+            File.stderr().write_all("pepper: error: option '-C' requires a directory\n");
+            return 2;
+        }
+        var directory = args[index + 1];
+        # An empty directory leaves the current one as it is, as in git.
+        if (!directory.is_empty) {
+            var changed = process.change_working_directory(Path(directory));
+            if (changed.is_err()) {
+                File.stderr().write_all($"pepper: error: cannot change to '{directory}': {changed.error().message}\n");
+                return 1;
+            }
+        }
+        index += 2;
+    }
+    if (index >= args.count) {
         File.stderr().write_all(usage());
         return 2;
     }
-    var first = args[1];
+    var first = args[index];
     var rest = Array<String>();
-    ulong index = 2;
+    index += 1;
     while (index < args.count) {
         rest.append(args[index]);
         index += 1;
@@ -215,7 +237,7 @@ print_version(options: Array<String>): int {
 }
 
 usage(): String {
-    return "usage: pepper <command> [arguments]\n       pepper help [<command>]\n       pepper --version [-v]\n";
+    return "usage: pepper [-C <dir>]... <command> [arguments]\n       pepper help [<command>]\n       pepper --version [-v]\n";
 }
 
 help(): String {
@@ -223,6 +245,7 @@ help(): String {
     text = text + "\nRuns the program pep-<command>, found next to pepper or on the PATH,\n";
     text = text + "with the remaining arguments.\n\n";
     text = text + "Options:\n";
+    text = text + "  -C <dir>       run the command in <dir>; each repeat is relative to the last\n";
     text = text + "  -h, --help     show this help; 'pepper help <command>' runs 'pep-<command> --help'\n";
     text = text + "  --version      show pepper's version\n";
     text = text + "  -v, --verbose  after --version: also show each command's version\n\n";
