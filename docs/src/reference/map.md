@@ -42,8 +42,8 @@ loses track of its keys.
 
 **Example**
 ```pepper
-    assert(compare<int>(1, 2) < 0, "1 sorts first");
-    assert(compare<int>(2, 2) == 0, "equal");
+assert(compare<int>(1, 2) < 0, "1 sorts first");
+assert(compare<int>(2, 2) == 0, "equal");
 ```
 
 ## compare
@@ -64,7 +64,7 @@ keys in: the same as `a.compare(b)`.
 
 **Example**
 ```pepper
-    assert(compare<String>("apple", "pear") < 0, "apple sorts first");
+assert(compare<String>("apple", "pear") < 0, "apple sorts first");
 ```
 
 ## Map
@@ -99,13 +99,13 @@ expected O(1) lookups in no order, `HashMap`.
 
 **Example**
 ```pepper
-    var scores = Map<String, int>();
-    scores["carol"] = 91;
-    scores["alice"] = 84;
-    scores["bob"] = 77;
-    for (var (name, score) in scores) {
-        print($"{name}: {score}");   # alice, bob, carol
-    }
+var scores = Map<String, int>();
+scores["carol"] = 91;
+scores["alice"] = 84;
+scores["bob"] = 77;
+for (var (name, score) in scores) {
+    print($"{name}: {score}");   # alice, bob, carol
+}
 ```
 
 ### Properties
@@ -217,9 +217,9 @@ O(log count).
 
 **Example**
 ```pepper
-    if (scores.try_get("alice") is Value(score)) {
-        print($"{score}");
-    }
+if (scores.try_get("alice") is Value(score)) {
+    print($"{score}");
+}
 ```
 
 #### remove
@@ -307,7 +307,7 @@ count).
 
 **Example**
 ```pepper
-    var after_b = scores.lower_bound("b");   # ("bob", 77)
+var after_b = scores.lower_bound("b");   # ("bob", 77)
 ```
 
 #### upper_bound
@@ -354,9 +354,9 @@ the same rules as `iterate`.
 
 **Example**
 ```pepper
-    for (var (name, score) in scores.reversed()) {
-        print(name);   # carol, bob, alice
-    }
+for (var (name, score) in scores.reversed()) {
+    print(name);   # carol, bob, alice
+}
 ```
 
 #### range
@@ -378,9 +378,9 @@ and less than `to`, in ascending key order, under the same rules as
 
 **Example**
 ```pepper
-    for (var (name, score) in scores.range("a", "c")) {
-        print(name);   # alice, bob
-    }
+for (var (name, score) in scores.range("a", "c")) {
+    print(name);   # alice, bob
+}
 ```
 
 #### copy
@@ -489,10 +489,10 @@ released on remove, on `clear`, or when the set is destroyed.
 
 **Example**
 ```pepper
-    Set<int> primes = [7, 2, 5, 3];
-    for (var p in primes) {
-        print($"{p}");   # 2, 3, 5, 7
-    }
+Set<int> primes = [7, 2, 5, 3];
+for (var p in primes) {
+    print($"{p}");   # 2, 3, 5, 7
+}
 ```
 
 ### Properties
@@ -539,8 +539,8 @@ a set is expected, so an array literal can initialize one.
 
 **Example**
 ```pepper
-    Set<String> keywords = ["while", "if", "else"];
-    assert(keywords.first().value() == "else", "sorted");
+Set<String> keywords = ["while", "if", "else"];
+assert(keywords.first().value() == "else", "sorted");
 ```
 
 ### Methods

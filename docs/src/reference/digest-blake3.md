@@ -24,12 +24,12 @@ same. `finish` resets the hasher, so it can hash a new input.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    var hasher = digest.Blake3();
-    hasher.update("hello ");
-    hasher.update("world");
-    assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
+var hasher = digest.Blake3();
+hasher.update("hello ");
+hasher.update("world");
+assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 ```
 
 ### Constructor
@@ -116,10 +116,10 @@ Returns the BLAKE3 digest of `bytes`.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
-    assert(digest.to_hex(digest.blake3(Array<u8>())) == empty, "BLAKE3 of nothing");
+var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+assert(digest.to_hex(digest.blake3(Array<u8>())) == empty, "BLAKE3 of nothing");
 ```
 
 ## blake3

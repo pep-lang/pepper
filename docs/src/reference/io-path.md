@@ -34,15 +34,15 @@ dots are ASCII, so splitting at them never cuts a character in two.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
-    var name = p.file_name().value();               # "guide.md"
-    var ext = p.extension().value_or("");           # "md"
-    var dir = p.parent();                           # some io.Path("docs")
-    if (p.is_file()) {
-        print(p.to_string());
-    }
+var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
+var name = p.file_name().value();               # "guide.md"
+var ext = p.extension().value_or("");           # "md"
+var dir = p.parent();                           # some io.Path("docs")
+if (p.is_file()) {
+    print(p.to_string());
+}
 ```
 
 ### Properties
@@ -76,11 +76,11 @@ takes a `Path` also accepts text.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var p = io.Path("/usr/lib");
-    var empty = io.Path();   # is_empty is true
-    var q: io.Path = "docs";   # converted implicitly
+var p = io.Path("/usr/lib");
+var empty = io.Path();   # is_empty is true
+var q: io.Path = "docs";   # converted implicitly
 ```
 
 ### Static methods
@@ -181,12 +181,12 @@ normalized: `a` joined with `../b` is `a/../b`.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
-    var q = io.Path("a/").join(io.Path("b"));      # "a/b"
-    var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
-    var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
+var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
+var q = io.Path("a/").join(io.Path("b"));      # "a/b"
+var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 ```
 
 #### join_str
@@ -210,9 +210,9 @@ since a `String` converts to a `Path` implicitly.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
+var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 ```
 
 #### has_root_or_prefix
@@ -251,11 +251,11 @@ it now returns none.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
-    var root = io.Path("/a").parent().value();        # "/"
-    var none = io.Path("/").parent();                 # none
+var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+var root = io.Path("/a").parent().value();        # "/"
+var none = io.Path("/").parent();                 # none
 ```
 
 #### file_name
@@ -275,10 +275,10 @@ returns none.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
-    var none = io.Path("a/..").file_name();                 # none
+var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+var none = io.Path("a/..").file_name();                 # none
 ```
 
 #### file_stem
@@ -331,11 +331,11 @@ separators after the file name are dropped.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
-    var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
-    var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
+var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
+var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
+var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
 ```
 
 #### components
@@ -357,10 +357,10 @@ are dropped, except a leading one in a path with no prefix or root
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
-    var d = io.Path("./a/b").components();            # [".", "a", "b"]
+var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
+var d = io.Path("./a/b").components();            # [".", "a", "b"]
 ```
 
 #### normalize
@@ -388,10 +388,10 @@ resolves.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
-    var q = io.Path("a/..").normalize();         # "."
+var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
+var q = io.Path("a/..").normalize();         # "."
 ```
 
 #### exists
@@ -463,12 +463,12 @@ opened for attributes only.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var m = io.Path("data.bin").metadata();
-    if (m.is_ok()) {
-        var size = m.value().size;
-    }
+var m = io.Path("data.bin").metadata();
+if (m.is_ok()) {
+    var size = m.value().size;
+}
 ```
 
 #### symlink_metadata
@@ -513,12 +513,12 @@ removed (`\\?\UNC\server\share` becomes `\\server\share`).
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var real = io.Path("a/../b.txt").canonicalize();
-    if (real.is_ok()) {
-        print(real.value().to_string());
-    }
+var real = io.Path("a/../b.txt").canonicalize();
+if (real.is_ok()) {
+    print(real.value().to_string());
+}
 ```
 
 #### operator ==

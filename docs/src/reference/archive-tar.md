@@ -68,10 +68,10 @@ One entry of a tar archive: its header, without its contents.
 
 **Example**
 ```pepper
-    import archive;
+import archive;
 
-    var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
-    entry.mode = 493;   # octal 755: rwxr-xr-x
+var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
+entry.mode = 493;   # octal 755: rwxr-xr-x
 ```
 
 ### Fields
@@ -158,19 +158,19 @@ Wrap the source in a `compress.DecompressReader` to read a `.tar.gz`.
 
 **Example**
 ```pepper
-    import archive;
-    import compress;
-    import io;
+import archive;
+import compress;
+import io;
 
-    var file = io.File.open(io.Path("release.tar.gz")).value();
-    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
-    while (true) {
-        var entry = tar.next_entry().value();
-        if (entry.is_empty()) {
-            break;
-        }
-        print(entry.value().path);
+var file = io.File.open(io.Path("release.tar.gz")).value();
+var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+while (true) {
+    var entry = tar.next_entry().value();
+    if (entry.is_empty()) {
+        break;
     }
+    print(entry.value().path);
+}
 ```
 
 ### Constructor
@@ -256,13 +256,13 @@ and FIFOs are skipped, as are permission bits and modification times.
 
 **Example**
 ```pepper
-    import archive;
-    import compress;
-    import io;
+import archive;
+import compress;
+import io;
 
-    var file = io.File.open(io.Path("pepper-main.tar.gz")).value();
-    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
-    tar.extract(io.Path(".pep/deps/pepper"), strip_components = 1).value();
+var file = io.File.open(io.Path("pepper-main.tar.gz")).value();
+var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+tar.extract(io.Path(".pep/deps/pepper"), strip_components = 1).value();
 ```
 
 ## TarWriter
@@ -282,15 +282,15 @@ ids are 0 and owner names empty. Wrap the sink in a
 
 **Example**
 ```pepper
-    import archive;
-    import io;
+import archive;
+import io;
 
-    var out = io.ByteWriter();
-    var tar = archive.TarWriter(out);
-    tar.append_directory("docs");
-    tar.append_file("docs/readme.txt", "hello\n".bytes());
-    tar.finish();
-    assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
+var out = io.ByteWriter();
+var tar = archive.TarWriter(out);
+tar.append_directory("docs");
+tar.append_file("docs/readme.txt", "hello\n".bytes());
+tar.finish();
+assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 ```
 
 ### Constructor
@@ -405,10 +405,10 @@ Appends a file entry whose contents are read from `source`: exactly
 
 **Example**
 ```pepper
-    var file = io.File.open(io.Path("big.bin")).value();
-    var entry = archive.TarEntry("big.bin");
-    entry.size = file.metadata().value().size;
-    tar.append_stream(entry, file);
+var file = io.File.open(io.Path("big.bin")).value();
+var entry = archive.TarEntry("big.bin");
+entry.size = file.metadata().value().size;
+tar.append_stream(entry, file);
 ```
 
 #### finish

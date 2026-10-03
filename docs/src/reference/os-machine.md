@@ -66,13 +66,13 @@ Returns the operating system the program was built for.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
-        print(executable);
-        return 0;
-    }
+main(): int {
+    var executable = os.system_os() == os.OperatingSystem.Windows ? "tool.exe" : "tool";
+    print(executable);
+    return 0;
+}
 ```
 
 ## system_name

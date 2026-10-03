@@ -22,14 +22,14 @@ is copied, compared with `==`, and allocates nothing.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
-        print(timeout.milliseconds());   # 2500
-        print(timeout);                  # 2.5s
-        return 0;
-    }
+main(): int {
+    var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
+    print(timeout.milliseconds());   # 2500
+    print(timeout);                  # 2.5s
+    return 0;
+}
 ```
 
 ### Constructor
@@ -336,18 +336,18 @@ The clock is `CLOCK_MONOTONIC` on Linux and macOS and
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var start = os.Instant.now();
-        var total = 0;
-        for (var i in 0..1000000) {
-            total = total + i;
-        }
-        var elapsed = os.Instant.now() - start;
-        print($"summed in {elapsed.milliseconds()} ms");
-        return 0;
+main(): int {
+    var start = os.Instant.now();
+    var total = 0;
+    for (var i in 0..1000000) {
+        total = total + i;
     }
+    var elapsed = os.Instant.now() - start;
+    print($"summed in {elapsed.milliseconds()} ms");
+    return 0;
+}
 ```
 
 ### Constructor
@@ -510,13 +510,13 @@ zones and formatting are not part of `os`.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var now = os.SystemTime.now();
-        print($"{now.unix_seconds()} seconds since 1970");
-        return 0;
-    }
+main(): int {
+    var now = os.SystemTime.now();
+    print($"{now.unix_seconds()} seconds since 1970");
+    return 0;
+}
 ```
 
 ### Constructor

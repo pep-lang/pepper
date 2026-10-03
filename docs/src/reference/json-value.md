@@ -32,14 +32,14 @@ changing them through `value[key] = ...`, `append` or the map from
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var reply = json.JsonValue.object();
-    reply["id"] = json.JsonValue.Integer(42);
-    reply["tags"] = json.JsonValue.array([json.JsonValue.String("a")]);
-    assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
-    assert(reply["id"].as_int().value() == 42, "a lookup");
-    assert(reply["missing"]["deeper"].is_null(), "lookups chain");
+var reply = json.JsonValue.object();
+reply["id"] = json.JsonValue.Integer(42);
+reply["tags"] = json.JsonValue.array([json.JsonValue.String("a")]);
+assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
+assert(reply["id"].as_int().value() == 42, "a lookup");
+assert(reply["missing"]["deeper"].is_null(), "lookups chain");
 ```
 
 ### Cases
@@ -136,10 +136,10 @@ Returns a new, empty object.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var config = json.JsonValue.object();
-    config["name"] = json.JsonValue.String("pepper");
+var config = json.JsonValue.object();
+config["name"] = json.JsonValue.String("pepper");
 ```
 
 #### array
@@ -159,11 +159,11 @@ than copying.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
-    list.append(json.JsonValue.Integer(2));
-    assert(list.to_string() == "[1,2]", "two elements");
+var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+list.append(json.JsonValue.Integer(2));
+assert(list.to_string() == "[1,2]", "two elements");
 ```
 
 ### Methods
@@ -313,10 +313,10 @@ Returns the number as an integer, when it is one: an `Integer`, or a
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
-    assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
+assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
+assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
 ```
 
 #### as_double
@@ -400,10 +400,10 @@ them past U+FFFF), so the text is plain ASCII.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var word = json.JsonValue.String("é");
-    assert(word.to_string(ascii_only = true) == "\"\\u00e9\"", "escaped");
+var word = json.JsonValue.String("é");
+assert(word.to_string(ascii_only = true) == "\"\\u00e9\"", "escaped");
 ```
 
 #### to_pretty_string
@@ -428,8 +428,8 @@ each `:`. An empty array or object stays `[]` or `{}`.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
-    assert(list.to_pretty_string() == "[\n  1\n]", "two spaces");
+var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+assert(list.to_pretty_string() == "[\n  1\n]", "two spaces");
 ```

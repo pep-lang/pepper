@@ -1,5 +1,5 @@
-# Rust-analogous Result type: an enum whose Ok case carries the value and
-# whose Err case carries the error.
+## `Result<T, E>`: the value of an operation that can fail, either `Ok`
+## holding its value or `Err` holding its error, like Rust's `Result`.
 
 import "internals";
 
@@ -111,7 +111,6 @@ export enum Result<TValue, TError=Error> {
     ## For `Result<void>` it returns nothing: calling it only checks that the
     ## result is Ok.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns the value of an Ok result
     ## @panics if the result is Err ("Result.value on an Err value")
     ## @example
@@ -128,7 +127,6 @@ export enum Result<TValue, TError=Error> {
     ## For a struct `TError` the caller gets its own reference; the result
     ## keeps its reference too.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns the error of an Err result
     ## @panics if the result is Ok ("Result.error on an Ok value")
     ## @example

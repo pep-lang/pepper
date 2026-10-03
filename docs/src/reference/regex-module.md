@@ -12,13 +12,13 @@ time linear in the size of the text whatever the pattern.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    main(): int {
-        var word = regex.Regex("\\b(\\w)(\\w*)\\b");
-        assert(word.replace_all("hello big world", "${1}.") == "h. b. w.", "initials");
-        return 0;
-    }
+main(): int {
+    var word = regex.Regex("\\b(\\w)(\\w*)\\b");
+    assert(word.replace_all("hello big world", "${1}.") == "h. b. w.", "initials");
+    return 0;
+}
 ```
 
 Source: `runtime/regex/module.pep`

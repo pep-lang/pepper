@@ -30,12 +30,12 @@ that maps it are different values.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var a = io.IpAddress.parse("192.168.1.10").value();
-    var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
-    print(a.is_v4());         # true
-    print(b.to_string());     # 2001:db8::1
+var a = io.IpAddress.parse("192.168.1.10").value();
+var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
+print(a.is_v4());         # true
+print(b.to_string());     # 2001:db8::1
 ```
 
 ### Constructor
@@ -69,7 +69,7 @@ Creates an IPv4 address from its four bytes, `a.b.c.d`.
 
 **Example**
 ```pepper
-    var home = IpAddress.v4(127, 0, 0, 1);
+var home = IpAddress.v4(127, 0, 0, 1);
 ```
 
 #### v6
@@ -95,7 +95,7 @@ Creates an IPv6 address from its eight 16-bit groups, `a:b:c:d:e:f:g:h`.
 
 **Example**
 ```pepper
-    var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
+var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
 ```
 
 #### loopback_v4
@@ -169,8 +169,8 @@ accepted.
 
 **Example**
 ```pepper
-    var r = IpAddress.parse("10.0.0.300");
-    print(r.is_err());   # true: 300 is out of range
+var r = IpAddress.parse("10.0.0.300");
+print(r.is_err());   # true: 300 is out of range
 ```
 
 ### Methods
@@ -235,7 +235,7 @@ IPv6.
 
 **Example**
 ```pepper
-    var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
+var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
 ```
 
 #### to_string
@@ -301,11 +301,11 @@ form is `address:port` for IPv4 and `[address]:port` for IPv6.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
-    var local = io.SocketAddress.parse("[::1]:443").value();
-    print(local.port());   # 443
+var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
+var local = io.SocketAddress.parse("[::1]:443").value();
+print(local.port());   # 443
 ```
 
 ### Constructors
@@ -352,8 +352,8 @@ syntax of `IpAddress.parse` and a decimal port from 0 to 65535.
 
 **Example**
 ```pepper
-    var a = SocketAddress.parse("127.0.0.1:8080").value();
-    var b = SocketAddress.parse("[::1]:8080").value();
+var a = SocketAddress.parse("127.0.0.1:8080").value();
+var b = SocketAddress.parse("[::1]:8080").value();
 ```
 
 ### Methods
@@ -467,12 +467,12 @@ most once.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var r = io.resolve("localhost", 8080);
-    if (r.is_ok()) {
-        for (var address in r.value()) {
-            print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
-        }
+var r = io.resolve("localhost", 8080);
+if (r.is_ok()) {
+    for (var address in r.value()) {
+        print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
     }
+}
 ```

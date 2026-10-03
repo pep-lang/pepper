@@ -33,14 +33,14 @@ holding it in the closure keeps it alive until the release runs).
 
 **Example**
 ```pepper
-    extern void* malloc(ulong size);
-    extern void free(void* p);
+extern void* malloc(ulong size);
+extern void free(void* p);
 
-    main(): int {
-        var buffer = Handle<__ptr<void>>(malloc(16), (p) => free(p));
-        # use buffer.value; free runs when `buffer` goes out of scope
-        return 0;
-    }
+main(): int {
+    var buffer = Handle<__ptr<void>>(malloc(16), (p) => free(p));
+    # use buffer.value; free runs when `buffer` goes out of scope
+    return 0;
+}
 ```
 
 ### Properties

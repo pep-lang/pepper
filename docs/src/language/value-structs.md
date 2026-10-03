@@ -109,10 +109,10 @@ trait value changes the box and not the original, and two conversions of
 one value make two boxes. Copying the trait value shares the box, as for
 any trait value.
 
-The runtime's iterators (`ArrayIterator`, `StringIterator`,
-`HashMapIterator`, `HashSetIterator`, `ChannelIterator`, and the `map` and
-`filter` adapters) are value structs, so a `for` loop over an `Array`, a
-`String` or a `HashMap` allocates no iterator.
+The runtime's iterators (`ArrayIterator`, `StringIterator`, the map and
+set iterators, `ChannelIterator`, and the `map`, `filter`, `enumerate` and
+`zip` adapters) are value structs, so a `for` loop over an `Array`, a
+`String` or any map or set allocates no iterator.
 
 ## Current limitations
 

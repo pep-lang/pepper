@@ -39,15 +39,16 @@ larger(a: int, b: int): int {
 - The text of each line is what follows `## `. A line that is just `##` is a
   blank line in the documentation, which separates paragraphs.
 - The comment must sit directly above the declaration, with no blank line in
-  between. [Attributes](platform-selection.md) and `export` or `static` may
+  between. [Attributes](reflection.md#attributes) and `export` or `static` may
   come between the comment and the declaration, so put the comment above the
   attributes.
 - Only lines that start with exactly two `#` count. A single `#` is an
   ordinary comment, and a line starting with three or more, such as a
   decorative `#######`, is not documentation.
-- A doc comment works on functions, structs, traits, extensions, type aliases,
-  module-scope variables, and the fields, constructors and methods inside a
-  struct, trait or extension.
+- A doc comment works on functions, structs, enums and their cases, traits,
+  extensions, type aliases, module-scope variables, and the fields,
+  properties, constructors and methods inside a struct, enum, trait or
+  extension.
 
 ## What to write
 

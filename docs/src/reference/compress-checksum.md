@@ -18,13 +18,13 @@ computed over data given in one or more pieces.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    var crc = compress.Crc32();
-    crc.update("hello ".bytes());
-    crc.update("world".bytes());
-    assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
-    assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
+var crc = compress.Crc32();
+crc.update("hello ".bytes());
+crc.update("world".bytes());
+assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
+assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 ```
 
 ### Properties
@@ -95,9 +95,9 @@ over data given in one or more pieces.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
+assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 ```
 
 ### Properties

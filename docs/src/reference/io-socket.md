@@ -38,14 +38,14 @@ closed listener fails with an error no `IoError` predicate identifies
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-    print(listener.local_address().value().to_string());   # 127.0.0.1:<port>
-    while (true) {
-        var (stream, peer) = listener.accept().value();
-        stream.write_all("hello " + peer.to_string());
-    }
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+print(listener.local_address().value().to_string());   # 127.0.0.1:<port>
+while (true) {
+    var (stream, peer) = listener.accept().value();
+    stream.write_all("hello " + peer.to_string());
+}
 ```
 
 ### Constructor
@@ -119,16 +119,16 @@ is needed.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
-    for (var connection in listener.incoming()) {
-        if (connection.is_err()) {
-            print(connection.error().message);
-            continue;
-        }
-        connection.value().write_all("hello");
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+for (var connection in listener.incoming()) {
+    if (connection.is_err()) {
+        print(connection.error().message);
+        continue;
     }
+    connection.value().write_all("hello");
+}
 ```
 
 #### local_address
@@ -231,25 +231,25 @@ them (`accept` then fails and the loop returns).
 
 **Example**
 ```pepper
-    import async;
-    import io;
+import async;
+import io;
 
-    main(): int {
-        async.run(() => {
-            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
-            async.spawn_on_each_worker(() => {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    var (stream, peer) = accepted.value();
-                    stream.write_all("hello");
+main(): int {
+    async.run(() => {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+        async.spawn_on_each_worker(() => {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
+                var (stream, peer) = accepted.value();
+                stream.write_all("hello");
+            }
         });
-        return 0;
-    }
+    });
+    return 0;
+}
 ```
 
 ### Constructor
@@ -339,13 +339,13 @@ closed stream fails with an error no `IoError` predicate identifies
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var stream = io.TcpStream.connect_host("example.com", 80).value();
-    stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
-    var reply = Array<u8>();
-    while (stream.read(reply, 4096).value() > 0) {
-    }
+var stream = io.TcpStream.connect_host("example.com", 80).value();
+stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
+var reply = Array<u8>();
+while (stream.read(reply, 4096).value() > 0) {
+}
 ```
 
 ### Constructor
@@ -394,10 +394,10 @@ addresses that accepts, trying them in order.
 
 **Example**
 ```pepper
-    var r = TcpStream.connect_host("localhost", 8080);
-    if (r.is_err() && r.error().is_connection_refused()) {
-        print("nothing is listening on 8080");
-    }
+var r = TcpStream.connect_host("localhost", 8080);
+if (r.is_err() && r.error().is_connection_refused()) {
+    print("nothing is listening on 8080");
+}
 ```
 
 #### adopt
@@ -447,8 +447,8 @@ Waits until data arrives, then appends up to `max` bytes of it to
 
 **Example**
 ```pepper
-    var buffer = Array<u8>();
-    var n = stream.read(buffer, 4096).value();   # buffer.count == n
+var buffer = Array<u8>();
+var n = stream.read(buffer, 4096).value();   # buffer.count == n
 ```
 
 #### read_exact
@@ -517,7 +517,7 @@ No newline or terminator is added.
 
 **Example**
 ```pepper
-    stream.write_all("ping");
+stream.write_all("ping");
 ```
 
 #### write_string
@@ -609,17 +609,17 @@ one started with `async.spawn`.
 
 **Example**
 ```pepper
-    import async;
-    import io;
+import async;
+import io;
 
-    serve(listener: io.TcpListener) {
-        var (stream, peer) = listener.accept().value();
-        var transfer = stream.into_transfer();
-        async.spawn<void>(() => {
-            var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_all("hello from another worker");
-        });
-    }
+serve(listener: io.TcpListener) {
+    var (stream, peer) = listener.accept().value();
+    var transfer = stream.into_transfer();
+    async.spawn<void>(() => {
+        var mine = io.TcpStream.adopt(transfer).value();
+        mine.write_all("hello from another worker");
+    });
+}
 ```
 
 #### close
@@ -683,12 +683,12 @@ Closing: the destructor closes the socket when the last reference goes;
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
-    var buffer = Array<u8>();
-    var (n, from) = socket.receive_from(buffer, 65507).value();
-    socket.send_to(buffer, from);   # echo it back
+var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
+var buffer = Array<u8>();
+var (n, from) = socket.receive_from(buffer, 65507).value();
+socket.send_to(buffer, from);   # echo it back
 ```
 
 ### Constructor

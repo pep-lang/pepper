@@ -15,21 +15,21 @@ in a `compress.CompressWriter` to write one. A damaged archive is an
 
 **Example**
 ```pepper
-    import archive;
-    import io;
+import archive;
+import io;
 
-    main(): int {
-        var out = io.ByteWriter();
-        var writer = archive.TarWriter(out);
-        writer.append_file("hello.txt", "hi\n".bytes());
-        writer.finish();
+main(): int {
+    var out = io.ByteWriter();
+    var writer = archive.TarWriter(out);
+    writer.append_file("hello.txt", "hi\n".bytes());
+    writer.finish();
 
-        var reader = archive.TarReader(io.ByteReader(out.bytes));
-        var entry = reader.next_entry().value().value();
-        assert(entry.path == "hello.txt" && entry.size == 3, "the header");
-        assert(reader.read_all().value() == "hi\n".bytes(), "the contents");
-        return 0;
-    }
+    var reader = archive.TarReader(io.ByteReader(out.bytes));
+    var entry = reader.next_entry().value().value();
+    assert(entry.path == "hello.txt" && entry.size == 3, "the header");
+    assert(reader.read_all().value() == "hi\n".bytes(), "the contents");
+    return 0;
+}
 ```
 
 Source: `runtime/archive/module.pep`

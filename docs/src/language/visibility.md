@@ -13,6 +13,7 @@ You can export every kind of top-level declaration:
 
 - functions, including `extern` declarations of C functions
 - structs
+- enums
 - type aliases
 - traits
 - extensions
@@ -47,12 +48,12 @@ main(): int {
 main.pep:4:13: error: 'make' is private to lib.pep; declare it with 'export' to use it from another file
     4 |     var q = make(1, 2);
       |             ^~~~
-lib.pep:27:1: note: declared here
-   27 | make(x: int, y: int): Point {
+lib.pep:29:1: note: declared here
+   29 | make(x: int, y: int): Point {
       | ^~~~
 ```
 
-The same applies to private structs, type aliases, traits, and variables:
+The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports `'name' is private to file.pep`.
 
 ## Members of structs and extensions
@@ -73,8 +74,8 @@ call it, even though `Point` itself is exported:
 main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
-lib.pep:42:5: note: declared here
-   42 |     norm(): int {
+lib.pep:46:5: note: declared here
+   46 |     norm(): int {
       |     ^~~~
 ```
 
@@ -145,7 +146,8 @@ named `m`.
 attributes:
 
 ```pepper
-[Target(OS(Windows))] export platform_name(): String { return "Windows"; }
+[Target(OS(Windows))]
+export platform_name(): String { return "Windows"; }
 ```
 
 Writing it before the attributes is a parse error:
@@ -166,8 +168,9 @@ The runtime's public surface (`String`, `Array`, `HashMap`, `HashSet`,
 `Result`, `Error`, `hash`, `assert`, `panic`, and the rest of the
 [standard library reference](../reference/README.md)) is exported the same
 way, and is visible in every file without an import. The runtime's own helpers
-are private, so calling one, such as the integer formatter `dec`, reports
-`'dec' is private to` followed by the path of the runtime's `internals.pep`.
+are private, so calling one, such as `_pep_check_sync_enabled`, reports
+`'_pep_check_sync_enabled' is private to` followed by the path of the
+runtime's `internals.pep`.
 
 ## Each file has its own namespace
 

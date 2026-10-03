@@ -32,13 +32,13 @@ cleared, or when the map is destroyed.
 
 **Example**
 ```pepper
-    var config = OrderedMap<String, String>();
-    config["name"] = "pepper";
-    config["version"] = "0.2";
-    config["license"] = "MIT";
-    for (var (key, value) in config) {
-        print($"{key} = {value}");   # name, version, license
-    }
+var config = OrderedMap<String, String>();
+config["name"] = "pepper";
+config["version"] = "0.2";
+config["license"] = "MIT";
+for (var (key, value) in config) {
+    print($"{key} = {value}");   # name, version, license
+}
 ```
 
 ### Properties

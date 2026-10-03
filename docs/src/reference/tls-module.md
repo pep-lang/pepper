@@ -17,17 +17,17 @@ connector or acceptor is made; on Windows it uses SChannel.
 
 **Example**
 ```pepper
-    import tls;
+import tls;
 
-    main(): int {
-        var connector = tls.TlsConnector.create().value();
-        var stream = connector.connect_host("localhost", 8443).value();
-        stream.write_all("ping");
-        var reply = Array<u8>();
-        while (stream.read(reply, 4096).value() > 0) {
-        }
-        return 0;
+main(): int {
+    var connector = tls.TlsConnector.create().value();
+    var stream = connector.connect_host("localhost", 8443).value();
+    stream.write_all("ping");
+    var reply = Array<u8>();
+    while (stream.read(reply, 4096).value() > 0) {
     }
+    return 0;
+}
 ```
 
 Source: `runtime/tls/module.pep`

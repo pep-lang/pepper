@@ -20,21 +20,21 @@ unchanged. `encode` and `decode` convert structs to JSON text and back.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    main(): int {
-        var parsed = json.parse("{\"name\": \"pepper\", \"port\": 8080}");
-        if (parsed.is_err()) {
-            print(parsed.error().to_string());
-            return 1;
-        }
-        var root = parsed.value();
-        assert(root["name"].as_string().value() == "pepper", "a string");
-        assert(root["port"].as_int().value_or(80) == 8080, "a number");
-        root["debug"] = json.JsonValue.Bool(true);
-        assert(root.to_string() == "{\"name\":\"pepper\",\"port\":8080,\"debug\":true}", "compact");
-        return 0;
+main(): int {
+    var parsed = json.parse("{\"name\": \"pepper\", \"port\": 8080}");
+    if (parsed.is_err()) {
+        print(parsed.error().to_string());
+        return 1;
     }
+    var root = parsed.value();
+    assert(root["name"].as_string().value() == "pepper", "a string");
+    assert(root["port"].as_int().value_or(80) == 8080, "a number");
+    root["debug"] = json.JsonValue.Bool(true);
+    assert(root.to_string() == "{\"name\":\"pepper\",\"port\":8080,\"debug\":true}", "compact");
+    return 0;
+}
 ```
 
 Source: `runtime/json/module.pep`

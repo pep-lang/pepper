@@ -13,7 +13,7 @@ main(): int {
     }
     assert(product == 120, "5 factorial");
 
-    # The bounds give the type: count() is a ulong, so i is too.
+    # The bounds give the type: `count` is a ulong, so i is too.
     var names = ["Ada", "Grace", "Edsger"];
     ulong letters = 0;
     for (var i in 0..names.count) {

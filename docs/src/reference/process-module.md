@@ -20,17 +20,17 @@ in the prelude, and the module passes them on as well.
 
 **Example**
 ```pepper
-    import process;
+import process;
 
-    main(): int {
-        var output = process.Command("git").argument("--version").run();
-        if (output.is_err()) {
-            print("git is not installed");
-            return 1;
-        }
-        print(output.value().stdout);
-        return 0;
+main(): int {
+    var output = process.Command("git").argument("--version").run();
+    if (output.is_err()) {
+        print("git is not installed");
+        return 1;
     }
+    print(output.value().stdout);
+    return 0;
+}
 ```
 
 Source: `runtime/process/module.pep`

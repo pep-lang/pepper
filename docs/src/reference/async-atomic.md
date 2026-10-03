@@ -33,12 +33,12 @@ another thread-safe type. `async.Atomic<String>` is a compile error at
 
 **Example**
 ```pepper
-    main(): int {
-        var counter = async.Atomic<long>(0);
-        var before = counter.fetch_add(5);   # before == 0
-        if (counter.load() != 5) { return 1; }
-        return 0;
-    }
+main(): int {
+    var counter = async.Atomic<long>(0);
+    var before = counter.fetch_add(5);   # before == 0
+    if (counter.load() != 5) { return 1; }
+    return 0;
+}
 ```
 
 ### Constructor
@@ -58,8 +58,8 @@ For a struct `T` the Atomic acquires a reference to `value`.
 
 **Example**
 ```pepper
-    var a = async.Atomic<int>(41);
-    var p = async.Atomic<Point>();   # holds null until a store
+var a = async.Atomic<int>(41);
+var p = async.Atomic<Point>();   # holds null until a store
 ```
 
 ### Methods
@@ -118,10 +118,10 @@ failure no reference count changes.
 
 **Example**
 ```pepper
-    var cur = counter.load();
-    while (!counter.compare_exchange(cur, cur + 1)) {
-        cur = counter.load();
-    }
+var cur = counter.load();
+while (!counter.compare_exchange(cur, cur + 1)) {
+    cur = counter.load();
+}
 ```
 
 #### exchange
@@ -145,8 +145,8 @@ acquires `v`, and the caller owns the returned reference.
 
 **Example**
 ```pepper
-    var e = async.Atomic<int>(1);
-    var old = e.exchange(2);   # old == 1, e.load() == 2
+var e = async.Atomic<int>(1);
+var old = e.exchange(2);   # old == 1, e.load() == 2
 ```
 
 #### is_lock_free
@@ -186,8 +186,8 @@ program when it runs.
 
 **Example**
 ```pepper
-    var c = async.Atomic<long>(10);
-    var old = c.fetch_add(5);   # old == 10, c.load() == 15
+var c = async.Atomic<long>(10);
+var old = c.fetch_add(5);   # old == 10, c.load() == 15
 ```
 
 #### fetch_sub

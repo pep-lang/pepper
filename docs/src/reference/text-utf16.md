@@ -19,11 +19,11 @@ is written, and one read is kept as part of the text.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var bytes = text.Utf16.encode("hi");
-    assert(bytes.count == 4 && bytes[0] == 104 && bytes[1] == 0, "little-endian");
-    assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
+var bytes = text.Utf16.encode("hi");
+assert(bytes.count == 4 && bytes[0] == 104 && bytes[1] == 0, "little-endian");
+assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 ```
 
 ### Static methods

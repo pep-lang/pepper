@@ -17,10 +17,10 @@ holds UTF-8, so encoding copies its bytes; decoding checks them.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var bytes = text.Utf8.encode("hi");
-    assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
+var bytes = text.Utf8.encode("hi");
+assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 ```
 
 ### Static methods
@@ -72,11 +72,11 @@ Decodes `bytes` as UTF-8, or gives none when they are not valid UTF-8
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var bad = Array<u8>();
-    bad.append(255);
-    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
+var bad = Array<u8>();
+bad.append(255);
+assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
 ```
 
 #### decode_lossy
@@ -97,13 +97,13 @@ the same text as `decode`.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var data = Array<u8>();
-    data.append(104);
-    data.append(255);
-    data.append(105);
-    assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
+var data = Array<u8>();
+data.append(104);
+data.append(255);
+data.append(105);
+assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
 ```
 
 #### find_invalid
@@ -125,9 +125,9 @@ from C memory may not be.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
+assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
 ```
 
 #### code_point_at
@@ -152,10 +152,10 @@ of `value`.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var (point, run) = text.Utf8.code_point_at("é!", 0);
-    assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+var (point, run) = text.Utf8.code_point_at("é!", 0);
+assert(point == 233 and run == 2, "U+00E9 takes two bytes");
 ```
 
 #### append_code_point
@@ -176,9 +176,9 @@ Appends the UTF-8 encoding of `code_point`, from 1 to 4 bytes, to
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    var out = Array<u8>();
-    text.Utf8.append_code_point(out, 8364);
-    assert(text.Utf8.decode(out).value() == "€", "U+20AC");
+var out = Array<u8>();
+text.Utf8.append_code_point(out, 8364);
+assert(text.Utf8.decode(out).value() == "€", "U+20AC");
 ```

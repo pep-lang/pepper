@@ -8,7 +8,7 @@ main(): int {
     assert(message == "Hello, Pepper", "concatenation");
     assert(message != language, "different contents");
 
-    # Strings are UTF-8. length() counts code points, size() counts bytes.
+    # Strings are UTF-8. `length` counts code points, `size` counts bytes.
     var word = "héllo";
     assert(word.length == 5, "5 code points");
     assert(word.size == 6, "6 bytes: 'é' takes 2");

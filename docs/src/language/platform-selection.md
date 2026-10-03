@@ -40,9 +40,9 @@ item, such as `[Link(...)]`, do not affect the selection.
 ## What it applies to
 
 Put `[Target(...)]` before any top-level declaration: a function, an `extern`,
-a struct, a trait, an extension, a type alias, a module-scope variable, an
-`import`, or a re-export. It also works on the methods inside a struct, trait
-or extension. When two declarations share a name, give them conditions that
+a struct, an enum, a trait, an extension, a type alias, a module-scope
+variable, an `import`, or a re-export. It also works on the methods inside a
+struct, trait or extension, and on an enum's cases. When two declarations share a name, give them conditions that
 never match on the same platform, so exactly one survives:
 
 ```pepper
@@ -87,12 +87,13 @@ platform, even one inside removed code. A misspelled value is always an error,
 never a silent "no match":
 
 ```pepper
-[Target(OS(Darwin))] f(): int { return 1; }
+[Target(OS(Darwin))]
+f(): int { return 1; }
 ```
 
 ```text
 main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
-    1 | [Target(OS(Darwin))] f(): int { return 1; }
+    1 | [Target(OS(Darwin))]
       | ^~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -131,7 +132,7 @@ other triple is an error that lists these. `wasm32-wasi`,
 `wasm32-unknown-wasi` and `wasm32-unknown-wasip1` all mean `wasm32-wasip1`.
 
 ```sh
-pep-build --target aarch64-unknown-linux-gnu main.pep -o main
+pepper build --target aarch64-unknown-linux-gnu main.pep -o main
 ```
 
 Linking an executable for another platform needs that platform's system

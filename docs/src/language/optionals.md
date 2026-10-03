@@ -110,6 +110,7 @@ than a sentinel value:
 | `io.Path.extension()` | `String?` | there is no file name, or the name has no dot after its first character (`Makefile`, `.bashrc`); `foo.` has the empty extension `""` |
 | `io.Path.dot_index(name)` | `ulong?` | `name` has no dot after its first character |
 | `http.Headers.get(name)` | `String?` | no field has that name |
+| `HashMap<K, V>.try_get(key)` (and `Map`, `OrderedMap`) | `V?` | `key` is absent |
 
 ```pepper
 {{#include ../../examples/optionals-library.pep}}
@@ -134,5 +135,6 @@ error.
 ## Current limits
 
 - Some runtime APIs still use null references, default values or sentinels
-  for "missing": a `HashMap` returns the default value for a missing key,
-  and `String.find` returns `-1`, for example.
+  for "missing": a `HashMap`'s `get` (and indexer) returns the default value
+  for a missing key (use `try_get` for an optional), and `String.find`
+  returns `-1`, for example.

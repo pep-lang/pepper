@@ -69,7 +69,8 @@ includes `b`. Looping over one is how you count:
   there without overflowing.
 - **A range is a value**, a [`Range<T>`](../reference/range.md). It has
   `contains(x)` and the `is_empty` property, and it is an `Iterator<T>`, so it has the
-  [adapters](#adapters) `map` and `filter`. Looping over one allocates
+  [adapters](#adapters) (`map`, `filter`, `enumerate`, `zip`) and
+  `to_array()`. Looping over one allocates
   nothing; the optimizer turns it into a plain counting loop.
 
 ## The iterator protocol
@@ -81,8 +82,8 @@ reference):
 
 ```pepper
 export trait Iterator<T> {
-    bool next();     # advance; true if there is a current element
-    T current();     # the element next() just moved to
+    next(): bool;    # advance; true if there is a current element
+    current(): T;    # the element next() just moved to
 }
 
 export trait Iterable<T> {
@@ -212,7 +213,8 @@ Some things to keep in mind:
   `current()` (see [Traits and extensions](traits-and-extensions.md)).
   Declaring it also lets the type be used as an `Iterator<int>` value, and a
   `for` loop over such a value calls the methods through the trait. It also
-  gives the type the [adapters](#adapters) `map` and `filter`.
+  gives the type the [adapters](#adapters) (`map`, `filter`, `enumerate`,
+  `zip`) and `to_array()`.
 - **Looping over an iterator uses it up.** When the source is itself an
   iterator stored in a variable, the loop drives that variable in place, so
   it is exhausted afterwards, and a loop left with `break` can be resumed by

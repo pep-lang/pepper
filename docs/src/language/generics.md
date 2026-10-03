@@ -5,7 +5,7 @@ Add type parameters in angle brackets after the name, then use them like any
 other type name. The standard library's [`Array<T>`](../reference/array.md),
 [`HashMap<K, V>`](../reference/hash.md), and
 [`Result<TValue, TError>`](../reference/result.md) are all ordinary generic
-structs written this way.
+types written this way (`Result` is a generic [enum](enums.md)).
 
 Pepper generics work like C++ templates: each distinct set of type arguments,
 such as `Stack<int>` or `Stack<String>`, produces its own copy of the code,
@@ -114,7 +114,7 @@ that argument out, the default fills it in:
 ```
 
 Arguments are matched to parameters in order, so put the parameters that have
-defaults last. The standard library declares `struct Result<TValue, TError=Error>`, so
+defaults last. The standard library declares `enum Result<TValue, TError=Error>`, so
 `Result<int>` means `Result<int, Error>`. See
 [Error handling with Result](results.md).
 

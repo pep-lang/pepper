@@ -39,29 +39,29 @@ A Select is not `[Shared]`: use it from the thread (or task) that made it.
 
 **Example**
 ```pepper
-    enum Event {
-        Job(job: Job),
-        Tick(count: long),
-        Stop,
-    }
+enum Event {
+    Job(job: Job),
+    Tick(count: long),
+    Stop,
+}
 
-    var select = async.Select<Event>();
-    select.receive(jobs, (job: Job): Event => Event.Job(job));
-    select.receive(ticks, (count: long): Event => Event.Tick(count));
-    select.receive(quit, (stop: bool): Event => Event.Stop);
-    var running = true;
-    while (running) {
-        match (select.wait()) {
-            Ok(event) => {
-                match (event) {
-                    Job(job) => { run(job); }
-                    Tick(count) => { report(count); }
-                    Stop => { running = false; }
-                }
+var select = async.Select<Event>();
+select.receive(jobs, (job: Job): Event => Event.Job(job));
+select.receive(ticks, (count: long): Event => Event.Tick(count));
+select.receive(quit, (stop: bool): Event => Event.Stop);
+var running = true;
+while (running) {
+    match (select.wait()) {
+        Ok(event) => {
+            match (event) {
+                Job(job) => { run(job); }
+                Tick(count) => { report(count); }
+                Stop => { running = false; }
             }
-            Err(error) => { running = false; }   # every channel closed
         }
+        Err(error) => { running = false; }   # every channel closed
     }
+}
 ```
 
 ### Constructor
@@ -94,7 +94,7 @@ those `wait()` returns.
 
 **Example**
 ```pepper
-    select.receive(lines, (line: String): Event => Event.Line(line));
+select.receive(lines, (line: String): Event => Event.Line(line));
 ```
 
 #### wait

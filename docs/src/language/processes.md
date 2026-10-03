@@ -32,6 +32,14 @@ and returns an `Output`: the `status` it ended with, and the text it wrote to
   not exist). A program that runs and fails is a successful result whose
   `status` says so.
 
+`exec()` runs the program in place of the running one, as a shell's `exec`
+does: the program's exit status becomes this process's own, and `exec()`
+returns only when the program cannot be started, with the error. On POSIX
+the program takes over the process; Windows cannot replace a process, so
+there the program is started, waited for, and its exit status passed on.
+Output that `print` buffered is flushed first, and the standard streams must
+stay inherited (otherwise the error has `is_invalid_input()`).
+
 ## Exit status
 
 `ExitStatus.success()` is true for exit code 0. `code()` returns the exit

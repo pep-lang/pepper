@@ -33,22 +33,22 @@ freely.
 
 **Example**
 ```pepper
-    struct Child {
-        Weak<Parent> owner;
+struct Child {
+    Weak<Parent> owner;
 
-        construct(Parent owner) {
-            this.owner = Weak<Parent>(owner);
-        }
-
-        String owner_name() {
-            with (var parent = this.owner) {
-                return parent.name;
-            } else {
-                return "(gone)";
-            }
-            return "";
-        }
+    construct(Parent owner) {
+        this.owner = Weak<Parent>(owner);
     }
+
+    String owner_name() {
+        with (var parent = this.owner) {
+            return parent.name;
+        } else {
+            return "(gone)";
+        }
+        return "";
+    }
+}
 ```
 
 ### Constructor

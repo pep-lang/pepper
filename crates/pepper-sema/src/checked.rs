@@ -1,5 +1,5 @@
 //! Checking a program against declarations already checked (a reused,
-//! checked runtime; see `design-notes/sema/canonical-specialization.md`):
+//! checked runtime):
 //! their bodies are kept out of the passes, which walk bodies, until the
 //! checks that read callee bodies (`check_confinement`) run, then put back.
 

@@ -48,27 +48,27 @@ not end the wait for the lock.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    [Shared]
-    struct Account {
-        const checking: Atomic<long>;
-        const savings: Atomic<long>;
-        construct(long checking = 0, long savings = 0) {
-            this.checking = Atomic<long>(checking);
-            this.savings = Atomic<long>(savings);
-        }
+[Shared]
+struct Account {
+    const checking: Atomic<long>;
+    const savings: Atomic<long>;
+    construct(long checking = 0, long savings = 0) {
+        this.checking = Atomic<long>(checking);
+        this.savings = Atomic<long>(savings);
     }
+}
 
-    const account = async.Mutex<Account>(Account(100, 0));
+const account = async.Mutex<Account>(Account(100, 0));
 
-    save(long amount) {
-        with (var a = account.lock()) {
-            # No other thread sees the money in neither account.
-            a.checking.fetch_sub(amount);
-            a.savings.fetch_add(amount);
-        }
+save(long amount) {
+    with (var a = account.lock()) {
+        # No other thread sees the money in neither account.
+        a.checking.fetch_sub(amount);
+        a.savings.fetch_add(amount);
     }
+}
 ```
 
 ### Constructor
@@ -93,7 +93,7 @@ its reference over, so nothing is copied.
 
 **Example**
 ```pepper
-    const names = async.Mutex<Array<String>>(Array<String>());
+const names = async.Mutex<Array<String>>(Array<String>());
 ```
 
 ### Methods
@@ -120,9 +120,9 @@ else holds the lock until its last reference is released.
 
 **Example**
 ```pepper
-    with (var account = accounts.lock()) {
-        account.balance.fetch_add(10);
-    }
+with (var account = accounts.lock()) {
+    account.balance.fetch_add(10);
+}
 ```
 
 #### try_lock
@@ -142,11 +142,11 @@ calling thread already holding the lock counts as busy.
 
 **Example**
 ```pepper
-    with (var account = accounts.try_lock()) {
-        account.balance.fetch_add(10);
-    } else {
-        print("busy; try later\n");
-    }
+with (var account = accounts.try_lock()) {
+    account.balance.fetch_add(10);
+} else {
+    print("busy; try later\n");
+}
 ```
 
 #### replace
@@ -172,7 +172,7 @@ the constructor, and is handed over without a copy.
 
 **Example**
 ```pepper
-    var done = pending.replace(Array<Job>());   # take every job at once
+var done = pending.replace(Array<Job>());   # take every job at once
 ```
 
 #### is_held
@@ -203,8 +203,8 @@ waits or notifies must use the same Condition.
 
 **Example**
 ```pepper
-    const queue = async.Mutex<Jobs>(Jobs());
-    const not_empty = queue.condition();
+const queue = async.Mutex<Jobs>(Jobs());
+const not_empty = queue.condition();
 ```
 
 ## MutexGuard
@@ -230,9 +230,9 @@ with the confinement rule (see `Mutex`).
 
 **Example**
 ```pepper
-    with (var totals = stats.lock()) {
-        totals.requests.fetch_add(1);
-    }   # unlocked here
+with (var totals = stats.lock()) {
+    totals.requests.fetch_add(1);
+}   # unlocked here
 ```
 
 ### Fields
@@ -317,32 +317,32 @@ cancel does not end it, since the caller's loop would only wait again;
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    [Shared]
-    struct Jobs {
-        const waiting: Atomic<long>;
-        construct() { waiting = Atomic<long>(0); }
-    }
+[Shared]
+struct Jobs {
+    const waiting: Atomic<long>;
+    construct() { waiting = Atomic<long>(0); }
+}
 
-    const jobs = async.Mutex<Jobs>(Jobs());
-    const has_work = jobs.condition();
+const jobs = async.Mutex<Jobs>(Jobs());
+const has_work = jobs.condition();
 
-    take_job() {
-        with (var j = jobs.lock()) {
-            while (j.waiting.load() == 0) {
-                has_work.wait();
-            }
-            j.waiting.fetch_sub(1);
+take_job() {
+    with (var j = jobs.lock()) {
+        while (j.waiting.load() == 0) {
+            has_work.wait();
         }
+        j.waiting.fetch_sub(1);
     }
+}
 
-    add_job() {
-        with (var j = jobs.lock()) {
-            j.waiting.fetch_add(1);
-            has_work.notify_one();
-        }
+add_job() {
+    with (var j = jobs.lock()) {
+        j.waiting.fetch_add(1);
+        has_work.notify_one();
     }
+}
 ```
 
 ### Constructor
@@ -381,11 +381,11 @@ that re-checks what it waits for.
 
 **Example**
 ```pepper
-    with (var q = queue.lock()) {
-        while (q.waiting.load() == 0) {
-            not_empty.wait();
-        }
+with (var q = queue.lock()) {
+    while (q.waiting.load() == 0) {
+        not_empty.wait();
     }
+}
 ```
 
 #### wait_for
@@ -432,10 +432,10 @@ value from outside.
 
 **Example**
 ```pepper
-    with (var queue = jobs.lock()) {
-        not_empty.wait_while((queue: Array<Job>): bool => queue.count == 0);
-        var job = queue.remove_at(0);
-    }
+with (var queue = jobs.lock()) {
+    not_empty.wait_while((queue: Array<Job>): bool => queue.count == 0);
+    var job = queue.remove_at(0);
+}
 ```
 
 #### wait_while_for

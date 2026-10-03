@@ -24,15 +24,15 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    main(): int {
-        var path = io.Directory.temp().join("greeting.txt");
-        assert(io.File.write_text(path, "hello").is_ok(), "write");
-        assert(io.File.read_to_string(path).value() == "hello", "read back");
-        io.File.remove(path);
-        return 0;
-    }
+main(): int {
+    var path = io.Directory.temp().join("greeting.txt");
+    assert(io.File.write_text(path, "hello").is_ok(), "write");
+    assert(io.File.read_to_string(path).value() == "hello", "read back");
+    io.File.remove(path);
+    return 0;
+}
 ```
 
 Source: `runtime/io/module.pep`

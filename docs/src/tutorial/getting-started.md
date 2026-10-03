@@ -59,7 +59,9 @@ Pepper source files end in `.pep`. Create a file named `hello.pep`:
 {{#include ../../examples/tutorial-hello.pep}}
 ```
 
-Every program starts at `main`, which takes no arguments and returns an `int`:
+Every program starts at `main`, which here takes no arguments and returns an
+`int` (it can also take the command-line arguments; see
+[Functions](../language/functions.md#command-line-arguments-and-exit)):
 the process's exit code, where 0 means success. `print` writes a value's text to
 standard output, followed by a new line. Comments start with `#` and run to
 the end of the line.

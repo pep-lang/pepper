@@ -675,7 +675,6 @@ export extend char {
     ## value, -128, has no positive counterpart in a `char`, so it panics, as
     ## its negation does.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns `-this` when this value is negative, else `this`
     ## @panics if this value is -128 ("integer overflow in 'char' absolute value")
     ## @example
@@ -1364,7 +1363,6 @@ export extend short {
     ## value, -32768, has no positive counterpart in a `short`, so it panics, as
     ## its negation does.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns `-this` when this value is negative, else `this`
     ## @panics if this value is -32768 ("integer overflow in 'short' absolute value")
     ## @example
@@ -1893,7 +1891,6 @@ export extend int {
     ## value, -2147483648, has no positive counterpart in a `int`, so it panics, as
     ## its negation does.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns `-this` when this value is negative, else `this`
     ## @panics if this value is -2147483648 ("integer overflow in 'int' absolute value")
     ## @example
@@ -2421,7 +2418,6 @@ export extend long {
     ## value, -9223372036854775808, has no positive counterpart in a `long`, so it panics, as
     ## its negation does.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns `-this` when this value is negative, else `this`
     ## @panics if this value is -9223372036854775808 ("integer overflow in 'long' absolute value")
     ## @example

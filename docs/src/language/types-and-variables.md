@@ -230,10 +230,10 @@ pointers in full.
 ## Naming conventions
 
 Primitive types and keywords are lowercase: `int`, `float`, `bool`, `var`,
-`while`. Structs, including the ones the runtime provides, are PascalCase:
-`String`, `Array<T>`, `HashMap<K, V>`, `Result<TValue, TError>`. Follow the same
-convention for your own structs. Functions and variables are usually written in
-`snake_case`.
+`while`. Types, including the ones the runtime provides, are PascalCase:
+`String`, `Array<T>`, `HashMap<K, V>`, `Result<TValue, TError>`. Functions,
+variables and fields are `snake_case`, and constants are `SCREAMING_CASE`.
+[Naming conventions](naming.md) has the full rules.
 
 Identifiers are made of ASCII letters, digits and underscores, and cannot start
 with a digit. Avoid names that start with two underscores: the compiler and
@@ -393,7 +393,7 @@ conversions"), so code ported from C gives the same results:
 - **Division** of integers truncates toward zero (`-7 / 2` is -3), and `%` takes
   the sign of the left operand (`-7 % 3` is -1).
 - **Conditionals.** `c ? a : b` with numeric arms of different types has
-  their common type by the same rules (`c ? 0 : s.length` is a `long`), and
+  their common type by the same rules (`c ? 0 : s.length` is a `ulong`), and
   so does a [`match` expression](enums.md#match-expressions-is-and-literal-patterns)
   over its arms. The value converts from that type wherever it goes.
 - **Shifts** take the type of the (promoted) left operand. `>>` keeps the sign for
@@ -450,7 +450,7 @@ type has methods that say what to do on overflow instead of panicking:
 | Method | On overflow |
 |---|---|
 | `wrapping_add(x)`, `wrapping_sub(x)`, `wrapping_mul(x)` | Wraps around: the result modulo 2^bits. |
-| `checked_add(x)`, `checked_sub(x)`, `checked_mul(x)` | Returns none (the result is a `T?`). |
+| `checked_add(x)`, `checked_sub(x)`, `checked_mul(x)` | Returns Empty (the result is a `T?`). |
 | `saturating_add(x)`, `saturating_sub(x)`, `saturating_mul(x)` | Clamps to the type's highest or lowest value. |
 | `overflowing_add(x)`, `overflowing_sub(x)`, `overflowing_mul(x)` | Returns the wrapped result and `true` as a `(T, bool)`. |
 
@@ -459,7 +459,7 @@ type has methods that say what to do on overflow instead of panicking:
 ```
 
 The methods work at their type's own width: `byte 200.checked_add(100)` is
-none, while `200 + 100` on two `byte`s is 300 at `int`.
+Empty, while `200 + 100` on two `byte`s is 300 at `int`.
 
 ### Removing the checks
 
@@ -572,20 +572,22 @@ Operators bind in this order, tightest first:
 
 1. Postfix: calls `f(x)`, indexing `a[i]`, member access `a.b`, `x++`, `x--`
 2. `**`
-3. `as`
+3. `as`, `as?`
 4. Unary `+`, `-`, `!`, `~`
 5. Prefix `++`, `--`
 6. `*`, `/`, `%`
 7. `+`, `-`
 8. `<<`, `>>`
-9. `<`, `<=`, `>`, `>=`
-10. `==`, `!=`, `===`, `!==`
-11. `&`
-12. `|`, `^`
-13. `&&`, `and`
-14. `||`, `or`
-15. `? :`
-16. `=` and the compound assignments (right-associative)
+9. `..`, `..>` (ranges; not associative)
+10. `is`
+11. `<`, `<=`, `>`, `>=`
+12. `==`, `!=`, `===`, `!==`
+13. `&`
+14. `|`, `^`
+15. `&&`, `and`
+16. `||`, `or`
+17. `? :`
+18. `=` and the compound assignments (right-associative)
 
 As in C, `&` binds more loosely than `==`, so write `(flags & mask) == mask`
 with the parentheses.

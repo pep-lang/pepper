@@ -20,10 +20,10 @@ have no defined order, as HTTP allows.
 
 **Example**
 ```pepper
-    var headers = http.Headers();
-    headers.add("Accept", "text/html");
-    headers["accept"] = "application/json";   # replaces it
-    assert(headers["ACCEPT"] == "application/json", "one value");
+var headers = http.Headers();
+headers.add("Accept", "text/html");
+headers["accept"] = "application/json";   # replaces it
+assert(headers["ACCEPT"] == "application/json", "one value");
 ```
 
 ### Properties
@@ -183,8 +183,8 @@ full.
 
 **Example**
 ```pepper
-    var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
-    request.headers["Content-Type"] = "application/x-www-form-urlencoded";
+var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
+request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 ```
 
 ### Fields
@@ -335,11 +335,11 @@ server adds `Content-Length` itself.
 
 **Example**
 ```pepper
-    handle(request: http.Request): http.Response {
-        var response = http.Response(200).set_text("hello");
-        response.headers["Content-Type"] = "text/plain";
-        return response;
-    }
+handle(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello");
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
 ```
 
 ### Fields

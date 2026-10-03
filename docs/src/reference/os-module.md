@@ -21,15 +21,15 @@ environment variables, clocks and time, and the machine and user.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var start = os.Instant.now();
-        var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
-        print($"runtime at {runtime} on {os.hostname()}");
-        print($"took {os.Instant.now() - start}");
-        return 0;
-    }
+main(): int {
+    var start = os.Instant.now();
+    var runtime = os.environment("PEPPER_RUNTIME").value_or("runtime");
+    print($"runtime at {runtime} on {os.hostname()}");
+    print($"took {os.Instant.now() - start}");
+    return 0;
+}
 ```
 
 Source: `runtime/os/module.pep`

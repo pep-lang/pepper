@@ -5,8 +5,8 @@ Pepper has no inheritance. Instead, you add behavior to a type with an
 *trait*. Extensions can be written anywhere, so you can add methods to a
 library type, such as `String`, from your own code.
 
-A trait is also a type: a value of type `Shape` holds any struct that has the
-`Shape` trait, and calls its methods (see [Traits as types](#traits-as-types)).
+A trait is also a type: a value of type `Shape` holds any struct, or enum
+whose cases carry values, that has the `Shape` trait, and calls its methods (see [Traits as types](#traits-as-types)).
 
 ## Extensions
 
@@ -193,8 +193,9 @@ the value:
 ### Traits as types
 
 A trait's name is also a type. A variable, parameter, field, return value, or
-collection element of type `Shape` holds any struct that declares `Shape`, and
-calling a method on it runs that struct's own method:
+collection element of type `Shape` holds any struct, or enum whose cases
+carry values, that declares `Shape`, and calling a method on it runs that
+type's own method:
 
 ```pepper
 {{#include ../../examples/traits-values.pep}}

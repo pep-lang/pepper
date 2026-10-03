@@ -18,9 +18,9 @@ signal.
 
 **Example**
 ```pepper
-    var status = process.Command("false").run().value().status;
-    assert(!status.success(), "false fails");
-    assert(status.code().value() == 1, "with code 1");
+var status = process.Command("false").run().value().status;
+assert(!status.success(), "false fails");
+assert(status.code().value() == 1, "with code 1");
 ```
 
 ### Constructor
@@ -104,15 +104,15 @@ a Child neither waits for it nor kills it; the process runs on.
 
 **Example**
 ```pepper
-    import process;
+import process;
 
-    main(): int {
-        var child = process.Command("sleep").argument("10").spawn().value();
-        child.kill();
-        var status = child.wait().value();
-        assert(!status.success(), "killed");
-        return 0;
-    }
+main(): int {
+    var child = process.Command("sleep").argument("10").spawn().value();
+    child.kill();
+    var status = child.wait().value();
+    assert(!status.success(), "killed");
+    return 0;
+}
 ```
 
 ### Constructor

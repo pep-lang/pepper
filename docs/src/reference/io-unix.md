@@ -40,15 +40,15 @@ on Windows).
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var path = io.Directory.temp().join("server.sock");
-    io.File.remove(path);   # left over from an earlier run
-    var listener = io.UnixListener.bind(path).value();
-    while (true) {
-        var stream = listener.accept().value();
-        stream.write_all("hello");
-    }
+var path = io.Directory.temp().join("server.sock");
+io.File.remove(path);   # left over from an earlier run
+var listener = io.UnixListener.bind(path).value();
+while (true) {
+    var stream = listener.accept().value();
+    stream.write_all("hello");
+}
 ```
 
 ### Constructor
@@ -145,24 +145,24 @@ goes. The socket file stays.
 
 **Example**
 ```pepper
-    import async;
-    import io;
+import async;
+import io;
 
-    main(): int {
-        async.run(() => {
-            var listener = io.SharedUnixListener.bind(io.Path("/tmp/server.sock")).value();
-            async.spawn_on_each_worker(() => {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    accepted.value().write_all("hello");
+main(): int {
+    async.run(() => {
+        var listener = io.SharedUnixListener.bind(io.Path("/tmp/server.sock")).value();
+        async.spawn_on_each_worker(() => {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
+                accepted.value().write_all("hello");
+            }
         });
-        return 0;
-    }
+    });
+    return 0;
+}
 ```
 
 ### Constructor
@@ -237,12 +237,12 @@ closed stream fails with an error no `IoError` predicate identifies.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
-    stream.write_all("ping");
-    var reply = Array<u8>();
-    stream.read_exact(reply, 4).value();
+var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
+stream.write_all("ping");
+var reply = Array<u8>();
+stream.read_exact(reply, 4).value();
 ```
 
 ### Constructor
@@ -381,7 +381,7 @@ No newline or terminator is added.
 
 **Example**
 ```pepper
-    stream.write_all("ping");
+stream.write_all("ping");
 ```
 
 #### write_string

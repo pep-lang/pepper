@@ -70,20 +70,20 @@ compile error naming the property:
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct Point {
-        var x: int;
-        var y: int;
-    }
+struct Point {
+    var x: int;
+    var y: int;
+}
 
-    main(): int {
-        var p = Point();
-        p.x = 1;
-        p.y = 2;
-        assert(json.to_json(p)["y"].as_int().value() == 2, "a member");
-        return 0;
-    }
+main(): int {
+    var p = Point();
+    p.x = 1;
+    p.y = 2;
+    assert(json.to_json(p)["y"].as_int().value() == 2, "a member");
+    return 0;
+}
 ```
 
 ## encode
@@ -107,26 +107,26 @@ Writes `value` as JSON text, converting it as `to_json` does.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct ServerConfig {
-        var host: String;
-        var port: int;
-        [Name("max-connections")]
-        var max_connections: int;
-        [Ignore]
-        var started_at: long;
-    }
+struct ServerConfig {
+    var host: String;
+    var port: int;
+    [Name("max-connections")]
+    var max_connections: int;
+    [Ignore]
+    var started_at: long;
+}
 
-    main(): int {
-        var config = ServerConfig();
-        config.host = "localhost";
-        config.port = 8080;
-        config.max_connections = 16;
-        var text = json.encode(config);
-        assert(text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16}", "compact");
-        return 0;
-    }
+main(): int {
+    var config = ServerConfig();
+    config.host = "localhost";
+    config.port = 8080;
+    config.max_connections = 16;
+    var text = json.encode(config);
+    assert(text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16}", "compact");
+    return 0;
+}
 ```
 
 ## from_json
@@ -165,19 +165,19 @@ a string`.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct Point {
-        var x: int;
-        var y: int;
-    }
+struct Point {
+    var x: int;
+    var y: int;
+}
 
-    main(): int {
-        var parsed = json.parse("{\"x\": 1, \"y\": 2}");
-        var p = json.from_json<Point>(parsed.value());
-        assert(p.value().y == 2, "a property");
-        return 0;
-    }
+main(): int {
+    var parsed = json.parse("{\"x\": 1, \"y\": 2}");
+    var p = json.from_json<Point>(parsed.value());
+    assert(p.value().y == 2, "a property");
+    return 0;
+}
 ```
 
 ## decode
@@ -202,24 +202,24 @@ Parses JSON text and converts it to a `T`: `parse`, then `from_json`.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct ServerConfig {
-        var host: String;
-        [Required]
-        var port: int;
-        var tags: Array<String>;
-        var timeout: int?;
-    }
+struct ServerConfig {
+    var host: String;
+    [Required]
+    var port: int;
+    var tags: Array<String>;
+    var timeout: int?;
+}
 
-    main(): int {
-        var config = json.decode<ServerConfig>("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
-        assert(config.value().port == 80, "a number");
-        assert(config.value().tags[0] == "x", "an array");
-        assert(config.value().timeout.is_empty(), "a missing optional");
+main(): int {
+    var config = json.decode<ServerConfig>("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
+    assert(config.value().port == 80, "a number");
+    assert(config.value().tags[0] == "x", "an array");
+    assert(config.value().timeout.is_empty(), "a missing optional");
 
-        var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
-        assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
-        return 0;
-    }
+    var bad = json.decode<ServerConfig>("{\"port\": \"80\"}", path = "server.json");
+    assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
+    return 0;
+}
 ```

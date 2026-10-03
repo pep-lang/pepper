@@ -1,3 +1,6 @@
+## Hashing: `hash<T>(value)`, the 64-bit hash `HashMap` and `HashSet` use for
+## their keys, and the hash maps and sets themselves.
+
 import "internals";
 
 # ── Generic hash ─────────────────────────────────────────────────────────────

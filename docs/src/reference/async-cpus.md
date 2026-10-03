@@ -28,12 +28,12 @@ a virtual machine or container it counts the processors the guest sees.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    main(): int {
-        print(async.logical_cpus(), " logical processors\n");
-        return 0;
-    }
+main(): int {
+    print(async.logical_cpus(), " logical processors\n");
+    return 0;
+}
 ```
 
 ## physical_cpus

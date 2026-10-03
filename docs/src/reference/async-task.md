@@ -191,16 +191,16 @@ returns.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    main(): int {
-        async.run(() => {
-            var a = async.Task<int>.spawn_local(() => { return 20; });
-            var b = async.Task<int>.spawn_local(() => { return 22; });
-            print(a.join().value() + b.join().value());   # 42
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() => {
+        var a = async.Task<int>.spawn_local(() => { return 20; });
+        var b = async.Task<int>.spawn_local(() => { return 22; });
+        print(a.join().value() + b.join().value());   # 42
+    });
+    return 0;
+}
 ```
 
 ### Constructor
@@ -297,19 +297,19 @@ still running are cancelled (see `Task.cancel`), on every worker, and
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    main(): int {
-        async.run(() => {
-            var t = async.Task<void>.spawn_local(() => {
-                async.sleep(10);
-                print("second");
-            });
-            print("first");
-            t.join();
+main(): int {
+    async.run(() => {
+        var t = async.Task<void>.spawn_local(() => {
+            async.sleep(10);
+            print("second");
         });
-        return 0;
-    }
+        print("first");
+        t.join();
+    });
+    return 0;
+}
 ```
 
 ## run_with
@@ -358,26 +358,26 @@ cancelling work as for `spawn_local`.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    sum(from: long, to: long): long {
-        var total: long = 0;
-        var i = from;
-        while (i < to) {
-            total = total + i;
-            i = i + 1;
-        }
-        return total;
+sum(from: long, to: long): long {
+    var total: long = 0;
+    var i = from;
+    while (i < to) {
+        total = total + i;
+        i = i + 1;
     }
+    return total;
+}
 
-    main(): int {
-        async.run(() => {
-            var low = async.spawn<long>(() => { return sum(0, 500000); });
-            var high = async.spawn<long>(() => { return sum(500000, 1000000); });
-            print(low.join().value() + high.join().value());   # 499999500000
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() => {
+        var low = async.spawn<long>(() => { return sum(0, 500000); });
+        var high = async.spawn<long>(() => { return sum(500000, 1000000); });
+        print(low.join().value() + high.join().value());   # 499999500000
+    });
+    return 0;
+}
 ```
 
 ## spawn_on_each_worker
@@ -404,30 +404,30 @@ a `shared` function.
 
 **Example**
 ```pepper
-    import async;
-    import io;
+import async;
+import io;
 
-    main(): int {
-        async.run(() => {
-            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
-            var loops = async.spawn_on_each_worker(() => {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    var (stream, peer) = accepted.value();
-                    async.Task<void>.spawn_local(() => {
-                        stream.write_all("hello");
-                    });
+main(): int {
+    async.run(() => {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+        var loops = async.spawn_on_each_worker(() => {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
-            for (var loop in loops) {
-                loop.join();
+                var (stream, peer) = accepted.value();
+                async.Task<void>.spawn_local(() => {
+                    stream.write_all("hello");
+                });
             }
         });
-        return 0;
-    }
+        for (var loop in loops) {
+            loop.join();
+        }
+    });
+    return 0;
+}
 ```
 
 ## run_blocking
@@ -464,23 +464,23 @@ Outside a task, `run_blocking` just calls `body`.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    main(): int {
-        async.run(() => {
-            var ticker = async.Task<void>.spawn_local(() => {
-                async.sleep(10);
-                print("the worker kept running");
-            });
-            var answer = async.run_blocking<int>(() => {
-                async.Thread.sleep(50);   # blocks a pool thread, not the worker
-                return 42;
-            });
-            print(answer);
-            ticker.join();
+main(): int {
+    async.run(() => {
+        var ticker = async.Task<void>.spawn_local(() => {
+            async.sleep(10);
+            print("the worker kept running");
         });
-        return 0;
-    }
+        var answer = async.run_blocking<int>(() => {
+            async.Thread.sleep(50);   # blocks a pool thread, not the worker
+            return 42;
+        });
+        print(answer);
+        ticker.join();
+    });
+    return 0;
+}
 ```
 
 ## yield_now
@@ -520,7 +520,7 @@ shorter than asked.
 
 **Example**
 ```pepper
-    async.sleep(os.Duration.from_seconds(1));
+async.sleep(os.Duration.from_seconds(1));
 ```
 
 ## is_cancelled
@@ -615,19 +615,19 @@ Returns a time limit for a `with` block: the waits inside it give up
 
 **Example**
 ```pepper
-    import async;
-    import io;
+import async;
+import io;
 
-    main(): int {
-        async.run(() => {
-            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-            with (var deadline = async.timeout(50)) {
-                var accepted = listener.accept();   # nobody connects
-                assert(accepted.error().is_timed_out(), "timed out");
-            }
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() => {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        with (var deadline = async.timeout(50)) {
+            var accepted = listener.accept();   # nobody connects
+            assert(accepted.error().is_timed_out(), "timed out");
+        }
+    });
+    return 0;
+}
 ```
 
 ## current_backend

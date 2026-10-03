@@ -315,7 +315,12 @@ An import or a re-export may carry attributes like any declaration. With a
 elsewhere (see [Platform selection](platform-selection.md)):
 
 ```pepper
-[Target(OS(Linux))] import linux;
-[Target(OS(Linux))] export linux_open as open;
-[Target(OS(Windows))] export * from "windows";
+[Target(OS(Linux))]
+import linux;
+
+[Target(OS(Linux))]
+export linux_open as open;
+
+[Target(OS(Windows))]
+export * from "windows";
 ```

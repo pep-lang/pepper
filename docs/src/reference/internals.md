@@ -2,12 +2,14 @@
 
 # Built-in functions
 
+`assert` and `panic`, which every program can call without an import.
+
 Source: `runtime/internals.pep`
 
 ## assert
 
 ```pepper
-assert(condition: bool, message: String, location: __ptr<char> = __caller_location())
+assert(condition: bool, message: String)
 ```
 
 Panics with `message` when `condition` is false; otherwise does nothing.
@@ -19,20 +21,19 @@ builds no `String`. Any other message is evaluated before the call.
 **Parameters**
 - `condition` — the condition that must hold
 - `message` — the text to print on failure; a null `String` prints a generic message
-- `location` — where the failure is reported, `file:line:col`; leave it out to report this call (see `panic`)
 
 **Panics**
 - if `condition` is false: prints the location and `message`, and aborts (see `panic`)
 
 **Example**
 ```pepper
-    assert(count > 0, "count must be positive");
+assert(count > 0, "count must be positive");
 ```
 
 ## assert
 
 ```pepper
-assert(condition: bool, message: __ptr<char>, location: __ptr<char> = __caller_location())
+assert(condition: bool, message: __ptr<char>)
 ```
 
 Checks that `condition` holds; if not, panics with `message`, a
@@ -42,25 +43,22 @@ so an assertion that holds builds no `String`.
 **Parameters**
 - `condition` — the condition that must hold
 - `message` — the text to print on failure, or `__null` for a generic message
-- `location` — where the failure is reported, `file:line:col`; leave it out to report this call (see `panic`)
 
 **Panics**
 - if `condition` is false: prints the location and `message`, and aborts (see `panic`)
 
 **Example**
 ```pepper
-    assert(count > 0, "count must be positive");
+assert(count > 0, "count must be positive");
 ```
 
 ## panic
 
 ```pepper
-panic(message: String, location: __ptr<char> = __caller_location())
+panic(message: String)
 ```
 
 Prints `message` and aborts the program. It never returns.
-
-Reports `message` as a panic and aborts.
 
 Flushes every C output stream, so output printed so far is not lost,
 then writes `location: panic: message` and a newline to standard error
@@ -68,11 +66,11 @@ then writes `location: panic: message` and a newline to standard error
 null), and calls C `abort()`. No destructors or releases run, and the
 process ends abnormally (SIGABRT on POSIX).
 
-`location` is `file:line:col`. Left out, it is this call's location, the
-way a C++ `std::source_location` default argument works. A function
-that panics on its caller's behalf takes a `location` parameter of its
-own with the same default and passes it on, so the panic names its
-caller's line:
+The location is the call's `file:line:col`, which the compiler passes
+in a hidden parameter, the way a C++ `std::source_location` default
+argument works. A function that panics on its caller's behalf, as the
+runtime's indexers do, declares that parameter itself and passes it on,
+so the panic names its caller's line:
 
     check_positive(value: int, location: __ptr<char> = __caller_location()) {
         if (value <= 0) {
@@ -82,20 +80,19 @@ caller's line:
 
 **Parameters**
 - `message` — the text to print
-- `location` — where the panic is reported, or `__null` for none
 
 **Panics**
 - always
 
 **Example**
 ```pepper
-    panic("unreachable");
+panic("unreachable");
 ```
 
 ## panic
 
 ```pepper
-panic(message: __ptr<char>, location: __ptr<char> = __caller_location())
+panic(message: __ptr<char>)
 ```
 
 Reports `message`, a NUL-terminated C string (a generic message when it
@@ -104,12 +101,11 @@ literal message picks this overload, so it allocates nothing.
 
 **Parameters**
 - `message` — the text to print, or `__null`
-- `location` — where the panic is reported, or `__null` for none; left out, this call's location
 
 **Panics**
 - always
 
 **Example**
 ```pepper
-    panic("unreachable");
+panic("unreachable");
 ```

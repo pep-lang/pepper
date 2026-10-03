@@ -17,19 +17,19 @@ in `main(args: String[])` and `process.arguments()`.
 
 **Example**
 ```pepper
-    import cli;
+import cli;
 
-    main(args: String[]): int {
-        var parser = cli.Parser("greet", "Greets someone");
-        var loud = parser.flag("loud", "l", "shout the greeting");
-        var name = parser.positional("name", "who to greet", required = false, default_value = "world");
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        var greeting = $"hello, {name.value()}";
-        print(loud.is_set ? greeting.upper() : greeting);
-        return 0;
+main(args: String[]): int {
+    var parser = cli.Parser("greet", "Greets someone");
+    var loud = parser.flag("loud", "l", "shout the greeting");
+    var name = parser.positional("name", "who to greet", required = false, default_value = "world");
+    if (!parser.parse(args)) {
+        return 2;
     }
+    var greeting = $"hello, {name.value()}";
+    print(loud.is_set ? greeting.upper() : greeting);
+    return 0;
+}
 ```
 
 Source: `runtime/cli/module.pep`

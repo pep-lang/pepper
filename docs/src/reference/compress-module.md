@@ -14,14 +14,14 @@ no zlib. Corrupt data is an `io.IoError` whose `is_invalid_input()` holds.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    main(): int {
-        var data = "to be or not to be, that is the question".bytes();
-        var packed = compress.Gzip.compress(data);
-        assert(compress.Gzip.decompress(packed).value() == data, "round trip");
-        return 0;
-    }
+main(): int {
+    var data = "to be or not to be, that is the question".bytes();
+    var packed = compress.Gzip.compress(data);
+    assert(compress.Gzip.decompress(packed).value() == data, "round trip");
+    return 0;
+}
 ```
 
 Source: `runtime/compress/module.pep`

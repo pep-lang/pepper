@@ -14,14 +14,14 @@ here are deprecated.
 
 **Example**
 ```pepper
-    import hint;
+import hint;
 
-    main(): int {
-        var text = "a long text that a loop will read";
-        hint.prefetch_read(text.c_str());
-        assert(text.length > 0, "a prefetch changes nothing");
-        return 0;
-    }
+main(): int {
+    var text = "a long text that a loop will read";
+    hint.prefetch_read(text.c_str());
+    assert(text.length > 0, "a prefetch changes nothing");
+    return 0;
+}
 ```
 
 Source: `runtime/hint/module.pep`
@@ -76,7 +76,7 @@ the CPU has no prefetch instruction.
 
 **Example**
 ```pepper
-    hint.prefetch_read(text.c_str());
+hint.prefetch_read(text.c_str());
 ```
 
 ## prefetch_write

@@ -63,22 +63,22 @@ outside. A `panic` or failed `assert` on any thread ends the whole program.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const total = Atomic<long>(0);
+const total = Atomic<long>(0);
 
-    add_ten() {
-        total.fetch_add(10);
-    }
+add_ten() {
+    total.fetch_add(10);
+}
 
-    main(): int {
-        var a = async.Thread.spawn(add_ten, "adder a");
-        var b = async.Thread.spawn(add_ten, "adder b");
-        a.join();
-        b.join();
-        assert(total.load() == 20, "both threads ran");
-        return 0;
-    }
+main(): int {
+    var a = async.Thread.spawn(add_ten, "adder a");
+    var b = async.Thread.spawn(add_ten, "adder b");
+    a.join();
+    b.join();
+    assert(total.load() == 20, "both threads ran");
+    return 0;
+}
 ```
 
 ### Constructor
@@ -122,8 +122,8 @@ The new thread starts right away and runs until `body` returns. Its
 
 **Example**
 ```pepper
-    var worker = Thread.spawn(do_work, "worker");
-    worker.join();
+var worker = Thread.spawn(do_work, "worker");
+worker.join();
 ```
 
 #### current
@@ -145,8 +145,8 @@ cannot be joined.
 
 **Example**
 ```pepper
-    var me = Thread.current();
-    print(me.name(), "\n");   # "main" on the main thread
+var me = Thread.current();
+print(me.name(), "\n");   # "main" on the main thread
 ```
 
 #### sleep

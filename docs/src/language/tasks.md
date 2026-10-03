@@ -246,12 +246,13 @@ program, for testing and benchmarks. `async.current_backend()` says which one is
 
 io_uring usually pays off as the amount of multiplexed I/O grows: many
 operations in flight, submitted and completed in batches through the ring
-rather than one system call each. Pepper's `IoUring` backend does not do
-that yet. It uses the ring only to learn when a socket is ready, then reads
-and writes with ordinary `recv` and `send` calls, as epoll does, so it makes
-the same number of system calls. In our echo benchmark it kept level with
+rather than one system call each. For sockets, Pepper's `IoUring` backend
+does not do that yet: it uses the ring only to learn when a socket is
+ready, then reads and writes with ordinary `recv` and `send` calls, as epoll
+does, so it makes the same number of system calls. (File reads and writes
+do go through the ring; see [Files](#files).) In our echo benchmark it kept level with
 epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
-the reads and writes themselves through the ring is future work.
+the socket reads and writes themselves through the ring is future work.
 
 ## Timeouts
 

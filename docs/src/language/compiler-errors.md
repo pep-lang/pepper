@@ -86,9 +86,14 @@ colored.
 
 Warnings do not stop the build, and the compiler prints them whether or not
 it also finds an error. Besides the linker's own warnings, which the compiler
-passes through (see [Linking](linking.md)), the warnings today are
-deprecations and a method whose parameter names differ from its trait's
-(see [Traits](traits-and-extensions.md#traits)).
+passes through (see [Linking](linking.md)), the warnings are: deprecations;
+a method whose parameter names differ from its trait's (see
+[Traits](traits-and-extensions.md#traits)); an `else` arm of a `match` that
+every case already handles (see [Enums](enums.md#match)); a comparison with
+a build option that is not defined (see
+[Build options](build-options.md#comparing-values)); and an `[Export]` that
+has no effect, or a `--lib` build that exports nothing (see
+[Calling Pepper from C](c-interop.md#calling-pepper-from-c)).
 
 ## Deprecations
 

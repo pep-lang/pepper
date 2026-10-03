@@ -37,34 +37,34 @@ has nothing to bind.
 
 **Example**
 ```pepper
-    var open = 0;
+var open = 0;
 
-    struct Session {
-        construct() {
-            open = open + 1;
-        }
-
-        destruct {
-            this.exit();
-        }
-
-        Session enter() {
-            return this;
-        }
-
-        exit() {
-            open = open - 1;
-        }
+struct Session {
+    construct() {
+        open = open + 1;
     }
 
-    extend Session with Scoped<Session>;
-
-    main(): int {
-        with (var session = Session()) {
-            # open == 1 here
-        }
-        return open;   # 0: the session was destroyed at the end of the block
+    destruct {
+        this.exit();
     }
+
+    Session enter() {
+        return this;
+    }
+
+    exit() {
+        open = open - 1;
+    }
+}
+
+extend Session with Scoped<Session>;
+
+main(): int {
+    with (var session = Session()) {
+        # open == 1 here
+    }
+    return open;   # 0: the session was destroyed at the end of the block
+}
 ```
 
 ### Methods

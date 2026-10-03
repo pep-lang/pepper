@@ -24,14 +24,14 @@ ids. `finish` resets the hasher, so it can hash a new input.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    # The id git gives an empty file ("blob 0" and a NUL byte).
-    u8[] nul = [0];
-    var hasher = digest.Sha1();
-    hasher.update("blob 0");
-    hasher.update(nul);
-    assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
+# The id git gives an empty file ("blob 0" and a NUL byte).
+u8[] nul = [0];
+var hasher = digest.Sha1();
+hasher.update("blob 0");
+hasher.update(nul);
+assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 ```
 
 ### Constructor
@@ -132,7 +132,7 @@ Returns the SHA-1 digest of the UTF-8 bytes of `text`.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d", "FIPS 180-4 example");
+assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d", "FIPS 180-4 example");
 ```

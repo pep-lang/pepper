@@ -22,14 +22,14 @@ the array while reading changes what is read.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var data = "one\ntwo\n".bytes();
-    var count = 0;
-    for (var line in io.ByteReader(data).lines()) {
-        count += 1;
-    }
-    assert(count == 2, "two lines");
+var data = "one\ntwo\n".bytes();
+var count = 0;
+for (var line in io.ByteReader(data).lines()) {
+    count += 1;
+}
+assert(count == 2, "two lines");
 ```
 
 ### Properties
@@ -83,12 +83,12 @@ A `Writer` that appends everything written to an array in memory,
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var out = io.ByteWriter();
-    out.print("n = ");
-    out.print_line(3);
-    assert(out.bytes == "n = 3\n".bytes(), "collected");
+var out = io.ByteWriter();
+out.print("n = ");
+out.print_line(3);
+assert(out.bytes == "n = 3\n".bytes(), "collected");
 ```
 
 ### Fields

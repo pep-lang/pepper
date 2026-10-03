@@ -55,7 +55,7 @@
 //! This stays compiler work rather than a `static` block over
 //! `reflect.fields<T>()`: reflection cannot see another file's private
 //! fields, allocate without a constructor, or see the struct behind a trait
-//! value (`design-notes/sema/copy-and-reflection.md`, #324).
+//! value (#324).
 
 use crate::model::*;
 use crate::passes::check_shared_types::{ThreadSafeStructs, unsafe_part_in};

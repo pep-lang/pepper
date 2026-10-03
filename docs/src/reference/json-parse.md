@@ -138,10 +138,10 @@ than recursing, and `max_depth` bounds it.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var parsed = json.parse("{\"server\": {\"port\": 8080}}");
-    assert(parsed.value()["server"]["port"].as_int().value() == 8080, "a lookup");
-    var bad = json.parse("[1 2]", path = "list.json");
-    assert(bad.error().to_string() == "list.json:1:4: error: expected ',' or ']'", "where");
+var parsed = json.parse("{\"server\": {\"port\": 8080}}");
+assert(parsed.value()["server"]["port"].as_int().value() == 8080, "a lookup");
+var bad = json.parse("[1 2]", path = "list.json");
+assert(bad.error().to_string() == "list.json:1:4: error: expected ',' or ']'", "where");
 ```

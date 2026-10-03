@@ -23,18 +23,18 @@ Take a `Reader` (or `<R: Reader>`) to accept any stream.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    count_lines(source: io.Reader): int {
-        var count = 0;
-        for (var line in source.lines()) {
-            if (line.is_err()) {
-                break;
-            }
-            count += 1;
+count_lines(source: io.Reader): int {
+    var count = 0;
+    for (var line in source.lines()) {
+        if (line.is_err()) {
+            break;
         }
-        return count;
+        count += 1;
     }
+    return count;
+}
 ```
 
 ### Methods
@@ -77,10 +77,10 @@ the last line returned.
 
 **Example**
 ```pepper
-    var f = File.open(Path("notes.txt")).value();
-    for (var line in f.lines()) {
-        print(line.value());
-    }
+var f = File.open(Path("notes.txt")).value();
+for (var line in f.lines()) {
+    print(line.value());
+}
 ```
 
 #### chunks
@@ -108,10 +108,10 @@ error is yielded and ends it.
 
 **Example**
 ```pepper
-    var total = 0;
-    for (var chunk in stream.chunks(4096)) {
-        total += chunk.value().count;
-    }
+var total = 0;
+for (var chunk in stream.chunks(4096)) {
+    total += chunk.value().count;
+}
 ```
 
 ## Writer
@@ -130,18 +130,18 @@ of a value (the text `$"{value}"` would hold).
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    main(): int {
-        var path = io.Directory.temp().join("report.txt");
-        var file = io.File.create(path).value();
-        file.print("total: ");
-        file.print_line(42);
-        file.close();
-        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
-        io.File.remove(path);
-        return 0;
-    }
+main(): int {
+    var path = io.Directory.temp().join("report.txt");
+    var file = io.File.create(path).value();
+    file.print("total: ");
+    file.print_line(42);
+    file.close();
+    assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+    io.File.remove(path);
+    return 0;
+}
 ```
 
 ### Methods
@@ -195,8 +195,8 @@ it is, anything else through `to_string`.
 
 **Example**
 ```pepper
-    file.print("n = ");
-    file.print(3);   # the file now holds "n = 3"
+file.print("n = ");
+file.print(3);   # the file now holds "n = 3"
 ```
 
 #### print_line
@@ -219,8 +219,8 @@ Writes the text of `value` and a line break (`\n`), as the global
 
 **Example**
 ```pepper
-    file.print_line($"total: {total}");
-    file.print_line((1, "two"));   # (1, two)
+file.print_line($"total: {total}");
+file.print_line((1, "two"));   # (1, two)
 ```
 
 ## Lines
@@ -237,11 +237,11 @@ chunks as the loop asks for them, each as an `IoResult<String>`.
 
 **Example**
 ```pepper
-    var f = File.open(Path("notes.txt")).value();
-    var it = f.lines();
-    while (it.next()) {
-        var line = it.current();
-    }
+var f = File.open(Path("notes.txt")).value();
+var it = f.lines();
+while (it.next()) {
+    var line = it.current();
+}
 ```
 
 ### Constructor

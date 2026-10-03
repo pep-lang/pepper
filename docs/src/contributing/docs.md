@@ -53,6 +53,12 @@ The `Docs` workflow (`.github/workflows/docs.yml`) publishes to the
 `cargo run -p pepper-docgen -- check` fails when `docs/src/reference/` does
 not match the runtime, and CI runs it.
 
+What the compiler provides rather than the runtime declares has a page
+written by hand: `reference/reflect.md` documents the `reflect` functions
+of `static` blocks. `HAND_WRITTEN` in `tools/docgen/src/reference.rs` lists
+such pages for the table of contents, and a docgen test fails when the
+compiler gains a `reflect` function or property the page does not name.
+
 Each reference page's title and place in the table of contents come from
 `PAGES` in `tools/docgen/src/reference.rs`. A new runtime file with public
 declarations must be added there, under its module's `module.pep`; until it

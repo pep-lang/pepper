@@ -183,7 +183,7 @@ main.pep:6:29: note: 'Cell<String>' is required here, in 'make<String>'
 main.pep:3:18: note: required by field 'value' declared here
     3 |     const value: T;
       |                  ^
-runtime/string.pep:41:15: note: 'String' is not declared [Shared]
+runtime/string.pep:54:15: note: 'String' is not declared [Shared]
 ```
 
 A generic can state the rule up front with the built-in constraint
@@ -302,9 +302,9 @@ main.pep:7:16: error: 'line' is not a new value, but parameter 'value' takes a v
     7 |     lines.send(line);
       |                ^~~~
       |                move(line)
-runtime/async/channel.pep:151:27: note: 'value' is declared [Move] here
-  151 |     bool send([Move] T value) {
-      |                           ^~~~~
+runtime/async/channel.pep:173:17: note: 'value' is declared [Move] here
+  173 |     send([Move] value: T): bool {
+      |                 ^~~~~
 note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'
 ```
 

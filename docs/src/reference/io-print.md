@@ -24,18 +24,18 @@ value (the text `$"{value}"` would hold).
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    main(): int {
-        var path = io.Directory.temp().join("report.txt");
-        var file = io.File.create(path).value();
-        file.print("total: ");
-        file.print_line(42);
-        file.close();
-        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
-        io.File.remove(path);
-        return 0;
-    }
+main(): int {
+    var path = io.Directory.temp().join("report.txt");
+    var file = io.File.create(path).value();
+    file.print("total: ");
+    file.print_line(42);
+    file.close();
+    assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+    io.File.remove(path);
+    return 0;
+}
 ```
 
 ### Methods
@@ -74,8 +74,8 @@ it is, anything else through `to_string`.
 
 **Example**
 ```pepper
-    file.print("n = ");
-    file.print(3);   # the file now holds "n = 3"
+file.print("n = ");
+file.print(3);   # the file now holds "n = 3"
 ```
 
 #### print_line
@@ -98,6 +98,6 @@ Writes the text of `value` and a line break (`\n`), as the global
 
 **Example**
 ```pepper
-    file.print_line($"total: {total}");
-    file.print_line((1, "two"));   # (1, two)
+file.print_line($"total: {total}");
+file.print_line((1, "two"));   # (1, two)
 ```

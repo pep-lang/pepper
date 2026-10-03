@@ -42,11 +42,11 @@ sharing read, write and delete access with other openers.
 
 **Example**
 ```pepper
-    var r = OpenOptions().read(true).write(true).create(true).open(Path("data.bin"));
-    if (r.is_err()) {
-        return 1;
-    }
-    var f = r.value();
+var r = OpenOptions().read(true).write(true).create(true).open(Path("data.bin"));
+if (r.is_err()) {
+    return 1;
+}
+var f = r.value();
 ```
 
 ### Constructor
@@ -174,8 +174,8 @@ Opens `path` with these options. The same as
 
 **Example**
 ```pepper
-    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    log.write_all("started");
+var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
+log.write_all("started");
 ```
 
 ## FileType
@@ -196,16 +196,16 @@ reparse point, junctions included, even one that points to a directory.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var m = io.Path("notes.txt").metadata();
-    if (m.is_ok()) {
-        match (m.value().file_type) {
-            File => { print("a file"); }
-            Directory => { print("a directory"); }
-            Symlink, Other => { print("something else"); }
-        }
+var m = io.Path("notes.txt").metadata();
+if (m.is_ok()) {
+    match (m.value().file_type) {
+        File => { print("a file"); }
+        Directory => { print("a directory"); }
+        Symlink, Other => { print("something else"); }
     }
+}
 ```
 
 ### Cases
@@ -256,10 +256,10 @@ Where `File.seek` measures its offset from, with the offset itself.
 
 **Example**
 ```pepper
-    var f = File.open(Path("data.bin")).value();
-    var length = f.seek(SeekFrom.End(0)).value();     # at the end
-    f.seek(SeekFrom.Start(4));                        # 4 bytes in
-    var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();     # at the end
+f.seek(SeekFrom.Start(4));                        # 4 bytes in
+var at = f.seek(SeekFrom.Current(-2)).value();    # 2
 ```
 
 ### Cases
@@ -355,10 +355,10 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 
 **Example**
 ```pepper
-    var m = Path("notes.txt").metadata();
-    if (m.is_ok() && m.value().is_file) {
-        var bytes = m.value().size;
-    }
+var m = Path("notes.txt").metadata();
+if (m.is_ok() && m.value().is_file) {
+    var bytes = m.value().size;
+}
 ```
 
 ### Fields
@@ -501,10 +501,10 @@ kinds apart portably.
 
 **Example**
 ```pepper
-    var f = File.create(Path("out.txt")).value();
-    f.write_all("hello");
-    f.close();
-    var text = File.read_to_string(Path("out.txt")).value();   # "hello"
+var f = File.create(Path("out.txt")).value();
+f.write_all("hello");
+f.close();
+var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 ```
 
 ### Fields
@@ -552,11 +552,11 @@ A directory can be opened this way too, but reading it fails with
 
 **Example**
 ```pepper
-    var r = File.open(Path("config.txt"));
-    if (r.is_err() && r.error().is_not_found()) {
-        return 0;
-    }
-    var text = r.value().read_string();
+var r = File.open(Path("config.txt"));
+if (r.is_err() && r.error().is_not_found()) {
+    return 0;
+}
+var text = r.value().read_string();
 ```
 
 #### create
@@ -578,8 +578,8 @@ On POSIX a created file gets mode 0666 less the process umask.
 
 **Example**
 ```pepper
-    var f = File.create(Path("report.txt")).value();
-    f.write_all("done");
+var f = File.create(Path("report.txt")).value();
+f.write_all("done");
 ```
 
 #### open_with
@@ -605,11 +605,11 @@ still writes at the end).
 
 **Example**
 ```pepper
-    var opts = OpenOptions().write(true).create_new(true);
-    var r = File.open_with(Path("lock"), opts);
-    if (r.is_err() && r.error().is_already_exists()) {
-        return 1;
-    }
+var opts = OpenOptions().write(true).create_new(true);
+var r = File.open_with(Path("lock"), opts);
+if (r.is_err() && r.error().is_already_exists()) {
+    return 1;
+}
 ```
 
 #### std_file
@@ -635,8 +635,8 @@ handle, and the File is then not open.
 
 **Example**
 ```pepper
-    var err = File.std_file(StdStream.Error, "<stderr>");
-    err.write_all("warning");
+var err = File.std_file(StdStream.Error, "<stderr>");
+err.write_all("warning");
 ```
 
 #### std_file
@@ -687,8 +687,8 @@ and from this File comes out in program order.
 
 **Example**
 ```pepper
-    var out = File.stdout();
-    out.write_all("hello");
+var out = File.stdout();
+out.write_all("hello");
 ```
 
 #### stderr
@@ -722,10 +722,10 @@ Reads the whole file at `path` into a byte array (Rust's
 
 **Example**
 ```pepper
-    var r = File.read_bytes(Path("image.png"));
-    if (r.is_ok()) {
-        var n = r.value().count;
-    }
+var r = File.read_bytes(Path("image.png"));
+if (r.is_ok()) {
+    var n = r.value().count;
+}
 ```
 
 #### read_to_string
@@ -745,11 +745,11 @@ Reads the whole file at `path` as UTF-8 text (Rust's
 
 **Example**
 ```pepper
-    var r = File.read_to_string(Path("notes.txt"));
-    if (r.is_err()) {
-        return 1;
-    }
-    var text = r.value();
+var r = File.read_to_string(Path("notes.txt"));
+if (r.is_err()) {
+    return 1;
+}
+var text = r.value();
 ```
 
 #### write_bytes
@@ -773,9 +773,9 @@ leaves it truncated or partly written.
 
 **Example**
 ```pepper
-    var data = Array<u8>();
-    data.append(1 as u8);
-    File.write_bytes(Path("one.bin"), data);
+var data = Array<u8>();
+data.append(1 as u8);
+File.write_bytes(Path("one.bin"), data);
 ```
 
 #### write_text
@@ -803,10 +803,10 @@ leaves it truncated or partly written.
 
 **Example**
 ```pepper
-    var r = File.write_text(Path("hello.txt"), "hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
+var r = File.write_text(Path("hello.txt"), "hello, world");
+if (r.is_err()) {
+    return 1;
+}
 ```
 
 #### copy
@@ -831,7 +831,7 @@ part way leaves `to` partly written.
 
 **Example**
 ```pepper
-    var n = File.copy(Path("a.txt"), Path("b.txt")).value();
+var n = File.copy(Path("a.txt"), Path("b.txt")).value();
 ```
 
 #### rename
@@ -856,7 +856,7 @@ fails rather than copying.
 
 **Example**
 ```pepper
-    File.rename(Path("draft.txt"), Path("final.txt"));
+File.rename(Path("draft.txt"), Path("final.txt"));
 ```
 
 #### remove
@@ -877,10 +877,10 @@ target. Directories are not removed: use `Directory.remove` or
 
 **Example**
 ```pepper
-    var r = File.remove(Path("old.txt"));
-    if (r.is_err() && !r.error().is_not_found()) {
-        return 1;
-    }
+var r = File.remove(Path("old.txt"));
+if (r.is_err() && !r.error().is_not_found()) {
+    return 1;
+}
 ```
 
 ### Methods
@@ -935,13 +935,13 @@ failure `buffer` keeps its previous contents.
 
 **Example**
 ```pepper
-    var buf = Array<u8>();
-    while (true) {
-        var r = f.read(buf, 4096);
-        if (r.is_err() || r.value() == 0) {
-            break;
-        }
+var buf = Array<u8>();
+while (true) {
+    var r = f.read(buf, 4096);
+    if (r.is_err() || r.value() == 0) {
+        break;
     }
+}
 ```
 
 #### read_all
@@ -1026,11 +1026,11 @@ No newline or terminator is added.
 
 **Example**
 ```pepper
-    var f = File.create(Path("greeting.txt")).value();
-    var r = f.write_all("hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
+var f = File.create(Path("greeting.txt")).value();
+var r = f.write_all("hello, world");
+if (r.is_err()) {
+    return 1;
+}
 ```
 
 #### write_string
@@ -1073,9 +1073,9 @@ POSIX and has platform-defined results on Windows.
 
 **Example**
 ```pepper
-    var f = File.open(Path("data.bin")).value();
-    var length = f.seek(SeekFrom.End(0)).value();
-    f.seek(SeekFrom.Start(0));
+var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();
+f.seek(SeekFrom.Start(0));
 ```
 
 #### seek_start
@@ -1216,7 +1216,7 @@ permission bits and timestamps.
 
 **Example**
 ```pepper
-    var size = f.metadata().value().size;
+var size = f.metadata().value().size;
 ```
 
 #### close
@@ -1239,9 +1239,9 @@ stream stays open, and `File.stdout()` and the like still work.
 
 **Example**
 ```pepper
-    var f = File.create(Path("out.bin")).value();
-    f.write_all("data");
-    if (f.close().is_err()) {
-        return 1;
-    }
+var f = File.create(Path("out.bin")).value();
+f.write_all("data");
+if (f.close().is_err()) {
+    return 1;
+}
 ```

@@ -17,10 +17,10 @@ The framing around DEFLATE-compressed data.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    var packed = compress.Gzip.compress("hi".bytes());
-    var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
+var packed = compress.Gzip.compress("hi".bytes());
+var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
 ```
 
 ### Cases
@@ -63,11 +63,11 @@ Raw DEFLATE (RFC 1951) data, compressed or decompressed in one call.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    var data = "abcabcabcabc".bytes();
-    var packed = compress.Deflate.compress(data);
-    assert(compress.Deflate.decompress(packed).value() == data, "round trip");
+var data = "abcabcabcabc".bytes();
+var packed = compress.Deflate.compress(data);
+assert(compress.Deflate.decompress(packed).value() == data, "round trip");
 ```
 
 ### Static methods
@@ -115,11 +115,11 @@ zlib (RFC 1950) data, compressed or decompressed in one call.
 
 **Example**
 ```pepper
-    import compress;
+import compress;
 
-    var packed = compress.Zlib.compress("hello".bytes());
-    assert(packed[0] == 0x78, "the zlib header");
-    assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
+var packed = compress.Zlib.compress("hello".bytes());
+assert(packed[0] == 0x78, "the zlib header");
+assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
 ```
 
 ### Static methods
@@ -169,12 +169,12 @@ one call.
 
 **Example**
 ```pepper
-    import compress;
-    import io;
+import compress;
+import io;
 
-    var packed = compress.Gzip.compress("hello".bytes());
-    io.File.write_bytes(io.Path("hello.txt.gz"), packed);
-    assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
+var packed = compress.Gzip.compress("hello".bytes());
+io.File.write_bytes(io.Path("hello.txt.gz"), packed);
+assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
 ```
 
 ### Static methods
@@ -230,14 +230,14 @@ the problem; an error from the source is passed on.
 
 **Example**
 ```pepper
-    import compress;
-    import io;
+import compress;
+import io;
 
-    var file = io.File.open(io.Path("notes.txt.gz")).value();
-    var reader = compress.DecompressReader(file, compress.Format.Gzip);
-    for (var line in reader.lines()) {
-        print(line.value());
-    }
+var file = io.File.open(io.Path("notes.txt.gz")).value();
+var reader = compress.DecompressReader(file, compress.Format.Gzip);
+for (var line in reader.lines()) {
+    print(line.value());
+}
 ```
 
 ### Constructor
@@ -297,15 +297,15 @@ end, since dropping the writer does not. It does not close the sink.
 
 **Example**
 ```pepper
-    import compress;
-    import io;
+import compress;
+import io;
 
-    var file = io.File.create(io.Path("log.txt.gz")).value();
-    var writer = compress.CompressWriter(file, compress.Format.Gzip);
-    writer.print_line("first line");
-    writer.print_line("second line");
-    writer.finish();
-    file.close();
+var file = io.File.create(io.Path("log.txt.gz")).value();
+var writer = compress.CompressWriter(file, compress.Format.Gzip);
+writer.print_line("first line");
+writer.print_line("second line");
+writer.finish();
+file.close();
 ```
 
 ### Constructor

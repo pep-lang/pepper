@@ -30,11 +30,11 @@ task. Configure it (`add_root_certificate`) before the first `connect`.
 
 **Example**
 ```pepper
-    import tls;
+import tls;
 
-    var connector = tls.TlsConnector.create().value();
-    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_all("ping");
+var connector = tls.TlsConnector.create().value();
+var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
 ```
 
 ### Constructor
@@ -133,18 +133,18 @@ one.
 
 **Example**
 ```pepper
-    import io;
-    import tls;
+import io;
+import tls;
 
-    var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("0.0.0.0:8443").value()).value();
-    while (true) {
-        var (tcp, peer) = listener.accept().value();
-        var accepted = acceptor.accept(tcp);
-        if (accepted.is_ok()) {
-            accepted.value().write_all("hello over TLS");
-        }
+var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+var listener = io.TcpListener.bind(io.SocketAddress.parse("0.0.0.0:8443").value()).value();
+while (true) {
+    var (tcp, peer) = listener.accept().value();
+    var accepted = acceptor.accept(tcp);
+    if (accepted.is_ok()) {
+        accepted.value().write_all("hello over TLS");
     }
+}
 ```
 
 ### Constructor
@@ -222,11 +222,11 @@ goes; `close()` closes it earlier. Neither sends close_notify; call
 
 **Example**
 ```pepper
-    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_all("ping");
-    var reply = Array<u8>();
-    while (stream.read(reply, 4096).value() > 0) {
-    }
+var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
+var reply = Array<u8>();
+while (stream.read(reply, 4096).value() > 0) {
+}
 ```
 
 ### Constructor
@@ -334,7 +334,7 @@ No newline or terminator is added.
 
 **Example**
 ```pepper
-    stream.write_all("ping");
+stream.write_all("ping");
 ```
 
 #### write_string

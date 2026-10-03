@@ -39,17 +39,17 @@ next step of such a loop panics with "Array modified during iteration".
 
 **Example**
 ```pepper
-    main(): int {
-        var a = Array<int>();
-        a.append(1);
-        a.append(2);
-        a[0] = 5;
-        var total = 0;
-        for (var x in a) {
-            total = total + x;
-        }
-        return total;   # 7
+main(): int {
+    var a = Array<int>();
+    a.append(1);
+    a.append(2);
+    a[0] = 5;
+    var total = 0;
+    for (var x in a) {
+        total = total + x;
     }
+    return total;   # 7
+}
 ```
 
 ### Properties
@@ -99,7 +99,7 @@ would otherwise perform while the Array grows to a known size.
 
 **Example**
 ```pepper
-    var a = Array<int>(16);   # a.count == 0, a.capacity == 16
+var a = Array<int>(16);   # a.count == 0, a.capacity == 16
 ```
 
 ### Methods
@@ -123,9 +123,9 @@ panic.
 
 **Example**
 ```pepper
-    for (var x in a) {
-        total = total + x;
-    }
+for (var x in a) {
+    total = total + x;
+}
 ```
 
 #### reserve
@@ -150,9 +150,9 @@ existing elements, which costs O(count).
 
 **Example**
 ```pepper
-    var a = Array<int>();
-    a.reserve(8);   # a.capacity >= 8
-    a.reserve(2);   # no effect: capacity never shrinks
+var a = Array<int>();
+a.reserve(8);   # a.capacity >= 8
+a.reserve(2);   # no effect: capacity never shrinks
 ```
 
 #### grow
@@ -173,7 +173,7 @@ Does not change the elements or invalidate iterators.
 #### operator []
 
 ```pepper
-[](idx: ulong, location: __ptr<char> = __caller_location()): T
+[](idx: ulong): T
 ```
 
 Returns the element at `idx`; this is the indexer read `a[idx]`.
@@ -183,7 +183,6 @@ itself; binding it to a variable acquires it like any shared copy.
 
 **Parameters**
 - `idx` — the zero-based position to read
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at `idx`
@@ -193,13 +192,13 @@ itself; binding it to a variable acquires it like any shared copy.
 
 **Example**
 ```pepper
-    var first = a[0];
+var first = a[0];
 ```
 
 #### operator []
 
 ```pepper
-[](idx: ulong, value: T, location: __ptr<char> = __caller_location()): T
+[](idx: ulong, value: T): T
 ```
 
 Replaces the element at `idx` with `value`; this is the indexer write
@@ -214,7 +213,6 @@ unchanged.
 **Parameters**
 - `idx` — the zero-based position to overwrite
 - `value` — the new element
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element now stored at `idx` (that is, `value`)
@@ -224,7 +222,7 @@ unchanged.
 
 **Example**
 ```pepper
-    a[0] = 42;
+a[0] = 42;
 ```
 
 #### append
@@ -247,15 +245,15 @@ Invalidates running iterators.
 
 **Example**
 ```pepper
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);   # a holds [1, 2]
+var a = Array<int>();
+a.append(1);
+a.append(2);   # a holds [1, 2]
 ```
 
 #### insert
 
 ```pepper
-insert(idx: ulong, item: T, location: __ptr<char> = __caller_location())
+insert(idx: ulong, item: T)
 ```
 
 Inserts `item` at position `idx`, shifting the element there and every
@@ -269,7 +267,6 @@ Invalidates running iterators.
 **Parameters**
 - `idx` — the position `item` will occupy; from 0 through `count`
 - `item` — the element to insert
-- `location` — where a failure is reported; left out, this call's location
 
 **Panics**
 - if `idx <= count` does not hold ("Array insert index out of bounds")
@@ -277,16 +274,16 @@ Invalidates running iterators.
 
 **Example**
 ```pepper
-    var a = Array<int>();
-    a.append(1);
-    a.append(3);
-    a.insert(1, 2);   # a holds [1, 2, 3]
+var a = Array<int>();
+a.append(1);
+a.append(3);
+a.insert(1, 2);   # a holds [1, 2, 3]
 ```
 
 #### remove_at
 
 ```pepper
-remove_at(idx: ulong, location: __ptr<char> = __caller_location()): T
+remove_at(idx: ulong): T
 ```
 
 Removes and returns the element at `idx`, shifting every later element
@@ -299,7 +296,6 @@ capacity is unchanged. Invalidates running iterators.
 
 **Parameters**
 - `idx` — the position of the element to remove
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the removed element
@@ -309,25 +305,22 @@ capacity is unchanged. Invalidates running iterators.
 
 **Example**
 ```pepper
-    var a = Array<int>();
-    a.append(1);
-    a.append(2);
-    var x = a.remove_at(0);   # x == 1; a holds [2]
+var a = Array<int>();
+a.append(1);
+a.append(2);
+var x = a.remove_at(0);   # x == 1; a holds [2]
 ```
 
 #### pop
 
 ```pepper
-pop(location: __ptr<char> = __caller_location()): T
+pop(): T
 ```
 
 Removes and returns the last element.
 
 Runs in O(1). For a struct `T` the Array's reference is transferred to
 the caller. The capacity is unchanged. Invalidates running iterators.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element that was last
@@ -337,19 +330,16 @@ the caller. The capacity is unchanged. Invalidates running iterators.
 
 **Example**
 ```pepper
-    var top = a.pop();
+var top = a.pop();
 ```
 
 #### first
 
 ```pepper
-first(location: __ptr<char> = __caller_location()): T
+first(): T
 ```
 
 Returns the first element without removing it; the same as `a[0]`.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at index 0
@@ -360,14 +350,11 @@ Returns the first element without removing it; the same as `a[0]`.
 #### last
 
 ```pepper
-last(location: __ptr<char> = __caller_location()): T
+last(): T
 ```
 
 Returns the last element without removing it; the same as
 `a[a.count - 1]`.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the element at index `count - 1`
@@ -407,14 +394,14 @@ actual shrink invalidates them. The capacity is kept.
 
 **Example**
 ```pepper
-    a.truncate(1);   # keeps only a[0]
-    a.truncate(5);   # no effect when a has fewer than 5 elements
+a.truncate(1);   # keeps only a[0]
+a.truncate(5);   # no effect when a has fewer than 5 elements
 ```
 
 #### swap
 
 ```pepper
-swap(a: ulong, b: ulong, location: __ptr<char> = __caller_location())
+swap(a: ulong, b: ulong)
 ```
 
 Exchanges the elements at positions `a` and `b`.
@@ -426,7 +413,6 @@ element, but still invalidates running iterators like every swap.
 **Parameters**
 - `a` — the position of the first element
 - `b` — the position of the second element
-- `location` — where a failure is reported; left out, this call's location
 
 **Panics**
 - if `a < count` does not hold ("Array swap index out of bounds")
@@ -447,7 +433,7 @@ invalidated.
 
 **Example**
 ```pepper
-    a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
+a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 ```
 
 #### sort
@@ -479,14 +465,14 @@ the two buffers while the sort runs.
 
 **Example**
 ```pepper
-    var names = Array<String>();
-    names.append("pear");
-    names.append("apple");
-    names.sort((a, b) => a.compare(b));   # ["apple", "pear"]
-    var numbers = Array<int>();
-    numbers.append(3);
-    numbers.append(1);
-    numbers.sort((a, b) => b - a);        # descending: [3, 1]
+var names = Array<String>();
+names.append("pear");
+names.append("apple");
+names.sort((a, b) => a.compare(b));   # ["apple", "pear"]
+var numbers = Array<int>();
+numbers.append(3);
+numbers.append(1);
+numbers.sort((a, b) => b - a);        # descending: [3, 1]
 ```
 
 #### find
@@ -515,9 +501,9 @@ as a condition) and read the index with `value()`.
 
 **Example**
 ```pepper
-    var a = [3, 9, 4];
-    var i = a.find(9);         # i.value() == 1
-    var missing = a.find(7);   # missing.is_empty() == true
+var a = [3, 9, 4];
+var i = a.find(9);         # i.value() == 1
+var missing = a.find(7);   # missing.is_empty() == true
 ```
 
 #### contains
@@ -577,8 +563,8 @@ capacity equals this Array's `count`.
 
 **Example**
 ```pepper
-    var b = a.clone();
-    b.append(7);   # a is unchanged
+var b = a.clone();
+b.append(7);   # a is unchanged
 ```
 
 #### copy
@@ -602,9 +588,9 @@ copying the elements.
 
 **Example**
 ```pepper
-    var names = Array<String>();
-    names.append("ada");
-    var copied = copy(names);   # calls this method
+var names = Array<String>();
+names.append("ada");
+var copied = copy(names);   # calls this method
 ```
 
 #### operator ==
@@ -662,7 +648,7 @@ same as `append_all`.
 
 **Example**
 ```pepper
-    a += b;   # a now ends with b's elements
+a += b;   # a now ends with b's elements
 ```
 
 #### operator +
@@ -685,7 +671,7 @@ Runs in O(count + count of `rhs`). Neither operand is modified; like
 
 **Example**
 ```pepper
-    var c = a + b;
+var c = a + b;
 ```
 
 ## ArrayIterator
@@ -710,10 +696,10 @@ the iterator was created (see `Array` for which operations count), its next
 
 **Example**
 ```pepper
-    var it = a.iterate();
-    while (it.next()) {
-        var x = it.current();
-    }
+var it = a.iterate();
+while (it.next()) {
+    var x = it.current();
+}
 ```
 
 ### Methods

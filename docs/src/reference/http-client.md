@@ -32,15 +32,15 @@ In a task, a request parks only the task while it waits.
 
 **Example**
 ```pepper
-    import http;
+import http;
 
-    main(): int {
-        var client = http.Client();
-        var response = client.get("https://example.com/").value();
-        print(to_string(response.status));   # 200
-        print(response.text());
-        return 0;
-    }
+main(): int {
+    var client = http.Client();
+    var response = client.get("https://example.com/").value();
+    print(to_string(response.status));   # 200
+    print(response.text());
+    return 0;
+}
 ```
 
 ### Constructors

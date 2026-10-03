@@ -35,21 +35,21 @@ optionals with `==`, not `===`.
 
 **Example**
 ```pepper
-    find_even(values: Array<int>): int? {
-        for (var v in values) {
-            if (v % 2 == 0) { return Optional<int>.Value(v); }
-        }
-        return Optional<int>.Empty;
+find_even(values: Array<int>): int? {
+    for (var v in values) {
+        if (v % 2 == 0) { return Optional<int>.Value(v); }
     }
+    return Optional<int>.Empty;
+}
 
-    main(): int {
-        var values = Array<int>();
-        values.append(3);
-        values.append(4);
-        var found = find_even(values);
-        if (!found) { return 1; }
-        return found.value() - 4;   # 0
-    }
+main(): int {
+    var values = Array<int>();
+    values.append(3);
+    values.append(4);
+    var found = find_even(values);
+    if (!found) { return 1; }
+    return found.value() - 4;   # 0
+}
 ```
 
 ### Cases
@@ -121,8 +121,8 @@ Reports whether this optional holds a value.
 
 **Example**
 ```pepper
-    var found = Optional<int>.Value(7);
-    if (found.is_value()) { print(found.value()); }   # prints 7
+var found = Optional<int>.Value(7);
+if (found.is_value()) { print(found.value()); }   # prints 7
 ```
 
 #### is_empty
@@ -138,8 +138,8 @@ Reports whether this optional holds no value.
 
 **Example**
 ```pepper
-    var missing = Optional<int>.Empty;
-    if (missing.is_empty()) { print("missing"); }
+var missing = Optional<int>.Empty;
+if (missing.is_empty()) { print("missing"); }
 ```
 
 #### is_some
@@ -186,23 +186,20 @@ optional can stand as a condition by itself.
 
 **Example**
 ```pepper
-    var found = Optional<int>.Value(7);
-    if (found) { print(found.value()); }   # prints 7
+var found = Optional<int>.Value(7);
+if (found) { print(found.value()); }   # prints 7
 ```
 
 #### value
 
 ```pepper
-value(location: __ptr<char> = __caller_location()): T
+value(): T
 ```
 
 Returns the value, panicking if this optional is Empty.
 
 For a struct `T` the caller gets its own reference; the optional keeps
 its reference too.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the value of a Value optional
@@ -212,7 +209,7 @@ its reference too.
 
 **Example**
 ```pepper
-    var n = Optional<int>.Value(42).value();   # 42
+var n = Optional<int>.Value(42).value();   # 42
 ```
 
 #### value_or
@@ -234,5 +231,5 @@ is used.
 
 **Example**
 ```pepper
-    var n = Optional<int>.Empty.value_or(-1);   # -1
+var n = Optional<int>.Empty.value_or(-1);   # -1
 ```

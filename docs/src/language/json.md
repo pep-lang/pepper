@@ -40,9 +40,9 @@ also converts [structs](#structs) to JSON and back.
 |------------|--------|
 | `value["key"]` | the member, or `Null` when missing or not an object |
 | `value[index]` | the element, or `Null` when out of range or not an array |
-| `value.as_string()`, `as_bool()`, `as_double()` | the value, or none for another kind |
-| `value.as_int()` | an `Integer`, or a `Number` with no fraction that fits in a `long`; otherwise none |
-| `value.as_array()`, `as_object()` | the array or map itself, or none |
+| `value.as_string()`, `as_bool()`, `as_double()` | the value, or Empty for another kind |
+| `value.as_int()` | an `Integer`, or a `Number` with no fraction that fits in a `long`; otherwise Empty |
+| `value.as_array()`, `as_object()` | the array or map itself, or Empty |
 | `value.is_null()` | whether it is `Null` |
 | `value.contains("key")` | whether an object has the member, even a `null` one |
 
@@ -167,7 +167,7 @@ same rules apply at the top level (`json.decode<Array<int>>("[1, 2]")`):
 | `bool` | `true`, `false` |
 | `String` | a string |
 | an enum | a case that carries no values as its name (`"Safe"`); one that carries values as an object with the case's name as its one key, holding the values by name (`{"Circle": {"radius": 2}}`); [attributes](#attributes) choose other forms |
-| `T?` | the value, or `null` when none; a missing key reads as none |
+| `T?` | the value, or `null` when Empty; a missing key reads as Empty |
 | `Array<T>` | an array |
 | `HashMap<String, V>`, `OrderedMap<String, V>`, `Map<String, V>` | an object |
 | a struct | an object, recursively |
@@ -250,7 +250,7 @@ error naming the property. Notes follow the conversion back to the call
 that asked for it:
 
 ```text
-runtime/json/convert.pep:315:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
+runtime/json/convert.pep:358:25: error: 'encode' cannot convert property 'outcome' of type 'Result<int>' to JSON
 ...
 main.pep:10:16: note: 'encode<Job>' is used by 'main' here
    10 |     var text = json.encode(job);

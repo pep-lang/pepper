@@ -36,12 +36,12 @@ advances that variable.
 
 **Example**
 ```pepper
-    var total = 0;
-    for (var i in 1..>4) {
-        total += i;   # 1 + 2 + 3 + 4
-    }
-    var r = 0..10;
-    assert(r.contains(9) && !r.contains(10), "half-open");
+var total = 0;
+for (var i in 1..>4) {
+    total += i;   # 1 + 2 + 3 + 4
+}
+var r = 0..10;
+assert(r.contains(9) && !r.contains(10), "half-open");
 ```
 
 ### Fields

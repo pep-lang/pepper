@@ -41,26 +41,26 @@ threads.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const jobs = async.Channel<long>(64);
-    const total = Atomic<long>(0);
+const jobs = async.Channel<long>(64);
+const total = Atomic<long>(0);
 
-    worker() {
-        for (var job in jobs) {
-            total.fetch_add(job);
-        }
+worker() {
+    for (var job in jobs) {
+        total.fetch_add(job);
     }
+}
 
-    main(): int {
-        var thread = async.Thread.spawn(worker);
-        jobs.send(20);
-        jobs.send(22);
-        jobs.close();
-        thread.join();
-        assert(total.load() == 42, "the worker received both jobs");
-        return 0;
-    }
+main(): int {
+    var thread = async.Thread.spawn(worker);
+    jobs.send(20);
+    jobs.send(22);
+    jobs.close();
+    thread.join();
+    assert(total.load() == 42, "the worker received both jobs");
+    return 0;
+}
 ```
 
 ### Properties
@@ -92,8 +92,8 @@ Creates an open, empty channel.
 
 **Example**
 ```pepper
-    var bounded = async.Channel<long>(16);
-    var unbounded = async.Channel<long>();
+var bounded = async.Channel<long>(16);
+var unbounded = async.Channel<long>();
 ```
 
 ### Methods
@@ -122,10 +122,10 @@ other tasks; a cancel or the task's `timeout` ends the wait.
 
 **Example**
 ```pepper
-    var line = "hello";
-    lines.send(copy(line));
-    line.append(" again");   # the receiver still gets "hello"
-    lines.send(move(line));   # line is null now
+var line = "hello";
+lines.send(copy(line));
+line.append(" again");   # the receiver still gets "hello"
+lines.send(move(line));   # line is null now
 ```
 
 #### try_send
@@ -159,10 +159,10 @@ other tasks; a cancel or the task's `timeout` ends the wait.
 
 **Example**
 ```pepper
-    var job = jobs.receive();
-    if (job.is_ok()) {
-        run(job.value());
-    }
+var job = jobs.receive();
+if (job.is_ok()) {
+    run(job.value());
+}
 ```
 
 #### try_receive
@@ -230,9 +230,9 @@ exactly one of them.
 
 **Example**
 ```pepper
-    for (var line in lines) {
-        print(line, "\n");
-    }   # ends once `lines` is closed and empty
+for (var line in lines) {
+    print(line, "\n");
+}   # ends once `lines` is closed and empty
 ```
 
 ## ChannelIterator
@@ -252,10 +252,10 @@ without naming it. It belongs to the thread that runs the loop.
 
 **Example**
 ```pepper
-    var values = jobs.iterate();
-    while (values.next()) {
-        total = total + values.current();
-    }
+var values = jobs.iterate();
+while (values.next()) {
+    total = total + values.current();
+}
 ```
 
 ### Constructor

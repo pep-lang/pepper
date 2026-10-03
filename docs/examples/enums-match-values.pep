@@ -28,7 +28,7 @@ keyword(word: String): int {
 }
 
 # The arms' values are numbers of different types (`0` is an `int`,
-# `length()` a `long`), so the `match` has their common type, `long`, and
+# `length` a `ulong`), so the `match` has their common type, `ulong`, and
 # converts to the `int` this function returns.
 length_of(word: String): int {
     return match (word) {

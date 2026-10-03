@@ -14,17 +14,17 @@ enough too, since `json` exports them.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct ServerConfig {
-        var host: String;
-        [Name("max-connections")]
-        var max_connections: int;
-        [Required]
-        var port: int;
-        [Ignore]
-        var started_at: long;
-    }
+struct ServerConfig {
+    var host: String;
+    [Name("max-connections")]
+    var max_connections: int;
+    [Required]
+    var port: int;
+    [Ignore]
+    var started_at: long;
+}
 ```
 
 Source: `runtime/serialize/module.pep`
@@ -40,12 +40,12 @@ own name.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    struct Limits {
-        [Name("max-connections")]
-        var max_connections: int;
-    }
+struct Limits {
+    [Name("max-connections")]
+    var max_connections: int;
+}
 ```
 
 ### Fields
@@ -94,13 +94,13 @@ enum.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    [Tag("kind")]
-    enum Shape {
-        Circle(radius: int),
-        Point,
-    }
+[Tag("kind")]
+enum Shape {
+    Circle(radius: int),
+    Point,
+}
 ```
 
 ### Fields
@@ -138,11 +138,11 @@ Write it above an enum.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    [Untagged]
-    enum Size {
-        Fixed(px: int),
-        Auto,
-    }
+[Untagged]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
 ```

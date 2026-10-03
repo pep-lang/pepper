@@ -234,7 +234,7 @@ can be any type. These binary operators can be defined:
 | Kind | Operators |
 |---|---|
 | Arithmetic | `+` `-` `*` `/` `%` `**` |
-| Bitwise | `&` `\|` `^` `>>` |
+| Bitwise | `&` `\|` `^` |
 | Bitwise shifts | `<<` `>>` |
 | Comparison and logical | `==` `!=` `<` `<=` `>` `>=` `&&` `\|\|` |
 | Compound assignment | `+=` `-=` `*=` `/=` `%=` `<<=` `>>=` `&=` `\|=` `^=` |

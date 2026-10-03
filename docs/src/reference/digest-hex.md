@@ -23,7 +23,7 @@ way checksums and git object ids are usually written.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    assert(digest.to_hex([0, 15, 255]) == "000fff", "two digits per byte");
+assert(digest.to_hex([0, 15, 255]) == "000fff", "two digits per byte");
 ```

@@ -25,13 +25,13 @@ versions.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    main(): int {
-        var id = digest.to_hex(digest.sha256("hello"));
-        assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
-        return 0;
-    }
+main(): int {
+    var id = digest.to_hex(digest.sha256("hello"));
+    assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
+    return 0;
+}
 ```
 
 Source: `runtime/digest/module.pep`

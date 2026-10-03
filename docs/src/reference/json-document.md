@@ -31,16 +31,16 @@ value.
 
 **Example**
 ```pepper
-    import json;
+import json;
 
-    var text = "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": true\n}";
-    var document = json.parse_document(text).value();
-    document.root["wrap"] = json.JsonValue.Bool(false);
-    assert(
-        document.to_string() == "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": false\n}",
-        "the comments stay"
-    );
-    assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
+var text = "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": true\n}";
+var document = json.parse_document(text).value();
+document.root["wrap"] = json.JsonValue.Bool(false);
+assert(
+    document.to_string() == "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": false\n}",
+    "the comments stay"
+);
+assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 ```
 
 ### Fields

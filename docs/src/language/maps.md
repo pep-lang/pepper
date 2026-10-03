@@ -11,7 +11,7 @@ keep their keys in:
 
 All of them share one API: `m[key]` reads (a missing key reads as the
 default of `V`, and is not inserted) and `m[key] = value` writes; `insert`,
-`get`, `try_get` (an [optional](optionals.md), none when the key is absent),
+`get`, `try_get` (an [optional](optionals.md), Empty when the key is absent),
 `contains`, `remove`, `count`, `is_empty` and `clear`. A `for` loop visits a
 map's entries as `(key, value)` [tuples](tuples.md) and a set's members one
 by one. Adding or removing an entry while a loop iterates the map panics
@@ -30,7 +30,7 @@ iterating in order, it answers questions about the order:
 - `range(from, to)`: iterates the keys from `from` up to, not including,
   `to`.
 
-Each of the four queries returns an optional `(key, value)` tuple, none when
+Each of the four queries returns an optional `(key, value)` tuple, Empty when
 there is no such entry. `Set<K>` is the same tree without values, and its
 queries return an optional member. An array converts to a `Set`, so an array
 literal can initialize one.

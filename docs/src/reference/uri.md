@@ -28,14 +28,14 @@ has an empty query) differs from a missing one (`http://h/` has none).
 
 **Example**
 ```pepper
-    var uri = Uri.parse("HTTPS://user@example.com:8443/a%20b?x=1#top").value();
-    assert(uri.scheme == "https", "the scheme is lowercased");
-    assert(uri.user_info.value() == "user", "user information");
-    assert(uri.host.value() == "example.com", "host");
-    assert(uri.port.value() == 8443, "port");
-    assert(uri.path == "/a%20b", "the path keeps its escapes");
-    assert(Uri.decode(uri.path).value() == "/a b", "decoded");
-    assert(uri.query.value() == "x=1" && uri.fragment.value() == "top", "query and fragment");
+var uri = Uri.parse("HTTPS://user@example.com:8443/a%20b?x=1#top").value();
+assert(uri.scheme == "https", "the scheme is lowercased");
+assert(uri.user_info.value() == "user", "user information");
+assert(uri.host.value() == "example.com", "host");
+assert(uri.port.value() == 8443, "port");
+assert(uri.path == "/a%20b", "the path keeps its escapes");
+assert(Uri.decode(uri.path).value() == "/a b", "decoded");
+assert(uri.query.value() == "x=1" && uri.fragment.value() == "top", "query and fragment");
 ```
 
 ### Fields
@@ -131,10 +131,10 @@ followed by two hexadecimal digits.
 
 **Example**
 ```pepper
-    var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.scheme == "mailto" && mail.host.is_empty(), "no authority");
-    assert(mail.path == "someone@example.com", "the path holds the address");
-    assert(Uri.parse("a b").is_err(), "a space must be encoded");
+var mail = Uri.parse("mailto:someone@example.com").value();
+assert(mail.scheme == "mailto" && mail.host.is_empty(), "no authority");
+assert(mail.path == "someone@example.com", "the path holds the address");
+assert(Uri.parse("a b").is_err(), "a space must be encoded");
 ```
 
 #### decode
@@ -155,8 +155,8 @@ uses `+` for a space needs that replaced first.
 
 **Example**
 ```pepper
-    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
-    assert(Uri.decode("100%").is_err(), "a lone '%'");
+assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
+assert(Uri.decode("100%").is_err(), "a lone '%'");
 ```
 
 ### Methods

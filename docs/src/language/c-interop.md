@@ -90,7 +90,9 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
   `__ptr<void>` in Pepper code (a variable, field, argument, or return
   value), so `String("hello")` copies the literal's five bytes.
 - A **`String` value** is passed with `c_str()`, which returns the String's
-  NUL-terminated buffer as a `__ptr<char>`. The pointer belongs to the String:
+  buffer, NUL-terminated, as a `__ptr<char>`. A String is not guaranteed to
+  be NUL-terminated otherwise, so always go through `c_str()` when C needs
+  the terminator. The pointer belongs to the String:
   it is valid until the String is destroyed or grows (for example with
   `append` or `+=`). An empty `String()` has no buffer, so its `c_str()` is
   `__null`; check before you pass it to a C function that does not accept
@@ -396,7 +398,9 @@ your program. The C library is always linked. For anything else, attach
 [Linking](linking.md) chapter covers both.
 
 ```pepper
-[Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int kind);
+[Target(OS(Windows))]
+[Link("gdi32")]
+extern ulong GetStockObject(int kind);
 ```
 
 ## Calling Pepper from C
@@ -532,6 +536,29 @@ C code passes back but never looks inside. Handles follow Pepper's
 
 A handle must not be null, and is freed at most once: C gets no checks on
 either.
+
+### Why a string is freed but a handle is released
+
+The two look alike from C, a pointer Pepper hands over, but they are
+different things, and the names say which:
+
+- **A handle is a live Pepper object.** Pepper may hold references to it
+  too: a field, a global, another thread. C holds one or more of those
+  references, so it uses the same counting Pepper does: `<name>_retain`
+  adds one, `<name>_release` drops one, and the object is destroyed only
+  when the last reference anywhere goes away. Releasing is not freeing.
+- **A returned string is not a Pepper object.** It is a plain copy of the
+  bytes, made at the boundary like `strdup` makes one, with no count and no
+  other owner. Pepper keeps no reference to it, so there is nothing to
+  retain or share; the C code owns it outright and gives it back once with
+  `pepper_string_free`.
+- **Why not `free`:** the copy comes from Pepper's allocator, which tracks
+  live allocations and, on Windows, may use a different C runtime's heap
+  than the caller's. `pepper_string_free` returns it to the allocator that
+  made it.
+
+A `String` parameter needs neither: Pepper copies the bytes for the call,
+and C's buffer stays C's.
 
 ### Building the library
 

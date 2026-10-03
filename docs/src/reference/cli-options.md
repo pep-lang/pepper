@@ -19,14 +19,14 @@ still an option, named after the field.
 
 **Example**
 ```pepper
-    import cli;
+import cli;
 
-    struct Options {
-        [cli.Option("o", "the executable to write")]
-        var output: String = "a.out";
-        [cli.Option("v", "say what is happening")]
-        var verbose: bool;
-    }
+struct Options {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say what is happening")]
+    var verbose: bool;
+}
 ```
 
 ### Fields
@@ -85,12 +85,12 @@ optional one; a `String[]` field takes every value that is left.
 
 **Example**
 ```pepper
-    import cli;
+import cli;
 
-    struct Options {
-        [cli.Positional("the program's entry file")]
-        var source: String;
-    }
+struct Options {
+    [cli.Positional("the program's entry file")]
+    var source: String;
+}
 ```
 
 ### Fields

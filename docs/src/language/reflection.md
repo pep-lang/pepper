@@ -129,9 +129,52 @@ strings (`$"{field.name}: "`), `?:`, assignment to a compile-time `var`
 Emitted code can use a compile-time number, `bool`, string or enum case;
 the compiler writes it as a literal.
 
+### Seeing what a block does
+
+A `static` block runs inside the compiler, so a `print` in it would be
+emitted into the program instead of showing anything while compiling.
+These show what the block computes:
+
+- **`reflect.print(value)`** writes `value` as a note each time the compiler
+  runs it, on every compile, including one that succeeds. In an unrolled
+  loop each note says which pass printed it:
+
+  ```text
+  main.pep:9:17: note: static print: "describing Point"
+      9 |         reflect.print($"describing {reflect.name<T>()}");
+        |                 ^~~~~
+  main.pep:11:21: note: static print: "x"
+     11 |             reflect.print(field.name);
+        |                     ^~~~~
+  main.pep:10:27: note: in pass 1 of 2 (member 'x')
+     10 |         for (var field in reflect.properties<T>()) {
+        |                           ^~~~~~~~~~~~~~~~~~~~~~~
+  ```
+
+- **`reflect.assert(condition, message)`** and **`reflect.error(message)`**
+  stop the compile at that point with `message`, which can be an
+  interpolated string holding the values that matter
+  (`reflect.assert(n < 8, $"{reflect.name<T>()} has {n} fields")`). Like
+  every error in a block, it carries the pass and, in generic code, the
+  specialization it happened in (see [In generic code](#in-generic-code)).
+- **The emitted code runs like code written by hand.** Each statement a
+  block emits keeps the source line of the statement it came from, so a
+  runtime `print` it emits shows values as the program runs, and a
+  [debugger](../tools/debugging.md) breakpoint on that line (with `-g`)
+  stops there. The passes of an unrolled loop share the lines of its body,
+  so a breakpoint on one stops only in the first pass, and stepping over
+  the line runs the rest.
+- **`--emit-llvm`** writes the program's LLVM IR into the build directory
+  (`.pep/build/<name>.ll`), where the function a block expanded in shows
+  exactly what it emitted, one copy per specialization
+  (`describe<Point>`). `--emit-ast` prints the program as parsed, before
+  any block runs, so it does not show the expansion.
+
 ## The `reflect` functions
 
-`reflect` is built in: a `static` block uses it without an import.
+`reflect` is built in: a `static` block uses it without an import. The
+[reference](../reference/reflect.md) has an entry for each function and
+for the members, cases and functions they return.
 
 | Function | Returns |
 |----------|---------|
@@ -146,7 +189,7 @@ the compiler writes it as a literal.
 | `reflect.has_attribute<T, A>()`, `reflect.attribute<T, A>()` | attribute `A` on struct or enum `T` |
 | `reflect.has_build_option("NAME")` | whether the build defines [build option](build-options.md) `NAME` (`-D NAME`) |
 | `reflect.build_option("NAME")`, `reflect.build_option("NAME", default)` | the build option's value as a `String`; without a default, an error when the build does not define it |
-| `reflect.print(value)` | writes `value` as a note while compiling |
+| `reflect.print(value)` | writes `value` as a note while compiling (see [Seeing what a block does](#seeing-what-a-block-does)) |
 | `reflect.error(message)` | fails the compile with `message` |
 | `reflect.assert(condition, message)` | fails the compile with `message` when `condition` is false |
 

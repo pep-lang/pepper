@@ -2,6 +2,9 @@
 
 # HashMap and HashSet
 
+Hashing: `hash<T>(value)`, the 64-bit hash `HashMap` and `HashSet` use for
+their keys, and the hash maps and sets themselves.
+
 Source: `runtime/hash.pep`
 
 ## hash
@@ -51,8 +54,8 @@ argument is released afterwards.
 
 **Example**
 ```pepper
-    var a = hash<int>(5);
-    var b = hash<int>(5);   # a == b
+var a = hash<int>(5);
+var b = hash<int>(5);   # a == b
 ```
 
 ## hash
@@ -77,7 +80,7 @@ at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 
 **Example**
 ```pepper
-    assert(hash<String>("hello") == hash<String>("hello"), "content hash");
+assert(hash<String>("hello") == hash<String>("hello"), "content hash");
 ```
 
 ## HashMap
@@ -112,13 +115,13 @@ never shrinks.
 
 **Example**
 ```pepper
-    var ages = HashMap<String, int>();
-    ages["ada"] = 36;
-    ages.insert("alan", 41);
-    assert(ages["ada"] == 36, "lookup");
-    assert(ages.get("grace") == 0, "a missing key reads as the default");
-    assert(ages.remove("alan"), "removed");
-    assert(ages.count == 1, "one entry left");
+var ages = HashMap<String, int>();
+ages["ada"] = 36;
+ages.insert("alan", 41);
+assert(ages["ada"] == 36, "lookup");
+assert(ages.get("grace") == 0, "a missing key reads as the default");
+assert(ages.remove("alan"), "removed");
+assert(ages.count == 1, "one entry left");
 ```
 
 ### Properties
@@ -169,7 +172,7 @@ three arrays of that many slots.
 
 **Example**
 ```pepper
-    var m = HashMap<int, int>(64);   # 64 slots, 32 entries before growing
+var m = HashMap<int, int>(64);   # 64 slots, 32 entries before growing
 ```
 
 ### Methods
@@ -263,9 +266,9 @@ table (see `grow`). Expected O(1); a grow costs O(capacity).
 
 **Example**
 ```pepper
-    var m = HashMap<int, int>();
-    m.insert(1, 10);   # true: added
-    m.insert(1, 20);   # false: overwritten; m.get(1) == 20
+var m = HashMap<int, int>();
+m.insert(1, 10);   # true: added
+m.insert(1, 20);   # false: overwritten; m.get(1) == 20
 ```
 
 #### get
@@ -306,9 +309,9 @@ Expected O(1).
 
 **Example**
 ```pepper
-    if (ages.try_get("ada") is Value(age)) {
-        print($"{age}");
-    }
+if (ages.try_get("ada") is Value(age)) {
+    print($"{age}");
+}
 ```
 
 #### remove
@@ -348,8 +351,8 @@ same as `get`. A missing key is not inserted.
 
 **Example**
 ```pepper
-    var m = HashMap<String, int>();
-    var n = m["missing"];   # 0; m is still empty
+var m = HashMap<String, int>();
+var n = m["missing"];   # 0; m is still empty
 ```
 
 #### operator []
@@ -370,8 +373,8 @@ same as `insert`.
 
 **Example**
 ```pepper
-    var m = HashMap<String, int>();
-    m["hello"] = 5;
+var m = HashMap<String, int>();
+m["hello"] = 5;
 ```
 
 #### iterate
@@ -392,10 +395,10 @@ makes the iterator's next `next()` or `current()` panic.
 
 **Example**
 ```pepper
-    var total = 0;
-    for (var (name, age) in ages) {
-        total += age;
-    }
+var total = 0;
+for (var (name, age) in ages) {
+    total += age;
+}
 ```
 
 ## HashSet
@@ -430,12 +433,12 @@ may change, and writing to them breaks the set.
 
 **Example**
 ```pepper
-    var seen = HashSet<String>();
-    seen.insert("a");
-    seen["b"] = "b";   # the same as seen.insert("b")
-    assert(seen.contains("a"), "member");
-    assert(!seen.insert("a"), "already a member");
-    assert(seen.count == 2, "two members");
+var seen = HashSet<String>();
+seen.insert("a");
+seen["b"] = "b";   # the same as seen.insert("b")
+assert(seen.contains("a"), "member");
+assert(!seen.insert("a"), "already a member");
+assert(seen.count == 2, "two members");
 ```
 
 ### Properties
@@ -498,8 +501,8 @@ a set is expected, so an array literal can initialize one.
 
 **Example**
 ```pepper
-    HashSet<String> keywords = ["if", "else", "while"];
-    assert(keywords.contains("else"), "a member");
+HashSet<String> keywords = ["if", "else", "while"];
+assert(keywords.contains("else"), "a member");
 ```
 
 ### Methods
@@ -641,9 +644,9 @@ while iterating makes the iterator's next `next()` or `current()` panic.
 
 **Example**
 ```pepper
-    for (var name in seen) {
-        print(name);
-    }
+for (var name in seen) {
+    print(name);
+}
 ```
 
 #### copy

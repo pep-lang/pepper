@@ -39,23 +39,23 @@ Large`; the connection then closes.
 
 **Example**
 ```pepper
-    import async;
-    import http;
-    import io;
+import async;
+import http;
+import io;
 
-    hello(request: http.Request): http.Response {
-        var response = http.Response(200).set_text("hello from " + request.path());
-        response.headers["Content-Type"] = "text/plain";
-        return response;
-    }
+hello(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello from " + request.path());
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
 
-    main(): int {
-        async.run(() => {
-            var server = http.Server.bind(io.SocketAddress.parse("0.0.0.0:8080").value()).value();
-            server.serve(hello);
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() => {
+        var server = http.Server.bind(io.SocketAddress.parse("0.0.0.0:8080").value()).value();
+        server.serve(hello);
+    });
+    return 0;
+}
 ```
 
 ### Constructor

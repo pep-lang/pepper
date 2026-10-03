@@ -31,15 +31,15 @@ module scope (`const word = regex.Regex("\\w+");`) serves every thread.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    main(): int {
-        var date = regex.Regex("(\\d{4})-(\\d{2})-(\\d{2})");
-        var found = date.find("due 2026-10-01").value();
-        assert(found.group(1).value() == "2026", "the year");
-        assert(found.start() == 4, "a byte offset");
-        return 0;
-    }
+main(): int {
+    var date = regex.Regex("(\\d{4})-(\\d{2})-(\\d{2})");
+    var found = date.find("due 2026-10-01").value();
+    assert(found.group(1).value() == "2026", "the year");
+    assert(found.start() == 4, "a byte offset");
+    return 0;
+}
 ```
 
 ### Constructors
@@ -88,10 +88,10 @@ Compiles `pattern`, or reports why it is invalid.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    assert(regex.Regex.parse("[a-z]+").is_ok(), "valid");
-    assert(regex.Regex.parse("(a").is_err(), "unclosed group");
+assert(regex.Regex.parse("[a-z]+").is_ok(), "valid");
+assert(regex.Regex.parse("(a").is_err(), "unclosed group");
 ```
 
 #### escape
@@ -111,9 +111,9 @@ escaped, so the result matches `text` literally.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
+assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 ```
 
 ### Methods
@@ -158,9 +158,9 @@ than `find`, since it stops at the first match it sees.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
+assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
 ```
 
 #### find
@@ -218,12 +218,12 @@ skipped, so `a*` finds `a` twice in `"aba"`, not also between them.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    var total = 0;
-    for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
-        total += number.text().size;   # 1, then 2, then 3
-    }
+var total = 0;
+for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
+    total += number.text().size;   # 1, then 2, then 3
+}
 ```
 
 #### replace
@@ -252,10 +252,10 @@ is kept as it is.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    var swapped = regex.Regex("(\\w+) (\\w+)").replace("hello world", "$2 $1");
-    assert(swapped == "world hello", "groups swapped");
+var swapped = regex.Regex("(\\w+) (\\w+)").replace("hello world", "$2 $1");
+assert(swapped == "world hello", "groups swapped");
 ```
 
 #### replace_all
@@ -279,10 +279,10 @@ Returns `text` with every match, as `find_all` finds them, replaced by
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
-    assert(squeezed == "a b c", "runs of space replaced");
+var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
+assert(squeezed == "a b c", "runs of space replaced");
 ```
 
 #### split
@@ -303,10 +303,10 @@ or last piece, and text with no match gives one piece, the whole text.
 
 **Example**
 ```pepper
-    import regex;
+import regex;
 
-    var parts = regex.Regex(",\\s*").split("a, b,c");
-    assert(parts.count == 3 && parts[1] == "b", "three pieces");
+var parts = regex.Regex(",\\s*").split("a, b,c");
+assert(parts.count == 3 && parts[1] == "b", "three pieces");
 ```
 
 #### to_string

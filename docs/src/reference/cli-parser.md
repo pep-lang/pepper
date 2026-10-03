@@ -34,20 +34,20 @@ parser, and everything after it to the command's.
 
 **Example**
 ```pepper
-    import cli;
+import cli;
 
-    main(args: String[]): int {
-        var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
-        var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
-        var imports = parser.multiple("import-path", "I", "a directory to search for modules");
-        var verbose = parser.flag("verbose", "v", "say what is happening");
-        var source = parser.positional("source", "the program's entry file");
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        print($"{source.value()} -> {output.value()}");
-        return 0;
+main(args: String[]): int {
+    var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
+    var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
+    var imports = parser.multiple("import-path", "I", "a directory to search for modules");
+    var verbose = parser.flag("verbose", "v", "say what is happening");
+    var source = parser.positional("source", "the program's entry file");
+    if (!parser.parse(args)) {
+        return 2;
     }
+    print($"{source.value()} -> {output.value()}");
+    return 0;
+}
 ```
 
 ### Properties
@@ -243,27 +243,27 @@ help and errors read the same, and the two styles mix on one parser.
 
 **Example**
 ```pepper
-    import cli;
+import cli;
 
-    struct Options {
-        [cli.Option("o", "the executable to write")]
-        var output: String = "a.out";
-        [cli.Option("v", "say what is happening")]
-        var verbose: bool;
-        [cli.Positional("the program's entry file")]
-        var source: String;
-    }
+struct Options {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say what is happening")]
+    var verbose: bool;
+    [cli.Positional("the program's entry file")]
+    var source: String;
+}
 
-    main(args: String[]): int {
-        var options = Options();
-        var parser = cli.Parser("pepper", "Compiles a Pepper program");
-        parser.add_options(options);
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        print($"{options.source} -> {options.output}");
-        return 0;
+main(args: String[]): int {
+    var options = Options();
+    var parser = cli.Parser("pepper", "Compiles a Pepper program");
+    parser.add_options(options);
+    if (!parser.parse(args)) {
+        return 2;
     }
+    print($"{options.source} -> {options.output}");
+    return 0;
+}
 ```
 
 #### usage
@@ -351,10 +351,10 @@ close candidates the first wins.
 
 **Example**
 ```pepper
-    var names = Array<String>();
-    names.append("build");
-    names.append("fmt");
-    var best = cli.closest("buidl", names);   # some("build")
+var names = Array<String>();
+names.append("build");
+names.append("fmt");
+var best = cli.closest("buidl", names);   # some("build")
 ```
 
 ## Flag

@@ -17,10 +17,10 @@ points below 128 have an ASCII byte.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
-    assert(text.Ascii.encode("é").is_empty(), "not ASCII");
+assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
+assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 ```
 
 ### Static methods

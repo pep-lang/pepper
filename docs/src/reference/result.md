@@ -2,6 +2,9 @@
 
 # Result
 
+`Result<T, E>`: the value of an operation that can fail, either `Ok`
+holding its value or `Err` holding its error, like Rust's `Result`.
+
 Source: `runtime/result.pep`
 
 ## Error
@@ -14,8 +17,8 @@ The default error type of `Result`: a human-readable message.
 
 **Example**
 ```pepper
-    var r = Result<int>.err(Error("boom"));
-    var n = r.error().message.length;   # 4
+var r = Result<int>.err(Error("boom"));
+var n = r.error().message.length;   # 4
 ```
 
 ### Fields
@@ -72,14 +75,14 @@ nothing, so it only checks that the result is Ok.
 
 **Example**
 ```pepper
-    main(): int {
-        var a = Result<int>.ok(42);
-        if (a.value() != 42) { return 1; }
-        var b = Result<int>.err(Error("boom"));
-        if (!b.is_err()) { return 2; }
-        var n = match (b) { Ok(v) => v, Err(e) => e.message.length };   # 4
-        return b.ok_or(0);   # 0
-    }
+main(): int {
+    var a = Result<int>.ok(42);
+    if (a.value() != 42) { return 1; }
+    var b = Result<int>.err(Error("boom"));
+    if (!b.is_err()) { return 2; }
+    var n = match (b) { Ok(v) => v, Err(e) => e.message.length };   # 4
+    return b.ok_or(0);   # 0
+}
 ```
 
 ### Cases
@@ -128,8 +131,8 @@ For `Result<void>`, `ok()` takes no argument.
 
 **Example**
 ```pepper
-    var r = Result<int>.ok(42);
-    var done = Result<void>.ok();
+var r = Result<int>.ok(42);
+var done = Result<void>.ok();
 ```
 
 #### err
@@ -150,7 +153,7 @@ For a struct `TError` the result acquires a reference to `e`.
 
 **Example**
 ```pepper
-    var r = Result<int>.err(Error("boom"));
+var r = Result<int>.err(Error("boom"));
 ```
 
 ### Methods
@@ -180,7 +183,7 @@ Reports whether this result is Err.
 #### value
 
 ```pepper
-value(location: __ptr<char> = __caller_location()): TValue
+value(): TValue
 ```
 
 Returns the success value, panicking if this result is Err.
@@ -191,9 +194,6 @@ keeps its reference too.
 For `Result<void>` it returns nothing: calling it only checks that the
 result is Ok.
 
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
-
 **Returns**
 - the value of an Ok result
 
@@ -202,22 +202,19 @@ result is Ok.
 
 **Example**
 ```pepper
-    var n = Result<int>.ok(42).value();   # 42
+var n = Result<int>.ok(42).value();   # 42
 ```
 
 #### error
 
 ```pepper
-error(location: __ptr<char> = __caller_location()): TError
+error(): TError
 ```
 
 Returns the failure value, panicking if this result is Ok.
 
 For a struct `TError` the caller gets its own reference; the result
 keeps its reference too.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the error of an Err result
@@ -227,7 +224,7 @@ keeps its reference too.
 
 **Example**
 ```pepper
-    var e = Result<int>.err(Error("boom")).error();   # e.message == "boom"
+var e = Result<int>.err(Error("boom")).error();   # e.message == "boom"
 ```
 
 #### ok_or
@@ -249,5 +246,5 @@ is used.
 
 **Example**
 ```pepper
-    var n = Result<int>.err(Error("e")).ok_or(-1);   # -1
+var n = Result<int>.err(Error("e")).ok_or(-1);   # -1
 ```

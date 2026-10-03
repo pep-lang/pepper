@@ -32,28 +32,28 @@ values only. See the language guide's Threads chapter.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const hits = async.Atomic<long>(0);
+const hits = async.Atomic<long>(0);
 
-    work() {
-        hits.fetch_add(1);
+work() {
+    hits.fetch_add(1);
+}
+
+main(): int {
+    var workers = Array<async.Thread>();
+    var n = async.logical_cpus();
+    var i: ulong = 0;
+    while (i < n) {
+        workers.append(async.Thread.spawn(work));
+        i = i + 1;
     }
-
-    main(): int {
-        var workers = Array<async.Thread>();
-        var n = async.logical_cpus();
-        var i: ulong = 0;
-        while (i < n) {
-            workers.append(async.Thread.spawn(work));
-            i = i + 1;
-        }
-        for (var worker in workers) {
-            worker.join();
-        }
-        assert(hits.load() == n as long, "every worker ran");
-        return 0;
+    for (var worker in workers) {
+        worker.join();
     }
+    assert(hits.load() == n as long, "every worker ran");
+    return 0;
+}
 ```
 
 Source: `runtime/async/module.pep`

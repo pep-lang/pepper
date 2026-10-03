@@ -34,7 +34,7 @@ set too, and so are its static methods, its operators, its
   Two functions with the same parameter types and the same return type are
   a `redefinition of 'f'`.
 - **A file's own functions hide imported ones.** A file's functions of a
-  name hide an imported function of that name, as before: a file cannot add
+  name hide an imported function of that name: a file cannot add
   members to an imported set.
 
 ### Files of one module share a set

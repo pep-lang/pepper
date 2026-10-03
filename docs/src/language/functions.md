@@ -195,7 +195,7 @@ var (quotient, remainder) = divide(17, 5);
 
 ## Overloading
 
-Functions of one file can share a name when their parameter lists differ,
+Functions of one file (or of one module's files) can share a name when their parameter lists differ,
 and each call picks the best fit for its arguments. See
 [Overloading](overloading.md).
 
@@ -259,7 +259,7 @@ failed: an [overflowing operator](types-and-variables.md#integer-overflow), a
 null function value, a `match` on a null reference enum. So do the runtime's
 checking methods, which report their caller's line, not their own: indexing an
 `Array` or `String` out of range, `Array.pop()` on an empty array,
-`Optional.value()` on none, `Result.value()` on an error, and the like.
+`Optional.value()` on an Empty optional, `Result.value()` on an error, and the like.
 
 They do it with an ordinary [default parameter](#default-parameter-values),
 `location: __ptr<char> = __caller_location()`. A call that leaves `location`

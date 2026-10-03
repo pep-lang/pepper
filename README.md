@@ -1,8 +1,11 @@
 # Pepper
 
 Pepper is a compiled programming language. This repository holds the compiler,
-written in Rust: the root `pepper` crate is the CLI, and the stages live in
-`crates/` as `pepper-parser`, `pepper-sema`, `pepper-codegen`, and `pepper-driver`. Codegen goes through LLVM via `inkwell`.
+written in Rust: the root `pepper` crate builds the compiler CLI, `pep-build`,
+and the stages live in `crates/` as `pepper-parser`, `pepper-sema`,
+`pepper-codegen`, `pepper-driver` and `pepper-files` (source and runtime
+discovery). `tools/lsp` (`pep-lsp`) and `tools/docgen` (`pep-doc`) are the
+language server and the book builder. Codegen goes through LLVM via `inkwell`.
 
 See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; build it with `cargo run -p pepper-docgen -- serve`) for the language itself, and [`INTERNALS.md`](INTERNALS.md) for how the compiler works.
 
@@ -216,19 +219,6 @@ gh workflow run llvm-versions.yml --ref main
 
 On macOS, where Homebrew carries `llvm@18` through `llvm@22`,
 all five pass; CI's `test-macos` job runs the suite there against LLVM 20.
-
-### Benchmarks
-
-`benchmarks/` holds scripts that time runtime modules against a reference
-implementation, for comparing a change before and after. They need a release
-build (`cargo build --release`) and Python 3:
-
-```bash
-python3 benchmarks/compress/bench.py    # compress vs the gzip command, 12 MB of text
-python3 benchmarks/compress/check.py    # round trips against Python's zlib; ends "failures 0"
-```
-
-`bench.py --tool <binary>` times a tool built from another checkout instead.
 
 ## Run the compiler
 

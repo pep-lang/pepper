@@ -21,6 +21,10 @@ Two measures describe a String, and each API says which one it uses:
   `ends_with`. The byte size is the authoritative length, so the data may
   contain NUL bytes. It is never derived from a terminator.
 
+A String's bytes are not guaranteed to be followed by a NUL. Only
+`c_str()` guarantees one, so call it to hand the text to C; anything else
+that reads the bytes must stop at `size`.
+
 A String is a reference type: `var b = a;` shares one object, so
 `append`, `+=`, and `grow` are visible through every reference. Use
 `copy()` or `+` for an independent copy. Equality (`==`) compares
@@ -37,15 +41,15 @@ the String interpolation chapter).
 
 **Example**
 ```pepper
-    var s = "héllo";
-    assert(s.length == 5, "5 code points");
-    assert(s.size == 6, "6 bytes: 'é' is 2");
-    s.append(" world");
-    assert(s.find("world") == 7, "find returns a byte offset");
-    assert(s[1] == "é", "the indexer counts code points");
-    for (var c in s) {
-        print(c);   # one code point per line
-    }
+var s = "héllo";
+assert(s.length == 5, "5 code points");
+assert(s.size == 6, "6 bytes: 'é' is 2");
+s.append(" world");
+assert(s.find("world") == 7, "find returns a byte offset");
+assert(s[1] == "é", "the indexer counts code points");
+for (var c in s) {
+    print(c);   # one code point per line
+}
 ```
 
 ### Properties
@@ -67,8 +71,7 @@ The number of Unicode code points. O(1).
 var size: ulong { get; }
 ```
 
-The number of bytes of UTF-8, not counting the NUL
-terminator. O(1).
+The number of bytes of UTF-8. O(1).
 
 **See also**
 - `length`
@@ -110,9 +113,9 @@ trusted, not checked against the data. Runs in O(size).
 
 **Example**
 ```pepper
-    var empty = String();
-    var s = "abc";
-    var copy = String(s.c_str(), s.size, s.length);
+var empty = String();
+var s = "abc";
+var copy = String(s.c_str(), s.size, s.length);
 ```
 
 ### Static methods
@@ -153,8 +156,8 @@ terminating NUL. Runs in O(size).
 
 **Example**
 ```pepper
-    var data = "hi".bytes();
-    assert(data.count == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
+var data = "hi".bytes();
+assert(data.count == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
 ```
 
 #### grow
@@ -193,14 +196,14 @@ this String sees the change. Runs in O(size + rhs.size).
 
 **Example**
 ```pepper
-    var s = "TEST";
-    s.append("ING");   # s == "TESTING"
+var s = "TEST";
+s.append("ING");   # s == "TESTING"
 ```
 
 #### operator []
 
 ```pepper
-[](idx: int, location: __ptr<char> = __caller_location()): String
+[](idx: int): String
 ```
 
 Returns the code point at code-point index `idx` as a new
@@ -214,7 +217,6 @@ visit every code point in O(size).
 
 **Parameters**
 - `idx` — the code-point index; negative counts from the end
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String that holds the one code point
@@ -224,9 +226,9 @@ visit every code point in O(size).
 
 **Example**
 ```pepper
-    var s = "TEST";
-    assert(s[0] == "T", "first");
-    assert(s[-1] == "T", "last");
+var s = "TEST";
+assert(s[0] == "T", "first");
+assert(s[-1] == "T", "last");
 ```
 
 #### operator ==
@@ -263,8 +265,8 @@ shares, and invalidates running iterators.
 
 **Example**
 ```pepper
-    var s = "a";
-    s += "b";   # s == "ab"
+var s = "a";
+s += "b";   # s == "ab"
 ```
 
 #### iterate
@@ -286,10 +288,10 @@ panic.
 
 **Example**
 ```pepper
-    var n = 0;
-    for (var c in "héllo") {
-        n = n + 1;   # 5 iterations
-    }
+var n = 0;
+for (var c in "héllo") {
+    n = n + 1;   # 5 iterations
+}
 ```
 
 #### c_str
@@ -299,6 +301,10 @@ c_str(): __ptr<char>
 ```
 
 Returns the String's buffer as a NUL-terminated C string.
+
+This is the one API that guarantees a NUL after the content: a String
+is not otherwise guaranteed to be NUL-terminated, so code that needs
+the terminator calls `c_str()` rather than relying on the buffer.
 
 The pointer is owned by the String. It is valid until the String is
 destroyed or `append`, `+=`, or `grow` reallocates it. It is `__null`
@@ -325,9 +331,9 @@ implementation).
 
 **Example**
 ```pepper
-    var a = "abc";
-    var b = a.copy();
-    b.append("d");   # a is still "abc"
+var a = "abc";
+var b = a.copy();
+b.append("d");   # a is still "abc"
 ```
 
 #### clone
@@ -371,10 +377,10 @@ nothing. The result still counts from the start of the String.
 
 **Example**
 ```pepper
-    var s = "TESTING";
-    assert(s.find("STI") == 2, "byte offset");
-    assert(s.find("xyz") == -1, "absent");
-    assert("a,b,c".find(",", 2) == 3, "the second comma");
+var s = "TESTING";
+assert(s.find("STI") == 2, "byte offset");
+assert(s.find("xyz") == -1, "absent");
+assert("a,b,c".find(",", 2) == 3, "the second comma");
 ```
 
 #### rfind
@@ -395,14 +401,14 @@ String, or -1 when it does not occur. An empty `needle` is found at
 
 **Example**
 ```pepper
-    assert("a/b/c".rfind("/") == 3, "the last slash");
-    assert("abc".rfind("x") == -1, "absent");
+assert("a/b/c".rfind("/") == 3, "the last slash");
+assert("abc".rfind("x") == -1, "absent");
 ```
 
 #### split
 
 ```pepper
-split(separator: String, location: __ptr<char> = __caller_location()): String[]
+split(separator: String): String[]
 ```
 
 Splits the String at every occurrence of `separator` and returns the
@@ -414,7 +420,6 @@ whole String. Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new Array with one new String per piece
@@ -424,15 +429,15 @@ whole String. Runs in O(size * separator.size).
 
 **Example**
 ```pepper
-    var parts = "a,b,,c".split(",");
-    assert(parts.count == 4, "four pieces");
-    assert(parts[2] == "", "an empty piece");
+var parts = "a,b,,c".split(",");
+assert(parts.count == 4, "four pieces");
+assert(parts[2] == "", "an empty piece");
 ```
 
 #### split_once
 
 ```pepper
-split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)?
+split_once(separator: String): (String, String)?
 ```
 
 Splits the String at the first occurrence of `separator`: the text
@@ -441,7 +446,6 @@ Runs in O(size * separator.size).
 
 **Parameters**
 - `separator` — the text to split at
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the pieces before and after the first `separator`, or none
@@ -451,10 +455,10 @@ Runs in O(size * separator.size).
 
 **Example**
 ```pepper
-    var header = "Host: example.com".split_once(": ");
-    assert(header.is_value(), "has a colon");
-    var (name, value) = header.value();
-    assert(name == "Host" && value == "example.com", "split");
+var header = "Host: example.com".split_once(": ");
+assert(header.is_value(), "has a colon");
+var (name, value) = header.value();
+assert(name == "Host" && value == "example.com", "split");
 ```
 
 #### join
@@ -475,16 +479,16 @@ String, and one part gives a copy of it. Runs in O(total size).
 
 **Example**
 ```pepper
-    var parts = Array<String>();
-    parts.append("a");
-    parts.append("b");
-    assert(", ".join(parts) == "a, b", "joined");
+var parts = Array<String>();
+parts.append("a");
+parts.append("b");
+assert(", ".join(parts) == "a, b", "joined");
 ```
 
 #### replace
 
 ```pepper
-replace(from: String, to: String, location: __ptr<char> = __caller_location()): String
+replace(from: String, to: String): String
 ```
 
 Returns a copy of this String with every occurrence of `from` replaced
@@ -495,7 +499,6 @@ size.
 **Parameters**
 - `from` — the text to replace
 - `to` — the text to put in its place
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String
@@ -505,7 +508,7 @@ size.
 
 **Example**
 ```pepper
-    assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
+assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
 ```
 
 #### contains
@@ -575,10 +578,10 @@ or past `length`, the result is an empty String. Runs in O(size).
 
 **Example**
 ```pepper
-    var s = "TEST";
-    assert(s.substr(1, 2) == "ES", "middle");
-    assert(s.substr(0, 99) == "TEST", "count is clamped");
-    assert(s.substr(4, 5) == "", "start past the end");
+var s = "TEST";
+assert(s.substr(1, 2) == "ES", "middle");
+assert(s.substr(0, 99) == "TEST", "count is clamped");
+assert(s.substr(4, 5) == "", "start past the end");
 ```
 
 #### operator !=
@@ -613,7 +616,7 @@ operand is modified. Runs in O(size + rhs.size).
 
 **Example**
 ```pepper
-    var greeting = "Hello, " + "world";
+var greeting = "Hello, " + "world";
 ```
 
 #### to_string
@@ -632,7 +635,7 @@ a copy. O(1).
 #### byte_at
 
 ```pepper
-byte_at(index: ulong, location: __ptr<char> = __caller_location()): byte
+byte_at(index: ulong): byte
 ```
 
 Returns the byte at byte offset `index` of the UTF-8 data. O(1).
@@ -643,7 +646,6 @@ character literal (`s.byte_at(0) == '#'`).
 
 **Parameters**
 - `index` — the byte offset, less than `size`
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - the byte at `index`
@@ -653,14 +655,14 @@ character literal (`s.byte_at(0) == '#'`).
 
 **Example**
 ```pepper
-    var s = "a=b";
-    assert(s.byte_at(1) == '=', "second byte");
+var s = "a=b";
+assert(s.byte_at(1) == '=', "second byte");
 ```
 
 #### substr_bytes
 
 ```pepper
-substr_bytes(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): String
+substr_bytes(start: ulong, size: ulong): String
 ```
 
 Returns a new String of the `size` bytes starting at byte offset
@@ -670,7 +672,6 @@ Returns a new String of the `size` bytes starting at byte offset
 **Parameters**
 - `start` — the byte offset of the first byte to copy
 - `size` — the number of bytes to copy
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - a new String that holds those bytes
@@ -681,10 +682,10 @@ Returns a new String of the `size` bytes starting at byte offset
 
 **Example**
 ```pepper
-    var s = "key=value";
-    var eq = s.find("=") as ulong;
-    assert(s.substr_bytes(0, eq) == "key", "before '='");
-    assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
+var s = "key=value";
+var eq = s.find("=") as ulong;
+assert(s.substr_bytes(0, eq) == "key", "before '='");
+assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
 ```
 
 #### compare
@@ -705,9 +706,9 @@ other orders first. Runs in O(min(size, other.size)).
 
 **Example**
 ```pepper
-    assert("apple".compare("banana") < 0, "a before b");
-    assert("ab".compare("abc") < 0, "a prefix orders first");
-    assert("x".compare("x") == 0, "equal");
+assert("apple".compare("banana") < 0, "a before b");
+assert("ab".compare("abc") < 0, "a prefix orders first");
+assert("x".compare("x") == 0, "equal");
 ```
 
 #### operator <
@@ -783,8 +784,8 @@ only). Runs in O(size).
 
 **Example**
 ```pepper
-    assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
-    assert("  indented".trim_end() == "  indented", "leading kept");
+assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
+assert("  indented".trim_end() == "  indented", "leading kept");
 ```
 
 #### trim_start
@@ -802,7 +803,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 
 **Example**
 ```pepper
-    assert("  \tcode".trim_start() == "code", "leading whitespace");
+assert("  \tcode".trim_start() == "code", "leading whitespace");
 ```
 
 #### trim
@@ -819,7 +820,7 @@ Returns a new String without the whitespace at either end, as
 
 **Example**
 ```pepper
-    assert(" \t value \r\n".trim() == "value", "both ends");
+assert(" \t value \r\n".trim() == "value", "both ends");
 ```
 
 #### lower
@@ -838,8 +839,8 @@ O(size).
 
 **Example**
 ```pepper
-    assert("Content-Type".lower() == "content-type", "ASCII lowered");
-    assert("Ärger".lower() == "Ärger", "non-ASCII kept");
+assert("Content-Type".lower() == "content-type", "ASCII lowered");
+assert("Ärger".lower() == "Ärger", "non-ASCII kept");
 ```
 
 #### upper
@@ -858,7 +859,7 @@ O(size).
 
 **Example**
 ```pepper
-    assert("get".upper() == "GET", "ASCII raised");
+assert("get".upper() == "GET", "ASCII raised");
 ```
 
 #### lines
@@ -878,10 +879,10 @@ give `["a", "b"]`, and `""` gives no lines. Runs in O(size).
 
 **Example**
 ```pepper
-    var lines = "first\r\nsecond\n\nfourth".lines();
-    assert(lines.count == 4, "four lines");
-    assert(lines[1] == "second", "\\r\\n removed");
-    assert(lines[2] == "", "an empty line");
+var lines = "first\r\nsecond\n\nfourth".lines();
+assert(lines.count == 4, "four lines");
+assert(lines[1] == "second", "\\r\\n removed");
+assert(lines[2] == "", "an empty line");
 ```
 
 #### repeat
@@ -902,8 +903,8 @@ O(size * count).
 
 **Example**
 ```pepper
-    assert("ab".repeat(3) == "ababab", "three copies");
-    var indent = " ".repeat(8);   # eight spaces
+assert("ab".repeat(3) == "ababab", "three copies");
+var indent = " ".repeat(8);   # eight spaces
 ```
 
 ## to_string
@@ -926,8 +927,8 @@ integer picks its own overload.
 
 **Example**
 ```pepper
-    assert(to_string(-42) == "-42", "negative");
-    var where = to_string(line) + ":" + to_string(column);
+assert(to_string(-42) == "-42", "negative");
+var where = to_string(line) + ":" + to_string(column);
 ```
 
 ## to_string
@@ -1071,9 +1072,9 @@ number of steps per value.
 
 **Example**
 ```pepper
-    assert(to_string(0.1) == "0.1", "shortest");
-    assert(to_string(3.0) == "3.0", "keeps the point");
-    assert(to_string(1.0e20) == "1e+20", "exponent");
+assert(to_string(0.1) == "0.1", "shortest");
+assert(to_string(3.0) == "3.0", "keeps the point");
+assert(to_string(1.0e20) == "1e+20", "exponent");
 ```
 
 ## to_string
@@ -1093,8 +1094,8 @@ a `float`, laid out as `to_string(double)` lays it out.
 
 **Example**
 ```pepper
-    float third = 1.0 / 3.0;
-    assert(to_string(third) == "0.33333334", "a float's digits");
+float third = 1.0 / 3.0;
+assert(to_string(third) == "0.33333334", "a float's digits");
 ```
 
 ## to_string
@@ -1119,9 +1120,9 @@ without quotes. Tuples of up to eight elements convert this way.
 
 **Example**
 ```pepper
-    assert(to_string((1, "two")) == "(1, two)", "a pair");
-    var nested = (1, (2.5, true));
-    assert($"{nested}" == "(1, (2.5, true))", "nested");
+assert(to_string((1, "two")) == "(1, two)", "a pair");
+var nested = (1, (2.5, true));
+assert($"{nested}" == "(1, (2.5, true))", "nested");
 ```
 
 ## to_string
@@ -1277,10 +1278,10 @@ or a file (where C would buffer it until the program exits).
 
 **Example**
 ```pepper
-    print("hello");
-    var n = 3;
-    print($"n = {n}");
-    print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+print("hello");
+var n = 3;
+print($"n = {n}");
+print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
 ```
 
 ## print
@@ -1303,9 +1304,9 @@ the argument.
 
 **Example**
 ```pepper
-    print(42);          # 42
-    print(0.5);         # 0.5
-    print((1, "two"));  # (1, two)
+print(42);          # 42
+print(0.5);         # 0.5
+print((1, "two"));  # (1, two)
 ```
 
 ## to_string
@@ -1333,17 +1334,17 @@ interpolated strings.
 
 **Example**
 ```pepper
-    struct Point {
-        var x: int = 0;
-        var y: int = 0;
-        construct(this.x = 0, this.y = 0) {}
-    }
+struct Point {
+    var x: int = 0;
+    var y: int = 0;
+    construct(this.x = 0, this.y = 0) {}
+}
 
-    to_string<Point>(value: Point): String {
-        var x = value.x;
-        var y = value.y;
-        return $"({x}, {y})";
-    }
+to_string<Point>(value: Point): String {
+    var x = value.x;
+    var y = value.y;
+    return $"({x}, {y})";
+}
 ```
 
 ## ToString
@@ -1362,20 +1363,20 @@ it.
 
 **Example**
 ```pepper
-    struct Point {
-        var x: int = 0;
-        var y: int = 0;
-        construct(this.x = 0, this.y = 0) {}
-    }
+struct Point {
+    var x: int = 0;
+    var y: int = 0;
+    construct(this.x = 0, this.y = 0) {}
+}
 
-    extend Point with ToString {
-        to_string(): String {
-            return $"({x}, {y})";
-        }
+extend Point with ToString {
+    to_string(): String {
+        return $"({x}, {y})";
     }
+}
 
-    var p = Point(1, 2);
-    assert($"p = {p}" == "p = (1, 2)", "interpolated");
+var p = Point(1, 2);
+assert($"p = {p}" == "p = (1, 2)", "interpolated");
 ```
 
 ### Methods
@@ -1407,9 +1408,9 @@ when it is full, so appending is amortized O(piece size). Call
 
 **Example**
 ```pepper
-    var out = StringBuilder();
-    out.append("line ").append(to_string(3)).append("\n");
-    var text = out.to_string();   # "line 3\n"
+var out = StringBuilder();
+out.append("line ").append(to_string(3)).append("\n");
+var text = out.to_string();   # "line 3\n"
 ```
 
 ### Properties
@@ -1472,8 +1473,8 @@ chained. Runs in amortized O(text.size).
 
 **Example**
 ```pepper
-    var b = StringBuilder();
-    b.append("a").append("b");   # b.to_string() == "ab"
+var b = StringBuilder();
+b.append("a").append("b");   # b.to_string() == "ab"
 ```
 
 #### clear
@@ -1512,10 +1513,10 @@ default-constructed `StringIterator()` has no String to walk.
 
 **Example**
 ```pepper
-    var it = "ab".iterate();
-    while (it.next()) {
-        print(it.current());   # "a", then "b"
-    }
+var it = "ab".iterate();
+while (it.next()) {
+    print(it.current());   # "a", then "b"
+}
 ```
 
 ### Methods

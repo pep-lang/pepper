@@ -45,30 +45,30 @@ used it have finished.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const request_id = async.TaskLocal<long>();
+const request_id = async.TaskLocal<long>();
 
-    handle(id: long) {
-        request_id.set(id);
-        async.yield_now();   # the other tasks run meanwhile
-        assert(request_id.get() == id, "still this task's id");
-    }
+handle(id: long) {
+    request_id.set(id);
+    async.yield_now();   # the other tasks run meanwhile
+    assert(request_id.get() == id, "still this task's id");
+}
 
-    main(): int {
-        async.run(() => {
-            var tasks = Array<async.Task<void>>();
-            for (var id in [1, 2, 3]) {
-                tasks.append(async.spawn<void>(() => {
-                    handle(id);
-                }));
-            }
-            for (var task in tasks) {
-                task.join();
-            }
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() => {
+        var tasks = Array<async.Task<void>>();
+        for (var id in [1, 2, 3]) {
+            tasks.append(async.spawn<void>(() => {
+                handle(id);
+            }));
+        }
+        for (var task in tasks) {
+            task.join();
+        }
+    });
+    return 0;
+}
 ```
 
 ### Constructor
@@ -134,16 +134,16 @@ no value (for a struct `T`).
 
 **Example**
 ```pepper
-    const trail = async.TaskLocal<Array<String>>();
+const trail = async.TaskLocal<Array<String>>();
 
-    note(step: String) {
-        if (!trail.is_set()) {
-            trail.set(Array<String>());
-        }
-        with (var steps = trail.enter()) {
-            steps.append(step.copy());
-        }
+note(step: String) {
+    if (!trail.is_set()) {
+        trail.set(Array<String>());
     }
+    with (var steps = trail.enter()) {
+        steps.append(step.copy());
+    }
+}
 ```
 
 #### is_set

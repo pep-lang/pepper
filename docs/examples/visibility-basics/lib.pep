@@ -53,5 +53,8 @@ export norm_of(p: Point): int {
 }
 
 # `export` goes after attributes, directly before the declaration.
-[Target(OS(Windows))] export platform_name(): String { return "Windows"; }
-[Target(!OS(Windows))] export platform_name(): String { return "not Windows"; }
+[Target(OS(Windows))]
+export platform_name(): String { return "Windows"; }
+
+[Target(!OS(Windows))]
+export platform_name(): String { return "not Windows"; }

@@ -48,13 +48,13 @@ next to it with `executable_path().value().parent()`.
 
 **Example**
 ```pepper
-    import process;
+import process;
 
-    main(): int {
-        var path = process.executable_path().value();
-        print(path.to_string());
-        return 0;
-    }
+main(): int {
+    var path = process.executable_path().value();
+    print(path.to_string());
+    return 0;
+}
 ```
 
 ## working_directory

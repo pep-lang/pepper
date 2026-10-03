@@ -16,14 +16,14 @@ and always succeeds.
 
 **Example**
 ```pepper
-    import text;
+import text;
 
-    main(): int {
-        var bytes = text.Utf8.encode("héllo");
-        assert(bytes.count == 6, "é takes two bytes");
-        assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
-        return 0;
-    }
+main(): int {
+    var bytes = text.Utf8.encode("héllo");
+    assert(bytes.count == 6, "é takes two bytes");
+    assert(text.Utf8.decode(bytes).value() == "héllo", "round trip");
+    return 0;
+}
 ```
 
 Source: `runtime/text/module.pep`

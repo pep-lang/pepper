@@ -15,24 +15,24 @@ request with a handler function. Bodies are read into memory in full.
 
 **Example**
 ```pepper
-    import async;
-    import http;
-    import io;
+import async;
+import http;
+import io;
 
-    main(): int {
-        async.run(() => {
-            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-            var port = server.local_address().value().port();
-            async.spawn<void>(() => {
-                server.serve((request) => {
-                    return http.Response(200).set_text("hello");
-                });
+main(): int {
+    async.run(() => {
+        var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = server.local_address().value().port();
+        async.spawn<void>(() => {
+            server.serve((request) => {
+                return http.Response(200).set_text("hello");
             });
-            var response = http.Client().get("http://127.0.0.1:" + to_string(port) + "/").value();
-            assert(response.text() == "hello", "served");
         });
-        return 0;
-    }
+        var response = http.Client().get("http://127.0.0.1:" + to_string(port) + "/").value();
+        assert(response.text() == "hello", "served");
+    });
+    return 0;
+}
 ```
 
 Source: `runtime/http/module.pep`

@@ -171,16 +171,16 @@ the `EIO` of a short write or the `EBADF` of a closed `File`, is `Other`.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var r = io.File.open(io.Path("settings.txt"));
-    if (r.is_err()) {
-        match (r.error().kind()) {
-            NotFound => { print("no settings file"); }
-            PermissionDenied => { print("settings file is not readable"); }
-            else => { print(r.error().message); }
-        }
+var r = io.File.open(io.Path("settings.txt"));
+if (r.is_err()) {
+    match (r.error().kind()) {
+        NotFound => { print("no settings file"); }
+        PermissionDenied => { print("settings file is not readable"); }
+        else => { print(r.error().message); }
     }
+}
 ```
 
 ### Cases
@@ -334,16 +334,16 @@ for them too. A short write uses `EIO` / `ERROR_WRITE_FAULT` and a closed
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var r = io.File.open(io.Path("settings.txt"));
-    if (r.is_err()) {
-        if (r.error().is_not_found()) {
-            print("no settings file");
-        } else {
-            print(r.error().message);
-        }
+var r = io.File.open(io.Path("settings.txt"));
+if (r.is_err()) {
+    if (r.error().is_not_found()) {
+        print("no settings file");
+    } else {
+        print(r.error().message);
     }
+}
 ```
 
 ### Fields
@@ -420,12 +420,12 @@ current platform uses for each kind. Each predicate below is
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var r = io.File.open(io.Path("missing.txt"));
-    if (r.is_err() && r.error().kind() == io.ErrorKind.NotFound) {
-        print("no such file");
-    }
+var r = io.File.open(io.Path("missing.txt"));
+if (r.is_err() && r.error().kind() == io.ErrorKind.NotFound) {
+    print("no such file");
+}
 ```
 
 #### is_not_found
@@ -661,12 +661,12 @@ operations that produce nothing return `IoResult<void>`.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var cwd = io.Directory.current();
-    if (cwd.is_ok()) {
-        print(cwd.value().to_string());
-    } else {
-        print(cwd.error().message);
-    }
+var cwd = io.Directory.current();
+if (cwd.is_ok()) {
+    print(cwd.value().to_string());
+} else {
+    print(cwd.error().message);
+}
 ```

@@ -254,7 +254,7 @@ of an enum whose cases carry values panics with `match on a null 'Name'`; a
   arm's type, and every other arm's value must convert to it. When the arms
   are numbers of different types, the value has their common type, as C's
   `? :` does (`int` and `long` give `long`), and converts from it wherever
-  it goes (`0` or a `long` `length`, returned as an `int`). A closure in
+  it goes (`0` or a `ulong` `length`, returned as an `int`). A closure in
   an arm's value cannot use a name the arm binds; use a `match` statement
   there.
 - **`value is Pattern`** is a `bool`: whether `value` holds that case
@@ -362,11 +362,10 @@ the next arm is tried, as if this one had not matched.
 - An enum whose cases carry nothing cannot be generic, by design: its value
   is a plain integer, so a type parameter would have nothing to describe.
   An enum whose cases carry values can be (`enum List<T>`).
-- An enum whose cases carry values has no derived `==` that compares the
-  values: `==` compares identity, as for a struct, unless the enum declares
-  `==` (with a matching `hash<T>` to be a key), or is a
-  [`[Value]` enum](#value-enums). Deriving `==` and `hash` from the values
-  is planned together with the same for structs.
+- An enum whose cases carry values compares by identity with `==`, as a
+  struct does, unless it is a [`[Value]` enum](#value-enums), is
+  [`[Equatable]`](hashing.md#deriving-both-with-equatable), or declares
+  `==` (with a matching `hash<T>` to be a key).
 - A constant is a pattern only when it is declared at module scope.
 - A `match` cannot examine floating-point values.
 - The methods of an enum whose cases carry nothing have no value form:

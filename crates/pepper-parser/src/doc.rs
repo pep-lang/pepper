@@ -29,7 +29,7 @@
 //! member of one carries a doc comment that describes it and tags every
 //! parameter, generic parameter, and returned value.
 
-use crate::ast::{Declaration, FunctionDecl, GenericParam, Module, PropertyDecl, Span, VariableDecl};
+use crate::ast::{Declaration, Expression, FunctionDecl, GenericParam, Module, PropertyDecl, Span, VariableDecl};
 use crate::diagnostic::{Diagnostic, FileId, Loc};
 
 /// One tag of a doc comment: `@param count how many` is kind `param`, name
@@ -164,10 +164,25 @@ impl DocComment {
         section("See also", see);
         section("Note", plain("note"));
         for example in self.tags_of("example") {
-            out.push_str(&format!("\n\n**Example**\n```pepper\n{}\n```", example.text));
+            out.push_str(&format!("\n\n**Example**\n```pepper\n{}\n```", dedent(&example.text)));
         }
         out
     }
+}
+
+/// `text` with the indentation its non-blank lines share removed, so an
+/// `@example` written indented under its tag shows from the left margin.
+fn dedent(text: &str) -> String {
+    let indent = text.lines().filter(|l| !l.trim().is_empty()).map(|l| l.len() - l.trim_start().len()).min().unwrap_or(0);
+    text.lines().map(|l| l.get(indent..).unwrap_or("").trim_end()).collect::<Vec<_>>().join("\n")
+}
+
+/// Whether parameter `p` defaults to `__caller_location()`: the compiler
+/// fills it with the call's location so a panic reports the caller's line.
+/// Callers never pass it, so the documentation leaves it out.
+pub fn is_caller_location(p: &VariableDecl) -> bool {
+    matches!(&p.default_value, Some(Expression::FunctionCall { function, arguments, .. })
+        if arguments.is_empty() && matches!(function.as_ref(), Expression::SymbolRef { id, .. } if id == "__caller_location"))
 }
 
 /// The doc comment directly above a declaration starting at `offset`:
@@ -447,13 +462,18 @@ impl Checker<'_> {
         }
         let doc = doc.unwrap();
         self.generics(&doc, what, generics, f.name_span);
-        for p in &f.parameters {
+        for p in f.parameters.iter().filter(|p| !is_caller_location(p)) {
             if !doc.tags_of("param").any(|t| t.name == p.name) {
                 self.error(format!("missing '@param {}' in the doc comment for '{}'", p.name, what), p.name_span);
             }
         }
         for tag in doc.tags_of("param") {
-            if !f.parameters.iter().any(|p| p.name == tag.name) {
+            if f.parameters.iter().any(|p| p.name == tag.name && is_caller_location(p)) {
+                self.error(
+                    format!("'@param {}' documents a '__caller_location()' parameter, which callers never pass; remove it", tag.name),
+                    tag.span,
+                );
+            } else if !f.parameters.iter().any(|p| p.name == tag.name) {
                 self.error(format!("'@param {}' names no parameter of '{}'", tag.name, what), tag.span);
             }
         }
@@ -531,6 +551,16 @@ mod tests {
         let errs = errors(src);
         assert_eq!(errs.len(), 3, "{:#?}", errs);
         assert_eq!(errs[0], "t.pep:2:8: error: missing doc comment for 'f'\n    2 | export f(): void {}\n      |        ^");
+    }
+
+    #[test]
+    fn caller_location_parameters_are_not_documented() {
+        let src = "## Checks.\n##\n## @param x the value\nexport f(x: int, location: __ptr<char> = __caller_location()): void {}\n";
+        assert!(errors(src).is_empty(), "{:#?}", errors(src));
+        let src = "## Checks.\n##\n## @param x the value\n## @param location where\nexport f(x: int, location: __ptr<char> = __caller_location()): void {}\n";
+        let errs = errors(src);
+        assert_eq!(errs.len(), 1, "{:#?}", errs);
+        assert!(errs[0].starts_with("t.pep:4:11: error: '@param location' documents a '__caller_location()' parameter"), "{}", errs[0]);
     }
 
     #[test]

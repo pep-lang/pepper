@@ -22,12 +22,12 @@ The digest of the input is the same however it was split between
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    var hasher = digest.Sha256();
-    hasher.update("hello ");
-    hasher.update("world");
-    assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
+var hasher = digest.Sha256();
+hasher.update("hello ");
+hasher.update("world");
+assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 ```
 
 ### Constructor
@@ -114,10 +114,10 @@ Returns the SHA-256 digest of `bytes`.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    var empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-    assert(digest.to_hex(digest.sha256(Array<u8>())) == empty, "SHA-256 of nothing");
+var empty = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+assert(digest.to_hex(digest.sha256(Array<u8>())) == empty, "SHA-256 of nothing");
 ```
 
 ## sha256
@@ -136,8 +136,8 @@ Returns the SHA-256 digest of the UTF-8 bytes of `text`.
 
 **Example**
 ```pepper
-    import digest;
+import digest;
 
-    var abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-    assert(digest.to_hex(digest.sha256("abc")) == abc, "FIPS 180-4 example");
+var abc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+assert(digest.to_hex(digest.sha256("abc")) == abc, "FIPS 180-4 example");
 ```

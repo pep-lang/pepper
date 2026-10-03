@@ -50,21 +50,21 @@ to WebAssembly for WASI (`--target wasm32-wasip1`, see
 ## Current status
 
 Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and [properties](language/properties.md), enums (with cases that carry values, methods and computed properties) and `match` (as a statement or a value, on enums, integers, characters, strings and trait values, with `is` tests, nested and tuple patterns, guards, ranges and constants), tuples
+structs with constructors, destructors, methods and [properties](language/properties.md), [value structs and enums](language/value-structs.md) (`[Value]`), derived `==` and `hash` ([`[Equatable]`](language/hashing.md)), enums (with cases that carry values, methods and computed properties) and `match` (as a statement or a value, on enums, integers, characters, strings and trait values, with `is` tests, nested and tuple patterns, guards, ranges and constants), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with `as?`), function types and
-closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with `map` and
-`filter` adapters),
+closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with `map`,
+`filter`, `enumerate` and `zip` adapters),
 `with` blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (`[Export]`ed functions in a static or shared library, with a generated header). The standard library covers strings (with a `StringBuilder`,
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
+that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see [text](language/text.md)),
 TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing `JsonValue`s, JSONC documents that keep their comments, and converting structs with `json.encode` and `json.decode`), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the `digest` module), command-line arguments (`main(args: String[])`, parsed into options with the `cli` module), starting child processes, and the `os` module (environment variables, monotonic and wall clocks with `Duration`, and machine and user information). That is enough to write real
 programs, but expect gaps. [pep-fmt](tools/pep-fmt.md), the code formatter, and
 [`pepper`](tools/pepper.md), the entry point that runs every tool, are
 themselves written in Pepper.
-Some that you will meet quickly:
+Some things you will meet quickly:
 
 - Functions are values: a named function, an `extern` C function, a method (`p.norm`,
   `Point.norm`), a constructor (`Point`), a generic function's
@@ -91,8 +91,8 @@ Some that you will meet quickly:
 - Generic parameters can require traits (`<T: Shape & Named>`), checked
   wherever the generic is used and, inside the generic, against what the
   traits declare (see [constraints](language/generics.md#constraints)).
-  Numbers, `bool` and enums can declare traits too, for constraints, but
-  are never trait values.
+  Numbers, `bool` and enums whose cases carry nothing can declare traits
+  too, for constraints, but are never trait values.
 - Threads can share only thread-safe values, which the compiler checks,
   closure captures included. A channel hands over what it is sent without
   copying it (`send(move(x))`, or `send(copy(x))` to keep `x`), a `Select`
@@ -122,11 +122,14 @@ chapter shows a feature, the example was compiled and run to check it.
   program.
 - **Language guide.** One chapter per part of the language, from
   [types and variables](language/types-and-variables.md) to
-  [calling C](language/c-interop.md). Read it in order, or jump to the topic
-  you need.
+  [naming conventions](language/naming.md). Read it in order, or jump to the
+  topic you need.
+- **Tools.** [The pepper command](tools/pepper.md),
+  [pep-fmt](tools/pep-fmt.md) and [debugging](tools/debugging.md).
 - **Standard library reference.** Every type and function in the runtime,
   generated from the runtime's own documentation comments. Start at the
   [overview](reference/README.md).
+- **Contributing.** [Building this documentation](contributing/docs.md).
 
 Every complete program in this book lives in the repository's
 `docs/examples/` folder and is compiled and run by the test suite, so what

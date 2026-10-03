@@ -26,13 +26,13 @@ instruction on most CPUs (`leading_zeros`, `trailing_zeros`,
 
 **Example**
 ```pepper
-    var port = int.parse("8080");
-    assert(port.is_value() && port.value() == 8080, "parsed");
-    assert(byte.parse("256").is_empty(), "too big for a byte");
-    int big = 2147483647;
-    assert(big.wrapping_add(1) == -2147483648, "wraps around");
-    assert(big.checked_add(1).is_empty(), "does not fit");
-    assert((40 as uint).trailing_zeros() == 3, "40 is 0b101000");
+var port = int.parse("8080");
+assert(port.is_value() && port.value() == 8080, "parsed");
+assert(byte.parse("256").is_empty(), "too big for a byte");
+int big = 2147483647;
+assert(big.wrapping_add(1) == -2147483648, "wraps around");
+assert(big.checked_add(1).is_empty(), "does not fit");
+assert((40 as uint).trailing_zeros() == 3, "40 is 0b101000");
 ```
 
 Source: `runtime/number.pep`
@@ -68,7 +68,7 @@ are accepted.
 
 **Example**
 ```pepper
-    assert(i8.parse("-128").value() == -128, "the lowest");
+assert(i8.parse("-128").value() == -128, "the lowest");
 ```
 
 ### Methods
@@ -469,7 +469,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as char)).leading_zeros() == 7, "one bit, at the bottom");
+assert(((1 as char)).leading_zeros() == 7, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -487,7 +487,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as char).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as char).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -504,7 +504,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as char).count_ones() == 3, "three bits set");
+assert((11 as char).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -520,7 +520,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as char).count_zeros() == 5, "three bits set");
+assert((11 as char).count_zeros() == 5, "three bits set");
 ```
 
 #### swap_bytes
@@ -549,7 +549,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as char)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as char)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -570,7 +570,7 @@ taken modulo 8, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as char).rotate_left(7) == (9 as char).rotate_right(1), "the same rotation");
+assert((9 as char).rotate_left(7) == (9 as char).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -591,7 +591,7 @@ taken modulo 8, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as char)).rotate_right(1) == ((1 as char)).rotate_left(7), "the bottom bit to the top");
+assert(((1 as char)).rotate_right(1) == ((1 as char)).rotate_left(7), "the bottom bit to the top");
 ```
 
 #### min
@@ -610,7 +610,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as char).min(5) == 3, "smaller");
+assert((3 as char).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -629,21 +629,18 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as char).max(5) == 5, "larger");
+assert((3 as char).max(5) == 5, "larger");
 ```
 
 #### abs
 
 ```pepper
-abs(location: __ptr<char> = __caller_location()): char
+abs(): char
 ```
 
 Returns the absolute value: `this` without its sign. The lowest
 value, -128, has no positive counterpart in a `char`, so it panics, as
 its negation does.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - `-this` when this value is negative, else `this`
@@ -653,7 +650,7 @@ its negation does.
 
 **Example**
 ```pepper
-    assert((-5 as char).abs() == 5, "negative");
+assert((-5 as char).abs() == 5, "negative");
 ```
 
 ## extend byte
@@ -687,7 +684,7 @@ accepted.
 
 **Example**
 ```pepper
-    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
+assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 ```
 
 ### Methods
@@ -710,8 +707,8 @@ letter, space or punctuation.
 
 **Example**
 ```pepper
-    assert(('7' as byte).is_digit(), "a digit");
-    assert(!('x' as byte).is_digit(), "a letter");
+assert(('7' as byte).is_digit(), "a digit");
+assert(!('x' as byte).is_digit(), "a letter");
 ```
 
 #### is_hex_digit
@@ -811,8 +808,8 @@ or space, like C's `ispunct`. That is ``!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~``.
 
 **Example**
 ```pepper
-    assert((';' as byte).is_punctuation(), "punctuation");
-    assert(!(' ' as byte).is_punctuation(), "a space is not");
+assert((';' as byte).is_punctuation(), "punctuation");
+assert(!(' ' as byte).is_punctuation(), "a space is not");
 ```
 
 #### is_graphic
@@ -876,8 +873,8 @@ value unchanged for anything else, like C's `toupper`.
 
 **Example**
 ```pepper
-    assert(('q' as byte).to_upper() == 'Q', "raised");
-    assert(('?' as byte).to_upper() == '?', "kept");
+assert(('q' as byte).to_upper() == 'Q', "raised");
+assert(('?' as byte).to_upper() == '?', "kept");
 ```
 
 #### to_lower
@@ -912,9 +909,9 @@ and the letters, either case, are 10 and up (`a` is 10, `z` is 35).
 
 **Example**
 ```pepper
-    assert(('7' as byte).digit_value().value() == 7, "decimal");
-    assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
-    assert(('9' as byte).digit_value(8).is_empty(), "not octal");
+assert(('7' as byte).digit_value().value() == 7, "decimal");
+assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
+assert(('9' as byte).digit_value(8).is_empty(), "not octal");
 ```
 
 #### wrapping_add
@@ -1112,7 +1109,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as byte)).leading_zeros() == 7, "one bit, at the bottom");
+assert(((1 as byte)).leading_zeros() == 7, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -1130,7 +1127,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as byte).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as byte).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -1147,7 +1144,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as byte).count_ones() == 3, "three bits set");
+assert((11 as byte).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -1163,7 +1160,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as byte).count_zeros() == 5, "three bits set");
+assert((11 as byte).count_zeros() == 5, "three bits set");
 ```
 
 #### swap_bytes
@@ -1192,7 +1189,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as byte)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as byte)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -1213,7 +1210,7 @@ taken modulo 8, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as byte).rotate_left(7) == (9 as byte).rotate_right(1), "the same rotation");
+assert((9 as byte).rotate_left(7) == (9 as byte).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -1234,7 +1231,7 @@ taken modulo 8, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as byte)).rotate_right(1) == ((1 as byte)).rotate_left(7), "the bottom bit to the top");
+assert(((1 as byte)).rotate_right(1) == ((1 as byte)).rotate_left(7), "the bottom bit to the top");
 ```
 
 #### min
@@ -1253,7 +1250,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as byte).min(5) == 3, "smaller");
+assert((3 as byte).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -1272,7 +1269,7 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as byte).max(5) == 5, "larger");
+assert((3 as byte).max(5) == 5, "larger");
 ```
 
 ## extend short
@@ -1306,7 +1303,7 @@ separators are accepted.
 
 **Example**
 ```pepper
-    assert(short.parse("-300").value() == -300, "decimal");
+assert(short.parse("-300").value() == -300, "decimal");
 ```
 
 ### Methods
@@ -1506,7 +1503,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as short)).leading_zeros() == 15, "one bit, at the bottom");
+assert(((1 as short)).leading_zeros() == 15, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -1524,7 +1521,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as short).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as short).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -1541,7 +1538,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as short).count_ones() == 3, "three bits set");
+assert((11 as short).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -1557,7 +1554,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as short).count_zeros() == 13, "three bits set");
+assert((11 as short).count_zeros() == 13, "three bits set");
 ```
 
 #### swap_bytes
@@ -1574,7 +1571,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x1234 as short).swap_bytes() == 0x3412, "bytes reversed");
+assert((0x1234 as short).swap_bytes() == 0x3412, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -1591,7 +1588,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as short)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as short)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -1612,7 +1609,7 @@ taken modulo 16, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as short).rotate_left(15) == (9 as short).rotate_right(1), "the same rotation");
+assert((9 as short).rotate_left(15) == (9 as short).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -1633,7 +1630,7 @@ taken modulo 16, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as short)).rotate_right(1) == ((1 as short)).rotate_left(15), "the bottom bit to the top");
+assert(((1 as short)).rotate_right(1) == ((1 as short)).rotate_left(15), "the bottom bit to the top");
 ```
 
 #### min
@@ -1652,7 +1649,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as short).min(5) == 3, "smaller");
+assert((3 as short).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -1671,21 +1668,18 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as short).max(5) == 5, "larger");
+assert((3 as short).max(5) == 5, "larger");
 ```
 
 #### abs
 
 ```pepper
-abs(location: __ptr<char> = __caller_location()): short
+abs(): short
 ```
 
 Returns the absolute value: `this` without its sign. The lowest
 value, -32768, has no positive counterpart in a `short`, so it panics, as
 its negation does.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - `-this` when this value is negative, else `this`
@@ -1695,7 +1689,7 @@ its negation does.
 
 **Example**
 ```pepper
-    assert((-5 as short).abs() == 5, "negative");
+assert((-5 as short).abs() == 5, "negative");
 ```
 
 ## extend ushort
@@ -1729,7 +1723,7 @@ accepted.
 
 **Example**
 ```pepper
-    assert(ushort.parse("8080").value() == 8080, "a port");
+assert(ushort.parse("8080").value() == 8080, "a port");
 ```
 
 ### Methods
@@ -1929,7 +1923,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as ushort)).leading_zeros() == 15, "one bit, at the bottom");
+assert(((1 as ushort)).leading_zeros() == 15, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -1947,7 +1941,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as ushort).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as ushort).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -1964,7 +1958,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as ushort).count_ones() == 3, "three bits set");
+assert((11 as ushort).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -1980,7 +1974,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as ushort).count_zeros() == 13, "three bits set");
+assert((11 as ushort).count_zeros() == 13, "three bits set");
 ```
 
 #### swap_bytes
@@ -1997,7 +1991,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x1234 as ushort).swap_bytes() == 0x3412, "bytes reversed");
+assert((0x1234 as ushort).swap_bytes() == 0x3412, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -2014,7 +2008,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as ushort)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as ushort)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -2035,7 +2029,7 @@ taken modulo 16, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as ushort).rotate_left(15) == (9 as ushort).rotate_right(1), "the same rotation");
+assert((9 as ushort).rotate_left(15) == (9 as ushort).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -2056,7 +2050,7 @@ taken modulo 16, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as ushort)).rotate_right(1) == ((1 as ushort)).rotate_left(15), "the bottom bit to the top");
+assert(((1 as ushort)).rotate_right(1) == ((1 as ushort)).rotate_left(15), "the bottom bit to the top");
 ```
 
 #### min
@@ -2075,7 +2069,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as ushort).min(5) == 3, "smaller");
+assert((3 as ushort).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -2094,7 +2088,7 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as ushort).max(5) == 5, "larger");
+assert((3 as ushort).max(5) == 5, "larger");
 ```
 
 ## extend int
@@ -2128,9 +2122,9 @@ prefixes (`0x`) or separators are accepted.
 
 **Example**
 ```pepper
-    assert(int.parse("-42").value() == -42, "decimal");
-    assert(int.parse("ff", 16).value() == 255, "hexadecimal");
-    assert(int.parse("12x").is_empty(), "not a number");
+assert(int.parse("-42").value() == -42, "decimal");
+assert(int.parse("ff", 16).value() == 255, "hexadecimal");
+assert(int.parse("12x").is_empty(), "not a number");
 ```
 
 ### Methods
@@ -2330,7 +2324,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as int)).leading_zeros() == 31, "one bit, at the bottom");
+assert(((1 as int)).leading_zeros() == 31, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -2348,7 +2342,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as int).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as int).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -2365,7 +2359,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as int).count_ones() == 3, "three bits set");
+assert((11 as int).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -2381,7 +2375,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as int).count_zeros() == 29, "three bits set");
+assert((11 as int).count_zeros() == 29, "three bits set");
 ```
 
 #### swap_bytes
@@ -2398,7 +2392,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x12345678 as int).swap_bytes() == 0x78563412, "bytes reversed");
+assert((0x12345678 as int).swap_bytes() == 0x78563412, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -2415,7 +2409,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as int)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as int)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -2436,7 +2430,7 @@ taken modulo 32, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as int).rotate_left(31) == (9 as int).rotate_right(1), "the same rotation");
+assert((9 as int).rotate_left(31) == (9 as int).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -2457,7 +2451,7 @@ taken modulo 32, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as int)).rotate_right(1) == ((1 as int)).rotate_left(31), "the bottom bit to the top");
+assert(((1 as int)).rotate_right(1) == ((1 as int)).rotate_left(31), "the bottom bit to the top");
 ```
 
 #### min
@@ -2476,7 +2470,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as int).min(5) == 3, "smaller");
+assert((3 as int).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -2495,21 +2489,18 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as int).max(5) == 5, "larger");
+assert((3 as int).max(5) == 5, "larger");
 ```
 
 #### abs
 
 ```pepper
-abs(location: __ptr<char> = __caller_location()): int
+abs(): int
 ```
 
 Returns the absolute value: `this` without its sign. The lowest
 value, -2147483648, has no positive counterpart in a `int`, so it panics, as
 its negation does.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - `-this` when this value is negative, else `this`
@@ -2519,7 +2510,7 @@ its negation does.
 
 **Example**
 ```pepper
-    assert((-5 as int).abs() == 5, "negative");
+assert((-5 as int).abs() == 5, "negative");
 ```
 
 ## extend uint
@@ -2553,7 +2544,7 @@ accepted.
 
 **Example**
 ```pepper
-    assert(uint.parse("4294967295").value() == 4294967295, "the highest");
+assert(uint.parse("4294967295").value() == 4294967295, "the highest");
 ```
 
 ### Methods
@@ -2753,7 +2744,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as uint)).leading_zeros() == 31, "one bit, at the bottom");
+assert(((1 as uint)).leading_zeros() == 31, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -2771,7 +2762,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as uint).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as uint).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -2788,7 +2779,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as uint).count_ones() == 3, "three bits set");
+assert((11 as uint).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -2804,7 +2795,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as uint).count_zeros() == 29, "three bits set");
+assert((11 as uint).count_zeros() == 29, "three bits set");
 ```
 
 #### swap_bytes
@@ -2821,7 +2812,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
+assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -2838,7 +2829,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as uint)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as uint)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -2859,7 +2850,7 @@ taken modulo 32, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as uint).rotate_left(31) == (9 as uint).rotate_right(1), "the same rotation");
+assert((9 as uint).rotate_left(31) == (9 as uint).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -2880,7 +2871,7 @@ taken modulo 32, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as uint)).rotate_right(1) == ((1 as uint)).rotate_left(31), "the bottom bit to the top");
+assert(((1 as uint)).rotate_right(1) == ((1 as uint)).rotate_left(31), "the bottom bit to the top");
 ```
 
 #### min
@@ -2899,7 +2890,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as uint).min(5) == 3, "smaller");
+assert((3 as uint).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -2918,7 +2909,7 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as uint).max(5) == 5, "larger");
+assert((3 as uint).max(5) == 5, "larger");
 ```
 
 ## extend long
@@ -2952,8 +2943,8 @@ are accepted.
 
 **Example**
 ```pepper
-    assert(long.parse("-9000000000").value() == -9000000000, "decimal");
-    assert(long.parse("9223372036854775808").is_empty(), "too big");
+assert(long.parse("-9000000000").value() == -9000000000, "decimal");
+assert(long.parse("9223372036854775808").is_empty(), "too big");
 ```
 
 ### Methods
@@ -3153,7 +3144,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as long)).leading_zeros() == 63, "one bit, at the bottom");
+assert(((1 as long)).leading_zeros() == 63, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -3171,7 +3162,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as long).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as long).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -3188,7 +3179,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as long).count_ones() == 3, "three bits set");
+assert((11 as long).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -3204,7 +3195,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as long).count_zeros() == 61, "three bits set");
+assert((11 as long).count_zeros() == 61, "three bits set");
 ```
 
 #### swap_bytes
@@ -3221,7 +3212,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x0102030405060708 as long).swap_bytes() == 0x0807060504030201, "bytes reversed");
+assert((0x0102030405060708 as long).swap_bytes() == 0x0807060504030201, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -3238,7 +3229,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as long)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as long)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -3259,7 +3250,7 @@ taken modulo 64, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as long).rotate_left(63) == (9 as long).rotate_right(1), "the same rotation");
+assert((9 as long).rotate_left(63) == (9 as long).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -3280,7 +3271,7 @@ taken modulo 64, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as long)).rotate_right(1) == ((1 as long)).rotate_left(63), "the bottom bit to the top");
+assert(((1 as long)).rotate_right(1) == ((1 as long)).rotate_left(63), "the bottom bit to the top");
 ```
 
 #### min
@@ -3299,7 +3290,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as long).min(5) == 3, "smaller");
+assert((3 as long).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -3318,21 +3309,18 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as long).max(5) == 5, "larger");
+assert((3 as long).max(5) == 5, "larger");
 ```
 
 #### abs
 
 ```pepper
-abs(location: __ptr<char> = __caller_location()): long
+abs(): long
 ```
 
 Returns the absolute value: `this` without its sign. The lowest
 value, -9223372036854775808, has no positive counterpart in a `long`, so it panics, as
 its negation does.
-
-**Parameters**
-- `location` — where a failure is reported; left out, this call's location
 
 **Returns**
 - `-this` when this value is negative, else `this`
@@ -3342,7 +3330,7 @@ its negation does.
 
 **Example**
 ```pepper
-    assert((-5 as long).abs() == 5, "negative");
+assert((-5 as long).abs() == 5, "negative");
 ```
 
 ## extend ulong
@@ -3376,7 +3364,7 @@ accepted.
 
 **Example**
 ```pepper
-    assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
+assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
 ```
 
 ### Methods
@@ -3576,7 +3564,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 
 **Example**
 ```pepper
-    assert(((1 as ulong)).leading_zeros() == 63, "one bit, at the bottom");
+assert(((1 as ulong)).leading_zeros() == 63, "one bit, at the bottom");
 ```
 
 #### trailing_zeros
@@ -3594,7 +3582,7 @@ first set bit of a mask without a loop.
 
 **Example**
 ```pepper
-    assert((8 as ulong).trailing_zeros() == 3, "8 is 0b1000");
+assert((8 as ulong).trailing_zeros() == 3, "8 is 0b1000");
 ```
 
 #### count_ones
@@ -3611,7 +3599,7 @@ Returns the number of bits that are set (the population count,
 
 **Example**
 ```pepper
-    assert((11 as ulong).count_ones() == 3, "three bits set");
+assert((11 as ulong).count_ones() == 3, "three bits set");
 ```
 
 #### count_zeros
@@ -3627,7 +3615,7 @@ Returns the number of bits that are clear.
 
 **Example**
 ```pepper
-    assert((11 as ulong).count_zeros() == 61, "three bits set");
+assert((11 as ulong).count_zeros() == 61, "three bits set");
 ```
 
 #### swap_bytes
@@ -3644,7 +3632,7 @@ convert between little-endian and big-endian byte order.
 
 **Example**
 ```pepper
-    assert((0x0102030405060708 as ulong).swap_bytes() == 0x0807060504030201, "bytes reversed");
+assert((0x0102030405060708 as ulong).swap_bytes() == 0x0807060504030201, "bytes reversed");
 ```
 
 #### reverse_bits
@@ -3661,7 +3649,7 @@ becomes the highest (`llvm.bitreverse`).
 
 **Example**
 ```pepper
-    assert(((1 as ulong)).reverse_bits().leading_zeros() == 0, "bottom to top");
+assert(((1 as ulong)).reverse_bits().leading_zeros() == 0, "bottom to top");
 ```
 
 #### rotate_left
@@ -3682,7 +3670,7 @@ taken modulo 64, so a negative count rotates right.
 
 **Example**
 ```pepper
-    assert((9 as ulong).rotate_left(63) == (9 as ulong).rotate_right(1), "the same rotation");
+assert((9 as ulong).rotate_left(63) == (9 as ulong).rotate_right(1), "the same rotation");
 ```
 
 #### rotate_right
@@ -3703,7 +3691,7 @@ taken modulo 64, so a negative count rotates left.
 
 **Example**
 ```pepper
-    assert(((1 as ulong)).rotate_right(1) == ((1 as ulong)).rotate_left(63), "the bottom bit to the top");
+assert(((1 as ulong)).rotate_right(1) == ((1 as ulong)).rotate_left(63), "the bottom bit to the top");
 ```
 
 #### min
@@ -3722,7 +3710,7 @@ Returns the smaller of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as ulong).min(5) == 3, "smaller");
+assert((3 as ulong).min(5) == 3, "smaller");
 ```
 
 #### max
@@ -3741,7 +3729,7 @@ Returns the larger of this value and `other`.
 
 **Example**
 ```pepper
-    assert((3 as ulong).max(5) == 5, "larger");
+assert((3 as ulong).max(5) == 5, "larger");
 ```
 
 ## extend float
@@ -3772,8 +3760,8 @@ hexadecimal are accepted.
 
 **Example**
 ```pepper
-    assert(float.parse("0.25").value() == 0.25, "decimal");
-    assert(float.parse("1e39").is_empty(), "too big");
+assert(float.parse("0.25").value() == 0.25, "decimal");
+assert(float.parse("1e39").is_empty(), "too big");
 ```
 
 ### Methods
@@ -3792,7 +3780,7 @@ NaN for a negative value, and `-0.0` for `-0.0`.
 
 **Example**
 ```pepper
-    assert((2.25 as float).square_root() == 1.5, "exact");
+assert((2.25 as float).square_root() == 1.5, "exact");
 ```
 
 #### floor
@@ -3809,7 +3797,7 @@ Returns the largest whole number not greater than this value
 
 **Example**
 ```pepper
-    assert((-1.5 as float).floor() == -2.0, "down");
+assert((-1.5 as float).floor() == -2.0, "down");
 ```
 
 #### ceiling
@@ -3826,7 +3814,7 @@ Returns the smallest whole number not less than this value
 
 **Example**
 ```pepper
-    assert((-1.5 as float).ceiling() == -1.0, "up");
+assert((-1.5 as float).ceiling() == -1.0, "up");
 ```
 
 #### truncate
@@ -3842,7 +3830,7 @@ Returns this value without its fractional part (`llvm.trunc`).
 
 **Example**
 ```pepper
-    assert((-1.5 as float).truncate() == -1.0, "toward zero");
+assert((-1.5 as float).truncate() == -1.0, "toward zero");
 ```
 
 #### round
@@ -3859,7 +3847,7 @@ Returns the nearest whole number, halfway cases away from zero
 
 **Example**
 ```pepper
-    assert((2.5 as float).round() == 3.0, "half away from zero");
+assert((2.5 as float).round() == 3.0, "half away from zero");
 ```
 
 #### abs
@@ -3876,7 +3864,7 @@ Returns the absolute value: this value with its sign bit cleared
 
 **Example**
 ```pepper
-    assert((-2.0 as float).abs() == 2.0, "negative");
+assert((-2.0 as float).abs() == 2.0, "negative");
 ```
 
 #### copy_sign
@@ -3896,7 +3884,7 @@ Returns this value's magnitude with the sign of `sign`
 
 **Example**
 ```pepper
-    assert((3.0 as float).copy_sign(-0.0) == -3.0, "negative zero is negative");
+assert((3.0 as float).copy_sign(-0.0) == -3.0, "negative zero is negative");
 ```
 
 #### multiply_add
@@ -3918,7 +3906,7 @@ one instruction where the CPU has it.
 
 **Example**
 ```pepper
-    assert((2.0 as float).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+assert((2.0 as float).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
 ```
 
 #### min
@@ -3938,7 +3926,7 @@ NaN, the other (`llvm.minnum`).
 
 **Example**
 ```pepper
-    assert((1.5 as float).min(-2.0) == -2.0, "smaller");
+assert((1.5 as float).min(-2.0) == -2.0, "smaller");
 ```
 
 #### max
@@ -3958,7 +3946,7 @@ NaN, the other (`llvm.maxnum`).
 
 **Example**
 ```pepper
-    assert((1.5 as float).max(-2.0) == 1.5, "larger");
+assert((1.5 as float).max(-2.0) == 1.5, "larger");
 ```
 
 ## extend double
@@ -3989,8 +3977,8 @@ hexadecimal are accepted.
 
 **Example**
 ```pepper
-    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
-    assert(double.parse("1.5.2").is_empty(), "not a number");
+assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
+assert(double.parse("1.5.2").is_empty(), "not a number");
 ```
 
 ### Methods
@@ -4009,7 +3997,7 @@ NaN for a negative value, and `-0.0` for `-0.0`.
 
 **Example**
 ```pepper
-    assert((2.25 as double).square_root() == 1.5, "exact");
+assert((2.25 as double).square_root() == 1.5, "exact");
 ```
 
 #### floor
@@ -4026,7 +4014,7 @@ Returns the largest whole number not greater than this value
 
 **Example**
 ```pepper
-    assert((-1.5 as double).floor() == -2.0, "down");
+assert((-1.5 as double).floor() == -2.0, "down");
 ```
 
 #### ceiling
@@ -4043,7 +4031,7 @@ Returns the smallest whole number not less than this value
 
 **Example**
 ```pepper
-    assert((-1.5 as double).ceiling() == -1.0, "up");
+assert((-1.5 as double).ceiling() == -1.0, "up");
 ```
 
 #### truncate
@@ -4059,7 +4047,7 @@ Returns this value without its fractional part (`llvm.trunc`).
 
 **Example**
 ```pepper
-    assert((-1.5 as double).truncate() == -1.0, "toward zero");
+assert((-1.5 as double).truncate() == -1.0, "toward zero");
 ```
 
 #### round
@@ -4076,7 +4064,7 @@ Returns the nearest whole number, halfway cases away from zero
 
 **Example**
 ```pepper
-    assert((2.5 as double).round() == 3.0, "half away from zero");
+assert((2.5 as double).round() == 3.0, "half away from zero");
 ```
 
 #### abs
@@ -4093,7 +4081,7 @@ Returns the absolute value: this value with its sign bit cleared
 
 **Example**
 ```pepper
-    assert((-2.0 as double).abs() == 2.0, "negative");
+assert((-2.0 as double).abs() == 2.0, "negative");
 ```
 
 #### copy_sign
@@ -4113,7 +4101,7 @@ Returns this value's magnitude with the sign of `sign`
 
 **Example**
 ```pepper
-    assert((3.0 as double).copy_sign(-0.0) == -3.0, "negative zero is negative");
+assert((3.0 as double).copy_sign(-0.0) == -3.0, "negative zero is negative");
 ```
 
 #### multiply_add
@@ -4135,7 +4123,7 @@ one instruction where the CPU has it.
 
 **Example**
 ```pepper
-    assert((2.0 as double).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+assert((2.0 as double).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
 ```
 
 #### min
@@ -4155,7 +4143,7 @@ NaN, the other (`llvm.minnum`).
 
 **Example**
 ```pepper
-    assert((1.5 as double).min(-2.0) == -2.0, "smaller");
+assert((1.5 as double).min(-2.0) == -2.0, "smaller");
 ```
 
 #### max
@@ -4175,5 +4163,5 @@ NaN, the other (`llvm.maxnum`).
 
 **Example**
 ```pepper
-    assert((1.5 as double).max(-2.0) == 1.5, "larger");
+assert((1.5 as double).max(-2.0) == 1.5, "larger");
 ```

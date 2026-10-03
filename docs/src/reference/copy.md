@@ -54,10 +54,10 @@ Runs in O(size of the value) and allocates each copied object.
 
 **Example**
 ```pepper
-    var names = Array<String>();
-    names.append("ada");
-    var copied = copy(names);
-    copied[0].append(" lovelace");   # names[0] is still "ada"
+var names = Array<String>();
+names.append("ada");
+var copied = copy(names);
+copied[0].append(" lovelace");   # names[0] is still "ada"
 ```
 
 ## register_copy
@@ -80,12 +80,12 @@ them may lead back to it; outside a copy it does nothing.
 
 **Example**
 ```pepper
-    copy(): Node {
-        var made = Node(value);
-        register_copy(this, made);   # a cycle back to this finds made
-        made.next = copy(next);
-        return made;
-    }
+copy(): Node {
+    var made = Node(value);
+    register_copy(this, made);   # a cycle back to this finds made
+    made.next = copy(next);
+    return made;
+}
 ```
 
 ## move
@@ -115,9 +115,9 @@ or `Mutex.replace`, without the cost of `copy`.
 
 **Example**
 ```pepper
-    var lines = Array<String>();
-    lines.append("first");
-    var log = async.Mutex<Array<String>>(move(lines));   # lines is null now
+var lines = Array<String>();
+lines.append("first");
+var log = async.Mutex<Array<String>>(move(lines));   # lines is null now
 ```
 
 ## Copyable
@@ -141,31 +141,31 @@ shared.
 
 **Example**
 ```pepper
-    struct Buffer {
-        __ptr<u8> data;
-        ulong size;
+struct Buffer {
+    __ptr<u8> data;
+    ulong size;
 
-        construct(ulong size = 0) {
-            data = _pep_malloc(size);
-            this.size = size;
-        }
-
-        destruct {
-            _pep_free(data);
-        }
-
-        copy(): Buffer {
-            var made = Buffer(size);
-            var i: ulong = 0;
-            while (i < size) {
-                made.data[i] = data[i];
-                i = i + 1;
-            }
-            return made;
-        }
+    construct(ulong size = 0) {
+        data = _pep_malloc(size);
+        this.size = size;
     }
 
-    extend Buffer with Copyable<Buffer>;
+    destruct {
+        _pep_free(data);
+    }
+
+    copy(): Buffer {
+        var made = Buffer(size);
+        var i: ulong = 0;
+        while (i < size) {
+            made.data[i] = data[i];
+            i = i + 1;
+        }
+        return made;
+    }
+}
+
+extend Buffer with Copyable<Buffer>;
 ```
 
 ### Methods

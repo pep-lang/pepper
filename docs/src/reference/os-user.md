@@ -35,15 +35,15 @@ database's entry when `HOME` is unset or empty; on Windows
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var home = os.home_directory();
-        if (home) {
-            print(home.value().join(".config").to_string());
-        }
-        return 0;
+main(): int {
+    var home = os.home_directory();
+    if (home) {
+        print(home.value().join(".config").to_string());
     }
+    return 0;
+}
 ```
 
 ## temp_directory

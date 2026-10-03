@@ -21,16 +21,16 @@ these (a FIFO, socket or device on POSIX) have all three flags clear. Call
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var list = io.Directory.open(io.Path("src")).value().entries().value();
-    ulong i = 0;
-    while (i < list.count) {
-        if (list[i].is_file) {
-            print(list[i].Name);
-        }
-        i = i + 1;
+var list = io.Directory.open(io.Path("src")).value().entries().value();
+ulong i = 0;
+while (i < list.count) {
+    if (list[i].is_file) {
+        print(list[i].Name);
     }
+    i = i + 1;
+}
 ```
 
 ### Fields
@@ -135,14 +135,14 @@ afresh.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var dir = io.Directory.temp().join("scratch").join("logs");
-    if (io.Directory.create_all(dir).is_ok()) {
-        var d = io.Directory.open(dir).value();
-        var count = d.entries().value().count;
-        io.Directory.remove_all(io.Directory.temp().join("scratch"));
-    }
+var dir = io.Directory.temp().join("scratch").join("logs");
+if (io.Directory.create_all(dir).is_ok()) {
+    var d = io.Directory.open(dir).value();
+    var count = d.entries().value().count;
+    io.Directory.remove_all(io.Directory.temp().join("scratch"));
+}
 ```
 
 ### Fields
@@ -186,12 +186,12 @@ can still be renamed or removed afterwards.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var d = io.Directory.open(io.Path("src"));
-    if (d.is_err() && d.error().is_not_a_directory()) {
-        print("src is a file");
-    }
+var d = io.Directory.open(io.Path("src"));
+if (d.is_err() && d.error().is_not_a_directory()) {
+    print("src is a file");
+}
 ```
 
 #### create
@@ -233,9 +233,9 @@ directories at the same time.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
+var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
 ```
 
 #### remove
@@ -282,13 +282,13 @@ Windows a read-only file inside the tree is such a failure
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var tree = io.Directory.temp().join("my-scratch");
-    var r = io.Directory.remove_all(tree);
-    if (r.is_err() && !r.error().is_not_found()) {
-        print(r.error().message);
-    }
+var tree = io.Directory.temp().join("my-scratch");
+var r = io.Directory.remove_all(tree);
+if (r.is_err() && !r.error().is_not_found()) {
+    print(r.error().message);
+}
 ```
 
 #### current
@@ -346,9 +346,9 @@ a root, or `.` if that call fails.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var scratch = io.Directory.temp().join("my-tool");
+var scratch = io.Directory.temp().join("my-tool");
 ```
 
 ### Methods
@@ -370,12 +370,12 @@ at a time instead, loop over the `Directory` itself (see `iterate`).
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var list = io.Directory.open(io.Path(".")).value().entries();
-    if (list.is_ok()) {
-        var n = list.value().count;
-    }
+var list = io.Directory.open(io.Path(".")).value().entries();
+if (list.is_ok()) {
+    var n = list.value().count;
+}
 ```
 
 #### iterate
@@ -400,16 +400,16 @@ early with `break` or `return` closes it too.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var dir = io.Directory.open(io.Path(".")).value();
-    for (var entry in dir) {
-        if (entry.is_err()) {
-            print(entry.error().message);
-            break;
-        }
-        print(entry.value().name);
+var dir = io.Directory.open(io.Path(".")).value();
+for (var entry in dir) {
+    if (entry.is_err()) {
+        print(entry.error().message);
+        break;
     }
+    print(entry.value().name);
+}
 ```
 
 ## DirectoryIterator
@@ -431,12 +431,12 @@ iterator is released.
 
 **Example**
 ```pepper
-    import io;
+import io;
 
-    var it = io.Directory.open(io.Path(".")).value().iterate();
-    while (it.next()) {
-        var entry = it.current();
-    }
+var it = io.Directory.open(io.Path(".")).value().iterate();
+while (it.next()) {
+    var entry = it.current();
+}
 ```
 
 ### Constructor

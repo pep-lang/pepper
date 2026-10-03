@@ -132,7 +132,6 @@ export enum Optional<T> {
     ## For a struct `T` the caller gets its own reference; the optional keeps
     ## its reference too.
     ##
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns the value of a Value optional
     ## @panics if the optional is Empty ("Optional.value on an Empty optional")
     ## @example

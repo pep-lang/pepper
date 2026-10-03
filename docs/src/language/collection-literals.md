@@ -39,8 +39,9 @@ main.pep:2:13: error: empty array literal has no element type; declare the varia
 ## Sets
 
 There is no separate set literal. An array literal where a
-[`HashSet<K>`](../reference/hash.md#hashset) is expected converts to one
-through `HashSet`'s [implicit constructor](structs.md#implicit-conversions),
+[`HashSet<K>`](../reference/hash.md#hashset) or a
+[`Set<K>`](maps.md#sorted-map-and-set) is expected converts to one through
+the set's [implicit constructor](structs.md#implicit-conversions),
 which keeps each element once: `HashSet<String> keywords = ["if", "else"];`.
 
 ## Types of specializations

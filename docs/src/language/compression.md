@@ -22,8 +22,7 @@ written in Pepper, so a program that uses them links no extra library.
   searches for matches with zlib's settings for it, so the output is about
   the size zlib makes at the same level, at a similar speed: on 12 MB of
   source text, compressing at level 6 takes about 1.2 times as long as the
-  `gzip` command, and decompressing is a little faster than `gzip -d`
-  (`benchmarks/compress/bench.py` measures it).
+  `gzip` command, and decompressing is a little faster than `gzip -d`.
 - `decompress(data)` returns an `io.IoResult<u8[]>`. Damaged or truncated
   data is an error whose `is_invalid_input()` holds, and gzip and zlib
   data is checked against its CRC-32 or Adler-32 checksum.
@@ -66,7 +65,7 @@ wrap the file in a `DecompressReader` to read a `.tar.gz`.
 - `next_entry()` moves to the next entry and returns its `TarEntry`:
   `path`, `kind` (`File`, `Directory`, `Symlink`, `HardLink` or `Other`),
   `size`, `mode`, `modified` (seconds since 1970) and `link_target`. It
-  returns none at the end of the archive.
+  returns Empty at the end of the archive.
 - The reader is an `io.Reader` of the current entry's contents: `read`,
   `read_all()`, `lines()`. Contents not read are skipped.
 - It reads ustar archives with the pax and GNU extensions for long paths,

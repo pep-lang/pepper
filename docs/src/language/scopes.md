@@ -43,7 +43,7 @@ reference):
 
 ```pepper
 export trait Scoped<T> {
-    T enter();   # what the header binds; null skips the body
+    enter(): T;  # what the header binds; null skips the body
     exit();      # the cleanup; call it from the destructor
 }
 ```

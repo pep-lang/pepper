@@ -126,16 +126,16 @@ input the null device, unless they were set.
 
 **Example**
 ```pepper
-    import process;
+import process;
 
-    main(): int {
-        var output = process.Command("clang").arguments(["--version"]).run().value();
-        if (!output.status.success()) {
-            print(output.stderr);
-            return 1;
-        }
-        return 0;
+main(): int {
+    var output = process.Command("clang").arguments(["--version"]).run().value();
+    if (!output.status.success()) {
+        print(output.stderr);
+        return 1;
     }
+    return 0;
+}
 ```
 
 ### Fields
@@ -317,11 +317,11 @@ table until the parent ends.
 
 **Example**
 ```pepper
-    var child = process.Command("sort").stdin(process.Stream.Pipe).stdout(process.Stream.Pipe).spawn().value();
-    child.stdin().write_all("pear\napple\n");
-    child.stdin().close();
-    var sorted = child.stdout().read_string().value();   # "apple\npear\n"
-    child.wait();
+var child = process.Command("sort").stdin(process.Stream.Pipe).stdout(process.Stream.Pipe).spawn().value();
+child.stdin().write_all("pear\napple\n");
+child.stdin().close();
+var sorted = child.stdout().read_string().value();   # "apple\npear\n"
+child.wait();
 ```
 
 #### run
@@ -344,9 +344,9 @@ wait park the task rather than blocking its worker.
 
 **Example**
 ```pepper
-    var output = process.Command("echo").argument("hello").run().value();
-    assert(output.status.success(), "echo succeeds");
-    assert(output.stdout == "hello\n", "and prints its argument");
+var output = process.Command("echo").argument("hello").run().value();
+assert(output.status.success(), "echo succeeds");
+assert(output.stdout == "hello\n", "and prints its argument");
 ```
 
 #### exec
@@ -379,18 +379,18 @@ own working directory.
 
 **Example**
 ```pepper
-    import process;
+import process;
 
-    main(args: String[]): int {
-        # Run git with this program's arguments, as if it were git.
-        var git = process.Command("git");
-        ulong index = 1;
-        while (index < args.count) {
-            git.argument(args[index]);
-            index += 1;
-        }
-        var error = git.exec();
-        print($"cannot run git: {error.message}");
-        return 1;
+main(args: String[]): int {
+    # Run git with this program's arguments, as if it were git.
+    var git = process.Command("git");
+    ulong index = 1;
+    while (index < args.count) {
+        git.argument(args[index]);
+        index += 1;
     }
+    var error = git.exec();
+    print($"cannot run git: {error.message}");
+    return 1;
+}
 ```

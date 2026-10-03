@@ -33,15 +33,15 @@ page survives.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        var home = os.environment("HOME");
-        if (home) {
-            print(home.value());
-        }
-        return 0;
+main(): int {
+    var home = os.environment("HOME");
+    if (home) {
+        print(home.value());
     }
+    return 0;
+}
 ```
 
 ## environment_variables
@@ -64,12 +64,12 @@ returns it.
 
 **Example**
 ```pepper
-    import os;
+import os;
 
-    main(): int {
-        for (var (name, value) in os.environment_variables()) {
-            print($"{name}={value}");
-        }
-        return 0;
+main(): int {
+    for (var (name, value) in os.environment_variables()) {
+        print($"{name}={value}");
     }
+    return 0;
+}
 ```

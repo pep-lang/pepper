@@ -1,8 +1,9 @@
 # Linking
 
 The Pepper compiler turns your program into a native executable in two steps:
-it compiles all of your files, and the runtime, into one object file, and
-then links that object file with the system libraries it needs. When you
+it compiles your files and the runtime into object files (one per source
+file; see [Output files](#output-files)), and then links them with the
+system libraries it needs. When you
 [call C functions](c-interop.md), linking is where their definitions come
 from, so this chapter explains what is linked by default and how to add more.
 
@@ -147,3 +148,6 @@ directory you pass to `--build`: one object per file of the program in
 `<name>.units/`, and `<name>.o`, which runs the program's global
 initializers. Unchanged objects come from the build cache in `.pep/cache/`
 (`--no-cache` skips it).
+
+With `--lib static` or `--lib shared`, the output is a library and a C
+header instead (see [Building the library](c-interop.md#building-the-library)).

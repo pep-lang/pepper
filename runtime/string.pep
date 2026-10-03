@@ -27,6 +27,10 @@ extern int snprintf(char* buffer, ulong size, char* format, ...);
 ##   `ends_with`. The byte size is the authoritative length, so the data may
 ##   contain NUL bytes. It is never derived from a terminator.
 ##
+## A String's bytes are not guaranteed to be followed by a NUL. Only
+## `c_str()` guarantees one, so call it to hand the text to C; anything else
+## that reads the bytes must stop at `size`.
+##
 ## A String is a reference type: `var b = a;` shares one object, so
 ## `append`, `+=`, and `grow` are visible through every reference. Use
 ## `copy()` or `+` for an independent copy. Equality (`==`) compares
@@ -52,14 +56,14 @@ extern int snprintf(char* buffer, ulong size, char* format, ...);
 ##         print(c);   # one code point per line
 ##     }
 export struct String {
-    ## The heap buffer: `_size` bytes of UTF-8 followed by a NUL terminator,
-    ## or `__null` for a String built with no data (`String()`). The String
+    ## The heap buffer: `_size` bytes of UTF-8, followed for now by a NUL
+    ## that only `c_str()` may rely on, or `__null` for a String built with no data (`String()`). The String
     ## owns it and frees it on destruction. `append` and `grow` may move it.
     __ptr<char> _data;
     ## The number of Unicode code points. The constructor and `append` keep
     ## it current; `grow` does not update it.
     ulong _length;
-    ## The number of bytes of UTF-8 in `_data`, not counting the NUL terminator.
+    ## The number of bytes of UTF-8 in `_data`.
     ulong _size;
     ## A modification counter, incremented by `append` and `grow`. A
     ## `StringIterator` compares it to detect modification during iteration.
@@ -293,7 +297,6 @@ export struct String {
     ## visit every code point in O(size).
     ##
     ## @param idx the code-point index; negative counts from the end
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String that holds the one code point
     ## @panics if `idx` is not less than `length` after the negative index is
     ##   normalized, which includes any index into an empty String
@@ -346,8 +349,7 @@ export struct String {
         return this;
     }
 
-    ## The number of bytes of UTF-8, not counting the NUL
-    ## terminator. O(1).
+    ## The number of bytes of UTF-8. O(1).
     ##
     ## @see length
     var size: ulong {
@@ -385,6 +387,10 @@ export struct String {
     }
 
     ## Returns the String's buffer as a NUL-terminated C string.
+    ##
+    ## This is the one API that guarantees a NUL after the content: a String
+    ## is not otherwise guaranteed to be NUL-terminated, so code that needs
+    ## the terminator calls `c_str()` rather than relying on the buffer.
     ##
     ## The pointer is owned by the String. It is valid until the String is
     ## destroyed or `append`, `+=`, or `grow` reallocates it. It is `__null`
@@ -488,7 +494,6 @@ export struct String {
     ## whole String. Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new Array with one new String per piece
     ## @panics if `separator` is empty
     ## @example
@@ -516,7 +521,6 @@ export struct String {
     ## Runs in O(size * separator.size).
     ##
     ## @param separator the text to split at
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns the pieces before and after the first `separator`, or none
     ## @panics if `separator` is empty
     ## @example
@@ -567,7 +571,6 @@ export struct String {
     ##
     ## @param from the text to replace
     ## @param to the text to put in its place
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String
     ## @panics if `from` is empty
     ## @example
@@ -699,7 +702,6 @@ export struct String {
     ## character literal (`s.byte_at(0) == '#'`).
     ##
     ## @param index the byte offset, less than `size`
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns the byte at `index`
     ## @panics if `index` is not less than `size` ("String byte_at index out of bounds")
     ## @example
@@ -716,7 +718,6 @@ export struct String {
     ##
     ## @param start the byte offset of the first byte to copy
     ## @param size the number of bytes to copy
-    ## @param location where a failure is reported; left out, this call's location
     ## @returns a new String that holds those bytes
     ## @panics if `start + size` is greater than `size` ("String substr_bytes range out of bounds")
     ## @panics if `start` or `start + size` falls inside a multi-byte code point

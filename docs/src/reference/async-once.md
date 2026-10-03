@@ -25,18 +25,18 @@ threads.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const setup = async.Once();
-    const setups = Atomic<long>(0);
+const setup = async.Once();
+const setups = Atomic<long>(0);
 
-    initialize() {
-        setups.fetch_add(1);
-    }
+initialize() {
+    setups.fetch_add(1);
+}
 
-    work() {
-        setup.call(initialize);   # only the first caller runs it
-    }
+work() {
+    setup.call(initialize);   # only the first caller runs it
+}
 ```
 
 ### Constructor
@@ -74,7 +74,7 @@ Only one body ever runs, even if later calls pass different ones.
 
 **Example**
 ```pepper
-    config_once.call(load_config);
+config_once.call(load_config);
 ```
 
 #### is_done
@@ -110,24 +110,24 @@ gets the same value; `Lazy<String>` is a compile error.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    [Shared]
-    struct Settings {
-        const workers: long;
-        construct(this.workers = 1) {}
-    }
+[Shared]
+struct Settings {
+    const workers: long;
+    construct(this.workers = 1) {}
+}
 
-    load_settings(): Settings {
-        return Settings(async.logical_cpus() as long);
-    }
+load_settings(): Settings {
+    return Settings(async.logical_cpus() as long);
+}
 
-    const settings = async.Lazy<Settings>(load_settings);
+const settings = async.Lazy<Settings>(load_settings);
 
-    main(): int {
-        var workers = settings.get().workers;   # built here, on first use
-        return 0;
-    }
+main(): int {
+    var workers = settings.get().workers;   # built here, on first use
+    return 0;
+}
 ```
 
 ### Constructor

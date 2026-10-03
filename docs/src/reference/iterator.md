@@ -31,35 +31,35 @@ which a `for` loop drives through the trait.
 
 **Example**
 ```pepper
-    struct Countdown {
-        int remaining;
-        int now;
+struct Countdown {
+    int remaining;
+    int now;
 
-        construct(this.remaining = 0) {}
+    construct(this.remaining = 0) {}
 
-        bool next() {
-            if (remaining == 0) {
-                return false;
-            }
-            now = remaining;
-            remaining = remaining - 1;
-            return true;
+    bool next() {
+        if (remaining == 0) {
+            return false;
         }
-
-        int current() {
-            return now;
-        }
+        now = remaining;
+        remaining = remaining - 1;
+        return true;
     }
 
-    extend Countdown with Iterator<int>;
-
-    main(): int {
-        var total = 0;
-        for (int n in Countdown(3)) {
-            total = total + n;   # visits 3, 2, 1
-        }
-        return total;
+    int current() {
+        return now;
     }
+}
+
+extend Countdown with Iterator<int>;
+
+main(): int {
+    var total = 0;
+    for (int n in Countdown(3)) {
+        total = total + n;   # visits 3, 2, 1
+    }
+    return total;
+}
 ```
 
 ### Methods
@@ -115,10 +115,10 @@ the result advances this iterator. Every type that declares
 
 **Example**
 ```pepper
-    var names = Array<String>();
-    for (var size in names.iterate().map((name) => name.size)) {
-        print(size);
-    }
+var names = Array<String>();
+for (var size in names.iterate().map((name) => name.size)) {
+    print(size);
+}
 ```
 
 #### filter
@@ -142,10 +142,10 @@ gets this method.
 
 **Example**
 ```pepper
-    var nums = Array<int>();
-    for (var even in nums.iterate().filter((n) => n % 2 == 0)) {
-        print(even);
-    }
+var nums = Array<int>();
+for (var even in nums.iterate().filter((n) => n % 2 == 0)) {
+    print(even);
+}
 ```
 
 #### enumerate
@@ -170,10 +170,10 @@ declares `Iterator<T>` gets this method.
 
 **Example**
 ```pepper
-    var names = ["Ada", "Grace"];
-    for (var (i, name) in names.iterate().enumerate()) {
-        print($"{i}: {name}");   # 0: Ada, then 1: Grace
-    }
+var names = ["Ada", "Grace"];
+for (var (i, name) in names.iterate().enumerate()) {
+    print($"{i}: {name}");   # 0: Ada, then 1: Grace
+}
 ```
 
 #### zip
@@ -200,11 +200,11 @@ method.
 
 **Example**
 ```pepper
-    var names = ["Ada", "Grace"];
-    var ages = [36, 45];
-    for (var (name, age) in names.iterate().zip(ages.iterate())) {
-        print($"{name} is {age}");
-    }
+var names = ["Ada", "Grace"];
+var ages = [36, 45];
+for (var (name, age) in names.iterate().zip(ages.iterate())) {
+    print($"{name} is {age}");
+}
 ```
 
 #### to_array
@@ -225,7 +225,7 @@ method.
 
 **Example**
 ```pepper
-    var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
 ```
 
 ## MapIterator
@@ -466,13 +466,13 @@ returned iterator with `next()` and `current()`. When a type declares both
 
 **Example**
 ```pepper
-    var nums = Array<int>();
-    nums.append(1);
-    nums.append(2);
-    var total = 0;
-    for (var x in nums) {
-        total = total + x;
-    }
+var nums = Array<int>();
+nums.append(1);
+nums.append(2);
+var total = 0;
+for (var x in nums) {
+    total = total + x;
+}
 ```
 
 ### Methods

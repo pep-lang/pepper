@@ -40,20 +40,20 @@ so destroy one only after the threads that used it have exited.
 
 **Example**
 ```pepper
-    import async;
+import async;
 
-    const calls = async.ThreadLocal<int>();
+const calls = async.ThreadLocal<int>();
 
-    count_call() {
-        calls.set(calls.get() + 1);
-    }
+count_call() {
+    calls.set(calls.get() + 1);
+}
 
-    main(): int {
-        count_call();
-        count_call();
-        assert(calls.get() == 2, "two calls on this thread");
-        return 0;
-    }
+main(): int {
+    count_call();
+    count_call();
+    assert(calls.get() == 2, "two calls on this thread");
+    return 0;
+}
 ```
 
 ### Constructor
@@ -119,16 +119,16 @@ no value (for a struct `T`).
 
 **Example**
 ```pepper
-    const names = async.ThreadLocal<Array<String>>();
+const names = async.ThreadLocal<Array<String>>();
 
-    remember(String name) {
-        if (!names.is_set()) {
-            names.set(Array<String>());
-        }
-        with (var list = names.enter()) {
-            list.append(name.copy());
-        }
+remember(String name) {
+    if (!names.is_set()) {
+        names.set(Array<String>());
     }
+    with (var list = names.enter()) {
+        list.append(name.copy());
+    }
+}
 ```
 
 #### is_set

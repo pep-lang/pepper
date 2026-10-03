@@ -27,7 +27,7 @@ A pattern is a `String`, so each backslash is doubled in a string literal:
 | Method | Result |
 |--------|--------|
 | `is_match(text)` | whether there is a match anywhere; the fastest test |
-| `find(text)` | the leftmost `Match`, or none |
+| `find(text)` | the leftmost `Match`, or Empty |
 | `find_at(text, start)` | the leftmost match starting at or after byte `start` |
 | `find_all(text)` | an iterator over every match, left to right, without overlaps |
 | `replace(text, replacement)` | `text` with the first match replaced |
@@ -36,7 +36,7 @@ A pattern is a `String`, so each backslash is doubled in a string literal:
 
 A `Match` has `text()`, `start()` and `end()` (byte offsets, as `String.find`
 returns, for use with `substr_bytes`), and `group(index)` or `group(name)`,
-which give the group's text or none when the group did not take part (as
+which give the group's text or Empty when the group did not take part (as
 `(a)` in `(a)|b` matching `b`). Group 0 is the whole match; groups are
 numbered by their opening `(`. `group_range(index)` gives a group's offsets.
 
