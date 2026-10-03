@@ -1,6 +1,6 @@
 <!-- Generated from runtime/io/unix.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# io/unix.pep
+# Unix domain sockets
 
 Unix domain sockets: `UnixListener` accepts connections on a path in the
 file system, `UnixStream` is one connection.

@@ -1,6 +1,6 @@
 <!-- Generated from runtime/uri.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# uri.pep
+# URI
 
 URI references (RFC 3986): parse any URI, such as `https://example.com/a?b#c`,
 `mailto:someone@example.com` or `/items?page=2`, into its parts.

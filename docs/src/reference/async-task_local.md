@@ -1,6 +1,6 @@
 <!-- Generated from runtime/async/task_local.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# async/task_local.pep
+# TaskLocal
 
 Per-task values: `TaskLocal<T>` gives every task its own copy of a
 variable.

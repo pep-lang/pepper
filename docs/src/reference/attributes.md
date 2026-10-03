@@ -1,6 +1,6 @@
 <!-- Generated from runtime/attributes.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# attributes.pep
+# Built-in attributes
 
 The built-in attributes, declared as `[Attribute]` structs so a `static`
 block can read them like its own: `field.has_attribute<Deprecated>()`

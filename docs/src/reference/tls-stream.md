@@ -1,6 +1,6 @@
 <!-- Generated from runtime/tls/stream.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# tls/stream.pep
+# Connectors and streams
 
 TLS connections: `TlsConnector` opens client connections, `TlsAcceptor`
 accepts server connections, and `TlsStream` is one encrypted connection

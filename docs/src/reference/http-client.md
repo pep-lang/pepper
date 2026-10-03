@@ -1,6 +1,6 @@
 <!-- Generated from runtime/http/client.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# http/client.pep
+# Client
 
 The HTTP client: `Client` sends a `Request` over HTTP or HTTPS and
 returns the `Response`.

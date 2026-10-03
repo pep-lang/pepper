@@ -1,6 +1,6 @@
 <!-- Generated from runtime/hint/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# hint/module.pep
+# The hint module
 
 Hints to the optimizer about memory a loop will soon read or write.
 

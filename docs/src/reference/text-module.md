@@ -1,6 +1,6 @@
 <!-- Generated from runtime/text/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# text/module.pep
+# The text module
 
 Converting text to and from bytes in a given encoding.
 

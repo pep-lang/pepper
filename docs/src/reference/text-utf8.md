@@ -1,6 +1,6 @@
 <!-- Generated from runtime/text/utf8.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# text/utf8.pep
+# UTF-8
 
 UTF-8, the encoding a `String` holds.
 

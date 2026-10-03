@@ -1,6 +1,6 @@
 <!-- Generated from runtime/math/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# math/module.pep
+# The math module
 
 Numbers beyond the operators: the math library as it grows.
 

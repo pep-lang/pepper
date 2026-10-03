@@ -1,6 +1,6 @@
 <!-- Generated from runtime/text/ascii.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# text/ascii.pep
+# ASCII
 
 ASCII, the first 128 code points, one byte each.
 

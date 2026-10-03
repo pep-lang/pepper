@@ -36,83 +36,91 @@ set too, and so are its static methods, its operators, its
 - **A file's own functions hide imported ones.** A file's functions of a
   name hide an imported function of that name, as before: a file cannot add
   members to an imported set.
-- **Files of one module share a set.** When an import or a re-export takes
-  one name from two files of the same module, and both are functions
-  declared under that name, it takes their union: one set of every member. Here `shapes/module.pep`
-  re-exports `area` from two files:
 
-  ```pepper
-  {{#include ../../examples/overloading-modules/shapes/module.pep}}
-  ```
+### Files of one module share a set
 
-  ```pepper
-  {{#include ../../examples/overloading-modules/shapes/square.pep}}
-  ```
+When an import or a re-export takes one name from two files of the same
+module, and both are functions declared under that name, it takes their
+union: one set of every member. Here `shapes/module.pep` re-exports `area`
+from two files:
 
-  ```pepper
-  {{#include ../../examples/overloading-modules/shapes/rect.pep}}
-  ```
+```pepper
+{{#include ../../examples/overloading-modules/shapes/module.pep}}
+```
 
-  ```pepper
-  {{#include ../../examples/overloading-modules/main.pep}}
-  ```
+```pepper
+{{#include ../../examples/overloading-modules/shapes/square.pep}}
+```
 
-  A file of the module that imports both files (`import "square";` and
-  `import "rect";`, or an import list naming `area` from each) sees the
-  same set. Members from different files must still differ in their
-  parameters (`redefinition of 'area'`). Names that are not all functions,
-  such as two structs `Point`, and a renaming re-export
-  (`export size as area` beside an `area`) are still `exported twice`.
-- **Members may differ in visibility.** Exported members are what other
-  files see; a private member is a candidate only for calls in its own
-  file. Here `shapes.pep` exports `area(int)` and keeps the two-argument
-  form as a helper:
+```pepper
+{{#include ../../examples/overloading-modules/shapes/rect.pep}}
+```
 
-  ```pepper
-  {{#include ../../examples/overloading-visibility/shapes.pep}}
-  ```
+```pepper
+{{#include ../../examples/overloading-modules/main.pep}}
+```
 
-  ```pepper
-  {{#include ../../examples/overloading-visibility/main.pep}}
-  ```
+A file of the module that imports both files (`import "square";` and
+`import "rect";`, or an import list naming `area` from each) sees the
+same set. Members from different files must still differ in their
+parameters (`redefinition of 'area'`). Names that are not all functions,
+such as two structs `Point`, and a renaming re-export
+(`export size as area` beside an `area`) are still `exported twice`.
 
-  A call that only the private member fits is an error in another file,
-  and its notes list only the exported members:
+Two modules' sets do not merge. When two imported modules, or two files
+outside any module, each export a set named `parse`, an unqualified `parse(…)` is an error (`'parse' is ambiguous: more than one
+import provides it`), even when their parameters differ. A qualifier
+(`a.parse`) or an import list (`import [parse] from "b"`) picks one.
 
-  ```text
-  main.pep:2:22: error: no matching function for call to 'area'
-      2 | main(): int { return area(2, 3); }
-        |                      ^~~~
-  shapes.pep:2:8: note: candidate function not viable: requires 1 argument, but 2 were provided
-      2 | export area(side: int): int {
-        |        ^~~~
-  ```
+### Members may differ in visibility
 
-  Importing the name (`import [area] from "shapes"`, or the whole file)
-  brings every exported member, and `import [area as size]` renames the
-  whole set. A re-export (`export area;`, `export * from "shapes"`) passes
-  on the exported members too; a set whose members are all private is
-  re-exported whole.
-- **Two modules' sets do not merge.** When two imported modules, or two
-  files outside any module, each export a set named `parse`, an
-  unqualified `parse(…)` is an error (`'parse' is ambiguous: more than one
-  import provides it`), even when their parameters differ. A qualifier
-  (`a.parse`) or an import list (`import [parse] from "b"`) picks one.
-- **`extern` functions do not overload**, by design: an extern is a C
-  function, which has one symbol, and keeping one extern per name keeps
-  the binding to C one-to-one. To put a family of C functions such as
-  `abs` and `llabs` behind one name, give each extern a name of its own
-  (`[Link(name = ...)]` binds it to the C symbol) and overload Pepper
-  functions that call them. With optimization on (`-O2`), LLVM inlines
-  the small wrappers:
+Exported members are what other files see; a private member is a candidate
+only for calls in its own file. Here `shapes.pep` exports `area(int)` and
+keeps the two-argument form as a helper:
 
-  ```pepper
-  {{#include ../../examples/overloading-externs.pep}}
-  ```
+```pepper
+{{#include ../../examples/overloading-visibility/shapes.pep}}
+```
 
-  Overloading the extern itself is an error that says so (`extern 'abs'
-  cannot be overloaded; rename it and overload Pepper functions named
-  'abs' that call it`).
+```pepper
+{{#include ../../examples/overloading-visibility/main.pep}}
+```
+
+A call that only the private member fits is an error in another file,
+and its notes list only the exported members:
+
+```text
+main.pep:2:22: error: no matching function for call to 'area'
+    2 | main(): int { return area(2, 3); }
+      |                      ^~~~
+shapes.pep:2:8: note: candidate function not viable: requires 1 argument, but 2 were provided
+    2 | export area(side: int): int {
+      |        ^~~~
+```
+
+Importing the name (`import [area] from "shapes"`, or the whole file)
+brings every exported member, and `import [area as size]` renames the
+whole set. A re-export (`export area;`, `export * from "shapes"`) passes
+on the exported members too; a set whose members are all private is
+re-exported whole.
+
+### `extern` functions do not overload
+
+An `extern` function does not overload, by design: an extern is a C
+function, which has one symbol, and keeping one extern per name keeps
+the binding to C one-to-one. To put a family of C functions such as
+`abs` and `llabs` behind one name, give each extern a name of its own
+(`[Link(name = ...)]` binds it to the C symbol) and overload Pepper
+functions that call them. With optimization on (`-O2`), LLVM inlines
+the small wrappers:
+
+```pepper
+{{#include ../../examples/overloading-externs.pep}}
+```
+
+Overloading the extern itself is an error that says so (`extern 'abs'
+cannot be overloaded; rename it and overload Pepper functions named
+'abs' that call it`).
 
 ## How a call picks a member
 

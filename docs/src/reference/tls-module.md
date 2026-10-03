@@ -1,6 +1,6 @@
 <!-- Generated from runtime/tls/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# tls/module.pep
+# The tls module
 
 Encrypted connections: TLS 1.2 and 1.3 over TCP, for clients and servers.
 

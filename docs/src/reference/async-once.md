@@ -1,6 +1,6 @@
 <!-- Generated from runtime/async/once.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# async/once.pep
+# Once and Lazy
 
 One-time initialization: `Once` runs a function exactly once however many
 threads ask, and `Lazy<T>` builds a value on first use.

@@ -1,6 +1,6 @@
 <!-- Generated from runtime/copy.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# copy.pep
+# Copying
 
 Deep copies: `copy(value)` makes a copy that shares no object that is
 not thread-safe with the original, so it can be handed to another thread;

@@ -1,6 +1,6 @@
 <!-- Generated from runtime/io/stream.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# io/stream.pep
+# Reader and Writer
 
 `Reader` and `Writer`: the traits of byte streams, such as a `File`, a
 `TcpStream`, a `UnixStream` or a `tls.TlsStream`, so code can read from

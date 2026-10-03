@@ -262,17 +262,8 @@ and pass a named function, or a closure that captures nothing:
   This is a design decision, not a missing feature: a C function pointer is
   a bare address, and giving each capturing closure an address of its own
   would mean writing executable code at run time, which some platforms
-  forbid. A callback that needs state gets it another way:
-  - **The C function's context argument.** Most C APIs that take a callback
-    also take a `void*` context argument that they hand back to it; pass a
-    pointer to the data the callback needs through that.
-  - **A thread-local or module-scope value.** Set an
-    [`async.ThreadLocal<T>`](threads.md#per-thread-values-with-threadlocal) (or an `Atomic<T>`) before calling
-    C, and read it in the callback, which is a named function:
-
-    ```pepper
-    {{#include ../../examples/c-callback-state.pep}}
-    ```
+  forbid. A callback that needs state gets it another way (see
+  [Callbacks that need state](#callbacks-that-need-state)).
 
   A function value held in a variable does not convert either, since it may
   be a closure.
@@ -295,6 +286,23 @@ whose method uses it. Inside a generic struct the static method is the one
 for the current type arguments, which is how `ThreadLocal<T>` gives the
 operating system a destructor for its `T`. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.
+
+### Callbacks that need state
+
+Since a C function pointer holds no captured values, a callback that needs
+state gets it another way:
+
+- **The C function's context argument.** Most C APIs that take a callback
+  also take a `void*` context argument that they hand back to it; pass a
+  pointer to the data the callback needs through that.
+- **A thread-local or module-scope value.** Set an
+  [`async.ThreadLocal<T>`](threads.md#per-thread-values-with-threadlocal)
+  (or an `Atomic<T>`) before calling C, and read it in the callback, which
+  is a named function:
+
+```pepper
+{{#include ../../examples/c-callback-state.pep}}
+```
 
 ## Binding to a different symbol name
 

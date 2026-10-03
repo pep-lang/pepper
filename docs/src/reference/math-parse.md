@@ -1,6 +1,6 @@
 <!-- Generated from runtime/math/parse.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# math/parse.pep
+# Parsing integers
 
 Reading integers from text.
 

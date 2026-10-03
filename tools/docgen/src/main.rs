@@ -4,7 +4,8 @@
 //! cargo run -p pepper-docgen -- reference
 //!     Regenerate docs/src/reference/ from the runtime's doc comments.
 //! cargo run -p pepper-docgen -- check
-//!     Fail if the committed reference is out of date.
+//!     Fail if the committed reference is out of date, or if a chapter has
+//!     Markdown that renders broken (an include inside a list item).
 //! cargo run -p pepper-docgen -- build [--version <semver>|dev] [--site <dir>]
 //!     Regenerate the reference, render the book with mdBook into
 //!     <site>/<version>/ (default: target/docs-site/dev/), and refresh the
@@ -16,6 +17,7 @@
 //!
 //! mdBook must be on PATH (`cargo install mdbook --locked`).
 
+mod book;
 mod reference;
 mod site;
 
@@ -72,14 +74,21 @@ fn run(args: &[String]) -> Result<(), String> {
             if reference::update_summary(&summary, &pages)? != summary {
                 stale.push("docs/src/SUMMARY.md".to_string());
             }
-            if stale.is_empty() {
-                Ok(())
-            } else {
-                Err(format!(
+            let broken = book::lint(&root.join("docs/src"))?;
+            for e in &broken {
+                eprintln!("{}", e);
+            }
+            let mut errors = vec![];
+            if !broken.is_empty() {
+                errors.push(format!("{} problem(s) in the book's chapters", broken.len()));
+            }
+            if !stale.is_empty() {
+                errors.push(format!(
                     "the standard library reference is out of date: {}\nrun `cargo run -p pepper-docgen -- reference`",
                     stale.join(", ")
-                ))
+                ));
             }
+            if errors.is_empty() { Ok(()) } else { Err(errors.join("\n")) }
         }
         "build" => {
             let version = match option("--version").as_deref() {

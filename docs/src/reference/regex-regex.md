@@ -1,6 +1,6 @@
 <!-- Generated from runtime/regex/regex.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# regex/regex.pep
+# Regex and Match
 
 Regex, Match and the iterator over every match.
 

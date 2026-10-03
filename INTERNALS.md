@@ -2084,8 +2084,11 @@ diagnostics"). The mechanics:
   reference pages in `docs/src/reference/` and the reference part of
   `docs/src/SUMMARY.md` are **generated** by
   `cargo run -p pepper-docgen -- reference`. CI fails if they are stale
-  (`cargo run -p pepper-docgen -- check`). See `docs/src/contributing/docs.md` for the
-  book.
+  (`cargo run -p pepper-docgen -- check`). A page's title and place in the
+  table of contents come from `PAGES` in `tools/docgen/src/reference.rs`,
+  which must name every runtime file with public declarations; `check`
+  also lints the chapters (`tools/docgen/src/book.rs`). See
+  `docs/src/contributing/docs.md` for the book.
 
 ---
 
@@ -2449,7 +2452,8 @@ rendered-output test in `crates/pepper-driver/tests/integration/diagnostic_tests
 3. For the `io` module, add it to the implementing file and re-export it
    from `runtime/io/module.pep`.
 4. Regenerate the reference: `cargo run -p pepper-docgen -- reference`.
-   Commit the changed `docs/src/reference/*.md` and `docs/src/SUMMARY.md`.
+   A new file needs a title in `PAGES` (`tools/docgen/src/reference.rs`)
+   first. Commit the changed `docs/src/reference/*.md` and `docs/src/SUMMARY.md`.
 5. Test it with `compile_with_runtime` + JIT in the matching
    `crates/pepper-driver/tests/integration/*_tests.rs`. For behavior the docs show, add a
    `docs/examples/` program.

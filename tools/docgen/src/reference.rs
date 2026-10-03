@@ -13,11 +13,17 @@ use pepper_parser::ast::{Declaration, FunctionDecl, Import, Module, PropertyDecl
 use pepper_parser::doc::{DocComment, doc_comment_before, doc_comment_of, file_doc, is_public_member, member_name};
 
 /// Page titles for the runtime files, in the order the reference lists them.
-/// A file not named here is listed after these, titled by its path.
+/// Every runtime file that gets a page must be named here: `generate` fails
+/// on one that is not, so a new file cannot land at the end of the list
+/// under whatever module happens to come last. A module's files follow its
+/// `module.pep`, which the summary nests them under.
 const PAGES: &[(&str, &str)] = &[
     ("internals.pep", "Built-in functions"),
+    ("attributes.pep", "Built-in attributes"),
     ("process.pep", "Arguments and exit (deprecated)"),
     ("string.pep", "String"),
+    ("number.pep", "Numbers"),
+    ("range.pep", "Ranges"),
     ("array.pep", "Array"),
     ("hash.pep", "HashMap and HashSet"),
     ("map.pep", "Map and Set"),
@@ -25,23 +31,33 @@ const PAGES: &[(&str, &str)] = &[
     ("iterator.pep", "Iterators"),
     ("scoped.pep", "Scoped"),
     ("weak.pep", "Weak"),
+    ("handle.pep", "Handle"),
     ("result.pep", "Result"),
     ("optional.pep", "Optional"),
+    ("copy.pep", "Copying"),
+    ("uri.pep", "URI"),
     ("io/module.pep", "The io module"),
     ("io/types.pep", "Errors and platform types"),
+    ("io/stream.pep", "Reader and Writer"),
     ("io/path.pep", "Path"),
     ("io/file.pep", "File"),
     ("io/directory.pep", "Directory"),
     ("io/address.pep", "Network addresses"),
     ("io/socket.pep", "Sockets"),
+    ("io/unix.pep", "Unix domain sockets"),
     ("io/memory.pep", "Streams in memory"),
     ("io/print.pep", "Print"),
     ("async/module.pep", "The async module"),
     ("async/atomic.pep", "Atomic"),
     ("async/thread.pep", "Thread"),
     ("async/thread_local.pep", "ThreadLocal"),
+    ("async/mutex.pep", "Mutex and Condition"),
+    ("async/once.pep", "Once and Lazy"),
+    ("async/channel.pep", "Channel"),
+    ("async/select.pep", "Select"),
     ("async/cpus.pep", "Processor counts"),
     ("async/task.pep", "Tasks"),
+    ("async/task_local.pep", "TaskLocal"),
     ("async/driver.pep", "I/O backends"),
     ("process/module.pep", "The process module"),
     ("process/command.pep", "Command"),
@@ -52,25 +68,40 @@ const PAGES: &[(&str, &str)] = &[
     ("os/time.pep", "Time"),
     ("os/machine.pep", "Machine"),
     ("os/user.pep", "User"),
-    ("compress/module.pep", "The compress module"),
-    ("compress/format.pep", "Formats and streams"),
-    ("compress/checksum.pep", "Checksums"),
-    ("archive/module.pep", "The archive module"),
-    ("archive/tar.pep", "Tar archives"),
-    ("cli/module.pep", "The cli module"),
-    ("cli/parser.pep", "Parser"),
-    ("cli/options.pep", "Options"),
-    ("digest/module.pep", "The digest module"),
-    ("digest/sha256.pep", "SHA-256"),
-    ("digest/sha1.pep", "SHA-1"),
-    ("digest/blake3.pep", "BLAKE3"),
-    ("digest/hex.pep", "Hexadecimal"),
+    ("math/module.pep", "The math module"),
+    ("math/parse.pep", "Parsing integers"),
+    ("hint/module.pep", "The hint module"),
+    ("text/module.pep", "The text module"),
+    ("text/utf8.pep", "UTF-8"),
+    ("text/utf16.pep", "UTF-16"),
+    ("text/ascii.pep", "ASCII"),
+    ("regex/module.pep", "The regex module"),
+    ("regex/regex.pep", "Regex and Match"),
     ("json/module.pep", "The json module"),
     ("json/value.pep", "JsonValue"),
     ("json/parse.pep", "Parsing"),
     ("json/document.pep", "Documents with comments"),
     ("json/convert.pep", "Struct conversion"),
     ("serialize/module.pep", "The serialize module"),
+    ("compress/module.pep", "The compress module"),
+    ("compress/format.pep", "Formats and streams"),
+    ("compress/checksum.pep", "Checksums"),
+    ("archive/module.pep", "The archive module"),
+    ("archive/tar.pep", "Tar archives"),
+    ("digest/module.pep", "The digest module"),
+    ("digest/sha256.pep", "SHA-256"),
+    ("digest/sha1.pep", "SHA-1"),
+    ("digest/blake3.pep", "BLAKE3"),
+    ("digest/hex.pep", "Hexadecimal"),
+    ("cli/module.pep", "The cli module"),
+    ("cli/parser.pep", "Parser"),
+    ("cli/options.pep", "Options"),
+    ("http/module.pep", "The http module"),
+    ("http/message.pep", "Requests and responses"),
+    ("http/client.pep", "Client"),
+    ("http/server.pep", "Server"),
+    ("tls/module.pep", "The tls module"),
+    ("tls/stream.pep", "Connectors and streams"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.
@@ -112,12 +143,17 @@ pub fn generate(runtime_dir: &Path) -> Result<Vec<Page>, String> {
         let path: PathBuf = runtime_dir.join(&file);
         let source = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {}", path.display(), e))?;
         let module = pepper_parser::parser::parse_source(&format!("runtime/{}", file), &source)?;
-        let title = PAGES.iter().find(|(p, _)| *p == file).map_or_else(|| file.clone(), |(_, t)| t.to_string());
         let body = format!("{}{}", reexports(&module, &file), page_body(&module, &source));
         let intro = file_doc(&source);
         if body.is_empty() && intro.is_none() {
             continue;
         }
+        let title = PAGES.iter().find(|(p, _)| *p == file).map(|(_, t)| t.to_string()).ok_or_else(|| {
+            format!(
+                "runtime/{} has public declarations but no reference page; give it a title and a place in PAGES in tools/docgen/src/reference.rs",
+                file
+            )
+        })?;
         let mut markdown = format!(
             "<!-- Generated from runtime/{} by `cargo run -p pepper-docgen -- reference`. Do not edit. -->\n\n# {}\n\n",
             file, title
@@ -403,6 +439,35 @@ pub fn write(docs_dir: &Path, pages: &[Page]) -> Result<Vec<PathBuf>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The module a runtime file belongs to (`io` for `io/path.pep`), or
+    /// `None` for a file at the top of the runtime.
+    fn module_of(file: &str) -> Option<&str> {
+        file.split_once('/').map(|(module, _)| module)
+    }
+
+    #[test]
+    fn pages_keep_each_module_together_under_its_module_file() {
+        let mut seen: Vec<&str> = vec![];
+        let mut current: Option<&str> = None;
+        for (file, _) in PAGES {
+            let module = module_of(file);
+            assert!(module.is_some() || seen.is_empty(), "{} must come before the modules in PAGES", file);
+            if module != current {
+                if let Some(m) = module {
+                    assert!(!seen.contains(&m), "the {} module's pages are split up in PAGES at {}", m, file);
+                    assert_eq!(*file, format!("{}/module.pep", m), "the {} module's pages must start with its module.pep", m);
+                    seen.push(m);
+                }
+                current = module;
+            }
+        }
+    }
+
+    #[test]
+    fn every_runtime_file_with_a_page_has_a_title() {
+        generate(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../runtime")).unwrap();
+    }
 
     #[test]
     fn re_exports_link_to_their_sources() {

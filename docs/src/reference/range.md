@@ -1,6 +1,6 @@
 <!-- Generated from runtime/range.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# range.pep
+# Ranges
 
 Ranges of numbers: `a..b` and `a..>b`.
 

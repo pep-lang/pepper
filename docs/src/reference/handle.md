@@ -1,6 +1,6 @@
 <!-- Generated from runtime/handle.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# handle.pep
+# Handle
 
 `Handle<T>`: owns a resource that Pepper's reference counting does not
 know about, such as a C library's object, and releases it when the last

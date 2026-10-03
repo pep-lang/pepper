@@ -1,6 +1,6 @@
 <!-- Generated from runtime/regex/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# regex/module.pep
+# The regex module
 
 Regular expressions: test whether text matches a pattern, find the
 matches and their capture groups, and replace or split by a pattern.

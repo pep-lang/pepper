@@ -1,6 +1,6 @@
 <!-- Generated from runtime/number.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# number.pep
+# Numbers
 
 Reading numbers from text, and arithmetic that says what to do on
 overflow.

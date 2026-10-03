@@ -1,6 +1,6 @@
 <!-- Generated from runtime/async/mutex.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# async/mutex.pep
+# Mutex and Condition
 
 Mutual exclusion: `Mutex<T>` owns a value that one thread at a time can
 use, `MutexGuard<T>` is the lock a `with` block holds, and `Condition<T>`

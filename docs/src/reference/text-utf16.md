@@ -1,6 +1,6 @@
 <!-- Generated from runtime/text/utf16.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# text/utf16.pep
+# UTF-16
 
 UTF-16, as Windows and Java hold text.
 

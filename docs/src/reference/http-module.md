@@ -1,6 +1,6 @@
 <!-- Generated from runtime/http/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# http/module.pep
+# The http module
 
 HTTP/1.1 clients and servers, over TCP or TLS.
 

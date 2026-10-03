@@ -1,6 +1,6 @@
 <!-- Generated from runtime/http/server.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# http/server.pep
+# Server
 
 The HTTP server: `Server` accepts HTTP/1.1 connections on every worker of
 `async.run` and answers each request with a handler function.

@@ -1,6 +1,6 @@
 <!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# async/channel.pep
+# Channel
 
 Channels: `Channel<T>` carries values from threads that send to threads
 that receive, and `ChannelIterator<T>` receives in a `for` loop.

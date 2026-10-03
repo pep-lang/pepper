@@ -1,6 +1,6 @@
 <!-- Generated from runtime/async/select.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# async/select.pep
+# Select
 
 Waiting on several channels at once: `Select<E>` takes the first value
 any of them receives and turns it into a case of your own enum, which a

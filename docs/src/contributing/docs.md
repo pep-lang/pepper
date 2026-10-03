@@ -51,5 +51,16 @@ The `Docs` workflow (`.github/workflows/docs.yml`) publishes to the
 ## The reference stays current
 
 `cargo run -p pepper-docgen -- check` fails when `docs/src/reference/` does
-not match the runtime, and CI runs it. The runtime itself must meet the doc
+not match the runtime, and CI runs it.
+
+Each reference page's title and place in the table of contents come from
+`PAGES` in `tools/docgen/src/reference.rs`. A new runtime file with public
+declarations must be added there, under its module's `module.pep`; until it
+is, `reference` and `check` fail and name the file.
+
+`check` also fails on chapter Markdown that renders broken without an
+mdBook error. An include indented inside a list item is one: mdBook pastes
+the file's lines at column 0, which ends the list and the code block, so the
+rest of the example shows as prose and its `#` comments as headings. Put an
+included example at column 0, after the list or in its own `###` section. The runtime itself must meet the doc
 comment standard in `AGENTS.md`, which `runtime_docs_tests.rs` enforces.

@@ -162,7 +162,7 @@ A `module.pep` that only passes on its files' exports would repeat every name.
   compiler reports it at the `export ... from` that adds the second one. List the names you want instead, or
   rename one with `as`. The exception is functions of one name from files
   of the same module: they join one
-  [overload set](overloading.md#declaring-overloads).
+  [overload set](overloading.md#files-of-one-module-share-a-set).
   Anything else collides:
 
   ```text
@@ -290,7 +290,7 @@ runtime/iterator.pep:182:15: note: also exported here
   the same name from a whole-file import. When two whole-file imports provide
   the same name differently, using that name is an error because it is
   ambiguous, unless both are functions of that name from files of one
-  module, which join one [overload set](overloading.md#declaring-overloads).
+  module, which join one [overload set](overloading.md#files-of-one-module-share-a-set).
 - **A local may share an imported declaration's name.** If `g.rect_area` is
   `shapes.pep`'s `area`, calling `g.rect_area(1, 2)` inside a function with a
   parameter named `area` calls `shapes.pep`'s function. The one exception is a

@@ -1,6 +1,6 @@
 <!-- Generated from runtime/http/message.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 
-# http/message.pep
+# Requests and responses
 
 HTTP messages: `Headers`, `Request` and `Response`, the values a
 `Client` sends and receives and a `Server` handler takes and returns.
