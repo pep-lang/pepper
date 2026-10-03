@@ -179,18 +179,3 @@ fn pep_test_reports_a_file_that_does_not_build() {
     assert!(summary.ends_with("1 passed, 0 failed; 1 file did not build\n"), "{}", summary);
     let _ = std::fs::remove_dir_all(&dir);
 }
-
-
-/// The runtime's own tests pass: the `[Test]` files in each module's
-/// `test/` folder (`runtime/test/` for the prelude), which `pep-test` finds
-/// under `runtime/`. Each test also fails when it leaves an allocation
-/// behind.
-#[test]
-fn the_runtime_tests_pass() {
-    // In `runtime/`, as documented, so a test finds its data files by a
-    // path relative to it; the builds go to the ignored `runtime/.pep/`.
-    let output = pep_test(&repo_root().join("runtime"), &[]);
-    let text = output_text(&output);
-    assert!(output.status.success(), "{}", text);
-    assert!(!text.contains("running 0 tests"), "{}", text);
-}

@@ -1,6 +1,6 @@
 ---
 name: test
-description: Run the Pepper project's test suite with cargo test. Use when asked to test, run tests, or verify changes to the compiler, parser, sema, or codegen.
+description: Run the Pepper project's test suites, the compiler's with cargo test and the runtime's and tools' with pepper test. Use when asked to test, run tests, or verify changes to the compiler, parser, sema, codegen, runtime or tools.
 ---
 
 # Testing Pepper
@@ -12,6 +12,14 @@ cargo test --workspace
 ```
 
 `--workspace` matters: the repo root is itself a package, so a bare `cargo test` runs only the root package's tests (the `.pep` corpus test) and silently skips every crate under `crates/`.
+
+The runtime's and the Pepper tools' own tests are Pepper `[Test]` functions, run separately with `pepper test` (`cargo test` does not run them). After `cargo build`, run them all with:
+
+```bash
+scripts/pepper-tests.sh
+```
+
+Run both after a runtime or tools change; see `docs/src/contributing/tests.md`.
 
 The workspace must be built first, which needs LLVM provisioned — see the **build** skill if `llvm-sys` reports it cannot find LLVM.
 

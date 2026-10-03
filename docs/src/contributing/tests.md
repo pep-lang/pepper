@@ -3,13 +3,15 @@
 The repository has two kinds of tests, split by what they check.
 
 - **The runtime and the Pepper tools** are tested in Pepper: `[Test]`
-  functions (see [Unit tests](../language/testing.md)) that
-  [`pep-test`](../tools/pep-test.md) builds and runs.
+  functions (see [Unit tests](../language/testing.md)) that `pepper test`
+  ([`pep-test`](../tools/pep-test.md)) builds and runs.
 - **The compiler** is tested in Rust: diagnostics, codegen and IR facts,
   reference-count order, optimization, linking, cross-compiling, debug
   info, the build cache, the documentation checks, and the drivers. These
   live in `crates/*/tests/` and the root package's `tests/*.rs` (see
-  `INTERNALS.md`, section 9).
+  `INTERNALS.md`, section 9), and `cargo test --workspace` runs them.
+
+The two run separately, and CI runs both on every platform.
 
 A test that checks a library function's result belongs with the runtime; a
 test that checks what the compiler emits or reports stays in Rust.
@@ -30,13 +32,32 @@ needs no `##` comments.
 
 ## Running them
 
+`scripts/pepper-tests.sh` runs them all:
+
 ```bash
-cargo build --release
-target/release/pep-build -I tools tools/pep-test/main.pep -o target/release/pep-test
+cargo build                                      # or --release
+scripts/pepper-tests.sh                          # every runtime and tool test
+scripts/pepper-tests.sh -f parses                # by name, in each run
+```
+
+It builds `pepper` and `pep-test` with the `pep-build` you built (the
+release build if there is one, else the debug build; a folder given as the
+first argument overrides it), puts them beside it, and runs `pepper test`:
+
+- in `runtime/`, every runtime test;
+- in `runtime/`, the `compress` tests again with `-D USE_ZLIB` and the
+  `digest` tests with `-D USE_LIBCRYPTO`, which link the system's zlib and
+  libcrypto (on Windows the zlib run needs `PEPPER_TEST_ZLIB_DIR`, a folder
+  holding `zlib.lib`, and is skipped without it);
+- in `tools/`, with `-I .`, the tools' tests.
+
+Once `pepper` is built, run any part of them by hand:
+
+```bash
 cd runtime
-../target/release/pep-test                       # every runtime test
-../target/release/pep-test json/test             # one module's
-../target/release/pep-test -f parses test        # by name
+pepper test                       # every runtime test
+pepper test json/test             # one module's
+pepper test -f parses test        # by name
 ```
 
 Tests run with `runtime/` as the current folder, so a test reads data
@@ -45,10 +66,8 @@ The builds go to `runtime/.pep/`, which git ignores. A test that writes
 files uses a fresh folder under the system's temporary folder
 (`TempFolder` in the `testing` module makes and removes one).
 
-`cargo test --workspace` runs them all too, on every platform CI runs:
-`the_runtime_tests_pass` in the root package's `tests/pep_test_tool.rs`
-builds `pep-test` with this source's `pep-build` and runs it in
-`runtime/`.
+CI runs `scripts/pepper-tests.sh` after `cargo test --workspace` on
+Linux, macOS and Windows.
 
 ## Leaks fail a test
 

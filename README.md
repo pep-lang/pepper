@@ -263,8 +263,14 @@ need. Platform notes:
 cargo build                # debug compiler at target/debug/pep-build(.exe)
 cargo build --release
 target/release/pep-build tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
-cargo test --workspace
+cargo test --workspace     # the compiler's tests
+scripts/pepper-tests.sh    # the runtime's and tools' tests, with `pepper test`
 ```
+
+The two suites run separately: `cargo test` runs the compiler's Rust tests,
+and `scripts/pepper-tests.sh` builds `pepper` and `pep-test` beside the
+`pep-build` you built and runs the runtime's and tools' `[Test]` functions
+(see `docs/src/contributing/tests.md`).
 
 `--workspace` is not optional. The repository root is itself a package, so a
 bare `cargo test` runs only its single integration test and **silently skips

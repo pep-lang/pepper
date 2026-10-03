@@ -45,7 +45,7 @@ names and the pass order come from that implementation.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder (no `module.pep`, so not part of the module), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), and `install-vscode-extension.ps1`. |
+| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the runtime's and tools' Pepper tests (`pepper-tests.sh`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -2552,8 +2552,8 @@ dogfooding of the language.
 
 ## 9. Tests
 
-`cargo test --workspace` runs everything. Without `--workspace`, only the
-root package's test runs. The Rust suite has roughly 810 `#[test]` functions; the runtime's own tests are Pepper `[Test]` functions (the Runtime row below).
+`cargo test --workspace` runs the Rust tests: the compiler's. Without `--workspace`, only the
+root package's test runs. The Rust suite has roughly 810 `#[test]` functions. The runtime's and the Pepper tools' own tests are Pepper `[Test]` functions that `scripts/pepper-tests.sh` runs with `pepper test` (the Runtime row below); CI runs both.
 
 | Kind | Where | Notes |
 | --- | --- | --- |
@@ -2570,7 +2570,7 @@ root package's test runs. The Rust suite has roughly 810 `#[test]` functions; th
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
 | Built binaries | `tests/*.rs` (root package: `pep_build.rs`, `pep_test_tool.rs`) | Run the `pep-build` cargo builds from this source (`CARGO_BIN_EXE_pep-build`), for a tool that runs the compiler (`pep-test`). A `pep-build` found beside a pepper-driver test binary may be left over from an older build. |
-| Runtime | `runtime/<module>/test/*_test.pep`, `runtime/test/*_test.pep` (the prelude's) | `[Test]` functions in Pepper, run by `pep-test` over `runtime/` (`pep_test_tool.rs::the_runtime_tests_pass`); each fails when it leaks (the `TestRunner` compares `_pep_live_allocs` before and after). Runtime and library behaviour is tested here, not in the driver's Rust suite; see `docs/src/contributing/tests.md`. |
+| Runtime | `runtime/<module>/test/*_test.pep`, `runtime/test/*_test.pep` (the prelude's) | `[Test]` functions in Pepper, run by `pepper test` in `runtime/` (`scripts/pepper-tests.sh`, which also runs the `-D USE_ZLIB` and `-D USE_LIBCRYPTO` variants and the tools' tests); each fails when it leaks (the `TestRunner` compares `_pep_live_allocs` before and after). Runtime and library behaviour is tested here, not in the driver's Rust suite; see `docs/src/contributing/tests.md`. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
 | xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
 
