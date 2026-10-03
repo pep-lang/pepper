@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-23c4b80f.js";
+            window.path_to_searchindex_js = "searchindex-775eb8cc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2079cc94.js"></script>
+        <script src="toc-f60afe02.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -18167,6 +18167,7 @@ of the page to read the reference for another release.</p>
 <ul>
 <li><a href="#built-in-functions">Built-in functions</a>: <code>assert</code> and <code>panic</code>, which every program can call without an import.</li>
 <li><a href="#built-in-attributes">Built-in attributes</a>: The built-in attributes, declared as <code>[Attribute]</code> structs so a <code>static</code> block can read them like its own: <code>field.has_attribute&lt;Deprecated&gt;()</code> tests for one and <code>function.attribute&lt;Deprecated&gt;().message</code> reads its value (see the reflection chapter).</li>
+<li><a href="#the-reflect-module-compile-time">The reflect module (compile time)</a>: <code>reflect</code> exists only inside a <a href="#reflection-and-attributes"><code>static</code> block</a>, which runs while compiling.</li>
 <li><a href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a>: The running program’s arguments and exit, kept for the deprecated prelude <code>arguments()</code> and <code>exit()</code>; the <code>process</code> module has them now.</li>
 <li><a href="#string">String</a>: A mutable, reference-counted string of UTF-8 text.</li>
 <li><a href="#numbers">Numbers</a>: Reading numbers from text, and arithmetic that says what to do on overflow.</li>
@@ -18456,6 +18457,573 @@ it may use the locked value.</p>
 </code></pre>
 <p>The C symbol, when it differs from the function’s name; empty
 otherwise.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/reflect.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-reflect-module-compile-time"><a class="header" href="#the-reflect-module-compile-time">The reflect module (compile time)</a></h1>
+<p><code>reflect</code> exists only inside a <a href="#reflection-and-attributes"><code>static</code> block</a>,
+which runs while compiling. It needs no import. Everything here is
+evaluated by the compiler: the values are compile-time numbers, <code>bool</code>s,
+strings, lists, and the members, cases, functions and attributes below.
+The <a href="#reflection-and-attributes">Reflection and attributes</a> chapter
+explains how a block mixes them with the code it emits.</p>
+<p>The compiler provides <code>reflect</code> itself; this file only declares it, with
+<code>[__BuiltIn]</code>, for this reference and the editor.</p>
+<p>Source: <code>runtime/reflect.pep</code></p>
+<h2 id="reflectname"><a class="header" href="#reflectname">reflect.name</a></h2>
+<pre><code class="language-pepper">reflect.name&lt;T&gt;(): String
+</code></pre>
+<p>The name of type <code>T</code> as it is written in source, with its type arguments
+(<code>"Box&lt;int&gt;"</code>, <code>"Array&lt;String&gt;"</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the type’s name</li>
+</ul>
+<h2 id="reflectproperties"><a class="header" href="#reflectproperties">reflect.properties</a></h2>
+<pre><code class="language-pepper">reflect.properties&lt;T&gt;(): List&lt;Member&gt;
+</code></pre>
+<p>The public fields and <a href="#properties">properties</a> of struct
+<code>T</code>, in declaration order, as members.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one member per public field or property</li>
+</ul>
+<h2 id="reflectfields"><a class="header" href="#reflectfields">reflect.fields</a></h2>
+<pre><code class="language-pepper">reflect.fields&lt;T&gt;(): List&lt;Member&gt;
+</code></pre>
+<p>Every field of struct <code>T</code>, private ones and a property’s storage included,
+in declaration order, as members. It is meant for code a struct’s author
+writes, such as a field-by-field <code>==</code>, so it is available only in the
+file that declares <code>T</code>; anywhere else it is an error that points at
+<code>properties</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a struct declared in this file</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one member per field</li>
+</ul>
+<h2 id="reflectcases"><a class="header" href="#reflectcases">reflect.cases</a></h2>
+<pre><code class="language-pepper">reflect.cases&lt;E&gt;(): List&lt;Case&gt;
+</code></pre>
+<p>The cases of enum <code>E</code>, in declaration order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — an enum</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one case per enum case</li>
+</ul>
+<h2 id="reflectfunctions_with"><a class="header" href="#reflectfunctions_with">reflect.functions_with</a></h2>
+<pre><code class="language-pepper">reflect.functions_with&lt;A&gt;(): List&lt;Function&gt;
+</code></pre>
+<p>Every free function in the program that carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — an <a href="#attributes-1">attribute struct</a></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>one function per function marked <code>[A]</code></li>
+</ul>
+<h2 id="reflectis_struct"><a class="header" href="#reflectis_struct">reflect.is_struct</a></h2>
+<pre><code class="language-pepper">reflect.is_struct&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a struct. A number, <code>bool</code> or <code>char</code> is not, nor is an
+enum or a trait.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a struct</li>
+</ul>
+<h2 id="reflectis_enum"><a class="header" href="#reflectis_enum">reflect.is_enum</a></h2>
+<pre><code class="language-pepper">reflect.is_enum&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is an enum.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is an enum</li>
+</ul>
+<h2 id="reflectis_trait"><a class="header" href="#reflectis_trait">reflect.is_trait</a></h2>
+<pre><code class="language-pepper">reflect.is_trait&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a trait.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a trait</li>
+</ul>
+<h2 id="reflectis_reference"><a class="header" href="#reflectis_reference">reflect.is_reference</a></h2>
+<pre><code class="language-pepper">reflect.is_reference&lt;T&gt;(): bool
+</code></pre>
+<p>Whether <code>T</code> is a reference type, whose slots can be null: a struct, or an
+enum whose cases carry values, unless it is <code>[Value]</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> is a reference type</li>
+</ul>
+<h2 id="reflectis_same"><a class="header" href="#reflectis_same">reflect.is_same</a></h2>
+<pre><code class="language-pepper">reflect.is_same&lt;A, B&gt;(): bool
+</code></pre>
+<p>Whether <code>A</code> and <code>B</code> are the same type, after aliases (<code>int</code> and <code>i32</code>
+are). A member’s <code>Type</code> can be either argument:
+<code>reflect.is_same&lt;field.Type, String&gt;()</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the first type</li>
+<li><code>B</code> — the second type</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether they are the same type</li>
+</ul>
+<h2 id="reflecthas_attribute"><a class="header" href="#reflecthas_attribute">reflect.has_attribute</a></h2>
+<pre><code class="language-pepper">reflect.has_attribute&lt;T, A&gt;(): bool
+</code></pre>
+<p>Whether struct or enum <code>T</code> carries attribute <code>A</code>. A member, case or
+function has the same test as a method with one type argument
+(<code>field.has_attribute&lt;A&gt;()</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or enum</li>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>T</code> carries <code>A</code></li>
+</ul>
+<h2 id="reflectattribute"><a class="header" href="#reflectattribute">reflect.attribute</a></h2>
+<pre><code class="language-pepper">reflect.attribute&lt;T, A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on struct or enum <code>T</code>: each field of attribute
+struct <code>A</code> by name (<code>reflect.attribute&lt;T, Deprecated&gt;().message</code>). It is
+an error when <code>T</code> does not carry <code>A</code>. A member, case or function has the
+same as a method with one type argument (<code>field.attribute&lt;A&gt;()</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct or enum</li>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute’s value</li>
+</ul>
+<h2 id="reflecthas_build_option"><a class="header" href="#reflecthas_build_option">reflect.has_build_option</a></h2>
+<pre><code class="language-pepper">reflect.has_build_option(name: String): bool
+</code></pre>
+<p>Whether the build defines <a href="#build-options">build option</a>
+<code>name</code> (<code>-D NAME</code> or <code>-D NAME=value</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option’s name: a letter or <code>_</code>, then letters, digits and <code>_</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it is defined</li>
+</ul>
+<h2 id="reflectbuild_option"><a class="header" href="#reflectbuild_option">reflect.build_option</a></h2>
+<pre><code class="language-pepper">reflect.build_option(name: String): String
+</code></pre>
+<p>The value of <a href="#build-options">build option</a> <code>name</code>, as a
+string (<code>-D NAME</code> alone is <code>"1"</code>). It is an error when the build does not
+define the option.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option’s name</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the option’s value</li>
+</ul>
+<h2 id="reflectbuild_option-1"><a class="header" href="#reflectbuild_option-1">reflect.build_option</a></h2>
+<pre><code class="language-pepper">reflect.build_option(name: String, default: String): String
+</code></pre>
+<p>The value of <a href="#build-options">build option</a> <code>name</code>, as a
+string, or <code>default</code> when the build does not define it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the option’s name</li>
+<li><code>default</code> — the value when the build does not define it</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the option’s value, else <code>default</code></li>
+</ul>
+<h2 id="reflectprint"><a class="header" href="#reflectprint">reflect.print</a></h2>
+<pre><code class="language-pepper">reflect.print&lt;T&gt;(value: T)
+</code></pre>
+<p>Writes <code>value</code> as a note each time the compiler runs the call, on every
+compile, including one that succeeds; in an unrolled loop the note says
+which pass printed it. See
+<a href="#seeing-what-a-block-does">Seeing what a block does</a>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the value’s compile-time kind</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — any compile-time value</li>
+</ul>
+<h2 id="reflecterror"><a class="header" href="#reflecterror">reflect.error</a></h2>
+<pre><code class="language-pepper">reflect.error(message: String)
+</code></pre>
+<p>Stops the compile with an error at the call.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — the error’s text; an interpolated string can show the values that matter</li>
+</ul>
+<h2 id="reflectassert"><a class="header" href="#reflectassert">reflect.assert</a></h2>
+<pre><code class="language-pepper">reflect.assert(condition: bool, message: String)
+</code></pre>
+<p>Stops the compile with an error at <code>condition</code> when it is false.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — a compile-time condition</li>
+<li><code>message</code> — the error’s text</li>
+</ul>
+<h2 id="reflectmember"><a class="header" href="#reflectmember">reflect.Member</a></h2>
+<pre><code class="language-pepper">struct reflect.Member
+</code></pre>
+<p>A field or property, from <code>properties</code> or <code>fields</code>. A compile-time value:
+no program can name its type.</p>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h4 id="index"><a class="header" href="#index">index</a></h4>
+<pre><code class="language-pepper">const index: int
+</code></pre>
+<p>Its position in the list, from 0.</p>
+<h4 id="is_last"><a class="header" href="#is_last">is_last</a></h4>
+<pre><code class="language-pepper">const is_last: bool
+</code></pre>
+<p>Whether it is the last in the list.</p>
+<h4 id="type_name"><a class="header" href="#type_name">type_name</a></h4>
+<pre><code class="language-pepper">const type_name: String
+</code></pre>
+<p>Its type, as a string.</p>
+<h4 id="type"><a class="header" href="#type">Type</a></h4>
+<pre><code class="language-pepper">const Type: Type
+</code></pre>
+<p>Its type, usable wherever a type is written
+(<code>var copy: field.Type = ...</code>).</p>
+<h4 id="is_const"><a class="header" href="#is_const">is_const</a></h4>
+<pre><code class="language-pepper">const is_const: bool
+</code></pre>
+<p>Whether it is a <code>const</code> field.</p>
+<h4 id="is_property"><a class="header" href="#is_property">is_property</a></h4>
+<pre><code class="language-pepper">const is_property: bool
+</code></pre>
+<p>Whether it is a property rather than a field.</p>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="has_attribute"><a class="header" href="#has_attribute">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-1"><a class="header" href="#attribute-1">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute’s value</li>
+</ul>
+<h4 id="get"><a class="header" href="#get">get</a></h4>
+<pre><code class="language-pepper">get&lt;T&gt;(value: T): Type
+</code></pre>
+<p>Emits <code>value.name</code>, a read of this member of <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the struct to read from</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the member’s value</li>
+</ul>
+<h4 id="set"><a class="header" href="#set">set</a></h4>
+<pre><code class="language-pepper">set&lt;T&gt;(value: T, x: Type)
+</code></pre>
+<p>Emits <code>value.name = x</code>, a store to this member of <code>value</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the struct to store into</li>
+<li><code>x</code> — the value to store</li>
+</ul>
+<h2 id="reflectcase"><a class="header" href="#reflectcase">reflect.Case</a></h2>
+<pre><code class="language-pepper">struct reflect.Case
+</code></pre>
+<p>An enum case, from <code>cases</code>. A compile-time value: no program can name its
+type.</p>
+<h3 id="fields-1-1"><a class="header" href="#fields-1-1">Fields</a></h3>
+<h4 id="name-1-1"><a class="header" href="#name-1-1">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<pre><code class="language-pepper">const value: int
+</code></pre>
+<p>Its integer value, or the tag of a case that carries values.</p>
+<h4 id="index-1"><a class="header" href="#index-1">index</a></h4>
+<pre><code class="language-pepper">const index: int
+</code></pre>
+<p>Its position, from 0.</p>
+<h4 id="is_last-1"><a class="header" href="#is_last-1">is_last</a></h4>
+<pre><code class="language-pepper">const is_last: bool
+</code></pre>
+<p>Whether it is the last case.</p>
+<h4 id="values-1"><a class="header" href="#values-1">values</a></h4>
+<pre><code class="language-pepper">const values: List&lt;Member&gt;
+</code></pre>
+<p>The values it carries, as members, in order; empty when it carries
+none. A value’s <code>get(v)</code> reads it from <code>v</code>, which must hold this case.</p>
+<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
+<h4 id="has_attribute-1"><a class="header" href="#has_attribute-1">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-1-1"><a class="header" href="#attribute-1-1">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute’s value</li>
+</ul>
+<h4 id="matches"><a class="header" href="#matches">matches</a></h4>
+<pre><code class="language-pepper">matches&lt;E&gt;(v: E): bool
+</code></pre>
+<p>Emits a test of whether <code>v</code> holds this case.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the enum</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>v</code> — the enum value to test</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether <code>v</code> holds this case</li>
+</ul>
+<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<pre><code class="language-pepper">get&lt;E, TValues&gt;(values: TValues): E
+</code></pre>
+<p>Emits the case made with <code>values</code> (<code>case.get()</code> for one that carries
+none); at module scope, the case itself.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>E</code> — the enum</li>
+<li><code>TValues</code> — the types of the values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>values</code> — the values the case carries, one argument each</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the enum value</li>
+</ul>
+<h2 id="reflectfunction"><a class="header" href="#reflectfunction">reflect.Function</a></h2>
+<pre><code class="language-pepper">struct reflect.Function
+</code></pre>
+<p>A function, from <code>functions_with</code>. A compile-time value: no program can
+name its type.</p>
+<h3 id="fields-2-1"><a class="header" href="#fields-2-1">Fields</a></h3>
+<h4 id="name-2-1"><a class="header" href="#name-2-1">name</a></h4>
+<pre><code class="language-pepper">const name: String
+</code></pre>
+<p>Its name.</p>
+<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h4 id="has_attribute-2"><a class="header" href="#has_attribute-2">has_attribute</a></h4>
+<pre><code class="language-pepper">has_attribute&lt;A&gt;(): bool
+</code></pre>
+<p>Whether it carries attribute <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it carries <code>A</code></li>
+</ul>
+<h4 id="attribute-2"><a class="header" href="#attribute-2">attribute</a></h4>
+<pre><code class="language-pepper">attribute&lt;A&gt;(): A
+</code></pre>
+<p>The value of attribute <code>A</code> on it; an error when it does not carry <code>A</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>A</code> — the attribute struct</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the attribute’s value</li>
+</ul>
+<h4 id="call"><a class="header" href="#call">call</a></h4>
+<pre><code class="language-pepper">call&lt;R, TArguments&gt;(arguments: TArguments): R
+</code></pre>
+<p>Emits a direct call of the function with <code>arguments</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>R</code> — what the function returns</li>
+<li><code>TArguments</code> — the types of the arguments</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>arguments</code> — the call’s arguments, one argument each</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>what the call returns</li>
+</ul>
+<h2 id="reflectlist"><a class="header" href="#reflectlist">reflect.List</a></h2>
+<pre><code class="language-pepper">struct reflect.List&lt;T&gt;
+</code></pre>
+<p>What <code>properties</code>, <code>fields</code>, <code>cases</code>, <code>functions_with</code> and a case’s
+<code>values</code> return. A compile-time <code>for</code> unrolls over it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — a member, case or function</li>
+</ul>
+<h3 id="fields-3-1"><a class="header" href="#fields-3-1">Fields</a></h3>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">const count: int
+</code></pre>
+<p>How many items it holds.</p>
+<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<pre><code class="language-pepper">const is_empty: bool
+</code></pre>
+<p>Whether it holds none.</p>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
+<pre><code class="language-pepper">[](i: int): T
+</code></pre>
+<p>The item at index <code>i</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>i</code> — its position, from 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the item</li>
+</ul>
+<h2 id="reflectstring"><a class="header" href="#reflectstring">reflect.String</a></h2>
+<pre><code class="language-pepper">struct reflect.String
+</code></pre>
+<p>A compile-time string: a literal, a member’s <code>name</code>, or the result of
+<code>name</code>, <code>+</code> or interpolation. It joins with <code>+</code> and interpolation.</p>
+<h3 id="fields-4-1"><a class="header" href="#fields-4-1">Fields</a></h3>
+<h4 id="length"><a class="header" href="#length">length</a></h4>
+<pre><code class="language-pepper">const length: int
+</code></pre>
+<p>How many characters it holds.</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">const is_empty: bool
+</code></pre>
+<p>Whether it holds none.</p>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="starts_with"><a class="header" href="#starts_with">starts_with</a></h4>
+<pre><code class="language-pepper">starts_with(s: String): bool
+</code></pre>
+<p>Whether it starts with <code>s</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the prefix</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it starts with <code>s</code></li>
+</ul>
+<h4 id="ends_with"><a class="header" href="#ends_with">ends_with</a></h4>
+<pre><code class="language-pepper">ends_with(s: String): bool
+</code></pre>
+<p>Whether it ends with <code>s</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the suffix</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it ends with <code>s</code></li>
+</ul>
+<h4 id="contains"><a class="header" href="#contains">contains</a></h4>
+<pre><code class="language-pepper">contains(s: String): bool
+</code></pre>
+<p>Whether <code>s</code> occurs in it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>s</code> — the text to find</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>whether it contains <code>s</code></li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator +</a></h4>
+<pre><code class="language-pepper">+(rhs: String): String
+</code></pre>
+<p>A new compile-time string: this one followed by <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the string to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the joined string</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="arguments-and-exit-deprecated"><a class="header" href="#arguments-and-exit-deprecated">Arguments and exit (deprecated)</a></h1>
 <p>The running program’s arguments and exit, kept for the deprecated
@@ -18524,7 +19092,7 @@ for (var c in s) {
 }
 </code></pre>
 <h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
-<h4 id="length"><a class="header" href="#length">length</a></h4>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
 <p>The number of Unicode code points. O(1).</p>
@@ -18540,7 +19108,7 @@ for (var c in s) {
 <ul>
 <li><code>length</code></li>
 </ul>
-<h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
+<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the String has no code points. O(1).</p>
@@ -18589,7 +19157,7 @@ whole count 0.</p>
 <ul>
 <li>the number of code points, or 0 for invalid UTF-8</li>
 </ul>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="bytes"><a class="header" href="#bytes">bytes</a></h4>
 <pre><code class="language-pepper">bytes(): u8[]
 </code></pre>
@@ -18633,7 +19201,7 @@ this String sees the change. Runs in O(size + rhs.size).</p>
 <pre><code class="language-pepper">var s = "TEST";
 s.append("ING");   # s == "TESTING"
 </code></pre>
-<h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
+<h4 id="operator--2"><a class="header" href="#operator--2">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: int): String
 </code></pre>
 <p>Returns the code point at code-point index <code>idx</code> as a new
@@ -18660,7 +19228,7 @@ visit every code point in O(size).</p>
 assert(s[0] == "T", "first");
 assert(s[-1] == "T", "last");
 </code></pre>
-<h4 id="operator--1"><a class="header" href="#operator--1">operator ==</a></h4>
+<h4 id="operator--1-1"><a class="header" href="#operator--1-1">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: String): bool
 </code></pre>
 <p>Returns whether this String and <code>rhs</code> have the same content, compared
@@ -18674,7 +19242,7 @@ comparing bytes. Runs in O(size).</p>
 <ul>
 <li>true when both hold the same bytes</li>
 </ul>
-<h4 id="operator--2"><a class="header" href="#operator--2">operator +=</a></h4>
+<h4 id="operator--2-1"><a class="header" href="#operator--2-1">operator +=</a></h4>
 <pre><code class="language-pepper">+=(rhs: String): String
 </code></pre>
 <p>Appends <code>rhs</code> in place, like <code>append</code>, and returns this same String,
@@ -18890,7 +19458,7 @@ size.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
 </code></pre>
-<h4 id="contains"><a class="header" href="#contains">contains</a></h4>
+<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
 <pre><code class="language-pepper">contains(needle: String): bool
 </code></pre>
 <p>Returns whether <code>needle</code> occurs in this String (<code>find(needle) &gt;= 0</code>).
@@ -18904,7 +19472,7 @@ Runs in O(size * needle.size).</p>
 <ul>
 <li>true when <code>needle</code> occurs</li>
 </ul>
-<h4 id="starts_with"><a class="header" href="#starts_with">starts_with</a></h4>
+<h4 id="starts_with-1"><a class="header" href="#starts_with-1">starts_with</a></h4>
 <pre><code class="language-pepper">starts_with(prefix: String): bool
 </code></pre>
 <p>Returns whether this String begins with the bytes of <code>prefix</code>. An
@@ -18917,7 +19485,7 @@ empty <code>prefix</code> always matches. Runs in O(prefix.size).</p>
 <ul>
 <li>true when the first <code>prefix.size</code> bytes equal <code>prefix</code></li>
 </ul>
-<h4 id="ends_with"><a class="header" href="#ends_with">ends_with</a></h4>
+<h4 id="ends_with-1"><a class="header" href="#ends_with-1">ends_with</a></h4>
 <pre><code class="language-pepper">ends_with(suffix: String): bool
 </code></pre>
 <p>Returns whether this String ends with the bytes of <code>suffix</code>. An empty
@@ -19237,7 +19805,7 @@ String copy = name;   # a new String with its own bytes
 copy.append("!");
 </code></pre>
 <h3 id="properties-1-1"><a class="header" href="#properties-1-1">Properties</a></h3>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<h4 id="length-1-1"><a class="header" href="#length-1-1">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
 <p>The number of Unicode code points. O(1).</p>
@@ -19253,7 +19821,7 @@ copy.append("!");
 <ul>
 <li><code>length</code></li>
 </ul>
-<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<h4 id="is_empty-1-1"><a class="header" href="#is_empty-1-1">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the text has no code points. O(1).</p>
@@ -19273,7 +19841,7 @@ text.</p>
 <li><code>size</code> — the number of bytes before the NUL terminator</li>
 <li><code>length</code> — the number of code points in those bytes</li>
 </ul>
-<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
+<h3 id="methods-1-2"><a class="header" href="#methods-1-2">Methods</a></h3>
 <h4 id="c_str-1"><a class="header" href="#c_str-1">c_str</a></h4>
 <pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
 </code></pre>
@@ -19386,7 +19954,7 @@ after byte offset <code>from</code>, or -1, as <code>String.find</code> does.</p
 <ul>
 <li>the byte offset of the last match, or -1 when there is none</li>
 </ul>
-<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
+<h4 id="contains-1-1"><a class="header" href="#contains-1-1">contains</a></h4>
 <pre><code class="language-pepper">contains(needle: String): bool
 </code></pre>
 <p>Returns whether <code>needle</code> occurs in the text.</p>
@@ -19398,7 +19966,7 @@ after byte offset <code>from</code>, or -1, as <code>String.find</code> does.</p
 <ul>
 <li>true when <code>find(needle)</code> is not -1</li>
 </ul>
-<h4 id="starts_with-1"><a class="header" href="#starts_with-1">starts_with</a></h4>
+<h4 id="starts_with-1-1"><a class="header" href="#starts_with-1-1">starts_with</a></h4>
 <pre><code class="language-pepper">starts_with(prefix: String): bool
 </code></pre>
 <p>Returns whether the text starts with <code>prefix</code>. An empty prefix always
@@ -19411,7 +19979,7 @@ matches.</p>
 <ul>
 <li>true when the first bytes are <code>prefix</code>’s</li>
 </ul>
-<h4 id="ends_with-1"><a class="header" href="#ends_with-1">ends_with</a></h4>
+<h4 id="ends_with-1-1"><a class="header" href="#ends_with-1-1">ends_with</a></h4>
 <pre><code class="language-pepper">ends_with(suffix: String): bool
 </code></pre>
 <p>Returns whether the text ends with <code>suffix</code>. An empty suffix always
@@ -20079,7 +20647,7 @@ extend Point with ToString {
 var p = Point(1, 2);
 assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
-<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h3 id="methods-2-2"><a class="header" href="#methods-2-2">Methods</a></h3>
 <h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -20111,7 +20679,7 @@ var text = out.to_string();   # "line 3\n"
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
 <p>The number of code points appended so far. O(1).</p>
-<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
+<h4 id="is_empty-2-1"><a class="header" href="#is_empty-2-1">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether nothing has been appended since the builder was
@@ -20126,7 +20694,7 @@ bytes before it has to grow.</p>
 <ul>
 <li><code>capacity</code> — the number of bytes to allocate up front</li>
 </ul>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-3-1"><a class="header" href="#methods-3-1">Methods</a></h3>
 <h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
@@ -20172,7 +20740,7 @@ while (it.next()) {
     print(it.current());   # "a", then "b"
 }
 </code></pre>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h3 id="methods-4-1"><a class="header" href="#methods-4-1">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -20260,7 +20828,7 @@ are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="is_digit"><a class="header" href="#is_digit">is_digit</a></h4>
 <pre><code class="language-pepper">is_digit(): bool
 </code></pre>
@@ -20749,7 +21317,7 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 </code></pre>
-<h3 id="methods-1-2"><a class="header" href="#methods-1-2">Methods</a></h3>
+<h3 id="methods-1-3"><a class="header" href="#methods-1-3">Methods</a></h3>
 <h4 id="is_digit-1"><a class="header" href="#is_digit-1">is_digit</a></h4>
 <pre><code class="language-pepper">is_digit(): bool
 </code></pre>
@@ -21237,7 +21805,7 @@ separators are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(short.parse("-300").value() == -300, "decimal");
 </code></pre>
-<h3 id="methods-2-2"><a class="header" href="#methods-2-2">Methods</a></h3>
+<h3 id="methods-2-3"><a class="header" href="#methods-2-3">Methods</a></h3>
 <h4 id="wrapping_add-2"><a class="header" href="#wrapping_add-2">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: short): short
 </code></pre>
@@ -21575,7 +22143,7 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(ushort.parse("8080").value() == 8080, "a port");
 </code></pre>
-<h3 id="methods-3-1"><a class="header" href="#methods-3-1">Methods</a></h3>
+<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
 <h4 id="wrapping_add-3"><a class="header" href="#wrapping_add-3">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: ushort): ushort
 </code></pre>
@@ -21898,7 +22466,7 @@ prefixes (<code>0x</code>) or separators are accepted.</p>
 assert(int.parse("ff", 16).value() == 255, "hexadecimal");
 assert(int.parse("12x").is_empty(), "not a number");
 </code></pre>
-<h3 id="methods-4-1"><a class="header" href="#methods-4-1">Methods</a></h3>
+<h3 id="methods-4-2"><a class="header" href="#methods-4-2">Methods</a></h3>
 <h4 id="wrapping_add-4"><a class="header" href="#wrapping_add-4">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: int): int
 </code></pre>
@@ -22558,7 +23126,7 @@ are accepted.</p>
 <pre><code class="language-pepper">assert(long.parse("-9000000000").value() == -9000000000, "decimal");
 assert(long.parse("9223372036854775808").is_empty(), "too big");
 </code></pre>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h3 id="methods-6-1"><a class="header" href="#methods-6-1">Methods</a></h3>
 <h4 id="wrapping_add-6"><a class="header" href="#wrapping_add-6">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: long): long
 </code></pre>
@@ -23548,7 +24116,7 @@ for (var i in 1..&gt;4) {
 var r = 0..10;
 assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="start"><a class="header" href="#start">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -23661,7 +24229,7 @@ next step of such a loop panics with “Array modified during iteration”.</p>
 }
 </code></pre>
 <h3 id="properties-4"><a class="header" href="#properties-4">Properties</a></h3>
-<h4 id="count"><a class="header" href="#count">count</a></h4>
+<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of elements in the Array.</p>
@@ -23763,7 +24331,7 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var first = a[0];
 </code></pre>
-<h4 id="operator--1-1"><a class="header" href="#operator--1-1">operator []</a></h4>
+<h4 id="operator--1-2"><a class="header" href="#operator--1-2">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong, value: T): T
 </code></pre>
 <p>Replaces the element at <code>idx</code> with <code>value</code>; this is the indexer write
@@ -24084,7 +24652,7 @@ copying the elements.</p>
 names.append("ada");
 var copied = copy(names);   # calls this method
 </code></pre>
-<h4 id="operator--2-1"><a class="header" href="#operator--2-1">operator ==</a></h4>
+<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Array&lt;T&gt;): bool
 </code></pre>
 <p>Reports whether both Arrays have the same count and pairwise equal
@@ -24174,7 +24742,7 @@ while (it.next()) {
     var x = it.current();
 }
 </code></pre>
-<h3 id="methods-1-3"><a class="header" href="#methods-1-3">Methods</a></h3>
+<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
 <h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24324,7 +24892,7 @@ assert(ages.remove("alan"), "removed");
 assert(ages.count == 1, "one entry left");
 </code></pre>
 <h3 id="properties-5"><a class="header" href="#properties-5">Properties</a></h3>
-<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
+<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
@@ -24426,7 +24994,7 @@ table (see <code>grow</code>). Expected O(1); a grow costs O(capacity).</p>
 m.insert(1, 10);   # true: added
 m.insert(1, 20);   # false: overwritten; m.get(1) == 20
 </code></pre>
-<h4 id="get"><a class="header" href="#get">get</a></h4>
+<h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
 <pre><code class="language-pepper">get(key: K): V
 </code></pre>
 <p>Returns the value stored for <code>key</code>, or the default of <code>V</code> when <code>key</code>
@@ -24496,7 +25064,7 @@ same as <code>get</code>. A missing key is not inserted.</p>
 <pre><code class="language-pepper">var m = HashMap&lt;String, int&gt;();
 var n = m["missing"];   # 0; m is still empty
 </code></pre>
-<h4 id="operator--1-2"><a class="header" href="#operator--1-2">operator []</a></h4>
+<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: inserts <code>key</code> or overwrites its value, the
@@ -24570,7 +25138,7 @@ assert(seen.count == 2, "two members");
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of members in the set. O(1).</p>
-<h4 id="is_empty-1-1"><a class="header" href="#is_empty-1-1">is_empty</a></h4>
+<h4 id="is_empty-1-2"><a class="header" href="#is_empty-1-2">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the set has no members. O(1).</p>
@@ -24605,7 +25173,7 @@ a set is expected, so an array literal can initialize one.</p>
 <pre><code class="language-pepper">HashSet&lt;String&gt; keywords = ["if", "else", "while"];
 assert(keywords.contains("else"), "a member");
 </code></pre>
-<h3 id="methods-1-4"><a class="header" href="#methods-1-4">Methods</a></h3>
+<h3 id="methods-1-5"><a class="header" href="#methods-1-5">Methods</a></h3>
 <h4 id="grow-1-1"><a class="header" href="#grow-1-1">grow</a></h4>
 <pre><code class="language-pepper">grow()
 </code></pre>
@@ -24627,7 +25195,7 @@ the table.</p>
 </code></pre>
 <p>Removes every member and releases the set’s references to them. The
 table keeps its capacity. Runs in O(capacity).</p>
-<h4 id="contains-1-1"><a class="header" href="#contains-1-1">contains</a></h4>
+<h4 id="contains-1-2"><a class="header" href="#contains-1-2">contains</a></h4>
 <pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether <code>key</code> is a member of the set. Expected O(1).</p>
@@ -24669,7 +25237,7 @@ tombstone (see <code>_tombstones</code>). Expected O(1).</p>
 <ul>
 <li>true when <code>key</code> was a member and was removed, false otherwise</li>
 </ul>
-<h4 id="operator--2-2"><a class="header" href="#operator--2-2">operator []</a></h4>
+<h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): K
 </code></pre>
 <p>Reads <code>s[key]</code>: returns the stored member equal to <code>key</code>, or the
@@ -24758,7 +25326,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <ul>
 <li><code>source</code> — the map to iterate</li>
 </ul>
-<h3 id="methods-2-3"><a class="header" href="#methods-2-3">Methods</a></h3>
+<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
 <h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24809,7 +25377,7 @@ panic.</p>
 <ul>
 <li><code>source</code> — the set to iterate</li>
 </ul>
-<h3 id="methods-3-2"><a class="header" href="#methods-3-2">Methods</a></h3>
+<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
 <h4 id="next-1-1"><a class="header" href="#next-1-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -24925,7 +25493,7 @@ for (var (name, score) in scores) {
 }
 </code></pre>
 <h3 id="properties-6"><a class="header" href="#properties-6">Properties</a></h3>
-<h4 id="count-2"><a class="header" href="#count-2">count</a></h4>
+<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
@@ -24973,7 +25541,7 @@ O(log count).</p>
 <ul>
 <li>true when a new key was added, false when an existing key’s value was overwritten</li>
 </ul>
-<h4 id="get-1"><a class="header" href="#get-1">get</a></h4>
+<h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
 <pre><code class="language-pepper">get(key: K): V
 </code></pre>
 <p>Returns the value stored for <code>key</code>, or the default of <code>V</code> (0, or a
@@ -25035,7 +25603,7 @@ of <code>V</code> and is not inserted.</p>
 <ul>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
-<h4 id="operator--1-3"><a class="header" href="#operator--1-3">operator []</a></h4>
+<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
@@ -25181,7 +25749,7 @@ Internal: call <code>Map.iterate</code>, <code>reversed</code> or <code>range</c
 <li><code>stop</code> — the node to stop before, 0 for the end</li>
 <li><code>reverse</code> — whether to step in descending key order</li>
 </ul>
-<h3 id="methods-1-5"><a class="header" href="#methods-1-5">Methods</a></h3>
+<h3 id="methods-1-6"><a class="header" href="#methods-1-6">Methods</a></h3>
 <h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -25207,7 +25775,7 @@ Internal: call <code>Map.iterate</code>, <code>reversed</code> or <code>range</c
 <li>if an entry was added or removed since the iterator was created (“Map modified during iteration”)</li>
 <li>if <code>next()</code> was never called or already returned false (“SortedMapIterator.current() without an entry”)</li>
 </ul>
-<h2 id="set"><a class="header" href="#set">Set</a></h2>
+<h2 id="set-1"><a class="header" href="#set-1">Set</a></h2>
 <pre><code class="language-pepper">struct Set&lt;K&gt;
 </code></pre>
 <p>A set of distinct elements of type <code>K</code> kept in sorted order, on the same
@@ -25234,12 +25802,12 @@ for (var p in primes) {
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of members. O(1).</p>
-<h4 id="is_empty-1-2"><a class="header" href="#is_empty-1-2">is_empty</a></h4>
+<h4 id="is_empty-1-3"><a class="header" href="#is_empty-1-3">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the set has no members. O(1).</p>
 <h3 id="constructors-3"><a class="header" href="#constructors-3">Constructors</a></h3>
-<h4 id="set-1"><a class="header" href="#set-1">Set()</a></h4>
+<h4 id="set-1-1"><a class="header" href="#set-1-1">Set()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set.</p>
@@ -25257,13 +25825,13 @@ a set is expected, so an array literal can initialize one.</p>
 <pre><code class="language-pepper">Set&lt;String&gt; keywords = ["while", "if", "else"];
 assert(keywords.first().value() == "else", "sorted");
 </code></pre>
-<h3 id="methods-2-4"><a class="header" href="#methods-2-4">Methods</a></h3>
+<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
 <h4 id="clear-1-2"><a class="header" href="#clear-1-2">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes every member and releases the set’s references to them.
 O(count).</p>
-<h4 id="contains-1-2"><a class="header" href="#contains-1-2">contains</a></h4>
+<h4 id="contains-1-3"><a class="header" href="#contains-1-3">contains</a></h4>
 <pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether <code>key</code> is a member. O(log count).</p>
@@ -25418,7 +25986,7 @@ Internal: call <code>Set.iterate</code>, <code>reversed</code> or <code>range</c
 <li><code>stop</code> — the node to stop before, 0 for the end</li>
 <li><code>reverse</code> — whether to step in descending order</li>
 </ul>
-<h3 id="methods-3-3"><a class="header" href="#methods-3-3">Methods</a></h3>
+<h3 id="methods-3-4"><a class="header" href="#methods-3-4">Methods</a></h3>
 <h4 id="next-1-2"><a class="header" href="#next-1-2">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -25477,7 +26045,7 @@ for (var (key, value) in config) {
 }
 </code></pre>
 <h3 id="properties-7"><a class="header" href="#properties-7">Properties</a></h3>
-<h4 id="count-3"><a class="header" href="#count-3">count</a></h4>
+<h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
@@ -25528,7 +26096,7 @@ stores), and only its value is replaced. Expected O(1).</p>
 <ul>
 <li>true when a new key was added, false when an existing key’s value was overwritten</li>
 </ul>
-<h4 id="get-2"><a class="header" href="#get-2">get</a></h4>
+<h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
 <pre><code class="language-pepper">get(key: K): V
 </code></pre>
 <p>Returns the value stored for <code>key</code>, or the default of <code>V</code> (0, or a
@@ -25586,7 +26154,7 @@ of <code>V</code> and is not inserted.</p>
 <ul>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
-<h4 id="operator--1-4"><a class="header" href="#operator--1-4">operator []</a></h4>
+<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
 </code></pre>
 <p>Writes <code>m[key] = value</code>: the same as <code>insert</code>.</p>
@@ -25649,7 +26217,7 @@ entry after the iterator was created makes its next <code>next()</code> or
 <ul>
 <li><code>source</code> — the map to iterate</li>
 </ul>
-<h3 id="methods-1-6"><a class="header" href="#methods-1-6">Methods</a></h3>
+<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
 <h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -25887,7 +26455,7 @@ passed through the transform function.</p>
 <li><code>source</code> — the iterator to transform</li>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
-<h3 id="methods-1-7"><a class="header" href="#methods-1-7">Methods</a></h3>
+<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
 <h4 id="next-1-3"><a class="header" href="#next-1-3">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -25927,7 +26495,7 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-2-5"><a class="header" href="#methods-2-5">Methods</a></h3>
+<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
 <h4 id="next-2-1"><a class="header" href="#next-2-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -25967,7 +26535,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>source</code> — the iterator to number</li>
 </ul>
-<h3 id="methods-3-4"><a class="header" href="#methods-3-4">Methods</a></h3>
+<h3 id="methods-3-5"><a class="header" href="#methods-3-5">Methods</a></h3>
 <h4 id="next-3-1"><a class="header" href="#next-3-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -26009,7 +26577,7 @@ paired in step, until either runs out.</p>
 <li><code>first</code> — the iterator giving the first half of each pair</li>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
-<h3 id="methods-4-2"><a class="header" href="#methods-4-2">Methods</a></h3>
+<h3 id="methods-4-3"><a class="header" href="#methods-4-3">Methods</a></h3>
 <h4 id="next-4-1"><a class="header" href="#next-4-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -26247,7 +26815,7 @@ main(): int {
 }
 </code></pre>
 <h3 id="properties-8"><a class="header" href="#properties-8">Properties</a></h3>
-<h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
+<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
 <pre><code class="language-pepper">var value: T { get; }
 </code></pre>
 <p>The resource. It stays readable after the handle is released or
@@ -26300,7 +26868,7 @@ holding its value or <code>Err</code> holding its error, like Rust’s <code>Res
 <pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 var n = r.error().message.length;   # 4
 </code></pre>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
@@ -26416,7 +26984,7 @@ var done = Result&lt;void&gt;.ok();
 <ul>
 <li>true when the result holds an error</li>
 </ul>
-<h4 id="value-2"><a class="header" href="#value-2">value</a></h4>
+<h4 id="value-3"><a class="header" href="#value-3">value</a></h4>
 <pre><code class="language-pepper">value(): TValue
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
@@ -26517,7 +27085,7 @@ main(): int {
 </code></pre>
 <p>Holds no value. It is the first case, so an optional that is never
 given a value is Empty.</p>
-<h4 id="value-3"><a class="header" href="#value-3">Value</a></h4>
+<h4 id="value-4"><a class="header" href="#value-4">Value</a></h4>
 <pre><code class="language-pepper">Value(value: T)
 </code></pre>
 <p>Holds a value.</p>
@@ -26837,7 +27405,7 @@ assert(uri.path == "/a%20b", "the path keeps its escapes");
 assert(Uri.decode(uri.path).value() == "/a b", "decoded");
 assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -26953,245 +27521,6 @@ scheme is lowercased.</p>
 <ul>
 <li>the URI reference as a String</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="the-reflect-module-compile-time"><a class="header" href="#the-reflect-module-compile-time">The reflect module (compile time)</a></h1>
-<p><code>reflect</code> is built into the compiler, not written in the runtime, so this
-page is written by hand; the test <code>reflect_reference_names_every_function</code>
-in <code>tools/docgen</code> fails when the compiler gains a <code>reflect</code> function or a
-property this page does not name.</p>
-<p><code>reflect</code> exists only inside a <a href="#reflection-and-attributes"><code>static</code> block</a>,
-which runs while compiling. It needs no import. Everything here is
-evaluated by the compiler: the values are compile-time numbers, <code>bool</code>s,
-strings, lists, and the members, cases, functions and attributes below. The
-<a href="#reflection-and-attributes">Reflection and attributes</a> chapter explains how
-a block mixes them with the code it emits.</p>
-<h2 id="reflectname"><a class="header" href="#reflectname">reflect.name</a></h2>
-<pre><code class="language-pepper">reflect.name&lt;T&gt;(): String
-</code></pre>
-<p>The name of type <code>T</code> as it is written in source, with its type arguments
-(<code>"Box&lt;int&gt;"</code>, <code>"Array&lt;String&gt;"</code>).</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type to name</li>
-</ul>
-<p><strong>Returns</strong> the type’s name</p>
-<h2 id="reflectproperties"><a class="header" href="#reflectproperties">reflect.properties</a></h2>
-<pre><code class="language-pepper">reflect.properties&lt;T&gt;(): list of member
-</code></pre>
-<p>The public fields and <a href="#properties">properties</a> of struct <code>T</code>,
-in declaration order, as <a href="#member">members</a>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — a struct</li>
-</ul>
-<p><strong>Returns</strong> one member per public field or property</p>
-<h2 id="reflectfields"><a class="header" href="#reflectfields">reflect.fields</a></h2>
-<pre><code class="language-pepper">reflect.fields&lt;T&gt;(): list of member
-</code></pre>
-<p>Every field of struct <code>T</code>, private ones and a property’s storage included,
-in declaration order, as <a href="#member">members</a>. It is meant for code a struct’s
-author writes, such as a field-by-field <code>==</code>, so it is available only in the
-file that declares <code>T</code>; anywhere else it is an error that points at
-<code>properties</code>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — a struct declared in this file</li>
-</ul>
-<p><strong>Returns</strong> one member per field</p>
-<h2 id="reflectcases"><a class="header" href="#reflectcases">reflect.cases</a></h2>
-<pre><code class="language-pepper">reflect.cases&lt;E&gt;(): list of case
-</code></pre>
-<p>The cases of enum <code>E</code>, in declaration order, as <a href="#case">cases</a>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>E</code> — an enum</li>
-</ul>
-<p><strong>Returns</strong> one case per enum case</p>
-<h2 id="reflectfunctions_with"><a class="header" href="#reflectfunctions_with">reflect.functions_with</a></h2>
-<pre><code class="language-pepper">reflect.functions_with&lt;A&gt;(): list of function
-</code></pre>
-<p>Every free function in the program that carries attribute <code>A</code>, as
-<a href="#function">functions</a>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>A</code> — an <a href="#attributes-1">attribute struct</a></li>
-</ul>
-<p><strong>Returns</strong> one function per function marked <code>[A]</code></p>
-<h2 id="reflectis_struct-reflectis_enum-reflectis_trait"><a class="header" href="#reflectis_struct-reflectis_enum-reflectis_trait">reflect.is_struct, reflect.is_enum, reflect.is_trait</a></h2>
-<pre><code class="language-pepper">reflect.is_struct&lt;T&gt;(): bool
-reflect.is_enum&lt;T&gt;(): bool
-reflect.is_trait&lt;T&gt;(): bool
-</code></pre>
-<p>What kind of type <code>T</code> is. A number, <code>bool</code> or <code>char</code> is none of them.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type to test</li>
-</ul>
-<p><strong>Returns</strong> whether <code>T</code> is a struct, an enum, or a trait</p>
-<h2 id="reflectis_reference"><a class="header" href="#reflectis_reference">reflect.is_reference</a></h2>
-<pre><code class="language-pepper">reflect.is_reference&lt;T&gt;(): bool
-</code></pre>
-<p>Whether <code>T</code> is a reference type, whose slots can be null: a struct, or an
-enum whose cases carry values, unless it is <code>[Value]</code>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the type to test</li>
-</ul>
-<p><strong>Returns</strong> whether <code>T</code> is a reference type</p>
-<h2 id="reflectis_same"><a class="header" href="#reflectis_same">reflect.is_same</a></h2>
-<pre><code class="language-pepper">reflect.is_same&lt;A, B&gt;(): bool
-</code></pre>
-<p>Whether <code>A</code> and <code>B</code> are the same type, after aliases (<code>int</code> and <code>i32</code> are).
-A member’s <code>Type</code> can be either argument:
-<code>reflect.is_same&lt;field.Type, String&gt;()</code>.</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>A</code> — the first type</li>
-<li><code>B</code> — the second type</li>
-</ul>
-<p><strong>Returns</strong> whether they are the same type</p>
-<h2 id="reflecthas_attribute-reflectattribute"><a class="header" href="#reflecthas_attribute-reflectattribute">reflect.has_attribute, reflect.attribute</a></h2>
-<pre><code class="language-pepper">reflect.has_attribute&lt;T, A&gt;(): bool
-reflect.attribute&lt;T, A&gt;(): attribute
-</code></pre>
-<p>Attribute <code>A</code> on struct or enum <code>T</code>. A member, case or function has the
-same two as methods with one type argument (<code>field.has_attribute&lt;A&gt;()</code>).</p>
-<p><strong>Type parameters</strong></p>
-<ul>
-<li><code>T</code> — the struct or enum</li>
-<li><code>A</code> — the attribute struct</li>
-</ul>
-<p><strong>Returns</strong> <code>has_attribute</code>: whether <code>T</code> carries <code>A</code>; <code>attribute</code>: its
-<a href="#attribute-1">value</a></p>
-<p><strong>Errors</strong> <code>attribute</code> when <code>T</code> does not carry <code>A</code></p>
-<h2 id="reflecthas_build_option"><a class="header" href="#reflecthas_build_option">reflect.has_build_option</a></h2>
-<pre><code class="language-pepper">reflect.has_build_option(name: String): bool
-</code></pre>
-<p>Whether the build defines <a href="#build-options">build option</a>
-<code>name</code> (<code>-D NAME</code> or <code>-D NAME=value</code>).</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>name</code> — the option’s name: a letter or <code>_</code>, then letters, digits and <code>_</code></li>
-</ul>
-<p><strong>Returns</strong> whether it is defined</p>
-<h2 id="reflectbuild_option"><a class="header" href="#reflectbuild_option">reflect.build_option</a></h2>
-<pre><code class="language-pepper">reflect.build_option(name: String): String
-reflect.build_option(name: String, default: String): String
-</code></pre>
-<p>The value of <a href="#build-options">build option</a> <code>name</code>, as a
-string (<code>-D NAME</code> alone is <code>"1"</code>).</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>name</code> — the option’s name</li>
-<li><code>default</code> — the value when the build does not define it</li>
-</ul>
-<p><strong>Returns</strong> the option’s value, else <code>default</code></p>
-<p><strong>Errors</strong> without <code>default</code>, when the build does not define the option</p>
-<h2 id="reflectprint"><a class="header" href="#reflectprint">reflect.print</a></h2>
-<pre><code class="language-pepper">reflect.print(value)
-</code></pre>
-<p>Writes <code>value</code> as a note each time the compiler runs the call, on every
-compile, including one that succeeds; in an unrolled loop the note says
-which pass printed it. See
-<a href="#seeing-what-a-block-does">Seeing what a block does</a>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>value</code> — any compile-time value</li>
-</ul>
-<h2 id="reflecterror"><a class="header" href="#reflecterror">reflect.error</a></h2>
-<pre><code class="language-pepper">reflect.error(message: String)
-</code></pre>
-<p>Stops the compile with an error at the call.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>message</code> — the error’s text; an interpolated string can show the values
-that matter</li>
-</ul>
-<h2 id="reflectassert"><a class="header" href="#reflectassert">reflect.assert</a></h2>
-<pre><code class="language-pepper">reflect.assert(condition: bool, message: String)
-</code></pre>
-<p>Stops the compile with an error at <code>condition</code> when it is false.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>condition</code> — a compile-time condition</li>
-<li><code>message</code> — the error’s text</li>
-</ul>
-<h2 id="compile-time-values"><a class="header" href="#compile-time-values">Compile-time values</a></h2>
-<h3 id="member"><a class="header" href="#member">member</a></h3>
-<p>A field or property, from <code>properties</code> or <code>fields</code>.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th></th><th></th></tr>
-</thead>
-<tbody>
-<tr><td><code>name</code></td><td>its name</td></tr>
-<tr><td><code>index</code></td><td>its position in the list, from 0</td></tr>
-<tr><td><code>is_last</code></td><td>whether it is the last in the list</td></tr>
-<tr><td><code>type_name</code></td><td>its type, as a string</td></tr>
-<tr><td><code>Type</code></td><td>its type, usable wherever a type is written (<code>var copy: field.Type = ...</code>)</td></tr>
-<tr><td><code>is_const</code></td><td>whether it is a <code>const</code> field</td></tr>
-<tr><td><code>is_property</code></td><td>whether it is a property rather than a field</td></tr>
-<tr><td><code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code></td><td>attribute <code>A</code> on it</td></tr>
-<tr><td><code>get(value)</code></td><td>emits <code>value.name</code></td></tr>
-<tr><td><code>set(value, x)</code></td><td>emits <code>value.name = x</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="case"><a class="header" href="#case">case</a></h3>
-<p>An enum case, from <code>cases</code>.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th></th><th></th></tr>
-</thead>
-<tbody>
-<tr><td><code>name</code></td><td>its name</td></tr>
-<tr><td><code>value</code></td><td>its integer value, or the tag of a case that carries values</td></tr>
-<tr><td><code>index</code></td><td>its position, from 0</td></tr>
-<tr><td><code>is_last</code></td><td>whether it is the last case</td></tr>
-<tr><td><code>values</code></td><td>the values it carries, as members, in order; empty when it carries none. A value’s <code>get(v)</code> reads it from <code>v</code>, which must hold this case</td></tr>
-<tr><td><code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code></td><td>attribute <code>A</code> on it</td></tr>
-<tr><td><code>matches(v)</code></td><td>emits a test of whether <code>v</code> holds this case</td></tr>
-<tr><td><code>get(values...)</code></td><td>emits the case made with those values (<code>case.get()</code> for one that carries none); at module scope, the case itself</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="function"><a class="header" href="#function">function</a></h3>
-<p>A function, from <code>functions_with</code>.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th></th><th></th></tr>
-</thead>
-<tbody>
-<tr><td><code>name</code></td><td>its name</td></tr>
-<tr><td><code>has_attribute&lt;A&gt;()</code>, <code>attribute&lt;A&gt;()</code></td><td>attribute <code>A</code> on it</td></tr>
-<tr><td><code>call(arguments...)</code></td><td>emits a direct call</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="attribute-1"><a class="header" href="#attribute-1">attribute</a></h3>
-<p>The value of an attribute, from <code>attribute&lt;A&gt;()</code>: each field of attribute
-struct <code>A</code> by name (<code>function.attribute&lt;Deprecated&gt;().message</code>).</p>
-<h3 id="list"><a class="header" href="#list">list</a></h3>
-<p>What <code>properties</code>, <code>fields</code>, <code>cases</code>, <code>functions_with</code> and a case’s <code>values</code>
-return. A compile-time <code>for</code> unrolls over it.</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th></th><th></th></tr>
-</thead>
-<tbody>
-<tr><td><code>count</code></td><td>how many items it holds</td></tr>
-<tr><td><code>is_empty</code></td><td>whether it holds none</td></tr>
-<tr><td><code>list[i]</code></td><td>the item at index <code>i</code></td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="string-3"><a class="header" href="#string-3">String</a></h3>
-<p>A compile-time string has <code>length</code>, <code>is_empty</code>, <code>starts_with(s)</code>,
-<code>ends_with(s)</code> and <code>contains(s)</code>, and joins with <code>+</code> and interpolation.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-io-module"><a class="header" href="#the-io-module">The io module</a></h1>
 <p>Files, directories, paths, and sockets, modeled on Rust’s <code>std::fs</code>,
@@ -27467,7 +27796,7 @@ if (r.is_err()) {
     }
 }
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
 <pre><code class="language-pepper">ErrorCode code
 </code></pre>
@@ -27821,7 +28150,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="methods-1-8"><a class="header" href="#methods-1-8">Methods</a></h3>
+<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
 <h4 id="write"><a class="header" href="#write">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -27914,7 +28243,7 @@ while (it.next()) {
 <ul>
 <li><code>source</code> — the open stream to read</li>
 </ul>
-<h3 id="methods-2-6"><a class="header" href="#methods-2-6">Methods</a></h3>
+<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
 <h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -27955,7 +28284,7 @@ while (it.next()) {
 <li><code>source</code> — the open stream to read</li>
 <li><code>size</code> — the most bytes in one chunk</li>
 </ul>
-<h3 id="methods-3-5"><a class="header" href="#methods-3-5">Methods</a></h3>
+<h3 id="methods-3-6"><a class="header" href="#methods-3-6">Methods</a></h3>
 <h4 id="next-1-4"><a class="header" href="#next-1-4">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -28403,7 +28732,7 @@ results to ignore spelling differences.</p>
 <ul>
 <li>true when both paths’ texts are equal</li>
 </ul>
-<h4 id="operator--1-5"><a class="header" href="#operator--1-5">operator !=</a></h4>
+<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths differ in their text: the opposite of <code>==</code>,
@@ -28688,7 +29017,7 @@ if (m.is_ok() &amp;&amp; m.value().is_file) {
     var bytes = m.value().size;
 }
 </code></pre>
-<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
 <h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
@@ -28778,7 +29107,7 @@ f.write_all("hello");
 f.close();
 var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
-<h3 id="fields-1-1"><a class="header" href="#fields-1-1">Fields</a></h3>
+<h3 id="fields-1-2"><a class="header" href="#fields-1-2">Fields</a></h3>
 <h4 id="path-3"><a class="header" href="#path-3">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
@@ -29079,7 +29408,7 @@ if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
     return 1;
 }
 </code></pre>
-<h3 id="methods-1-9"><a class="header" href="#methods-1-9">Methods</a></h3>
+<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
 <h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -29406,13 +29735,13 @@ while (i &lt; list.count) {
     i = i + 1;
 }
 </code></pre>
-<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
+<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
 <p>The entry’s full path: the listed directory’s path joined with
 <code>name</code> (relative when the directory’s path was relative).</p>
-<h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
+<h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
 <pre><code class="language-pepper">String name
 </code></pre>
 <p>The entry’s own file name, without any directory part.</p>
@@ -29478,7 +29807,7 @@ if (io.Directory.create_all(dir).is_ok()) {
     io.Directory.remove_all(io.Directory.temp().join("scratch"));
 }
 </code></pre>
-<h3 id="fields-1-2"><a class="header" href="#fields-1-2">Fields</a></h3>
+<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
 <h4 id="path-1-2"><a class="header" href="#path-1-2">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
@@ -29650,7 +29979,7 @@ a root, or <code>.</code> if that call fails.</p>
 
 var scratch = io.Directory.temp().join("my-tool");
 </code></pre>
-<h3 id="methods-1-10"><a class="header" href="#methods-1-10">Methods</a></h3>
+<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
 <h4 id="entries"><a class="header" href="#entries">entries</a></h4>
 <pre><code class="language-pepper">entries(): IoResult&lt;DirEntry[]&gt;
 </code></pre>
@@ -29730,7 +30059,7 @@ is opened until the first <code>next()</code>.</p>
 <ul>
 <li><code>path</code> — the directory to list</li>
 </ul>
-<h3 id="methods-2-7"><a class="header" href="#methods-2-7">Methods</a></h3>
+<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
 <h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -29957,7 +30286,7 @@ address that maps it.</p>
 <ul>
 <li>true when both are equal</li>
 </ul>
-<h4 id="operator--1-6"><a class="header" href="#operator--1-6">operator !=</a></h4>
+<h4 id="operator--1-7"><a class="header" href="#operator--1-7">operator !=</a></h4>
 <pre><code class="language-pepper">!=(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses differ.</p>
@@ -30023,7 +30352,7 @@ syntax of <code>IpAddress.parse</code> and a decimal port from 0 to 65535.</p>
 <pre><code class="language-pepper">var a = SocketAddress.parse("127.0.0.1:8080").value();
 var b = SocketAddress.parse("[::1]:8080").value();
 </code></pre>
-<h3 id="methods-1-11"><a class="header" href="#methods-1-11">Methods</a></h3>
+<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
 <h4 id="address"><a class="header" href="#address">address</a></h4>
 <pre><code class="language-pepper">address(): IpAddress
 </code></pre>
@@ -30065,7 +30394,7 @@ IPv6.</p>
 <ul>
 <li>the text form, which <code>SocketAddress.parse</code> reads back</li>
 </ul>
-<h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator ==</a></h4>
+<h4 id="operator--2-4"><a class="header" href="#operator--2-4">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: SocketAddress): bool
 </code></pre>
 <p>Returns whether two socket addresses have equal IP addresses and the
@@ -30254,7 +30583,7 @@ the listener stays open while the iterator lives.</p>
 <ul>
 <li><code>listener</code> — the listener to accept on</li>
 </ul>
-<h3 id="methods-1-12"><a class="header" href="#methods-1-12">Methods</a></h3>
+<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
 <h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -30335,7 +30664,7 @@ main(): int {
 <ul>
 <li>the listening socket, or the errors <code>TcpListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-2-8"><a class="header" href="#methods-2-8">Methods</a></h3>
+<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
 <h4 id="accept-1"><a class="header" href="#accept-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;(TcpStream, SocketAddress)&gt;
 </code></pre>
@@ -30440,7 +30769,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-3-6"><a class="header" href="#methods-3-6">Methods</a></h3>
+<h3 id="methods-3-7"><a class="header" href="#methods-3-7">Methods</a></h3>
 <h4 id="is_open-1-1"><a class="header" href="#is_open-1-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -30676,7 +31005,7 @@ fails. Use <code>UdpSocket.bind</code> to get an open one.</p>
 <ul>
 <li>the bound socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, or another platform error</li>
 </ul>
-<h3 id="methods-4-3"><a class="header" href="#methods-4-3">Methods</a></h3>
+<h3 id="methods-4-4"><a class="header" href="#methods-4-4">Methods</a></h3>
 <h4 id="is_open-2"><a class="header" href="#is_open-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -30940,7 +31269,7 @@ main(): int {
 <ul>
 <li>the listening socket, or the errors <code>UnixListener.bind</code> returns</li>
 </ul>
-<h3 id="methods-1-13"><a class="header" href="#methods-1-13">Methods</a></h3>
+<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
 <h4 id="accept-1-1"><a class="header" href="#accept-1-1">accept</a></h4>
 <pre><code class="language-pepper">accept(): IoResult&lt;UnixStream&gt;
 </code></pre>
@@ -31013,7 +31342,7 @@ gets the connection.</p>
 <ul>
 <li>the stream; an error when the token is empty (already adopted, or made from a closed stream)</li>
 </ul>
-<h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
+<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
 <h4 id="is_open-1-2"><a class="header" href="#is_open-1-2">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -31200,7 +31529,7 @@ out.print("n = ");
 out.print_line(3);
 assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
-<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
+<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
 <h4 id="bytes-2"><a class="header" href="#bytes-2">bytes</a></h4>
 <pre><code class="language-pepper">var bytes: u8[]
 </code></pre>
@@ -31210,7 +31539,7 @@ assert(out.bytes == "n = 3\n".bytes(), "collected");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Makes a writer with nothing written yet.</p>
-<h3 id="methods-1-14"><a class="header" href="#methods-1-14">Methods</a></h3>
+<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
 <h4 id="write-4"><a class="header" href="#write-4">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): IoResult&lt;ulong&gt;
 </code></pre>
@@ -31717,7 +32046,7 @@ early.</p>
 <ul>
 <li>the thread’s id</li>
 </ul>
-<h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
+<h4 id="name-5"><a class="header" href="#name-5">name</a></h4>
 <pre><code class="language-pepper">name(): String
 </code></pre>
 <p>Returns the name the thread was given.</p>
@@ -31812,7 +32141,7 @@ main(): int {
 <li>if the operating system has no thread-local keys left</li>
 </ul>
 <h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
-<h4 id="get-3"><a class="header" href="#get-3">get</a></h4>
+<h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the calling thread’s value.</p>
@@ -31893,7 +32222,7 @@ as <code>local.enter()</code>.</p>
 <ul>
 <li><code>local</code> — the thread-local variable</li>
 </ul>
-<h3 id="methods-1-15"><a class="header" href="#methods-1-15">Methods</a></h3>
+<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
 <h4 id="enter-1-1"><a class="header" href="#enter-1-1">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -32092,7 +32421,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
     totals.requests.fetch_add(1);
 }   # unlocked here
 </code></pre>
-<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
+<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
 <h4 id="locked-1"><a class="header" href="#locked-1">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -32113,7 +32442,7 @@ a <code>try_lock()</code> that found the lock busy.</p>
 <ul>
 <li>if <code>wait</code> is true and the calling thread already holds the lock</li>
 </ul>
-<h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
+<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
 <h4 id="enter-3"><a class="header" href="#enter-3">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -32190,7 +32519,7 @@ does the same.</p>
 <ul>
 <li>if the operating system cannot create a condition variable</li>
 </ul>
-<h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
+<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">wait()
 </code></pre>
@@ -32320,7 +32649,7 @@ work() {
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
-<h4 id="call"><a class="header" href="#call">call</a></h4>
+<h4 id="call-1"><a class="header" href="#call-1">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
 <p>Runs <code>body</code> if no call has run a body yet; otherwise waits until that
@@ -32395,8 +32724,8 @@ Nothing runs yet.</p>
 <ul>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
-<h3 id="methods-1-17"><a class="header" href="#methods-1-17">Methods</a></h3>
-<h4 id="get-4"><a class="header" href="#get-4">get</a></h4>
+<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the value, building it with the initializer on the first call.</p>
@@ -32470,7 +32799,7 @@ main(): int {
 }
 </code></pre>
 <h3 id="properties-11"><a class="header" href="#properties-11">Properties</a></h3>
-<h4 id="count-4"><a class="header" href="#count-4">count</a></h4>
+<h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
@@ -32624,7 +32953,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -32817,7 +33146,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
+<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
 <h4 id="message-3"><a class="header" href="#message-3">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
@@ -32860,7 +33189,7 @@ finished. The task itself carries on.</p>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
 stack per task, the system’s best I/O backend, and up to 64 threads
 for <code>run_blocking</code>.</p>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
 </code></pre>
@@ -32986,7 +33315,7 @@ task can, since it stays on this thread.</p>
 <ul>
 <li>outside <code>run</code></li>
 </ul>
-<h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
+<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
 <h4 id="join-4"><a class="header" href="#join-4">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
@@ -33259,7 +33588,7 @@ Timeouts nest: an inner one cannot extend an outer one.</p>
 <ul>
 <li><code>milliseconds</code> — how long from now the limit passes</li>
 </ul>
-<h3 id="methods-3-7"><a class="header" href="#methods-3-7">Methods</a></h3>
+<h3 id="methods-3-8"><a class="header" href="#methods-3-8">Methods</a></h3>
 <h4 id="enter-4"><a class="header" href="#enter-4">enter</a></h4>
 <pre><code class="language-pepper">enter(): Deadline
 </code></pre>
@@ -33397,7 +33726,7 @@ main(): int {
 <li>if the operating system has no thread-local keys left</li>
 </ul>
 <h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
-<h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
+<h4 id="get-7"><a class="header" href="#get-7">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
 <p>Returns the calling task’s value.</p>
@@ -33478,7 +33807,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -33594,7 +33923,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
+<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -33651,7 +33980,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-1-3"><a class="header" href="#fields-1-3">Fields</a></h3>
+<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
 <h4 id="program"><a class="header" href="#program">program</a></h4>
 <pre><code class="language-pepper">var program: String
 </code></pre>
@@ -33950,7 +34279,7 @@ main(): int {
 <p>Creates a Child that stands for no process: <code>id()</code> is 0, its streams
 are closed, and <code>wait()</code>, <code>try_wait()</code> and <code>kill()</code> fail. Use
 <code>Command.spawn()</code> to start one.</p>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>
@@ -34351,7 +34680,7 @@ down.</p>
 <ul>
 <li>if <code>other</code> is longer than this duration: a duration is never negative</li>
 </ul>
-<h4 id="operator--1-7"><a class="header" href="#operator--1-7">operator *</a></h4>
+<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator *</a></h4>
 <pre><code class="language-pepper">*(times: ulong): Duration
 </code></pre>
 <p>Returns this duration <code>times</code> times over.</p>
@@ -34367,7 +34696,7 @@ down.</p>
 <ul>
 <li>if the product does not fit in a <code>ulong</code> of nanoseconds</li>
 </ul>
-<h4 id="operator--2-4"><a class="header" href="#operator--2-4">operator /</a></h4>
+<h4 id="operator--2-5"><a class="header" href="#operator--2-5">operator /</a></h4>
 <pre><code class="language-pepper">/(parts: ulong): Duration
 </code></pre>
 <p>Returns this duration split into <code>parts</code> equal parts, rounded down to
@@ -34482,7 +34811,7 @@ clock.</p>
 <ul>
 <li>the current moment</li>
 </ul>
-<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
+<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
 <h4 id="elapsed"><a class="header" href="#elapsed">elapsed</a></h4>
 <pre><code class="language-pepper">elapsed(): Duration
 </code></pre>
@@ -34648,7 +34977,7 @@ systems and most protocols record it.</p>
 <ul>
 <li>if the time is outside the years 1677 to 2262</li>
 </ul>
-<h3 id="methods-2-12"><a class="header" href="#methods-2-12">Methods</a></h3>
+<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
 <h4 id="unix_nanoseconds"><a class="header" href="#unix_nanoseconds">unix_nanoseconds</a></h4>
 <pre><code class="language-pepper">unix_nanoseconds(): long
 </code></pre>
@@ -35702,7 +36031,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -35794,13 +36123,13 @@ when it did not take part.</p>
 <ul>
 <li>the text of the whole match</li>
 </ul>
-<h2 id="matches"><a class="header" href="#matches">Matches</a></h2>
+<h2 id="matches-1"><a class="header" href="#matches-1">Matches</a></h2>
 <pre><code class="language-pepper">struct Matches
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
 <h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
-<h4 id="matches-1"><a class="header" href="#matches-1">Matches()</a></h4>
+<h4 id="matches-1-1"><a class="header" href="#matches-1-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
 <p>Creates an iterator over the matches of <code>program</code> in <code>text</code>. Use
@@ -35810,7 +36139,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
 <h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -35928,7 +36257,7 @@ outside ±(2^53 − 1).</p>
 <ul>
 <li><code>value</code> — the number</li>
 </ul>
-<h4 id="string-4"><a class="header" href="#string-4">String</a></h4>
+<h4 id="string-3"><a class="header" href="#string-3">String</a></h4>
 <pre><code class="language-pepper">String(value: String)
 </code></pre>
 <p>A string.</p>
@@ -36001,7 +36330,7 @@ assert(list.to_string() == "[1,2]", "two elements");
 <ul>
 <li>the member, or <code>Null</code> when this is not an object or has no member named <code>key</code></li>
 </ul>
-<h4 id="operator--1-8"><a class="header" href="#operator--1-8">operator []</a></h4>
+<h4 id="operator--1-9"><a class="header" href="#operator--1-9">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String, member: JsonValue): JsonValue
 </code></pre>
 <p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of an
@@ -36019,7 +36348,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>if this is not an object (“JsonValue[key] = value needs an object”)</li>
 </ul>
-<h4 id="operator--2-5"><a class="header" href="#operator--2-5">operator []</a></h4>
+<h4 id="operator--2-6"><a class="header" href="#operator--2-6">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): JsonValue
 </code></pre>
 <p>Reads <code>value[index]</code>: an element of an array.</p>
@@ -36221,7 +36550,7 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
+<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
 <h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
@@ -36341,7 +36670,7 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
@@ -36633,7 +36962,7 @@ struct ServerConfig {
 }
 </code></pre>
 <p>Source: <code>runtime/serialize/module.pep</code></p>
-<h2 id="name-5"><a class="header" href="#name-5">Name</a></h2>
+<h2 id="name-6"><a class="header" href="#name-6">Name</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Name
 </code></pre>
 <p>Writes a property, or an enum case, under <code>value</code> rather than under its
@@ -36646,8 +36975,8 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
-<h4 id="value-4"><a class="header" href="#value-4">value</a></h4>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
 <p>The key the property is written under, or the name the case is
@@ -36681,7 +37010,7 @@ enum Shape {
     Point,
 }
 </code></pre>
-<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">key</a></h4>
 <pre><code class="language-pepper">const key: String
 </code></pre>
@@ -36979,7 +37308,7 @@ file.close();
 <ul>
 <li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”)</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -37041,7 +37370,7 @@ assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
 assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 </code></pre>
 <h3 id="properties-12"><a class="header" href="#properties-12">Properties</a></h3>
-<h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
+<h4 id="value-6"><a class="header" href="#value-6">value</a></h4>
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
@@ -37109,7 +37438,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
 <h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -37193,7 +37522,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -37359,7 +37688,7 @@ assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 <ul>
 <li><code>sink</code> — the stream the archive is written to</li>
 </ul>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
 <pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
 </code></pre>
@@ -38198,8 +38527,8 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
-<h4 id="value-6"><a class="header" href="#value-6">value</a></h4>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
 <p>Returns the value given, or the default when it was left out.</p>
@@ -38244,8 +38573,8 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
-<h4 id="values-1"><a class="header" href="#values-1">values</a></h4>
+<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
+<h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;String&gt;
 </code></pre>
 <p>Returns the values given, in command-line order.</p>
@@ -38274,7 +38603,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -38283,7 +38612,7 @@ struct Options {
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
 <p>What the option does, for the help.</p>
-<h4 id="name-6"><a class="header" href="#name-6">name</a></h4>
+<h4 id="name-7"><a class="header" href="#name-7">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>The long name, without <code>--</code>; empty for the field’s name with each
@@ -38311,12 +38640,12 @@ struct Options {
     var source: String;
 }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="help-1-1"><a class="header" href="#help-1-1">help</a></h4>
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
 <p>What the argument is, for the help.</p>
-<h4 id="name-1-1"><a class="header" href="#name-1-1">name</a></h4>
+<h4 id="name-1-2"><a class="header" href="#name-1-2">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
 <p>What the help and errors call it; empty for the field’s name.</p>
@@ -38377,7 +38706,7 @@ headers["accept"] = "application/json";   # replaces it
 assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
 <h3 id="properties-14"><a class="header" href="#properties-14">Properties</a></h3>
-<h4 id="count-5"><a class="header" href="#count-5">count</a></h4>
+<h4 id="count-6"><a class="header" href="#count-6">count</a></h4>
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
@@ -38395,7 +38724,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <ul>
 <li>a new array with one entry per name</li>
 </ul>
-<h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
+<h4 id="values-3"><a class="header" href="#values-3">values</a></h4>
 <pre><code class="language-pepper">values(name: String): String[]
 </code></pre>
 <p>Returns every value of the field named <code>name</code>, in the order added.</p>
@@ -38425,7 +38754,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <li><code>name</code> — the field name, in any case</li>
 <li><code>value</code> — the field value</li>
 </ul>
-<h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
+<h4 id="get-8"><a class="header" href="#get-8">get</a></h4>
 <pre><code class="language-pepper">get(name: String): String?
 </code></pre>
 <p>Returns the first value of the field named <code>name</code>.</p>
@@ -38471,7 +38800,7 @@ from a missing field.</p>
 <ul>
 <li>the first value, or <code>""</code></li>
 </ul>
-<h4 id="operator--1-9"><a class="header" href="#operator--1-9">operator []</a></h4>
+<h4 id="operator--1-10"><a class="header" href="#operator--1-10">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String, value: String): String
 </code></pre>
 <p>Writes <code>headers[name] = value</code>: replaces every value of the field, as
@@ -38497,7 +38826,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -38522,7 +38851,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -38608,7 +38937,7 @@ server adds <code>Content-Length</code> itself.</p>
     return response;
 }
 </code></pre>
-<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
+<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
 <h4 id="status-1"><a class="header" href="#status-1">status</a></h4>
 <pre><code class="language-pepper">var status: int
 </code></pre>
@@ -38631,7 +38960,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
+<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -38729,7 +39058,7 @@ instance one that trusts a private certificate authority.</p>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
 <h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
-<h4 id="get-7"><a class="header" href="#get-7">get</a></h4>
+<h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
 <p>Sends a <code>GET</code> request for <code>url</code>.</p>
@@ -39053,7 +39382,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -39104,7 +39433,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
+<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -39321,11 +39650,18 @@ site alone; <code>versions.json</code> lists them for the version picker, and th
 <h2 id="the-reference-stays-current"><a class="header" href="#the-reference-stays-current">The reference stays current</a></h2>
 <p><code>cargo run -p pepper-docgen -- check</code> fails when <code>docs/src/reference/</code> does
 not match the runtime, and CI runs it.</p>
-<p>What the compiler provides rather than the runtime declares has a page
-written by hand: <code>reference/reflect.md</code> documents the <code>reflect</code> functions
-of <code>static</code> blocks. <code>HAND_WRITTEN</code> in <code>tools/docgen/src/reference.rs</code> lists
-such pages for the table of contents, and a docgen test fails when the
-compiler gains a <code>reflect</code> function or property the page does not name.</p>
+<p>What the compiler provides rather than the runtime declares is still
+declared in the runtime, marked <code>[__BuiltIn]</code>: <code>runtime/reflect.pep</code>
+declares the <code>reflect</code> functions of <code>static</code> blocks and the values they
+return. The compiler ignores such a declaration (its body is only <code>{}</code>), so
+it costs nothing and cannot clash with the built-in; the reference, the doc
+comment check and the language server read it like any other. A string
+argument names the built-in when it is not the declaration’s own name:
+<code>[__BuiltIn("reflect.name")]</code> titles the entry and its signature
+<code>reflect.name</code>, and hover and go-to-definition on a use of <code>reflect.name</code>
+lead to it. Only the runtime may use the attribute. A docgen test fails
+when the compiler gains a <code>reflect</code> function or property that
+<code>runtime/reflect.pep</code> does not declare, or loses one it does.</p>
 <p>Each reference page’s title and place in the table of contents come from
 <code>PAGES</code> in <code>tools/docgen/src/reference.rs</code>. A new runtime file with public
 declarations must be added there, under its module’s <code>module.pep</code>; until it
