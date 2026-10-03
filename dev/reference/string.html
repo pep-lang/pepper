@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
+            window.path_to_searchindex_js = "../searchindex-23c4b80f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2079cc94.js"></script>
@@ -187,8 +187,9 @@
 <h2 id="string-1"><a class="header" href="#string-1">String</a></h2>
 <pre><code class="language-pepper">struct String
 </code></pre>
-<p>A mutable, reference-counted string of UTF-8 text. String literals
-(<code>"text"</code>) are <code>String</code> values.</p>
+<p>A mutable, reference-counted string of UTF-8 text. A string literal
+(<code>"text"</code>) is a <code>String</code> wherever a <code>String</code> is expected; its own type is
+<code>StringConstant</code>.</p>
 <p>Two measures describe a String, and each API says which one it uses:</p>
 <ul>
 <li><strong>Code points</strong> (Unicode characters): <code>length</code>, <code>is_empty</code>,
@@ -912,7 +913,463 @@ O(size * count).</p>
 <pre><code class="language-pepper">assert("ab".repeat(3) == "ababab", "three copies");
 var indent = " ".repeat(8);   # eight spaces
 </code></pre>
-<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
+<h2 id="stringconstant"><a class="header" href="#stringconstant">StringConstant</a></h2>
+<pre><code class="language-pepper">[Value] struct StringConstant
+</code></pre>
+<p>The text of a string literal: a pointer to its bytes, which never change
+and are never freed, with their byte size and code-point length. A string
+literal’s type is <code>StringConstant</code>; where a <code>String</code> is expected, the
+literal is a <code>String</code> (see the Strings chapter of the book).</p>
+<p>A <code>StringConstant</code> is a <code>[Value]</code> type: copying one copies the pointer
+and steps no reference count, and any thread may read it. Its bytes
+always end in a NUL byte, so <code>c_str()</code> goes to C as it is. It has
+<code>String</code>’s read API, measured the same way (<code>length</code> in code points,
+<code>size</code> and offsets in bytes); the methods that make new text return a
+<code>String</code>. A <code>StringConstant</code> converts to a <code>String</code> wherever a <code>String</code>
+is expected, as if <code>String</code> had an <code>[Implicit]</code> constructor from it: the
+conversion, like <code>String(text)</code>, copies the bytes. Where C expects a
+<code>char*</code>, it passes its own bytes, as <code>c_str()</code> does.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">StringConstant name = "pepper";
+assert(name.length == 6, "6 code points");
+assert(name.starts_with("pep"), "the read API of String");
+String copy = name;   # a new String with its own bytes
+copy.append("!");
+</code></pre>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of Unicode code points. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>size</code></li>
+</ul>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8, not counting the NUL terminator. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>length</code></li>
+</ul>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the text has no code points. O(1).</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="stringconstant-1"><a class="header" href="#stringconstant-1">StringConstant()</a></h4>
+<pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
+</code></pre>
+<p>Creates a <code>StringConstant</code> over the <code>size</code> bytes at <code>data</code>. The
+compiler calls it for each string literal. The bytes must be followed
+by a NUL byte and must never change or be freed while the program
+runs; no other bytes meet that, so code outside the runtime has no
+reason to call it with arguments. With no arguments, it is the empty
+text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the constant NUL-terminated bytes</li>
+<li><code>size</code> — the number of bytes before the NUL terminator</li>
+<li><code>length</code> — the number of code points in those bytes</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="c_str-1"><a class="header" href="#c_str-1">c_str</a></h4>
+<pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
+</code></pre>
+<p>Returns the text as a NUL-terminated C string, with no copy. Unlike
+<code>String.c_str()</code>, it is never <code>__null</code>, and it stays valid for the
+whole run of the program.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the constant NUL-terminated bytes</li>
+</ul>
+<h4 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns a new String with a copy of the text. Converting a
+<code>StringConstant</code> to a <code>String</code>, or calling <code>String(text)</code>, calls it.
+Runs in O(size).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the same content</li>
+</ul>
+<h4 id="bytes-1"><a class="header" href="#bytes-1">bytes</a></h4>
+<pre><code class="language-pepper">bytes(): u8[]
+</code></pre>
+<p>Returns a copy of the UTF-8 bytes in a new array, as <code>String.bytes</code>
+does. Runs in O(size).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>size</code> bytes</li>
+</ul>
+<h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
+<pre><code class="language-pepper">[](idx: int): String
+</code></pre>
+<p>Returns the code point at code-point index <code>idx</code> as a new
+one-code-point String, as <code>String</code>’s indexer does. A negative <code>idx</code>
+counts from the end. Runs in O(idx).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>idx</code> — the code-point index; negative counts from the end</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String that holds the one code point</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized</li>
+</ul>
+<h4 id="operator--10"><a class="header" href="#operator--10">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether two texts hold the same bytes, a literal <code>rhs</code>
+included. Runs in O(size). To compare with a <code>String</code>, put the
+<code>String</code> on the left (<code>name == constant</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both hold the same bytes</li>
+</ul>
+<h4 id="operator--11"><a class="header" href="#operator--11">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether two texts differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the bytes differ</li>
+</ul>
+<h4 id="operator--12"><a class="header" href="#operator--12">operator +</a></h4>
+<pre><code class="language-pepper">+(rhs: String): String
+</code></pre>
+<p>Returns a new String: this text followed by <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="find-1"><a class="header" href="#find-1">find</a></h4>
+<pre><code class="language-pepper">find(needle: String, from: ulong = 0): long
+</code></pre>
+<p>Returns the byte offset of the first occurrence of <code>needle</code> at or
+after byte offset <code>from</code>, or -1, as <code>String.find</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+<li><code>from</code> — the byte offset to start searching at; 0 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte offset of the first match, or -1 when there is none</li>
+</ul>
+<h4 id="rfind-1"><a class="header" href="#rfind-1">rfind</a></h4>
+<pre><code class="language-pepper">rfind(needle: String): long
+</code></pre>
+<p>Returns the byte offset of the last occurrence of <code>needle</code>, or -1, as
+<code>String.rfind</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte offset of the last match, or -1 when there is none</li>
+</ul>
+<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
+<pre><code class="language-pepper">contains(needle: String): bool
+</code></pre>
+<p>Returns whether <code>needle</code> occurs in the text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>find(needle)</code> is not -1</li>
+</ul>
+<h4 id="starts_with-1"><a class="header" href="#starts_with-1">starts_with</a></h4>
+<pre><code class="language-pepper">starts_with(prefix: String): bool
+</code></pre>
+<p>Returns whether the text starts with <code>prefix</code>. An empty prefix always
+matches.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>prefix</code> — the text to look for at the start</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the first bytes are <code>prefix</code>’s</li>
+</ul>
+<h4 id="ends_with-1"><a class="header" href="#ends_with-1">ends_with</a></h4>
+<pre><code class="language-pepper">ends_with(suffix: String): bool
+</code></pre>
+<p>Returns whether the text ends with <code>suffix</code>. An empty suffix always
+matches.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>suffix</code> — the text to look for at the end</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the last bytes are <code>suffix</code>’s</li>
+</ul>
+<h4 id="substr-1"><a class="header" href="#substr-1">substr</a></h4>
+<pre><code class="language-pepper">substr(start: ulong, count: ulong): String
+</code></pre>
+<p>Returns up to <code>count</code> code points starting at code-point index
+<code>start</code>, as a new String, as <code>String.substr</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the code-point index of the first code point</li>
+<li><code>count</code> — the most code points to take</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String; empty when <code>start</code> is past the end</li>
+</ul>
+<h4 id="byte_at-1"><a class="header" href="#byte_at-1">byte_at</a></h4>
+<pre><code class="language-pepper">byte_at(index: ulong): byte
+</code></pre>
+<p>Returns the byte at byte offset <code>index</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the byte offset</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte at <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>size</code></li>
+</ul>
+<h4 id="substr_bytes-1"><a class="header" href="#substr_bytes-1">substr_bytes</a></h4>
+<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong): String
+</code></pre>
+<p>Returns the <code>size</code> bytes from byte offset <code>start</code> as a new String, as
+<code>String.substr_bytes</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the byte offset of the first byte</li>
+<li><code>size</code> — the number of bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the range is not inside the text</li>
+<li>if <code>start</code> or <code>start + size</code> falls inside a code point</li>
+</ul>
+<h4 id="compare-1"><a class="header" href="#compare-1">compare</a></h4>
+<pre><code class="language-pepper">compare(other: String): int
+</code></pre>
+<p>Compares this text with <code>other</code> byte by byte, for sorting, as
+<code>String.compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, 0, or a positive number when this text sorts before, the same as, or after <code>other</code></li>
+</ul>
+<h4 id="operator--13"><a class="header" href="#operator--13">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts before <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is negative</li>
+</ul>
+<h4 id="operator--14"><a class="header" href="#operator--14">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts before or the same as <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not positive</li>
+</ul>
+<h4 id="operator--15"><a class="header" href="#operator--15">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts after <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is positive</li>
+</ul>
+<h4 id="operator--16"><a class="header" href="#operator--16">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts after or the same as <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not negative</li>
+</ul>
+<h4 id="trim_end-1"><a class="header" href="#trim_end-1">trim_end</a></h4>
+<pre><code class="language-pepper">trim_end(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the trailing whitespace removed</li>
+</ul>
+<h4 id="trim_start-1"><a class="header" href="#trim_start-1">trim_start</a></h4>
+<pre><code class="language-pepper">trim_start(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the start.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading whitespace removed</li>
+</ul>
+<h4 id="trim-1"><a class="header" href="#trim-1">trim</a></h4>
+<pre><code class="language-pepper">trim(): String
+</code></pre>
+<p>Returns a new String without the whitespace at either end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading and trailing whitespace removed</li>
+</ul>
+<h4 id="lower-1"><a class="header" href="#lower-1">lower</a></h4>
+<pre><code class="language-pepper">lower(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters in lowercase.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="upper-1"><a class="header" href="#upper-1">upper</a></h4>
+<pre><code class="language-pepper">upper(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters in uppercase.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
+<pre><code class="language-pepper">lines(): String[]
+</code></pre>
+<p>Returns the lines of the text, split at <code>"\n"</code> or <code>"\r\n"</code>, as
+<code>String.lines</code> does.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of Strings, without the line breaks</li>
+</ul>
+<h4 id="repeat-1"><a class="header" href="#repeat-1">repeat</a></h4>
+<pre><code class="language-pepper">repeat(count: ulong): String
+</code></pre>
+<p>Returns a new String of <code>count</code> copies of the text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of copies</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String; empty when <code>count</code> is 0</li>
+</ul>
+<h4 id="split-1"><a class="header" href="#split-1">split</a></h4>
+<pre><code class="language-pepper">split(separator: String): String[]
+</code></pre>
+<p>Returns the pieces of the text between each <code>separator</code>, as
+<code>String.split</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of Strings</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<h4 id="split_once-1"><a class="header" href="#split_once-1">split_once</a></h4>
+<pre><code class="language-pepper">split_once(separator: String): (String, String)?
+</code></pre>
+<p>Returns the text before and after the first <code>separator</code>, or <code>Empty</code>
+when it does not occur, as <code>String.split_once</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the two pieces, or <code>Empty</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
+<pre><code class="language-pepper">join(parts: String[]): String
+</code></pre>
+<p>Returns <code>parts</code> joined into a new String with this text between each
+two.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>parts</code> — the Strings to join</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="replace-1"><a class="header" href="#replace-1">replace</a></h4>
+<pre><code class="language-pepper">replace(from: String, to: String): String
+</code></pre>
+<p>Returns a new String with every occurrence of <code>from</code> replaced by
+<code>to</code>, as <code>String.replace</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the text to replace</li>
+<li><code>to</code> — the text to put in its place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>from</code> is empty</li>
+</ul>
+<h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): StringIterator
+</code></pre>
+<p>Returns an iterator over the code points, so <code>for (var c in text)</code>
+visits each one as a one-code-point String.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new iterator, positioned before the first code point</li>
+</ul>
+<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: long): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -931,7 +1388,7 @@ integer picks its own overload.</p>
 <pre><code class="language-pepper">assert(to_string(-42) == "-42", "negative");
 var where = to_string(line) + ":" + to_string(column);
 </code></pre>
-<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
+<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ulong): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -943,7 +1400,7 @@ var where = to_string(line) + ":" + to_string(column);
 <ul>
 <li>a new String such as <code>"18446744073709551615"</code></li>
 </ul>
-<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
+<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: int): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -956,7 +1413,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
+<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: uint): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -968,7 +1425,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
+<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: short): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -981,7 +1438,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
+<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ushort): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -993,7 +1450,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
+<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: char): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -1006,7 +1463,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
+<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: byte): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -1018,7 +1475,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
+<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: bool): String
 </code></pre>
 <p>Returns <code>"true"</code> or <code>"false"</code>.</p>
@@ -1030,7 +1487,7 @@ negative.</p>
 <ul>
 <li>a new String, <code>"true"</code> or <code>"false"</code></li>
 </ul>
-<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: double): String
 </code></pre>
 <p>Returns the shortest decimal text that reads back as exactly <code>value</code>,
@@ -1055,7 +1512,7 @@ number of steps per value.</p>
 assert(to_string(3.0) == "3.0", "keeps the point");
 assert(to_string(1.0e20) == "1e+20", "exponent");
 </code></pre>
-<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
+<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: float): String
 </code></pre>
 <p>Returns the shortest decimal text that reads back as exactly <code>value</code> as
@@ -1072,7 +1529,7 @@ a <code>float</code>, laid out as <code>to_string(double)</code> lays it out.</p
 <pre><code class="language-pepper">float third = 1.0 / 3.0;
 assert(to_string(third) == "0.33333334", "a float's digits");
 </code></pre>
-<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
+<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B&gt;(value: (A, B)): String
 </code></pre>
 <p>Returns the text of a pair, <code>"(1, x)"</code>: each element’s <code>to_string</code>
@@ -1096,7 +1553,7 @@ without quotes. Tuples of up to eight elements convert this way.</p>
 var nested = (1, (2.5, true));
 assert($"{nested}" == "(1, (2.5, true))", "nested");
 </code></pre>
-<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
+<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C&gt;(value: (A, B, C)): String
 </code></pre>
 <p>Returns the text of a three-element tuple, as the pair overload does.</p>
@@ -1114,7 +1571,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3)"</code></li>
 </ul>
-<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
+<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D&gt;(value: (A, B, C, D)): String
 </code></pre>
 <p>Returns the text of a four-element tuple, as the pair overload does.</p>
@@ -1133,7 +1590,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4)"</code></li>
 </ul>
-<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
+<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E&gt;(value: (A, B, C, D, E)): String
 </code></pre>
 <p>Returns the text of a five-element tuple, as the pair overload does.</p>
@@ -1153,7 +1610,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5)"</code></li>
 </ul>
-<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
+<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F&gt;(value: (A, B, C, D, E, F)): String
 </code></pre>
 <p>Returns the text of a six-element tuple, as the pair overload does.</p>
@@ -1174,7 +1631,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5, 6)"</code></li>
 </ul>
-<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
+<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G&gt;(value: (A, B, C, D, E, F, G)): String
 </code></pre>
 <p>Returns the text of a seven-element tuple, as the pair overload does.</p>
@@ -1196,7 +1653,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7)"</code></li>
 </ul>
-<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
+<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G, H&gt;(value: (A, B, C, D, E, F, G, H)): String
 </code></pre>
 <p>Returns the text of an eight-element tuple, as the pair overload does.</p>
@@ -1263,7 +1720,7 @@ the argument.</p>
 print(0.5);         # 0.5
 print((1, "two"));  # (1, two)
 </code></pre>
-<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
+<h2 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
 </code></pre>
 <p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
@@ -1322,8 +1779,8 @@ extend Point with ToString {
 var p = Point(1, 2);
 assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h4>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the text of this value.</p>
@@ -1345,21 +1802,21 @@ when it is full, so appending is amortized O(piece size). Call
 out.append("line ").append(to_string(3)).append("\n");
 var text = out.to_string();   # "line 3\n"
 </code></pre>
-<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
+<h4 id="size-2"><a class="header" href="#size-2">size</a></h4>
 <pre><code class="language-pepper">var size: ulong { get; }
 </code></pre>
 <p>The number of bytes of UTF-8 appended so far. O(1).</p>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<h4 id="length-2"><a class="header" href="#length-2">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
 <p>The number of code points appended so far. O(1).</p>
-<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether nothing has been appended since the builder was
 created or last cleared. O(1).</p>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="stringbuilder-1"><a class="header" href="#stringbuilder-1">StringBuilder()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -1369,7 +1826,7 @@ bytes before it has to grow.</p>
 <ul>
 <li><code>capacity</code> — the number of bytes to allocate up front</li>
 </ul>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
@@ -1391,7 +1848,7 @@ b.append("a").append("b");   # b.to_string() == "ab"
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
+<h4 id="to_string-22"><a class="header" href="#to_string-22">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
@@ -1415,7 +1872,7 @@ while (it.next()) {
     print(it.current());   # "a", then "b"
 }
 </code></pre>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>

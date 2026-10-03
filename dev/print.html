@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f2c5c1c0.js";
+            window.path_to_searchindex_js = "searchindex-23c4b80f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2079cc94.js"></script>
@@ -230,7 +230,7 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
 closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code>,
 <code>filter</code>, <code>enumerate</code> and <code>zip</code> adapters),
-<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>,
+<code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>, <code>StringConstant</code> for literals’ constant bytes,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
@@ -1105,8 +1105,11 @@ main(): int {
 </code></pre>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
-value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
-literal’s NUL-terminated bytes (see <a href="#passing-strings">Passing strings</a>). <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
+value wherever a <code>String</code> is expected, and wherever nothing asks for another
+type (<code>var s = "hello";</code> declares a <code>String</code>). Where it is stored or passed as
+a <code>__ptr&lt;char&gt;</code>, it is the literal’s NUL-terminated bytes (see
+<a href="#passing-strings">Passing strings</a>), and where a
+<a href="#string-constants"><code>StringConstant</code></a> is expected, it is one. <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
 the <code>length</code> property counts code points, <code>size</code> counts bytes, and <code>s[i]</code> gives the code
 point at index <code>i</code> as a one-code-point <code>String</code>.</p>
 <pre><code class="language-pepper"># String literals are String values.
@@ -1145,6 +1148,69 @@ literal: after <code>var s = "a"; s.append("b");</code> the next <code>"a"</code
 Where a literal is only read, passed to a parameter that the function
 neither keeps nor changes (<code>builder.append("x")</code>, <code>name == "x"</code>), every
 evaluation shares one constant object and allocates nothing.</p>
+<h4 id="string-constants"><a class="header" href="#string-constants">String constants</a></h4>
+<p>A literal’s own type is <a href="#string"><code>StringConstant</code></a>: a pointer
+to the literal’s bytes, which never change and are never freed, with their
+size and length. It is a <a href="#value-structs"><code>[Value]</code></a> type, so copying one
+steps no reference count, any thread may read it, and a literal stored as one
+allocates nothing. Its bytes always end in a NUL byte, so <code>c_str()</code> passes it
+to C as it is (a <code>String</code>’s <code>c_str()</code> does too, but a <code>String</code> built with no
+data has none).</p>
+<p>A <code>StringConstant</code> has <code>String</code>’s read API (<code>length</code>, <code>size</code>, <code>find</code>,
+<code>split</code>, <code>trim</code>, <code>==</code>, <code>&lt;</code>, the indexer, <code>for</code> loops and so on); the methods
+that make new text return a <code>String</code>. It converts to a <code>String</code> wherever a
+<code>String</code> is expected, as if <code>String</code> had an <a href="#implicit-conversions"><code>[Implicit]</code>
+constructor</a> taking it: the conversion (and
+<code>String(text)</code>) copies the bytes, so an API that takes a <code>String</code> takes a
+<code>StringConstant</code> too. Where C expects a <code>char*</code>, it passes its own bytes, as
+<code>c_str()</code> does. Among <a href="#overloading-1">overloads</a>, a literal picks a
+<code>StringConstant</code> parameter over a <code>String</code> one, and a <code>StringConstant</code> value
+picks a <code>String</code> parameter last, as an implicit conversion.</p>
+<pre><code class="language-pepper"># A string literal's own type is StringConstant: its constant bytes, with no
+# allocation and no reference count.
+extern ulong strlen(char* text);
+
+const GREETING: StringConstant = "hello";
+
+shout(text: String): String {
+    return text.upper() + "!";
+}
+
+main(): int {
+    StringConstant name = "pepper";
+    assert(name.length == 6, "the read API of String");
+    assert(name.starts_with("pep") &amp;&amp; name.find("p", 1) == 2, "find counts bytes");
+
+    # Always NUL-terminated: c_str() goes to C with no copy.
+    assert(strlen(GREETING.c_str()) == 5, "C reads the literal's bytes");
+
+    # A StringConstant converts to a String wherever one is expected.
+    String copy = name;
+    copy.append("!");
+    assert(copy == "pepper!" &amp;&amp; name == "pepper", "the copy has its own bytes");
+    print(shout(GREETING));
+
+    # Copying a StringConstant copies a pointer.
+    var also = name;
+    assert(also == name, "same text");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
+return value of type <code>StringConstant</code>, and a <code>HashMap&lt;StringConstant, V&gt;</code>
+key. Everywhere else a literal is a <code>String</code>, as before.</li>
+<li><strong>Converting chains once</strong>: a literal reaches a type that converts from
+<code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
+does not, since conversions never chain. Write <code>String(text)</code> or pass a
+literal.</li>
+<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> on a <code>StringConstant</code>
+take another <code>StringConstant</code> (a literal included), so generic code such
+as a <code>HashMap&lt;StringConstant, V&gt;</code> compares two keys with no conversion. To
+compare with a <code>String</code>, put the <code>String</code> on the left (<code>name == constant</code>)
+or call <code>compare</code>, which takes a <code>String</code>.</li>
+<li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
+</ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
 <code>find</code> returns), <code>compare</code> and <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code> order strings byte by byte
@@ -4858,7 +4924,7 @@ argument, the conversion has a rank, best first:</p>
 <tr><th>Rank</th><th>What converts</th></tr>
 </thead>
 <tbody>
-<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code></td></tr>
+<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code> or <a href="#string-constants"><code>StringConstant</code></a></td></tr>
 <tr><td>promotion</td><td>an integer widening that loses nothing (<code>int</code> to <code>long</code>, <code>u8</code> to <code>int</code>; the narrower target ranks better, so a <code>short</code> picks <code>int</code> over <code>long</code>), <code>float</code> to <code>double</code>, an integer literal to any integer type it fits, a struct to a <a href="#traits-as-types">trait it declares</a>, <code>__null</code> to a reference, a string literal to <code>String</code></td></tr>
 <tr><td>conversion</td><td>any other numeric conversion (<code>bool</code> included), and pointer conversions</td></tr>
 <tr><td>implicit constructor</td><td>a value to a struct whose <a href="#implicit-conversions"><code>[Implicit]</code> constructor</a> takes it</td></tr>
@@ -15268,6 +15334,10 @@ string, with no allocation: <code>strlen("hello")</code> is 5. The same is true
 wherever a literal flows into a <code>__ptr&lt;char&gt;</code>, <code>__ptr&lt;u8&gt;</code>, or
 <code>__ptr&lt;void&gt;</code> in Pepper code (a variable, field, argument, or return
 value), so <code>String("hello")</code> copies the literal’s five bytes.</li>
+<li>A <strong><a href="#string-constants"><code>StringConstant</code></a></strong> passes
+its constant NUL-terminated bytes with no copy, by itself where a
+<code>__ptr&lt;char&gt;</code> is expected or through <code>c_str()</code>. The pointer is valid for
+the whole run of the program and is never <code>__null</code>.</li>
 <li>A <strong><code>String</code> value</strong> is passed with <code>c_str()</code>, which returns the String’s
 buffer, NUL-terminated, as a <code>__ptr&lt;char&gt;</code>. A String is not guaranteed to
 be NUL-terminated otherwise, so always go through <code>c_str()</code> when C needs
@@ -18417,8 +18487,9 @@ does.</p>
 <h2 id="string-1"><a class="header" href="#string-1">String</a></h2>
 <pre><code class="language-pepper">struct String
 </code></pre>
-<p>A mutable, reference-counted string of UTF-8 text. String literals
-(<code>"text"</code>) are <code>String</code> values.</p>
+<p>A mutable, reference-counted string of UTF-8 text. A string literal
+(<code>"text"</code>) is a <code>String</code> wherever a <code>String</code> is expected; its own type is
+<code>StringConstant</code>.</p>
 <p>Two measures describe a String, and each API says which one it uses:</p>
 <ul>
 <li><strong>Code points</strong> (Unicode characters): <code>length</code>, <code>is_empty</code>,
@@ -19142,7 +19213,463 @@ O(size * count).</p>
 <pre><code class="language-pepper">assert("ab".repeat(3) == "ababab", "three copies");
 var indent = " ".repeat(8);   # eight spaces
 </code></pre>
-<h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
+<h2 id="stringconstant"><a class="header" href="#stringconstant">StringConstant</a></h2>
+<pre><code class="language-pepper">[Value] struct StringConstant
+</code></pre>
+<p>The text of a string literal: a pointer to its bytes, which never change
+and are never freed, with their byte size and code-point length. A string
+literal’s type is <code>StringConstant</code>; where a <code>String</code> is expected, the
+literal is a <code>String</code> (see the Strings chapter of the book).</p>
+<p>A <code>StringConstant</code> is a <code>[Value]</code> type: copying one copies the pointer
+and steps no reference count, and any thread may read it. Its bytes
+always end in a NUL byte, so <code>c_str()</code> goes to C as it is. It has
+<code>String</code>’s read API, measured the same way (<code>length</code> in code points,
+<code>size</code> and offsets in bytes); the methods that make new text return a
+<code>String</code>. A <code>StringConstant</code> converts to a <code>String</code> wherever a <code>String</code>
+is expected, as if <code>String</code> had an <code>[Implicit]</code> constructor from it: the
+conversion, like <code>String(text)</code>, copies the bytes. Where C expects a
+<code>char*</code>, it passes its own bytes, as <code>c_str()</code> does.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">StringConstant name = "pepper";
+assert(name.length == 6, "6 code points");
+assert(name.starts_with("pep"), "the read API of String");
+String copy = name;   # a new String with its own bytes
+copy.append("!");
+</code></pre>
+<h3 id="properties-1-1"><a class="header" href="#properties-1-1">Properties</a></h3>
+<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<pre><code class="language-pepper">var length: ulong { get; }
+</code></pre>
+<p>The number of Unicode code points. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>size</code></li>
+</ul>
+<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<pre><code class="language-pepper">var size: ulong { get; }
+</code></pre>
+<p>The number of bytes of UTF-8, not counting the NUL terminator. O(1).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>length</code></li>
+</ul>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the text has no code points. O(1).</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="stringconstant-1"><a class="header" href="#stringconstant-1">StringConstant()</a></h4>
+<pre><code class="language-pepper">construct(data: __ptr&lt;char&gt; = __null, size: ulong = 0, length: ulong = 0)
+</code></pre>
+<p>Creates a <code>StringConstant</code> over the <code>size</code> bytes at <code>data</code>. The
+compiler calls it for each string literal. The bytes must be followed
+by a NUL byte and must never change or be freed while the program
+runs; no other bytes meet that, so code outside the runtime has no
+reason to call it with arguments. With no arguments, it is the empty
+text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the constant NUL-terminated bytes</li>
+<li><code>size</code> — the number of bytes before the NUL terminator</li>
+<li><code>length</code> — the number of code points in those bytes</li>
+</ul>
+<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
+<h4 id="c_str-1"><a class="header" href="#c_str-1">c_str</a></h4>
+<pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
+</code></pre>
+<p>Returns the text as a NUL-terminated C string, with no copy. Unlike
+<code>String.c_str()</code>, it is never <code>__null</code>, and it stays valid for the
+whole run of the program.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the constant NUL-terminated bytes</li>
+</ul>
+<h4 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns a new String with a copy of the text. Converting a
+<code>StringConstant</code> to a <code>String</code>, or calling <code>String(text)</code>, calls it.
+Runs in O(size).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the same content</li>
+</ul>
+<h4 id="bytes-1"><a class="header" href="#bytes-1">bytes</a></h4>
+<pre><code class="language-pepper">bytes(): u8[]
+</code></pre>
+<p>Returns a copy of the UTF-8 bytes in a new array, as <code>String.bytes</code>
+does. Runs in O(size).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of <code>size</code> bytes</li>
+</ul>
+<h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
+<pre><code class="language-pepper">[](idx: int): String
+</code></pre>
+<p>Returns the code point at code-point index <code>idx</code> as a new
+one-code-point String, as <code>String</code>’s indexer does. A negative <code>idx</code>
+counts from the end. Runs in O(idx).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>idx</code> — the code-point index; negative counts from the end</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String that holds the one code point</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized</li>
+</ul>
+<h4 id="operator--10"><a class="header" href="#operator--10">operator ==</a></h4>
+<pre><code class="language-pepper">==(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether two texts hold the same bytes, a literal <code>rhs</code>
+included. Runs in O(size). To compare with a <code>String</code>, put the
+<code>String</code> on the left (<code>name == constant</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when both hold the same bytes</li>
+</ul>
+<h4 id="operator--11"><a class="header" href="#operator--11">operator !=</a></h4>
+<pre><code class="language-pepper">!=(rhs: StringConstant): bool
+</code></pre>
+<p>Returns whether two texts differ.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the bytes differ</li>
+</ul>
+<h4 id="operator--12"><a class="header" href="#operator--12">operator +</a></h4>
+<pre><code class="language-pepper">+(rhs: String): String
+</code></pre>
+<p>Returns a new String: this text followed by <code>rhs</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>rhs</code> — the text to append</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="find-1"><a class="header" href="#find-1">find</a></h4>
+<pre><code class="language-pepper">find(needle: String, from: ulong = 0): long
+</code></pre>
+<p>Returns the byte offset of the first occurrence of <code>needle</code> at or
+after byte offset <code>from</code>, or -1, as <code>String.find</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+<li><code>from</code> — the byte offset to start searching at; 0 by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte offset of the first match, or -1 when there is none</li>
+</ul>
+<h4 id="rfind-1"><a class="header" href="#rfind-1">rfind</a></h4>
+<pre><code class="language-pepper">rfind(needle: String): long
+</code></pre>
+<p>Returns the byte offset of the last occurrence of <code>needle</code>, or -1, as
+<code>String.rfind</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte offset of the last match, or -1 when there is none</li>
+</ul>
+<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
+<pre><code class="language-pepper">contains(needle: String): bool
+</code></pre>
+<p>Returns whether <code>needle</code> occurs in the text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>needle</code> — the text to search for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>find(needle)</code> is not -1</li>
+</ul>
+<h4 id="starts_with-1"><a class="header" href="#starts_with-1">starts_with</a></h4>
+<pre><code class="language-pepper">starts_with(prefix: String): bool
+</code></pre>
+<p>Returns whether the text starts with <code>prefix</code>. An empty prefix always
+matches.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>prefix</code> — the text to look for at the start</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the first bytes are <code>prefix</code>’s</li>
+</ul>
+<h4 id="ends_with-1"><a class="header" href="#ends_with-1">ends_with</a></h4>
+<pre><code class="language-pepper">ends_with(suffix: String): bool
+</code></pre>
+<p>Returns whether the text ends with <code>suffix</code>. An empty suffix always
+matches.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>suffix</code> — the text to look for at the end</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the last bytes are <code>suffix</code>’s</li>
+</ul>
+<h4 id="substr-1"><a class="header" href="#substr-1">substr</a></h4>
+<pre><code class="language-pepper">substr(start: ulong, count: ulong): String
+</code></pre>
+<p>Returns up to <code>count</code> code points starting at code-point index
+<code>start</code>, as a new String, as <code>String.substr</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the code-point index of the first code point</li>
+<li><code>count</code> — the most code points to take</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String; empty when <code>start</code> is past the end</li>
+</ul>
+<h4 id="byte_at-1"><a class="header" href="#byte_at-1">byte_at</a></h4>
+<pre><code class="language-pepper">byte_at(index: ulong): byte
+</code></pre>
+<p>Returns the byte at byte offset <code>index</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the byte offset</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the byte at <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index</code> is not less than <code>size</code></li>
+</ul>
+<h4 id="substr_bytes-1"><a class="header" href="#substr_bytes-1">substr_bytes</a></h4>
+<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong): String
+</code></pre>
+<p>Returns the <code>size</code> bytes from byte offset <code>start</code> as a new String, as
+<code>String.substr_bytes</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the byte offset of the first byte</li>
+<li><code>size</code> — the number of bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the range is not inside the text</li>
+<li>if <code>start</code> or <code>start + size</code> falls inside a code point</li>
+</ul>
+<h4 id="compare-1"><a class="header" href="#compare-1">compare</a></h4>
+<pre><code class="language-pepper">compare(other: String): int
+</code></pre>
+<p>Compares this text with <code>other</code> byte by byte, for sorting, as
+<code>String.compare</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a negative number, 0, or a positive number when this text sorts before, the same as, or after <code>other</code></li>
+</ul>
+<h4 id="operator--13"><a class="header" href="#operator--13">operator &lt;</a></h4>
+<pre><code class="language-pepper">&lt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts before <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is negative</li>
+</ul>
+<h4 id="operator--14"><a class="header" href="#operator--14">operator &lt;=</a></h4>
+<pre><code class="language-pepper">&lt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts before or the same as <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not positive</li>
+</ul>
+<h4 id="operator--15"><a class="header" href="#operator--15">operator &gt;</a></h4>
+<pre><code class="language-pepper">&gt;(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts after <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is positive</li>
+</ul>
+<h4 id="operator--16"><a class="header" href="#operator--16">operator &gt;=</a></h4>
+<pre><code class="language-pepper">&gt;=(other: StringConstant): bool
+</code></pre>
+<p>Returns whether this text sorts after or the same as <code>other</code>, byte by byte.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the text to compare with</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the byte-by-byte order is not negative</li>
+</ul>
+<h4 id="trim_end-1"><a class="header" href="#trim_end-1">trim_end</a></h4>
+<pre><code class="language-pepper">trim_end(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the trailing whitespace removed</li>
+</ul>
+<h4 id="trim_start-1"><a class="header" href="#trim_start-1">trim_start</a></h4>
+<pre><code class="language-pepper">trim_start(): String
+</code></pre>
+<p>Returns a new String without the whitespace at the start.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading whitespace removed</li>
+</ul>
+<h4 id="trim-1"><a class="header" href="#trim-1">trim</a></h4>
+<pre><code class="language-pepper">trim(): String
+</code></pre>
+<p>Returns a new String without the whitespace at either end.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String with the leading and trailing whitespace removed</li>
+</ul>
+<h4 id="lower-1"><a class="header" href="#lower-1">lower</a></h4>
+<pre><code class="language-pepper">lower(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters in lowercase.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="upper-1"><a class="header" href="#upper-1">upper</a></h4>
+<pre><code class="language-pepper">upper(): String
+</code></pre>
+<p>Returns a new String with the ASCII letters in uppercase.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
+<pre><code class="language-pepper">lines(): String[]
+</code></pre>
+<p>Returns the lines of the text, split at <code>"\n"</code> or <code>"\r\n"</code>, as
+<code>String.lines</code> does.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of Strings, without the line breaks</li>
+</ul>
+<h4 id="repeat-1"><a class="header" href="#repeat-1">repeat</a></h4>
+<pre><code class="language-pepper">repeat(count: ulong): String
+</code></pre>
+<p>Returns a new String of <code>count</code> copies of the text.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of copies</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String; empty when <code>count</code> is 0</li>
+</ul>
+<h4 id="split-1"><a class="header" href="#split-1">split</a></h4>
+<pre><code class="language-pepper">split(separator: String): String[]
+</code></pre>
+<p>Returns the pieces of the text between each <code>separator</code>, as
+<code>String.split</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of Strings</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<h4 id="split_once-1"><a class="header" href="#split_once-1">split_once</a></h4>
+<pre><code class="language-pepper">split_once(separator: String): (String, String)?
+</code></pre>
+<p>Returns the text before and after the first <code>separator</code>, or <code>Empty</code>
+when it does not occur, as <code>String.split_once</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text to split at</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the two pieces, or <code>Empty</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>separator</code> is empty</li>
+</ul>
+<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
+<pre><code class="language-pepper">join(parts: String[]): String
+</code></pre>
+<p>Returns <code>parts</code> joined into a new String with this text between each
+two.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>parts</code> — the Strings to join</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<h4 id="replace-1"><a class="header" href="#replace-1">replace</a></h4>
+<pre><code class="language-pepper">replace(from: String, to: String): String
+</code></pre>
+<p>Returns a new String with every occurrence of <code>from</code> replaced by
+<code>to</code>, as <code>String.replace</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>from</code> — the text to replace</li>
+<li><code>to</code> — the text to put in its place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new String</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>from</code> is empty</li>
+</ul>
+<h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): StringIterator
+</code></pre>
+<p>Returns an iterator over the code points, so <code>for (var c in text)</code>
+visits each one as a one-code-point String.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new iterator, positioned before the first code point</li>
+</ul>
+<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: long): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -19161,7 +19688,7 @@ integer picks its own overload.</p>
 <pre><code class="language-pepper">assert(to_string(-42) == "-42", "negative");
 var where = to_string(line) + ":" + to_string(column);
 </code></pre>
-<h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
+<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ulong): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -19173,7 +19700,7 @@ var where = to_string(line) + ":" + to_string(column);
 <ul>
 <li>a new String such as <code>"18446744073709551615"</code></li>
 </ul>
-<h2 id="to_string-3"><a class="header" href="#to_string-3">to_string</a></h2>
+<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: int): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -19186,7 +19713,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-4"><a class="header" href="#to_string-4">to_string</a></h2>
+<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: uint): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -19198,7 +19725,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-5"><a class="header" href="#to_string-5">to_string</a></h2>
+<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: short): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -19211,7 +19738,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-6"><a class="header" href="#to_string-6">to_string</a></h2>
+<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ushort): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -19223,7 +19750,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-7"><a class="header" href="#to_string-7">to_string</a></h2>
+<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: char): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>, with a leading <code>-</code> when it is
@@ -19236,7 +19763,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"-7"</code></li>
 </ul>
-<h2 id="to_string-8"><a class="header" href="#to_string-8">to_string</a></h2>
+<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: byte): String
 </code></pre>
 <p>Returns the decimal text of <code>value</code>.</p>
@@ -19248,7 +19775,7 @@ negative.</p>
 <ul>
 <li>a new String such as <code>"7"</code></li>
 </ul>
-<h2 id="to_string-9"><a class="header" href="#to_string-9">to_string</a></h2>
+<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: bool): String
 </code></pre>
 <p>Returns <code>"true"</code> or <code>"false"</code>.</p>
@@ -19260,7 +19787,7 @@ negative.</p>
 <ul>
 <li>a new String, <code>"true"</code> or <code>"false"</code></li>
 </ul>
-<h2 id="to_string-10"><a class="header" href="#to_string-10">to_string</a></h2>
+<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: double): String
 </code></pre>
 <p>Returns the shortest decimal text that reads back as exactly <code>value</code>,
@@ -19285,7 +19812,7 @@ number of steps per value.</p>
 assert(to_string(3.0) == "3.0", "keeps the point");
 assert(to_string(1.0e20) == "1e+20", "exponent");
 </code></pre>
-<h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
+<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: float): String
 </code></pre>
 <p>Returns the shortest decimal text that reads back as exactly <code>value</code> as
@@ -19302,7 +19829,7 @@ a <code>float</code>, laid out as <code>to_string(double)</code> lays it out.</p
 <pre><code class="language-pepper">float third = 1.0 / 3.0;
 assert(to_string(third) == "0.33333334", "a float's digits");
 </code></pre>
-<h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
+<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B&gt;(value: (A, B)): String
 </code></pre>
 <p>Returns the text of a pair, <code>"(1, x)"</code>: each element’s <code>to_string</code>
@@ -19326,7 +19853,7 @@ without quotes. Tuples of up to eight elements convert this way.</p>
 var nested = (1, (2.5, true));
 assert($"{nested}" == "(1, (2.5, true))", "nested");
 </code></pre>
-<h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
+<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C&gt;(value: (A, B, C)): String
 </code></pre>
 <p>Returns the text of a three-element tuple, as the pair overload does.</p>
@@ -19344,7 +19871,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3)"</code></li>
 </ul>
-<h2 id="to_string-14"><a class="header" href="#to_string-14">to_string</a></h2>
+<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D&gt;(value: (A, B, C, D)): String
 </code></pre>
 <p>Returns the text of a four-element tuple, as the pair overload does.</p>
@@ -19363,7 +19890,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4)"</code></li>
 </ul>
-<h2 id="to_string-15"><a class="header" href="#to_string-15">to_string</a></h2>
+<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E&gt;(value: (A, B, C, D, E)): String
 </code></pre>
 <p>Returns the text of a five-element tuple, as the pair overload does.</p>
@@ -19383,7 +19910,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5)"</code></li>
 </ul>
-<h2 id="to_string-16"><a class="header" href="#to_string-16">to_string</a></h2>
+<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F&gt;(value: (A, B, C, D, E, F)): String
 </code></pre>
 <p>Returns the text of a six-element tuple, as the pair overload does.</p>
@@ -19404,7 +19931,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5, 6)"</code></li>
 </ul>
-<h2 id="to_string-17"><a class="header" href="#to_string-17">to_string</a></h2>
+<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G&gt;(value: (A, B, C, D, E, F, G)): String
 </code></pre>
 <p>Returns the text of a seven-element tuple, as the pair overload does.</p>
@@ -19426,7 +19953,7 @@ assert($"{nested}" == "(1, (2.5, true))", "nested");
 <ul>
 <li>a new String such as <code>"(1, 2, 3, 4, 5, 6, 7)"</code></li>
 </ul>
-<h2 id="to_string-18"><a class="header" href="#to_string-18">to_string</a></h2>
+<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C, D, E, F, G, H&gt;(value: (A, B, C, D, E, F, G, H)): String
 </code></pre>
 <p>Returns the text of an eight-element tuple, as the pair overload does.</p>
@@ -19493,7 +20020,7 @@ the argument.</p>
 print(0.5);         # 0.5
 print((1, "two"));  # (1, two)
 </code></pre>
-<h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
+<h2 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
 </code></pre>
 <p>Returns the text of <code>value</code> by calling its <code>to_string()</code> method: the
@@ -19552,8 +20079,8 @@ extend Point with ToString {
 var p = Point(1, 2);
 assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
-<h3 id="methods-1-1"><a class="header" href="#methods-1-1">Methods</a></h3>
-<h4 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h4>
+<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the text of this value.</p>
@@ -19575,21 +20102,21 @@ when it is full, so appending is amortized O(piece size). Call
 out.append("line ").append(to_string(3)).append("\n");
 var text = out.to_string();   # "line 3\n"
 </code></pre>
-<h3 id="properties-1-1"><a class="header" href="#properties-1-1">Properties</a></h3>
-<h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
+<h3 id="properties-2-1"><a class="header" href="#properties-2-1">Properties</a></h3>
+<h4 id="size-2"><a class="header" href="#size-2">size</a></h4>
 <pre><code class="language-pepper">var size: ulong { get; }
 </code></pre>
 <p>The number of bytes of UTF-8 appended so far. O(1).</p>
-<h4 id="length-1"><a class="header" href="#length-1">length</a></h4>
+<h4 id="length-2"><a class="header" href="#length-2">length</a></h4>
 <pre><code class="language-pepper">var length: ulong { get; }
 </code></pre>
 <p>The number of code points appended so far. O(1).</p>
-<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether nothing has been appended since the builder was
 created or last cleared. O(1).</p>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="stringbuilder-1"><a class="header" href="#stringbuilder-1">StringBuilder()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -19599,7 +20126,7 @@ bytes before it has to grow.</p>
 <ul>
 <li><code>capacity</code> — the number of bytes to allocate up front</li>
 </ul>
-<h3 id="methods-2-1"><a class="header" href="#methods-2-1">Methods</a></h3>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="append-1"><a class="header" href="#append-1">append</a></h4>
 <pre><code class="language-pepper">append(text: String): StringBuilder
 </code></pre>
@@ -19621,7 +20148,7 @@ b.append("a").append("b");   # b.to_string() == "ab"
 <pre><code class="language-pepper">clear()
 </code></pre>
 <p>Removes all the text and keeps the buffer for reuse. O(1).</p>
-<h4 id="to_string-21"><a class="header" href="#to_string-21">to_string</a></h4>
+<h4 id="to_string-22"><a class="header" href="#to_string-22">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns a new String holding the text appended so far. The builder
@@ -19645,7 +20172,7 @@ while (it.next()) {
     print(it.current());   # "a", then "b"
 }
 </code></pre>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -19733,7 +20260,7 @@ are accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="is_digit"><a class="header" href="#is_digit">is_digit</a></h4>
 <pre><code class="language-pepper">is_digit(): bool
 </code></pre>
@@ -21709,7 +22236,7 @@ accepted.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(uint.parse("4294967295").value() == 4294967295, "the highest");
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-5-1"><a class="header" href="#methods-5-1">Methods</a></h3>
 <h4 id="wrapping_add-5"><a class="header" href="#wrapping_add-5">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: uint): uint
 </code></pre>
@@ -23035,12 +23562,12 @@ assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
 <p>Whether <code>end</code> is part of the range: true for <code>a..&gt;b</code>, false for <code>a..b</code>.</p>
 <h3 id="properties-3"><a class="header" href="#properties-3">Properties</a></h3>
-<h4 id="is_empty-2"><a class="header" href="#is_empty-2">is_empty</a></h4>
+<h4 id="is_empty-3"><a class="header" href="#is_empty-3">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the range holds no numbers, whatever the iteration has
 reached.</p>
-<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
 <h4 id="range-1"><a class="header" href="#range-1">Range()</a></h4>
 <pre><code class="language-pepper">construct(start: T, end: T, inclusive: bool = false)
 </code></pre>
@@ -23076,7 +23603,7 @@ more each time.</p>
 <li>if <code>next()</code> was never called (“Range.current() before next()”)</li>
 <li>if <code>next()</code> already returned false (“Range.current() past the end”)</li>
 </ul>
-<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
+<h4 id="contains-2"><a class="header" href="#contains-2">contains</a></h4>
 <pre><code class="language-pepper">contains(value: T): bool
 </code></pre>
 <p>Returns whether <code>value</code> lies in the range, whatever the iteration has
@@ -23143,11 +23670,11 @@ next step of such a loop panics with “Array modified during iteration”.</p>
 </code></pre>
 <p>The number of elements the Array can hold before its buffer
 must be reallocated.</p>
-<h4 id="is_empty-3"><a class="header" href="#is_empty-3">is_empty</a></h4>
+<h4 id="is_empty-4"><a class="header" href="#is_empty-4">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the Array has no elements.</p>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="array-2"><a class="header" href="#array-2">Array()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -23164,7 +23691,7 @@ would otherwise perform while the Array grows to a known size.</p>
 <pre><code class="language-pepper">var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
 </code></pre>
 <h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
-<h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
+<h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): ArrayIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator over the elements in index order; this is what
@@ -23215,7 +23742,7 @@ Does not change the elements or invalidate iterators.</p>
 <ul>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
-<h4 id="operator--9"><a class="header" href="#operator--9">operator []</a></h4>
+<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
 <pre><code class="language-pepper">[](idx: ulong): T
 </code></pre>
 <p>Returns the element at <code>idx</code>; this is the indexer read <code>a[idx]</code>.</p>
@@ -23462,7 +23989,7 @@ numbers.append(3);
 numbers.append(1);
 numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
 </code></pre>
-<h4 id="find-1"><a class="header" href="#find-1">find</a></h4>
+<h4 id="find-2"><a class="header" href="#find-2">find</a></h4>
 <pre><code class="language-pepper">find(item: T): ulong?
 </code></pre>
 <p>Returns the position of the first element equal to <code>item</code>, or none
@@ -23487,7 +24014,7 @@ as a condition) and read the index with <code>value()</code>.</p>
 var i = a.find(9);         # i.value() == 1
 var missing = a.find(7);   # missing.is_empty() == true
 </code></pre>
-<h4 id="contains-2"><a class="header" href="#contains-2">contains</a></h4>
+<h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
 <pre><code class="language-pepper">contains(item: T): bool
 </code></pre>
 <p>Reports whether any element equals <code>item</code>, compared as <code>find</code> does.</p>
@@ -23750,6 +24277,20 @@ at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(hash&lt;String&gt;("hello") == hash&lt;String&gt;("hello"), "content hash");
 </code></pre>
+<h2 id="hash-2"><a class="header" href="#hash-2">hash</a></h2>
+<pre><code class="language-pepper">hash&lt;StringConstant&gt;(value: StringConstant): u64
+</code></pre>
+<p>Returns a 64-bit hash of a <code>StringConstant</code>’s bytes, the same hash
+<code>hash&lt;String&gt;</code> gives a String with the same content, so <code>StringConstant</code>
+keys work in a <code>HashMap</code> or <code>HashSet</code>. Runs in O(size).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text to hash</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 64-bit hash of the text’s content</li>
+</ul>
 <h2 id="hashmap"><a class="header" href="#hashmap">HashMap</a></h2>
 <pre><code class="language-pepper">struct HashMap&lt;K, V&gt;
 </code></pre>
@@ -23787,7 +24328,7 @@ assert(ages.count == 1, "one entry left");
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
-<h4 id="is_empty-4"><a class="header" href="#is_empty-4">is_empty</a></h4>
+<h4 id="is_empty-5"><a class="header" href="#is_empty-5">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the map has no entries. O(1).</p>
@@ -23796,7 +24337,7 @@ assert(ages.count == 1, "one entry left");
 </code></pre>
 <p>The number of slots in the table, a power of two and at least 8.
 The map grows before its entries and tombstones reach half of it. O(1).</p>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="hashmap-1"><a class="header" href="#hashmap-1">HashMap()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
 </code></pre>
@@ -23850,7 +24391,7 @@ cost of copying the entries.</p>
 <ul>
 <li>the copy</li>
 </ul>
-<h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
+<h4 id="contains-4"><a class="header" href="#contains-4">contains</a></h4>
 <pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether the map has an entry for <code>key</code>. Expected O(1).</p>
@@ -23937,7 +24478,7 @@ table grows. Expected O(1).</p>
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--10"><a class="header" href="#operator--10">operator []</a></h4>
+<h4 id="operator--18"><a class="header" href="#operator--18">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: returns the value for <code>key</code>, or the default of <code>V</code>
@@ -23973,7 +24514,7 @@ same as <code>insert</code>.</p>
 <pre><code class="language-pepper">var m = HashMap&lt;String, int&gt;();
 m["hello"] = 5;
 </code></pre>
-<h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
+<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): HashMapIterator&lt;K, V&gt;
 </code></pre>
 <p>Returns an iterator over the entries as <code>(key, value)</code> tuples, in no
@@ -24299,7 +24840,7 @@ panic.</p>
 <p>Sorted collections: <code>Map&lt;K, V&gt;</code> and <code>Set&lt;K&gt;</code>, kept in key order on a
 red-black tree, and <code>compare&lt;T&gt;</code>, the ordering they sort keys by.</p>
 <p>Source: <code>runtime/map.pep</code></p>
-<h2 id="compare-1"><a class="header" href="#compare-1">compare</a></h2>
+<h2 id="compare-2"><a class="header" href="#compare-2">compare</a></h2>
 <pre><code class="language-pepper">compare&lt;T&gt;(a: T, b: T): int
 </code></pre>
 <p>Returns a negative number when <code>a</code> sorts before <code>b</code>, zero when they are
@@ -24388,11 +24929,11 @@ for (var (name, score) in scores) {
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
-<h4 id="is_empty-5"><a class="header" href="#is_empty-5">is_empty</a></h4>
+<h4 id="is_empty-6"><a class="header" href="#is_empty-6">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the map has no entries. O(1).</p>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="map-1"><a class="header" href="#map-1">Map()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -24403,7 +24944,7 @@ for (var (name, score) in scores) {
 </code></pre>
 <p>Removes every entry and releases the map’s references to their keys
 and values. O(count).</p>
-<h4 id="contains-4"><a class="header" href="#contains-4">contains</a></h4>
+<h4 id="contains-5"><a class="header" href="#contains-5">contains</a></h4>
 <pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether the map has an entry for <code>key</code>. O(log count).</p>
@@ -24481,7 +25022,7 @@ key and value. Does nothing when <code>key</code> is absent. O(log count).</p>
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--11"><a class="header" href="#operator--11">operator []</a></h4>
+<h4 id="operator--19"><a class="header" href="#operator--19">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
@@ -24552,7 +25093,7 @@ count).</p>
 <ul>
 <li>the first <code>(key, value)</code> with a key <code>&gt; key</code>, or none when no key is greater</li>
 </ul>
-<h4 id="iterate-3"><a class="header" href="#iterate-3">iterate</a></h4>
+<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): SortedMapIterator&lt;K, V&gt;
 </code></pre>
 <p>Returns an iterator over the entries as <code>(key, value)</code> tuples in
@@ -24940,11 +25481,11 @@ for (var (key, value) in config) {
 <pre><code class="language-pepper">var count: int { get; }
 </code></pre>
 <p>The number of entries in the map. O(1).</p>
-<h4 id="is_empty-6"><a class="header" href="#is_empty-6">is_empty</a></h4>
+<h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the map has no entries. O(1).</p>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="orderedmap-2"><a class="header" href="#orderedmap-2">OrderedMap()</a></h4>
 <pre><code class="language-pepper">construct(initial_capacity: ulong = 8)
 </code></pre>
@@ -24960,7 +25501,7 @@ for (var (key, value) in config) {
 </code></pre>
 <p>Removes every entry and releases the map’s references to their keys
 and values. O(capacity).</p>
-<h4 id="contains-5"><a class="header" href="#contains-5">contains</a></h4>
+<h4 id="contains-6"><a class="header" href="#contains-6">contains</a></h4>
 <pre><code class="language-pepper">contains(key: K): bool
 </code></pre>
 <p>Returns whether the map has an entry for <code>key</code>. Expected O(1).</p>
@@ -25032,7 +25573,7 @@ key and value. The other entries keep their order. Does nothing when
 <ul>
 <li>true when <code>key</code> was present and removed, false when absent</li>
 </ul>
-<h4 id="operator--12"><a class="header" href="#operator--12">operator []</a></h4>
+<h4 id="operator--20"><a class="header" href="#operator--20">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K): V
 </code></pre>
 <p>Reads <code>m[key]</code>: the same as <code>get</code>. A missing key reads as the default
@@ -25058,7 +25599,7 @@ of <code>V</code> and is not inserted.</p>
 <ul>
 <li><code>value</code>, the value of the assignment expression</li>
 </ul>
-<h4 id="iterate-4"><a class="header" href="#iterate-4">iterate</a></h4>
+<h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): OrderedMapIterator&lt;K, V&gt;
 </code></pre>
 <p>Returns an iterator over the entries as <code>(key, value)</code> tuples in
@@ -25336,7 +25877,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
@@ -25512,8 +26053,8 @@ for (var x in nums) {
     total = total + x;
 }
 </code></pre>
-<h3 id="methods-5-1"><a class="header" href="#methods-5-1">Methods</a></h3>
-<h4 id="iterate-5"><a class="header" href="#iterate-5">iterate</a></h4>
+<h3 id="methods-5-2"><a class="header" href="#methods-5-2">Methods</a></h3>
+<h4 id="iterate-6"><a class="header" href="#iterate-6">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
 <p>Returns a new iterator positioned before the first element.</p>
@@ -25638,7 +26179,7 @@ freely.</p>
     }
 }
 </code></pre>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(target: T)
 </code></pre>
@@ -25711,7 +26252,7 @@ main(): int {
 </code></pre>
 <p>The resource. It stays readable after the handle is released or
 detached, but it no longer refers to anything the handle owns.</p>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="handle-2"><a class="header" href="#handle-2">Handle()</a></h4>
 <pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
 </code></pre>
@@ -25764,7 +26305,7 @@ var n = r.error().message.length;   # 4
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(message: String = "")
 </code></pre>
@@ -26021,7 +26562,7 @@ instead.</p>
 <pre><code class="language-pepper">var found = Optional&lt;int&gt;.Value(7);
 if (found.is_value()) { print(found.value()); }   # prints 7
 </code></pre>
-<h4 id="is_empty-7"><a class="header" href="#is_empty-7">is_empty</a></h4>
+<h4 id="is_empty-8"><a class="header" href="#is_empty-8">is_empty</a></h4>
 <pre><code class="language-pepper">is_empty(): bool
 </code></pre>
 <p>Reports whether this optional holds no value.</p>
@@ -26051,7 +26592,7 @@ if (missing.is_empty()) { print("missing"); }
 <ul>
 <li>true when the optional is Empty</li>
 </ul>
-<h4 id="operator--13"><a class="header" href="#operator--13">operator !!</a></h4>
+<h4 id="operator--21"><a class="header" href="#operator--21">operator !!</a></h4>
 <pre><code class="language-pepper">!!(): bool
 </code></pre>
 <p>Reports whether this optional holds a value: the truth test, so an
@@ -26326,7 +26867,7 @@ has no authority (no <code>//</code>), and empty for one such as <code>file:///t
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="uri-2"><a class="header" href="#uri-2">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -26402,7 +26943,7 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
-<h4 id="to_string-22"><a class="header" href="#to_string-22">to_string</a></h4>
+<h4 id="to_string-23"><a class="header" href="#to_string-23">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the URI as text, putting its components back together. For a
@@ -26939,7 +27480,7 @@ if (r.is_err()) {
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(code: ErrorCode = 0, message: String = "")
 </code></pre>
@@ -27208,7 +27749,7 @@ them to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes appended, 0 at the end of the stream; an error when the stream fails</li>
 </ul>
-<h4 id="lines-1"><a class="header" href="#lines-1">lines</a></h4>
+<h4 id="lines-2"><a class="header" href="#lines-2">lines</a></h4>
 <pre><code class="language-pepper">lines(): Lines
 </code></pre>
 <p>Returns an iterator over the rest of the stream’s lines, read as it
@@ -27364,8 +27905,8 @@ while (it.next()) {
     var line = it.current();
 }
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
-<h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h4 id="lines-2-1"><a class="header" href="#lines-2-1">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
 <p>Makes an iterator over the lines of <code>source</code>, from what it reads next.</p>
@@ -27472,12 +28013,12 @@ if (p.is_file()) {
 }
 </code></pre>
 <h3 id="properties-9"><a class="header" href="#properties-9">Properties</a></h3>
-<h4 id="is_empty-8"><a class="header" href="#is_empty-8">is_empty</a></h4>
+<h4 id="is_empty-9"><a class="header" href="#is_empty-9">is_empty</a></h4>
 <pre><code class="language-pepper">var is_empty: bool { get; }
 </code></pre>
 <p>Whether the path has no text at all. File-system operations
 on the empty path fail.</p>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="path-2-1"><a class="header" href="#path-2-1">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
@@ -27523,7 +28064,7 @@ extension”; it now returns none.</p>
 <li>the index of the extension’s dot, or none when the name has no such dot (<code>noext</code>, <code>.bashrc</code>, the empty name)</li>
 </ul>
 <h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
-<h4 id="to_string-23"><a class="header" href="#to_string-23">to_string</a></h4>
+<h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the path’s text, the same String the Path holds, not a copy.</p>
@@ -27554,7 +28095,7 @@ path is relative.</p>
 <ul>
 <li>true when the path is not absolute</li>
 </ul>
-<h4 id="join-1"><a class="header" href="#join-1">join</a></h4>
+<h4 id="join-2"><a class="header" href="#join-2">join</a></h4>
 <pre><code class="language-pepper">join(other: Path): Path
 </code></pre>
 <p>Returns this path with <code>other</code> appended as further components.</p>
@@ -27846,7 +28387,7 @@ if (real.is_ok()) {
     print(real.value().to_string());
 }
 </code></pre>
-<h4 id="operator--14"><a class="header" href="#operator--14">operator ==</a></h4>
+<h4 id="operator--22"><a class="header" href="#operator--22">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Path): bool
 </code></pre>
 <p>Returns whether two paths have exactly the same text. The comparison
@@ -27917,7 +28458,7 @@ if (r.is_err()) {
 }
 var f = r.value();
 </code></pre>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -28148,7 +28689,7 @@ if (m.is_ok() &amp;&amp; m.value().is_file) {
 }
 </code></pre>
 <h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
-<h4 id="size-2"><a class="header" href="#size-2">size</a></h4>
+<h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
 <p>The file’s length in bytes.</p>
@@ -28895,7 +29436,7 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -29130,7 +29671,7 @@ if (list.is_ok()) {
     var n = list.value().count;
 }
 </code></pre>
-<h4 id="iterate-6"><a class="header" href="#iterate-6">iterate</a></h4>
+<h4 id="iterate-7"><a class="header" href="#iterate-7">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): DirectoryIterator
 </code></pre>
 <p>Returns an iterator that reads the directory’s listing one entry at a
@@ -29240,7 +29781,7 @@ var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
 print(a.is_v4());         # true
 print(b.to_string());     # 2001:db8::1
 </code></pre>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -29391,7 +29932,7 @@ IPv6.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
 </code></pre>
-<h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
+<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the address as text: dotted decimal for IPv4, the RFC 5952
@@ -29402,7 +29943,7 @@ IPv4-mapped address).</p>
 <ul>
 <li>the text form, which <code>IpAddress.parse</code> reads back</li>
 </ul>
-<h4 id="operator--15"><a class="header" href="#operator--15">operator ==</a></h4>
+<h4 id="operator--23"><a class="header" href="#operator--23">operator ==</a></h4>
 <pre><code class="language-pepper">==(other: IpAddress): bool
 </code></pre>
 <p>Returns whether two addresses are the same: same family and same
@@ -29615,7 +30156,7 @@ while (true) {
     stream.write_all("hello " + peer.to_string());
 }
 </code></pre>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -30289,7 +30830,7 @@ while (true) {
     stream.write_all("hello");
 }
 </code></pre>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -30623,7 +31164,7 @@ assert(count == 2, "two lines");
 <pre><code class="language-pepper">var remaining: ulong { get; }
 </code></pre>
 <p>The number of bytes not read yet.</p>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="bytereader-1"><a class="header" href="#bytereader-1">ByteReader()</a></h4>
 <pre><code class="language-pepper">construct(data: u8[])
 </code></pre>
@@ -30660,7 +31201,7 @@ out.print_line(3);
 assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
 <h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
-<h4 id="bytes-1"><a class="header" href="#bytes-1">bytes</a></h4>
+<h4 id="bytes-2"><a class="header" href="#bytes-2">bytes</a></h4>
 <pre><code class="language-pepper">var bytes: u8[]
 </code></pre>
 <p>The bytes written so far, in order.</p>
@@ -30863,7 +31404,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
     return 0;
 }
 </code></pre>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
@@ -31102,7 +31643,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
@@ -31204,7 +31745,7 @@ result can be out of date by the time it is used. Always false for a
 <ul>
 <li>true if the thread can be joined</li>
 </ul>
-<h4 id="join-2"><a class="header" href="#join-2">join</a></h4>
+<h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
 <pre><code class="language-pepper">join()
 </code></pre>
 <p>Waits for the thread’s body to return.</p>
@@ -31261,7 +31802,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -31425,7 +31966,7 @@ save(long amount) {
     }
 }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -31485,7 +32026,7 @@ calling thread already holding the lock counts as busy.</p>
     print("busy; try later\n");
 }
 </code></pre>
-<h4 id="replace-1"><a class="header" href="#replace-1">replace</a></h4>
+<h4 id="replace-2"><a class="header" href="#replace-2">replace</a></h4>
 <pre><code class="language-pepper">replace([Move] value: T): T
 </code></pre>
 <p>Replaces the whole value and returns the one the Mutex held, which the
@@ -31769,7 +32310,7 @@ work() {
     setup.call(initialize);   # only the first caller runs it
 }
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -31934,7 +32475,7 @@ main(): int {
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="channel-2"><a class="header" href="#channel-2">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -32040,7 +32581,7 @@ end. Closing a closed channel does nothing.</p>
 <ul>
 <li>true once the channel is closed, even while values are still queued</li>
 </ul>
-<h4 id="iterate-7"><a class="header" href="#iterate-7">iterate</a></h4>
+<h4 id="iterate-8"><a class="header" href="#iterate-8">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): ChannelIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator that receives until the channel is closed and
@@ -32156,7 +32697,7 @@ while (running) {
     }
 }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="select-2"><a class="header" href="#select-2">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -32281,7 +32822,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -32446,7 +32987,7 @@ task can, since it stays on this thread.</p>
 <li>outside <code>run</code></li>
 </ul>
 <h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
-<h4 id="join-3"><a class="header" href="#join-3">join</a></h4>
+<h4 id="join-4"><a class="header" href="#join-4">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
 <p>Waits for the task to finish and returns its value. Other tasks run
@@ -32846,7 +33387,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="tasklocal-2"><a class="header" href="#tasklocal-2">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -33069,7 +33610,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -33334,7 +33875,7 @@ signal.</p>
 assert(!status.success(), "false fails");
 assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -33374,7 +33915,7 @@ process always has an exit code).</p>
 <ul>
 <li>the signal number, such as 9 for <code>SIGKILL</code>, or none when the process exited</li>
 </ul>
-<h4 id="to_string-25"><a class="header" href="#to_string-25">to_string</a></h4>
+<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns how the process ended as text.</p>
@@ -33661,7 +34202,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -33778,7 +34319,7 @@ down.</p>
 <ul>
 <li>true for a zero-length duration</li>
 </ul>
-<h4 id="operator--16"><a class="header" href="#operator--16">operator +</a></h4>
+<h4 id="operator--24"><a class="header" href="#operator--24">operator +</a></h4>
 <pre><code class="language-pepper">+(other: Duration): Duration
 </code></pre>
 <p>Returns the sum of two durations.</p>
@@ -33891,7 +34432,7 @@ a whole nanosecond.</p>
 <ul>
 <li>true when this one is not shorter</li>
 </ul>
-<h4 id="to_string-26"><a class="header" href="#to_string-26">to_string</a></h4>
+<h4 id="to_string-27"><a class="header" href="#to_string-27">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns this duration as text in the largest unit it reaches, with
@@ -35005,7 +35546,7 @@ than <code>find</code>, since it stops at the first match it sees.</p>
 
 assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
 </code></pre>
-<h4 id="find-2"><a class="header" href="#find-2">find</a></h4>
+<h4 id="find-3"><a class="header" href="#find-3">find</a></h4>
 <pre><code class="language-pepper">find(text: String): Match?
 </code></pre>
 <p>Returns the leftmost match in <code>text</code>, or none. Among matches that
@@ -35061,7 +35602,7 @@ for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
     total += number.text().size;   # 1, then 2, then 3
 }
 </code></pre>
-<h4 id="replace-2"><a class="header" href="#replace-2">replace</a></h4>
+<h4 id="replace-3"><a class="header" href="#replace-3">replace</a></h4>
 <pre><code class="language-pepper">replace(text: String, replacement: String): String
 </code></pre>
 <p>Returns <code>text</code> with the first match replaced by <code>replacement</code>, or a
@@ -35113,7 +35654,7 @@ assert(swapped == "world hello", "groups swapped");
 var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
 assert(squeezed == "a b c", "runs of space replaced");
 </code></pre>
-<h4 id="split-1"><a class="header" href="#split-1">split</a></h4>
+<h4 id="split-2"><a class="header" href="#split-2">split</a></h4>
 <pre><code class="language-pepper">split(text: String): String[]
 </code></pre>
 <p>Splits <code>text</code> at each match, as <code>find_all</code> finds them, and returns the
@@ -35133,7 +35674,7 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 var parts = regex.Regex(",\\s*").split("a, b,c");
 assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
-<h4 id="to_string-27"><a class="header" href="#to_string-27">to_string</a></h4>
+<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the pattern, so <code>print</code> and interpolation show it.</p>
@@ -35149,7 +35690,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -35448,7 +35989,7 @@ list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
 <h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
-<h4 id="operator--17"><a class="header" href="#operator--17">operator []</a></h4>
+<h4 id="operator--25"><a class="header" href="#operator--25">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
 <p>Reads <code>value[key]</code>: the member named <code>key</code> of an object.</p>
@@ -35520,7 +36061,7 @@ object. A new key goes at the end; an existing key keeps its place.</p>
 <ul>
 <li>if this is not an array (“JsonValue.append needs an array”)</li>
 </ul>
-<h4 id="contains-6"><a class="header" href="#contains-6">contains</a></h4>
+<h4 id="contains-7"><a class="header" href="#contains-7">contains</a></h4>
 <pre><code class="language-pepper">contains(key: String): bool
 </code></pre>
 <p>Returns whether this is an object with a member named <code>key</code>.</p>
@@ -35611,7 +36152,7 @@ value holds, not a copy.</p>
 <ul>
 <li>the members of an <code>Object</code>, or none</li>
 </ul>
-<h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
+<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the value as compact JSON text, with no spaces or line
@@ -35710,7 +36251,7 @@ when <code>line</code> is.</p>
 <p>Where in the document the value an error is about is, as a path from
 the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
 syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -35724,7 +36265,7 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
 <h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
-<h4 id="to_string-29"><a class="header" href="#to_string-29">to_string</a></h4>
+<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the error as a compiler prints one:
@@ -35805,7 +36346,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
 <p>The document’s value.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="jsondocument-1"><a class="header" href="#jsondocument-1">JsonDocument()</a></h4>
 <pre><code class="language-pepper">construct(root: JsonValue = JsonValue.Null)
 </code></pre>
@@ -35842,7 +36383,7 @@ must be a whole comment, <code>// ...</code> (one line) or <code>/* ... */</code
 <ul>
 <li>if a comment does not start with <code>//</code> or <code>/*</code> (“a JSONC comment starts with ‘//’ or ‘/*’”)</li>
 </ul>
-<h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
+<h4 id="to_string-31"><a class="header" href="#to_string-31">to_string</a></h4>
 <pre><code class="language-pepper">to_string(indent: int = 2, ascii_only: bool = false): String
 </code></pre>
 <p>Returns the document as indented JSONC text with its comments, each
@@ -36372,7 +36913,7 @@ for (var line in reader.lines()) {
     print(line.value());
 }
 </code></pre>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="decompressreader-1"><a class="header" href="#decompressreader-1">DecompressReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader, format: Format)
 </code></pre>
@@ -36504,7 +37045,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -36662,7 +37203,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var kind: EntryKind
 </code></pre>
 <p>What the entry is.</p>
-<h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
+<h4 id="size-4"><a class="header" href="#size-4">size</a></h4>
 <pre><code class="language-pepper">var size: ulong
 </code></pre>
 <p>The length of the contents in bytes; 0 for anything but a file.</p>
@@ -36678,7 +37219,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var link_target: String
 </code></pre>
 <p>The target of a symlink or hard link; empty otherwise.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
 <pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
 </code></pre>
@@ -36975,7 +37516,7 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -37082,7 +37623,7 @@ hasher.update("blob 0");
 hasher.update(nul);
 assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -37180,7 +37721,7 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -37354,7 +37895,7 @@ main(args: String[]): int {
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -37641,7 +38182,7 @@ for the runtime.</p>
 </code></pre>
 <p>An option or positional argument that takes one value, from
 <code>Parser.option</code> or <code>Parser.positional</code>.</p>
-<h3 id="properties-2-1"><a class="header" href="#properties-2-1">Properties</a></h3>
+<h3 id="properties-2-2"><a class="header" href="#properties-2-2">Properties</a></h3>
 <h4 id="is_set-1-1"><a class="header" href="#is_set-1-1">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
@@ -37840,7 +38381,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -37916,7 +38457,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <ul>
 <li><code>name</code> — the field name, in any case</li>
 </ul>
-<h4 id="operator--18"><a class="header" href="#operator--18">operator []</a></h4>
+<h4 id="operator--26"><a class="header" href="#operator--26">operator []</a></h4>
 <pre><code class="language-pepper">[](name: String): String
 </code></pre>
 <p>Reads <code>headers[name]</code>: the first value of the field named <code>name</code>, or
@@ -38271,7 +38812,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -38400,7 +38941,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>

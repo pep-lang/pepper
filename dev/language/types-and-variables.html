@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
+            window.path_to_searchindex_js = "../searchindex-23c4b80f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2079cc94.js"></script>
@@ -390,8 +390,11 @@ main(): int {
 </code></pre>
 <h3 id="strings"><a class="header" href="#strings">Strings</a></h3>
 <p><code>String</code> is a UTF-8 string. A string literal such as <code>"hello"</code> is a <code>String</code>
-value, except where it is stored or passed as a <code>__ptr&lt;char&gt;</code>: there it is the
-literal’s NUL-terminated bytes (see <a href="c-interop.html#passing-strings">Passing strings</a>). <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
+value wherever a <code>String</code> is expected, and wherever nothing asks for another
+type (<code>var s = "hello";</code> declares a <code>String</code>). Where it is stored or passed as
+a <code>__ptr&lt;char&gt;</code>, it is the literal’s NUL-terminated bytes (see
+<a href="c-interop.html#passing-strings">Passing strings</a>), and where a
+<a href="#string-constants"><code>StringConstant</code></a> is expected, it is one. <code>+</code> joins two strings into a new one, <code>==</code> and <code>!=</code> compare contents,
 the <code>length</code> property counts code points, <code>size</code> counts bytes, and <code>s[i]</code> gives the code
 point at index <code>i</code> as a one-code-point <code>String</code>.</p>
 <pre><code class="language-pepper"># String literals are String values.
@@ -430,6 +433,69 @@ literal: after <code>var s = "a"; s.append("b");</code> the next <code>"a"</code
 Where a literal is only read, passed to a parameter that the function
 neither keeps nor changes (<code>builder.append("x")</code>, <code>name == "x"</code>), every
 evaluation shares one constant object and allocates nothing.</p>
+<h4 id="string-constants"><a class="header" href="#string-constants">String constants</a></h4>
+<p>A literal’s own type is <a href="../reference/string.html"><code>StringConstant</code></a>: a pointer
+to the literal’s bytes, which never change and are never freed, with their
+size and length. It is a <a href="value-structs.html"><code>[Value]</code></a> type, so copying one
+steps no reference count, any thread may read it, and a literal stored as one
+allocates nothing. Its bytes always end in a NUL byte, so <code>c_str()</code> passes it
+to C as it is (a <code>String</code>’s <code>c_str()</code> does too, but a <code>String</code> built with no
+data has none).</p>
+<p>A <code>StringConstant</code> has <code>String</code>’s read API (<code>length</code>, <code>size</code>, <code>find</code>,
+<code>split</code>, <code>trim</code>, <code>==</code>, <code>&lt;</code>, the indexer, <code>for</code> loops and so on); the methods
+that make new text return a <code>String</code>. It converts to a <code>String</code> wherever a
+<code>String</code> is expected, as if <code>String</code> had an <a href="structs.html#implicit-conversions"><code>[Implicit]</code>
+constructor</a> taking it: the conversion (and
+<code>String(text)</code>) copies the bytes, so an API that takes a <code>String</code> takes a
+<code>StringConstant</code> too. Where C expects a <code>char*</code>, it passes its own bytes, as
+<code>c_str()</code> does. Among <a href="overloading.html">overloads</a>, a literal picks a
+<code>StringConstant</code> parameter over a <code>String</code> one, and a <code>StringConstant</code> value
+picks a <code>String</code> parameter last, as an implicit conversion.</p>
+<pre><code class="language-pepper"># A string literal's own type is StringConstant: its constant bytes, with no
+# allocation and no reference count.
+extern ulong strlen(char* text);
+
+const GREETING: StringConstant = "hello";
+
+shout(text: String): String {
+    return text.upper() + "!";
+}
+
+main(): int {
+    StringConstant name = "pepper";
+    assert(name.length == 6, "the read API of String");
+    assert(name.starts_with("pep") &amp;&amp; name.find("p", 1) == 2, "find counts bytes");
+
+    # Always NUL-terminated: c_str() goes to C with no copy.
+    assert(strlen(GREETING.c_str()) == 5, "C reads the literal's bytes");
+
+    # A StringConstant converts to a String wherever one is expected.
+    String copy = name;
+    copy.append("!");
+    assert(copy == "pepper!" &amp;&amp; name == "pepper", "the copy has its own bytes");
+    print(shout(GREETING));
+
+    # Copying a StringConstant copies a pointer.
+    var also = name;
+    assert(also == name, "same text");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Where a literal is a <code>StringConstant</code></strong>: a variable, field, parameter or
+return value of type <code>StringConstant</code>, and a <code>HashMap&lt;StringConstant, V&gt;</code>
+key. Everywhere else a literal is a <code>String</code>, as before.</li>
+<li><strong>Converting chains once</strong>: a literal reaches a type that converts from
+<code>String</code> (<code>io.Path</code>, <code>Error</code>) directly, but a <code>StringConstant</code> variable
+does not, since conversions never chain. Write <code>String(text)</code> or pass a
+literal.</li>
+<li><strong>Comparing</strong>: <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code> and <code>&gt;=</code> on a <code>StringConstant</code>
+take another <code>StringConstant</code> (a literal included), so generic code such
+as a <code>HashMap&lt;StringConstant, V&gt;</code> compares two keys with no conversion. To
+compare with a <code>String</code>, put the <code>String</code> on the left (<code>name == constant</code>)
+or call <code>compare</code>, which takes a <code>String</code>.</li>
+<li><strong>A literal method call</strong> (<code>"a,b".split(",")</code>) calls the <code>String</code> method.</li>
+</ul>
 <p><code>to_string</code> turns any integer into its decimal text. For parsing and
 generating text, <code>byte_at</code> and <code>substr_bytes</code> work in bytes (the offsets
 <code>find</code> returns), <code>compare</code> and <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code> order strings byte by byte

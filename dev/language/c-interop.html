@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
+            window.path_to_searchindex_js = "../searchindex-23c4b80f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2079cc94.js"></script>
@@ -287,6 +287,10 @@ string, with no allocation: <code>strlen("hello")</code> is 5. The same is true
 wherever a literal flows into a <code>__ptr&lt;char&gt;</code>, <code>__ptr&lt;u8&gt;</code>, or
 <code>__ptr&lt;void&gt;</code> in Pepper code (a variable, field, argument, or return
 value), so <code>String("hello")</code> copies the literal’s five bytes.</li>
+<li>A <strong><a href="types-and-variables.html#string-constants"><code>StringConstant</code></a></strong> passes
+its constant NUL-terminated bytes with no copy, by itself where a
+<code>__ptr&lt;char&gt;</code> is expected or through <code>c_str()</code>. The pointer is valid for
+the whole run of the program and is never <code>__null</code>.</li>
 <li>A <strong><code>String</code> value</strong> is passed with <code>c_str()</code>, which returns the String’s
 buffer, NUL-terminated, as a <code>__ptr&lt;char&gt;</code>. A String is not guaranteed to
 be NUL-terminated otherwise, so always go through <code>c_str()</code> when C needs

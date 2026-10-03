@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f2c5c1c0.js";
+            window.path_to_searchindex_js = "../searchindex-23c4b80f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2079cc94.js"></script>
@@ -346,7 +346,7 @@ argument, the conversion has a rank, best first:</p>
 <tr><th>Rank</th><th>What converts</th></tr>
 </thead>
 <tbody>
-<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code></td></tr>
+<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code> or <a href="types-and-variables.html#string-constants"><code>StringConstant</code></a></td></tr>
 <tr><td>promotion</td><td>an integer widening that loses nothing (<code>int</code> to <code>long</code>, <code>u8</code> to <code>int</code>; the narrower target ranks better, so a <code>short</code> picks <code>int</code> over <code>long</code>), <code>float</code> to <code>double</code>, an integer literal to any integer type it fits, a struct to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>, <code>__null</code> to a reference, a string literal to <code>String</code></td></tr>
 <tr><td>conversion</td><td>any other numeric conversion (<code>bool</code> included), and pointer conversions</td></tr>
 <tr><td>implicit constructor</td><td>a value to a struct whose <a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a> takes it</td></tr>
