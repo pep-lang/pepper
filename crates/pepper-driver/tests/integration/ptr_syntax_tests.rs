@@ -320,3 +320,35 @@ test(): int {
         111111
     );
 }
+
+#[test]
+fn ptr_offsets_keep_all_64_bits() {
+    // #524: `p + n` cut a 64-bit offset to 32 bits, so a buffer past 2 GiB
+    // was addressed modulo 4 GiB. Each offset widens by its own signedness.
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+test(): int {
+    __ptr<u8> p = unsafe_cast<__ptr<u8>>(4096 as ulong);
+    __ptr<int> q = unsafe_cast<__ptr<int>>(4096 as ulong);
+    ulong big = 5000000000;
+    long signed_big = 5000000000;
+    long back = -16;
+    uint wide = 4000000000;
+    int minus_one = -1;
+    u8 small = 200;
+    if (unsafe_cast<ulong>(p + big) != 5000004096) { return 1; }
+    if (unsafe_cast<ulong>(p + signed_big) != 5000004096) { return 2; }
+    if (unsafe_cast<ulong>(p + back) != 4080) { return 3; }
+    if (unsafe_cast<ulong>(p + wide) != 4000004096) { return 4; }
+    if (unsafe_cast<ulong>(q + big) != 20000004096) { return 5; }
+    if (unsafe_cast<ulong>(p + minus_one) != 4095) { return 6; }
+    if (unsafe_cast<ulong>(p + small) != 4296) { return 7; }
+    if (unsafe_cast<ulong>((p + big) - big) != 4096) { return 8; }
+    return 0;
+}
+"#
+        ),
+        0
+    );
+}

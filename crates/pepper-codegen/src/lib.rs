@@ -6704,8 +6704,20 @@ impl<'ctx> CodeGenerator<'ctx> {
             .value_sema_type(rhs)
             .unwrap_or_else(|| value_type_name(&rhs_val));
         let result_ty = binary_result_type(op, &lhs_name, &rhs_name);
-        let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &result_ty);
-        let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &result_ty);
+        // In `p + n` and `p - n`, the offset widens to 64 bits by its own
+        // signedness: coercing it to the pointer's type cut it to 32 bits,
+        // so an offset past 2 GiB wrapped (#524).
+        let operand_ty = |name: &str| -> String {
+            let pointer_arithmetic = matches!(op, BinaryOp::Add | BinaryOp::Sub)
+                && lhs_name.ends_with('*') != rhs_name.ends_with('*');
+            if pointer_arithmetic && !name.ends_with('*') {
+                "long".to_string()
+            } else {
+                result_ty.clone()
+            }
+        };
+        let lhs_c = llvm_ops::coerce(self.context, &self.builder, lhs_val, &lhs_name, &operand_ty(&lhs_name));
+        let rhs_c = llvm_ops::coerce(self.context, &self.builder, rhs_val, &rhs_name, &operand_ty(&rhs_name));
         // Pointer arithmetic needs the pointer's element type (`char*` strides
         // i8); `value_type_name` flattens pointers to `void*`, so use the
         // sema type of the lhs expression for that.
