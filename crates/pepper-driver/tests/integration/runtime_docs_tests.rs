@@ -6,11 +6,16 @@
 
 use std::path::{Path, PathBuf};
 
+/// The `.pep` files under `dir`, leaving out tests (`test/` folders, which
+/// are not part of any module) and hidden folders such as `.pep/`.
 fn runtime_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {
-            runtime_files(&path, out);
+            let name = path.file_name().unwrap().to_string_lossy();
+            if name != "test" && !name.starts_with('.') {
+                runtime_files(&path, out);
+            }
         } else if path.extension().is_some_and(|e| e == "pep") {
             out.push(path);
         }

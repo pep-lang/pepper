@@ -183,9 +183,11 @@
     - [Connectors and streams](reference/tls-stream.md)
   - [The testing module](reference/testing-module.md)
     - [TestRunner](reference/testing-runner.md)
+    - [TempFolder](reference/testing-temp_folder.md)
 <!-- reference:end -->
 
 # Contributing
 
 - [Setting up LLVM: cargo setup](contributing/setup.md)
 - [Building this documentation](contributing/docs.md)
+- [Testing the runtime and the compiler](contributing/tests.md)

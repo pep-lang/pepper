@@ -7,6 +7,37 @@ and answers `pep-test`'s `--list` and `--run NAME`.
 
 Source: `runtime/testing/runner.pep`
 
+## keep_for_the_program
+
+```pepper
+keep_for_the_program(body: () => void)
+```
+
+Runs `body` and lets what it leaves allocated stay without failing the
+test's leak check: for what a program makes once, on first use, and keeps
+until it ends, such as a lazily made global (`async.Lazy`), when a test is
+the first to use it.
+
+Call it at the start of the test, with the first use alone, so the rest
+of the test is still checked.
+
+**Parameters**
+- `body` — the code that makes what the program keeps
+
+**Example**
+```pepper
+import tls;
+
+[Test]
+connects() {
+    # The first connector loads the TLS library, which stays loaded.
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    # ... the checks, under the leak check as usual
+}
+```
+
 ## TestMain
 
 ```pepper
@@ -31,7 +62,8 @@ The program answers two requests, both made by `pep-test`:
   name, `file:line`, `returns` or `panics` (for `[ShouldPanic]`), and the
   text the panic must contain (empty for any panic or none).
 - `--run NAME [--timeout SECONDS]` runs the test `NAME` and exits with 0
-  when it returns; a panic aborts the program. With a timeout above 0, a
+  when it returns, or with 1 when it left an allocation behind (or
+  released one too many); a panic aborts the program. With a timeout above 0, a
   test still running after that many seconds ends the program with exit
   status 124 and a message on standard error.
 

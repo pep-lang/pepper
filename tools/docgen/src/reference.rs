@@ -118,6 +118,7 @@ const PAGES: &[(&str, &str)] = &[
     ("tls/stream.pep", "Connectors and streams"),
     ("testing/module.pep", "The testing module"),
     ("testing/runner.pep", "TestRunner"),
+    ("testing/temp_folder.pep", "TempFolder"),
 ];
 
 /// A generated page: its path under `reference/` and its Markdown.
@@ -128,13 +129,17 @@ pub struct Page {
 }
 
 /// Every `.pep` file under `dir`, as paths relative to it with `/`
-/// separators.
+/// separators. Tests (`test/` folders, which are not part of any module)
+/// and hidden folders such as `.pep/` are left out.
 fn pep_files(dir: &Path, prefix: &str, out: &mut Vec<String>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("cannot read {}: {}", dir.display(), e))?;
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
+            if name == "test" || name.starts_with('.') {
+                continue;
+            }
             pep_files(&path, &format!("{}{}/", prefix, name), out)?;
         } else if name.ends_with(".pep") {
             out.push(format!("{}{}", prefix, name));

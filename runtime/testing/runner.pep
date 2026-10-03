@@ -7,6 +7,36 @@ import process;
 
 extern void memcpy(void* destination, void* source, ulong size);
 
+# How many allocations the calls to `keep_for_the_program` left behind,
+# which the leak check does not count against the test.
+const _testing_kept = async.Atomic<long>(0);
+
+## Runs `body` and lets what it leaves allocated stay without failing the
+## test's leak check: for what a program makes once, on first use, and keeps
+## until it ends, such as a lazily made global (`async.Lazy`), when a test is
+## the first to use it.
+##
+## Call it at the start of the test, with the first use alone, so the rest
+## of the test is still checked.
+##
+## @param body the code that makes what the program keeps
+## @example
+##     import tls;
+##
+##     [Test]
+##     connects() {
+##         # The first connector loads the TLS library, which stays loaded.
+##         keep_for_the_program(() => {
+##             tls.TlsConnector.create();
+##         });
+##         # ... the checks, under the leak check as usual
+##     }
+export keep_for_the_program(body: () => void) {
+    var before = _pep_live_allocs();
+    body();
+    _testing_kept.fetch_add(_pep_live_allocs() - before);
+}
+
 ## Marks the `main` that `pep-build --test` generates: in a test build it
 ## replaces the entry file's own `main`.
 [Attribute]
@@ -38,7 +68,8 @@ struct _TestCase {
 ##   name, `file:line`, `returns` or `panics` (for `[ShouldPanic]`), and the
 ##   text the panic must contain (empty for any panic or none).
 ## - `--run NAME [--timeout SECONDS]` runs the test `NAME` and exits with 0
-##   when it returns; a panic aborts the program. With a timeout above 0, a
+##   when it returns, or with 1 when it left an allocation behind (or
+##   released one too many); a panic aborts the program. With a timeout above 0, a
 ##   test still running after that many seconds ends the program with exit
 ##   status 124 and a message on standard error.
 export struct TestRunner {
@@ -117,15 +148,34 @@ export struct TestRunner {
             var text = _pep_malloc(message.size + 1) as __ptr<char>;
             memcpy(text, message.c_str(), message.size + 1);
             # The watchdog is left running: the program ends when the test
-            # returns, or the watchdog ends it.
+            # returns, or the watchdog ends it. The test waits until the
+            # watchdog sleeps, so that nothing the new thread allocates as
+            # it starts counts against the test.
+            var sleeping = async.Atomic<int>(0);
             async.Thread.spawn(() => {
+                sleeping.store(1);
                 async.Thread.sleep(limit * 1000);
                 _pep_write_error(text);
                 process.exit(124);
             });
+            while (sleeping.load() == 0) {
+                async.Thread.sleep(1);
+            }
         }
         var body = test.body;
+        # The first `Thread.current()` makes the main thread's `Thread` and
+        # keeps it for the program's life: make it now, so a test that joins a
+        # thread is not charged for it.
+        async.Thread.current();
+        var before = _pep_live_allocs();
         body();
+        var leaked = _pep_live_allocs() - before - _testing_kept.load();
+        if (leaked != 0) {
+            var count = leaked == 1 or leaked == -1 ? "allocation" : "allocations";
+            var what = leaked > 0 ? $"left {leaked} {count} behind" : $"released {-leaked} {count} too many";
+            File.stderr().write_all($"error: test '{test.name}' {what}\n");
+            return 1;
+        }
         return 0;
     }
 

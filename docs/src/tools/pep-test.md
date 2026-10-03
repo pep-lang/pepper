@@ -42,6 +42,7 @@ pep-test [options] [path]...
 | `-j <count>`, `--jobs <count>` | How many tests run at once | one per logical CPU |
 | `-t <seconds>`, `--timeout <seconds>` | Fail a test still running after this long; `0` for no limit | 60 |
 | `-I <dir>`, `--import-path <dir>` | A folder `pep-build` searches for imports; repeatable | |
+| `-L <dir>`, `--library-path <dir>` | A folder the linker searches for libraries, for `pep-build`; repeatable | |
 | `-D <option>`, `--define <option>` | A [build option](../language/build-options.md) for `pep-build`, `NAME` or `NAME=VALUE`; repeatable | |
 | `-h`, `--help` | Prints the usage and these options | |
 | `-V`, `--version` | Prints `pep-test` and its version | |
@@ -86,7 +87,9 @@ which `pep-test` runs with one of two requests:
   `file:line`, `returns` or `panics` (a `[ShouldPanic]` test), and the text
   the panic must contain.
 - `--run NAME [--timeout SECONDS]` runs one test and exits with 0 when it
-  returns. A panic aborts the program; a test that runs past the timeout
+  returns having released everything it allocated; a test that leaves an
+  allocation behind (or releases one too many) exits with 1 and says so on
+  standard error. A panic aborts the program; a test that runs past the timeout
   ends it with exit status 124.
 
 On Windows, a test program turns off Windows Error Reporting for its

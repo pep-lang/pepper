@@ -55,6 +55,9 @@ main(args: String[]): int {
         default_value = DEFAULT_TIMEOUT
     );
     var imports = parser.multiple("import-path", "I", "a directory pep-build searches for imports", value_name = "DIR");
+    var library_dirs = parser.multiple(
+        "library-path", "L", "a directory the linker searches for libraries", value_name = "DIR"
+    );
     var defines = parser.multiple(
         "define", "D", "a build option for pep-build: NAME or NAME=VALUE", value_name = "OPTION"
     );
@@ -67,6 +70,7 @@ main(args: String[]): int {
     var options = Options();
     options.filters = filters.values();
     options.imports = imports.values();
+    options.library_dirs = library_dirs.values();
     options.defines = defines.values();
     var limit = ulong.parse(timeout.value());
     if (limit.is_empty()) {
@@ -119,6 +123,7 @@ main(args: String[]): int {
 struct Options {
     var filters: Array<String> = __null;
     var imports: Array<String> = __null;
+    var library_dirs: Array<String> = __null;
     var defines: Array<String> = __null;
     var jobs: ulong = 1;
     var timeout: ulong = 60;
@@ -126,6 +131,7 @@ struct Options {
     construct() {
         this.filters = Array<String>();
         this.imports = Array<String>();
+        this.library_dirs = Array<String>();
         this.defines = Array<String>();
     }
 }
@@ -282,6 +288,10 @@ build(compiler: String, file: String, program: String, options: Options): String
     arguments.append(file);
     for (var directory in options.imports) {
         arguments.append("-I");
+        arguments.append(directory);
+    }
+    for (var directory in options.library_dirs) {
+        arguments.append("-L");
         arguments.append(directory);
     }
     for (var define in options.defines) {

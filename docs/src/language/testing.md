@@ -62,9 +62,43 @@ run in parallel, one per logical CPU (`--jobs 1` runs them one at a time,
 in order), and a test still running after 60 seconds fails (`--timeout`
 changes the limit). Tests share no state: each process starts fresh.
 
+A test also fails when it leaks: the test program counts the live
+allocations before and after the test, and a test that returns with more
+(or fewer) than it started with fails, saying how many it left behind:
+
+```text
+error: test 'counts_the_words' left 1 allocation behind
+```
+
+What a program makes once and keeps until it ends, such as a global made
+on first use, is not a leak. A test that is first to use it wraps that
+use in `keep_for_the_program`, which runs it and leaves what it allocates
+out of the count:
+
+```pepper
+keep_for_the_program(() => {
+    tls.TlsConnector.create();   # loads the TLS library, which stays loaded
+});
+```
+
 There is no setup or teardown: a fixture is a plain function that a test
 calls, and what it makes is released when the test's scope ends, as
-everywhere else.
+everywhere else. A struct whose destructor cleans up makes a fixture that
+tears itself down. `TempFolder`, which every test file can use, is one: a
+fresh folder under the system's temporary folder, removed with what is in
+it when the test returns:
+
+```pepper
+import io;
+
+[Test]
+writes_a_file() {
+    var folder = TempFolder("writes_a_file");
+    var path = folder.path.join("notes.txt");
+    io.File.write_text(path, "hello");
+    expect_equal(io.File.read_to_string(path).value(), "hello");
+}
+```
 
 ## Where tests live
 
