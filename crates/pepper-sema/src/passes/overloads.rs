@@ -42,6 +42,7 @@
 
 use crate::model::*;
 use crate::passes::check_function_types::canonical;
+use crate::passes::convert_to_traits::STRING_CONSTANT;
 use crate::passes::type_arguments::GenericSignature;
 use crate::type_name::TypeName;
 use pepper_parser::namespace::{OVERLOAD_SEPARATOR as MEMBER_SEPARATOR, demangle_name};
@@ -810,6 +811,8 @@ impl Overloads {
             ArgKind::Null => return Some(if p_name.ends_with('*') { 0 } else if is_numeric(&p_name) { 2 } else { 1 }),
             // A literal is its `char*` global where a pointer is expected.
             ArgKind::StringLiteral if p_name == "i8*" => return Some(0),
+            // A literal is a `StringConstant`, and only promotes to a `String`.
+            ArgKind::StringLiteral if p_name == STRING_CONSTANT => return Some(0),
             _ => {}
         }
         let actual = arg.ty.as_ref()?;
@@ -841,6 +844,15 @@ impl Overloads {
         let pointer = |t: &str| t.ends_with('*');
         if (pointer(&a_name) || is_numeric(&a_name)) && (pointer(&p_name) || is_numeric(&p_name)) || p_name == "void*" {
             return Some(2);
+        }
+        // A `StringConstant` converts to a `String` (a copy, ranked like an
+        // `[Implicit]` constructor) and to a C string (its own bytes).
+        if a_name == STRING_CONSTANT {
+            return match p_name.as_str() {
+                "i8*" => Some(2),
+                "String" if implicit => Some(3),
+                _ => None,
+            };
         }
         if implicit {
             if let Some(from) = self.implicit.get(&p_name) {

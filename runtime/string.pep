@@ -16,8 +16,9 @@ extern int __stdio_common_vsprintf(
 [Target(!OS(Windows))]
 extern int snprintf(char* buffer, ulong size, char* format, ...);
 
-## A mutable, reference-counted string of UTF-8 text. String literals
-## (`"text"`) are `String` values.
+## A mutable, reference-counted string of UTF-8 text. A string literal
+## (`"text"`) is a `String` wherever a `String` is expected; its own type is
+## `StringConstant`.
 ##
 ## Two measures describe a String, and each API says which one it uses:
 ##
@@ -226,13 +227,7 @@ export struct String {
     ##     var data = "hi".bytes();
     ##     assert(data.count == 2 && data[0] == 104, "the bytes of 'h' and 'i'");
     bytes(): u8[] {
-        var result = Array<u8>(_size);
-        ulong index = 0;
-        while (index < _size) {
-            result.append(_data[index] as u8);
-            index = index + 1;
-        }
-        return result;
+        return _string_bytes(_data, _size);
     }
 
     ## The number of Unicode code points. O(1).
@@ -305,17 +300,7 @@ export struct String {
     ##     assert(s[0] == "T", "first");
     ##     assert(s[-1] == "T", "last");
     [](idx: int, location: __ptr<char> = __caller_location()): String {
-        # Normalize a negative index to the end-relative offset *before* the
-        # bounds check: `idx < _length` compares int against ulong, which
-        # promotes to unsigned (a negative idx would wrap to ~2^64).
-        if (_length > 0) {
-            while (idx < 0) {
-                idx = (idx + (_length as long)) as int;
-            }
-        }
-        _pep_check_bounds(idx < _length, "String[] idx must be < length", location);
-        ulong begin = _pep_utf8_char_offset(_data, _size, idx);
-        return String(_data + begin, 0, 1);
+        return _string_index(_data, _size, _length, idx, location);
     }
 
     ## Returns whether this String and `rhs` have the same content, compared
@@ -325,14 +310,15 @@ export struct String {
     ## @param rhs the String to compare with
     ## @returns true when both hold the same bytes
     ==(rhs: String): bool {
+        # The body of `_string_equals`, written out: the extra call made
+        # `HashMap<String, V>` lookups 4% slower.
         if (_length != rhs._length) {
             return false;
         }
         if (_size == 0) {
             return true;
         }
-        bool eq = _pep_utf8_compare(_data, _size, rhs._data, rhs._size, _size);
-        return eq;
+        return _pep_utf8_compare(_data, _size, rhs._data, rhs._size, _size);
     }
 
     ## Appends `rhs` in place, like `append`, and returns this same String,
@@ -450,14 +436,7 @@ export struct String {
     ##     assert(s.find("xyz") == -1, "absent");
     ##     assert("a,b,c".find(",", 2) == 3, "the second comma");
     find(needle: String, from: ulong = 0): long {
-        if (from > _size || (from == _size && from > 0)) {
-            return -1;
-        }
-        var found = _pep_utf8_find(_data + from, _size - from, needle._data, needle._size);
-        if (found < 0) {
-            return -1;
-        }
-        return found + (from as long);
+        return _string_find(_data, _size, needle._data, needle._size, from);
     }
 
     ## Returns the byte offset of the last place `needle` occurs in this
@@ -470,20 +449,7 @@ export struct String {
     ##     assert("a/b/c".rfind("/") == 3, "the last slash");
     ##     assert("abc".rfind("x") == -1, "absent");
     rfind(needle: String): long {
-        if (needle._size > _size) {
-            return -1;
-        }
-        var index = _size - needle._size;
-        while (true) {
-            if (needle._size == 0 || memcmp(_data + index, needle._data, needle._size) == 0) {
-                return index as long;
-            }
-            if (index == 0) {
-                return -1;
-            }
-            index = index - 1;
-        }
-        return -1;
+        return _string_rfind(_data, _size, needle._data, needle._size);
     }
 
     ## Splits the String at every occurrence of `separator` and returns the
@@ -608,13 +574,7 @@ export struct String {
     ## @param prefix the text to test for
     ## @returns true when the first `prefix.size` bytes equal `prefix`
     starts_with(prefix: String): bool {
-        if (prefix._size > _size) {
-            return false;
-        }
-        if (prefix._size == 0) {
-            return true;
-        }
-        return _pep_utf8_compare(_data, _size, prefix._data, prefix._size, prefix._size);
+        return _string_starts_with(_data, _size, prefix._data, prefix._size);
     }
 
     ## Returns whether this String ends with the bytes of `suffix`. An empty
@@ -623,13 +583,7 @@ export struct String {
     ## @param suffix the text to test for
     ## @returns true when the last `suffix.size` bytes equal `suffix`
     ends_with(suffix: String): bool {
-        if (suffix._size > _size) {
-            return false;
-        }
-        if (suffix._size == 0) {
-            return true;
-        }
-        return _pep_utf8_compare(_data + (_size - suffix._size), _size, suffix._data, suffix._size, suffix._size);
+        return _string_ends_with(_data, _size, suffix._data, suffix._size);
     }
 
     ## Returns a new String of up to `count` code points starting at
@@ -647,21 +601,7 @@ export struct String {
     ##     assert(s.substr(0, 99) == "TEST", "count is clamped");
     ##     assert(s.substr(4, 5) == "", "start past the end");
     substr(start: ulong, count: ulong): String {
-        if (start >= _length) {
-            return String();
-        }
-        ulong begin = _pep_utf8_char_offset(_data, _size, start);
-        # Clamp the requested character count to what remains in the String.
-        ulong avail = length_of(_data + begin, _size - begin);
-        if (count > avail) {
-            count = avail;
-        }
-        # A zero size would tell the constructor to measure the C string.
-        if (count == 0) {
-            return String();
-        }
-        ulong len = _pep_utf8_char_offset(_data + begin, _size - begin, count);
-        return String(_data + begin, len, count);
+        return _string_substr(_data, _size, _length, start, count);
     }
 
     ## Returns whether this String and `rhs` differ in content, the negation
@@ -728,22 +668,12 @@ export struct String {
     ##     assert(s.substr_bytes(0, eq) == "key", "before '='");
     ##     assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
     substr_bytes(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): String {
-        assert(start <= _size && size <= _size - start, "String substr_bytes range out of bounds", location);
-        assert(_is_boundary(start) && _is_boundary(start + size), "String substr_bytes splits a code point", location);
-        # A zero size would tell the constructor to measure the C string.
-        if (size == 0) {
-            return String();
-        }
-        return String(_data + start, size);
+        return _string_substr_bytes(_data, _size, start, size, location);
     }
 
-    # Whether byte offset `offset` starts a code point or is the end: the
-    # byte there is not a UTF-8 continuation byte (10xxxxxx).
+    # Whether byte offset `offset` starts a code point or is the end.
     _is_boundary(offset: ulong): bool {
-        if (offset >= _size) {
-            return true;
-        }
-        return ((_data[offset] as byte) & 0xC0) != 0x80;
+        return _string_is_boundary(_data, _size, offset);
     }
 
     ## Compares this String with `other` byte by byte, for sorting. For
@@ -759,23 +689,7 @@ export struct String {
     ##     assert("ab".compare("abc") < 0, "a prefix orders first");
     ##     assert("x".compare("x") == 0, "equal");
     compare(other: String): int {
-        ulong common = _size;
-        if (other._size < common) {
-            common = other._size;
-        }
-        if (common > 0) {
-            int result = memcmp(_data, other._data, common);
-            if (result != 0) {
-                return result;
-            }
-        }
-        if (_size < other._size) {
-            return -1;
-        }
-        if (_size > other._size) {
-            return 1;
-        }
-        return 0;
+        return _string_compare(_data, _size, other._data, other._size);
     }
 
     ## Returns whether this String orders before `other`, as `compare` does.
@@ -821,11 +735,7 @@ export struct String {
     ##     assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
     ##     assert("  indented".trim_end() == "  indented", "leading kept");
     trim_end(): String {
-        ulong end = _size;
-        while (end > 0 && (_data[end - 1] as byte).is_whitespace()) {
-            end = end - 1;
-        }
-        return substr_bytes(0, end);
+        return substr_bytes(0, _string_trim_end(_data, _size));
     }
 
     ## Returns a new String without the whitespace at the start: spaces,
@@ -836,10 +746,7 @@ export struct String {
     ## @example
     ##     assert("  \tcode".trim_start() == "code", "leading whitespace");
     trim_start(): String {
-        ulong start = 0;
-        while (start < _size && (_data[start] as byte).is_whitespace()) {
-            start = start + 1;
-        }
+        var start = _string_trim_start(_data, _size);
         return substr_bytes(start, _size - start);
     }
 
@@ -951,6 +858,558 @@ export struct String {
         result._length = _length * count;
         return result;
     }
+}
+
+## The text of a string literal: a pointer to its bytes, which never change
+## and are never freed, with their byte size and code-point length. A string
+## literal's type is `StringConstant`; where a `String` is expected, the
+## literal is a `String` (see the Strings chapter of the book).
+##
+## A `StringConstant` is a `[Value]` type: copying one copies the pointer
+## and steps no reference count, and any thread may read it. Its bytes
+## always end in a NUL byte, so `c_str()` goes to C as it is. It has
+## `String`'s read API, measured the same way (`length` in code points,
+## `size` and offsets in bytes); the methods that make new text return a
+## `String`. A `StringConstant` converts to a `String` wherever a `String`
+## is expected, as if `String` had an `[Implicit]` constructor from it: the
+## conversion, like `String(text)`, copies the bytes. Where C expects a
+## `char*`, it passes its own bytes, as `c_str()` does.
+##
+## @example
+##     StringConstant name = "pepper";
+##     assert(name.length == 6, "6 code points");
+##     assert(name.starts_with("pep"), "the read API of String");
+##     String copy = name;   # a new String with its own bytes
+##     copy.append("!");
+[Value]
+export struct StringConstant {
+    ## The NUL-terminated bytes, or `__null` for `StringConstant()`.
+    __ptr<char> _data;
+    ## The number of Unicode code points.
+    ulong _length;
+    ## The number of bytes of UTF-8, not counting the NUL terminator.
+    ulong _size;
+
+    ## Creates a `StringConstant` over the `size` bytes at `data`. The
+    ## compiler calls it for each string literal. The bytes must be followed
+    ## by a NUL byte and must never change or be freed while the program
+    ## runs; no other bytes meet that, so code outside the runtime has no
+    ## reason to call it with arguments. With no arguments, it is the empty
+    ## text.
+    ##
+    ## @param data the constant NUL-terminated bytes
+    ## @param size the number of bytes before the NUL terminator
+    ## @param length the number of code points in those bytes
+    construct(data: __ptr<char> = __null, size: ulong = 0, length: ulong = 0) {
+        _data = data;
+        _size = size;
+        _length = length;
+    }
+
+    ## The number of Unicode code points. O(1).
+    ##
+    ## @see size
+    var length: ulong {
+        get {
+            return _length;
+        }
+    }
+
+    ## The number of bytes of UTF-8, not counting the NUL terminator. O(1).
+    ##
+    ## @see length
+    var size: ulong {
+        get {
+            return _size;
+        }
+    }
+
+    ## Whether the text has no code points. O(1).
+    var is_empty: bool {
+        get {
+            return _length == 0;
+        }
+    }
+
+    ## Returns the text as a NUL-terminated C string, with no copy. Unlike
+    ## `String.c_str()`, it is never `__null`, and it stays valid for the
+    ## whole run of the program.
+    ##
+    ## @returns the constant NUL-terminated bytes
+    c_str(): __ptr<char> {
+        if (_data == __null) {
+            return "";
+        }
+        return _data;
+    }
+
+    ## Returns a new String with a copy of the text. Converting a
+    ## `StringConstant` to a `String`, or calling `String(text)`, calls it.
+    ## Runs in O(size).
+    ##
+    ## @returns a new String with the same content
+    to_string(): String {
+        return String(c_str(), _size, _length);
+    }
+
+    ## Returns a copy of the UTF-8 bytes in a new array, as `String.bytes`
+    ## does. Runs in O(size).
+    ##
+    ## @returns a new array of `size` bytes
+    bytes(): u8[] {
+        return _string_bytes(c_str(), _size);
+    }
+
+    ## Returns the code point at code-point index `idx` as a new
+    ## one-code-point String, as `String`'s indexer does. A negative `idx`
+    ## counts from the end. Runs in O(idx).
+    ##
+    ## @param idx the code-point index; negative counts from the end
+    ## @returns a new String that holds the one code point
+    ## @panics if `idx` is not less than `length` after the negative index is
+    ##   normalized
+    [](idx: int, location: __ptr<char> = __caller_location()): String {
+        return _string_index(c_str(), _size, _length, idx, location);
+    }
+
+    # The operators take a `StringConstant`, so generic code comparing two
+    # values of one type (`HashMap<StringConstant, V>`, `sort`) needs no
+    # conversion. A `String` on the left compares with either type.
+
+    ## Returns whether two texts hold the same bytes, a literal `rhs`
+    ## included. Runs in O(size). To compare with a `String`, put the
+    ## `String` on the left (`name == constant`).
+    ##
+    ## @param rhs the text to compare with
+    ## @returns true when both hold the same bytes
+    ==(rhs: StringConstant): bool {
+        return _string_equals(c_str(), _size, _length, rhs.c_str(), rhs._size, rhs._length);
+    }
+
+    ## Returns whether two texts differ.
+    ##
+    ## @param rhs the text to compare with
+    ## @returns true when the bytes differ
+    !=(rhs: StringConstant): bool {
+        return !(this == rhs);
+    }
+
+    ## Returns a new String: this text followed by `rhs`.
+    ##
+    ## @param rhs the text to append
+    ## @returns a new String
+    +(rhs: String): String {
+        var result = to_string();
+        result.append(rhs);
+        return result;
+    }
+
+    ## Returns the byte offset of the first occurrence of `needle` at or
+    ## after byte offset `from`, or -1, as `String.find` does.
+    ##
+    ## @param needle the text to search for
+    ## @param from the byte offset to start searching at; 0 by default
+    ## @returns the byte offset of the first match, or -1 when there is none
+    find(needle: String, from: ulong = 0): long {
+        return _string_find(c_str(), _size, needle.c_str(), needle.size, from);
+    }
+
+    ## Returns the byte offset of the last occurrence of `needle`, or -1, as
+    ## `String.rfind` does.
+    ##
+    ## @param needle the text to search for
+    ## @returns the byte offset of the last match, or -1 when there is none
+    rfind(needle: String): long {
+        return _string_rfind(c_str(), _size, needle.c_str(), needle.size);
+    }
+
+    ## Returns whether `needle` occurs in the text.
+    ##
+    ## @param needle the text to search for
+    ## @returns true when `find(needle)` is not -1
+    contains(needle: String): bool {
+        return find(needle) >= 0;
+    }
+
+    ## Returns whether the text starts with `prefix`. An empty prefix always
+    ## matches.
+    ##
+    ## @param prefix the text to look for at the start
+    ## @returns true when the first bytes are `prefix`'s
+    starts_with(prefix: String): bool {
+        return _string_starts_with(c_str(), _size, prefix.c_str(), prefix.size);
+    }
+
+    ## Returns whether the text ends with `suffix`. An empty suffix always
+    ## matches.
+    ##
+    ## @param suffix the text to look for at the end
+    ## @returns true when the last bytes are `suffix`'s
+    ends_with(suffix: String): bool {
+        return _string_ends_with(c_str(), _size, suffix.c_str(), suffix.size);
+    }
+
+    ## Returns up to `count` code points starting at code-point index
+    ## `start`, as a new String, as `String.substr` does.
+    ##
+    ## @param start the code-point index of the first code point
+    ## @param count the most code points to take
+    ## @returns a new String; empty when `start` is past the end
+    substr(start: ulong, count: ulong): String {
+        return _string_substr(c_str(), _size, _length, start, count);
+    }
+
+    ## Returns the byte at byte offset `index`.
+    ##
+    ## @param index the byte offset
+    ## @returns the byte at `index`
+    ## @panics if `index` is not less than `size`
+    byte_at(index: ulong, location: __ptr<char> = __caller_location()): byte {
+        _pep_check_bounds(index < _size, "String byte_at index out of bounds", location);
+        return _data[index] as byte;
+    }
+
+    ## Returns the `size` bytes from byte offset `start` as a new String, as
+    ## `String.substr_bytes` does.
+    ##
+    ## @param start the byte offset of the first byte
+    ## @param size the number of bytes
+    ## @returns a new String
+    ## @panics if the range is not inside the text
+    ## @panics if `start` or `start + size` falls inside a code point
+    substr_bytes(start: ulong, size: ulong, location: __ptr<char> = __caller_location()): String {
+        return _string_substr_bytes(c_str(), _size, start, size, location);
+    }
+
+    ## Compares this text with `other` byte by byte, for sorting, as
+    ## `String.compare` does.
+    ##
+    ## @param other the text to compare with
+    ## @returns a negative number, 0, or a positive number when this text
+    ##   sorts before, the same as, or after `other`
+    compare(other: String): int {
+        return _string_compare(c_str(), _size, other.c_str(), other.size);
+    }
+
+    ## Returns whether this text sorts before `other`, byte by byte.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is negative
+    <(other: StringConstant): bool {
+        return _string_compare(c_str(), _size, other.c_str(), other._size) < 0;
+    }
+
+    ## Returns whether this text sorts before or the same as `other`, byte by byte.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is not positive
+    <=(other: StringConstant): bool {
+        return _string_compare(c_str(), _size, other.c_str(), other._size) <= 0;
+    }
+
+    ## Returns whether this text sorts after `other`, byte by byte.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is positive
+    >(other: StringConstant): bool {
+        return _string_compare(c_str(), _size, other.c_str(), other._size) > 0;
+    }
+
+    ## Returns whether this text sorts after or the same as `other`, byte by byte.
+    ##
+    ## @param other the text to compare with
+    ## @returns true when the byte-by-byte order is not negative
+    >=(other: StringConstant): bool {
+        return _string_compare(c_str(), _size, other.c_str(), other._size) >= 0;
+    }
+
+    ## Returns a new String without the whitespace at the end.
+    ##
+    ## @returns a new String with the trailing whitespace removed
+    trim_end(): String {
+        return substr_bytes(0, _string_trim_end(c_str(), _size));
+    }
+
+    ## Returns a new String without the whitespace at the start.
+    ##
+    ## @returns a new String with the leading whitespace removed
+    trim_start(): String {
+        var start = _string_trim_start(c_str(), _size);
+        return substr_bytes(start, _size - start);
+    }
+
+    ## Returns a new String without the whitespace at either end.
+    ##
+    ## @returns a new String with the leading and trailing whitespace removed
+    trim(): String {
+        var start = _string_trim_start(c_str(), _size);
+        var end = _string_trim_end(c_str(), _size);
+        if (end < start) {
+            end = start;
+        }
+        return substr_bytes(start, end - start);
+    }
+
+    # The methods below build their result with `String`'s, from a String
+    # copy of the text.
+
+    ## Returns a new String with the ASCII letters in lowercase.
+    ##
+    ## @returns a new String
+    lower(): String {
+        return to_string().lower();
+    }
+
+    ## Returns a new String with the ASCII letters in uppercase.
+    ##
+    ## @returns a new String
+    upper(): String {
+        return to_string().upper();
+    }
+
+    ## Returns the lines of the text, split at `"\n"` or `"\r\n"`, as
+    ## `String.lines` does.
+    ##
+    ## @returns a new array of Strings, without the line breaks
+    lines(): String[] {
+        return to_string().lines();
+    }
+
+    ## Returns a new String of `count` copies of the text.
+    ##
+    ## @param count the number of copies
+    ## @returns a new String; empty when `count` is 0
+    repeat(count: ulong): String {
+        return to_string().repeat(count);
+    }
+
+    ## Returns the pieces of the text between each `separator`, as
+    ## `String.split` does.
+    ##
+    ## @param separator the text to split at
+    ## @returns a new array of Strings
+    ## @panics if `separator` is empty
+    split(separator: String, location: __ptr<char> = __caller_location()): String[] {
+        return to_string().split(separator, location);
+    }
+
+    ## Returns the text before and after the first `separator`, or `Empty`
+    ## when it does not occur, as `String.split_once` does.
+    ##
+    ## @param separator the text to split at
+    ## @returns the two pieces, or `Empty`
+    ## @panics if `separator` is empty
+    split_once(separator: String, location: __ptr<char> = __caller_location()): (String, String)? {
+        return to_string().split_once(separator, location);
+    }
+
+    ## Returns `parts` joined into a new String with this text between each
+    ## two.
+    ##
+    ## @param parts the Strings to join
+    ## @returns a new String
+    join(parts: String[]): String {
+        return to_string().join(parts);
+    }
+
+    ## Returns a new String with every occurrence of `from` replaced by
+    ## `to`, as `String.replace` does.
+    ##
+    ## @param from the text to replace
+    ## @param to the text to put in its place
+    ## @returns a new String
+    ## @panics if `from` is empty
+    replace(from: String, to: String, location: __ptr<char> = __caller_location()): String {
+        return to_string().replace(from, to, location);
+    }
+
+    ## Returns an iterator over the code points, so `for (var c in text)`
+    ## visits each one as a one-code-point String.
+    ##
+    ## @returns a new iterator, positioned before the first code point
+    iterate(): StringIterator {
+        return to_string().iterate();
+    }
+}
+
+extend StringConstant with ToString;
+
+# ── Shared by String and StringConstant ─────────────────────────────────────
+# The read API of both types works on a span of UTF-8 bytes: `data`, `size`
+# bytes long and NUL-terminated, holding `length` code points.
+
+# The UTF-8 bytes of a span, copied into a new array.
+_string_bytes(data: __ptr<char>, size: ulong): u8[] {
+    var result = Array<u8>(size);
+    ulong index = 0;
+    while (index < size) {
+        result.append(data[index] as u8);
+        index = index + 1;
+    }
+    return result;
+}
+
+# The code point at code-point index `index` (negative counts from the end),
+# as a new one-code-point String.
+_string_index(data: __ptr<char>, size: ulong, length: ulong, index: int, location: __ptr<char>): String {
+    # Normalize a negative index to the end-relative offset *before* the
+    # bounds check: `index < length` compares int against ulong, which
+    # promotes to unsigned (a negative index would wrap to ~2^64).
+    if (length > 0) {
+        while (index < 0) {
+            index = (index + (length as long)) as int;
+        }
+    }
+    _pep_check_bounds(index < length, "String[] idx must be < length", location);
+    ulong begin = _pep_utf8_char_offset(data, size, index);
+    return String(data + begin, 0, 1);
+}
+
+# Whether two spans hold the same bytes.
+_string_equals(
+    data: __ptr<char>, size: ulong, length: ulong, other: __ptr<char>, other_size: ulong, other_length: ulong
+): bool {
+    if (length != other_length) {
+        return false;
+    }
+    if (size == 0) {
+        return true;
+    }
+    return _pep_utf8_compare(data, size, other, other_size, size);
+}
+
+# The byte offset of the first `needle` at or after byte offset `from`, or -1.
+_string_find(data: __ptr<char>, size: ulong, needle: __ptr<char>, needle_size: ulong, from: ulong): long {
+    if (from > size || (from == size && from > 0)) {
+        return -1;
+    }
+    var found = _pep_utf8_find(data + from, size - from, needle, needle_size);
+    if (found < 0) {
+        return -1;
+    }
+    return found + (from as long);
+}
+
+# The byte offset of the last `needle`, or -1.
+_string_rfind(data: __ptr<char>, size: ulong, needle: __ptr<char>, needle_size: ulong): long {
+    if (needle_size > size) {
+        return -1;
+    }
+    var index = size - needle_size;
+    while (true) {
+        if (needle_size == 0 || memcmp(data + index, needle, needle_size) == 0) {
+            return index as long;
+        }
+        if (index == 0) {
+            return -1;
+        }
+        index = index - 1;
+    }
+    return -1;
+}
+
+# Whether the span starts with the `prefix_size` bytes at `prefix`.
+_string_starts_with(data: __ptr<char>, size: ulong, prefix: __ptr<char>, prefix_size: ulong): bool {
+    if (prefix_size > size) {
+        return false;
+    }
+    if (prefix_size == 0) {
+        return true;
+    }
+    return _pep_utf8_compare(data, size, prefix, prefix_size, prefix_size);
+}
+
+# Whether the span ends with the `suffix_size` bytes at `suffix`.
+_string_ends_with(data: __ptr<char>, size: ulong, suffix: __ptr<char>, suffix_size: ulong): bool {
+    if (suffix_size > size) {
+        return false;
+    }
+    if (suffix_size == 0) {
+        return true;
+    }
+    return _pep_utf8_compare(data + (size - suffix_size), size, suffix, suffix_size, suffix_size);
+}
+
+# Up to `count` code points from code-point index `start`, as a new String.
+_string_substr(data: __ptr<char>, size: ulong, length: ulong, start: ulong, count: ulong): String {
+    if (start >= length) {
+        return String();
+    }
+    ulong begin = _pep_utf8_char_offset(data, size, start);
+    # Clamp the requested character count to what remains in the span.
+    ulong avail = _pep_utf8_length(data + begin, size - begin);
+    if (count > avail) {
+        count = avail;
+    }
+    # A zero size would tell the constructor to measure the C string.
+    if (count == 0) {
+        return String();
+    }
+    ulong len = _pep_utf8_char_offset(data + begin, size - begin, count);
+    return String(data + begin, len, count);
+}
+
+# The `count` bytes from byte offset `start`, as a new String.
+_string_substr_bytes(data: __ptr<char>, size: ulong, start: ulong, count: ulong, location: __ptr<char>): String {
+    assert(start <= size && count <= size - start, "String substr_bytes range out of bounds", location);
+    assert(
+        _string_is_boundary(data, size, start) && _string_is_boundary(data, size, start + count),
+        "String substr_bytes splits a code point",
+        location
+    );
+    # A zero size would tell the constructor to measure the C string.
+    if (count == 0) {
+        return String();
+    }
+    return String(data + start, count);
+}
+
+# Whether byte offset `offset` starts a code point or is the end: the byte
+# there is not a UTF-8 continuation byte (10xxxxxx).
+_string_is_boundary(data: __ptr<char>, size: ulong, offset: ulong): bool {
+    if (offset >= size) {
+        return true;
+    }
+    return ((data[offset] as byte) & 0xC0) != 0x80;
+}
+
+# Orders two spans byte by byte: negative, zero or positive.
+_string_compare(data: __ptr<char>, size: ulong, other: __ptr<char>, other_size: ulong): int {
+    ulong common = size;
+    if (other_size < common) {
+        common = other_size;
+    }
+    if (common > 0) {
+        int result = memcmp(data, other, common);
+        if (result != 0) {
+            return result;
+        }
+    }
+    if (size < other_size) {
+        return -1;
+    }
+    if (size > other_size) {
+        return 1;
+    }
+    return 0;
+}
+
+# The byte offset of the first byte that is not ASCII whitespace.
+_string_trim_start(data: __ptr<char>, size: ulong): ulong {
+    ulong start = 0;
+    while (start < size && (data[start] as byte).is_whitespace()) {
+        start = start + 1;
+    }
+    return start;
+}
+
+# The byte offset just past the last byte that is not ASCII whitespace.
+_string_trim_end(data: __ptr<char>, size: ulong): ulong {
+    ulong end = size;
+    while (end > 0 && (data[end - 1] as byte).is_whitespace()) {
+        end = end - 1;
+    }
+    return end;
 }
 
 ## Returns the decimal text of `value`, with a leading `-` when it is

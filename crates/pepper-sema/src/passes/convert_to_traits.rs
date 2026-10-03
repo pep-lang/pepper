@@ -58,6 +58,9 @@ struct Converter {
     conformance: Option<crate::passes::constraints::Conformance>,
     trait_types: HashMap<String, TraitType>,
     functions: HashMap<String, Vec<TypeName>>,
+    /// C functions' parameter types, by name: only a `StringConstant`
+    /// argument converts there (to its bytes).
+    externs: HashMap<String, Vec<TypeName>>,
     structs: HashMap<String, StructFacts>,
 }
 
@@ -82,6 +85,16 @@ impl Converter {
     ) {
         if is_c_string_type(expected) {
             unwrap_string_literal(value);
+            self.convert_constant(value, "c_str", current);
+            return;
+        }
+        let name = expected.to_string();
+        if name == STRING_CONSTANT {
+            constant_string_literal(value);
+            return;
+        }
+        if name == "String" {
+            self.convert_constant(value, "to_string", current);
             return;
         }
         if expected.is_tuple() {
@@ -295,6 +308,25 @@ impl Converter {
         }
         let start = Expression::FunctionCall { function: expected.to_string(), args: vec![], loc };
         *value = literals::build(start, entries, "_literal_insert", expected.clone(), loc);
+    }
+
+    /// A `StringConstant` flowing into a `String` slot is a copy of its text
+    /// (`method` is `to_string`); into a C string slot, its own constant
+    /// bytes (`c_str`). The conversion `String` would make with an
+    /// `[Implicit]` constructor, built in so that `String` keeps its one
+    /// constructor. Each arm of a ternary converts on its own.
+    fn convert_constant(&mut self, value: &mut Expression, method: &str, current: Option<&TypeName>) {
+        if let Expression::Ternary { true_expr, false_expr, .. } = value {
+            self.convert_constant(true_expr, method, current);
+            self.convert_constant(false_expr, method, current);
+            return;
+        }
+        if !static_type::of(value, &self.table, current).is_some_and(|t| t.to_string() == STRING_CONSTANT) {
+            return;
+        }
+        let loc = value.loc();
+        let inner = std::mem::replace(value, Expression::PointerLiteral);
+        *value = Expression::MethodCall { this: Box::new(inner), method: method.to_string(), args: vec![], loc };
     }
 
     /// `value` flows into a slot of struct type `expected`, which has an
@@ -560,6 +592,24 @@ impl Converter {
                 args,
                 loc,
             } => {
+                // `String(text)` of a `StringConstant` copies its text, as
+                // the conversion does.
+                if function == "String"
+                    && let [text] = args.as_mut_slice()
+                    && static_type::of(text, &self.table, current).is_some_and(|t| t.to_string() == STRING_CONSTANT)
+                {
+                    let text = std::mem::replace(text, Expression::PointerLiteral);
+                    *expr = Expression::MethodCall { this: Box::new(text), method: "to_string".to_string(), args: vec![], loc: *loc };
+                    return;
+                }
+                if let Some(params) = self.externs.get(function.as_str()).cloned() {
+                    for (arg, param) in args.iter_mut().zip(&params) {
+                        if is_c_string_type(param) {
+                            self.convert_constant(arg, "c_str", current);
+                        }
+                    }
+                    return;
+                }
                 // Constructors are listed with the functions, by name.
                 let params = self.functions.get(function.as_str()).cloned();
                 if let Some(params) = params {
@@ -698,10 +748,35 @@ fn unwrap_string_literal(value: &mut Expression) {
         // The synthesized call carries its literal's location; a
         // `String(...)` the user wrote has its own.
         Expression::FunctionCall { function, args, loc }
-            if function == "String"
-                && matches!(args.first(), Some(Expression::StringLiteral { is_raw: true, loc: literal, .. }) if literal == loc) =>
+            if crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) =>
         {
             *value = args.swap_remove(0);
+        }
+        _ => {}
+    }
+}
+
+/// The runtime's type of a string literal's constant bytes.
+pub const STRING_CONSTANT: &str = "StringConstant";
+
+/// A string literal flowing into a `StringConstant` slot is that value, a
+/// pointer to its constant bytes with their size and length: the
+/// `String(raw, size, length)` call `convert_string_literals` made becomes
+/// `StringConstant(raw, size, length)`, which allocates nothing. Each arm of
+/// a ternary converts on its own. Anything else is left for the type checks.
+fn constant_string_literal(value: &mut Expression) {
+    let literal = crate::passes::overloads::is_string_literal(value);
+    match value {
+        Expression::Ternary {
+            true_expr,
+            false_expr,
+            ..
+        } => {
+            constant_string_literal(true_expr);
+            constant_string_literal(false_expr);
+        }
+        Expression::FunctionCall { function, .. } if literal => {
+            *function = STRING_CONSTANT.to_string();
         }
         _ => {}
     }
@@ -780,6 +855,7 @@ pub fn convert_to_traits(module: &mut Module) {
             .any(|e| !e.restated.is_empty())
             .then(|| crate::passes::constraints::Conformance::of(module)),
         trait_types: HashMap::new(),
+        externs: module.externs.iter().map(|e| (e.name.clone(), e.parameters.iter().map(|p| p.ty.clone()).collect())).collect(),
         functions: module
             .functions
             .iter()

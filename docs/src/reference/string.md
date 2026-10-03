@@ -10,8 +10,9 @@ Source: `runtime/string.pep`
 struct String
 ```
 
-A mutable, reference-counted string of UTF-8 text. String literals
-(`"text"`) are `String` values.
+A mutable, reference-counted string of UTF-8 text. A string literal
+(`"text"`) is a `String` wherever a `String` is expected; its own type is
+`StringConstant`.
 
 Two measures describe a String, and each API says which one it uses:
 
@@ -906,6 +907,553 @@ O(size * count).
 assert("ab".repeat(3) == "ababab", "three copies");
 var indent = " ".repeat(8);   # eight spaces
 ```
+
+## StringConstant
+
+```pepper
+[Value] struct StringConstant
+```
+
+The text of a string literal: a pointer to its bytes, which never change
+and are never freed, with their byte size and code-point length. A string
+literal's type is `StringConstant`; where a `String` is expected, the
+literal is a `String` (see the Strings chapter of the book).
+
+A `StringConstant` is a `[Value]` type: copying one copies the pointer
+and steps no reference count, and any thread may read it. Its bytes
+always end in a NUL byte, so `c_str()` goes to C as it is. It has
+`String`'s read API, measured the same way (`length` in code points,
+`size` and offsets in bytes); the methods that make new text return a
+`String`. A `StringConstant` converts to a `String` wherever a `String`
+is expected, as if `String` had an `[Implicit]` constructor from it: the
+conversion, like `String(text)`, copies the bytes. Where C expects a
+`char*`, it passes its own bytes, as `c_str()` does.
+
+**Example**
+```pepper
+StringConstant name = "pepper";
+assert(name.length == 6, "6 code points");
+assert(name.starts_with("pep"), "the read API of String");
+String copy = name;   # a new String with its own bytes
+copy.append("!");
+```
+
+### Properties
+
+#### length
+
+```pepper
+var length: ulong { get; }
+```
+
+The number of Unicode code points. O(1).
+
+**See also**
+- `size`
+
+#### size
+
+```pepper
+var size: ulong { get; }
+```
+
+The number of bytes of UTF-8, not counting the NUL terminator. O(1).
+
+**See also**
+- `length`
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the text has no code points. O(1).
+
+### Constructor
+
+#### StringConstant()
+
+```pepper
+construct(data: __ptr<char> = __null, size: ulong = 0, length: ulong = 0)
+```
+
+Creates a `StringConstant` over the `size` bytes at `data`. The
+compiler calls it for each string literal. The bytes must be followed
+by a NUL byte and must never change or be freed while the program
+runs; no other bytes meet that, so code outside the runtime has no
+reason to call it with arguments. With no arguments, it is the empty
+text.
+
+**Parameters**
+- `data` — the constant NUL-terminated bytes
+- `size` — the number of bytes before the NUL terminator
+- `length` — the number of code points in those bytes
+
+### Methods
+
+#### c_str
+
+```pepper
+c_str(): __ptr<char>
+```
+
+Returns the text as a NUL-terminated C string, with no copy. Unlike
+`String.c_str()`, it is never `__null`, and it stays valid for the
+whole run of the program.
+
+**Returns**
+- the constant NUL-terminated bytes
+
+#### to_string
+
+```pepper
+to_string(): String
+```
+
+Returns a new String with a copy of the text. Converting a
+`StringConstant` to a `String`, or calling `String(text)`, calls it.
+Runs in O(size).
+
+**Returns**
+- a new String with the same content
+
+#### bytes
+
+```pepper
+bytes(): u8[]
+```
+
+Returns a copy of the UTF-8 bytes in a new array, as `String.bytes`
+does. Runs in O(size).
+
+**Returns**
+- a new array of `size` bytes
+
+#### operator []
+
+```pepper
+[](idx: int): String
+```
+
+Returns the code point at code-point index `idx` as a new
+one-code-point String, as `String`'s indexer does. A negative `idx`
+counts from the end. Runs in O(idx).
+
+**Parameters**
+- `idx` — the code-point index; negative counts from the end
+
+**Returns**
+- a new String that holds the one code point
+
+**Panics**
+- if `idx` is not less than `length` after the negative index is normalized
+
+#### operator ==
+
+```pepper
+==(rhs: StringConstant): bool
+```
+
+Returns whether two texts hold the same bytes, a literal `rhs`
+included. Runs in O(size). To compare with a `String`, put the
+`String` on the left (`name == constant`).
+
+**Parameters**
+- `rhs` — the text to compare with
+
+**Returns**
+- true when both hold the same bytes
+
+#### operator !=
+
+```pepper
+!=(rhs: StringConstant): bool
+```
+
+Returns whether two texts differ.
+
+**Parameters**
+- `rhs` — the text to compare with
+
+**Returns**
+- true when the bytes differ
+
+#### operator +
+
+```pepper
++(rhs: String): String
+```
+
+Returns a new String: this text followed by `rhs`.
+
+**Parameters**
+- `rhs` — the text to append
+
+**Returns**
+- a new String
+
+#### find
+
+```pepper
+find(needle: String, from: ulong = 0): long
+```
+
+Returns the byte offset of the first occurrence of `needle` at or
+after byte offset `from`, or -1, as `String.find` does.
+
+**Parameters**
+- `needle` — the text to search for
+- `from` — the byte offset to start searching at; 0 by default
+
+**Returns**
+- the byte offset of the first match, or -1 when there is none
+
+#### rfind
+
+```pepper
+rfind(needle: String): long
+```
+
+Returns the byte offset of the last occurrence of `needle`, or -1, as
+`String.rfind` does.
+
+**Parameters**
+- `needle` — the text to search for
+
+**Returns**
+- the byte offset of the last match, or -1 when there is none
+
+#### contains
+
+```pepper
+contains(needle: String): bool
+```
+
+Returns whether `needle` occurs in the text.
+
+**Parameters**
+- `needle` — the text to search for
+
+**Returns**
+- true when `find(needle)` is not -1
+
+#### starts_with
+
+```pepper
+starts_with(prefix: String): bool
+```
+
+Returns whether the text starts with `prefix`. An empty prefix always
+matches.
+
+**Parameters**
+- `prefix` — the text to look for at the start
+
+**Returns**
+- true when the first bytes are `prefix`'s
+
+#### ends_with
+
+```pepper
+ends_with(suffix: String): bool
+```
+
+Returns whether the text ends with `suffix`. An empty suffix always
+matches.
+
+**Parameters**
+- `suffix` — the text to look for at the end
+
+**Returns**
+- true when the last bytes are `suffix`'s
+
+#### substr
+
+```pepper
+substr(start: ulong, count: ulong): String
+```
+
+Returns up to `count` code points starting at code-point index
+`start`, as a new String, as `String.substr` does.
+
+**Parameters**
+- `start` — the code-point index of the first code point
+- `count` — the most code points to take
+
+**Returns**
+- a new String; empty when `start` is past the end
+
+#### byte_at
+
+```pepper
+byte_at(index: ulong): byte
+```
+
+Returns the byte at byte offset `index`.
+
+**Parameters**
+- `index` — the byte offset
+
+**Returns**
+- the byte at `index`
+
+**Panics**
+- if `index` is not less than `size`
+
+#### substr_bytes
+
+```pepper
+substr_bytes(start: ulong, size: ulong): String
+```
+
+Returns the `size` bytes from byte offset `start` as a new String, as
+`String.substr_bytes` does.
+
+**Parameters**
+- `start` — the byte offset of the first byte
+- `size` — the number of bytes
+
+**Returns**
+- a new String
+
+**Panics**
+- if the range is not inside the text
+- if `start` or `start + size` falls inside a code point
+
+#### compare
+
+```pepper
+compare(other: String): int
+```
+
+Compares this text with `other` byte by byte, for sorting, as
+`String.compare` does.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- a negative number, 0, or a positive number when this text sorts before, the same as, or after `other`
+
+#### operator <
+
+```pepper
+<(other: StringConstant): bool
+```
+
+Returns whether this text sorts before `other`, byte by byte.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is negative
+
+#### operator <=
+
+```pepper
+<=(other: StringConstant): bool
+```
+
+Returns whether this text sorts before or the same as `other`, byte by byte.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not positive
+
+#### operator >
+
+```pepper
+>(other: StringConstant): bool
+```
+
+Returns whether this text sorts after `other`, byte by byte.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is positive
+
+#### operator >=
+
+```pepper
+>=(other: StringConstant): bool
+```
+
+Returns whether this text sorts after or the same as `other`, byte by byte.
+
+**Parameters**
+- `other` — the text to compare with
+
+**Returns**
+- true when the byte-by-byte order is not negative
+
+#### trim_end
+
+```pepper
+trim_end(): String
+```
+
+Returns a new String without the whitespace at the end.
+
+**Returns**
+- a new String with the trailing whitespace removed
+
+#### trim_start
+
+```pepper
+trim_start(): String
+```
+
+Returns a new String without the whitespace at the start.
+
+**Returns**
+- a new String with the leading whitespace removed
+
+#### trim
+
+```pepper
+trim(): String
+```
+
+Returns a new String without the whitespace at either end.
+
+**Returns**
+- a new String with the leading and trailing whitespace removed
+
+#### lower
+
+```pepper
+lower(): String
+```
+
+Returns a new String with the ASCII letters in lowercase.
+
+**Returns**
+- a new String
+
+#### upper
+
+```pepper
+upper(): String
+```
+
+Returns a new String with the ASCII letters in uppercase.
+
+**Returns**
+- a new String
+
+#### lines
+
+```pepper
+lines(): String[]
+```
+
+Returns the lines of the text, split at `"\n"` or `"\r\n"`, as
+`String.lines` does.
+
+**Returns**
+- a new array of Strings, without the line breaks
+
+#### repeat
+
+```pepper
+repeat(count: ulong): String
+```
+
+Returns a new String of `count` copies of the text.
+
+**Parameters**
+- `count` — the number of copies
+
+**Returns**
+- a new String; empty when `count` is 0
+
+#### split
+
+```pepper
+split(separator: String): String[]
+```
+
+Returns the pieces of the text between each `separator`, as
+`String.split` does.
+
+**Parameters**
+- `separator` — the text to split at
+
+**Returns**
+- a new array of Strings
+
+**Panics**
+- if `separator` is empty
+
+#### split_once
+
+```pepper
+split_once(separator: String): (String, String)?
+```
+
+Returns the text before and after the first `separator`, or `Empty`
+when it does not occur, as `String.split_once` does.
+
+**Parameters**
+- `separator` — the text to split at
+
+**Returns**
+- the two pieces, or `Empty`
+
+**Panics**
+- if `separator` is empty
+
+#### join
+
+```pepper
+join(parts: String[]): String
+```
+
+Returns `parts` joined into a new String with this text between each
+two.
+
+**Parameters**
+- `parts` — the Strings to join
+
+**Returns**
+- a new String
+
+#### replace
+
+```pepper
+replace(from: String, to: String): String
+```
+
+Returns a new String with every occurrence of `from` replaced by
+`to`, as `String.replace` does.
+
+**Parameters**
+- `from` — the text to replace
+- `to` — the text to put in its place
+
+**Returns**
+- a new String
+
+**Panics**
+- if `from` is empty
+
+#### iterate
+
+```pepper
+iterate(): StringIterator
+```
+
+Returns an iterator over the code points, so `for (var c in text)`
+visits each one as a one-code-point String.
+
+**Returns**
+- a new iterator, positioned before the first code point
 
 ## to_string
 

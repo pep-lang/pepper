@@ -56,7 +56,7 @@ arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with `as?`), function types and
 closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with `map`,
 `filter`, `enumerate` and `zip` adapters),
-`with` blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (`[Export]`ed functions in a static or shared library, with a generated header). The standard library covers strings (with a `StringBuilder`,
+`with` blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (`[Export]`ed functions in a static or shared library, with a generated header). The standard library covers strings (with a `StringBuilder`, `StringConstant` for literals' constant bytes,
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), sortable arrays, hash
 maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see [text](language/text.md)),

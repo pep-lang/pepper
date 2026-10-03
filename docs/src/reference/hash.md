@@ -83,6 +83,22 @@ at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 assert(hash<String>("hello") == hash<String>("hello"), "content hash");
 ```
 
+## hash
+
+```pepper
+hash<StringConstant>(value: StringConstant): u64
+```
+
+Returns a 64-bit hash of a `StringConstant`'s bytes, the same hash
+`hash<String>` gives a String with the same content, so `StringConstant`
+keys work in a `HashMap` or `HashSet`. Runs in O(size).
+
+**Parameters**
+- `value` — the text to hash
+
+**Returns**
+- the 64-bit hash of the text's content
+
 ## HashMap
 
 ```pepper

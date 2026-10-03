@@ -89,6 +89,10 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
   wherever a literal flows into a `__ptr<char>`, `__ptr<u8>`, or
   `__ptr<void>` in Pepper code (a variable, field, argument, or return
   value), so `String("hello")` copies the literal's five bytes.
+- A **[`StringConstant`](types-and-variables.md#string-constants)** passes
+  its constant NUL-terminated bytes with no copy, by itself where a
+  `__ptr<char>` is expected or through `c_str()`. The pointer is valid for
+  the whole run of the program and is never `__null`.
 - A **`String` value** is passed with `c_str()`, which returns the String's
   buffer, NUL-terminated, as a `__ptr<char>`. A String is not guaranteed to
   be NUL-terminated otherwise, so always go through `c_str()` when C needs

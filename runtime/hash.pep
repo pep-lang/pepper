@@ -65,6 +65,16 @@ export hash<String>(value: String): u64 {
     return _pep_hash_bytes(value.c_str(), value.size);
 }
 
+## Returns a 64-bit hash of a `StringConstant`'s bytes, the same hash
+## `hash<String>` gives a String with the same content, so `StringConstant`
+## keys work in a `HashMap` or `HashSet`. Runs in O(size).
+##
+## @param value the text to hash
+## @returns the 64-bit hash of the text's content
+export hash<StringConstant>(value: StringConstant): u64 {
+    return _pep_hash_bytes(value.c_str(), value.size);
+}
+
 # ── The table ───────────────────────────────────────────────────────────────
 # Open addressing with triangular probing over a power-of-two table:
 # probe(i) = (h & mask) + i*(i+1)/2 visits every slot of the table, which

@@ -121,8 +121,11 @@ letter, digit, space or punctuation. Unicode classification is not covered.
 ### Strings
 
 `String` is a UTF-8 string. A string literal such as `"hello"` is a `String`
-value, except where it is stored or passed as a `__ptr<char>`: there it is the
-literal's NUL-terminated bytes (see [Passing strings](c-interop.md#passing-strings)). `+` joins two strings into a new one, `==` and `!=` compare contents,
+value wherever a `String` is expected, and wherever nothing asks for another
+type (`var s = "hello";` declares a `String`). Where it is stored or passed as
+a `__ptr<char>`, it is the literal's NUL-terminated bytes (see
+[Passing strings](c-interop.md#passing-strings)), and where a
+[`StringConstant`](#string-constants) is expected, it is one. `+` joins two strings into a new one, `==` and `!=` compare contents,
 the `length` property counts code points, `size` counts bytes, and `s[i]` gives the code
 point at index `i` as a one-code-point `String`.
 
@@ -142,6 +145,45 @@ literal: after `var s = "a"; s.append("b");` the next `"a"` is still `"a"`.
 Where a literal is only read, passed to a parameter that the function
 neither keeps nor changes (`builder.append("x")`, `name == "x"`), every
 evaluation shares one constant object and allocates nothing.
+
+#### String constants
+
+A literal's own type is [`StringConstant`](../reference/string.md): a pointer
+to the literal's bytes, which never change and are never freed, with their
+size and length. It is a [`[Value]`](value-structs.md) type, so copying one
+steps no reference count, any thread may read it, and a literal stored as one
+allocates nothing. Its bytes always end in a NUL byte, so `c_str()` passes it
+to C as it is (a `String`'s `c_str()` does too, but a `String` built with no
+data has none).
+
+A `StringConstant` has `String`'s read API (`length`, `size`, `find`,
+`split`, `trim`, `==`, `<`, the indexer, `for` loops and so on); the methods
+that make new text return a `String`. It converts to a `String` wherever a
+`String` is expected, as if `String` had an [`[Implicit]`
+constructor](structs.md#implicit-conversions) taking it: the conversion (and
+`String(text)`) copies the bytes, so an API that takes a `String` takes a
+`StringConstant` too. Where C expects a `char*`, it passes its own bytes, as
+`c_str()` does. Among [overloads](overloading.md), a literal picks a
+`StringConstant` parameter over a `String` one, and a `StringConstant` value
+picks a `String` parameter last, as an implicit conversion.
+
+```pepper
+{{#include ../../examples/types-string-constants.pep}}
+```
+
+- **Where a literal is a `StringConstant`**: a variable, field, parameter or
+  return value of type `StringConstant`, and a `HashMap<StringConstant, V>`
+  key. Everywhere else a literal is a `String`, as before.
+- **Converting chains once**: a literal reaches a type that converts from
+  `String` (`io.Path`, `Error`) directly, but a `StringConstant` variable
+  does not, since conversions never chain. Write `String(text)` or pass a
+  literal.
+- **Comparing**: `==`, `!=`, `<`, `<=`, `>` and `>=` on a `StringConstant`
+  take another `StringConstant` (a literal included), so generic code such
+  as a `HashMap<StringConstant, V>` compares two keys with no conversion. To
+  compare with a `String`, put the `String` on the left (`name == constant`)
+  or call `compare`, which takes a `String`.
+- **A literal method call** (`"a,b".split(",")`) calls the `String` method.
 
 `to_string` turns any integer into its decimal text. For parsing and
 generating text, `byte_at` and `substr_bytes` work in bytes (the offsets

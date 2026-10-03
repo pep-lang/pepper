@@ -90,6 +90,7 @@ mod tool_docs_tests;
 mod static_call_tests;
 mod store_type_tests;
 mod static_string_tests;
+mod string_constant_tests;
 mod string_tests;
 mod temp_lifetime_tests;
 mod trait_value_tests;

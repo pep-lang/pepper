@@ -130,7 +130,7 @@ argument, the conversion has a rank, best first:
 
 | Rank | What converts |
 |------|---------------|
-| exact | the same type; a string literal to `__ptr<char>` |
+| exact | the same type; a string literal to `__ptr<char>` or [`StringConstant`](types-and-variables.md#string-constants) |
 | promotion | an integer widening that loses nothing (`int` to `long`, `u8` to `int`; the narrower target ranks better, so a `short` picks `int` over `long`), `float` to `double`, an integer literal to any integer type it fits, a struct to a [trait it declares](traits-and-extensions.md#traits-as-types), `__null` to a reference, a string literal to `String` |
 | conversion | any other numeric conversion (`bool` included), and pointer conversions |
 | implicit constructor | a value to a struct whose [`[Implicit]` constructor](structs.md#implicit-conversions) takes it |
