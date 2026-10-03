@@ -20,6 +20,7 @@
 
 use crate::builder::{INTERPOLATE, REFLECT};
 use crate::model::*;
+use crate::passes::static_source::{self, Edit, Piece, Rendered};
 use crate::type_name::TypeName;
 use pepper_parser::ast;
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
@@ -128,7 +129,7 @@ pub fn expand(module: &mut Module, lowered: bool) -> bool {
         };
         let Some(mut body) = function.body.take() else { continue };
         let context = Context::of(function, &body);
-        let mut expander = Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None };
+        let mut expander = Expander::new(module, lowered, context);
         expander.expand_in(&mut body);
         notes.append(&mut expander.notes);
         let function = match site {
@@ -153,7 +154,7 @@ pub fn expand_module_blocks(module: &mut Module) {
     for block in &blocks {
         let context = Context { name: String::new(), symbol: String::new(), loc: block.block.loc, runtime: HashSet::new() };
         let mut expander =
-            Expander { module, lowered: false, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None };
+            Expander::new(module, false, context);
         if let Err(error) = expander.expand(&block.block) {
             crate::errors::report(error);
             continue;
@@ -291,6 +292,8 @@ struct Member {
     attributes: Vec<ast::Attribute>,
     /// The file the attributes are written in.
     file: FileId,
+    /// For a value a case carries, the enum.
+    enumeration: Option<TypeName>,
 }
 
 #[derive(Debug)]
@@ -366,6 +369,30 @@ impl Value {
         }
     }
 
+    /// The value as a literal in source, for `--emit-static`; `None` for
+    /// what emitted code cannot hold.
+    fn source(&self) -> Option<String> {
+        Some(match self {
+            Value::Int(v) => v.to_string(),
+            Value::Float(v) => format!("{:?}", v),
+            Value::Bool(v) => v.to_string(),
+            Value::String(v) => static_source::string_literal(v),
+            Value::Case(case) if case.is_value => format!("{}.{}", demangle(&case.enumeration.display()), case.name),
+            _ => return None,
+        })
+    }
+
+    /// The value as the text of an interpolated string, where it prints
+    /// the same as its hole would.
+    fn interpolated(&self) -> Option<String> {
+        match self {
+            Value::Int(v) => Some(v.to_string()),
+            Value::Bool(v) => Some(v.to_string()),
+            Value::String(v) => Some(static_source::escape(v, true)),
+            _ => None,
+        }
+    }
+
     /// [`Value::display`], with a string in quotes.
     fn quoted(&self) -> String {
         match self {
@@ -418,9 +445,18 @@ struct Expander<'m> {
     /// A compile-time `break` or `continue` that ran and has not yet reached
     /// its loop: the statements after it are skipped.
     jump: Option<ast::LoopBreakKind>,
+    /// Writing each expansion back out as source too (`--emit-static`).
+    recording: bool,
+    /// The placeholders the statement being filled replaced, as source.
+    edits: Vec<Edit>,
 }
 
-impl Expander<'_> {
+impl<'m> Expander<'m> {
+    fn new(module: &'m Module, lowered: bool, context: Context) -> Expander<'m> {
+        let recording = static_source::recording();
+        Expander { module, lowered, context, type_map: vec![], file: FileId::default(), scopes: vec![], passes: vec![], notes: vec![], jump: None, recording, edits: vec![] }
+    }
+
     /// Replaces each `static` block in `block` with what it emits. An error
     /// is reported, and the block emits nothing.
     fn expand_in(&mut self, block: &mut Block) {
@@ -455,7 +491,8 @@ impl Expander<'_> {
         self.scopes = vec![HashMap::new()];
         self.passes.clear();
         self.jump = None;
-        let items = self.items(&block.items).map_err(|error| {
+        let mut text = vec![];
+        let items = self.items(&block.items, &mut text).map_err(|error| {
             let mut error = error;
             if !self.context.name.is_empty() {
                 error = error.with_note(format!("in the static block of '{}'", self.context.name), Some(self.context.loc));
@@ -463,6 +500,16 @@ impl Expander<'_> {
             }
             error
         })?;
+        // A module-scope block emits nothing: its constants hold what it computed.
+        if self.recording && !self.context.symbol.is_empty() && block.span.end > block.span.start {
+            let mut lines = vec![];
+            static_source::write_lines(&[Rendered::Block(text)], 0, &mut lines);
+            if lines.is_empty() {
+                lines = vec!["{}".to_string()];
+            }
+            let type_arguments = block.type_map.iter().map(|(param, ty)| (param.clone(), demangle(&ty.display()).into_owned())).collect();
+            static_source::add(static_source::Expansion { loc: block.loc, span: block.span, type_arguments, lines });
+        }
         Ok(block_of(items))
     }
 
@@ -511,7 +558,8 @@ impl Expander<'_> {
         result
     }
 
-    fn items(&mut self, items: &[StaticItem]) -> Result<Vec<Statement>> {
+    /// Expands `items`, and when recording adds their source to `text`.
+    fn items(&mut self, items: &[StaticItem], text: &mut Vec<Rendered>) -> Result<Vec<Statement>> {
         let mut out = vec![];
         for item in items {
             match item {
@@ -527,12 +575,14 @@ impl Expander<'_> {
                     };
                     for (index, element) in list.iter().enumerate() {
                         self.passes.push((*loc, index, list.len(), format!("{} '{}'", element.kind(), element.display())));
+                        let mut pass_text = vec![];
                         let pass = self.scoped(|this| {
                             this.scopes.last_mut().unwrap().insert(name.clone(), element.clone());
-                            this.items(body)
+                            this.items(body, &mut pass_text)
                         });
                         self.passes.pop();
                         out.push(Statement::Block(block_of(pass?)));
+                        text.push(Rendered::Block(pass_text));
                         if self.jump.take() == Some(ast::LoopBreakKind::Break) {
                             break;
                         }
@@ -555,11 +605,13 @@ impl Expander<'_> {
                             return Err(self.with_passes(Diagnostic::error(message).at(*loc)));
                         }
                         self.passes.push((*loc, iteration, 0, String::new()));
-                        let pass = self.scoped(|this| this.items(body));
+                        let mut pass_text = vec![];
+                        let pass = self.scoped(|this| this.items(body, &mut pass_text));
                         self.passes.pop();
                         let pass = pass?;
                         if !pass.is_empty() {
                             out.push(Statement::Block(block_of(pass)));
+                            text.push(Rendered::Block(pass_text));
                         }
                         iteration += 1;
                         if self.jump.take() == Some(ast::LoopBreakKind::Break) {
@@ -577,19 +629,29 @@ impl Expander<'_> {
                         other => return Err(self.error(format!("a compile-time condition must be a 'bool', not a {}", other.kind()), condition.span())),
                     };
                     let branch = if taken { then_items } else { else_items };
-                    let expanded = self.scoped(|this| this.items(branch))?;
+                    let mut branch_text = vec![];
+                    let expanded = self.scoped(|this| this.items(branch, &mut branch_text))?;
                     out.push(Statement::Block(block_of(expanded)));
+                    text.push(Rendered::Block(branch_text));
                 }
-                StaticItem::EmitIf { condition, then_items, else_items } => {
+                StaticItem::EmitIf { condition, then_items, else_items, span } => {
                     let mut condition = condition.clone();
                     self.fill_expression(&mut condition)?;
-                    let if_block = block_of(self.scoped(|this| this.items(then_items))?);
-                    let else_block = if else_items.is_empty() { None } else { Some(block_of(self.scoped(|this| this.items(else_items))?)) };
+                    let condition_text = self.source_of(*span, false);
+                    let (mut then_text, mut else_text) = (vec![], vec![]);
+                    let if_block = block_of(self.scoped(|this| this.items(then_items, &mut then_text))?);
+                    let else_block = if else_items.is_empty() { None } else { Some(block_of(self.scoped(|this| this.items(else_items, &mut else_text))?)) };
                     out.push(Statement::Branch(Branch { condition, if_block, else_block }));
+                    if let Some(condition) = condition_text {
+                        let else_items = if else_items.is_empty() { None } else { Some(else_text) };
+                        text.push(Rendered::Branch { condition: condition.join("\n"), then_items: then_text, else_items });
+                    }
                 }
                 StaticItem::Block(inner) => {
-                    let expanded = self.scoped(|this| this.items(inner))?;
+                    let mut inner_text = vec![];
+                    let expanded = self.scoped(|this| this.items(inner, &mut inner_text))?;
                     out.push(Statement::Block(block_of(expanded)));
+                    text.push(Rendered::Block(inner_text));
                 }
                 StaticItem::Var { name, value, .. } => {
                     let value = self.evaluate(value)?;
@@ -598,10 +660,13 @@ impl Expander<'_> {
                 StaticItem::Evaluate(expr) => {
                     self.evaluate(expr)?;
                 }
-                StaticItem::Emit(stmt) => {
+                StaticItem::Emit(stmt, span) => {
                     let mut stmt = stmt.clone();
                     self.fill_statement(&mut stmt)?;
                     out.push(stmt);
+                    if let Some(lines) = self.source_of(*span, true) {
+                        text.push(Rendered::Code(lines));
+                    }
                 }
             }
             if self.jump.is_some() {
@@ -609,6 +674,28 @@ impl Expander<'_> {
             }
         }
         Ok(out)
+    }
+
+    /// When recording, the source at `span` (an emitted statement, or a
+    /// runtime `if`'s condition) with the placeholders just filled in
+    /// replaced and the types named; lines indented relative to the first.
+    fn source_of(&mut self, span: ast::Span, statement: bool) -> Option<Vec<String>> {
+        if !self.recording {
+            return None;
+        }
+        let edits = std::mem::take(&mut self.edits);
+        let (_, source) = pepper_parser::diagnostic::Sources::get(&self.module.sources, self.file)?;
+        let mut names: Vec<(String, String)> =
+            self.member_types().into_iter().map(|(spelled, ty)| (spelled, demangle(&ty.display()).into_owned())).collect();
+        names.extend(self.type_map.iter().map(|(param, ty)| (param.clone(), demangle(&ty.display()).into_owned())));
+        if span.end > source.len() {
+            return None;
+        }
+        Some(if statement {
+            static_source::statement(source, span, &edits, &names)
+        } else {
+            vec![static_source::expression(source, span, &edits, &names)]
+        })
     }
 
     /// The `x.Type` types of the members in scope.
@@ -628,6 +715,7 @@ impl Expander<'_> {
     /// Fills in an emitted statement: the members' types, then the
     /// placeholders.
     fn fill_statement(&mut self, stmt: &mut Statement) -> Result<()> {
+        self.edits.clear();
         let types = self.member_types();
         if !types.is_empty() {
             let mut holder = block_of(vec![std::mem::replace(stmt, Statement::Block(block_of(vec![])))]);
@@ -658,11 +746,22 @@ impl Expander<'_> {
         match expr {
             Expression::StaticValue(placeholder) => {
                 let value = self.evaluate(&placeholder.expr)?;
+                if self.recording
+                    && let Some(text) = value.source()
+                {
+                    let inline = value.interpolated();
+                    self.edits.push(Edit { span: placeholder.expr.extent(), pieces: vec![Piece::Text(text)], inline });
+                }
                 *expr = self.emitted(value, &placeholder.expr, placeholder.loc)?;
             }
             Expression::StaticMember(placeholder) => {
                 let receiver = self.evaluate(&placeholder.member)?;
-                let StaticMember { method, args, loc, member } = &mut **placeholder;
+                if self.recording
+                    && let Some(pieces) = member_source(&receiver, &placeholder.method, &placeholder.argument_spans)
+                {
+                    self.edits.push(Edit { span: placeholder.span, pieces, inline: None });
+                }
+                let StaticMember { method, args, loc, member, .. } = &mut **placeholder;
                 let loc = *loc;
                 let mut args = std::mem::take(args);
                 let span = loc.span;
@@ -1286,7 +1385,7 @@ impl Expander<'_> {
                 .into_iter()
                 .enumerate()
                 .map(|(index, (loc, name, ty, is_const, is_property, attributes))| {
-                    Value::Member(Rc::new(Member { name, field: None, ty, index, count, is_const, is_property, attributes, file: loc.file }))
+                    Value::Member(Rc::new(Member { name, field: None, ty, index, count, is_const, is_property, attributes, file: loc.file, enumeration: None }))
                 })
                 .collect(),
         )))
@@ -1300,6 +1399,7 @@ impl Expander<'_> {
             && let Some(cases) = &st.enum_cases
         {
             let count = cases.len();
+            let enumeration = ty.clone();
             let values = |case: &EnumCaseDef| -> Vec<Value> {
                 let count = case.payload.len();
                 case.payload
@@ -1319,6 +1419,7 @@ impl Expander<'_> {
                             is_property: false,
                             attributes: vec![],
                             file: loc.file,
+                            enumeration: Some(enumeration.clone()),
                         }))
                     })
                     .collect()
@@ -1460,7 +1561,57 @@ fn block_of(items: Vec<Statement>) -> Block {
 }
 
 fn empty_static() -> StaticBlock {
-    StaticBlock { captures: vec![], items: vec![], type_map: vec![], loc: Loc::NONE }
+    StaticBlock { captures: vec![], items: vec![], type_map: vec![], loc: Loc::NONE, span: ast::Span::default() }
+}
+
+/// The source a `get`, `set`, `call` or `matches` placeholder becomes, its
+/// arguments as written (see [`Expander::fill`] for the code it becomes).
+fn member_source(receiver: &Value, method: &str, arguments: &[ast::Span]) -> Option<Vec<Piece>> {
+    let text = |t: &str| Piece::Text(t.to_string());
+    let argument = |i: usize| arguments.get(i).map(|span| Piece::Argument(*span));
+    let enumeration = |ty: &TypeName| demangle(&ty.display()).into_owned();
+    Some(match (receiver, method) {
+        // A case's value: only a `match` can read it in source.
+        (Value::Member(m), "get") if m.field.is_some() => {
+            let (enumeration, case) = (enumeration(m.enumeration.as_ref()?), m.field.as_ref()?.split('.').next()?.to_string());
+            let bindings: Vec<&str> = (0..m.count).map(|i| if i == m.index { "_pep_value" } else { "_" }).collect();
+            vec![
+                text("match ("),
+                argument(0)?,
+                Piece::Text(format!(") {{ {}.{}({}) => _pep_value, else => __default<{}>() }}", enumeration, case, bindings.join(", "), demangle(&m.ty.display()))),
+            ]
+        }
+        (Value::Member(m), "get") => vec![argument(0)?, Piece::Text(format!(".{}", m.name))],
+        (Value::Member(m), "set") => vec![argument(0)?, Piece::Text(format!(".{} = ", m.name)), argument(1)?],
+        (Value::Function(f), "call") => {
+            let mut pieces = vec![Piece::Text(format!("{}(", demangle_name(&f.symbol)))];
+            for i in 0..arguments.len() {
+                if i > 0 {
+                    pieces.push(text(", "));
+                }
+                pieces.push(argument(i)?);
+            }
+            pieces.push(text(")"));
+            pieces
+        }
+        (Value::Case(case), "get") if case.is_value => vec![Piece::Text(format!("{}.{}", enumeration(&case.enumeration), case.name))],
+        (Value::Case(case), "get") => {
+            let mut pieces = vec![Piece::Text(format!("{}.{}(", enumeration(&case.enumeration), case.name))];
+            for i in 0..arguments.len() {
+                if i > 0 {
+                    pieces.push(text(", "));
+                }
+                pieces.push(argument(i)?);
+            }
+            pieces.push(text(")"));
+            pieces
+        }
+        (Value::Case(case), "matches") => {
+            let test = if case.is_value { "==" } else { "is" };
+            vec![text("("), argument(0)?, Piece::Text(format!(" {} {}.{})", test, enumeration(&case.enumeration), case.name))]
+        }
+        _ => return None,
+    })
 }
 
 /// The candidate declared in `file`, else the only one.

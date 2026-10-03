@@ -411,6 +411,28 @@ impl Expression {
             Expression::Match(m) => m.span,
         }
     }
+
+    /// The source the expression covers, from its first token to its last
+    /// (parentheses around a part not included). [`Expression::span`] is
+    /// where a diagnostic points, which for an operator is the operator
+    /// alone.
+    pub fn extent(&self) -> Span {
+        let union = |a: Span, b: Span| Span { start: a.start.min(b.start), end: a.end.max(b.end) };
+        let all = |span: Span, parts: &mut dyn Iterator<Item = &Expression>| parts.fold(span, |span, part| union(span, part.extent()));
+        match self {
+            Expression::Unary { operand, span, .. } => union(*span, operand.extent()),
+            Expression::Cast { expr, ty, span, .. } => union(union(*span, expr.extent()), ty.span),
+            Expression::Binary { lhs, rhs, span, .. } | Expression::Index { lhs, rhs, span } => union(union(*span, lhs.extent()), rhs.extent()),
+            Expression::Ternary { condition, true_expr, false_expr, span } => {
+                all(*span, &mut [condition.as_ref(), true_expr.as_ref(), false_expr.as_ref()].into_iter())
+            }
+            Expression::MemberAccess { lhs, span, .. } => union(*span, lhs.extent()),
+            Expression::FunctionCall { function, arguments, span } => all(union(*span, function.extent()), &mut arguments.iter()),
+            Expression::NamedArgument { value, span, .. } => union(*span, value.extent()),
+            Expression::Is { value, span, .. } => union(*span, value.extent()),
+            _ => self.span(),
+        }
+    }
 }
 
 impl From<String> for Literal {

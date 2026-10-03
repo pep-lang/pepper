@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod compiler;
+pub mod emit_static;
 pub mod fetch;
 pub mod keys;
 pub mod library;
@@ -71,7 +72,8 @@ impl StageTimer {
 }
 
 /// Run the compile pipeline and act per the options: `--emit-ast` dumps the
-/// AST, `--emit-llvm` writes IR, otherwise emit obj and link. Everything
+/// AST, `--emit-static` writes the source with `static` blocks expanded,
+/// `--emit-llvm` writes IR, otherwise emit obj and link. Everything
 /// compiles for `--target`'s platform (see `pepper_sema::with_target`).
 pub fn run(options: Options) -> Result<i32, String> {
     let target = options.effective_target()?;
@@ -97,6 +99,10 @@ fn run_for_target(options: Options) -> Result<i32, String> {
     // A project builds with what pep.lock lists: fetch what is missing.
     if let Some(entry) = options.source_files.first() {
         fetch::fetch_dependencies(entry)?;
+    }
+
+    if let Some(mode) = &options.emit_static {
+        return emit_static::run(&options, mode == "keep");
     }
 
     let build_dir = options.effective_build_dir();

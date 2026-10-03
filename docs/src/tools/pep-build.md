@@ -23,11 +23,12 @@ short, and `pepper help build` runs it.
 | `-I <dir>` | Add a folder to search for imported modules | the runtime's folder only |
 | `--import <name>` | Load a module into every file of the program | none |
 | `--no-runtime` | Compile without the standard library | the runtime is used |
-| `-o <file>` | Name the executable or library | `<entry stem>` in the current folder; a project's `name` in its folder |
+| `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
 | `--test` | Build the entry file's `[Test]` functions into a test program | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
+| `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
 | `--emit-ast` | Print the syntax tree instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
@@ -138,6 +139,8 @@ folder (`libname.a` with `--lib`), with `.exe` added when building for
 Windows and the name has no extension. Windows runs only files ending in
 `.exe`, so otherwise name the output there: `-o main.exe`.
 
+With `--emit-static`, it is the folder the expanded source goes into.
+
 ### `--lib static`, `--lib shared`
 
 Builds a library for C code to link instead of an executable, with a C
@@ -184,6 +187,43 @@ linked and no executable is written.
 ```bash
 pepper build main.pep -O --emit-llvm      # .pep/build/main.ll
 ```
+
+### `--emit-static`, `--emit-static=keep`
+
+Writes a copy of the program's source with each `static` block replaced by
+the code it emits, like a C compiler's `-E`, and stops there: nothing is
+compiled to code. Use it to see what a reflection loop, a serializer or a
+library's block does to the program (see
+[Seeing what a static block emits](../language/reflection.md#seeing-what-a-static-block-emits)).
+
+```bash
+pepper build main.pep --emit-static              # main.static/main.pep
+pepper build main.pep --emit-static -o expanded  # expanded/main.pep
+pepper build expanded/main.pep -o main           # the same program
+```
+
+- Every file of the program in the entry file's folder (and the folders
+  under it) is written into the output folder at the same relative path,
+  so the folder builds as a whole program; files with no block are copied
+  unchanged. The runtime and libraries found elsewhere are not copied. The
+  originals are never overwritten.
+- The folder is `-o`'s, else `<entry stem>.static` in the current folder.
+- Each expansion is a `{ ... }` block between
+  `# static (out, value) expanded from main.pep:12:5` and `# end static`.
+  `--emit-static=keep` also keeps the block as written, as `#` comments
+  above it; `--emit-static=expand` is the default, the same as
+  `--emit-static`.
+- A block in a generic function expands once per specialization. The
+  generic function stays as written, and after it comes a
+  [concrete override](../language/generics.md#overriding-a-generic-function-for-one-type)
+  for each type the program uses it with (`describe<Point>(value: Point)`),
+  its blocks expanded, so the copy still builds into the same program. A
+  block in a method of a generic struct, or in a generic method, stays,
+  with each specialization's expansion above it as `#` comments.
+- When `pep-fmt` is next to the compiler or on `PATH`, it formats the
+  copies, wrapping long lines.
+- Errors a block reports stop it, as they stop a build. Errors in the code
+  a block emits are found when the copy is built, at the copy's line.
 
 ### `--emit-ast`
 

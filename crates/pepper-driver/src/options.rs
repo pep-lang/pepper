@@ -37,7 +37,8 @@ pub struct Options {
     #[arg(short = 'D', value_name = "NAME[=VALUE]", value_parser = parse_build_option)]
     pub build_options: Vec<(String, String)>,
 
-    /// Output path: the executable, or with `--lib` the library.
+    /// Output path: the executable, with `--lib` the library, or with
+    /// `--emit-static` the folder for the expanded source.
     #[arg(short = 'o', value_name = "OUT")]
     pub output: Option<PathBuf>,
 
@@ -105,6 +106,13 @@ pub struct Options {
     /// Emit LLVM IR (optimized at the `-O` level).
     #[arg(long = "emit-llvm")]
     pub emit_llvm: bool,
+
+    /// Write the program's source with each `static` block replaced by the
+    /// code it emits, like C's `cc -E`, into the folder `-o` names (default
+    /// `<name>.static`) instead of compiling it. `--emit-static=keep` also
+    /// keeps each block, as `#` comments above its expansion.
+    #[arg(long = "emit-static", value_name = "MODE", num_args = 0..=1, require_equals = true, default_missing_value = "expand", value_parser = ["expand", "keep"])]
+    pub emit_static: Option<String>,
 
     /// Emit debug info: DWARF on Linux and macOS, CodeView and a `.pdb` on
     /// Windows.

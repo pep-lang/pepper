@@ -80,6 +80,7 @@ pub mod interpolation;
 pub mod properties;
 pub mod named_arguments;
 pub mod static_blocks;
+pub mod static_source;
 pub mod exports;
 
 use apply_extensions::apply_extensions;
@@ -375,12 +376,12 @@ fn walk_static_items(items: &mut [StaticItem], f: &mut impl FnMut(&mut Expressio
                 walk_static_items(then_items, f);
                 walk_static_items(else_items, f);
             }
-            StaticItem::EmitIf { condition, then_items, else_items } => {
+            StaticItem::EmitIf { condition, then_items, else_items, .. } => {
                 walk_expression(condition, f);
                 walk_static_items(then_items, f);
                 walk_static_items(else_items, f);
             }
-            StaticItem::Emit(statement) => walk_statement(statement, f),
+            StaticItem::Emit(statement, _) => walk_statement(statement, f),
             StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
         }
     }
@@ -529,12 +530,12 @@ fn visit_static_items<'e>(items: &'e [StaticItem], f: &mut impl FnMut(&'e Expres
                 visit_static_items(then_items, f);
                 visit_static_items(else_items, f);
             }
-            StaticItem::EmitIf { condition, then_items, else_items } => {
+            StaticItem::EmitIf { condition, then_items, else_items, .. } => {
                 visit_expression(condition, f);
                 visit_static_items(then_items, f);
                 visit_static_items(else_items, f);
             }
-            StaticItem::Emit(statement) => visit_statement(statement, f),
+            StaticItem::Emit(statement, _) => visit_statement(statement, f),
             StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
         }
     }

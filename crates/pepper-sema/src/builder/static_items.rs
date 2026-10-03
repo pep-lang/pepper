@@ -251,6 +251,8 @@ pub(super) fn placeholder(expr: &ast::Expression) -> Result<Option<Expression>, 
             method: name.clone(),
             args: call_arguments(arguments)?,
             loc: loc(*name_span),
+            span: expr.extent(),
+            argument_spans: arguments.iter().map(|a| a.extent()).collect(),
         }))));
     }
     if is_compile_time(expr, &names) {
@@ -283,6 +285,7 @@ fn build_block(block: &ast::StaticBlock, module_scope: bool) -> Result<Statement
         items,
         type_map: vec![],
         loc: loc(block.keyword_span),
+        span: block.span,
     })))
 }
 
@@ -325,7 +328,7 @@ fn items(statements: &[ast::Statement], names: &mut Names) -> Result<Vec<StaticI
                     StaticItem::Var { name: v.name.clone(), value: value.clone(), loc: loc(v.name_span) }
                 }
                 _ => {
-                    let item = StaticItem::Emit(emit(stmt, names)?);
+                    let item = StaticItem::Emit(emit(stmt, names)?, written(stmt));
                     names.declare(&v.name, true);
                     item
                 }
@@ -348,7 +351,7 @@ fn items(statements: &[ast::Statement], names: &mut Names) -> Result<Vec<StaticI
                 (names.loops, names.in_runtime_if) = (loops, in_runtime_if);
                 let (then_items, else_items) = (then_items?, else_items?);
                 if runtime {
-                    StaticItem::EmitIf { condition: emit_expression(&b.condition, names)?, then_items, else_items }
+                    StaticItem::EmitIf { condition: emit_expression(&b.condition, names)?, then_items, else_items, span: b.condition.extent() }
                 } else {
                     StaticItem::If { condition: b.condition.clone(), then_items, else_items, loc: loc(b.condition.span()) }
                 }
@@ -388,11 +391,19 @@ fn items(statements: &[ast::Statement], names: &mut Names) -> Result<Vec<StaticI
             ast::Statement::Static(s) => {
                 return Err(Diagnostic::error("a 'static' block cannot be nested in another").at(loc(s.keyword_span)));
             }
-            _ => StaticItem::Emit(emit(stmt, names)?),
+            _ => StaticItem::Emit(emit(stmt, names)?, written(stmt)),
         };
         out.push(item);
     }
     Ok(out)
+}
+
+/// The source `stmt` covers, for `--emit-static`.
+fn written(stmt: &ast::Statement) -> ast::Span {
+    match stmt {
+        ast::Statement::Expression(e) => e.extent(),
+        other => other.span(),
+    }
 }
 
 fn contains_is(expr: &ast::Expression) -> bool {

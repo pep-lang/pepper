@@ -556,6 +556,10 @@ pub struct StaticMember {
     pub args: Vec<Expression>,
     /// Location of the method name.
     pub loc: Loc,
+    /// The whole call as written, for `--emit-static`.
+    pub span: ast::Span,
+    /// Each argument as written, for `--emit-static`.
+    pub argument_spans: Vec<ast::Span>,
 }
 
 impl Expression {
@@ -933,6 +937,8 @@ pub struct StaticBlock {
     pub type_map: Vec<(String, TypeName)>,
     /// Location of the `static` keyword.
     pub loc: Loc,
+    /// The whole block, from `static` to its `}`.
+    pub span: ast::Span,
 }
 
 /// A module-scope `static { ... }` block.
@@ -958,12 +964,12 @@ impl StaticBlock {
                         items(then_items, statement, condition);
                         items(else_items, statement, condition);
                     }
-                    StaticItem::EmitIf { condition: test, then_items, else_items } => {
+                    StaticItem::EmitIf { condition: test, then_items, else_items, .. } => {
                         condition(test);
                         items(then_items, statement, condition);
                         items(else_items, statement, condition);
                     }
-                    StaticItem::Emit(emitted) => statement(emitted),
+                    StaticItem::Emit(emitted, _) => statement(emitted),
                     StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
                 }
             }
@@ -999,8 +1005,8 @@ pub enum StaticItem {
     /// `if` on a compile-time condition: only the branch taken is expanded.
     If { condition: ast::Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem>, loc: Loc },
     /// A runtime `if` (its condition uses a captured name), whose branches
-    /// may hold compile-time steps.
-    EmitIf { condition: Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem> },
+    /// may hold compile-time steps. `span` is the condition as written.
+    EmitIf { condition: Expression, then_items: Vec<StaticItem>, else_items: Vec<StaticItem>, span: ast::Span },
     /// A nested block, a scope for the names declared in it.
     Block(Vec<StaticItem>),
     /// `var name = value;` with a compile-time value.
@@ -1009,8 +1015,8 @@ pub enum StaticItem {
     Evaluate(ast::Expression),
     /// A statement emitted into the function once per pass, with its
     /// [`Expression::StaticValue`]s and [`Expression::StaticMember`]s
-    /// replaced.
-    Emit(Statement),
+    /// replaced, and the statement as written.
+    Emit(Statement, ast::Span),
 }
 
 // ── Declarations ─────────────────────────────────────────────────────────────

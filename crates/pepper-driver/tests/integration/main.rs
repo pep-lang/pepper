@@ -38,6 +38,7 @@ mod diagnostic_tests;
 mod digest_tests;
 mod docs_examples_tests;
 mod edge_case_tests;
+mod emit_static_tests;
 mod enum_tests;
 mod pattern_tests;
 mod extern_string_arg_tests;

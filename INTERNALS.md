@@ -30,7 +30,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-files` | Filesystem helpers shared by the driver and the LSP: import resolution (`imports.rs`), projects (`project.rs`: `pep.toml` parsed with the `toml` crate, and `Packages`, which resolves an import of a dependency against the `pep.toml` of the importing file's package to `.pep/deps/<host>/<repository>`), and runtime discovery (`runtime.rs`). No LLVM. |
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), `exports.rs` (the C entry points of `[Export]`ed functions, see 4.1), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
-| `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), the test `main` of `--test` (`test_main.rs`, see [2.1](#21-cli-options-cratespepper-driversrcoptionsrs)). Holds nearly all integration tests (`tests/*.rs`). |
+| `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), the test `main` of `--test` (`test_main.rs`, see [2.1](#21-cli-options-cratespepper-driversrcoptionsrs)), `--emit-static` (`emit_static.rs`, see [2.8](#28-static-blocks-and-reflection-builderstatic_itemsrs-passesstatic_blocksrs)). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
@@ -62,6 +62,8 @@ pep-build main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]   (p
   │  src/main.rs: Options::parse → pepper_driver::run            (driver/src/lib.rs)
   │
   ├─ --emit-ast ─→ run_emit_ast: parse_source(entry) → print AST   (entry file only)
+  ├─ --emit-static ─→ emit_static::run: compile_program, recording each static
+  │                  block's expansion as source → expanded copies  (§2.8)
   ▼
 compiler::compile → compile_sources                               (driver/src/compiler.rs)
   program::load_program                                           (sema/src/program.rs)
@@ -140,7 +142,7 @@ the runtime's own instances, so it is checked whole (`compiler::merge`).
 `source_files` (only the first is compiled; the rest are ignored), `-I`,
 `--import`, `-l`, `-L`, `-o`, `--build`, `-O<n>` (`effective_opt_level`, see
 [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
-`--emit-llvm`, `--emit-ast`, `--lib static|shared` (`library_kind`, see
+`--emit-llvm`, `--emit-ast`, `--emit-static[=keep]` (see [2.8](#28-static-blocks-and-reflection-builderstatic_itemsrs-passesstatic_blocksrs)), `--lib static|shared` (`library_kind`, see
 [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)),
 `--test` (a test build: `effective_build_options` defines `TEST`,
 `effective_forced_imports` adds the runtime's `testing` module, and
@@ -988,6 +990,30 @@ language side.
   entry back to the non-generic code that asked for it
   (`Expander::with_requests`), so an error inside `json`'s converters ends
   at the user's `json.encode(job)`.
+- **`--emit-static`** (`passes/static_source.rs`, driver `emit_static.rs`).
+  `static_source::record` runs the passes with a thread-local set, and
+  while it is set the `Expander` renders each block it expands as source
+  beside the statements it builds (`Rendered`): an emitted statement is its
+  source as written (`StaticItem::Emit` keeps its span, an
+  `ast::Expression::extent`, widened over parentheses by `balanced`), with
+  each placeholder `fill` replaces given an `Edit`: a literal for a
+  `StaticValue` (`Value::source`, inlined into an interpolated string's
+  text), and for a `StaticMember` the source of what it became
+  (`member_source`: `value.x`, `f(args)`, `value is Shape.Rect`, a `match`
+  reading a case's value), with its arguments rendered the same way; each
+  `x.Type` and type parameter outside strings and comments becomes the type
+  (`substitute_names`). A pass, a kept branch and a nested block are
+  `{ ... }`; a runtime `if` is written around its branches. Each finished
+  block is an `Expansion` (its span, its specialization's type arguments,
+  the lines); module-scope blocks are not recorded. The driver copies the
+  program's files under the entry's folder into `-o`, replacing a concrete
+  block with its expansion between `# static (...) expanded from` and
+  `# end static`; a generic free function stays and is followed by one
+  concrete override per specialization (`describe<Point>(value: Point)`,
+  its text with the type arguments substituted and its blocks expanded);
+  a block in other generic code stays, with its expansions above it as
+  comments. `pep-fmt`, beside the compiler or on `PATH`, formats the
+  copies.
 - **Cases.** A case of a reference or `[Value]` enum lists its `values` as
   members whose `field` is the payload field (`Circle.radius`), so `get`
   reads it; `case.matches(v)` emits a `__tag` comparison (a comparison with

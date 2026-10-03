@@ -164,11 +164,74 @@ These show what the block computes:
   stops there. The passes of an unrolled loop share the lines of its body,
   so a breakpoint on one stops only in the first pass, and stepping over
   the line runs the rest.
+- **`--emit-static`** writes the program's source with each block
+  replaced by what it emits (see the next section).
 - **`--emit-llvm`** writes the program's LLVM IR into the build directory
   (`.pep/build/<name>.ll`), where the function a block expanded in shows
   exactly what it emitted, one copy per specialization
   (`describe<Point>`). `--emit-ast` prints the program as parsed, before
   any block runs, so it does not show the expansion.
+
+### Seeing what a static block emits
+
+`pepper build main.pep --emit-static` writes a copy of the program with
+each `static` block replaced by the statements it emits, the way a C
+compiler's `-E` shows the preprocessed source. Nothing is compiled; the
+copy goes into `main.static/` (or the folder `-o` names) and builds into
+the same program. For the `describe` example at the top of this page, the
+copy keeps `describe<T>` as written and adds what it is for `Point`:
+
+```pepper
+# 'describe' specialized for T = Point, with its static blocks expanded
+describe<Point>(value: Point): String {
+    var out = StringBuilder();
+    # static (out, value) expanded from reflection-basics.pep:11:5 for T = Point
+    {
+        out.append("Point");
+        out.append("(");
+        {
+            out.append($"x = {value.x}");
+            {
+                out.append(", ");
+            }
+        }
+        {
+            out.append($"y = {value.y}");
+            {
+                out.append(", ");
+            }
+        }
+        {
+            out.append($"label = {value.label}");
+        }
+    }
+    # end static
+    out.append(")");
+    return out.to_string();
+}
+```
+
+- Each pass of an unrolled `for` or `while` is a block of its own, one
+  after another; a compile-time `if` leaves only the branch it took; the
+  compile-time `var`s and steps are gone.
+- Compile-time values are written as literals: `field.name` becomes
+  `"x"` (inside an interpolated string, its text), `field.Type` the type,
+  `field.get(value)` `value.x`, `case.matches(v)` `v is Shape.Circle`, and
+  `function.call()` a call by name. A case's value, `item.get(v)`, becomes
+  a `match` that reads it.
+- Everything else in the file is copied byte for byte, comments included.
+  `--emit-static=keep` also keeps each block as `#` comments above its
+  expansion.
+- A block in a generic function expands differently for each type, so the
+  copy adds a [concrete override](generics.md#overriding-a-generic-function-for-one-type)
+  per specialization the program uses, as above. A block in a method of a
+  generic struct, or in a generic method, stays as written, with each
+  specialization's expansion above it as comments.
+- An error in the emitted code shows when the copy is built, at the line
+  of the copy that has it.
+
+[pep-build](../tools/pep-build.md#--emit-static---emit-statickeep) lists
+the details.
 
 ## The `reflect` functions
 
@@ -285,6 +348,5 @@ methods, constructors, parameters and module-scope variables.
 - Calling functions other than the `reflect` functions at compile time.
 - Reflecting methods and constructors (`reflect.methods<T>()`).
 - Limiting where an attribute may be used (`[AttributeTargets(...)]`).
-- Showing the code a block expands to, and tracing the blocks the compiler
-  runs.
+- Tracing the blocks the compiler runs.
 - Type information at run time.
