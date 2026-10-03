@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
+            window.path_to_searchindex_js = "../searchindex-85679aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c779880d.js"></script>
+        <script src="../toc-57b6db41.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,8 +184,8 @@
                         <!-- Generated from runtime/process/find.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="finding-programs"><a class="header" href="#finding-programs">Finding programs</a></h1>
 <p>Finding programs: <code>find_executable</code> looks a program up on the <code>PATH</code>, as
-a shell does before running it, and <code>is_executable</code> tells whether a file
-can be run.</p>
+a shell does before running it, <code>find_companion</code> looks beside the running
+program first, and <code>is_executable</code> tells whether a file can be run.</p>
 <p>Source: <code>runtime/process/find.pep</code></p>
 <h2 id="find_executable"><a class="header" href="#find_executable">find_executable</a></h2>
 <pre><code class="language-pepper">find_executable(name: String): io.Path?
@@ -225,6 +225,30 @@ macOS, a file with an execute permission bit set; on Windows, any file.</p>
 <ul>
 <li>true when <code>path</code> names a file that may be run</li>
 </ul>
+<h2 id="find_companion"><a class="header" href="#find_companion">find_companion</a></h2>
+<pre><code class="language-pepper">find_companion(name: String): io.Path?
+</code></pre>
+<p>Returns the program <code>name</code> installed beside the running one, else the
+one <code>find_executable</code> finds on the <code>PATH</code>: how a tool finds the other
+tools of its suite, as <code>pep-test</code> finds <code>pep-build</code>. On Windows, <code>.exe</code>
+is added to <code>name</code> when looking beside the running program.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the program’s file name, such as <code>"pep-build"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the program’s path, or none when neither place holds it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    var compiler = process.find_companion("pep-build");
+    print(compiler.is_value() ? compiler.value().to_string() : "pep-build is not installed");
+    return 0;
+}
+</code></pre>
 
                     </main>
 

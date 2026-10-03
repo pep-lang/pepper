@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d18c1299.js";
+            window.path_to_searchindex_js = "searchindex-85679aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c779880d.js"></script>
+        <script src="toc-57b6db41.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -236,10 +236,12 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="language/text.html">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="language/testing.html">Unit tests</a> are <code>[Test]</code> functions that
+<code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="tools/pep-fmt.html">pep-fmt</a>, the code formatter,
 <a href="tools/pep-profile.html">pep-profile</a>, which profiles a program and draws a
-flame graph, and <a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every
+flame graph, <a href="tools/pep-test.html">pep-test</a>, which runs unit tests, and
+<a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every
 tool, are themselves written in Pepper. A <a href="tools/projects.html"><code>pep.toml</code></a>
 project builds with <code>pepper build</code> alone and imports the packages it depends
 on by name, which <a href="tools/pep-package.html"><code>pepper package</code></a> fetches from
@@ -304,8 +306,8 @@ program.</li>
 <a href="language/naming.html">naming conventions</a>. Read it in order, or jump to the
 topic you need.</li>
 <li><strong>Tools.</strong> <a href="tools/pepper.html">The pepper command</a>,
-<a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a> and
-<a href="tools/debugging.html">debugging</a>.</li>
+<a href="tools/pep-fmt.html">pep-fmt</a>, <a href="tools/pep-profile.html">pep-profile</a>,
+<a href="tools/pep-test.html">pep-test</a> and <a href="tools/debugging.html">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime’s own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
+            window.path_to_searchindex_js = "../searchindex-85679aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c779880d.js"></script>
+        <script src="../toc-57b6db41.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -204,6 +204,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--test</code></td><td>Build the entry file’s <code>[Test]</code> functions into a test program</td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
@@ -304,6 +305,23 @@ header beside it that declares the program’s <code>[Export]</code>ed functions
 macOS, <code>name.dll</code> on Windows.</li>
 </ul>
 <p>See <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
+<p>Builds the entry file’s tests into a test program, which
+<a href="pep-test.html">pep-test</a> runs. A build without it leaves every <code>[Test]</code>
+function out. With it:</p>
+<ul>
+<li>the <code>[Test]</code> functions are kept, and the build option <code>TEST</code> is defined
+(as by <code>-D TEST</code>), for code only tests use (<code>[BuildOption("TEST")]</code>);</li>
+<li>the runtime’s <code>testing</code> module is loaded into every file (as by
+<code>--import testing</code>);</li>
+<li>the entry file’s <code>main</code> is replaced by one that answers <code>--list</code> (one
+line per test: name, <code>file:line</code>, <code>returns</code> or <code>panics</code>, and the text a
+<code>[ShouldPanic]</code> panic must contain, separated by tabs) and
+<code>--run NAME [--timeout SECONDS]</code> (run that test; a test still running
+after the timeout ends the program with exit status 124).</li>
+</ul>
+<p>Only the entry file’s <code>[Test]</code> functions become tests. It cannot be
+combined with <code>--lib</code>. See <a href="../language/testing.html">Unit tests</a>.</p>
 <h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
 <p>The folder for intermediate files: the program’s objects and, with
 <code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or

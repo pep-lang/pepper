@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d18c1299.js";
+            window.path_to_searchindex_js = "../searchindex-85679aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c779880d.js"></script>
+        <script src="../toc-57b6db41.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,6 +195,8 @@ the command line with <code>-D</code>, as in C compilers, and the code tests the
 <li>Repeat <code>-D</code> for more options. When two name the same option, the later
 one wins.</li>
 </ul>
+<p><code>pep-build --test</code> defines <code>TEST</code>, which keeps the <code>[Test]</code> functions and
+can mark code only tests use (see <a href="testing.html#test-builds">Unit tests</a>).</p>
 <p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'

@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d18c1299.js";
+            window.path_to_searchindex_js = "searchindex-85679aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-c779880d.js"></script>
+        <script src="toc-57b6db41.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -234,10 +234,12 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). That is enough to write real
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
+<code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
-flame graph, and <a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every
+flame graph, <a href="#testing-with-pep-test">pep-test</a>, which runs unit tests, and
+<a href="#the-pepper-command"><code>pepper</code></a>, the entry point that runs every
 tool, are themselves written in Pepper. A <a href="#projects-peptoml"><code>pep.toml</code></a>
 project builds with <code>pepper build</code> alone and imports the packages it depends
 on by name, which <a href="#the-package-manager-pep-package"><code>pepper package</code></a> fetches from
@@ -302,8 +304,8 @@ program.</li>
 <a href="#naming-conventions-1">naming conventions</a>. Read it in order, or jump to the
 topic you need.</li>
 <li><strong>Tools.</strong> <a href="#the-pepper-command">The pepper command</a>,
-<a href="#formatting-with-pep-fmt">pep-fmt</a>, <a href="#profiling-with-pep-profile">pep-profile</a> and
-<a href="#debugging">debugging</a>.</li>
+<a href="#formatting-with-pep-fmt">pep-fmt</a>, <a href="#profiling-with-pep-profile">pep-profile</a>,
+<a href="#testing-with-pep-test">pep-test</a> and <a href="#debugging">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime’s own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>
@@ -15403,6 +15405,140 @@ ends the program, so guard it:</p>
 <p>See <a href="#debugging">Debugging</a> for running a program under gdb,
 lldb or Visual Studio.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="unit-tests"><a class="header" href="#unit-tests">Unit tests</a></h1>
+<p>A unit test is a function marked <code>[Test]</code>: it takes no parameters, returns
+nothing, and passes when it returns. It checks what the code under test
+does with <code>expect_equal</code> and the other <code>expect_*</code> functions, which are in
+the prelude, so a test file needs no import:</p>
+<pre><code class="language-pepper"># Counts the words in `text`: the runs of characters between spaces.
+word_count(text: String): ulong {
+    ulong count = 0;
+    for (var word in text.split(" ")) {
+        if (!word.is_empty) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+[Test]
+counts_the_words() {
+    expect_equal(word_count("salt and pepper"), 3);
+    expect_equal(word_count("  spaced   out "), 2);
+}
+
+[Test]
+an_empty_string_has_no_words() {
+    expect_equal(word_count(""), 0);
+    expect_true(word_count(" ") == 0);
+}
+
+[Test]
+[ShouldPanic("out of bounds")]
+reading_past_the_last_word_panics() {
+    var words = "salt pepper".split(" ");
+    var third = words[2];
+}
+
+# A normal build leaves the tests out and runs this.
+main(): int {
+    print(word_count("salt and pepper"));
+    return 0;
+}
+</code></pre>
+<p><code>pepper test</code> (the <a href="#testing-with-pep-test"><code>pep-test</code></a> tool) builds the
+tests and runs them:</p>
+<pre><code class="language-text">$ pepper test words_test.pep
+running 3 tests
+test counts_the_words ... ok
+test an_empty_string_has_no_words ... ok
+test reading_past_the_last_word_panics ... ok
+3 passed, 0 failed
+</code></pre>
+<p>Given a folder, or nothing (the current folder), it runs every test in the
+<code>.pep</code> files under it. Its exit status is 0 only when every test passes.</p>
+<h2 id="checks"><a class="header" href="#checks">Checks</a></h2>
+<p>Each check panics when it fails, as <code>assert</code> does, and reports what it
+compared at the line of the call, so a failing test says where and why:</p>
+<pre><code class="language-text">words_test.pep:14:5: panic: expect_equal failed
+  actual:   2
+  expected: 3
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Check</th><th>Fails when</th></tr>
+</thead>
+<tbody>
+<tr><td><code>expect_equal(actual, expected)</code></td><td><code>actual == expected</code> is false; prints both</td></tr>
+<tr><td><code>expect_not_equal(actual, unexpected)</code></td><td>the two are equal; prints the value</td></tr>
+<tr><td><code>expect_true(condition)</code></td><td><code>condition</code> is false</td></tr>
+<tr><td><code>expect_false(condition)</code></td><td><code>condition</code> is true</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>expect_equal</code> and <code>expect_not_equal</code> take two values of one type that has
+<code>==</code> and a text form (see <code>to_string</code> in <a href="#string-interpolation">String
+interpolation</a>). <code>assert</code> and <code>panic</code> fail a test too:
+any panic does.</p>
+<h2 id="tests-that-should-panic"><a class="header" href="#tests-that-should-panic">Tests that should panic</a></h2>
+<p><code>[ShouldPanic]</code> turns a test around: it passes only when it panics. With a
+message, <code>[ShouldPanic("out of bounds")]</code>, the panic’s message must also
+contain that text, so a test does not pass on some other panic. A
+<code>[ShouldPanic]</code> test that returns fails.</p>
+<h2 id="how-tests-run"><a class="header" href="#how-tests-run">How tests run</a></h2>
+<p>Each test runs in a child process of its own, so a panic, a crash or a
+test that never ends fails only that test, and the others carry on. Tests
+run in parallel, one per logical CPU (<code>--jobs 1</code> runs them one at a time,
+in order), and a test still running after 60 seconds fails (<code>--timeout</code>
+changes the limit). Tests share no state: each process starts fresh.</p>
+<p>There is no setup or teardown: a fixture is a plain function that a test
+calls, and what it makes is released when the test’s scope ends, as
+everywhere else.</p>
+<h2 id="where-tests-live"><a class="header" href="#where-tests-live">Where tests live</a></h2>
+<p>A test can sit beside the code it tests, where it can call the file’s
+private functions, as above. Or tests can live in their own files, such as
+a module’s <code>tests/</code> folder, where they import the module and see its public
+API; <code>pepper test -I &lt;dir&gt;</code> adds the folder that holds the module to the
+import path:</p>
+<pre><code class="language-text">geometry/
+  module.pep
+  shapes.pep
+  tests/
+    area_test.pep      # import geometry; [Test] functions
+</code></pre>
+<pre><code class="language-bash">pepper test -I . geometry/tests
+</code></pre>
+<p><code>pep-test</code> looks at each <code>.pep</code> file under the folders it is given and
+builds those with a line that starts with <code>[Test]</code>: each such file is the
+entry file of one test program, and its own <code>[Test]</code> functions are the
+program’s tests. Folders whose names start with <code>.</code> are skipped.</p>
+<h2 id="test-builds"><a class="header" href="#test-builds">Test builds</a></h2>
+<p>A normal build leaves <code>[Test]</code> functions out, so they cost nothing, and a
+file of tests can keep a <code>main</code> of its own. <code>pep-build --test</code>, which
+<code>pep-test</code> uses, builds the test program instead:</p>
+<ul>
+<li>it keeps the <code>[Test]</code> functions and defines the
+<a href="#build-options">build option</a> <code>TEST</code>, so code only the tests use
+(a fixture that would be unused otherwise) can be marked
+<code>[BuildOption("TEST")]</code>;</li>
+<li>it replaces the entry file’s <code>main</code> with one that answers <code>--list</code> (each
+test, one per line) and <code>--run NAME</code> (run one test), which is how
+<code>pep-test</code> drives it.</li>
+</ul>
+<p>A <code>[Test]</code> function that takes parameters, returns a value or is generic is
+an error, as are <code>[Test]</code> on a method and <code>[ShouldPanic]</code> without <code>[Test]</code>:</p>
+<pre><code class="language-text">main.pep:2:8: error: test 'checks' must take no parameters
+    2 | checks(x: int) {}
+      |        ^
+</code></pre>
+<p>Since <code>[Test]</code> bodies are left out of a normal build, the language server
+does not check them unless it analyzes with the build option <code>TEST</code>: add
+<code>"TEST"</code> to the <code>pepper.buildOptions</code> setting (see
+<a href="#the-language-server-pep-lsp">pep-lsp</a>).</p>
+<p>Tests that compare a program’s printed output with an expected file are
+not supported yet.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="calling-c"><a class="header" href="#calling-c">Calling C</a></h1>
 <p>Pepper programs can call functions written in C: the C standard library, your
 operating system’s API, or any other library with a C interface. You declare
@@ -16544,6 +16680,8 @@ the command line with <code>-D</code>, as in C compilers, and the code tests the
 <li>Repeat <code>-D</code> for more options. When two name the same option, the later
 one wins.</li>
 </ul>
+<p><code>pep-build --test</code> defines <code>TEST</code>, which keeps the <code>[Test]</code> functions and
+can mark code only tests use (see <a href="#test-builds">Unit tests</a>).</p>
 <p>A name is a letter or <code>_</code>, then letters, digits and <code>_</code>. Any other name is
 an error:</p>
 <pre><code class="language-text">error: invalid build option name '2FAST' in '-D 2FAST'; a name is a letter or '_' followed by letters, digits and '_'
@@ -17589,14 +17727,15 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 <tr><td><code>pepper package</code></td><td><code>pep-package</code></td><td>Adds, removes, updates and fetches a project’s dependencies (<a href="#the-package-manager-pep-package">The package manager: pep-package</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="#formatting-with-pep-fmt">Formatting with pep-fmt</a>)</td></tr>
 <tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="#profiling-with-pep-profile">Profiling with pep-profile</a>)</td></tr>
+<tr><td><code>pepper test</code></td><td><code>pep-test</code></td><td>Builds and runs the <code>[Test]</code> functions (<a href="#testing-with-pep-test">Testing with pep-test</a>)</td></tr>
 <tr><td><code>pepper lsp</code></td><td><code>pep-lsp</code></td><td>Runs the language server, which editors start (<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>)</td></tr>
 <tr><td><code>pepper doc</code></td><td><code>pep-doc</code></td><td>Generates the library reference and builds this book (<a href="#the-documentation-builder-pep-doc">The documentation builder: pep-doc</a>)</td></tr>
 </tbody>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code> and <code>pepper</code> are
-Pepper programs, built with <code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-test</code> and
+<code>pepper</code> are Pepper programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>
@@ -17659,6 +17798,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
+<tr><td><code>--test</code></td><td>Build the entry file’s <code>[Test]</code> functions into a test program</td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
@@ -17759,6 +17899,23 @@ header beside it that declares the program’s <code>[Export]</code>ed functions
 macOS, <code>name.dll</code> on Windows.</li>
 </ul>
 <p>See <a href="#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
+<p>Builds the entry file’s tests into a test program, which
+<a href="#testing-with-pep-test">pep-test</a> runs. A build without it leaves every <code>[Test]</code>
+function out. With it:</p>
+<ul>
+<li>the <code>[Test]</code> functions are kept, and the build option <code>TEST</code> is defined
+(as by <code>-D TEST</code>), for code only tests use (<code>[BuildOption("TEST")]</code>);</li>
+<li>the runtime’s <code>testing</code> module is loaded into every file (as by
+<code>--import testing</code>);</li>
+<li>the entry file’s <code>main</code> is replaced by one that answers <code>--list</code> (one
+line per test: name, <code>file:line</code>, <code>returns</code> or <code>panics</code>, and the text a
+<code>[ShouldPanic]</code> panic must contain, separated by tabs) and
+<code>--run NAME [--timeout SECONDS]</code> (run that test; a test still running
+after the timeout ends the program with exit status 124).</li>
+</ul>
+<p>Only the entry file’s <code>[Test]</code> functions become tests. It cannot be
+combined with <code>--lib</code>. See <a href="#unit-tests">Unit tests</a>.</p>
 <h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
 <p>The folder for intermediate files: the program’s objects and, with
 <code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or
@@ -18528,6 +18685,89 @@ nothing else installed. <code>--renderer inferno</code> draws it with
 Gregg’s <a href="https://github.com/brendangregg/FlameGraph"><code>flamegraph.pl</code></a>, each
 found on the <code>PATH</code>, for their extra features such as search.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-with-pep-test"><a class="header" href="#testing-with-pep-test">Testing with pep-test</a></h1>
+<p><code>pep-test</code> builds the <code>[Test]</code> functions of Pepper files and runs them,
+each in a child process of its own, reporting which pass. Writing tests is
+covered in <a href="#unit-tests">Unit tests</a>.</p>
+<pre><code class="language-bash">pepper test                          # every test under the current folder
+pepper test src/words_test.pep       # the tests of one file
+pepper test -f words src             # only tests whose name contains "words"
+pepper test --list src               # list them without running them
+pepper test -I . geometry/tests      # tests that import the module geometry
+</code></pre>
+<pre><code class="language-text">running 3 tests
+test counts_the_words ... ok
+test an_empty_string_has_no_words ... ok
+test reading_past_the_last_word_panics ... ok
+3 passed, 0 failed
+</code></pre>
+<p><code>pep-test</code> is written in Pepper (<code>tools/pep-test</code>). Build it with the
+compiler and put it next to <code>pepper</code> and <code>pep-build</code>, so that <code>pepper test</code>
+finds it and it finds the compiler:</p>
+<pre><code class="language-bash">target/release/pep-build tools/pep-test/main.pep -o target/release/pep-test
+</code></pre>
+<h2 id="usage-and-options-2"><a class="header" href="#usage-and-options-2">Usage and options</a></h2>
+<pre><code class="language-text">pep-test [options] [path]...
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>What it does</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>&lt;path&gt;</code></td><td>A <code>.pep</code> file to test, or a folder to search for files holding <code>[Test]</code> functions; repeatable</td><td>the current folder</td></tr>
+<tr><td><code>-f &lt;text&gt;</code>, <code>--filter &lt;text&gt;</code></td><td>Run only the tests whose name contains the text; repeated, any of them</td><td>every test</td></tr>
+<tr><td><code>-l</code>, <code>--list</code></td><td>List the tests instead of running them</td><td></td></tr>
+<tr><td><code>-j &lt;count&gt;</code>, <code>--jobs &lt;count&gt;</code></td><td>How many tests run at once</td><td>one per logical CPU</td></tr>
+<tr><td><code>-t &lt;seconds&gt;</code>, <code>--timeout &lt;seconds&gt;</code></td><td>Fail a test still running after this long; <code>0</code> for no limit</td><td>60</td></tr>
+<tr><td><code>-I &lt;dir&gt;</code>, <code>--import-path &lt;dir&gt;</code></td><td>A folder <code>pep-build</code> searches for imports; repeatable</td><td></td></tr>
+<tr><td><code>-D &lt;option&gt;</code>, <code>--define &lt;option&gt;</code></td><td>A <a href="#build-options">build option</a> for <code>pep-build</code>, <code>NAME</code> or <code>NAME=VALUE</code>; repeatable</td><td></td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage and these options</td><td></td></tr>
+<tr><td><code>-V</code>, <code>--version</code></td><td>Prints <code>pep-test</code> and its version</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p>The exit status is 0 when every file builds and every test passes, 1 when
+a test fails or a file does not build, and 2 for a usage error.</p>
+<h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
+<ol>
+<li><strong>Finds the files.</strong> A file named on the command line is tested as it
+is. In a folder, and the folders below it (except those whose names
+start with <code>.</code>), it takes each <code>.pep</code> file with a line that starts with
+<code>[Test]</code>.</li>
+<li><strong>Builds a test program for each,</strong> with <code>pep-build --test</code> (found next
+to <code>pep-test</code>, else on the <code>PATH</code>), in parallel. A file that does not
+build is reported with the compiler’s errors, and the other files’
+tests still run.</li>
+<li><strong>Lists each program’s tests</strong> with <code>--list</code> and keeps those that match
+<code>--filter</code>. With <code>--list</code> it prints them and stops: the test’s name, or
+<code>file::name</code> when the tests come from more than one file.</li>
+<li><strong>Runs each test</strong> as <code>program --run NAME --timeout SECONDS</code>, up to
+<code>--jobs</code> at once, and prints <code>test NAME ... ok</code> or <code>... FAILED</code> as each
+ends (in order with <code>--jobs 1</code>). A test passes when its process exits
+with 0; a <code>[ShouldPanic]</code> test passes when its process panics with a
+message that contains the attribute’s text.</li>
+<li><strong>Reports the failures,</strong> each with what the test printed (the panic’s
+message and location) and why it failed, then a summary:
+<code>2 passed, 1 failed</code>, with the number of tests <code>--filter</code> left out and of
+files that did not build when there are any.</li>
+</ol>
+<p>The test programs are built in a temporary folder that is removed at the
+end. A test runs in the current folder, with <code>PEPPER_BACKTRACE=0</code> unless
+<code>PEPPER_BACKTRACE</code> is set, so a panic prints its message without a
+backtrace.</p>
+<h2 id="the-test-program"><a class="header" href="#the-test-program">The test program</a></h2>
+<p><code>pep-build --test</code> builds a file’s test program (see <a href="#--test">pep-build</a>),
+which <code>pep-test</code> runs with one of two requests:</p>
+<ul>
+<li><code>--list</code> prints a line per test, its fields separated by tabs: the name,
+<code>file:line</code>, <code>returns</code> or <code>panics</code> (a <code>[ShouldPanic]</code> test), and the text
+the panic must contain.</li>
+<li><code>--run NAME [--timeout SECONDS]</code> runs one test and exits with 0 when it
+returns. A panic aborts the program; a test that runs past the timeout
+ends it with exit status 124.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-language-server-pep-lsp"><a class="header" href="#the-language-server-pep-lsp">The language server: pep-lsp</a></h1>
 <p><code>pep-lsp</code> is Pepper’s language server. An editor starts it and talks to it
 over standard input and output with the
@@ -18845,6 +19085,7 @@ of the page to read the reference for another release.</p>
 <li><a href="#optional">Optional</a>: A value of type <code>T</code> that may be absent: either Value, holding a <code>T</code>, or Empty, holding nothing, like Rust’s <code>Option&lt;T&gt;</code> and Swift’s <code>Optional</code>.</li>
 <li><a href="#copying">Copying</a>: Deep copies: <code>copy(value)</code> makes a copy that shares no object that is not thread-safe with the original, so it can be handed to another thread; <code>Copyable&lt;T&gt;</code> lets a type say how it is copied.</li>
 <li><a href="#uri">URI</a>: URI references (RFC 3986): parse any URI, such as <code>https://example.com/a?b#c</code>, <code>mailto:someone@example.com</code> or <code>/items?page=2</code>, into its parts.</li>
+<li><a href="#test-checks">Test checks</a>: Checks for tests: <code>expect_equal</code>, <code>expect_not_equal</code>, <code>expect_true</code> and <code>expect_false</code>, which every program can call without an import.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/internals.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
@@ -19108,13 +19349,31 @@ as <code>move</code> does.</p>
 </code></pre>
 <p>Marks a function-typed parameter that is called while a lock is held, so
 it may use the locked value.</p>
+<h2 id="test"><a class="header" href="#test">Test</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Test
+</code></pre>
+<p>Marks a function as a unit test: <code>pep-test</code> (<code>pepper test</code>) builds it
+into a test program and runs it in a child process of its own. The
+function takes no parameters and returns nothing; it passes when it
+returns and fails when it panics (see <code>expect_equal</code>). A build without
+<code>--test</code> leaves <code>[Test]</code> functions out.</p>
+<h2 id="shouldpanic"><a class="header" href="#shouldpanic">ShouldPanic</a></h2>
+<pre><code class="language-pepper">[Attribute] struct ShouldPanic
+</code></pre>
+<p>Marks a <code>[Test]</code> function as one that passes only when it panics:
+<code>[ShouldPanic]</code> takes any panic, and <code>[ShouldPanic("index out of range")]</code> only a panic whose message contains that text.</p>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
+<pre><code class="language-pepper">const message: String = ""
+</code></pre>
+<p>Text the panic’s message must contain; empty for any panic.</p>
 <h2 id="export"><a class="header" href="#export">Export</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Export
 </code></pre>
 <p>Makes a free function callable from C, in a library built with
 <code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
 <code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="name-2"><a class="header" href="#name-2">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -19127,7 +19386,7 @@ otherwise.</p>
 editor: the compiler ignores the declaration, whose functions end in <code>;</code>.
 <code>[__BuiltIn("reflect.name")]</code> names the built-in when it is not the
 declaration’s own name. Only the runtime may use it.</p>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -19384,7 +19643,7 @@ which pass printed it. See
 </code></pre>
 <p>A field or property, from <code>properties</code> or <code>fields</code>. A compile-time value:
 no program can name its type.</p>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
 <pre><code class="language-pepper">const name: String
 </code></pre>
@@ -25527,7 +25786,7 @@ for (var i in 1..&gt;4) {
 var r = 0..10;
 assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="start"><a class="header" href="#start">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -28279,8 +28538,8 @@ holding its value or <code>Err</code> holding its error, like Rust’s <code>Res
 <pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 var n = r.error().message.length;   # 4
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
-<h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
+<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h4 id="message-2"><a class="header" href="#message-2">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
@@ -28816,7 +29075,7 @@ assert(uri.path == "/a%20b", "the path keeps its escapes");
 assert(Uri.decode(uri.path).value() == "/a b", "decoded");
 assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -28932,6 +29191,91 @@ scheme is lowercased.</p>
 <ul>
 <li>the URI reference as a String</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/expect.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="test-checks"><a class="header" href="#test-checks">Test checks</a></h1>
+<p>Checks for tests: <code>expect_equal</code>, <code>expect_not_equal</code>, <code>expect_true</code> and
+<code>expect_false</code>, which every program can call without an import. Each
+panics when its check fails, as <code>assert</code> does, but reports the values it
+compared, at the line of the call:</p>
+<pre><code>math_test.pep:12:5: panic: expect_equal failed
+  actual:   3
+  expected: 4
+</code></pre>
+<p>A <code>[Test]</code> function fails on that panic (see the testing chapter).</p>
+<p>Source: <code>runtime/expect.pep</code></p>
+<h2 id="expect_equal"><a class="header" href="#expect_equal">expect_equal</a></h2>
+<pre><code class="language-pepper">expect_equal&lt;T&gt;(actual: T, expected: T)
+</code></pre>
+<p>Panics unless <code>actual == expected</code>, reporting both values.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the values; it needs <code>==</code> and a text form (see <code>to_string</code>)</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>actual</code> — the value the code under test produced</li>
+<li><code>expected</code> — the value it should have produced</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the values differ: prints the location of the call and both values, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var numbers = Array&lt;int&gt;();
+numbers.append(1);
+expect_equal(numbers.count, 1);
+</code></pre>
+<h2 id="expect_not_equal"><a class="header" href="#expect_not_equal">expect_not_equal</a></h2>
+<pre><code class="language-pepper">expect_not_equal&lt;T&gt;(actual: T, unexpected: T)
+</code></pre>
+<p>Panics if <code>actual == unexpected</code>, reporting the value.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the values; it needs <code>==</code> and a text form (see <code>to_string</code>)</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>actual</code> — the value the code under test produced</li>
+<li><code>unexpected</code> — the value it must not be</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the values are equal: prints the location of the call and the value, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">expect_not_equal("a".repeat(2), "a");
+</code></pre>
+<h2 id="expect_true"><a class="header" href="#expect_true">expect_true</a></h2>
+<pre><code class="language-pepper">expect_true(condition: bool)
+</code></pre>
+<p>Panics unless <code>condition</code> holds. Unlike <code>assert</code>, it needs no message:
+the location names the check.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must hold</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is false: prints the location of the call, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">expect_true("pepper".starts_with("pep"));
+</code></pre>
+<h2 id="expect_false"><a class="header" href="#expect_false">expect_false</a></h2>
+<pre><code class="language-pepper">expect_false(condition: bool)
+</code></pre>
+<p>Panics if <code>condition</code> holds.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>condition</code> — the condition that must not hold</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>condition</code> is true: prints the location of the call, and aborts (see <code>panic</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">expect_false("pepper".is_empty);
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-io-module"><a class="header" href="#the-io-module">The io module</a></h1>
 <p>Files, directories, paths, and sockets, modeled on Rust’s <code>std::fs</code>,
@@ -29207,13 +29551,13 @@ if (r.is_err()) {
     }
 }
 </code></pre>
-<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
+<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
 <pre><code class="language-pepper">ErrorCode code
 </code></pre>
 <p>The raw platform error code: an <code>errno</code> value on POSIX, a
 <code>GetLastError()</code> code on Windows; 0 means no error.</p>
-<h4 id="message-2"><a class="header" href="#message-2">message</a></h4>
+<h4 id="message-3"><a class="header" href="#message-3">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>A human-readable description: the platform’s text for <code>code</code>
@@ -30428,7 +30772,7 @@ if (m.is_ok() &amp;&amp; m.value().is_file) {
     var bytes = m.value().size;
 }
 </code></pre>
-<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
+<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
 <h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
@@ -31146,7 +31490,7 @@ while (i &lt; list.count) {
     i = i + 1;
 }
 </code></pre>
-<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
+<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
@@ -32940,7 +33284,7 @@ out.print("n = ");
 out.print_line(3);
 assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
-<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
+<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
 <h4 id="bytes-2"><a class="header" href="#bytes-2">bytes</a></h4>
 <pre><code class="language-pepper">var bytes: u8[]
 </code></pre>
@@ -33832,7 +34176,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
     totals.requests.fetch_add(1);
 }   # unlocked here
 </code></pre>
-<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
+<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
 <h4 id="locked-1"><a class="header" href="#locked-1">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -34557,8 +34901,8 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
-<h4 id="message-3"><a class="header" href="#message-3">message</a></h4>
+<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
@@ -35288,7 +35632,8 @@ and its <code>ExitStatus</code></li>
 <li><a href="#the-running-process-1">The running process</a>: <code>id()</code> and
 <code>executable_path()</code></li>
 <li><a href="#finding-programs">Finding programs</a>: <code>find_executable()</code> looks a
-program up on the <code>PATH</code>, and <code>is_executable()</code> checks a file</li>
+program up on the <code>PATH</code>, <code>find_companion()</code> looks beside the running
+program first, and <code>is_executable()</code> checks a file</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import process;
@@ -35336,7 +35681,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -35834,8 +36179,8 @@ process, every thread included. The same as <code>io.Directory.set_current</code
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/process/find.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="finding-programs"><a class="header" href="#finding-programs">Finding programs</a></h1>
 <p>Finding programs: <code>find_executable</code> looks a program up on the <code>PATH</code>, as
-a shell does before running it, and <code>is_executable</code> tells whether a file
-can be run.</p>
+a shell does before running it, <code>find_companion</code> looks beside the running
+program first, and <code>is_executable</code> tells whether a file can be run.</p>
 <p>Source: <code>runtime/process/find.pep</code></p>
 <h2 id="find_executable"><a class="header" href="#find_executable">find_executable</a></h2>
 <pre><code class="language-pepper">find_executable(name: String): io.Path?
@@ -35875,6 +36220,30 @@ macOS, a file with an execute permission bit set; on Windows, any file.</p>
 <ul>
 <li>true when <code>path</code> names a file that may be run</li>
 </ul>
+<h2 id="find_companion"><a class="header" href="#find_companion">find_companion</a></h2>
+<pre><code class="language-pepper">find_companion(name: String): io.Path?
+</code></pre>
+<p>Returns the program <code>name</code> installed beside the running one, else the
+one <code>find_executable</code> finds on the <code>PATH</code>: how a tool finds the other
+tools of its suite, as <code>pep-test</code> finds <code>pep-build</code>. On Windows, <code>.exe</code>
+is added to <code>name</code> when looking beside the running program.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the program’s file name, such as <code>"pep-build"</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the program’s path, or none when neither place holds it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    var compiler = process.find_companion("pep-build");
+    print(compiler.is_value() ? compiler.value().to_string() : "pep-build is not installed");
+    return 0;
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/os/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-os-module"><a class="header" href="#the-os-module">The os module</a></h1>
 <p>What the operating system provides beyond the running process:
@@ -36953,7 +37322,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
 <h4 id="address-1"><a class="header" href="#address-1">address</a></h4>
 <pre><code class="language-pepper">var address: ulong
 </code></pre>
@@ -38289,8 +38658,8 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
-<h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h4 id="message-5"><a class="header" href="#message-5">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
 <p>What is wrong, worded like a compiler error (<code>expected ':'</code>).</p>
@@ -38409,7 +38778,7 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
@@ -38714,7 +39083,7 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
@@ -39261,7 +39630,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
+<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -40342,7 +40711,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
+<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -40565,7 +40934,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
+<h3 id="fields-28"><a class="header" href="#fields-28">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -41284,6 +41653,88 @@ Closing a closed stream does nothing.</p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing the socket fails</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/testing/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="the-testing-module"><a class="header" href="#the-testing-module">The testing module</a></h1>
+<p>The test program <code>pep-build --test</code> builds: a <code>main</code> that lists the
+entry file’s <code>[Test]</code> functions or runs one of them.</p>
+<p>A test build loads <code>testing</code> into every file, as <code>--import testing</code>
+would, and adds to the entry file a <code>main</code> (marked <code>[TestMain]</code>, which
+replaces the file’s own) that registers each <code>[Test]</code> function with a
+<code>TestRunner</code> and calls <code>run</code>. Test files do not import it themselves:
+the checks they call, such as <code>expect_equal</code>, are in the prelude.</p>
+<p><code>pep-test</code> (<code>pepper test</code>) drives the program: it lists the tests with
+<code>--list</code> and runs each in a child process of its own with <code>--run NAME</code>
+(see the testing chapter).</p>
+<p>Source: <code>runtime/testing/module.pep</code></p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/testing/runner.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="testrunner"><a class="header" href="#testrunner">TestRunner</a></h1>
+<p>The <code>main</code> of a test program: <code>TestRunner</code> holds the entry file’s tests
+and answers <code>pep-test</code>’s <code>--list</code> and <code>--run NAME</code>.</p>
+<p>Source: <code>runtime/testing/runner.pep</code></p>
+<h2 id="testmain"><a class="header" href="#testmain">TestMain</a></h2>
+<pre><code class="language-pepper">[Attribute] struct TestMain
+</code></pre>
+<p>Marks the <code>main</code> that <code>pep-build --test</code> generates: in a test build it
+replaces the entry file’s own <code>main</code>.</p>
+<h2 id="testrunner-1"><a class="header" href="#testrunner-1">TestRunner</a></h2>
+<pre><code class="language-pepper">struct TestRunner
+</code></pre>
+<p>The tests of one test program, which its generated <code>main</code> registers and
+then runs with the program’s arguments.</p>
+<p>The program answers two requests, both made by <code>pep-test</code>:</p>
+<ul>
+<li><code>--list</code> prints one line per test, its fields separated by tabs: the
+name, <code>file:line</code>, <code>returns</code> or <code>panics</code> (for <code>[ShouldPanic]</code>), and the
+text the panic must contain (empty for any panic or none).</li>
+<li><code>--run NAME [--timeout SECONDS]</code> runs the test <code>NAME</code> and exits with 0
+when it returns; a panic aborts the program. With a timeout above 0, a
+test still running after that many seconds ends the program with exit
+status 124 and a message on standard error.</li>
+</ul>
+<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
+<h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>
+<pre><code class="language-pepper">construct(file: String)
+</code></pre>
+<p>Creates a runner for the tests of <code>file</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it</li>
+</ul>
+<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
+<h4 id="add-1"><a class="header" href="#add-1">add</a></h4>
+<pre><code class="language-pepper">add(name: String, body: () =&gt; void, line: int)
+</code></pre>
+<p>Registers a test that passes when <code>body</code> returns.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the test function’s name</li>
+<li><code>body</code> — the test function</li>
+<li><code>line</code> — the line that declares it</li>
+</ul>
+<h4 id="add_should_panic"><a class="header" href="#add_should_panic">add_should_panic</a></h4>
+<pre><code class="language-pepper">add_should_panic(name: String, body: () =&gt; void, line: int, message: String)
+</code></pre>
+<p>Registers a <code>[ShouldPanic]</code> test, which passes only when <code>body</code>
+panics with a message containing <code>message</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the test function’s name</li>
+<li><code>body</code> — the test function</li>
+<li><code>line</code> — the line that declares it</li>
+<li><code>message</code> — text the panic’s message must contain; empty for any panic</li>
+</ul>
+<h4 id="run-2"><a class="header" href="#run-2">run</a></h4>
+<pre><code class="language-pepper">run(args: String[]): int
+</code></pre>
+<p>Answers the request <code>args</code> makes (see the struct’s description).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>args</code> — the program’s arguments, the program first</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the program’s exit status: 0 when the request succeeded, 2 for a request it does not understand or a test it does not have</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="setting-up-llvm-cargo-setup"><a class="header" href="#setting-up-llvm-cargo-setup">Setting up LLVM: cargo setup</a></h1>
 <p>The compiler links against LLVM, which cargo cannot build. <code>xtask</code>, a small
@@ -41301,7 +41752,7 @@ says what each platform needs first and how the versions are chosen.</p>
 <pre><code class="language-text">cargo setup [options]
 cargo run -p xtask -- setup [options]
 </code></pre>
-<h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
+<h2 id="what-it-does-1"><a class="header" href="#what-it-does-1">What it does</a></h2>
 <p><code>cargo setup</code> runs the platform’s script (<code>scripts/setup-llvm.sh</code> on Linux
 and macOS, <code>scripts/setup-llvm.ps1</code> on Windows), which:</p>
 <ul>
