@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ce01dae0.js";
+            window.path_to_searchindex_js = "../searchindex-9d390785.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8e9cc5d7.js"></script>
+        <script src="../toc-0d41a7b3.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,12 +182,28 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h1>
-<p>This chapter gets the Pepper compiler built on your machine, compiles and runs
-a first program, and sets up your editor. Pepper has no binary releases yet,
-so you build the compiler from source.</p>
-<h2 id="build-the-compiler"><a class="header" href="#build-the-compiler">Build the compiler</a></h2>
-<p>The compiler is a Rust program that generates code through LLVM. Building it
-takes three steps on every platform. The repository’s
+<p>This chapter installs Pepper on your machine, compiles and runs a first
+program, and sets up your editor.</p>
+<h2 id="install-pepper"><a class="header" href="#install-pepper">Install Pepper</a></h2>
+<p>Each release has the Pepper toolchain prebuilt for Linux, macOS and Windows.
+One command installs it:</p>
+<pre><code class="language-sh"># Linux and macOS
+curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+</code></pre>
+<pre><code class="language-powershell"># Windows (PowerShell)
+irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+</code></pre>
+<p>It installs into <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code> on Windows), adds its
+<code>bin</code> folder to your <code>PATH</code>, and offers to install what linking a program
+needs when it is missing: clang on Linux, Xcode’s command line tools on
+macOS, LLVM and the Visual Studio Build Tools on Windows. Open a new terminal
+afterwards. <a href="../tools/install.html">Installing Pepper</a> covers the options, what
+it installs, and uninstalling.</p>
+<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
+<p>To work on Pepper itself, or on a platform with no prebuilt binaries, build
+the compiler from source. The compiler is a Rust program that generates code
+through LLVM. Building it takes three steps on every platform. The
+repository’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">README</a>
 has the full details for each platform; this is the short version.</p>
 <ol>
@@ -228,7 +244,10 @@ target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 <code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
 so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
 <a href="../tools/pepper.html">The pepper command</a>). To check that everything works,
-run the test suite with <code>cargo test --workspace</code>.</p>
+run the test suite with <code>cargo test --workspace</code>. Add <code>target/release</code> to
+your <code>PATH</code> to run <code>pepper</code> from anywhere; from the repository root, you can
+also run the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
+runs <code>pep-build</code> directly.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -255,10 +274,6 @@ but does not run it, so run the result yourself:</p>
 not run a file without an extension, and run it as <code>.\hello.exe</code>. Without <code>-o</code>
 the executable is written to the current directory, named after the source
 file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
-<p>The examples here write <code>pepper</code>; use the path to the binary you built, or add
-<code>target/release</code> to your <code>PATH</code>. From the repository root, you can also run
-the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
-runs <code>pep-build</code> directly.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
@@ -270,8 +285,9 @@ then <code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to fiv
 <li>Starting from the directory that holds the compiler executable:
 <code>runtime/</code> beside it, then in each parent directory, up to five levels up.</li>
 </ol>
-<p>So a compiler built in <code>target/release</code> finds the runtime of the clone it was
-built from, wherever you run it. To use a different runtime, set
+<p>So an installed compiler, in <code>~/.pepper/bin</code>, finds <code>~/.pepper/runtime</code>, and
+one built in <code>target/release</code> finds the runtime of the clone it was built
+from, wherever you run it. To use a different runtime, set
 <code>PEPPER_RUNTIME</code> or link the runtime into a project’s <code>.pep</code> folder:</p>
 <pre><code class="language-sh">mkdir .pep
 ln -s /path/to/pepper/runtime .pep/runtime

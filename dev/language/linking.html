@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ce01dae0.js";
+            window.path_to_searchindex_js = "../searchindex-9d390785.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8e9cc5d7.js"></script>
+        <script src="../toc-0d41a7b3.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,7 +197,10 @@ the first <code>clang</code> on your <code>PATH</code>.</p>
 <p>Every program is linked with:</p>
 <ul>
 <li><strong>Linux:</strong> the C library, which clang adds, and the math library (<code>m</code>),
-which the Pepper compiler adds (a floating-point <code>**</code> calls its <code>pow</code>).</li>
+which the Pepper compiler adds (a floating-point <code>**</code> calls its <code>pow</code>),
+and, when the compiler runs on a glibc older than 2.34, <code>pthread</code> and
+<code>dl</code>, where that glibc keeps threads and <code>dlsym</code> (a newer one has them in
+the C library).</li>
 <li><strong>macOS:</strong> <code>libSystem</code>, which contains the C library, plus the SDK and
 platform-version flags. clang adds all of these, using the Xcode Command
 Line Tools.</li>

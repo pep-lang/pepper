@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ce01dae0.js";
+            window.path_to_searchindex_js = "searchindex-9d390785.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-8e9cc5d7.js"></script>
+        <script src="toc-0d41a7b3.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -221,7 +221,10 @@ executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
 <p>Pepper runs on Windows (x64), Linux (x64) and macOS (arm64), and compiles
 to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
-<a href="#webassembly">WebAssembly</a>).</p>
+<a href="#webassembly">WebAssembly</a>).
+Each release is prebuilt for Windows (x64), Linux (x64, glibc 2.28 or newer)
+and macOS (arm64 and x64), and installs with one command: see
+<a href="#installing-pepper">Installing Pepper</a>.</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
 structs with constructors, destructors, methods and <a href="#properties">properties</a>, <a href="#value-structs">value structs and enums</a> (<code>[Value]</code>), derived <code>==</code> and <code>hash</code> (<a href="#hashing-and-equality"><code>[Equatable]</code></a>), enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
@@ -320,12 +323,28 @@ the top-right corner of each page to switch between releases; <code>dev</code> f
 branch. Read the version that matches the compiler you are using.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="getting-started"><a class="header" href="#getting-started">Getting started</a></h1>
-<p>This chapter gets the Pepper compiler built on your machine, compiles and runs
-a first program, and sets up your editor. Pepper has no binary releases yet,
-so you build the compiler from source.</p>
-<h2 id="build-the-compiler"><a class="header" href="#build-the-compiler">Build the compiler</a></h2>
-<p>The compiler is a Rust program that generates code through LLVM. Building it
-takes three steps on every platform. The repository’s
+<p>This chapter installs Pepper on your machine, compiles and runs a first
+program, and sets up your editor.</p>
+<h2 id="install-pepper"><a class="header" href="#install-pepper">Install Pepper</a></h2>
+<p>Each release has the Pepper toolchain prebuilt for Linux, macOS and Windows.
+One command installs it:</p>
+<pre><code class="language-sh"># Linux and macOS
+curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+</code></pre>
+<pre><code class="language-powershell"># Windows (PowerShell)
+irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+</code></pre>
+<p>It installs into <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code> on Windows), adds its
+<code>bin</code> folder to your <code>PATH</code>, and offers to install what linking a program
+needs when it is missing: clang on Linux, Xcode’s command line tools on
+macOS, LLVM and the Visual Studio Build Tools on Windows. Open a new terminal
+afterwards. <a href="#installing-pepper">Installing Pepper</a> covers the options, what
+it installs, and uninstalling.</p>
+<h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
+<p>To work on Pepper itself, or on a platform with no prebuilt binaries, build
+the compiler from source. The compiler is a Rust program that generates code
+through LLVM. Building it takes three steps on every platform. The
+repository’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">README</a>
 has the full details for each platform; this is the short version.</p>
 <ol>
@@ -366,7 +385,10 @@ target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 <code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
 so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
 <a href="#the-pepper-command">The pepper command</a>). To check that everything works,
-run the test suite with <code>cargo test --workspace</code>.</p>
+run the test suite with <code>cargo test --workspace</code>. Add <code>target/release</code> to
+your <code>PATH</code> to run <code>pepper</code> from anywhere; from the repository root, you can
+also run the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
+runs <code>pep-build</code> directly.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -393,10 +415,6 @@ but does not run it, so run the result yourself:</p>
 not run a file without an extension, and run it as <code>.\hello.exe</code>. Without <code>-o</code>
 the executable is written to the current directory, named after the source
 file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
-<p>The examples here write <code>pepper</code>; use the path to the binary you built, or add
-<code>target/release</code> to your <code>PATH</code>. From the repository root, you can also run
-the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
-runs <code>pep-build</code> directly.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
@@ -408,8 +426,9 @@ then <code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to fiv
 <li>Starting from the directory that holds the compiler executable:
 <code>runtime/</code> beside it, then in each parent directory, up to five levels up.</li>
 </ol>
-<p>So a compiler built in <code>target/release</code> finds the runtime of the clone it was
-built from, wherever you run it. To use a different runtime, set
+<p>So an installed compiler, in <code>~/.pepper/bin</code>, finds <code>~/.pepper/runtime</code>, and
+one built in <code>target/release</code> finds the runtime of the clone it was built
+from, wherever you run it. To use a different runtime, set
 <code>PEPPER_RUNTIME</code> or link the runtime into a project’s <code>.pep</code> folder:</p>
 <pre><code class="language-sh">mkdir .pep
 ln -s /path/to/pepper/runtime .pep/runtime
@@ -17138,7 +17157,10 @@ the first <code>clang</code> on your <code>PATH</code>.</p>
 <p>Every program is linked with:</p>
 <ul>
 <li><strong>Linux:</strong> the C library, which clang adds, and the math library (<code>m</code>),
-which the Pepper compiler adds (a floating-point <code>**</code> calls its <code>pow</code>).</li>
+which the Pepper compiler adds (a floating-point <code>**</code> calls its <code>pow</code>),
+and, when the compiler runs on a glibc older than 2.34, <code>pthread</code> and
+<code>dl</code>, where that glibc keeps threads and <code>dlsym</code> (a newer one has them in
+the C library).</li>
 <li><strong>macOS:</strong> <code>libSystem</code>, which contains the C library, plus the SDK and
 platform-version flags. clang adds all of these, using the Xcode Command
 Line Tools.</li>
@@ -17994,6 +18016,147 @@ The runtime also uses the prefix on top-level helpers that its own files
 export to each other, such as <code>_pep_malloc</code>: they are not part of its public
 API, and the reference leaves them out too.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installing-pepper"><a class="header" href="#installing-pepper">Installing Pepper</a></h1>
+<p>Each release publishes the Pepper toolchain prebuilt for Linux, macOS and
+Windows, with an install script that downloads the right one. You need no
+Rust, cargo or LLVM development install to use it; building from source is
+for working on Pepper itself (see <a href="#building-from-source">Getting started</a>).</p>
+<pre><code class="language-sh"># Linux and macOS
+curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.sh | sh
+</code></pre>
+<pre><code class="language-powershell"># Windows (PowerShell)
+irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
+</code></pre>
+<p>Each release also carries both scripts as assets, beside its archives.</p>
+<p>The script:</p>
+<ol>
+<li>picks this machine’s archive (<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or
+<code>windows-x64</code>) from the newest release that has one;</li>
+<li>downloads it and checks it against its <code>.sha256</code>;</li>
+<li>unpacks it into <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code> on Windows), replacing
+an earlier install there;</li>
+<li>adds that folder’s <code>bin</code> to the <code>PATH</code>: in <code>~/.profile</code>, <code>~/.bashrc</code>,
+<code>~/.bash_profile</code> and <code>~/.zshrc</code> and fish’s <code>conf.d</code>, or in the Windows
+user’s <code>PATH</code>, which it asks about first;</li>
+<li>checks that programs can be linked (below), offering to install what is
+missing;</li>
+<li>builds and runs a small program with the new install, and fails if it
+cannot.</li>
+</ol>
+<p>Open a new terminal afterwards so the <code>PATH</code> change takes effect, then
+<code>pepper build hello.pep -o hello</code> works as in <a href="#getting-started">Getting started</a>.</p>
+<h2 id="what-it-installs"><a class="header" href="#what-it-installs">What it installs</a></h2>
+<pre><code class="language-text">~/.pepper/
+  bin/
+    pepper          the entry point (The pepper command)
+    pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
+    pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc
+  runtime/          the runtime, which pep-build finds from its own folder
+  LICENSE.md
+</code></pre>
+<p>On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
+18.10 and later); systems that use musl, such as Alpine, are not supported.
+There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
+binaries are not signed: the script clears the quarantine flag, but an
+archive downloaded with a browser makes Gatekeeper warn before it runs.</p>
+<h2 id="what-linking-needs"><a class="header" href="#what-linking-needs">What linking needs</a></h2>
+<p><code>pep-build</code> compiles with the LLVM inside it, but links each program with
+<code>clang</code>, which also needs the platform’s linker and C library:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Needs</th><th>The script offers</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td><code>clang</code> and the C library’s development files</td><td><code>apt-get install clang build-essential</code>, <code>dnf</code>/<code>yum install clang gcc glibc-devel</code>, <code>pacman -S clang gcc</code> or <code>zypper install clang gcc glibc-devel</code>, whichever manager is present</td></tr>
+<tr><td>macOS</td><td>Xcode’s command line tools</td><td><code>xcode-select --install</code></td></tr>
+<tr><td>Windows</td><td>LLVM (<code>clang</code>) and the MSVC libraries and Windows SDK</td><td>LLVM with <code>scoop install llvm</code>, <code>winget install LLVM.LLVM</code> or <code>choco install llvm</code> (the first present), else LLVM’s own installer from its GitHub release; the Visual Studio Build Tools’ C++ workload with <code>winget</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>It asks before installing anything, unless given <code>--yes</code> (<code>-Yes</code>). With no
+terminal to ask on it installs nothing and says what to install.</p>
+<p>Programs that use the <code>tls</code> module also need OpenSSL 3 (<code>libssl.so.3</code> on
+Linux, Homebrew’s <code>openssl@3</code> on macOS; Windows uses SChannel). The script
+says so when it finds none, and on macOS offers <code>brew install openssl@3</code>.</p>
+<p><code>pep-build</code> looks for <code>clang</code> in this order, and uses the first it finds:</p>
+<ol>
+<li>in the LLVM named by <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>, which a development
+checkout sets;</li>
+<li>beside <code>pep-build</code> itself;</li>
+<li>on the <code>PATH</code>, as <code>clang</code>, then as <code>clang-&lt;major&gt;</code> for the LLVM it is
+built with (what Ubuntu’s <code>clang-20</code> package installs);</li>
+<li>where LLVM’s packages put it when they leave it off the <code>PATH</code>:
+<code>C:\Program Files\LLVM\bin</code> and Scoop’s <code>llvm</code> on Windows; Homebrew’s
+<code>llvm</code> and <code>llvm@&lt;major&gt;</code> on macOS; <code>/usr/lib/llvm-&lt;major&gt;/bin</code>, then the
+newest <code>/usr/lib/llvm-*/bin</code>, on Linux.</li>
+</ol>
+<p>When there is none, linking fails with an error that names what to install.</p>
+<h2 id="options"><a class="header" href="#options">Options</a></h2>
+<pre><code class="language-text">install.sh [--version &lt;x.y.z&gt; | --archive &lt;file&gt;] [--prefix &lt;dir&gt;]
+           [--yes] [--no-modify-path] [--no-prerequisites]
+install.sh --uninstall [--prefix &lt;dir&gt;]
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>install.sh</code></th><th><code>install.ps1</code></th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest</td></tr>
+<tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it</td></tr>
+<tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
+<tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites, and on Windows changes the <code>PATH</code>, without asking</td></tr>
+<tr><td><code>--no-modify-path</code></td><td><code>-NoModifyPath</code></td><td>Leaves the <code>PATH</code> alone</td></tr>
+<tr><td><code>--no-prerequisites</code></td><td><code>-NoPrerequisites</code></td><td>Neither checks for nor installs what linking needs</td></tr>
+<tr><td><code>--uninstall</code></td><td><code>-Uninstall</code></td><td>Removes the install and the <code>PATH</code> entries the script added</td></tr>
+<tr><td><code>-h</code>, <code>--help</code></td><td><code>Get-Help .\install.ps1</code></td><td>Shows the usage</td></tr>
+</tbody>
+</table>
+</div>
+<p>Piped into a shell, the script still takes options: <code>curl ... | sh -s -- --version 0.4.0</code>.
+<code>irm ... | iex</code> takes none, so <code>install.ps1</code> reads two environment variables
+in their place:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>Instead of</th></tr>
+</thead>
+<tbody>
+<tr><td><code>PEPPER_HOME</code></td><td><code>--prefix</code> / <code>-Prefix</code> (both scripts)</td></tr>
+<tr><td><code>PEPPER_VERSION</code></td><td><code>-Version</code> (<code>install.ps1</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>While the repository is private, its releases need a GitHub token to
+download: set <code>GITHUB_TOKEN</code> (or <code>GH_TOKEN</code>) to one that can read it, for
+example <code>GITHUB_TOKEN=$(gh auth token)</code>. The raw script URLs above need it too,
+so download the script with <code>gh</code> first:</p>
+<pre><code class="language-sh">gh api repos/justinboswell/pepper/contents/scripts/install.sh -H "Accept: application/vnd.github.raw" &gt; install.sh
+GITHUB_TOKEN=$(gh auth token) sh install.sh
+</code></pre>
+<h2 id="uninstalling"><a class="header" href="#uninstalling">Uninstalling</a></h2>
+<pre><code class="language-sh">sh install.sh --uninstall           # or: curl ... | sh -s -- --uninstall
+</code></pre>
+<pre><code class="language-powershell">.\install.ps1 -Uninstall
+</code></pre>
+<p>This removes the install folder (only when it holds <code>bin/pep-build</code>) and the
+<code>PATH</code> lines the script added. Prerequisites it installed, such as clang,
+stay.</p>
+<h2 id="how-releases-are-built"><a class="header" href="#how-releases-are-built">How releases are built</a></h2>
+<p>The <code>Release</code> workflow (<code>.github/workflows/release.yml</code>) runs on each
+<code>vX.Y.Z</code> tag. For each platform, <code>scripts/release-build.sh</code> builds the
+tools, lays them out as above, archives them as
+<code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>, and
+<code>scripts/release-smoke-test.sh</code> proves the archive works: unpacked outside the
+repository with no LLVM variables set, <code>pepper build</code> must build and run a
+program, and the binaries must load nothing beyond the system’s C and C++
+runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
+<code>manylinux_2_28</code> container). The workflow then installs each archive with
+the install script. Last, it uploads the archives, their checksums, a
+<code>SHA256SUMS</code> and both scripts to the tag’s release. A pull request that
+changes these scripts runs every leg too, without publishing.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-pepper-command"><a class="header" href="#the-pepper-command">The pepper command</a></h1>
 <p><code>pepper</code> is the entry point to every Pepper tool, the way <code>go</code> and <code>git</code>
 are: <code>pepper &lt;command&gt; [arguments]</code> runs a separate program named
@@ -18396,7 +18559,11 @@ come first, then those of <code>[Link(path = ...)]</code>, then those in
 error on every platform; Windows executables link with clang and lld.</p>
 <p>The link driver is clang. When <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the
 compiler was built with, such as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20) names an
-LLVM install, its <code>bin/clang</code> and <code>lld</code> are used, else those on the <code>PATH</code>.</p>
+LLVM install, its <code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
+<code>pep-build</code>, then one on the <code>PATH</code> (<code>clang</code>, then <code>clang-&lt;major&gt;</code>), then one
+where LLVM’s packages install it off the <code>PATH</code>. With none, the link fails
+with an error naming what to install. <a href="#what-linking-needs">Installing Pepper</a>
+lists the folders searched.</p>
 <h2 id="build-options-1"><a class="header" href="#build-options-1">Build options</a></h2>
 <h3 id="-d-name--d-namevalue"><a class="header" href="#-d-name--d-namevalue"><code>-D &lt;name&gt;</code>, <code>-D &lt;name&gt;=&lt;value&gt;</code></a></h3>
 <p>Defines a build option. A bare name is <code>name=1</code>, as in C. <code>[BuildOption]</code>
@@ -18863,7 +19030,7 @@ pep-fmt -w main.pep src/    # rewrite each file that is not formatted
 pep-fmt --check src/        # list each file that is not formatted
 pep-fmt &lt; main.pep          # no files: standard input to standard output
 </code></pre>
-<h3 id="options"><a class="header" href="#options">Options</a></h3>
+<h3 id="options-1"><a class="header" href="#options-1">Options</a></h3>
 <pre><code class="language-text">pep-fmt [OPTIONS] [paths]...
 </code></pre>
 <div class="table-wrapper">
@@ -19331,7 +19498,7 @@ default). Anything else is an error.</li>
 opening it in the browser and rebuilding as chapters change.</p>
 <h3 id="pep-doc-help"><a class="header" href="#pep-doc-help"><code>pep-doc help</code></a></h3>
 <p>Prints the commands and options, as <code>-h</code> and <code>--help</code> do.</p>
-<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
+<h2 id="options-2"><a class="header" href="#options-2">Options</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -42655,7 +42822,7 @@ in <code>main(args: String[])</code> and <code>process.arguments()</code>.</p>
 <li><a href="#parser">Parser</a>: <code>Parser</code>, and the handles its declarations
 return: <code>Flag</code>, <code>Argument</code>, <code>ArgumentList</code>; and <code>closest</code>, which
 picks the name a misspelled one most likely meant</li>
-<li><a href="#options-2">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
+<li><a href="#options-3">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
 that shape what <code>Parser.add_options</code> declares from a struct’s fields</li>
 </ul>
 <p><strong>Example</strong></p>
@@ -43079,7 +43246,7 @@ argument lists; this constructor is for the runtime.</p>
 <li>a new array of the values, empty when none was given</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/options.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="options-2"><a class="header" href="#options-2">Options</a></h1>
+<h1 id="options-3"><a class="header" href="#options-3">Options</a></h1>
 <p>The attributes that shape the options <code>Parser.add_options</code> declares
 from a struct’s fields.</p>
 <p>Source: <code>runtime/cli/options.pep</code></p>
@@ -44155,7 +44322,7 @@ with no environment variables set;</li>
 <p>When it provisions an LLVM other than the default (20), it prints the
 <code>--features</code> flag cargo needs for it, such as
 <code>cargo build --no-default-features --features llvm19-1</code>.</p>
-<h2 id="options-3"><a class="header" href="#options-3">Options</a></h2>
+<h2 id="options-4"><a class="header" href="#options-4">Options</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
