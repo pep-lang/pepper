@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2e8d6deb.js";
+            window.path_to_searchindex_js = "searchindex-5f641bd7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8e9cc5d7.js"></script>
@@ -16875,16 +16875,34 @@ the directory that holds the libraries (the sysroot) with <code>--sysroot &lt;di
 or set <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code>, the triple in capitals with <code>_</code> for each
 <code>-</code> (<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code>):</p>
 <ul>
-<li><strong>Linux:</strong> a directory with the target’s glibc and GCC runtime
+<li>
+<p><strong>Linux:</strong> a directory with the target’s glibc and GCC runtime
 (<code>/usr/aarch64-linux-gnu</code> from Debian’s or Ubuntu’s
 <code>libc6-dev-arm64-cross</code> and <code>libgcc-13-dev-arm64-cross</code>, which clang
-also finds without <code>--sysroot</code>).</li>
-<li><strong>macOS:</strong> a macOS SDK (<code>MacOSX.sdk</code>).</li>
-<li><strong>Windows:</strong> a directory laid out like a Visual Studio install, with the
+also finds without <code>--sysroot</code>). From another OS, copy a Linux machine’s
+at the same paths: the C startup files and <code>libc</code>, <code>libm</code>, <code>libgcc_s</code>
+and the dynamic loader from <code>/usr/lib/x86_64-linux-gnu</code>, and
+<code>crtbegin*.o</code>, <code>crtend*.o</code> and <code>libgcc*</code> from
+<code>/usr/lib/gcc/x86_64-linux-gnu/&lt;version&gt;</code>.</p>
+</li>
+<li>
+<p><strong>macOS:</strong> a macOS SDK (<code>MacOSX.sdk</code>, <code>xcrun --show-sdk-path</code> on a Mac).
+Linking reads only its <code>SDKSettings.json</code> and the library stubs in
+<code>usr/lib</code>.</p>
+</li>
+<li>
+<p><strong>Windows:</strong> a directory laid out like a Visual Studio install, with the
 MSVC libraries and the Windows SDK, as
-<a href="https://github.com/Jake-Shadle/xwin">xwin</a> <code>splat --use-winsysroot-style</code>
-writes it.</li>
+<a href="https://github.com/Jake-Shadle/xwin">xwin</a> writes it:</p>
+<pre><code class="language-sh">xwin --accept-license --arch x86_64 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
+</code></pre>
+</li>
 </ul>
+<p>CI links each of these from the other two (from Linux x64, macOS arm64 and
+Windows x64, for <code>x86_64-unknown-linux-gnu</code>, <code>aarch64-apple-darwin</code> and
+<code>x86_64-pc-windows-msvc</code>) and runs the programs on their own OS; its scripts,
+<code>scripts/ci-export-sysroot.sh</code> and <code>scripts/ci-provision-cross.sh</code>, show the
+setup end to end.</p>
 <p>When the link fails, the error ends with a note naming what is missing:</p>
 <pre><code class="language-text">note: linking for 'x86_64-pc-windows-msvc' needs that platform's system libraries and LLVM's linker (lld): pass '--sysroot &lt;dir&gt;' or set PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC
 </code></pre>
