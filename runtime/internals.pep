@@ -326,27 +326,18 @@ export _pep_c_strlen(s: __ptr<char>): ulong {
 
 export _pep_utf8_length(s: __ptr<char>, size: ulong): ulong {
     if (s == __null || size == 0) { return 0; }
-    var i = 0;
-    var count = 0;
+    ulong i = 0;
+    ulong count = 0;
     while (i < size) {
-        # Byte reads are signed; mask to the unsigned value.
-        var b = s[i] & 0xFF;
-        var n = 1;
-        if (b >= 240 && b < 248) {
-            if (i + 4 > size || (s[i + 1] & 0xC0) != 0x80 || (s[i + 2] & 0xC0) != 0x80 || (s[i + 3] & 0xC0) != 0x80) {
-                return 0;
-            }
-            n = 4;
+        if ((s[i] & 0x80) == 0) {
+            # A run of ASCII is one code point per byte.
+            var ascii = _pep_ascii_end(s, i, size);
+            count = count + (ascii - i);
+            i = ascii;
+            continue;
         }
-        if (b >= 224 && b < 240) {
-            if (i + 3 > size || (s[i + 1] & 0xC0) != 0x80 || (s[i + 2] & 0xC0) != 0x80) { return 0; }
-            n = 3;
-        }
-        if (b >= 192 && b < 224) {
-            if (i + 2 > size || (s[i + 1] & 0xC0) != 0x80) { return 0; }
-            n = 2;
-        }
-        if (b >= 128 && b < 192) {
+        var n = _pep_utf8_sequence_size(s, i, size);
+        if (n == 0) {
             return 0;
         }
         count = count + 1;
@@ -369,6 +360,32 @@ export _pep_utf8_compare(a: __ptr<char>, a_size: ulong, b: __ptr<char>, b_size: 
     return a_size >= size && b_size >= size && memcmp(a, b, size) == 0;
 }
 
+# The offset of the first byte from `i` up to (not including) `end` at `data`
+# that is not ASCII (has its high bit set), or `end` when there is none.
+# Once `data + i` is 8-byte aligned it tests eight bytes per step.
+_pep_ascii_end(data: __ptr<void>, i: ulong, end: ulong): ulong {
+    while (i < end && (unsafe_cast<ulong>(data + i) & 7) != 0) {
+        if ((data[i] & 0x80) != 0) {
+            return i;
+        }
+        i = i + 1;
+    }
+    while (i + 8 <= end) {
+        __ptr<ulong> word = unsafe_cast<__ptr<ulong>>(data + i);
+        if ((word[0] & 0x8080808080808080) != 0) {
+            break;
+        }
+        i = i + 8;
+    }
+    while (i < end) {
+        if ((data[i] & 0x80) != 0) {
+            return i;
+        }
+        i = i + 1;
+    }
+    return end;
+}
+
 # The byte size of the UTF-8 sequence starting at byte `i` of the `size`
 # bytes at `data`, or 0 when the bytes there are not a whole sequence. Each
 # read is guarded by its own `if`, so none reads past `size`.
@@ -378,33 +395,38 @@ _pep_utf8_sequence_size(data: __ptr<void>, i: ulong, size: ulong): ulong {
     if (b < 128) {
         return 1;
     }
-    ulong n = 0;
-    if (b >= 192 && b < 224) {
-        n = 2;
-    }
-    if (b >= 224 && b < 240) {
-        n = 3;
-    }
-    if (b >= 240 && b < 248) {
-        n = 4;
-    }
-    if (n == 0 || i + n > size) {
+    if (b < 192) {
         return 0;
     }
-    ulong k = 1;
-    while (k < n) {
-        if ((data[i + k] & 0xC0) != 0x80) {
-            return 0;
-        }
-        k = k + 1;
+    if (b < 224) {
+        if (i + 2 > size) { return 0; }
+        if ((data[i + 1] & 0xC0) != 0x80) { return 0; }
+        return 2;
     }
-    return n;
+    if (b < 240) {
+        if (i + 3 > size) { return 0; }
+        if ((data[i + 1] & 0xC0) != 0x80) { return 0; }
+        if ((data[i + 2] & 0xC0) != 0x80) { return 0; }
+        return 3;
+    }
+    if (b < 248) {
+        if (i + 4 > size) { return 0; }
+        if ((data[i + 1] & 0xC0) != 0x80) { return 0; }
+        if ((data[i + 2] & 0xC0) != 0x80) { return 0; }
+        if ((data[i + 3] & 0xC0) != 0x80) { return 0; }
+        return 4;
+    }
+    return 0;
 }
 
 _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     if (data == __null || size == 0) { return true; }
     ulong i = 0;
     while (i < size) {
+        if ((data[i] & 0x80) == 0) {
+            i = _pep_ascii_end(data, i, size);
+            continue;
+        }
         var n = _pep_utf8_sequence_size(data, i, size);
         if (n == 0) {
             return false;
@@ -414,57 +436,80 @@ _pep_utf8_valid(data: __ptr<void>, size: ulong): bool {
     return true;
 }
 
+[Target(!OS(Windows))]
+extern void* memmem(void* haystack, ulong haystack_size, void* needle, ulong needle_size);
+
+# The first `needle` in the haystack, or `__null`. libc's `memmem` scans
+# many bytes per step where it can.
+[Target(!OS(Windows))]
+_pep_memmem(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): __ptr<void> {
+    return memmem(haystack, haystack_size, needle, needle_size);
+}
+
+extern void* memchr(void* p, int c, ulong n);
+
+# The first `needle` in the haystack, or `__null`. The Windows C runtime has
+# no `memmem`, so this jumps between candidates with `memchr`, which it has.
+[Target(OS(Windows))]
+_pep_memmem(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): __ptr<void> {
+    if (needle_size > haystack_size) {
+        return __null;
+    }
+    var first = (needle[0] & 0xFF) as int;
+    ulong i = 0;
+    var last = haystack_size - needle_size;
+    while (i <= last) {
+        __ptr<void> found = memchr(haystack + i, first, last + 1 - i);
+        if (found == __null) {
+            return __null;
+        }
+        if (memcmp(found, needle, needle_size) == 0) {
+            return found;
+        }
+        i = unsafe_cast<ulong>(found) - unsafe_cast<ulong>(haystack) + 1;
+    }
+    return __null;
+}
+
 # The byte offset of the first `needle` in the haystack, or -1. The needle
-# must be valid UTF-8, and so must the haystack before the match: the bytes
-# are checked as the search passes them, one code point at a time, so a match
-# is found only at a code point boundary, and repeated searches from
-# successive offsets (split, replace) stay linear instead of re-checking all
-# the rest of the haystack on every call (#511).
+# must be valid UTF-8, and so must the haystack before the match. Only the
+# bytes before the match are checked, once each, so repeated searches from
+# successive offsets (split, replace) stay linear (#511); and a valid prefix
+# ends on a code point boundary, so a match is only ever found at one.
 export _pep_utf8_find(haystack: __ptr<void>, haystack_size: ulong, needle: __ptr<void>, needle_size: ulong): long {
     if (haystack == __null || haystack_size == 0) { return -1; }
     if (needle_size == 0) { return 0; }
     if (needle == __null) { return -1; }
     if (!_pep_utf8_valid(needle, needle_size)) { return -1; }
-    var first = needle[0];
-    ulong i = 0;
-    while (i + needle_size <= haystack_size) {
-        var n = _pep_utf8_sequence_size(haystack, i, haystack_size);
-        if (n == 0) {
-            return -1;
-        }
-        # The match is a copy of the valid needle, so it needs no check.
-        if (haystack[i] == first && memcmp(haystack + i, needle, needle_size) == 0) {
-            return i as long;
-        }
-        i = i + n;
+    __ptr<void> found = _pep_memmem(haystack, haystack_size, needle, needle_size);
+    if (found == __null) {
+        return -1;
     }
-    return -1;
+    var at = unsafe_cast<ulong>(found) - unsafe_cast<ulong>(haystack);
+    if (!_pep_utf8_valid(haystack, at)) {
+        return -1;
+    }
+    return at as long;
 }
 
 export _pep_utf8_char_offset(data: __ptr<void>, size: ulong, chars: ulong): ulong {
     if (data == __null || size == 0) { return 0; }
-    var i = 0;
-    var count = 0;
+    ulong i = 0;
+    ulong count = 0;
     while (i < size && count < chars) {
-        # Byte reads are signed; mask to the unsigned value.
-        var b = data[i] & 0xFF;
-        var n = 1;
-        if (b >= 240 && b < 248) {
-            if (i + 4 > size
-                || (data[i + 1] & 0xC0) != 0x80
-                || (data[i + 2] & 0xC0) != 0x80
-                || (data[i + 3] & 0xC0) != 0x80) { return size; }
-            n = 4;
+        if ((data[i] & 0x80) == 0) {
+            # Skip a run of ASCII, one code point per byte, up to `chars`.
+            var end = size;
+            if (chars - count < size - i) {
+                end = i + (chars - count);
+            }
+            var ascii = _pep_ascii_end(data, i, end);
+            count = count + (ascii - i);
+            i = ascii;
+            continue;
         }
-        if (b >= 224 && b < 240) {
-            if (i + 3 > size || (data[i + 1] & 0xC0) != 0x80 || (data[i + 2] & 0xC0) != 0x80) { return size; }
-            n = 3;
-        }
-        if (b >= 192 && b < 224) {
-            if (i + 2 > size || (data[i + 1] & 0xC0) != 0x80) { return size; }
-            n = 2;
-        }
-        if (b >= 128 && b < 192) {
+        var n = _pep_utf8_sequence_size(data, i, size);
+        if (n == 0) {
             return size;
         }
         count = count + 1;

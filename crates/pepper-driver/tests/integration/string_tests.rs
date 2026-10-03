@@ -483,6 +483,55 @@ test(): int {
     );
 }
 
+// The UTF-8 helpers skip ASCII eight bytes at a time once aligned, and
+// `find` uses `memmem`, then checks only the bytes before the match. Puts
+// the non-ASCII byte at every offset around the 8-byte steps, and invalid
+// bytes before and after a match.
+#[test]
+fn utf8_scans_across_word_boundaries() {
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"
+# `prefix`, then the byte `value`, then `suffix`, without validating.
+raw(prefix: String, value: u8, suffix: String): String {
+    var bytes = Array<u8>();
+    for (var b in prefix.bytes()) { bytes.append(b); }
+    bytes.append(value);
+    for (var b in suffix.bytes()) { bytes.append(b); }
+    return String(unsafe_cast<__ptr<char>>(bytes._data), bytes.count);
+}
+
+test(): int {
+    ulong at = 0;
+    while (at < 40) {
+        var s = "a".repeat(at) + "é" + "b".repeat(40 - at);
+        if (s.length != 41) { return -1; }
+        if (s.find("é") != at as long) { return -2; }
+        if (s.find("b") != (at + 2) as long) { return -3; }
+        if (!(s.substr(at, 1) == "é")) { return -4; }
+        if (!(s.substr(at + 1, 1) == "b")) { return -5; }
+        if (at > 0 && !(s.substr(at - 1, 1) == "a")) { return -6; }
+        # A lone continuation byte makes the length 0.
+        var bad = raw("a".repeat(at), 0x80, "b".repeat(40 - at));
+        if (bad.length != 0) { return -7; }
+        at = at + 1;
+    }
+    var before = raw("ab", 0xFF, "cd");
+    if (before.find("cd") != -1) { return -8; }
+    if (before.find("ab") != 0) { return -9; }
+    var after = raw("ab", 0xC3, "cd");
+    if (after.find("b") != 1) { return -10; }
+    if (after.find("d") != -1) { return -11; }
+    if ("héllo".find("l", 2) != -1) { return -12; }
+    if ("héllo".find("é") != 1) { return -13; }
+    if ("x".find("xy") != -1) { return -14; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}
+
 // #511: `find` re-checked that the whole rest of the String was valid UTF-8
 // on every call, so `split`, `replace` and a `find(_, from)` loop were
 // quadratic (20 s for these three over 100 KB). Linear, they take

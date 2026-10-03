@@ -431,9 +431,10 @@ export struct String {
     ## case the result is -1. The result is also -1 when `needle` is not valid
     ## UTF-8, or when this String holds invalid UTF-8 before the first match.
     ## Bytes past the match are not checked, so searching on from each match
-    ## (as `split` and `replace` do) reads the String once in all. Runs in
-    ## O(offset * needle.size) at worst, where offset is where the search
-    ## stops.
+    ## (as `split` and `replace` do) reads the String once in all. The
+    ## search is the C library's `memmem`, which compares many bytes per step
+    ## (Windows, which has none, jumps between matches of the first byte with
+    ## `memchr`).
     ##
     ## With `from`, the search starts at that byte offset, which must be a
     ## code point boundary (an offset `find` returned, plus a match's size,
