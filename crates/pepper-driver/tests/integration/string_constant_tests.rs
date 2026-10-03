@@ -83,8 +83,9 @@ literals_are_strings(): int {
     if (s != "ab" || takes_string("x") != "x") {
         return 1;
     }
-    var path = io.Path("docs").join("guide.md");
-    if (path.to_string() != "docs/guide.md") {
+    # Compare components: the separator is `\` on Windows.
+    var parts = io.Path("docs").join("guide.md").components();
+    if (parts.count != 2 || parts[0] != "docs" || parts[1] != "guide.md") {
         return 2;
     }
     var names = Array<String>();
