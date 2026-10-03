@@ -4,6 +4,11 @@ The `process` module starts other programs and holds what belongs to the
 running one: its arguments, its exit, its id, its executable, and its working
 directory. Bring it in with `import process`.
 
+On WebAssembly (`--target wasm32-wasip1`) a program cannot start another:
+`run`, `spawn`, `exec` and `executable_path` return an `IoError` saying it
+is not supported on WASI. Its arguments, exit and environment work (see
+[WebAssembly](platform-selection.md#webassembly)).
+
 ## Running a program
 
 `Command` describes a program to start. Its setters return the same

@@ -8,6 +8,10 @@ like `File`. To serve several connections at once, give each
 one its own [thread](threads.md), or its own [task](tasks.md#sockets): in a
 task, a call that has to wait parks only that task.
 
+On WebAssembly (`--target wasm32-wasip1`) there are no sockets, host name
+lookups or TLS: each of those calls returns an `IoError` saying it is not
+supported on WASI (see [WebAssembly](platform-selection.md#webassembly)).
+
 ## Addresses
 
 An `IpAddress` is an IPv4 or IPv6 address. A `SocketAddress` is an IP

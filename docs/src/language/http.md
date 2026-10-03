@@ -4,6 +4,9 @@ The `http` module has an HTTP/1.1 client and server, over plain TCP or
 [TLS](networking.md#tls). Both run in [tasks](tasks.md): a request that
 waits parks only its task.
 
+HTTP needs tasks and sockets, so it is not available on WebAssembly
+(`--target wasm32-wasip1`, see [WebAssembly](platform-selection.md#webassembly)).
+
 ```pepper
 {{#include ../../examples/http-basics.pep}}
 ```

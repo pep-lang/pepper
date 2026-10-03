@@ -193,8 +193,8 @@ things work differently:
   Code written for `!OS(Windows)` also compiles for WASI, so check that it
   only calls what wasi-libc has.
 - There are no threads and no stack switching: `Thread.spawn` panics, and
-  so does starting a task (`async.run`, `Task.spawn`). Mutexes, channels
-  and atomics work within the one thread.
+  so does starting tasks (`async.run`, `async.run_with`). Mutexes, channels
+  and atomics still work, as long as nothing waits for another thread.
 - Sockets, TLS, HTTP connections and starting processes return an
   `IoError` saying they are not supported on WASI.
 - Files work through the directories the runtime grants. `Metadata` has no

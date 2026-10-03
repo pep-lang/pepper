@@ -10,6 +10,9 @@ any function can wait, however deep in the call stack. A socket call that
 has to wait parks only its task, so one worker can serve thousands of
 connections.
 
+WASI cannot switch stacks, so on WebAssembly (`--target wasm32-wasip1`)
+starting tasks (`async.run`, `async.run_with`) panics (see [WebAssembly](platform-selection.md#webassembly)).
+
 Tasks live in the `async` module:
 
 ```pepper

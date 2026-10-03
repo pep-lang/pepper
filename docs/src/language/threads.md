@@ -5,6 +5,10 @@ threads safe by controlling what they can share: only **thread-safe** values
 can be reached from more than one thread, and the compiler checks the types
 that claim to be.
 
+On WebAssembly (`--target wasm32-wasip1`) a program has one thread:
+`Thread.spawn` panics. Mutexes, channels and atomics still work, as long as
+nothing waits for another thread (see [WebAssembly](platform-selection.md#webassembly)).
+
 ## Starting and joining threads
 
 ```pepper
