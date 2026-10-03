@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -414,8 +414,8 @@ things work differently:</p>
 Code written for <code>!OS(Windows)</code> also compiles for WASI, so check that it
 only calls what wasi-libc has.</li>
 <li>There are no threads and no stack switching: <code>Thread.spawn</code> panics, and
-so does starting a task (<code>async.run</code>, <code>Task.spawn</code>). Mutexes, channels
-and atomics work within the one thread.</li>
+so does starting tasks (<code>async.run</code>, <code>async.run_with</code>). Mutexes, channels
+and atomics still work, as long as nothing waits for another thread.</li>
 <li>Sockets, TLS, HTTP connections and starting processes return an
 <code>IoError</code> saying they are not supported on WASI.</li>
 <li>Files work through the directories the runtime grants. <code>Metadata</code> has no

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -191,6 +191,8 @@ the model of Go’s goroutines and of libuv or tokio event loops, without
 any function can wait, however deep in the call stack. A socket call that
 has to wait parks only its task, so one worker can serve thousands of
 connections.</p>
+<p>WASI cannot switch stacks, so on WebAssembly (<code>--target wasm32-wasip1</code>)
+starting tasks (<code>async.run</code>, <code>async.run_with</code>) panics (see <a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
 <p>Tasks live in the <code>async</code> module:</p>
 <pre><code class="language-pepper">import async;
 

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f60afe02.js"></script>
@@ -12330,6 +12330,9 @@ together with <code>Thread.spawn</code>.</p>
 threads safe by controlling what they can share: only <strong>thread-safe</strong> values
 can be reached from more than one thread, and the compiler checks the types
 that claim to be.</p>
+<p>On WebAssembly (<code>--target wasm32-wasip1</code>) a program has one thread:
+<code>Thread.spawn</code> panics. Mutexes, channels and atomics still work, as long as
+nothing waits for another thread (see <a href="#webassembly">WebAssembly</a>).</p>
 <h2 id="starting-and-joining-threads"><a class="header" href="#starting-and-joining-threads">Starting and joining threads</a></h2>
 <pre><code class="language-pepper">import async;
 
@@ -13385,6 +13388,8 @@ the model of Go’s goroutines and of libuv or tokio event loops, without
 any function can wait, however deep in the call stack. A socket call that
 has to wait parks only its task, so one worker can serve thousands of
 connections.</p>
+<p>WASI cannot switch stacks, so on WebAssembly (<code>--target wasm32-wasip1</code>)
+starting tasks (<code>async.run</code>, <code>async.run_with</code>) panics (see <a href="#webassembly">WebAssembly</a>).</p>
 <p>Tasks live in the <code>async</code> module:</p>
 <pre><code class="language-pepper">import async;
 
@@ -14052,6 +14057,9 @@ In a plain program every call blocks the calling thread until it completes,
 like <code>File</code>. To serve several connections at once, give each
 one its own <a href="#threads-and-shared-data">thread</a>, or its own <a href="#sockets">task</a>: in a
 task, a call that has to wait parks only that task.</p>
+<p>On WebAssembly (<code>--target wasm32-wasip1</code>) there are no sockets, host name
+lookups or TLS: each of those calls returns an <code>IoError</code> saying it is not
+supported on WASI (see <a href="#webassembly">WebAssembly</a>).</p>
 <h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
 <p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
 address and a port:</p>
@@ -14420,6 +14428,8 @@ limits how long it may wait.</li>
 <p>The <code>http</code> module has an HTTP/1.1 client and server, over plain TCP or
 <a href="#tls">TLS</a>. Both run in <a href="#tasks">tasks</a>: a request that
 waits parks only its task.</p>
+<p>HTTP needs tasks and sockets, so it is not available on WebAssembly
+(<code>--target wasm32-wasip1</code>, see <a href="#webassembly">WebAssembly</a>).</p>
 <pre><code class="language-pepper">import async;
 import http;
 import io;
@@ -14553,6 +14563,10 @@ document every method.</p>
 <p>The <code>process</code> module starts other programs and holds what belongs to the
 running one: its arguments, its exit, its id, its executable, and its working
 directory. Bring it in with <code>import process</code>.</p>
+<p>On WebAssembly (<code>--target wasm32-wasip1</code>) a program cannot start another:
+<code>run</code>, <code>spawn</code>, <code>exec</code> and <code>executable_path</code> return an <code>IoError</code> saying it
+is not supported on WASI. Its arguments, exit and environment work (see
+<a href="#webassembly">WebAssembly</a>).</p>
 <h2 id="running-a-program"><a class="header" href="#running-a-program">Running a program</a></h2>
 <p><code>Command</code> describes a program to start. Its setters return the same
 <code>Command</code>, so they chain. <code>run()</code> starts the program, waits for it to end,
@@ -16343,8 +16357,8 @@ things work differently:</p>
 Code written for <code>!OS(Windows)</code> also compiles for WASI, so check that it
 only calls what wasi-libc has.</li>
 <li>There are no threads and no stack switching: <code>Thread.spawn</code> panics, and
-so does starting a task (<code>async.run</code>, <code>Task.spawn</code>). Mutexes, channels
-and atomics work within the one thread.</li>
+so does starting tasks (<code>async.run</code>, <code>async.run_with</code>). Mutexes, channels
+and atomics still work, as long as nothing waits for another thread.</li>
 <li>Sockets, TLS, HTTP connections and starting processes return an
 <code>IoError</code> saying they are not supported on WASI.</li>
 <li>Files work through the directories the runtime grants. <code>Metadata</code> has no

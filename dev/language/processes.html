@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -185,6 +185,10 @@
 <p>The <code>process</code> module starts other programs and holds what belongs to the
 running one: its arguments, its exit, its id, its executable, and its working
 directory. Bring it in with <code>import process</code>.</p>
+<p>On WebAssembly (<code>--target wasm32-wasip1</code>) a program cannot start another:
+<code>run</code>, <code>spawn</code>, <code>exec</code> and <code>executable_path</code> return an <code>IoError</code> saying it
+is not supported on WASI. Its arguments, exit and environment work (see
+<a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
 <h2 id="running-a-program"><a class="header" href="#running-a-program">Running a program</a></h2>
 <p><code>Command</code> describes a program to start. Its setters return the same
 <code>Command</code>, so they chain. <code>run()</code> starts the program, waits for it to end,

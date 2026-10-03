@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -189,6 +189,9 @@ In a plain program every call blocks the calling thread until it completes,
 like <code>File</code>. To serve several connections at once, give each
 one its own <a href="threads.html">thread</a>, or its own <a href="tasks.html#sockets">task</a>: in a
 task, a call that has to wait parks only that task.</p>
+<p>On WebAssembly (<code>--target wasm32-wasip1</code>) there are no sockets, host name
+lookups or TLS: each of those calls returns an <code>IoError</code> saying it is not
+supported on WASI (see <a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
 <h2 id="addresses"><a class="header" href="#addresses">Addresses</a></h2>
 <p>An <code>IpAddress</code> is an IPv4 or IPv6 address. A <code>SocketAddress</code> is an IP
 address and a port:</p>

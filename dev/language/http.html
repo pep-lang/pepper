@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5200f3b2.js";
+            window.path_to_searchindex_js = "../searchindex-b94e91e4.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -185,6 +185,8 @@
 <p>The <code>http</code> module has an HTTP/1.1 client and server, over plain TCP or
 <a href="networking.html#tls">TLS</a>. Both run in <a href="tasks.html">tasks</a>: a request that
 waits parks only its task.</p>
+<p>HTTP needs tasks and sockets, so it is not available on WebAssembly
+(<code>--target wasm32-wasip1</code>, see <a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
 <pre><code class="language-pepper">import async;
 import http;
 import io;
