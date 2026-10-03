@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9d390785.js";
+            window.path_to_searchindex_js = "searchindex-d08a603e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-0d41a7b3.js"></script>
@@ -19210,6 +19210,7 @@ pep-profile [options] --input &lt;FILE&gt;
 <tr><td><code>--profiler &lt;name&gt;</code></td><td>Record with <code>samply</code>, <code>perf</code> or <code>sample</code>, or the profiler at a path</td><td>the first installed</td></tr>
 <tr><td><code>--symbolizer &lt;path&gt;</code></td><td>The <code>llvm-symbolizer</code> that names frames, or <code>none</code></td><td>found on the <code>PATH</code></td></tr>
 <tr><td><code>-l</code>, <code>--lines</code></td><td>End each frame’s name with its file and line</td><td>off</td></tr>
+<tr><td><code>--idle</code></td><td>Keep the samples of threads that were waiting, not running (samply)</td><td>off</td></tr>
 <tr><td><code>--title &lt;text&gt;</code></td><td>The flame graph’s title</td><td><code>Flame graph: &lt;name&gt;</code></td></tr>
 <tr><td><code>--renderer &lt;name&gt;</code></td><td>What draws the flame graph: <code>builtin</code>, <code>inferno</code> or <code>flamegraph.pl</code></td><td><code>builtin</code></td></tr>
 <tr><td><code>--folded &lt;file&gt;</code></td><td>Also write the folded stacks</td><td></td></tr>
@@ -19247,6 +19248,13 @@ seconds (10 by default). samply and perf need permission to do that: on
 Linux, <code>kernel.perf_event_paranoid</code> must allow it (samply asks for 1 or
 lower) or the profiler must run as root; on macOS, <code>sample</code> can attach to
 your own processes.</p>
+<p>samply also records each thread while it waits, as samples that used no
+CPU. On Windows, a thread pool that Windows starts in every process sits
+waiting the whole run, and alone would fill half the graph. So
+<code>pep-profile</code> leaves out every sample of a samply recording in which its
+thread used no CPU, and the graph shows where the program ran. <code>--idle</code>
+keeps them, to see where threads block. It changes nothing with perf or
+<code>sample</code>.</p>
 <h2 id="names-in-the-flame-graph"><a class="header" href="#names-in-the-flame-graph">Names in the flame graph</a></h2>
 <p>Every frame is named the way the source names it:</p>
 <ul>
