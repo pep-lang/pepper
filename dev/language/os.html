@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
+            window.path_to_searchindex_js = "../searchindex-e407b0c6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e8bb89c.js"></script>
@@ -305,6 +305,7 @@ main(): int {
 <tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
 <tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database’s entry, or none</td></tr>
 <tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>
+<tr><td><code>is_elevated()</code></td><td>whether the program runs as root, or elevated (“Run as administrator”) on Windows; never on WASI</td></tr>
 </tbody>
 </table>
 </div>

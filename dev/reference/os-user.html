@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
+            window.path_to_searchindex_js = "../searchindex-e407b0c6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e8bb89c.js"></script>
@@ -183,7 +183,8 @@
                     <main>
                         <!-- Generated from runtime/os/user.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="user"><a class="header" href="#user">User</a></h1>
-<p>The user the program runs as: their name and directories.</p>
+<p>The user the program runs as: their name, directories, and whether they
+have administrator rights.</p>
 <p>Source: <code>runtime/os/user.pep</code></p>
 <h2 id="user_name"><a class="header" href="#user_name">user_name</a></h2>
 <pre><code class="language-pepper">user_name(): String?
@@ -195,6 +196,18 @@ on Windows <code>GetUserNameW</code>’s answer (else <code>USERNAME</code>), an
 <p><strong>Returns</strong></p>
 <ul>
 <li>the user name, or none when it cannot be found</li>
+</ul>
+<h2 id="is_elevated"><a class="header" href="#is_elevated">is_elevated</a></h2>
+<pre><code class="language-pepper">is_elevated(): bool
+</code></pre>
+<p>Returns whether the program runs with administrator rights: on POSIX,
+as root (effective user id 0); on Windows, from an elevated
+(“Run as administrator”) process of a member of Administrators
+(<code>IsUserAnAdmin</code>); never on WASI. Tools that need them, such as a
+profiler that reads kernel events, check this to say so up front.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the program runs as root or elevated</li>
 </ul>
 <h2 id="home_directory"><a class="header" href="#home_directory">home_directory</a></h2>
 <pre><code class="language-pepper">home_directory(): io.Path?

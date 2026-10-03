@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6e36c851.js";
+            window.path_to_searchindex_js = "../searchindex-e407b0c6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6e8bb89c.js"></script>
@@ -210,6 +210,11 @@ sampling the program itself:</p>
 <p>It uses samply when it is installed, and otherwise perf on Linux or
 <code>sample</code> on macOS; on Windows, samply is the one supported. When none is
 installed it says what to install. <code>--profiler</code> picks one.</p>
+<p>On Windows, samply records the system’s ETW events, which needs
+administrator rights: run <code>pep-profile</code> from an Administrator terminal
+(“Run as administrator”). Without them it stops at once and says so, rather
+than waiting on a UAC prompt. Drawing a recording with <code>--input</code> needs no
+rights.</p>
 <p><code>pep-profile</code> is written in Pepper (<code>tools/pep-profile</code>). Build it with the
 compiler, with <code>tools/</code> on the import path, and put it next to <code>pepper</code> so
 that <code>pepper profile</code> finds it:</p>
