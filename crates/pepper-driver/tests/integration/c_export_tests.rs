@@ -10,8 +10,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// A library that exercises each kind of value that crosses to C: numbers,
-/// `bool`, a C function pointer, a struct handle in both directions, and a
-/// module-scope variable whose initializer must have run.
+/// `bool`, a C function pointer, a `String` in both directions, a struct
+/// handle in both directions, and a module-scope variable whose initializer
+/// must have run.
 const LIBRARY: &str = r#"
 import async;
 
@@ -73,15 +74,36 @@ narrow(x: short): short {
 apply(f: extern (int) => int, x: int): int {
     return f(x);
 }
+
+[Export]
+shout(text: String, times: int): String {
+    var out = "";
+    for (var i in 0..times) {
+        out += text.upper();
+    }
+    return out + "!";
+}
+
+[Export]
+live_allocations(): long {
+    return _pep_live_allocs();
+}
 "#;
 
 const PROGRAM: &str = r#"
 #include <stdio.h>
+#include <string.h>
 #include "counter.h"
 
 static int32_t twice(int32_t x) { return 2 * x; }
 
 int main(void) {
+    int64_t live = live_allocations();
+    char* shouted = shout("h\xc3\xa9", 3, 2);
+    char* empty = shout(NULL, 0, 1);
+    printf("%s %s %d\n", shouted, empty, (int)strlen(shouted));
+    pepper_string_free(shouted);
+    pepper_string_free(empty);
     Counter* counter = counter_new(10);
     counter_increment(counter);
     int32_t count = counter_increment(counter);
@@ -91,11 +113,12 @@ int main(void) {
     counter_release(counter);
     printf("%d %d %d %d %d %d %d %g %d %d\n", add(2, 3), count, freed_before, freed_count(), started_value(),
            is_even(4), is_even(7), scale(1.5, 2.0f), narrow(-3), apply(twice, 21));
+    printf("leaked %d\n", (int)(live_allocations() - live));
     return 0;
 }
 "#;
 
-const EXPECTED: &str = "5 12 0 1 7 1 0 3 -3 42";
+const EXPECTED: &str = "HéHé! ! 7\n5 12 0 1 7 1 0 3 -3 42\nleaked 0";
 
 /// Build `LIBRARY` as a `kind` library in `dir`, returning its path.
 fn build_library(dir: &Path, kind: &str) -> PathBuf {
@@ -136,7 +159,7 @@ fn run_program(dir: &Path, link: &[String]) -> String {
     assert!(output.status.success(), "clang failed:\n{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     let output = Command::new(&exe).output().expect("run the C program");
     assert!(output.status.success(), "the C program failed: {}\n{}", output.status, String::from_utf8_lossy(&output.stderr));
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    String::from_utf8_lossy(&output.stdout).trim().replace("\r\n", "\n")
 }
 
 #[test]
@@ -181,14 +204,20 @@ fn header_declares_exports_and_handles() {
          void counter_retain(Counter* handle);\n\
          void counter_release(Counter* handle);\n\
          \n\
+         /* A string a function returns is a NUL-terminated UTF-8 copy, which the\n \
+         * caller frees with this. */\n\
+         void pepper_string_free(char* text);\n\
+         \n\
          int32_t add(int32_t a, int32_t b);\n\
          int32_t apply(int32_t (*f)(int32_t), int32_t x);\n\
          int32_t counter_increment(Counter* counter);\n\
          Counter* counter_new(int32_t start);\n\
          int32_t freed_count(void);\n\
          bool is_even(int64_t n);\n\
+         int64_t live_allocations(void);\n\
          int16_t narrow(int16_t x);\n\
          double scale(double x, float factor);\n\
+         char* shout(const char* text, size_t text_size, int32_t times);\n\
          int32_t started_value(void);\n"
     );
 }

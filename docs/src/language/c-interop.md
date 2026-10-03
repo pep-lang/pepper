@@ -421,10 +421,13 @@ typedef struct Counter Counter;
 void counter_retain(Counter* handle);
 void counter_release(Counter* handle);
 
+void pepper_string_free(char* text);
+
 int32_t add(int32_t a, int32_t b);
 int32_t apply(int32_t (*f)(int32_t), int32_t x);
 int32_t counter_increment(Counter* counter);
 Counter* counter_new(int32_t start);
+char* greet(const char* name, size_t name_size);
 ```
 
 and a C program calls them like any C function:
@@ -440,6 +443,9 @@ int main(void) {
     printf("%d\n", counter_increment(counter));   /* 42 */
     counter_release(counter);
     printf("%d\n", apply(twice, add(2, 3)));      /* 10 */
+    char* greeting = greet("C", 1);
+    printf("%s\n", greeting);                       /* hello, C */
+    pepper_string_free(greeting);
     return 0;
 }
 ```
@@ -472,20 +478,40 @@ Each parameter and the result must be a type C can hold:
 | `float`, `double` | `float`, `double` |
 | `__ptr<T>` | `T*` for a number type, else `void*` |
 | `extern (P...) => R` | a C function pointer, `R (*name)(P...)` |
+| `String` | a parameter: `const char* name, size_t name_size`; a result: `char*` (see [Strings](#strings)) |
 | a struct | an opaque handle, `Name*` |
 
 Anything else is an error at the parameter or result that C cannot hold:
 
 ```text
-main.pep:2:14: error: cannot export 'length': C cannot hold 'String'
-    2 | length(text: String): int {
-      |              ^~~~~~
-note: pass the bytes as a '__ptr<u8>' and a 'ulong' size, and make the String with 'String(p, size)'
+main.pep:2:15: error: cannot export 'total': C cannot hold 'Array<int>'
+    2 | total(values: Array<int>): int {
+      |               ^~~~~~~~~~
+note: only a non-generic struct passes to C, as a handle
 ```
 
-`String` is not supported yet; pass its bytes as above. A generic struct
-(`Array<int>`), a value struct, an enum, a trait, a tuple, `Optional` and a
-Pepper function type cannot cross either.
+A generic struct (`Array<int>`), a value struct, an enum, a trait, a tuple,
+`Optional` and a Pepper function type cannot cross. Pass an array as a
+pointer to its elements and a count, or wrap it in a struct of your own and
+pass a handle.
+
+### Strings
+
+A `String` crosses as UTF-8 bytes, copied each way, so neither side keeps a
+pointer into the other's memory:
+
+- A `String` **parameter** is two C parameters: a pointer to the bytes and
+  their size, `const char* name, size_t name_size`. The bytes need no NUL
+  terminator, and may contain NULs. The function gets its own copy for the
+  call; C keeps its buffer. A size of 0 (with any pointer, `NULL`
+  included) is the empty string.
+- A `String` **result** is a NUL-terminated copy of its bytes, as `char*`,
+  which the C code owns and frees with `pepper_string_free`, never with
+  `free`. An empty `String` is `""`, never `NULL`. A string with NULs inside
+  ends at its first one for C; return a pointer and a size instead when that
+  matters.
+- The header declares `pepper_string_free` when some export returns a
+  `String`.
 
 ### Handles
 
@@ -526,6 +552,9 @@ is written beside the library, named for it without the `lib` prefix
 - On Windows, `--lib static` and `--lib shared` both write `name.lib` (the
   archive, or the DLL's import library), so build them into different
   folders.
+- A C program links at most one Pepper static library: each holds its own
+  copy of the runtime, and two would define it twice. Shared libraries
+  keep their runtimes to themselves, so a program may load several.
 
 ### Initialization, panics and threads
 

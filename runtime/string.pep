@@ -1758,3 +1758,28 @@ extend String with Copyable<String>;
 extend String with ToString;
 
 extend StringBuilder with ToString;
+
+# The String an `[Export]`ed function receives from C: a copy of the `size`
+# UTF-8 bytes at `bytes` (see the compiler's codegen/src/exports.rs).
+export _pep_string_from_c(bytes: __ptr<char>, size: ulong): String {
+    if (size == 0 || bytes == __null) {
+        return String();
+    }
+    return String(bytes, size);
+}
+
+# What C receives for an `[Export]`ed function's String result: a
+# NUL-terminated copy of its bytes, which C frees with
+# `_pep_string_free_c` (exported as `pepper_string_free`).
+export _pep_string_to_c(text: String): __ptr<char> {
+    var copy = _pep_malloc(text.size + 1) as __ptr<char>;
+    if (text.size > 0) {
+        memcpy(copy, text.c_str(), text.size);
+    }
+    return copy;
+}
+
+# Frees a copy `_pep_string_to_c` made.
+export _pep_string_free_c(text: __ptr<char>) {
+    _pep_free(text);
+}

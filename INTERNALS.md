@@ -1512,7 +1512,11 @@ defines, in the program module only (`unit: None`), one C entry point per
 export that calls the Pepper function with the same LLVM signature (adding
 `signext`/`zeroext` on small integers, default visibility, and `dllexport`
 on Windows), and `<struct>_retain`/`_release` per handle, which step the
-count with `acquire_ref`/`release_ref`. Until `partition::finish` they are
+count with `acquire_ref`/`release_ref`. A `String` parameter is a pointer
+and a size in C, made into a `String` for the call by the runtime's
+`_pep_string_from_c` and released after it; a `String` result leaves through
+`_pep_string_to_c`, a NUL-terminated copy C frees with the exported
+`pepper_string_free` (`_pep_string_free_c`). Until `partition::finish` they are
 named `__export.<symbol>` (`EXPORT_PREFIX`), since a Pepper function of the
 same name keeps it until `finish` spells it `_P...`; `finish` then names
 them by their C symbols (`CodeGenerator::exported`). Being in the program

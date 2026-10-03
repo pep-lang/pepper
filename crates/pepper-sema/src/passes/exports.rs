@@ -4,8 +4,10 @@
 //! `[Export]` on a free function gives it a C symbol, its declared name or
 //! the one `[Export(name = "c_name")]` gives. Each parameter and the result
 //! must be a type C can hold: a number, `bool`, a pointer (`__ptr<T>`), a C
-//! function pointer (`extern (P) => R`), or a reference to a struct, which
-//! C holds as an opaque handle. Each struct a handle names also gets two
+//! function pointer (`extern (P) => R`), a `String` (UTF-8 bytes: a pointer
+//! and a size in, a NUL-terminated copy out, which C frees with
+//! [`STRING_FREE`]), or a reference to a struct, which C holds as an opaque
+//! handle. Each struct a handle names also gets two
 //! exported functions, `<struct>_retain` and `<struct>_release`, which step
 //! its reference count.
 //!
@@ -23,6 +25,15 @@ use std::collections::{BTreeMap, HashMap};
 
 /// The attribute that exports a function to C.
 pub const EXPORT_ATTRIBUTE: &str = "Export";
+
+/// The C function that frees a `String` an export returned, exported when
+/// one does.
+pub const STRING_FREE: &str = "pepper_string_free";
+
+/// Whether `ty` is `String`, which crosses as UTF-8 bytes.
+pub fn is_string(ty: &TypeName) -> bool {
+    ty.name == "String" && ty.sub_types.is_empty()
+}
 
 /// A free function C code can call.
 #[derive(Debug, Clone, PartialEq)]
@@ -58,6 +69,8 @@ pub struct Handle {
 pub struct Exports {
     pub functions: Vec<Export>,
     pub handles: Vec<Handle>,
+    /// Some export returns a `String`, so [`STRING_FREE`] is exported too.
+    pub frees_strings: bool,
 }
 
 impl Exports {
@@ -142,6 +155,10 @@ pub fn collect_exports(module: &mut Module) {
             loc: function.loc,
         });
     }
+    exports.frees_strings = exports.functions.iter().any(|e| is_string(&e.result));
+    if let Some(&loc) = symbols.get(STRING_FREE).filter(|_| exports.frees_strings) {
+        return crate::errors::report(Diagnostic::error(format!("'{}' is exported already, to free the strings exports return", STRING_FREE)).at(loc));
+    }
     for handle in handles.values() {
         for symbol in [&handle.retain, &handle.release] {
             if let Some(&loc) = symbols.get(symbol) {
@@ -199,15 +216,12 @@ fn is_c_identifier(name: &str) -> bool {
 /// Check that C can hold `ty` (a parameter or result of the export
 /// `symbol`, written at `loc`), recording the handle functions of a struct.
 fn check_type(module: &Module, ty: &TypeName, symbol: &str, loc: Loc, handles: &mut BTreeMap<String, Handle>) -> Result<(), Diagnostic> {
-    if c_type(ty).is_some() {
+    if c_type(ty).is_some() || is_string(ty) {
         return Ok(());
     }
     let cannot = |why: &str| {
         Diagnostic::error(format!("cannot export '{}': C cannot hold '{}'", symbol, demangle_name(&ty.to_string()))).at(loc).with_note(why, None)
     };
-    if ty.name == "String" && ty.sub_types.is_empty() {
-        return Err(cannot("pass the bytes as a '__ptr<u8>' and a 'ulong' size, and make the String with 'String(p, size)'"));
-    }
     let structure = module.structs.iter().find(|s| s.name == ty.to_string());
     match structure {
         Some(st) if !st.is_value() && !st.ty.is_generic() && !st.ty.is_tuple() && !ty.is_weak() && st.enum_cases.is_none() => {
@@ -309,8 +323,12 @@ pub fn small_integer_is_signed(ty: &TypeName) -> Option<bool> {
     }
 }
 
-/// The C type of `ty` in the header: as [`c_type`], or a handle pointer.
+/// The C type of `ty` in the header: as [`c_type`], a handle pointer, or
+/// for a `String` result, `char*`.
 fn header_type(ty: &TypeName, handles: &[Handle]) -> String {
+    if is_string(ty) {
+        return "char*".to_string();
+    }
     match handles.iter().find(|h| h.structure == ty.to_string()) {
         Some(handle) => format!("{}*", handle.c_type),
         None => c_type(ty).unwrap_or_else(|| "void*".to_string()),
@@ -336,9 +354,21 @@ pub fn header_declarations(exports: &Exports) -> String {
         }
         out.push('\n');
     }
+    if exports.frees_strings {
+        out.push_str("/* A string a function returns is a NUL-terminated UTF-8 copy, which the\n");
+        out.push_str(" * caller frees with this. */\n");
+        out.push_str(&format!("void {}(char* text);\n\n", STRING_FREE));
+    }
     for export in &exports.functions {
-        let parameters: Vec<String> =
-            export.parameters.iter().map(|(name, ty)| declarator(&header_type(ty, &exports.handles), name)).collect();
+        // A `String` parameter is its bytes and their size.
+        let parameters: Vec<String> = export
+            .parameters
+            .iter()
+            .map(|(name, ty)| match is_string(ty) {
+                true => format!("const char* {0}, size_t {0}_size", name),
+                false => declarator(&header_type(ty, &exports.handles), name),
+            })
+            .collect();
         let parameters = if parameters.is_empty() { "void".to_string() } else { parameters.join(", ") };
         let result = header_type(&export.result, &exports.handles);
         out.push_str(&format!("{};\n", declarator(&result, &format!("{}({})", export.symbol, parameters))));
@@ -365,6 +395,7 @@ pub fn header(file_name: &str, declarations: &str, libraries: &[String]) -> Stri
          #define {guard}\n\
          \n\
          #include <stdbool.h>\n\
+         #include <stddef.h>\n\
          #include <stdint.h>\n\
          \n\
          #ifdef __cplusplus\n\

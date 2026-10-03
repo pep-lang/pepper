@@ -5029,11 +5029,11 @@ fn export_on_a_method_warns() {
 #[test]
 fn export_of_a_type_c_cannot_hold() {
     assert_eq!(
-        error_of("export_string", "[Export]\nlength(text: String): int {\n    return 0;\n}\n"),
-        "main.pep:2:14: error: cannot export 'length': C cannot hold 'String'\n\
-         \x20   2 | length(text: String): int {\n\
-         \x20     |              ^~~~~~\n\
-         note: pass the bytes as a '__ptr<u8>' and a 'ulong' size, and make the String with 'String(p, size)'"
+        error_of("export_array", "[Export]\ntotal(values: Array<int>): int {\n    return 0;\n}\n"),
+        "main.pep:2:15: error: cannot export 'total': C cannot hold 'Array<int>'\n\
+         \x20   2 | total(values: Array<int>): int {\n\
+         \x20     |               ^~~~~~~~~~\n\
+         note: only a non-generic struct passes to C, as a handle"
     );
 }
 

@@ -34,9 +34,17 @@ apply(f: extern (int) => int, x: int): int {
     return f(x);
 }
 
+# A String arrives as UTF-8 bytes and their size, and leaves as a
+# NUL-terminated copy that C frees with `pepper_string_free`.
+[Export]
+greet(name: String): String {
+    return "hello, " + name;
+}
+
 main(): int {
     var counter = make_counter(41);
     assert(counter_increment(counter) == 42, "the counter counts");
     assert(add(2, 3) == 5, "add adds");
+    assert(greet("C") == "hello, C", "greet greets");
     return 0;
 }
