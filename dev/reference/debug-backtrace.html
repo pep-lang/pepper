@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0e249424.js";
+            window.path_to_searchindex_js = "../searchindex-ce01dae0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -202,15 +202,24 @@ columns).</li>
 <li><strong>WASI:</strong> a WebAssembly program cannot walk its stack, so a backtrace
 is empty.</li>
 </ul>
+<p>A function the optimizer inlined into its caller has no frame of its
+own, so each address is expanded into its chain of inlined calls, from
+the debug info of a <code>-g</code> build: one <code>StackFrame</code> per call, marked
+<code>inlined</code>.</p>
 <p>Frames inside the runtime’s own capture and panic code are left out, and
-so are the C runtime’s frames below <code>main</code>. A function the optimizer
-inlined into its caller has no frame of its own.</p>
+so are the runtime’s operator methods (<code>Array&lt;int&gt;.__index_get</code>, what
+<code>a[i]</code> calls) between a panic and the code that caused it, and the C
+runtime’s frames below <code>main</code>. <code>frames(full = true)</code>, or
+<code>PEPPER_BACKTRACE=full</code> for a panic’s backtrace, keeps them all.</p>
 <p>Source: <code>runtime/debug/backtrace.pep</code></p>
 <h2 id="stackframe"><a class="header" href="#stackframe">StackFrame</a></h2>
 <pre><code class="language-pepper">struct StackFrame
 </code></pre>
 <p>One call on the stack: where it returns to, and the function and source
 position that address belongs to.</p>
+<p>A call the optimizer inlined is a frame too, with <code>inlined</code> set: it
+shares its <code>address</code> with the frames of its callers, up to the first
+frame that is not inlined, which is the real one.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import debug;
 
@@ -244,6 +253,11 @@ info.</p>
 <pre><code class="language-pepper">var column: int
 </code></pre>
 <p>The 1-based source column of the call; 0 when unknown.</p>
+<h4 id="inlined"><a class="header" href="#inlined">inlined</a></h4>
+<pre><code class="language-pepper">var inlined: bool
+</code></pre>
+<p>Whether the optimizer inlined this call into its caller, the next
+frame: the function has no frame of its own on the stack.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="stackframe-1"><a class="header" href="#stackframe-1">StackFrame()</a></h4>
 <pre><code class="language-pepper">construct(address: ulong = 0)
@@ -259,8 +273,8 @@ position yet.</p>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
 <p>Returns the frame as text: <code>function at file:line:column</code>, with the
-parts that are unknown left out, and the address in hexadecimal when
-the function is unknown.</p>
+parts that are unknown left out, the address in hexadecimal when
+the function is unknown, and <code> (inlined)</code> after an inlined call.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the frame as text</li>
@@ -294,13 +308,23 @@ includes the frames of <code>capture</code> itself, which <code>frames()</code> 
 <p>Creates an empty Backtrace. Use <code>capture()</code> to record the stack.</p>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="frames"><a class="header" href="#frames">frames</a></h4>
-<pre><code class="language-pepper">frames(): Array&lt;StackFrame&gt;
+<pre><code class="language-pepper">frames(full: bool = false): Array&lt;StackFrame&gt;
 </code></pre>
 <p>Resolves each return address to its function and source position.
-Runs in time proportional to the program’s symbol and line tables,
-which it reads each call.</p>
-<p>Leaves out the frames of <code>capture</code> and of the runtime’s panic code at
-the top, and the C runtime’s frames below <code>main</code>.</p>
+Runs in time proportional to the program’s symbol table and debug
+info, which it reads each call.</p>
+<p>In a <code>-g</code> build, an address inside code the optimizer inlined
+becomes a frame for each inlined call, innermost first, each marked
+<code>inlined</code>, followed by the real frame (Linux and macOS read the
+DWARF, Windows asks DbgHelp).</p>
+<p>Unless <code>full</code>, leaves out, at the top, the frames of <code>capture</code> and of
+the runtime’s panic code and the runtime’s operator methods
+(<code>Array&lt;int&gt;.__index_get</code> for <code>a[i]</code>) a panic came through; and at
+the bottom, the C runtime’s frames below <code>main</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>full</code> — whether to keep every frame</li>
+</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the frames, innermost first</li>
@@ -341,8 +365,9 @@ main(): int {
 <p>Writes the current call stack to standard error, a line per frame, after
 a <code>backtrace:</code> line: what a panic prints after its message.</p>
 <p>A panic prints it in a build without <code>-O</code>. Set the <code>PEPPER_BACKTRACE</code>
-environment variable to <code>1</code> to print it in an optimized build too, or to
-<code>0</code> to never print it.</p>
+environment variable to <code>1</code> to print it in an optimized build too, to
+<code>full</code> to also print the runtime frames it leaves out (see
+<code>Backtrace.frames</code>), or to <code>0</code> to never print it.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import debug;
 

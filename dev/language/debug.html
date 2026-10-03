@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0e249424.js";
+            window.path_to_searchindex_js = "../searchindex-ce01dae0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8e9cc5d7.js"></script>
@@ -191,7 +191,7 @@ with <code>import debug</code>.</p>
 </thead>
 <tbody>
 <tr><td><code>debug.capture()</code></td><td>Records the call stack as a <code>Backtrace</code>: the return address of each call, innermost first.</td></tr>
-<tr><td><code>trace.frames()</code></td><td>Resolves the addresses to <code>StackFrame</code>s: <code>function</code>, <code>file</code>, <code>line</code>, <code>column</code> and <code>address</code>.</td></tr>
+<tr><td><code>trace.frames()</code></td><td>Resolves the addresses to <code>StackFrame</code>s: <code>function</code>, <code>file</code>, <code>line</code>, <code>column</code>, <code>address</code> and <code>inlined</code>.</td></tr>
 <tr><td><code>debug.print_backtrace()</code></td><td>Writes the current stack to standard error, as a panic does.</td></tr>
 <tr><td><code>debug.output(text)</code></td><td>Writes to the platform’s debugger channel.</td></tr>
 <tr><td><code>debug.is_debugger_attached()</code></td><td>Whether a debugger is attached.</td></tr>
@@ -222,9 +222,9 @@ main(): int {
     for (var frame in frames) {
         print(frame.to_string());
     }
-    # The outermost frame is main. (With -O, `where` is inlined into main
-    # and has no frame of its own; WebAssembly cannot walk its stack, so
-    # there a backtrace is empty.)
+    # The outermost frame is main. (With -O and no -g, `where` is inlined
+    # into main and has no frame of its own; WebAssembly cannot walk its
+    # stack, so there a backtrace is empty.)
     if (frames.count &gt; 0) {
         assert(frames[frames.count - 1].function == "main", "the outermost call");
     }
@@ -234,6 +234,12 @@ main(): int {
 </code></pre>
 <p>Built with <code>-g</code>, this prints:</p>
 <pre><code class="language-text">Parser.where at debug-backtrace.pep:13:16
+main at debug-backtrace.pep:19:24
+done
+</code></pre>
+<p>Built with <code>-g -O2</code>, the optimizer inlines <code>where</code> into <code>main</code>, and the
+backtrace still shows it, marked as inlined:</p>
+<pre><code class="language-text">Parser.where at debug-backtrace.pep:13:16 (inlined)
 main at debug-backtrace.pep:19:24
 done
 </code></pre>
@@ -259,10 +265,27 @@ info a <code>-g</code> build carries:</p>
 </table>
 </div>
 <p>A WebAssembly program cannot walk its own stack, so on WASI a backtrace is
-empty. A function the optimizer inlined into its caller has no frame of its
-own: with <code>-O</code>, the caller’s frame shows the inlined code’s line instead.</p>
-<p><code>frames()</code> leaves out the frames of <code>capture</code> itself and of the runtime’s
-panic code at the top of the stack, and the C runtime’s frames below <code>main</code>.</p>
+empty.</p>
+<h2 id="inlined-calls"><a class="header" href="#inlined-calls">Inlined calls</a></h2>
+<p>A function the optimizer inlined into its caller has no frame of its own on
+the stack. In a <code>-g</code> build, <code>frames()</code> puts it back: it expands each address
+into the chain of inlined calls it is inside, as <code>addr2line -i</code> and
+debuggers do, with one <code>StackFrame</code> per call, innermost first. Each of these
+frames has <code>inlined</code> set and is at the line of its own call, and the frame
+after them, which is not inlined, is the real one. All of them share its
+<code>address</code>. Linux and macOS read the inlined calls from the DWARF debug info,
+and Windows asks DbgHelp. On Windows an inlined call to a generic function
+is named without its type arguments (<code>helper</code>, not <code>helper&lt;int&gt;</code>), since
+the <code>.pdb</code> records inlined calls that way.</p>
+<p>Without <code>-g</code> there is no record of what was inlined, so an optimized build’s
+backtrace shows only the real frames, each named after the function the
+code was inlined into.</p>
+<h2 id="which-frames-are-left-out"><a class="header" href="#which-frames-are-left-out">Which frames are left out</a></h2>
+<p><code>frames()</code> leaves out, at the top of the stack, the frames of <code>capture</code>
+itself and of the runtime’s panic code, and the runtime’s operator methods a
+panic came through: a panic in <code>a[i]</code> starts at the line with <code>a[i]</code>, not in
+<code>Array&lt;int&gt;.__index_get</code>. It also leaves out the C runtime’s frames below
+<code>main</code>. <code>frames(full = true)</code> keeps them all.</p>
 <h2 id="backtraces-on-panic"><a class="header" href="#backtraces-on-panic">Backtraces on panic</a></h2>
 <p>A <a href="functions.html#assertions-and-panics">panic</a> prints the stack after its
 message in a build without <code>-O</code>:</p>
@@ -273,7 +296,8 @@ backtrace:
 </code></pre>
 <p>An optimized build prints the message alone. The <code>PEPPER_BACKTRACE</code>
 environment variable overrides the build: <code>PEPPER_BACKTRACE=1</code> prints a
-backtrace in any build, and <code>PEPPER_BACKTRACE=0</code> never prints one. Without
+backtrace in any build, <code>PEPPER_BACKTRACE=full</code> also prints the frames
+<code>frames()</code> leaves out, and <code>PEPPER_BACKTRACE=0</code> never prints one. Without
 <code>-g</code>, each frame shows its function but no file or line.</p>
 <p>Only the first panic in a process prints a backtrace. If a second thread
 panics at the same time, it prints just its message.</p>
