@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-775eb8cc.js";
+            window.path_to_searchindex_js = "../searchindex-4bd6f042.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f60afe02.js"></script>
@@ -358,7 +358,9 @@ simplest way to keep that promise is to hash exactly the fields that <code>==</c
 compares, by hashing a tuple of them: <code>hash&lt;(int, int)&gt;((value.x, value.y))</code>. A tuple’s hash combines its elements’ hashes, and each element
 uses its own type’s <code>hash</code>, so a <code>String</code> field contributes its content.
 Unequal keys may share a hash. That costs speed, not correctness.</p>
-<p>With <code>==</code> declared, <code>!=</code> is its negation, as for any struct.</p>
+<p>With <code>==</code> declared, <code>!=</code> is its negation, as for any struct. The struct may
+also <a href="overloading.html">overload</a> <code>==</code> for other types (<code>==(rhs: int)</code>); the map
+and set compare keys with the <code>==</code> that takes the struct itself.</p>
 <p>Keep these rules in mind:</p>
 <ul>
 <li>
