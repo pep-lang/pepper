@@ -562,20 +562,9 @@ impl<'m> Expander<'m> {
     }
 
     /// `error` with a note for each specialization that led to the one
-    /// being expanded, back to the code that is not generic: where the user
-    /// called `json.encode(job)`, for an error in `_to_json<Job>`.
-    fn with_requests(&self, mut error: Diagnostic) -> Diagnostic {
-        let mut name = crate::passes::gather_generics::parse_type_string(&self.context.symbol).to_string();
-        let mut shown: Vec<String> = vec![];
-        while let Some(request) = self.module.spec_requests.get(&name) {
-            if shown.contains(&request.by) || shown.len() >= crate::passes::gather_generics::MAX_SPECIALIZATION_DEPTH {
-                break;
-            }
-            shown.push(request.by.clone());
-            error = error.with_note(format!("'{}' is used by '{}' here", demangle(&name), demangle(&request.by)), Some(request.loc));
-            name = request.by.clone();
-        }
-        error
+    /// being expanded, back to the code that is not generic.
+    fn with_requests(&self, error: Diagnostic) -> Diagnostic {
+        crate::passes::gather_generics::with_requests(self.module, &self.context.symbol, error)
     }
 
     fn at(&self, span: ast::Span) -> Loc {

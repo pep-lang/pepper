@@ -110,7 +110,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             $pass;
             crate::pass_timer::record(stringify!($pass), started);
             if let Some(error) = crate::errors::take() {
-                return Err(error);
+                return Err(gather_generics::with_instantiation(module, error));
             }
         }};
     }
@@ -190,7 +190,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         // type arguments are known.
         let expanded = static_blocks::expand(module, true);
         if let Some(error) = crate::errors::take() {
-            return Err(error);
+            return Err(gather_generics::with_instantiation(module, error));
         }
         // A generic method call on a value whose type the round just
         // specialized (`c.map(f)` with `c: Box<long>`) is typed, and its type
@@ -207,7 +207,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
         // methods call `copies.copy<F>` for each field, specialized next round.
         let copies_added = copies::synthesize_copies(module);
         if let Some(error) = crate::errors::take() {
-            return Err(error);
+            return Err(gather_generics::with_instantiation(module, error));
         }
         if (module.structs.len(), module.functions.len()) == before && !methods_added && !copies_added && !expanded && !methods_expanded {
             // The round's inference can still have named a new instance

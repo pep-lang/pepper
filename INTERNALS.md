@@ -1000,7 +1000,7 @@ language side.
   empties the blocks left in generic bases. Errors carry a note per `for`
   pass, one naming the specialization, and one per `Module::spec_requests`
   entry back to the non-generic code that asked for it
-  (`Expander::with_requests`), so an error inside `json`'s converters ends
+  (`gather_generics::with_requests`), so an error inside `json`'s converters ends
   at the user's `json.encode(job)`.
 - **`--emit-static`** (`passes/static_source.rs`, driver `emit_static.rs`).
   `static_source::record` runs the passes with a thread-local set, and
@@ -2195,6 +2195,14 @@ diagnostics"). The mechanics:
   `.at(loc(span))`, passes through `errors::report`, codegen through
   `Err(String)` plus `locate`, and linking through `ModuleError` and
   `VisibilityError`, each with a `to_diagnostic` method.
+- An error a pass reports inside a specialization's body (the runtime's
+  `to_string<T>` made for the user's `expect_equal(mode, ...)`) gets a
+  note per `Module::spec_requests` link back to the non-generic code that
+  asked for it: `transform_pass` passes each error through
+  `gather_generics::with_instantiation`, which finds the specialization
+  whose body holds the error's location (narrowed by the types the message
+  quotes, since instances share their base's locations) and adds
+  `with_requests`' notes.
 - Warnings exist only as deprecations, and never stop a compile. Every
   one has the code `deprecated`, and may carry a `Fix` whose `Edit`s replace
   source spans; the renderer prints the fix under the caret, and the

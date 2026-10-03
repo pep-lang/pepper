@@ -5278,3 +5278,37 @@ fn value_struct_without_the_operator() {
          \x20     |               ^~~~"
     );
 }
+
+/// An error inside a runtime generic notes each specialization that led to
+/// it, ending at the user's call, as clang notes a template instantiation
+/// (#564).
+#[test]
+fn an_error_in_a_runtime_generic_notes_the_call_that_specialized_it() {
+    let source = "enum Mode {\n    Safe,\n    Fast,\n}\n\nmain(): int {\n    var mode = Mode.Fast;\n    expect_equal(mode, Mode.Safe);\n    return 0;\n}\n";
+    let error = error_of("runtime_generic_chain", source).replace('\\', "/");
+    assert!(error.contains("error: no member named 'to_string' in 'Mode'"), "{}", error);
+    assert!(error.contains("runtime/expect.pep:"), "{}", error);
+    assert!(
+        error.ends_with(
+            "main.pep:8:5: note: 'expect_equal<Mode>' is used by 'main' here\n\
+             \x20   8 |     expect_equal(mode, Mode.Safe);\n\
+             \x20     |     ^~~~~~~~~~~~"
+        ),
+        "{}",
+        error
+    );
+
+    // A pass that reports at the runtime's interpolation gets the note too.
+    let source = "struct Point {\n    var x: int = 0;\n}\n\nmain(): int {\n    expect_equal(Point(), Point());\n    return 0;\n}\n";
+    let error = error_of("runtime_generic_interpolation", source);
+    assert!(error.contains("error: cannot interpolate a value of type 'Point'"), "{}", error);
+    assert!(
+        error.ends_with(
+            "main.pep:6:5: note: 'expect_equal<Point>' is used by 'main' here\n\
+             \x20   6 |     expect_equal(Point(), Point());\n\
+             \x20     |     ^~~~~~~~~~~~"
+        ),
+        "{}",
+        error
+    );
+}

@@ -4,6 +4,7 @@ use crate::model::{Block, Declaration, Diagnostic, Expression, Loc, Module, Spec
 use crate::passes::walk_function;
 use crate::symbols::SymbolTable;
 use crate::type_name::TypeName;
+use pepper_parser::namespace::demangle;
 use std::collections::BTreeMap;
 
 /// How deep specialization may nest: a generic whose instance asks for a
@@ -437,4 +438,70 @@ pub(crate) fn specialization_too_deep(module: &Module, spec: &TypeName) -> bool 
     }
     crate::errors::report(error);
     true
+}
+
+/// `error` with a note for each specialization that led to `symbol` (a
+/// specialization's name in the model), back to the code that is not
+/// generic: where the user called `json.encode(job)`, for an error in
+/// `_to_json<Job>`.
+pub(crate) fn with_requests(module: &Module, symbol: &str, mut error: Diagnostic) -> Diagnostic {
+    let mut name = parse_type_string(symbol).to_string();
+    let mut shown: Vec<String> = vec![];
+    while let Some(request) = module.spec_requests.get(&name) {
+        if shown.contains(&request.by) || shown.len() >= MAX_SPECIALIZATION_DEPTH {
+            break;
+        }
+        shown.push(request.by.clone());
+        error = error.with_note(format!("'{}' is used by '{}' here", demangle(&name), demangle(&request.by)), Some(request.loc));
+        name = request.by.clone();
+    }
+    error
+}
+
+/// `error`, found by a pass, with [`with_requests`]' notes when it lies in
+/// the body of a specialization, as clang notes the template instantiation
+/// an error came from: an error in the runtime's `to_string<T>` then also
+/// points at the user's `expect_equal(mode, Mode.Safe)` that asked for
+/// `to_string<Mode>`.
+///
+/// The specializations of one generic share its locations, so when several
+/// contain the error, those whose type arguments the message names
+/// (`no member named 'to_string' in 'Mode'`) are kept; the error is left as
+/// it is unless that leaves exactly one.
+pub(crate) fn with_instantiation(module: &Module, error: Diagnostic) -> Diagnostic {
+    let Some(at) = error.loc.filter(|l| *l != Loc::NONE) else { return error };
+    let contains = |function: &crate::model::FunctionDef| {
+        let mut found = false;
+        crate::passes::visit_function(function, &mut |e| found |= e.loc() == at);
+        found || function.parameters.iter().any(|p| p.loc == at)
+    };
+    // Each specialization a request made, and the functions it owns: a
+    // generic function's instance, or a generic struct's instance's methods.
+    let mut candidates: Vec<&str> = vec![];
+    for function in module.functions.iter().filter(|f| !f.is_generic_func && f.name.contains('<')) {
+        if module.spec_requests.contains_key(&parse_type_string(&function.name).to_string()) && contains(function) {
+            candidates.push(&function.name);
+        }
+    }
+    for st in module.structs.iter().filter(|s| s.generic_params.is_empty() && s.ty.is_generic()) {
+        let key = st.ty.to_string();
+        if module.spec_requests.contains_key(&key) && st.method_members.iter().chain(&st.constructors).any(contains) {
+            candidates.push(&st.name);
+        }
+    }
+    if candidates.len() > 1 {
+        let named: Vec<String> = error.message.split('\'').skip(1).step_by(2).map(str::to_string).collect();
+        candidates.retain(|c| {
+            let shown = demangle(c);
+            let arguments = shown.split_once('<').map_or("", |(_, rest)| rest);
+            named.iter().any(|n| arguments.split(|ch: char| !(ch.is_alphanumeric() || ch == '_' || ch == '.')).any(|word| word == n))
+        });
+    }
+    let [symbol] = candidates[..] else { return error };
+    // A pass that knows its specialization (a `static` block) noted the chain itself.
+    let first = module.spec_requests.get(&parse_type_string(symbol).to_string()).map(|r| r.loc);
+    if error.notes.iter().any(|n| n.loc == first) {
+        return error;
+    }
+    with_requests(module, symbol, error)
 }
