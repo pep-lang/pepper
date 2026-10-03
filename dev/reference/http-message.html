@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,10 +194,10 @@ lowercased, so <code>Content-Type</code> and <code>content-type</code> are the s
 name may hold several values, kept in the order added. Different names
 have no defined order, as HTTP allows.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var headers = http.Headers();
-    headers.add("Accept", "text/html");
-    headers["accept"] = "application/json";   # replaces it
-    assert(headers["ACCEPT"] == "application/json", "one value");
+<pre><code class="language-pepper">var headers = http.Headers();
+headers.add("Accept", "text/html");
+headers["accept"] = "application/json";   # replaces it
+assert(headers["ACCEPT"] == "application/json", "one value");
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
@@ -317,8 +317,8 @@ add headers and a body. A <code>Server</code> handler receives one, with <code>u
 the target from the request line (<code>/path?query</code>) and the body read in
 full.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
-    request.headers["Content-Type"] = "application/x-www-form-urlencoded";
+<pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
+request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
@@ -425,11 +425,11 @@ U+FFFD, the replacement character.</p>
 returns one: build it with a status, then add headers and a body. The
 server adds <code>Content-Length</code> itself.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    handle(request: http.Request): http.Response {
-        var response = http.Response(200).set_text("hello");
-        response.headers["Content-Type"] = "text/plain";
-        return response;
-    }
+<pre><code class="language-pepper">handle(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello");
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
 </code></pre>
 <h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>

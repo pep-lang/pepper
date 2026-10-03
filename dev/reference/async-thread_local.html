@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -211,20 +211,20 @@ so destroy one only after the threads that used it have exited.</p>
 <li><code>T</code> — the type of the per-thread value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const calls = async.ThreadLocal&lt;int&gt;();
+const calls = async.ThreadLocal&lt;int&gt;();
 
-    count_call() {
-        calls.set(calls.get() + 1);
-    }
+count_call() {
+    calls.set(calls.get() + 1);
+}
 
-    main(): int {
-        count_call();
-        count_call();
-        assert(calls.get() == 2, "two calls on this thread");
-        return 0;
-    }
+main(): int {
+    count_call();
+    count_call();
+    assert(calls.get() == 2, "two calls on this thread");
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
@@ -271,16 +271,16 @@ no value (for a struct <code>T</code>).</p>
 <li>the guard; its <code>enter()</code> returns this thread’s value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    const names = async.ThreadLocal&lt;Array&lt;String&gt;&gt;();
+<pre><code class="language-pepper">const names = async.ThreadLocal&lt;Array&lt;String&gt;&gt;();
 
-    remember(String name) {
-        if (!names.is_set()) {
-            names.set(Array&lt;String&gt;());
-        }
-        with (var list = names.enter()) {
-            list.append(name.copy());
-        }
+remember(String name) {
+    if (!names.is_set()) {
+        names.set(Array&lt;String&gt;());
     }
+    with (var list = names.enter()) {
+        list.append(name.copy());
+    }
+}
 </code></pre>
 <h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
 <pre><code class="language-pepper">is_set(): bool

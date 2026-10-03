@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,6 +197,9 @@ the indexer <code>s[i]</code>, <code>substr</code>, and iteration.</li>
 <code>ends_with</code>. The byte size is the authoritative length, so the data may
 contain NUL bytes. It is never derived from a terminator.</li>
 </ul>
+<p>A String’s bytes are not guaranteed to be followed by a NUL. Only
+<code>c_str()</code> guarantees one, so call it to hand the text to C; anything else
+that reads the bytes must stop at <code>size</code>.</p>
 <p>A String is a reference type: <code>var b = a;</code> shares one object, so
 <code>append</code>, <code>+=</code>, and <code>grow</code> are visible through every reference. Use
 <code>copy()</code> or <code>+</code> for an independent copy. Equality (<code>==</code>) compares
@@ -209,15 +212,15 @@ while a <code>for</code> loop iterates it panics.</p>
 a compiler intrinsic whose braces name its arguments by position (see
 the String interpolation chapter).</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "héllo";
-    assert(s.length == 5, "5 code points");
-    assert(s.size == 6, "6 bytes: 'é' is 2");
-    s.append(" world");
-    assert(s.find("world") == 7, "find returns a byte offset");
-    assert(s[1] == "é", "the indexer counts code points");
-    for (var c in s) {
-        print(c);   # one code point per line
-    }
+<pre><code class="language-pepper">var s = "héllo";
+assert(s.length == 5, "5 code points");
+assert(s.size == 6, "6 bytes: 'é' is 2");
+s.append(" world");
+assert(s.find("world") == 7, "find returns a byte offset");
+assert(s[1] == "é", "the indexer counts code points");
+for (var c in s) {
+    print(c);   # one code point per line
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="length"><a class="header" href="#length">length</a></h4>
@@ -231,8 +234,7 @@ the String interpolation chapter).</p>
 <h4 id="size"><a class="header" href="#size">size</a></h4>
 <pre><code class="language-pepper">var size: ulong { get; }
 </code></pre>
-<p>The number of bytes of UTF-8, not counting the NUL
-terminator. O(1).</p>
+<p>The number of bytes of UTF-8. O(1).</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>length</code></li>
@@ -264,9 +266,9 @@ trusted, not checked against the data. Runs in O(size).</p>
 <li><code>length</code> — the number of code points in those bytes</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var empty = String();
-    var s = "abc";
-    var copy = String(s.c_str(), s.size, s.length);
+<pre><code class="language-pepper">var empty = String();
+var s = "abc";
+var copy = String(s.c_str(), s.size, s.length);
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="length_of"><a class="header" href="#length_of">length_of</a></h4>
@@ -297,8 +299,8 @@ terminating NUL. Runs in O(size).</p>
 <li>a new array of <code>size</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var data = "hi".bytes();
-    assert(data.count == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
+<pre><code class="language-pepper">var data = "hi".bytes();
+assert(data.count == 2 &amp;&amp; data[0] == 104, "the bytes of 'h' and 'i'");
 </code></pre>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
 <pre><code class="language-pepper">grow(new_size: ulong)
@@ -327,11 +329,11 @@ this String sees the change. Runs in O(size + rhs.size).</p>
 <li><code>rhs</code> — the String to append; it is not modified</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "TEST";
-    s.append("ING");   # s == "TESTING"
+<pre><code class="language-pepper">var s = "TEST";
+s.append("ING");   # s == "TESTING"
 </code></pre>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: int, location: __ptr&lt;char&gt; = __caller_location()): String
+<pre><code class="language-pepper">[](idx: int): String
 </code></pre>
 <p>Returns the code point at code-point index <code>idx</code> as a new
 one-code-point String.</p>
@@ -343,7 +345,6 @@ visit every code point in O(size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the code-point index; negative counts from the end</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -354,9 +355,9 @@ visit every code point in O(size).</p>
 <li>if <code>idx</code> is not less than <code>length</code> after the negative index is normalized, which includes any index into an empty String</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "TEST";
-    assert(s[0] == "T", "first");
-    assert(s[-1] == "T", "last");
+<pre><code class="language-pepper">var s = "TEST";
+assert(s[0] == "T", "first");
+assert(s[-1] == "T", "last");
 </code></pre>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: String): bool
@@ -387,8 +388,8 @@ shares, and invalidates running iterators.</p>
 <li>this String, after appending</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "a";
-    s += "b";   # s == "ab"
+<pre><code class="language-pepper">var s = "a";
+s += "b";   # s == "ab"
 </code></pre>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): StringIterator
@@ -404,15 +405,18 @@ panic.</p>
 <li>a new iterator, positioned before the first code point</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = 0;
-    for (var c in "héllo") {
-        n = n + 1;   # 5 iterations
-    }
+<pre><code class="language-pepper">var n = 0;
+for (var c in "héllo") {
+    n = n + 1;   # 5 iterations
+}
 </code></pre>
 <h4 id="c_str"><a class="header" href="#c_str">c_str</a></h4>
 <pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
 </code></pre>
 <p>Returns the String’s buffer as a NUL-terminated C string.</p>
+<p>This is the one API that guarantees a NUL after the content: a String
+is not otherwise guaranteed to be NUL-terminated, so code that needs
+the terminator calls <code>c_str()</code> rather than relying on the buffer.</p>
 <p>The pointer is owned by the String. It is valid until the String is
 destroyed or <code>append</code>, <code>+=</code>, or <code>grow</code> reallocates it. It is <code>__null</code>
 for a String built with no data (<code>String()</code>), so check it before you
@@ -433,9 +437,9 @@ implementation).</p>
 <li>an independent copy of this String</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = "abc";
-    var b = a.copy();
-    b.append("d");   # a is still "abc"
+<pre><code class="language-pepper">var a = "abc";
+var b = a.copy();
+b.append("d");   # a is still "abc"
 </code></pre>
 <h4 id="clone"><a class="header" href="#clone">clone</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'copy' instead", "copy")] clone(): String
@@ -470,10 +474,10 @@ nothing. The result still counts from the start of the String.</p>
 <li>the byte offset of the first match at or after <code>from</code>, or -1 when there is none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "TESTING";
-    assert(s.find("STI") == 2, "byte offset");
-    assert(s.find("xyz") == -1, "absent");
-    assert("a,b,c".find(",", 2) == 3, "the second comma");
+<pre><code class="language-pepper">var s = "TESTING";
+assert(s.find("STI") == 2, "byte offset");
+assert(s.find("xyz") == -1, "absent");
+assert("a,b,c".find(",", 2) == 3, "the second comma");
 </code></pre>
 <h4 id="rfind"><a class="header" href="#rfind">rfind</a></h4>
 <pre><code class="language-pepper">rfind(needle: String): long
@@ -490,11 +494,11 @@ String, or -1 when it does not occur. An empty <code>needle</code> is found at
 <li>the byte offset of the last match, or -1 when there is none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("a/b/c".rfind("/") == 3, "the last slash");
-    assert("abc".rfind("x") == -1, "absent");
+<pre><code class="language-pepper">assert("a/b/c".rfind("/") == 3, "the last slash");
+assert("abc".rfind("x") == -1, "absent");
 </code></pre>
 <h4 id="split"><a class="header" href="#split">split</a></h4>
-<pre><code class="language-pepper">split(separator: String, location: __ptr&lt;char&gt; = __caller_location()): String[]
+<pre><code class="language-pepper">split(separator: String): String[]
 </code></pre>
 <p>Splits the String at every occurrence of <code>separator</code> and returns the
 pieces between them, in order. Adjacent separators give an empty
@@ -505,7 +509,6 @@ whole String. Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -516,12 +519,12 @@ whole String. Runs in O(size * separator.size).</p>
 <li>if <code>separator</code> is empty</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var parts = "a,b,,c".split(",");
-    assert(parts.count == 4, "four pieces");
-    assert(parts[2] == "", "an empty piece");
+<pre><code class="language-pepper">var parts = "a,b,,c".split(",");
+assert(parts.count == 4, "four pieces");
+assert(parts[2] == "", "an empty piece");
 </code></pre>
 <h4 id="split_once"><a class="header" href="#split_once">split_once</a></h4>
-<pre><code class="language-pepper">split_once(separator: String, location: __ptr&lt;char&gt; = __caller_location()): (String, String)?
+<pre><code class="language-pepper">split_once(separator: String): (String, String)?
 </code></pre>
 <p>Splits the String at the first occurrence of <code>separator</code>: the text
 before it and the text after it, or none when it does not occur.
@@ -529,7 +532,6 @@ Runs in O(size * separator.size).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>separator</code> — the text to split at</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -540,10 +542,10 @@ Runs in O(size * separator.size).</p>
 <li>if <code>separator</code> is empty</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var header = "Host: example.com".split_once(": ");
-    assert(header.is_value(), "has a colon");
-    var (name, value) = header.value();
-    assert(name == "Host" &amp;&amp; value == "example.com", "split");
+<pre><code class="language-pepper">var header = "Host: example.com".split_once(": ");
+assert(header.is_value(), "has a colon");
+var (name, value) = header.value();
+assert(name == "Host" &amp;&amp; value == "example.com", "split");
 </code></pre>
 <h4 id="join"><a class="header" href="#join">join</a></h4>
 <pre><code class="language-pepper">join(parts: String[]): String
@@ -560,13 +562,13 @@ String, and one part gives a copy of it. Runs in O(total size).</p>
 <li>a new String</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var parts = Array&lt;String&gt;();
-    parts.append("a");
-    parts.append("b");
-    assert(", ".join(parts) == "a, b", "joined");
+<pre><code class="language-pepper">var parts = Array&lt;String&gt;();
+parts.append("a");
+parts.append("b");
+assert(", ".join(parts) == "a, b", "joined");
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
-<pre><code class="language-pepper">replace(from: String, to: String, location: __ptr&lt;char&gt; = __caller_location()): String
+<pre><code class="language-pepper">replace(from: String, to: String): String
 </code></pre>
 <p>Returns a copy of this String with every occurrence of <code>from</code> replaced
 by <code>to</code>, scanning left to right without overlaps: <code>"aaa".replace("aa", "b")</code> is <code>"ba"</code>. Runs in O(size * from.size) plus the result’s
@@ -575,7 +577,6 @@ size.</p>
 <ul>
 <li><code>from</code> — the text to replace</li>
 <li><code>to</code> — the text to put in its place</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -586,7 +587,7 @@ size.</p>
 <li>if <code>from</code> is empty</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
+<pre><code class="language-pepper">assert("a\r\nb".replace("\r\n", "\n") == "a\nb", "line endings");
 </code></pre>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">contains(needle: String): bool
@@ -645,10 +646,10 @@ or past <code>length</code>, the result is an empty String. Runs in O(size).</p>
 <li>a new String that holds the selected code points</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "TEST";
-    assert(s.substr(1, 2) == "ES", "middle");
-    assert(s.substr(0, 99) == "TEST", "count is clamped");
-    assert(s.substr(4, 5) == "", "start past the end");
+<pre><code class="language-pepper">var s = "TEST";
+assert(s.substr(1, 2) == "ES", "middle");
+assert(s.substr(0, 99) == "TEST", "count is clamped");
+assert(s.substr(4, 5) == "", "start past the end");
 </code></pre>
 <h4 id="operator--3"><a class="header" href="#operator--3">operator !=</a></h4>
 <pre><code class="language-pepper">!=(rhs: String): bool
@@ -677,7 +678,7 @@ operand is modified. Runs in O(size + rhs.size).</p>
 <li>a new concatenated String</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var greeting = "Hello, " + "world";
+<pre><code class="language-pepper">var greeting = "Hello, " + "world";
 </code></pre>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
@@ -690,7 +691,7 @@ a copy. O(1).</p>
 <li>this String</li>
 </ul>
 <h4 id="byte_at"><a class="header" href="#byte_at">byte_at</a></h4>
-<pre><code class="language-pepper">byte_at(index: ulong, location: __ptr&lt;char&gt; = __caller_location()): byte
+<pre><code class="language-pepper">byte_at(index: ulong): byte
 </code></pre>
 <p>Returns the byte at byte offset <code>index</code> of the UTF-8 data. O(1).</p>
 <p>The offset counts bytes, not code points, so a byte inside a
@@ -699,7 +700,6 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>index</code> — the byte offset, less than <code>size</code></li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -710,11 +710,11 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <li>if <code>index</code> is not less than <code>size</code> (“String byte_at index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "a=b";
-    assert(s.byte_at(1) == '=', "second byte");
+<pre><code class="language-pepper">var s = "a=b";
+assert(s.byte_at(1) == '=', "second byte");
 </code></pre>
 <h4 id="substr_bytes"><a class="header" href="#substr_bytes">substr_bytes</a></h4>
-<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong, location: __ptr&lt;char&gt; = __caller_location()): String
+<pre><code class="language-pepper">substr_bytes(start: ulong, size: ulong): String
 </code></pre>
 <p>Returns a new String of the <code>size</code> bytes starting at byte offset
 <code>start</code>. Both arguments count bytes, not code points, so offsets from
@@ -723,7 +723,6 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <ul>
 <li><code>start</code> — the byte offset of the first byte to copy</li>
 <li><code>size</code> — the number of bytes to copy</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -735,10 +734,10 @@ character literal (<code>s.byte_at(0) == '#'</code>).</p>
 <li>if <code>start</code> or <code>start + size</code> falls inside a multi-byte code point (“String substr_bytes splits a code point”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var s = "key=value";
-    var eq = s.find("=") as ulong;
-    assert(s.substr_bytes(0, eq) == "key", "before '='");
-    assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
+<pre><code class="language-pepper">var s = "key=value";
+var eq = s.find("=") as ulong;
+assert(s.substr_bytes(0, eq) == "key", "before '='");
+assert(s.substr_bytes(eq + 1, s.size - eq - 1) == "value", "after '='");
 </code></pre>
 <h4 id="compare"><a class="header" href="#compare">compare</a></h4>
 <pre><code class="language-pepper">compare(other: String): int
@@ -755,9 +754,9 @@ other orders first. Runs in O(min(size, other.size)).</p>
 <li>a negative number when this String orders before <code>other</code>, 0 when both hold the same bytes, and a positive number when it orders after</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("apple".compare("banana") &lt; 0, "a before b");
-    assert("ab".compare("abc") &lt; 0, "a prefix orders first");
-    assert("x".compare("x") == 0, "equal");
+<pre><code class="language-pepper">assert("apple".compare("banana") &lt; 0, "a before b");
+assert("ab".compare("abc") &lt; 0, "a prefix orders first");
+assert("x".compare("x") == 0, "equal");
 </code></pre>
 <h4 id="operator--5"><a class="header" href="#operator--5">operator &lt;</a></h4>
 <pre><code class="language-pepper">&lt;(other: String): bool
@@ -820,8 +819,8 @@ only). Runs in O(size).</p>
 <li>a new String with the trailing whitespace removed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
-    assert("  indented".trim_end() == "  indented", "leading kept");
+<pre><code class="language-pepper">assert("code;  \r\n".trim_end() == "code;", "trailing whitespace");
+assert("  indented".trim_end() == "  indented", "leading kept");
 </code></pre>
 <h4 id="trim_start"><a class="header" href="#trim_start">trim_start</a></h4>
 <pre><code class="language-pepper">trim_start(): String
@@ -834,7 +833,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <li>a new String with the leading whitespace removed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("  \tcode".trim_start() == "code", "leading whitespace");
+<pre><code class="language-pepper">assert("  \tcode".trim_start() == "code", "leading whitespace");
 </code></pre>
 <h4 id="trim"><a class="header" href="#trim">trim</a></h4>
 <pre><code class="language-pepper">trim(): String
@@ -846,7 +845,7 @@ tabs, carriage returns, line feeds, vertical tabs and form feeds
 <li>a new String with the leading and trailing whitespace removed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(" \t value \r\n".trim() == "value", "both ends");
+<pre><code class="language-pepper">assert(" \t value \r\n".trim() == "value", "both ends");
 </code></pre>
 <h4 id="lower"><a class="header" href="#lower">lower</a></h4>
 <pre><code class="language-pepper">lower(): String
@@ -860,8 +859,8 @@ O(size).</p>
 <li>a new String in lowercase</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("Content-Type".lower() == "content-type", "ASCII lowered");
-    assert("Ärger".lower() == "Ärger", "non-ASCII kept");
+<pre><code class="language-pepper">assert("Content-Type".lower() == "content-type", "ASCII lowered");
+assert("Ärger".lower() == "Ärger", "non-ASCII kept");
 </code></pre>
 <h4 id="upper"><a class="header" href="#upper">upper</a></h4>
 <pre><code class="language-pepper">upper(): String
@@ -875,7 +874,7 @@ O(size).</p>
 <li>a new String in uppercase</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("get".upper() == "GET", "ASCII raised");
+<pre><code class="language-pepper">assert("get".upper() == "GET", "ASCII raised");
 </code></pre>
 <h4 id="lines"><a class="header" href="#lines">lines</a></h4>
 <pre><code class="language-pepper">lines(): String[]
@@ -890,10 +889,10 @@ give <code>["a", "b"]</code>, and <code>""</code> gives no lines. Runs in O(size
 <li>a new Array with one new String per line</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var lines = "first\r\nsecond\n\nfourth".lines();
-    assert(lines.count == 4, "four lines");
-    assert(lines[1] == "second", "\\r\\n removed");
-    assert(lines[2] == "", "an empty line");
+<pre><code class="language-pepper">var lines = "first\r\nsecond\n\nfourth".lines();
+assert(lines.count == 4, "four lines");
+assert(lines[1] == "second", "\\r\\n removed");
+assert(lines[2] == "", "an empty line");
 </code></pre>
 <h4 id="repeat"><a class="header" href="#repeat">repeat</a></h4>
 <pre><code class="language-pepper">repeat(count: ulong): String
@@ -910,8 +909,8 @@ O(size * count).</p>
 <li>a new String of <code>size * count</code> bytes</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert("ab".repeat(3) == "ababab", "three copies");
-    var indent = " ".repeat(8);   # eight spaces
+<pre><code class="language-pepper">assert("ab".repeat(3) == "ababab", "three copies");
+var indent = " ".repeat(8);   # eight spaces
 </code></pre>
 <h2 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: long): String
@@ -929,8 +928,8 @@ integer picks its own overload.</p>
 <li>a new String such as <code>"-42"</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(to_string(-42) == "-42", "negative");
-    var where = to_string(line) + ":" + to_string(column);
+<pre><code class="language-pepper">assert(to_string(-42) == "-42", "negative");
+var where = to_string(line) + ":" + to_string(column);
 </code></pre>
 <h2 id="to_string-2"><a class="header" href="#to_string-2">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: ulong): String
@@ -1052,9 +1051,9 @@ number of steps per value.</p>
 <li>a new String such as <code>"0.1"</code> or <code>"-2.5"</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(to_string(0.1) == "0.1", "shortest");
-    assert(to_string(3.0) == "3.0", "keeps the point");
-    assert(to_string(1.0e20) == "1e+20", "exponent");
+<pre><code class="language-pepper">assert(to_string(0.1) == "0.1", "shortest");
+assert(to_string(3.0) == "3.0", "keeps the point");
+assert(to_string(1.0e20) == "1e+20", "exponent");
 </code></pre>
 <h2 id="to_string-11"><a class="header" href="#to_string-11">to_string</a></h2>
 <pre><code class="language-pepper">to_string(value: float): String
@@ -1070,8 +1069,8 @@ a <code>float</code>, laid out as <code>to_string(double)</code> lays it out.</p
 <li>a new String such as <code>"0.1"</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    float third = 1.0 / 3.0;
-    assert(to_string(third) == "0.33333334", "a float's digits");
+<pre><code class="language-pepper">float third = 1.0 / 3.0;
+assert(to_string(third) == "0.33333334", "a float's digits");
 </code></pre>
 <h2 id="to_string-12"><a class="header" href="#to_string-12">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B&gt;(value: (A, B)): String
@@ -1093,9 +1092,9 @@ without quotes. Tuples of up to eight elements convert this way.</p>
 <li>a new String such as <code>"(1, two)"</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(to_string((1, "two")) == "(1, two)", "a pair");
-    var nested = (1, (2.5, true));
-    assert($"{nested}" == "(1, (2.5, true))", "nested");
+<pre><code class="language-pepper">assert(to_string((1, "two")) == "(1, two)", "a pair");
+var nested = (1, (2.5, true));
+assert($"{nested}" == "(1, (2.5, true))", "nested");
 </code></pre>
 <h2 id="to_string-13"><a class="header" href="#to_string-13">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;A, B, C&gt;(value: (A, B, C)): String
@@ -1238,10 +1237,10 @@ or a file (where C would buffer it until the program exits).</p>
 <li><code>text</code> — the text to print</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    print("hello");
-    var n = 3;
-    print($"n = {n}");
-    print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
+<pre><code class="language-pepper">print("hello");
+var n = 3;
+print($"n = {n}");
+print("{0} + {1} = {2}", 1, 2, 1 + 2);   # 1 + 2 = 3
 </code></pre>
 <h2 id="print-1"><a class="header" href="#print-1">print</a></h2>
 <pre><code class="language-pepper">print&lt;T&gt;(value: T)
@@ -1260,9 +1259,9 @@ the argument.</p>
 <li><code>value</code> — the value to print</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    print(42);          # 42
-    print(0.5);         # 0.5
-    print((1, "two"));  # (1, two)
+<pre><code class="language-pepper">print(42);          # 42
+print(0.5);         # 0.5
+print((1, "two"));  # (1, two)
 </code></pre>
 <h2 id="to_string-19"><a class="header" href="#to_string-19">to_string</a></h2>
 <pre><code class="language-pepper">to_string&lt;T&gt;(value: T): String
@@ -1286,17 +1285,17 @@ interpolated strings.</p>
 <li>the String that <code>value.to_string()</code> returns</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    struct Point {
-        var x: int = 0;
-        var y: int = 0;
-        construct(this.x = 0, this.y = 0) {}
-    }
+<pre><code class="language-pepper">struct Point {
+    var x: int = 0;
+    var y: int = 0;
+    construct(this.x = 0, this.y = 0) {}
+}
 
-    to_string&lt;Point&gt;(value: Point): String {
-        var x = value.x;
-        var y = value.y;
-        return $"({x}, {y})";
-    }
+to_string&lt;Point&gt;(value: Point): String {
+    var x = value.x;
+    var y = value.y;
+    return $"({x}, {y})";
+}
 </code></pre>
 <h2 id="tostring"><a class="header" href="#tostring">ToString</a></h2>
 <pre><code class="language-pepper">trait ToString
@@ -1308,20 +1307,20 @@ interpolated, as can the integers, <code>bool</code>, and <code>String</code>, w
 <code>to_string</code> overloads. <code>String</code>, <code>StringBuilder</code> and <code>io.Path</code> implement
 it.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    struct Point {
-        var x: int = 0;
-        var y: int = 0;
-        construct(this.x = 0, this.y = 0) {}
-    }
+<pre><code class="language-pepper">struct Point {
+    var x: int = 0;
+    var y: int = 0;
+    construct(this.x = 0, this.y = 0) {}
+}
 
-    extend Point with ToString {
-        to_string(): String {
-            return $"({x}, {y})";
-        }
+extend Point with ToString {
+    to_string(): String {
+        return $"({x}, {y})";
     }
+}
 
-    var p = Point(1, 2);
-    assert($"p = {p}" == "p = (1, 2)", "interpolated");
+var p = Point(1, 2);
+assert($"p = {p}" == "p = (1, 2)", "interpolated");
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="to_string-20"><a class="header" href="#to_string-20">to_string</a></h4>
@@ -1342,9 +1341,9 @@ appends can copy the text repeatedly. A StringBuilder doubles its buffer
 when it is full, so appending is amortized O(piece size). Call
 <code>to_string()</code> for the result; the builder can keep appending afterward.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var out = StringBuilder();
-    out.append("line ").append(to_string(3)).append("\n");
-    var text = out.to_string();   # "line 3\n"
+<pre><code class="language-pepper">var out = StringBuilder();
+out.append("line ").append(to_string(3)).append("\n");
+var text = out.to_string();   # "line 3\n"
 </code></pre>
 <h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
 <h4 id="size-1"><a class="header" href="#size-1">size</a></h4>
@@ -1385,8 +1384,8 @@ chained. Runs in amortized O(text.size).</p>
 <li>this StringBuilder</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var b = StringBuilder();
-    b.append("a").append("b");   # b.to_string() == "ab"
+<pre><code class="language-pepper">var b = StringBuilder();
+b.append("a").append("b");   # b.to_string() == "ab"
 </code></pre>
 <h4 id="clear"><a class="header" href="#clear">clear</a></h4>
 <pre><code class="language-pepper">clear()
@@ -1411,10 +1410,10 @@ to. Both methods panic if the String has been modified since the
 iterator was created. Create it with <code>String.iterate()</code>: a
 default-constructed <code>StringIterator()</code> has no String to walk.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var it = "ab".iterate();
-    while (it.next()) {
-        print(it.current());   # "a", then "b"
-    }
+<pre><code class="language-pepper">var it = "ab".iterate();
+while (it.next()) {
+    print(it.current());   # "a", then "b"
+}
 </code></pre>
 <h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>

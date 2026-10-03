@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,13 +192,13 @@ checking data as it is read or written.</p>
 <p>The CRC-32 checksum (IEEE 802.3, the polynomial gzip, zip and PNG use),
 computed over data given in one or more pieces.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
+<pre><code class="language-pepper">import compress;
 
-    var crc = compress.Crc32();
-    crc.update("hello ".bytes());
-    crc.update("world".bytes());
-    assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
-    assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
+var crc = compress.Crc32();
+crc.update("hello ".bytes());
+crc.update("world".bytes());
+assert(crc.value == compress.Crc32.of("hello world".bytes()), "same in pieces");
+assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
@@ -242,9 +242,9 @@ computed over data given in one or more pieces.</p>
 <p>The Adler-32 checksum (RFC 1950, the one zlib streams carry), computed
 over data given in one or more pieces.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
+<pre><code class="language-pepper">import compress;
 
-    assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
+assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 </code></pre>
 <h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
 <h4 id="value-1"><a class="header" href="#value-1">value</a></h4>

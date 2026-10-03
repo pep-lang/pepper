@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,7 +187,7 @@ Add type parameters in angle brackets after the name, then use them like any
 other type name. The standard library’s <a href="../reference/array.html"><code>Array&lt;T&gt;</code></a>,
 <a href="../reference/hash.html"><code>HashMap&lt;K, V&gt;</code></a>, and
 <a href="../reference/result.html"><code>Result&lt;TValue, TError&gt;</code></a> are all ordinary generic
-structs written this way.</p>
+types written this way (<code>Result</code> is a generic <a href="enums.html">enum</a>).</p>
 <p>Pepper generics work like C++ templates: each distinct set of type arguments,
 such as <code>Stack&lt;int&gt;</code> or <code>Stack&lt;String&gt;</code>, produces its own copy of the code,
 compiled for those exact types. There is no runtime cost for using them.</p>
@@ -428,7 +428,7 @@ main(): int {
 }
 </code></pre>
 <p>Arguments are matched to parameters in order, so put the parameters that have
-defaults last. The standard library declares <code>struct Result&lt;TValue, TError=Error&gt;</code>, so
+defaults last. The standard library declares <code>enum Result&lt;TValue, TError=Error&gt;</code>, so
 <code>Result&lt;int&gt;</code> means <code>Result&lt;int, Error&gt;</code>. See
 <a href="results.html">Error handling with Result</a>.</p>
 <h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>

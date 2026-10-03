@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -293,7 +293,7 @@ and the optional <code>else</code> block runs instead. <code>else</code> is only
 trait (<code>runtime/scoped.pep</code>, documented in the <a href="../reference/scoped.html">Scoped</a>
 reference):</p>
 <pre><code class="language-pepper">export trait Scoped&lt;T&gt; {
-    T enter();   # what the header binds; null skips the body
+    enter(): T;  # what the header binds; null skips the body
     exit();      # the cleanup; call it from the destructor
 }
 </code></pre>

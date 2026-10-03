@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,8 +186,8 @@
 <em>extension</em>, and describe a set of behavior that several types share with a
 <em>trait</em>. Extensions can be written anywhere, so you can add methods to a
 library type, such as <code>String</code>, from your own code.</p>
-<p>A trait is also a type: a value of type <code>Shape</code> holds any struct that has the
-<code>Shape</code> trait, and calls its methods (see <a href="#traits-as-types">Traits as types</a>).</p>
+<p>A trait is also a type: a value of type <code>Shape</code> holds any struct, or enum
+whose cases carry values, that has the <code>Shape</code> trait, and calls its methods (see <a href="#traits-as-types">Traits as types</a>).</p>
 <h2 id="extensions"><a class="header" href="#extensions">Extensions</a></h2>
 <p>An <code>extend</code> block adds methods to a struct declared elsewhere, whether in the
 same file, another file, or the standard library:</p>
@@ -557,8 +557,9 @@ an extension of one must name a trait.</p>
 </ul>
 <h3 id="traits-as-types"><a class="header" href="#traits-as-types">Traits as types</a></h3>
 <p>A trait’s name is also a type. A variable, parameter, field, return value, or
-collection element of type <code>Shape</code> holds any struct that declares <code>Shape</code>, and
-calling a method on it runs that struct’s own method:</p>
+collection element of type <code>Shape</code> holds any struct, or enum whose cases
+carry values, that declares <code>Shape</code>, and calling a method on it runs that
+type’s own method:</p>
 <pre><code class="language-pepper"># A trait used as a type holds any struct that declares the trait.
 trait Shape {
     area(): int;

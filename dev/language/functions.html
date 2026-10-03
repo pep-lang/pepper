@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -447,7 +447,7 @@ destructures it:</p>
 var (quotient, remainder) = divide(17, 5);
 </code></pre>
 <h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
-<p>Functions of one file can share a name when their parameter lists differ,
+<p>Functions of one file (or of one module’s files) can share a name when their parameter lists differ,
 and each call picks the best fit for its arguments. See
 <a href="overloading.html">Overloading</a>.</p>
 <h2 id="generic-functions"><a class="header" href="#generic-functions">Generic functions</a></h2>
@@ -506,7 +506,7 @@ failed: an <a href="types-and-variables.html#integer-overflow">overflowing opera
 null function value, a <code>match</code> on a null reference enum. So do the runtime’s
 checking methods, which report their caller’s line, not their own: indexing an
 <code>Array</code> or <code>String</code> out of range, <code>Array.pop()</code> on an empty array,
-<code>Optional.value()</code> on none, <code>Result.value()</code> on an error, and the like.</p>
+<code>Optional.value()</code> on an Empty optional, <code>Result.value()</code> on an error, and the like.</p>
 <p>They do it with an ordinary <a href="#default-parameter-values">default parameter</a>,
 <code>location: __ptr&lt;char&gt; = __caller_location()</code>. A call that leaves <code>location</code>
 out gets the place of that call, as <code>file:line:col</code>. Write the same parameter on

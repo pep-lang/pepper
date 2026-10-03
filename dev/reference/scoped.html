@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,34 +209,34 @@ has nothing to bind.</p>
 <li><code>T</code> — the type <code>enter()</code> returns</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var open = 0;
+<pre><code class="language-pepper">var open = 0;
 
-    struct Session {
-        construct() {
-            open = open + 1;
-        }
-
-        destruct {
-            this.exit();
-        }
-
-        Session enter() {
-            return this;
-        }
-
-        exit() {
-            open = open - 1;
-        }
+struct Session {
+    construct() {
+        open = open + 1;
     }
 
-    extend Session with Scoped&lt;Session&gt;;
-
-    main(): int {
-        with (var session = Session()) {
-            # open == 1 here
-        }
-        return open;   # 0: the session was destroyed at the end of the block
+    destruct {
+        this.exit();
     }
+
+    Session enter() {
+        return this;
+    }
+
+    exit() {
+        open = open - 1;
+    }
+}
+
+extend Session with Scoped&lt;Session&gt;;
+
+main(): int {
+    with (var session = Session()) {
+        # open == 1 here
+    }
+    return open;   # 0: the session was destroyed at the end of the block
+}
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -544,9 +544,14 @@ main(): int {
 <p>An import or a re-export may carry attributes like any declaration. With a
 <code>[Target(...)]</code> attribute it applies only on matching platforms and is ignored
 elsewhere (see <a href="platform-selection.html">Platform selection</a>):</p>
-<pre><code class="language-pepper">[Target(OS(Linux))] import linux;
-[Target(OS(Linux))] export linux_open as open;
-[Target(OS(Windows))] export * from "windows";
+<pre><code class="language-pepper">[Target(OS(Linux))]
+import linux;
+
+[Target(OS(Linux))]
+export linux_open as open;
+
+[Target(OS(Windows))]
+export * from "windows";
 </code></pre>
 
                     </main>

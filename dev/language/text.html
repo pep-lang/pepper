@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -227,12 +227,12 @@ main(): int {
 </table>
 </div>
 <ul>
-<li><strong><code>decode</code></strong> is strict: it gives none when the bytes are not valid in the
+<li><strong><code>decode</code></strong> is strict: it gives Empty when the bytes are not valid in the
 encoding (a stray UTF-8 continuation byte, an unpaired UTF-16 surrogate,
 an odd UTF-16 byte count, an ASCII byte of 128 or more).</li>
 <li><strong><code>decode_lossy</code></strong> always succeeds: whatever is invalid becomes U+FFFD,
 the replacement character.</li>
-<li><strong><code>Ascii.encode</code></strong> gives none for text with a code point past 127;
+<li><strong><code>Ascii.encode</code></strong> gives Empty for text with a code point past 127;
 <strong><code>encode_lossy</code></strong> writes <code>?</code> for each instead.</li>
 <li>No byte-order mark is written, and one that is read stays in the text.</li>
 <li><code>io.File.read_string</code> decodes with <code>text.Utf8.decode</code>, and an HTTP body’s

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,10 +191,10 @@
 <p>Encodes a <code>String</code> to UTF-8 bytes and decodes them back. A String already
 holds UTF-8, so encoding copies its bytes; decoding checks them.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var bytes = text.Utf8.encode("hi");
-    assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
+var bytes = text.Utf8.encode("hi");
+assert(text.Utf8.decode(bytes).value() == "hi", "round trip");
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>
@@ -237,11 +237,11 @@ U+10FFFF.</p>
 <li>the text, or none when <code>bytes</code> is not valid UTF-8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var bad = Array&lt;u8&gt;();
-    bad.append(255);
-    assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
+var bad = Array&lt;u8&gt;();
+bad.append(255);
+assert(text.Utf8.decode(bad).is_empty(), "0xFF is never UTF-8");
 </code></pre>
 <h4 id="decode_lossy"><a class="header" href="#decode_lossy">decode_lossy</a></h4>
 <pre><code class="language-pepper">static decode_lossy(bytes: u8[]): String
@@ -258,13 +258,13 @@ the same text as <code>decode</code>.</p>
 <li>the text</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var data = Array&lt;u8&gt;();
-    data.append(104);
-    data.append(255);
-    data.append(105);
-    assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
+var data = Array&lt;u8&gt;();
+data.append(104);
+data.append(255);
+data.append(105);
+assert(text.Utf8.decode_lossy(data) == "h\u{FFFD}i", "255 is replaced");
 </code></pre>
 <h4 id="find_invalid"><a class="header" href="#find_invalid">find_invalid</a></h4>
 <pre><code class="language-pepper">static find_invalid(value: String): ulong?
@@ -282,9 +282,9 @@ from C memory may not be.</p>
 <li>the offset of the first invalid byte, or none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
+assert(text.Utf8.find_invalid("héllo").is_empty(), "valid");
 </code></pre>
 <h4 id="code_point_at"><a class="header" href="#code_point_at">code_point_at</a></h4>
 <pre><code class="language-pepper">static code_point_at(value: String, offset: ulong): (uint, ulong)
@@ -306,10 +306,10 @@ of <code>value</code>.</p>
 <li>if no valid sequence starts at <code>offset</code> (“Utf8.code_point_at found invalid UTF-8”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var (point, run) = text.Utf8.code_point_at("é!", 0);
-    assert(point == 233 and run == 2, "U+00E9 takes two bytes");
+var (point, run) = text.Utf8.code_point_at("é!", 0);
+assert(point == 233 and run == 2, "U+00E9 takes two bytes");
 </code></pre>
 <h4 id="append_code_point"><a class="header" href="#append_code_point">append_code_point</a></h4>
 <pre><code class="language-pepper">static append_code_point(out: u8[], code_point: uint)
@@ -326,11 +326,11 @@ of <code>value</code>.</p>
 <li>if <code>code_point</code> is a surrogate (U+D800 to U+DFFF) or above U+10FFFF (“Utf8.append_code_point needs a Unicode scalar value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var out = Array&lt;u8&gt;();
-    text.Utf8.append_code_point(out, 8364);
-    assert(text.Utf8.decode(out).value() == "€", "U+20AC");
+var out = Array&lt;u8&gt;();
+text.Utf8.append_code_point(out, 8364);
+assert(text.Utf8.decode(out).value() == "€", "U+20AC");
 </code></pre>
 
                     </main>

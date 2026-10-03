@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -273,12 +273,12 @@ than recursing, and <code>max_depth</code> bounds it.</p>
 <li>the value, or an error naming the first problem and its line and column</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var parsed = json.parse("{\"server\": {\"port\": 8080}}");
-    assert(parsed.value()["server"]["port"].as_int().value() == 8080, "a lookup");
-    var bad = json.parse("[1 2]", path = "list.json");
-    assert(bad.error().to_string() == "list.json:1:4: error: expected ',' or ']'", "where");
+var parsed = json.parse("{\"server\": {\"port\": 8080}}");
+assert(parsed.value()["server"]["port"].as_int().value() == 8080, "a lookup");
+var bad = json.parse("[1 2]", path = "list.json");
+assert(bad.error().to_string() == "list.json:1:4: error: expected ',' or ']'", "where");
 </code></pre>
 
                     </main>

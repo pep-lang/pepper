@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -316,16 +316,16 @@ the <code>EIO</code> of a short write or the <code>EBADF</code> of a closed <cod
 <li><code>IoError.kind</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var r = io.File.open(io.Path("settings.txt"));
-    if (r.is_err()) {
-        match (r.error().kind()) {
-            NotFound =&gt; { print("no settings file"); }
-            PermissionDenied =&gt; { print("settings file is not readable"); }
-            else =&gt; { print(r.error().message); }
-        }
+var r = io.File.open(io.Path("settings.txt"));
+if (r.is_err()) {
+    match (r.error().kind()) {
+        NotFound =&gt; { print("no settings file"); }
+        PermissionDenied =&gt; { print("settings file is not readable"); }
+        else =&gt; { print(r.error().message); }
     }
+}
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="notfound"><a class="header" href="#notfound">NotFound</a></h4>
@@ -412,16 +412,16 @@ for them too. A short write uses <code>EIO</code> / <code>ERROR_WRITE_FAULT</cod
 <li><code>ErrorKind</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var r = io.File.open(io.Path("settings.txt"));
-    if (r.is_err()) {
-        if (r.error().is_not_found()) {
-            print("no settings file");
-        } else {
-            print(r.error().message);
-        }
+var r = io.File.open(io.Path("settings.txt"));
+if (r.is_err()) {
+    if (r.error().is_not_found()) {
+        print("no settings file");
+    } else {
+        print(r.error().message);
     }
+}
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
@@ -473,12 +473,12 @@ current platform uses for each kind. Each predicate below is
 <li>the kind of <code>code</code>; <code>ErrorKind.Other</code> for a code that fits no kind, and for 0</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var r = io.File.open(io.Path("missing.txt"));
-    if (r.is_err() &amp;&amp; r.error().kind() == io.ErrorKind.NotFound) {
-        print("no such file");
-    }
+var r = io.File.open(io.Path("missing.txt"));
+if (r.is_err() &amp;&amp; r.error().kind() == io.ErrorKind.NotFound) {
+    print("no such file");
+}
 </code></pre>
 <h4 id="is_not_found"><a class="header" href="#is_not_found">is_not_found</a></h4>
 <pre><code class="language-pepper">is_not_found(): bool
@@ -653,14 +653,14 @@ operations that produce nothing return <code>IoResult&lt;void&gt;</code>.</p>
 <li><code>IoError</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var cwd = io.Directory.current();
-    if (cwd.is_ok()) {
-        print(cwd.value().to_string());
-    } else {
-        print(cwd.error().message);
-    }
+var cwd = io.Directory.current();
+if (cwd.is_ok()) {
+    print(cwd.value().to_string());
+} else {
+    print(cwd.error().message);
+}
 </code></pre>
 
                     </main>

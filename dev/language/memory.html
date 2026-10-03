@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,8 +192,9 @@ behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p
 <h2 id="values-and-references"><a class="header" href="#values-and-references">Values and references</a></h2>
 <p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
 one copies it, as in C. So is a <a href="tuples.html">tuple</a>, whose elements are
-copied the way each element would be on its own, and so is a struct marked
-<a href="value-structs.html"><code>[Value]</code></a>, such as <code>Optional&lt;T&gt;</code>.</p>
+copied the way each element would be on its own, and so is a struct or enum
+marked <a href="value-structs.html"><code>[Value]</code></a>, such as <code>Optional&lt;T&gt;</code> and <code>Result&lt;T&gt;</code>
+(see <a href="enums.html#value-enums">value enums</a>).</p>
 <p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
 <a href="function-types.html">function values</a>, is a <em>reference</em> to an object on the
 heap. Assigning a reference, passing it to a function, or storing it in a

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -404,7 +404,7 @@ main(): int {
     assert(message == "Hello, Pepper", "concatenation");
     assert(message != language, "different contents");
 
-    # Strings are UTF-8. length() counts code points, size() counts bytes.
+    # Strings are UTF-8. `length` counts code points, `size` counts bytes.
     var word = "héllo";
     assert(word.length == 5, "5 code points");
     assert(word.size == 6, "6 bytes: 'é' takes 2");
@@ -560,10 +560,10 @@ assert(p == __null, "p is null");
 pointers in full.</p>
 <h2 id="naming-conventions"><a class="header" href="#naming-conventions">Naming conventions</a></h2>
 <p>Primitive types and keywords are lowercase: <code>int</code>, <code>float</code>, <code>bool</code>, <code>var</code>,
-<code>while</code>. Structs, including the ones the runtime provides, are PascalCase:
-<code>String</code>, <code>Array&lt;T&gt;</code>, <code>HashMap&lt;K, V&gt;</code>, <code>Result&lt;TValue, TError&gt;</code>. Follow the same
-convention for your own structs. Functions and variables are usually written in
-<code>snake_case</code>.</p>
+<code>while</code>. Types, including the ones the runtime provides, are PascalCase:
+<code>String</code>, <code>Array&lt;T&gt;</code>, <code>HashMap&lt;K, V&gt;</code>, <code>Result&lt;TValue, TError&gt;</code>. Functions,
+variables and fields are <code>snake_case</code>, and constants are <code>SCREAMING_CASE</code>.
+<a href="naming.html">Naming conventions</a> has the full rules.</p>
 <p>Identifiers are made of ASCII letters, digits and underscores, and cannot start
 with a digit. Avoid names that start with two underscores: the compiler and
 runtime use them for their own names, such as <code>__ptr</code> and <code>__null</code>.</p>
@@ -768,7 +768,7 @@ unsigned, the operation is unsigned: comparing <code>int -1</code> with <code>ui
 <li><strong>Division</strong> of integers truncates toward zero (<code>-7 / 2</code> is -3), and <code>%</code> takes
 the sign of the left operand (<code>-7 % 3</code> is -1).</li>
 <li><strong>Conditionals.</strong> <code>c ? a : b</code> with numeric arms of different types has
-their common type by the same rules (<code>c ? 0 : s.length</code> is a <code>long</code>), and
+their common type by the same rules (<code>c ? 0 : s.length</code> is a <code>ulong</code>), and
 so does a <a href="enums.html#match-expressions-is-and-literal-patterns"><code>match</code> expression</a>
 over its arms. The value converts from that type wherever it goes.</li>
 <li><strong>Shifts</strong> take the type of the (promoted) left operand. <code>&gt;&gt;</code> keeps the sign for
@@ -862,7 +862,7 @@ type has methods that say what to do on overflow instead of panicking:</p>
 </thead>
 <tbody>
 <tr><td><code>wrapping_add(x)</code>, <code>wrapping_sub(x)</code>, <code>wrapping_mul(x)</code></td><td>Wraps around: the result modulo 2^bits.</td></tr>
-<tr><td><code>checked_add(x)</code>, <code>checked_sub(x)</code>, <code>checked_mul(x)</code></td><td>Returns none (the result is a <code>T?</code>).</td></tr>
+<tr><td><code>checked_add(x)</code>, <code>checked_sub(x)</code>, <code>checked_mul(x)</code></td><td>Returns Empty (the result is a <code>T?</code>).</td></tr>
 <tr><td><code>saturating_add(x)</code>, <code>saturating_sub(x)</code>, <code>saturating_mul(x)</code></td><td>Clamps to the type’s highest or lowest value.</td></tr>
 <tr><td><code>overflowing_add(x)</code>, <code>overflowing_sub(x)</code>, <code>overflowing_mul(x)</code></td><td>Returns the wrapped result and <code>true</code> as a <code>(T, bool)</code>.</td></tr>
 </tbody>
@@ -900,7 +900,7 @@ main(): int {
 }
 </code></pre>
 <p>The methods work at their type’s own width: <code>byte 200.checked_add(100)</code> is
-none, while <code>200 + 100</code> on two <code>byte</code>s is 300 at <code>int</code>.</p>
+Empty, while <code>200 + 100</code> on two <code>byte</code>s is 300 at <code>int</code>.</p>
 <h3 id="removing-the-checks"><a class="header" href="#removing-the-checks">Removing the checks</a></h3>
 <p>The checks stay on at every optimization level. A build that has measured
 their cost and accepts the risk can remove kinds of check with
@@ -1102,12 +1102,14 @@ differ from C’s <code>pow</code> in the last bit; any other exponent calls <co
 <ol>
 <li>Postfix: calls <code>f(x)</code>, indexing <code>a[i]</code>, member access <code>a.b</code>, <code>x++</code>, <code>x--</code></li>
 <li><code>**</code></li>
-<li><code>as</code></li>
+<li><code>as</code>, <code>as?</code></li>
 <li>Unary <code>+</code>, <code>-</code>, <code>!</code>, <code>~</code></li>
 <li>Prefix <code>++</code>, <code>--</code></li>
 <li><code>*</code>, <code>/</code>, <code>%</code></li>
 <li><code>+</code>, <code>-</code></li>
 <li><code>&lt;&lt;</code>, <code>&gt;&gt;</code></li>
+<li><code>..</code>, <code>..&gt;</code> (ranges; not associative)</li>
+<li><code>is</code></li>
 <li><code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code></li>
 <li><code>==</code>, <code>!=</code>, <code>===</code>, <code>!==</code></li>
 <li><code>&amp;</code></li>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -213,17 +213,17 @@ next step of such a loop panics with “Array modified during iteration”.</p>
 <li><code>ArrayIterator</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    main(): int {
-        var a = Array&lt;int&gt;();
-        a.append(1);
-        a.append(2);
-        a[0] = 5;
-        var total = 0;
-        for (var x in a) {
-            total = total + x;
-        }
-        return total;   # 7
+<pre><code class="language-pepper">main(): int {
+    var a = Array&lt;int&gt;();
+    a.append(1);
+    a.append(2);
+    a[0] = 5;
+    var total = 0;
+    for (var x in a) {
+        total = total + x;
     }
+    return total;   # 7
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
@@ -253,7 +253,7 @@ would otherwise perform while the Array grows to a known size.</p>
 <li><code>capacity</code> — the number of element slots to allocate up front; <code>count</code> is still 0</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
+<pre><code class="language-pepper">var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
@@ -270,9 +270,9 @@ panic.</p>
 <li>a new iterator positioned before the first element</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    for (var x in a) {
-        total = total + x;
-    }
+<pre><code class="language-pepper">for (var x in a) {
+    total = total + x;
+}
 </code></pre>
 <h4 id="reserve"><a class="header" href="#reserve">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: ulong)
@@ -292,9 +292,9 @@ existing elements, which costs O(count).</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.reserve(8);   # a.capacity &gt;= 8
-    a.reserve(2);   # no effect: capacity never shrinks
+<pre><code class="language-pepper">var a = Array&lt;int&gt;();
+a.reserve(8);   # a.capacity &gt;= 8
+a.reserve(2);   # no effect: capacity never shrinks
 </code></pre>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
 <pre><code class="language-pepper">grow()
@@ -308,7 +308,7 @@ Does not change the elements or invalidate iterators.</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: ulong, location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">[](idx: ulong): T
 </code></pre>
 <p>Returns the element at <code>idx</code>; this is the indexer read <code>a[idx]</code>.</p>
 <p>Runs in O(1). For a struct <code>T</code> the result is the stored reference
@@ -316,7 +316,6 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the zero-based position to read</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -327,10 +326,10 @@ itself; binding it to a variable acquires it like any shared copy.</p>
 <li>if <code>idx &lt; count</code> does not hold (“Array index read out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var first = a[0];
+<pre><code class="language-pepper">var first = a[0];
 </code></pre>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: ulong, value: T, location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">[](idx: ulong, value: T): T
 </code></pre>
 <p>Replaces the element at <code>idx</code> with <code>value</code>; this is the indexer write
 <code>a[idx] = value</code>.</p>
@@ -343,7 +342,6 @@ unchanged.</p>
 <ul>
 <li><code>idx</code> — the zero-based position to overwrite</li>
 <li><code>value</code> — the new element</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -354,7 +352,7 @@ unchanged.</p>
 <li>if <code>idx &lt; count</code> does not hold (“Array index write out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    a[0] = 42;
+<pre><code class="language-pepper">a[0] = 42;
 </code></pre>
 <h4 id="append"><a class="header" href="#append">append</a></h4>
 <pre><code class="language-pepper">append(item: T)
@@ -372,12 +370,12 @@ Invalidates running iterators.</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.append(1);
-    a.append(2);   # a holds [1, 2]
+<pre><code class="language-pepper">var a = Array&lt;int&gt;();
+a.append(1);
+a.append(2);   # a holds [1, 2]
 </code></pre>
 <h4 id="insert"><a class="header" href="#insert">insert</a></h4>
-<pre><code class="language-pepper">insert(idx: ulong, item: T, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">insert(idx: ulong, item: T)
 </code></pre>
 <p>Inserts <code>item</code> at position <code>idx</code>, shifting the element there and every
 later element up by one.</p>
@@ -389,7 +387,6 @@ Invalidates running iterators.</p>
 <ul>
 <li><code>idx</code> — the position <code>item</code> will occupy; from 0 through <code>count</code></li>
 <li><code>item</code> — the element to insert</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -397,13 +394,13 @@ Invalidates running iterators.</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.append(1);
-    a.append(3);
-    a.insert(1, 2);   # a holds [1, 2, 3]
+<pre><code class="language-pepper">var a = Array&lt;int&gt;();
+a.append(1);
+a.append(3);
+a.insert(1, 2);   # a holds [1, 2, 3]
 </code></pre>
 <h4 id="remove_at"><a class="header" href="#remove_at">remove_at</a></h4>
-<pre><code class="language-pepper">remove_at(idx: ulong, location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">remove_at(idx: ulong): T
 </code></pre>
 <p>Removes and returns the element at <code>idx</code>, shifting every later element
 down by one.</p>
@@ -414,7 +411,6 @@ capacity is unchanged. Invalidates running iterators.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>idx</code> — the position of the element to remove</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -425,21 +421,17 @@ capacity is unchanged. Invalidates running iterators.</p>
 <li>if <code>idx &lt; count</code> does not hold (“Array remove index out of bounds”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = Array&lt;int&gt;();
-    a.append(1);
-    a.append(2);
-    var x = a.remove_at(0);   # x == 1; a holds [2]
+<pre><code class="language-pepper">var a = Array&lt;int&gt;();
+a.append(1);
+a.append(2);
+var x = a.remove_at(0);   # x == 1; a holds [2]
 </code></pre>
 <h4 id="pop"><a class="header" href="#pop">pop</a></h4>
-<pre><code class="language-pepper">pop(location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">pop(): T
 </code></pre>
 <p>Removes and returns the last element.</p>
 <p>Runs in O(1). For a struct <code>T</code> the Array’s reference is transferred to
 the caller. The capacity is unchanged. Invalidates running iterators.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element that was last</li>
@@ -449,16 +441,12 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <li>if the Array is empty (“Array pop on empty Array”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var top = a.pop();
+<pre><code class="language-pepper">var top = a.pop();
 </code></pre>
 <h4 id="first"><a class="header" href="#first">first</a></h4>
-<pre><code class="language-pepper">first(location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">first(): T
 </code></pre>
 <p>Returns the first element without removing it; the same as <code>a[0]</code>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element at index 0</li>
@@ -468,14 +456,10 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <li>if the Array is empty (“Array first on empty Array”)</li>
 </ul>
 <h4 id="last"><a class="header" href="#last">last</a></h4>
-<pre><code class="language-pepper">last(location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">last(): T
 </code></pre>
 <p>Returns the last element without removing it; the same as
 <code>a[a.count - 1]</code>.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the element at index <code>count - 1</code></li>
@@ -506,11 +490,11 @@ actual shrink invalidates them. The capacity is kept.</p>
 <li><code>count</code> — the number of leading elements to keep</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    a.truncate(1);   # keeps only a[0]
-    a.truncate(5);   # no effect when a has fewer than 5 elements
+<pre><code class="language-pepper">a.truncate(1);   # keeps only a[0]
+a.truncate(5);   # no effect when a has fewer than 5 elements
 </code></pre>
 <h4 id="swap"><a class="header" href="#swap">swap</a></h4>
-<pre><code class="language-pepper">swap(a: ulong, b: ulong, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">swap(a: ulong, b: ulong)
 </code></pre>
 <p>Exchanges the elements at positions <code>a</code> and <code>b</code>.</p>
 <p>Runs in O(1). Reference counts are unchanged: the two references just
@@ -520,7 +504,6 @@ element, but still invalidates running iterators like every swap.</p>
 <ul>
 <li><code>a</code> — the position of the first element</li>
 <li><code>b</code> — the position of the second element</li>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
@@ -536,7 +519,7 @@ are unchanged. An Array of fewer than two elements is left untouched
 and its iterators stay valid; otherwise running iterators are
 invalidated.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
+<pre><code class="language-pepper">a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 </code></pre>
 <h4 id="sort"><a class="header" href="#sort">sort</a></h4>
 <pre><code class="language-pepper">sort(compare: (T, T) =&gt; int)
@@ -562,14 +545,14 @@ the two buffers while the sort runs.</p>
 <li>if <code>compare</code> modifies the Array (“Array modified during sort”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    names.append("pear");
-    names.append("apple");
-    names.sort((a, b) =&gt; a.compare(b));   # ["apple", "pear"]
-    var numbers = Array&lt;int&gt;();
-    numbers.append(3);
-    numbers.append(1);
-    numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("pear");
+names.append("apple");
+names.sort((a, b) =&gt; a.compare(b));   # ["apple", "pear"]
+var numbers = Array&lt;int&gt;();
+numbers.append(3);
+numbers.append(1);
+numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
 </code></pre>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
 <pre><code class="language-pepper">find(item: T): ulong?
@@ -592,9 +575,9 @@ as a condition) and read the index with <code>value()</code>.</p>
 <li>the index of the first match, or none when no element matches (always none for an empty Array)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = [3, 9, 4];
-    var i = a.find(9);         # i.value() == 1
-    var missing = a.find(7);   # missing.is_empty() == true
+<pre><code class="language-pepper">var a = [3, 9, 4];
+var i = a.find(9);         # i.value() == 1
+var missing = a.find(7);   # missing.is_empty() == true
 </code></pre>
 <h4 id="contains"><a class="header" href="#contains">contains</a></h4>
 <pre><code class="language-pepper">contains(item: T): bool
@@ -643,8 +626,8 @@ capacity equals this Array’s <code>count</code>.</p>
 <li>an independent Array with the same elements</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var b = a.clone();
-    b.append(7);   # a is unchanged
+<pre><code class="language-pepper">var b = a.clone();
+b.append(7);   # a is unchanged
 </code></pre>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
 <pre><code class="language-pepper">copy(): Array&lt;T&gt;
@@ -662,9 +645,9 @@ copying the elements.</p>
 <li>the copy</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    names.append("ada");
-    var copied = copy(names);   # calls this method
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("ada");
+var copied = copy(names);   # calls this method
 </code></pre>
 <h4 id="operator--2"><a class="header" href="#operator--2">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Array&lt;T&gt;): bool
@@ -713,7 +696,7 @@ same as <code>append_all</code>.</p>
 <li><code>append_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    a += b;   # a now ends with b's elements
+<pre><code class="language-pepper">a += b;   # a now ends with b's elements
 </code></pre>
 <h4 id="operator--5"><a class="header" href="#operator--5">operator +</a></h4>
 <pre><code class="language-pepper">+(rhs: Array&lt;T&gt;): Array&lt;T&gt;
@@ -731,7 +714,7 @@ same as <code>append_all</code>.</p>
 <li>the concatenation of this Array and <code>rhs</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var c = a + b;
+<pre><code class="language-pepper">var c = a + b;
 </code></pre>
 <h2 id="arrayiterator"><a class="header" href="#arrayiterator">ArrayIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayIterator&lt;T&gt;
@@ -751,10 +734,10 @@ the iterator was created (see <code>Array</code> for which operations count), it
 <li><code>Array.iterate</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var it = a.iterate();
-    while (it.next()) {
-        var x = it.current();
-    }
+<pre><code class="language-pepper">var it = a.iterate();
+while (it.next()) {
+    var x = it.current();
+}
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>

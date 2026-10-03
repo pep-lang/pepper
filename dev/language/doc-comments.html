@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,15 +212,16 @@ larger(a: int, b: int): int {
 <li>The text of each line is what follows <code>## </code>. A line that is just <code>##</code> is a
 blank line in the documentation, which separates paragraphs.</li>
 <li>The comment must sit directly above the declaration, with no blank line in
-between. <a href="platform-selection.html">Attributes</a> and <code>export</code> or <code>static</code> may
+between. <a href="reflection.html#attributes">Attributes</a> and <code>export</code> or <code>static</code> may
 come between the comment and the declaration, so put the comment above the
 attributes.</li>
 <li>Only lines that start with exactly two <code>#</code> count. A single <code>#</code> is an
 ordinary comment, and a line starting with three or more, such as a
 decorative <code>#######</code>, is not documentation.</li>
-<li>A doc comment works on functions, structs, traits, extensions, type aliases,
-module-scope variables, and the fields, constructors and methods inside a
-struct, trait or extension.</li>
+<li>A doc comment works on functions, structs, enums and their cases, traits,
+extensions, type aliases, module-scope variables, and the fields,
+properties, constructors and methods inside a struct, enum, trait or
+extension.</li>
 </ul>
 <h2 id="what-to-write"><a class="header" href="#what-to-write">What to write</a></h2>
 <p>Start with a <strong>description</strong>: what the declaration does, in the third person

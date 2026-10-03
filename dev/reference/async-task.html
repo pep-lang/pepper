@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -330,16 +330,16 @@ returns.</p>
 <li><code>T</code> — the type of the body’s result; <code>void</code> when there is none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    main(): int {
-        async.run(() =&gt; {
-            var a = async.Task&lt;int&gt;.spawn_local(() =&gt; { return 20; });
-            var b = async.Task&lt;int&gt;.spawn_local(() =&gt; { return 22; });
-            print(a.join().value() + b.join().value());   # 42
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() =&gt; {
+        var a = async.Task&lt;int&gt;.spawn_local(() =&gt; { return 20; });
+        var b = async.Task&lt;int&gt;.spawn_local(() =&gt; { return 22; });
+        print(a.join().value() + b.join().value());   # 42
+    });
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
@@ -416,19 +416,19 @@ still running are cancelled (see <code>Task.cancel</code>), on every worker, and
 <li>if called inside a task, or if every remaining task is waiting on another and none can continue</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    main(): int {
-        async.run(() =&gt; {
-            var t = async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                async.sleep(10);
-                print("second");
-            });
-            print("first");
-            t.join();
+main(): int {
+    async.run(() =&gt; {
+        var t = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            async.sleep(10);
+            print("second");
         });
-        return 0;
-    }
+        print("first");
+        t.join();
+    });
+    return 0;
+}
 </code></pre>
 <h2 id="run_with"><a class="header" href="#run_with">run_with</a></h2>
 <pre><code class="language-pepper">run_with(options: RuntimeOptions, body: () =&gt; void)
@@ -472,26 +472,26 @@ cancelling work as for <code>spawn_local</code>.</p>
 <li>outside <code>run</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    sum(from: long, to: long): long {
-        var total: long = 0;
-        var i = from;
-        while (i &lt; to) {
-            total = total + i;
-            i = i + 1;
-        }
-        return total;
+sum(from: long, to: long): long {
+    var total: long = 0;
+    var i = from;
+    while (i &lt; to) {
+        total = total + i;
+        i = i + 1;
     }
+    return total;
+}
 
-    main(): int {
-        async.run(() =&gt; {
-            var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
-            var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
-            print(low.join().value() + high.join().value());   # 499999500000
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() =&gt; {
+        var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
+        var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
+        print(low.join().value() + high.join().value());   # 499999500000
+    });
+    return 0;
+}
 </code></pre>
 <h2 id="spawn_on_each_worker"><a class="header" href="#spawn_on_each_worker">spawn_on_each_worker</a></h2>
 <pre><code class="language-pepper">spawn_on_each_worker(body: shared () =&gt; void): Array&lt;Task&lt;void&gt;&gt;
@@ -515,30 +515,30 @@ a <code>shared</code> function.</p>
 <li>outside <code>run</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import io;
+<pre><code class="language-pepper">import async;
+import io;
 
-    main(): int {
-        async.run(() =&gt; {
-            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
-            var loops = async.spawn_on_each_worker(() =&gt; {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    var (stream, peer) = accepted.value();
-                    async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                        stream.write_all("hello");
-                    });
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+        var loops = async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
-            for (var loop in loops) {
-                loop.join();
+                var (stream, peer) = accepted.value();
+                async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                    stream.write_all("hello");
+                });
             }
         });
-        return 0;
-    }
+        for (var loop in loops) {
+            loop.join();
+        }
+    });
+    return 0;
+}
 </code></pre>
 <h2 id="run_blocking"><a class="header" href="#run_blocking">run_blocking</a></h2>
 <pre><code class="language-pepper">run_blocking&lt;T: Shared&gt;(body: shared () =&gt; T): T
@@ -570,23 +570,23 @@ Outside a task, <code>run_blocking</code> just calls <code>body</code>.</p>
 <li>what <code>body</code> returns</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    main(): int {
-        async.run(() =&gt; {
-            var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
-                async.sleep(10);
-                print("the worker kept running");
-            });
-            var answer = async.run_blocking&lt;int&gt;(() =&gt; {
-                async.Thread.sleep(50);   # blocks a pool thread, not the worker
-                return 42;
-            });
-            print(answer);
-            ticker.join();
+main(): int {
+    async.run(() =&gt; {
+        var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            async.sleep(10);
+            print("the worker kept running");
         });
-        return 0;
-    }
+        var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+            async.Thread.sleep(50);   # blocks a pool thread, not the worker
+            return 42;
+        });
+        print(answer);
+        ticker.join();
+    });
+    return 0;
+}
 </code></pre>
 <h2 id="yield_now"><a class="header" href="#yield_now">yield_now</a></h2>
 <pre><code class="language-pepper">yield_now()
@@ -614,7 +614,7 @@ shorter than asked.</p>
 <li><code>duration</code> — how long to wait</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    async.sleep(os.Duration.from_seconds(1));
+<pre><code class="language-pepper">async.sleep(os.Duration.from_seconds(1));
 </code></pre>
 <h2 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h2>
 <pre><code class="language-pepper">is_cancelled(): bool
@@ -683,19 +683,19 @@ it.</p>
 <li>the limit, for a <code>with</code> header</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import io;
+<pre><code class="language-pepper">import async;
+import io;
 
-    main(): int {
-        async.run(() =&gt; {
-            var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-            with (var deadline = async.timeout(50)) {
-                var accepted = listener.accept();   # nobody connects
-                assert(accepted.error().is_timed_out(), "timed out");
-            }
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        with (var deadline = async.timeout(50)) {
+            var accepted = listener.accept();   # nobody connects
+            assert(accepted.error().is_timed_out(), "timed out");
+        }
+    });
+    return 0;
+}
 </code></pre>
 <h2 id="current_backend"><a class="header" href="#current_backend">current_backend</a></h2>
 <pre><code class="language-pepper">current_backend(): Backend

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -333,6 +333,7 @@ than a sentinel value:</p>
 <tr><td><code>io.Path.extension()</code></td><td><code>String?</code></td><td>there is no file name, or the name has no dot after its first character (<code>Makefile</code>, <code>.bashrc</code>); <code>foo.</code> has the empty extension <code>""</code></td></tr>
 <tr><td><code>io.Path.dot_index(name)</code></td><td><code>ulong?</code></td><td><code>name</code> has no dot after its first character</td></tr>
 <tr><td><code>http.Headers.get(name)</code></td><td><code>String?</code></td><td>no field has that name</td></tr>
+<tr><td><code>HashMap&lt;K, V&gt;.try_get(key)</code> (and <code>Map</code>, <code>OrderedMap</code>)</td><td><code>V?</code></td><td><code>key</code> is absent</td></tr>
 </tbody>
 </table>
 </div>
@@ -381,8 +382,9 @@ error.</p>
 <h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
 <ul>
 <li>Some runtime APIs still use null references, default values or sentinels
-for “missing”: a <code>HashMap</code> returns the default value for a missing key,
-and <code>String.find</code> returns <code>-1</code>, for example.</li>
+for “missing”: a <code>HashMap</code>’s <code>get</code> (and indexer) returns the default value
+for a missing key (use <code>try_get</code> for an optional), and <code>String.find</code>
+returns <code>-1</code>, for example.</li>
 </ul>
 
                     </main>

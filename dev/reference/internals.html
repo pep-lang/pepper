@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,9 +183,10 @@
                     <main>
                         <!-- Generated from runtime/internals.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="built-in-functions"><a class="header" href="#built-in-functions">Built-in functions</a></h1>
+<p><code>assert</code> and <code>panic</code>, which every program can call without an import.</p>
 <p>Source: <code>runtime/internals.pep</code></p>
 <h2 id="assert"><a class="header" href="#assert">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: String, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">assert(condition: bool, message: String)
 </code></pre>
 <p>Panics with <code>message</code> when <code>condition</code> is false; otherwise does nothing.</p>
 <p>The check always runs; there is no release mode that removes it. A
@@ -195,17 +196,16 @@ builds no <code>String</code>. Any other message is evaluated before the call.</
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure; a null <code>String</code> prints a generic message</li>
-<li><code>location</code> — where the failure is reported, <code>file:line:col</code>; leave it out to report this call (see <code>panic</code>)</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
+<pre><code class="language-pepper">assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="assert-1"><a class="header" href="#assert-1">assert</a></h2>
-<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">assert(condition: bool, message: __ptr&lt;char&gt;)
 </code></pre>
 <p>Checks that <code>condition</code> holds; if not, panics with <code>message</code>, a
 NUL-terminated C string. A string literal message picks this overload,
@@ -214,30 +214,28 @@ so an assertion that holds builds no <code>String</code>.</p>
 <ul>
 <li><code>condition</code> — the condition that must hold</li>
 <li><code>message</code> — the text to print on failure, or <code>__null</code> for a generic message</li>
-<li><code>location</code> — where the failure is reported, <code>file:line:col</code>; leave it out to report this call (see <code>panic</code>)</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
 <li>if <code>condition</code> is false: prints the location and <code>message</code>, and aborts (see <code>panic</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(count &gt; 0, "count must be positive");
+<pre><code class="language-pepper">assert(count &gt; 0, "count must be positive");
 </code></pre>
 <h2 id="panic"><a class="header" href="#panic">panic</a></h2>
-<pre><code class="language-pepper">panic(message: String, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">panic(message: String)
 </code></pre>
 <p>Prints <code>message</code> and aborts the program. It never returns.</p>
-<p>Reports <code>message</code> as a panic and aborts.</p>
 <p>Flushes every C output stream, so output printed so far is not lost,
 then writes <code>location: panic: message</code> and a newline to standard error
 (“Assertion failed with no additional information” when <code>message</code> is
 null), and calls C <code>abort()</code>. No destructors or releases run, and the
 process ends abnormally (SIGABRT on POSIX).</p>
-<p><code>location</code> is <code>file:line:col</code>. Left out, it is this call’s location, the
-way a C++ <code>std::source_location</code> default argument works. A function
-that panics on its caller’s behalf takes a <code>location</code> parameter of its
-own with the same default and passes it on, so the panic names its
-caller’s line:</p>
+<p>The location is the call’s <code>file:line:col</code>, which the compiler passes
+in a hidden parameter, the way a C++ <code>std::source_location</code> default
+argument works. A function that panics on its caller’s behalf, as the
+runtime’s indexers do, declares that parameter itself and passes it on,
+so the panic names its caller’s line:</p>
 <pre><code>check_positive(value: int, location: __ptr&lt;char&gt; = __caller_location()) {
     if (value &lt;= 0) {
         panic("expected a positive value", location);
@@ -247,17 +245,16 @@ caller’s line:</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print</li>
-<li><code>location</code> — where the panic is reported, or <code>__null</code> for none</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
 <li>always</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    panic("unreachable");
+<pre><code class="language-pepper">panic("unreachable");
 </code></pre>
 <h2 id="panic-1"><a class="header" href="#panic-1">panic</a></h2>
-<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;, location: __ptr&lt;char&gt; = __caller_location())
+<pre><code class="language-pepper">panic(message: __ptr&lt;char&gt;)
 </code></pre>
 <p>Reports <code>message</code>, a NUL-terminated C string (a generic message when it
 is <code>__null</code>), as a panic and aborts, as <code>panic(String)</code> does. A string
@@ -265,21 +262,20 @@ literal message picks this overload, so it allocates nothing.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>message</code> — the text to print, or <code>__null</code></li>
-<li><code>location</code> — where the panic is reported, or <code>__null</code> for none; left out, this call’s location</li>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
 <li>always</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    panic("unreachable");
+<pre><code class="language-pepper">panic("unreachable");
 </code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../reference/prelude.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -293,7 +289,7 @@ literal message picks this overload, so it allocates nothing.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../reference/prelude.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 

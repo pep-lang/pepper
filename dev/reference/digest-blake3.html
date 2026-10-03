@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,12 +197,12 @@ at a time; it does not use SIMD or threads, so it runs well below the
 speed of the official C and Rust implementations. The digests are the
 same. <code>finish</code> resets the hasher, so it can hash a new input.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import digest;
+<pre><code class="language-pepper">import digest;
 
-    var hasher = digest.Blake3();
-    hasher.update("hello ");
-    hasher.update("world");
-    assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
+var hasher = digest.Blake3();
+hasher.update("hello ");
+hasher.update("world");
+assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
@@ -263,10 +263,10 @@ hexadecimal digits.</p>
 <li>the 32-byte digest</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import digest;
+<pre><code class="language-pepper">import digest;
 
-    var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
-    assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of nothing");
+var empty = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262";
+assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of nothing");
 </code></pre>
 <h2 id="blake3-4"><a class="header" href="#blake3-4">blake3</a></h2>
 <pre><code class="language-pepper">blake3(text: String): u8[]

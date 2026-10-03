@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,22 +207,22 @@ freely.</p>
 <li><code>Scoped</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    struct Child {
-        Weak&lt;Parent&gt; owner;
+<pre><code class="language-pepper">struct Child {
+    Weak&lt;Parent&gt; owner;
 
-        construct(Parent owner) {
-            this.owner = Weak&lt;Parent&gt;(owner);
-        }
-
-        String owner_name() {
-            with (var parent = this.owner) {
-                return parent.name;
-            } else {
-                return "(gone)";
-            }
-            return "";
-        }
+    construct(Parent owner) {
+        this.owner = Weak&lt;Parent&gt;(owner);
     }
+
+    String owner_name() {
+        with (var parent = this.owner) {
+            return parent.name;
+        } else {
+            return "(gone)";
+        }
+        return "";
+    }
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>

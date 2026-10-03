@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,6 +193,7 @@ You can export every kind of top-level declaration:</p>
 <ul>
 <li>functions, including <code>extern</code> declarations of C functions</li>
 <li>structs</li>
+<li>enums</li>
 <li>type aliases</li>
 <li>traits</li>
 <li>extensions</li>
@@ -256,8 +257,11 @@ export norm_of(p: Point): int {
 }
 
 # `export` goes after attributes, directly before the declaration.
-[Target(OS(Windows))] export platform_name(): String { return "Windows"; }
-[Target(!OS(Windows))] export platform_name(): String { return "not Windows"; }
+[Target(OS(Windows))]
+export platform_name(): String { return "Windows"; }
+
+[Target(!OS(Windows))]
+export platform_name(): String { return "not Windows"; }
 </code></pre>
 <pre><code class="language-pepper">import "lib";
 
@@ -289,11 +293,11 @@ main(): int {
 <pre><code class="language-text">main.pep:4:13: error: 'make' is private to lib.pep; declare it with 'export' to use it from another file
     4 |     var q = make(1, 2);
       |             ^~~~
-lib.pep:27:1: note: declared here
-   27 | make(x: int, y: int): Point {
+lib.pep:29:1: note: declared here
+   29 | make(x: int, y: int): Point {
       | ^~~~
 </code></pre>
-<p>The same applies to private structs, type aliases, traits, and variables:
+<p>The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports <code>'name' is private to file.pep</code>.</p>
 <h2 id="members-of-structs-and-extensions"><a class="header" href="#members-of-structs-and-extensions">Members of structs and extensions</a></h2>
 <p>Fields and methods declared inside a struct’s body are reached through the
@@ -308,8 +312,8 @@ call it, even though <code>Point</code> itself is exported:</p>
 <pre><code class="language-text">main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
-lib.pep:42:5: note: declared here
-   42 |     norm(): int {
+lib.pep:46:5: note: declared here
+   46 |     norm(): int {
       |     ^~~~
 </code></pre>
 <p>An exported extension’s methods are usable where its file is <strong>imported</strong>,
@@ -385,7 +389,8 @@ named <code>m</code>.</p>
 <h2 id="where-export-goes"><a class="header" href="#where-export-goes">Where <code>export</code> goes</a></h2>
 <p><code>export</code> goes directly before the declaration’s keyword or name, <strong>after</strong> any
 attributes:</p>
-<pre><code class="language-pepper">[Target(OS(Windows))] export platform_name(): String { return "Windows"; }
+<pre><code class="language-pepper">[Target(OS(Windows))]
+export platform_name(): String { return "Windows"; }
 </code></pre>
 <p>Writing it before the attributes is a parse error:</p>
 <pre><code class="language-text">main.pep:2:8: error: unexpected '['
@@ -400,8 +405,9 @@ attribute described in <a href="c-interop.html#calling-pepper-from-c">Calling Pe
 <code>Result</code>, <code>Error</code>, <code>hash</code>, <code>assert</code>, <code>panic</code>, and the rest of the
 <a href="../reference/README.html">standard library reference</a>) is exported the same
 way, and is visible in every file without an import. The runtime’s own helpers
-are private, so calling one, such as the integer formatter <code>dec</code>, reports
-<code>'dec' is private to</code> followed by the path of the runtime’s <code>internals.pep</code>.</p>
+are private, so calling one, such as <code>_pep_check_sync_enabled</code>, reports
+<code>'_pep_check_sync_enabled' is private to</code> followed by the path of the
+runtime’s <code>internals.pep</code>.</p>
 <h2 id="each-file-has-its-own-namespace"><a class="header" href="#each-file-has-its-own-namespace">Each file has its own namespace</a></h2>
 <p>A private declaration belongs to its file alone, so two files may each
 declare a private name without clashing. Here <code>main.pep</code> and <code>lib.pep</code> each

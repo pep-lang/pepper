@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,14 +203,14 @@ an <code>Integer</code>; any other number is a <code>Number</code>, a <code>doub
 changing them through <code>value[key] = ...</code>, <code>append</code> or the map from
 <code>as_object()</code> changes every holder of the value.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var reply = json.JsonValue.object();
-    reply["id"] = json.JsonValue.Integer(42);
-    reply["tags"] = json.JsonValue.array([json.JsonValue.String("a")]);
-    assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
-    assert(reply["id"].as_int().value() == 42, "a lookup");
-    assert(reply["missing"]["deeper"].is_null(), "lookups chain");
+var reply = json.JsonValue.object();
+reply["id"] = json.JsonValue.Integer(42);
+reply["tags"] = json.JsonValue.array([json.JsonValue.String("a")]);
+assert(reply.to_string() == "{\"id\":42,\"tags\":[\"a\"]}", "compact");
+assert(reply["id"].as_int().value() == 42, "a lookup");
+assert(reply["missing"]["deeper"].is_null(), "lookups chain");
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="null"><a class="header" href="#null">Null</a></h4>
@@ -278,10 +278,10 @@ text or the code wrote them, so a document round-trips unchanged.</p>
 <li>an <code>Object</code> with no members</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var config = json.JsonValue.object();
-    config["name"] = json.JsonValue.String("pepper");
+var config = json.JsonValue.object();
+config["name"] = json.JsonValue.String("pepper");
 </code></pre>
 <h4 id="array-1"><a class="header" href="#array-1">array</a></h4>
 <pre><code class="language-pepper">static array(items: Array&lt;JsonValue&gt; = Array&lt;JsonValue&gt;()): JsonValue
@@ -297,11 +297,11 @@ than copying.</p>
 <li>an <code>Array</code> of <code>items</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
-    list.append(json.JsonValue.Integer(2));
-    assert(list.to_string() == "[1,2]", "two elements");
+var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+list.append(json.JsonValue.Integer(2));
+assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
@@ -427,10 +427,10 @@ nothing gives.</p>
 <li>the integer, or none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
-    assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
+assert(json.parse("1e3").value().as_int().value() == 1000, "no fraction");
+assert(json.parse("1.5").value().as_int().is_empty(), "a fraction");
 </code></pre>
 <h4 id="as_double"><a class="header" href="#as_double">as_double</a></h4>
 <pre><code class="language-pepper">as_double(): double?
@@ -494,10 +494,10 @@ them past U+FFFF), so the text is plain ASCII.</p>
 <li>the JSON text</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var word = json.JsonValue.String("é");
-    assert(word.to_string(ascii_only = true) == "\"\\u00e9\"", "escaped");
+var word = json.JsonValue.String("é");
+assert(word.to_string(ascii_only = true) == "\"\\u00e9\"", "escaped");
 </code></pre>
 <h4 id="to_pretty_string"><a class="header" href="#to_pretty_string">to_pretty_string</a></h4>
 <pre><code class="language-pepper">to_pretty_string(indent: int = 2, ascii_only: bool = false): String
@@ -519,10 +519,10 @@ each <code>:</code>. An empty array or object stays <code>[]</code> or <code>{}<
 <li>if <code>indent</code> is negative (“JsonValue.to_pretty_string needs a non-negative indent”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
-    assert(list.to_pretty_string() == "[\n  1\n]", "two spaces");
+var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
+assert(list.to_pretty_string() == "[\n  1\n]", "two spaces");
 </code></pre>
 
                     </main>

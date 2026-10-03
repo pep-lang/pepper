@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -233,6 +233,13 @@ output from a pipe with <code>spawn()</code> instead.</li>
 not exist). A program that runs and fails is a successful result whose
 <code>status</code> says so.</li>
 </ul>
+<p><code>exec()</code> runs the program in place of the running one, as a shell’s <code>exec</code>
+does: the program’s exit status becomes this process’s own, and <code>exec()</code>
+returns only when the program cannot be started, with the error. On POSIX
+the program takes over the process; Windows cannot replace a process, so
+there the program is started, waited for, and its exit status passed on.
+Output that <code>print</code> buffered is flushed first, and the standard streams must
+stay inherited (otherwise the error has <code>is_invalid_input()</code>).</p>
 <h2 id="exit-status"><a class="header" href="#exit-status">Exit status</a></h2>
 <p><code>ExitStatus.success()</code> is true for exit code 0. <code>code()</code> returns the exit
 code, and <code>signal()</code> the POSIX signal that ended the process (such as 9 for

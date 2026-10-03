@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -231,20 +231,20 @@ compile error naming the property:
 <li>the value as JSON</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct Point {
-        var x: int;
-        var y: int;
-    }
+struct Point {
+    var x: int;
+    var y: int;
+}
 
-    main(): int {
-        var p = Point();
-        p.x = 1;
-        p.y = 2;
-        assert(json.to_json(p)["y"].as_int().value() == 2, "a member");
-        return 0;
-    }
+main(): int {
+    var p = Point();
+    p.x = 1;
+    p.y = 2;
+    assert(json.to_json(p)["y"].as_int().value() == 2, "a member");
+    return 0;
+}
 </code></pre>
 <h2 id="encode"><a class="header" href="#encode">encode</a></h2>
 <pre><code class="language-pepper">encode&lt;T&gt;(value: T, indent: int = 0, ascii_only: bool = false): String
@@ -265,26 +265,26 @@ compile error naming the property:
 <li>the JSON text</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct ServerConfig {
-        var host: String;
-        var port: int;
-        [Name("max-connections")]
-        var max_connections: int;
-        [Ignore]
-        var started_at: long;
-    }
+struct ServerConfig {
+    var host: String;
+    var port: int;
+    [Name("max-connections")]
+    var max_connections: int;
+    [Ignore]
+    var started_at: long;
+}
 
-    main(): int {
-        var config = ServerConfig();
-        config.host = "localhost";
-        config.port = 8080;
-        config.max_connections = 16;
-        var text = json.encode(config);
-        assert(text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16}", "compact");
-        return 0;
-    }
+main(): int {
+    var config = ServerConfig();
+    config.host = "localhost";
+    config.port = 8080;
+    config.max_connections = 16;
+    var text = json.encode(config);
+    assert(text == "{\"host\":\"localhost\",\"port\":8080,\"max-connections\":16}", "compact");
+    return 0;
+}
 </code></pre>
 <h2 id="from_json"><a class="header" href="#from_json">from_json</a></h2>
 <pre><code class="language-pepper">from_json&lt;T&gt;(value: JsonValue, unknown_keys: UnknownKeys = UnknownKeys.Ignore): Result&lt;T, JsonError&gt;
@@ -316,19 +316,19 @@ column, since there is no text: <code>$.server.port: expected a number, found a 
 <li>the converted value, or the first error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct Point {
-        var x: int;
-        var y: int;
-    }
+struct Point {
+    var x: int;
+    var y: int;
+}
 
-    main(): int {
-        var parsed = json.parse("{\"x\": 1, \"y\": 2}");
-        var p = json.from_json&lt;Point&gt;(parsed.value());
-        assert(p.value().y == 2, "a property");
-        return 0;
-    }
+main(): int {
+    var parsed = json.parse("{\"x\": 1, \"y\": 2}");
+    var p = json.from_json&lt;Point&gt;(parsed.value());
+    assert(p.value().y == 2, "a property");
+    return 0;
+}
 </code></pre>
 <h2 id="decode"><a class="header" href="#decode">decode</a></h2>
 <pre><code class="language-pepper">decode&lt;T&gt;( text: String, unknown_keys: UnknownKeys = UnknownKeys.Ignore, comments: bool = false, path: String = "" ): Result&lt;T, JsonError&gt;
@@ -350,26 +350,26 @@ column, since there is no text: <code>$.server.port: expected a number, found a 
 <li>the value, or the first error: a syntax error, or a conversion error with its path in the document; either has its line and column</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct ServerConfig {
-        var host: String;
-        [Required]
-        var port: int;
-        var tags: Array&lt;String&gt;;
-        var timeout: int?;
-    }
+struct ServerConfig {
+    var host: String;
+    [Required]
+    var port: int;
+    var tags: Array&lt;String&gt;;
+    var timeout: int?;
+}
 
-    main(): int {
-        var config = json.decode&lt;ServerConfig&gt;("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
-        assert(config.value().port == 80, "a number");
-        assert(config.value().tags[0] == "x", "an array");
-        assert(config.value().timeout.is_empty(), "a missing optional");
+main(): int {
+    var config = json.decode&lt;ServerConfig&gt;("{\"host\": \"a\", \"port\": 80, \"tags\": [\"x\"]}");
+    assert(config.value().port == 80, "a number");
+    assert(config.value().tags[0] == "x", "an array");
+    assert(config.value().timeout.is_empty(), "a missing optional");
 
-        var bad = json.decode&lt;ServerConfig&gt;("{\"port\": \"80\"}", path = "server.json");
-        assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
-        return 0;
-    }
+    var bad = json.decode&lt;ServerConfig&gt;("{\"port\": \"80\"}", path = "server.json");
+    assert(bad.error().to_string() == "server.json:1:10: error: $.port: expected a number, found a string", "a path");
+    return 0;
+}
 </code></pre>
 
                     </main>

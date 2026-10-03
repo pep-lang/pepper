@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,19 +196,19 @@ picks the name a misspelled one most likely meant</li>
 that shape what <code>Parser.add_options</code> declares from a struct’s fields</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import cli;
+<pre><code class="language-pepper">import cli;
 
-    main(args: String[]): int {
-        var parser = cli.Parser("greet", "Greets someone");
-        var loud = parser.flag("loud", "l", "shout the greeting");
-        var name = parser.positional("name", "who to greet", required = false, default_value = "world");
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        var greeting = $"hello, {name.value()}";
-        print(loud.is_set ? greeting.upper() : greeting);
-        return 0;
+main(args: String[]): int {
+    var parser = cli.Parser("greet", "Greets someone");
+    var loud = parser.flag("loud", "l", "shout the greeting");
+    var name = parser.positional("name", "who to greet", required = false, default_value = "world");
+    if (!parser.parse(args)) {
+        return 2;
     }
+    var greeting = $"hello, {name.value()}";
+    print(loud.is_set ? greeting.upper() : greeting);
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/cli/module.pep</code></p>
 

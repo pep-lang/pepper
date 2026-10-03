@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -220,6 +220,11 @@ site alone; <code>versions.json</code> lists them for the version picker, and th
 <h2 id="the-reference-stays-current"><a class="header" href="#the-reference-stays-current">The reference stays current</a></h2>
 <p><code>cargo run -p pepper-docgen -- check</code> fails when <code>docs/src/reference/</code> does
 not match the runtime, and CI runs it.</p>
+<p>What the compiler provides rather than the runtime declares has a page
+written by hand: <code>reference/reflect.md</code> documents the <code>reflect</code> functions
+of <code>static</code> blocks. <code>HAND_WRITTEN</code> in <code>tools/docgen/src/reference.rs</code> lists
+such pages for the table of contents, and a docgen test fails when the
+compiler gains a <code>reflect</code> function or property the page does not name.</p>
 <p>Each reference page’s title and place in the table of contents come from
 <code>PAGES</code> in <code>tools/docgen/src/reference.rs</code>. A new runtime file with public
 declarations must be added there, under its module’s <code>module.pep</code>; until it

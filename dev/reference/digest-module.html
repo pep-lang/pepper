@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -202,13 +202,13 @@ hashing secrets.</p>
 it is much faster, but neither cryptographic nor stable between
 versions.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import digest;
+<pre><code class="language-pepper">import digest;
 
-    main(): int {
-        var id = digest.to_hex(digest.sha256("hello"));
-        assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
-        return 0;
-    }
+main(): int {
+    var id = digest.to_hex(digest.sha256("hello"));
+    assert(id == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824", "SHA-256");
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/digest/module.pep</code></p>
 

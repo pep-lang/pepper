@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -204,15 +204,15 @@ of one.</li>
 <p>A Regex never changes once compiled and is <code>[Shared]</code>, so one compiled at
 module scope (<code>const word = regex.Regex("\\w+");</code>) serves every thread.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    main(): int {
-        var date = regex.Regex("(\\d{4})-(\\d{2})-(\\d{2})");
-        var found = date.find("due 2026-10-01").value();
-        assert(found.group(1).value() == "2026", "the year");
-        assert(found.start() == 4, "a byte offset");
-        return 0;
-    }
+main(): int {
+    var date = regex.Regex("(\\d{4})-(\\d{2})-(\\d{2})");
+    var found = date.find("due 2026-10-01").value();
+    assert(found.group(1).value() == "2026", "the year");
+    assert(found.start() == 4, "a byte offset");
+    return 0;
+}
 </code></pre>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="regex-1"><a class="header" href="#regex-1">Regex()</a></h4>
@@ -250,10 +250,10 @@ constructor is for the runtime.</p>
 <li>the compiled expression, or an error naming the problem and its byte offset in <code>pattern</code>, such as <code>invalid regex '(a': missing ')' at offset 0</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    assert(regex.Regex.parse("[a-z]+").is_ok(), "valid");
-    assert(regex.Regex.parse("(a").is_err(), "unclosed group");
+assert(regex.Regex.parse("[a-z]+").is_ok(), "valid");
+assert(regex.Regex.parse("(a").is_err(), "unclosed group");
 </code></pre>
 <h4 id="escape"><a class="header" href="#escape">escape</a></h4>
 <pre><code class="language-pepper">static escape(text: String): String
@@ -269,9 +269,9 @@ escaped, so the result matches <code>text</code> literally.</p>
 <li>a pattern that matches exactly <code>text</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
+assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
@@ -305,9 +305,9 @@ than <code>find</code>, since it stops at the first match it sees.</p>
 <li>true when there is a match</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
+assert(regex.Regex("^\\d+$").is_match("2026"), "all digits");
 </code></pre>
 <h4 id="find"><a class="header" href="#find">find</a></h4>
 <pre><code class="language-pepper">find(text: String): Match?
@@ -358,12 +358,12 @@ skipped, so <code>a*</code> finds <code>a</code> twice in <code>"aba"</code>, no
 <li>an iterator over the matches</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    var total = 0;
-    for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
-        total += number.text().size;   # 1, then 2, then 3
-    }
+var total = 0;
+for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
+    total += number.text().size;   # 1, then 2, then 3
+}
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
 <pre><code class="language-pepper">replace(text: String, replacement: String): String
@@ -388,10 +388,10 @@ is kept as it is.</p>
 <li>if <code>replacement</code> names a group the pattern does not have</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    var swapped = regex.Regex("(\\w+) (\\w+)").replace("hello world", "$2 $1");
-    assert(swapped == "world hello", "groups swapped");
+var swapped = regex.Regex("(\\w+) (\\w+)").replace("hello world", "$2 $1");
+assert(swapped == "world hello", "groups swapped");
 </code></pre>
 <h4 id="replace_all"><a class="header" href="#replace_all">replace_all</a></h4>
 <pre><code class="language-pepper">replace_all(text: String, replacement: String): String
@@ -412,10 +412,10 @@ is kept as it is.</p>
 <li>if <code>replacement</code> names a group the pattern does not have</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
-    assert(squeezed == "a b c", "runs of space replaced");
+var squeezed = regex.Regex("\\s+").replace_all("a  b\t\nc", " ");
+assert(squeezed == "a b c", "runs of space replaced");
 </code></pre>
 <h4 id="split"><a class="header" href="#split">split</a></h4>
 <pre><code class="language-pepper">split(text: String): String[]
@@ -432,10 +432,10 @@ or last piece, and text with no match gives one piece, the whole text.</p>
 <li>the pieces, at least one</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    var parts = regex.Regex(",\\s*").split("a, b,c");
-    assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
+var parts = regex.Regex(",\\s*").split("a, b,c");
+assert(parts.count == 3 &amp;&amp; parts[1] == "b", "three pieces");
 </code></pre>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String

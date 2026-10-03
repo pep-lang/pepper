@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -217,11 +217,11 @@ sharing read, write and delete access with other openers.</p>
 <li><code>File.open_with</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = OpenOptions().read(true).write(true).create(true).open(Path("data.bin"));
-    if (r.is_err()) {
-        return 1;
-    }
-    var f = r.value();
+<pre><code class="language-pepper">var r = OpenOptions().read(true).write(true).create(true).open(Path("data.bin"));
+if (r.is_err()) {
+    return 1;
+}
+var f = r.value();
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
@@ -328,8 +328,8 @@ creation are one atomic step. Requires <code>write</code> or <code>append</code>
 <li><code>File.open_with</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
-    log.write_all("started");
+<pre><code class="language-pepper">var log = OpenOptions().append(true).create(true).open(Path("log.txt")).value();
+log.write_all("started");
 </code></pre>
 <h2 id="filetype"><a class="header" href="#filetype">FileType</a></h2>
 <pre><code class="language-pepper">enum FileType
@@ -344,16 +344,16 @@ reparse point, junctions included, even one that points to a directory.</p>
 <li><code>Metadata</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var m = io.Path("notes.txt").metadata();
-    if (m.is_ok()) {
-        match (m.value().file_type) {
-            File =&gt; { print("a file"); }
-            Directory =&gt; { print("a directory"); }
-            Symlink, Other =&gt; { print("something else"); }
-        }
+var m = io.Path("notes.txt").metadata();
+if (m.is_ok()) {
+    match (m.value().file_type) {
+        File =&gt; { print("a file"); }
+        Directory =&gt; { print("a directory"); }
+        Symlink, Other =&gt; { print("something else"); }
     }
+}
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="file-1"><a class="header" href="#file-1">File</a></h4>
@@ -382,10 +382,10 @@ a reparse point.</p>
 <li><code>File.seek</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
-    var length = f.seek(SeekFrom.End(0)).value();     # at the end
-    f.seek(SeekFrom.Start(4));                        # 4 bytes in
-    var at = f.seek(SeekFrom.Current(-2)).value();    # 2
+<pre><code class="language-pepper">var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();     # at the end
+f.seek(SeekFrom.Start(4));                        # 4 bytes in
+var at = f.seek(SeekFrom.Current(-2)).value();    # 2
 </code></pre>
 <h3 id="cases-1"><a class="header" href="#cases-1">Cases</a></h3>
 <h4 id="start"><a class="header" href="#start">Start</a></h4>
@@ -448,10 +448,10 @@ epoch (1970-01-01 00:00:00 UTC). On POSIX the metadata comes from
 <code>statx</code> (Linux) or <code>stat</code> (macOS); on Windows from
 <code>GetFileInformationByHandle</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var m = Path("notes.txt").metadata();
-    if (m.is_ok() &amp;&amp; m.value().is_file) {
-        var bytes = m.value().size;
-    }
+<pre><code class="language-pepper">var m = Path("notes.txt").metadata();
+if (m.is_ok() &amp;&amp; m.value().is_file) {
+    var bytes = m.value().size;
+}
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="size"><a class="header" href="#size">size</a></h4>
@@ -538,10 +538,10 @@ on Windows).</p>
 predicates (<code>is_not_found()</code>, <code>is_permission_denied()</code>, …) to tell
 kinds apart portably.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.txt")).value();
-    f.write_all("hello");
-    f.close();
-    var text = File.read_to_string(Path("out.txt")).value();   # "hello"
+<pre><code class="language-pepper">var f = File.create(Path("out.txt")).value();
+f.write_all("hello");
+f.close();
+var text = File.read_to_string(Path("out.txt")).value();   # "hello"
 </code></pre>
 <h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="path"><a class="header" href="#path">path</a></h4>
@@ -573,11 +573,11 @@ every I/O method fails. Use <code>File.open</code>, <code>File.create</code> or
 <li>the open <code>File</code>; an error with <code>is_not_found()</code> when the path is empty or does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = File.open(Path("config.txt"));
-    if (r.is_err() &amp;&amp; r.error().is_not_found()) {
-        return 0;
-    }
-    var text = r.value().read_string();
+<pre><code class="language-pepper">var r = File.open(Path("config.txt"));
+if (r.is_err() &amp;&amp; r.error().is_not_found()) {
+    return 0;
+}
+var text = r.value().read_string();
 </code></pre>
 <h4 id="create-1"><a class="header" href="#create-1">create</a></h4>
 <pre><code class="language-pepper">static create(path: Path): IoResult&lt;File&gt;
@@ -594,8 +594,8 @@ truncating it to 0 bytes if it exists.</p>
 <li>the open <code>File</code>, empty and positioned at 0; an error with <code>is_not_found()</code> when the path is empty or its parent directory does not exist, <code>is_permission_denied()</code> when access is refused, or another platform error (on POSIX, <code>is_is_a_directory()</code> when the path is a directory)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("report.txt")).value();
-    f.write_all("done");
+<pre><code class="language-pepper">var f = File.create(Path("report.txt")).value();
+f.write_all("done");
 </code></pre>
 <h4 id="open_with"><a class="header" href="#open_with">open_with</a></h4>
 <pre><code class="language-pepper">static open_with(path: Path, options: OpenOptions): IoResult&lt;File&gt;
@@ -616,11 +616,11 @@ still writes at the end).</p>
 <li>the open <code>File</code>; an error with <code>is_invalid_input()</code> when no access mode is set or create, create_new or truncate is set without write or append; <code>is_not_found()</code> when the path is empty, or the file (or a parent directory) is missing and neither create nor create_new is set; <code>is_already_exists()</code> when create_new is set and the path exists; <code>is_permission_denied()</code> when access is refused; or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var opts = OpenOptions().write(true).create_new(true);
-    var r = File.open_with(Path("lock"), opts);
-    if (r.is_err() &amp;&amp; r.error().is_already_exists()) {
-        return 1;
-    }
+<pre><code class="language-pepper">var opts = OpenOptions().write(true).create_new(true);
+var r = File.open_with(Path("lock"), opts);
+if (r.is_err() &amp;&amp; r.error().is_already_exists()) {
+    return 1;
+}
 </code></pre>
 <h4 id="std_file"><a class="header" href="#std_file">std_file</a></h4>
 <pre><code class="language-pepper">static std_file(stream: StdStream, name: String): File
@@ -641,8 +641,8 @@ handle, and the File is then not open.</p>
 <li>a File on that stream, that does not close the stream when released</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var err = File.std_file(StdStream.Error, "&lt;stderr&gt;");
-    err.write_all("warning");
+<pre><code class="language-pepper">var err = File.std_file(StdStream.Error, "&lt;stderr&gt;");
+err.write_all("warning");
 </code></pre>
 <h4 id="std_file-1"><a class="header" href="#std_file-1">std_file</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'std_file' with a 'StdStream' instead")] static std_file(which: int, name: String): File
@@ -683,8 +683,8 @@ and from this File comes out in program order.</p>
 <li>a File on standard output, named <code>&lt;stdout&gt;</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var out = File.stdout();
-    out.write_all("hello");
+<pre><code class="language-pepper">var out = File.stdout();
+out.write_all("hello");
 </code></pre>
 <h4 id="stderr"><a class="header" href="#stderr">stderr</a></h4>
 <pre><code class="language-pepper">static stderr(): File
@@ -711,10 +711,10 @@ one first flushes what <code>print</code> has buffered.</p>
 <li>the file’s bytes; an error as for <code>File.open</code> (such as <code>is_not_found()</code>) or <code>read_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = File.read_bytes(Path("image.png"));
-    if (r.is_ok()) {
-        var n = r.value().count;
-    }
+<pre><code class="language-pepper">var r = File.read_bytes(Path("image.png"));
+if (r.is_ok()) {
+    var n = r.value().count;
+}
 </code></pre>
 <h4 id="read_to_string"><a class="header" href="#read_to_string">read_to_string</a></h4>
 <pre><code class="language-pepper">static read_to_string(path: Path): IoResult&lt;String&gt;
@@ -730,11 +730,11 @@ one first flushes what <code>print</code> has buffered.</p>
 <li>the file’s text; an error with <code>is_invalid_input()</code> when it is not valid UTF-8, or an error as for <code>File.open</code> (such as <code>is_not_found()</code>) or <code>read_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = File.read_to_string(Path("notes.txt"));
-    if (r.is_err()) {
-        return 1;
-    }
-    var text = r.value();
+<pre><code class="language-pepper">var r = File.read_to_string(Path("notes.txt"));
+if (r.is_err()) {
+    return 1;
+}
+var text = r.value();
 </code></pre>
 <h4 id="write_bytes"><a class="header" href="#write_bytes">write_bytes</a></h4>
 <pre><code class="language-pepper">static write_bytes(path: Path, data: u8[]): IoResult&lt;void&gt;
@@ -753,9 +753,9 @@ leaves it truncated or partly written.</p>
 <li>an Ok result once the data is written and the file closed; an error as for <code>File.create</code> (such as <code>is_not_found()</code> for a missing parent directory), <code>write_all</code>, or <code>close</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var data = Array&lt;u8&gt;();
-    data.append(1 as u8);
-    File.write_bytes(Path("one.bin"), data);
+<pre><code class="language-pepper">var data = Array&lt;u8&gt;();
+data.append(1 as u8);
+File.write_bytes(Path("one.bin"), data);
 </code></pre>
 <h4 id="write_text"><a class="header" href="#write_text">write_text</a></h4>
 <pre><code class="language-pepper">static write_text(path: Path, s: String): IoResult&lt;void&gt;
@@ -779,10 +779,10 @@ leaves it truncated or partly written.</p>
 <li>this is the design proposal’s <code>write_to_string</code>; a static <code>write</code> would clash with the instance <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = File.write_text(Path("hello.txt"), "hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
+<pre><code class="language-pepper">var r = File.write_text(Path("hello.txt"), "hello, world");
+if (r.is_err()) {
+    return 1;
+}
 </code></pre>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
 <pre><code class="language-pepper">static copy(from: Path, to: Path): IoResult&lt;ulong&gt;
@@ -802,7 +802,7 @@ part way leaves <code>to</code> partly written.</p>
 <li>the number of bytes copied; <code>is_invalid_input()</code> when <code>from</code> and <code>to</code> are the same file (after resolving symlinks), which truncating <code>to</code> would empty before it was read; otherwise an error as for <code>File.open</code> on <code>from</code> (such as <code>is_not_found()</code>), <code>File.create</code> on <code>to</code>, or a read, write or close failure</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = File.copy(Path("a.txt"), Path("b.txt")).value();
+<pre><code class="language-pepper">var n = File.copy(Path("a.txt"), Path("b.txt")).value();
 </code></pre>
 <h4 id="rename"><a class="header" href="#rename">rename</a></h4>
 <pre><code class="language-pepper">static rename(from: Path, to: Path): IoResult&lt;void&gt;
@@ -822,7 +822,7 @@ fails rather than copying.</p>
 <li>an Ok result on success; an error with <code>is_not_found()</code> when <code>from</code> (or the parent of <code>to</code>) does not exist or, on POSIX, either path is empty, <code>is_permission_denied()</code> when access is refused, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    File.rename(Path("draft.txt"), Path("final.txt"));
+<pre><code class="language-pepper">File.rename(Path("draft.txt"), Path("final.txt"));
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">static remove(path: Path): IoResult&lt;void&gt;
@@ -839,10 +839,10 @@ target. Directories are not removed: use <code>Directory.remove</code> or
 <li>an Ok result on success; an error with <code>is_not_found()</code> when the path does not exist (on POSIX, also when it is empty); when it is a directory, <code>is_is_a_directory()</code> on Linux and <code>is_permission_denied()</code> on macOS and Windows; <code>is_permission_denied()</code> when access is refused (on Windows also for a read-only file); or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = File.remove(Path("old.txt"));
-    if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
-        return 1;
-    }
+<pre><code class="language-pepper">var r = File.remove(Path("old.txt"));
+if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
+    return 1;
+}
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="is_open"><a class="header" href="#is_open">is_open</a></h4>
@@ -885,13 +885,13 @@ failure <code>buffer</code> keeps its previous contents.</p>
 <li>the number of bytes appended, 0 at end of file; an error when the File is closed, or <code>is_is_a_directory()</code> when it is a directory, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var buf = Array&lt;u8&gt;();
-    while (true) {
-        var r = f.read(buf, 4096);
-        if (r.is_err() || r.value() == 0) {
-            break;
-        }
+<pre><code class="language-pepper">var buf = Array&lt;u8&gt;();
+while (true) {
+    var r = f.read(buf, 4096);
+    if (r.is_err() || r.value() == 0) {
+        break;
     }
+}
 </code></pre>
 <h4 id="read_all"><a class="header" href="#read_all">read_all</a></h4>
 <pre><code class="language-pepper">read_all(): IoResult&lt;u8[]&gt;
@@ -959,11 +959,11 @@ No newline or terminator is added.</p>
 <li>an Ok result once every byte is written; an error as for <code>write_all(u8[])</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("greeting.txt")).value();
-    var r = f.write_all("hello, world");
-    if (r.is_err()) {
-        return 1;
-    }
+<pre><code class="language-pepper">var f = File.create(Path("greeting.txt")).value();
+var r = f.write_all("hello, world");
+if (r.is_err()) {
+    return 1;
+}
 </code></pre>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(s: String): IoResult&lt;void&gt;
@@ -1000,9 +1000,9 @@ POSIX and has platform-defined results on Windows.</p>
 <li>the new position, in bytes from the start of the file; an error when the File is closed, the resulting position would be negative (on POSIX, with <code>is_invalid_input()</code>), or the stream cannot seek</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("data.bin")).value();
-    var length = f.seek(SeekFrom.End(0)).value();
-    f.seek(SeekFrom.Start(0));
+<pre><code class="language-pepper">var f = File.open(Path("data.bin")).value();
+var length = f.seek(SeekFrom.End(0)).value();
+f.seek(SeekFrom.Start(0));
 </code></pre>
 <h4 id="seek_start"><a class="header" href="#seek_start">seek_start</a></h4>
 <pre><code class="language-pepper">seek_start(pos: Offset): IoResult&lt;Offset&gt;
@@ -1123,7 +1123,7 @@ permission bits and timestamps.</p>
 <li>the file’s <code>Metadata</code>; an error when the File is closed, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var size = f.metadata().value().size;
+<pre><code class="language-pepper">var size = f.metadata().value().size;
 </code></pre>
 <h4 id="close"><a class="header" href="#close">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
@@ -1140,11 +1140,11 @@ stream stays open, and <code>File.stdout()</code> and the like still work.</p>
 <li>an Ok result on success or when already closed; the platform error when closing an owned handle fails</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.create(Path("out.bin")).value();
-    f.write_all("data");
-    if (f.close().is_err()) {
-        return 1;
-    }
+<pre><code class="language-pepper">var f = File.create(Path("out.bin")).value();
+f.write_all("data");
+if (f.close().is_err()) {
+    return 1;
+}
 </code></pre>
 
                     </main>

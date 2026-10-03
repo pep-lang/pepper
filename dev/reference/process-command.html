@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -259,16 +259,16 @@ inherits the parent’s current directory and its three standard streams;
 <code>run()</code> instead pipes standard output and error, and gives standard
 input the null device, unless they were set.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import process;
+<pre><code class="language-pepper">import process;
 
-    main(): int {
-        var output = process.Command("clang").arguments(["--version"]).run().value();
-        if (!output.status.success()) {
-            print(output.stderr);
-            return 1;
-        }
-        return 0;
+main(): int {
+    var output = process.Command("clang").arguments(["--version"]).run().value();
+    if (!output.status.success()) {
+        print(output.stderr);
+        return 1;
     }
+    return 0;
+}
 </code></pre>
 <h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="program"><a class="header" href="#program">program</a></h4>
@@ -415,11 +415,11 @@ table until the parent ends.</p>
 <li>the running child; an error when the program cannot be started: <code>is_not_found()</code> when it is not found, <code>is_permission_denied()</code> when it is not executable, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var child = process.Command("sort").stdin(process.Stream.Pipe).stdout(process.Stream.Pipe).spawn().value();
-    child.stdin().write_all("pear\napple\n");
-    child.stdin().close();
-    var sorted = child.stdout().read_string().value();   # "apple\npear\n"
-    child.wait();
+<pre><code class="language-pepper">var child = process.Command("sort").stdin(process.Stream.Pipe).stdout(process.Stream.Pipe).spawn().value();
+child.stdin().write_all("pear\napple\n");
+child.stdin().close();
+var sorted = child.stdout().read_string().value();   # "apple\npear\n"
+child.wait();
 </code></pre>
 <h4 id="run"><a class="header" href="#run">run</a></h4>
 <pre><code class="language-pepper">run(): io.IoResult&lt;Output&gt;
@@ -436,9 +436,9 @@ wait park the task rather than blocking its worker.</p>
 <li>the exit status and output; an error when the program cannot be started (as for <code>spawn()</code>) or its output cannot be read</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var output = process.Command("echo").argument("hello").run().value();
-    assert(output.status.success(), "echo succeeds");
-    assert(output.stdout == "hello\n", "and prints its argument");
+<pre><code class="language-pepper">var output = process.Command("echo").argument("hello").run().value();
+assert(output.status.success(), "echo succeeds");
+assert(output.stdout == "hello\n", "and prints its argument");
 </code></pre>
 <h4 id="exec"><a class="header" href="#exec">exec</a></h4>
 <pre><code class="language-pepper">exec(): io.IoError
@@ -464,20 +464,20 @@ own working directory.</p>
 <li>only when the program cannot be started: why, as for <code>spawn()</code>, or an error with <code>is_invalid_input()</code> when a standard stream was set to something other than <code>Stream.Inherit</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import process;
+<pre><code class="language-pepper">import process;
 
-    main(args: String[]): int {
-        # Run git with this program's arguments, as if it were git.
-        var git = process.Command("git");
-        ulong index = 1;
-        while (index &lt; args.count) {
-            git.argument(args[index]);
-            index += 1;
-        }
-        var error = git.exec();
-        print($"cannot run git: {error.message}");
-        return 1;
+main(args: String[]): int {
+    # Run git with this program's arguments, as if it were git.
+    var git = process.Command("git");
+    ulong index = 1;
+    while (index &lt; args.count) {
+        git.argument(args[index]);
+        index += 1;
     }
+    var error = git.exec();
+    print($"cannot run git: {error.message}");
+    return 1;
+}
 </code></pre>
 
                     </main>

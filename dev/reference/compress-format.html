@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,10 +191,10 @@ streaming <code>DecompressReader</code> and <code>CompressWriter</code>.</p>
 </code></pre>
 <p>The framing around DEFLATE-compressed data.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
+<pre><code class="language-pepper">import compress;
 
-    var packed = compress.Gzip.compress("hi".bytes());
-    var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
+var packed = compress.Gzip.compress("hi".bytes());
+var reader = compress.DecompressReader(io.ByteReader(packed), compress.Format.Gzip);
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="raw"><a class="header" href="#raw">Raw</a></h4>
@@ -218,11 +218,11 @@ several members one after another, as <code>cat a.gz b.gz</code> makes.</p>
 </code></pre>
 <p>Raw DEFLATE (RFC 1951) data, compressed or decompressed in one call.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
+<pre><code class="language-pepper">import compress;
 
-    var data = "abcabcabcabc".bytes();
-    var packed = compress.Deflate.compress(data);
-    assert(compress.Deflate.decompress(packed).value() == data, "round trip");
+var data = "abcabcabcabc".bytes();
+var packed = compress.Deflate.compress(data);
+assert(compress.Deflate.decompress(packed).value() == data, "round trip");
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="compress"><a class="header" href="#compress">compress</a></h4>
@@ -260,11 +260,11 @@ data are ignored.</p>
 </code></pre>
 <p>zlib (RFC 1950) data, compressed or decompressed in one call.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
+<pre><code class="language-pepper">import compress;
 
-    var packed = compress.Zlib.compress("hello".bytes());
-    assert(packed[0] == 0x78, "the zlib header");
-    assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
+var packed = compress.Zlib.compress("hello".bytes());
+assert(packed[0] == 0x78, "the zlib header");
+assert(compress.Zlib.decompress(packed).value() == "hello".bytes(), "round trip");
 </code></pre>
 <h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
 <h4 id="compress-1"><a class="header" href="#compress-1">compress</a></h4>
@@ -304,12 +304,12 @@ dictionary is not supported.</p>
 <p>gzip (RFC 1952) data, as in <code>.gz</code> files, compressed or decompressed in
 one call.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
-    import io;
+<pre><code class="language-pepper">import compress;
+import io;
 
-    var packed = compress.Gzip.compress("hello".bytes());
-    io.File.write_bytes(io.Path("hello.txt.gz"), packed);
-    assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
+var packed = compress.Gzip.compress("hello".bytes());
+io.File.write_bytes(io.Path("hello.txt.gz"), packed);
+assert(compress.Gzip.decompress(packed).value() == "hello".bytes(), "round trip");
 </code></pre>
 <h3 id="static-methods-2"><a class="header" href="#static-methods-2">Static methods</a></h3>
 <h4 id="compress-2"><a class="header" href="#compress-2">compress</a></h4>
@@ -354,14 +354,14 @@ joined. The header’s file name, comment and extra field are skipped.</p>
 <code>is_invalid_input()</code> error from <code>read</code>, after the bytes decoded before
 the problem; an error from the source is passed on.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
-    import io;
+<pre><code class="language-pepper">import compress;
+import io;
 
-    var file = io.File.open(io.Path("notes.txt.gz")).value();
-    var reader = compress.DecompressReader(file, compress.Format.Gzip);
-    for (var line in reader.lines()) {
-        print(line.value());
-    }
+var file = io.File.open(io.Path("notes.txt.gz")).value();
+var reader = compress.DecompressReader(file, compress.Format.Gzip);
+for (var line in reader.lines()) {
+    print(line.value());
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="decompressreader-1"><a class="header" href="#decompressreader-1">DecompressReader()</a></h4>
@@ -404,15 +404,15 @@ to another stream, such as a <code>.gz</code> file.</p>
 writes the rest and the format’s trailer, and must be called once at the
 end, since dropping the writer does not. It does not close the sink.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import compress;
-    import io;
+<pre><code class="language-pepper">import compress;
+import io;
 
-    var file = io.File.create(io.Path("log.txt.gz")).value();
-    var writer = compress.CompressWriter(file, compress.Format.Gzip);
-    writer.print_line("first line");
-    writer.print_line("second line");
-    writer.finish();
-    file.close();
+var file = io.File.create(io.Path("log.txt.gz")).value();
+var writer = compress.CompressWriter(file, compress.Format.Gzip);
+writer.print_line("first line");
+writer.print_line("second line");
+writer.finish();
+file.close();
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="compresswriter-1"><a class="header" href="#compresswriter-1">CompressWriter()</a></h4>

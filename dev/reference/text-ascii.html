@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,10 +191,10 @@
 <p>Encodes a <code>String</code> to ASCII bytes and decodes them back. Only code
 points below 128 have an ASCII byte.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
-    assert(text.Ascii.encode("é").is_empty(), "not ASCII");
+assert(text.Ascii.encode("ok").value().count == 2, "one byte each");
+assert(text.Ascii.encode("é").is_empty(), "not ASCII");
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>

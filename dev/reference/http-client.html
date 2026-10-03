@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,15 +200,15 @@ whole response. Redirects are returned as they are, not followed.</p>
 <p>A client is <code>[Shared]</code>: make one and use it from every thread and task.
 In a task, a request parks only the task while it waits.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import http;
+<pre><code class="language-pepper">import http;
 
-    main(): int {
-        var client = http.Client();
-        var response = client.get("https://example.com/").value();
-        print(to_string(response.status));   # 200
-        print(response.text());
-        return 0;
-    }
+main(): int {
+    var client = http.Client();
+    var response = client.get("https://example.com/").value();
+    print(to_string(response.status));   # 200
+    print(response.text());
+    return 0;
+}
 </code></pre>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="client-2"><a class="header" href="#client-2">Client()</a></h4>

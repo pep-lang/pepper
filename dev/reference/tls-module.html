@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,17 +195,17 @@ connector or acceptor is made; on Windows it uses SChannel.</p>
 <li><a href="tls-stream.html">Streams</a>: <code>TlsConnector</code>, <code>TlsAcceptor</code>, and <code>TlsStream</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import tls;
+<pre><code class="language-pepper">import tls;
 
-    main(): int {
-        var connector = tls.TlsConnector.create().value();
-        var stream = connector.connect_host("localhost", 8443).value();
-        stream.write_all("ping");
-        var reply = Array&lt;u8&gt;();
-        while (stream.read(reply, 4096).value() &gt; 0) {
-        }
-        return 0;
+main(): int {
+    var connector = tls.TlsConnector.create().value();
+    var stream = connector.connect_host("localhost", 8443).value();
+    stream.write_all("ping");
+    var reply = Array&lt;u8&gt;();
+    while (stream.read(reply, 4096).value() &gt; 0) {
     }
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/tls/module.pep</code></p>
 

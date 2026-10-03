@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -217,30 +217,30 @@ used it have finished.</p>
 <li><code>ThreadLocal</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const request_id = async.TaskLocal&lt;long&gt;();
+const request_id = async.TaskLocal&lt;long&gt;();
 
-    handle(id: long) {
-        request_id.set(id);
-        async.yield_now();   # the other tasks run meanwhile
-        assert(request_id.get() == id, "still this task's id");
-    }
+handle(id: long) {
+    request_id.set(id);
+    async.yield_now();   # the other tasks run meanwhile
+    assert(request_id.get() == id, "still this task's id");
+}
 
-    main(): int {
-        async.run(() =&gt; {
-            var tasks = Array&lt;async.Task&lt;void&gt;&gt;();
-            for (var id in [1, 2, 3]) {
-                tasks.append(async.spawn&lt;void&gt;(() =&gt; {
-                    handle(id);
-                }));
-            }
-            for (var task in tasks) {
-                task.join();
-            }
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() =&gt; {
+        var tasks = Array&lt;async.Task&lt;void&gt;&gt;();
+        for (var id in [1, 2, 3]) {
+            tasks.append(async.spawn&lt;void&gt;(() =&gt; {
+                handle(id);
+            }));
+        }
+        for (var task in tasks) {
+            task.join();
+        }
+    });
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="tasklocal-2"><a class="header" href="#tasklocal-2">TaskLocal()</a></h4>
@@ -287,16 +287,16 @@ no value (for a struct <code>T</code>).</p>
 <li>the guard; its <code>enter()</code> returns this task’s value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    const trail = async.TaskLocal&lt;Array&lt;String&gt;&gt;();
+<pre><code class="language-pepper">const trail = async.TaskLocal&lt;Array&lt;String&gt;&gt;();
 
-    note(step: String) {
-        if (!trail.is_set()) {
-            trail.set(Array&lt;String&gt;());
-        }
-        with (var steps = trail.enter()) {
-            steps.append(step.copy());
-        }
+note(step: String) {
+    if (!trail.is_set()) {
+        trail.set(Array&lt;String&gt;());
     }
+    with (var steps = trail.enter()) {
+        steps.append(step.copy());
+    }
+}
 </code></pre>
 <h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
 <pre><code class="language-pepper">is_set(): bool

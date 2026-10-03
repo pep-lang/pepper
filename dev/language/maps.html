@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -198,7 +198,7 @@ keep their keys in:</p>
 </div>
 <p>All of them share one API: <code>m[key]</code> reads (a missing key reads as the
 default of <code>V</code>, and is not inserted) and <code>m[key] = value</code> writes; <code>insert</code>,
-<code>get</code>, <code>try_get</code> (an <a href="optionals.html">optional</a>, none when the key is absent),
+<code>get</code>, <code>try_get</code> (an <a href="optionals.html">optional</a>, Empty when the key is absent),
 <code>contains</code>, <code>remove</code>, <code>count</code>, <code>is_empty</code> and <code>clear</code>. A <code>for</code> loop visits a
 map’s entries as <code>(key, value)</code> <a href="tuples.html">tuples</a> and a set’s members one
 by one. Adding or removing an entry while a loop iterates the map panics
@@ -215,7 +215,7 @@ iterating in order, it answers questions about the order:</p>
 <li><code>range(from, to)</code>: iterates the keys from <code>from</code> up to, not including,
 <code>to</code>.</li>
 </ul>
-<p>Each of the four queries returns an optional <code>(key, value)</code> tuple, none when
+<p>Each of the four queries returns an optional <code>(key, value)</code> tuple, Empty when
 there is no such entry. <code>Set&lt;K&gt;</code> is the same tree without values, and its
 queries return an optional member. An array converts to a <code>Set</code>, so an array
 literal can initialize one.</p>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -206,15 +206,15 @@ the platform separator (<code>separator()</code>), but the rest of the text is k
 as written. Paths are UTF-8 Strings, scanned byte by byte; separators and
 dots are ASCII, so splitting at them never cuts a character in two.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
-    var name = p.file_name().value();               # "guide.md"
-    var ext = p.extension().value_or("");           # "md"
-    var dir = p.parent();                           # some io.Path("docs")
-    if (p.is_file()) {
-        print(p.to_string());
-    }
+var p = io.Path("docs").join("guide.md");   # "docs/guide.md"
+var name = p.file_name().value();               # "guide.md"
+var ext = p.extension().value_or("");           # "md"
+var dir = p.parent();                           # some io.Path("docs")
+if (p.is_file()) {
+    print(p.to_string());
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
@@ -236,11 +236,11 @@ takes a <code>Path</code> also accepts text.</p>
 <li><code>value</code> — the path’s text; the default, <code>""</code>, is the empty path</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var p = io.Path("/usr/lib");
-    var empty = io.Path();   # is_empty is true
-    var q: io.Path = "docs";   # converted implicitly
+var p = io.Path("/usr/lib");
+var empty = io.Path();   # is_empty is true
+var q: io.Path = "docs";   # converted implicitly
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="separator"><a class="header" href="#separator">separator</a></h4>
@@ -318,12 +318,12 @@ normalized: <code>a</code> joined with <code>../b</code> is <code>a/../b</code>.
 <li>a new Path; this path is not changed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
-    var q = io.Path("a/").join(io.Path("b"));      # "a/b"
-    var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
-    var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
+var p = io.Path("usr").join(io.Path("lib"));   # "usr/lib" ("usr\lib" on Windows)
+var q = io.Path("a/").join(io.Path("b"));      # "a/b"
+var r = io.Path("a").join(io.Path("/abs"));    # "/abs"
+var so = io.Path("usr").join("lib").join("x.so");   # a String converts to a Path
 </code></pre>
 <h4 id="join_str"><a class="header" href="#join_str">join_str</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'join', which accepts a String", "join")] join_str(other: String): Path
@@ -344,9 +344,9 @@ since a <code>String</code> converts to a <code>Path</code> implicitly.</p>
 <li><code>join</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
+var so = io.Path("usr").join("lib").join("x.so");   # "usr/lib/x.so"
 </code></pre>
 <h4 id="has_root_or_prefix"><a class="header" href="#has_root_or_prefix">has_root_or_prefix</a></h4>
 <pre><code class="language-pepper">has_root_or_prefix(): bool
@@ -375,11 +375,11 @@ it now returns none.</p>
 <li>the parent path, or none for a root (<code>/</code>, <code>C:\</code>, a bare prefix such as <code>C:</code>), a bare name with no root (<code>a</code>, <code>.</code>, <code>..</code>), or the empty path</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
-    var root = io.Path("/a").parent().value();        # "/"
-    var none = io.Path("/").parent();                 # none
+var p = io.Path("/a/b/c.txt").parent().value();   # "/a/b"
+var root = io.Path("/a").parent().value();        # "/"
+var none = io.Path("/").parent();                 # none
 </code></pre>
 <h4 id="file_name"><a class="header" href="#file_name">file_name</a></h4>
 <pre><code class="language-pepper">file_name(): String?
@@ -393,10 +393,10 @@ returns none.</p>
 <li>the last component, or none for a root (<code>/</code>, <code>C:\</code>), the empty path, or a path whose last component is <code>.</code> or <code>..</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
-    var none = io.Path("a/..").file_name();                 # none
+var name = io.Path("/a/b/c.txt").file_name().value();   # "c.txt"
+var none = io.Path("a/..").file_name();                 # none
 </code></pre>
 <h4 id="file_stem"><a class="header" href="#file_stem">file_stem</a></h4>
 <pre><code class="language-pepper">file_stem(): String?
@@ -437,11 +437,11 @@ separators after the file name are dropped.</p>
 <li>the new path, or a copy of this path unchanged when it has no file name (a root, <code>.</code>, <code>..</code>, or the empty path)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
-    var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
-    var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
+var md = io.Path("a/b.txt").with_extension("md");   # "a/b.md"
+var rs = io.Path("a/b").with_extension("rs");       # "a/b.rs"
+var bare = io.Path("a/b.txt").with_extension("");   # "a/b"
 </code></pre>
 <h4 id="components"><a class="header" href="#components">components</a></h4>
 <pre><code class="language-pepper">components(): Array&lt;String&gt;
@@ -457,10 +457,10 @@ are dropped, except a leading one in a path with no prefix or root
 <li>the components in order; empty for the empty path</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
-    var d = io.Path("./a/b").components();            # [".", "a", "b"]
+var c = io.Path("/usr//lib/./x/").components();   # ["/", "usr", "lib", "x"]
+var d = io.Path("./a/b").components();            # [".", "a", "b"]
 </code></pre>
 <h4 id="normalize"><a class="header" href="#normalize">normalize</a></h4>
 <pre><code class="language-pepper">normalize(): Path
@@ -483,10 +483,10 @@ resolves.</p>
 <li><code>canonicalize</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
-    var q = io.Path("a/..").normalize();         # "."
+var p = io.Path("a/./b/../c").normalize();   # "a/c" ("a\c" on Windows)
+var q = io.Path("a/..").normalize();         # "."
 </code></pre>
 <h4 id="exists"><a class="header" href="#exists">exists</a></h4>
 <pre><code class="language-pepper">exists(): bool
@@ -541,12 +541,12 @@ opened for attributes only.</p>
 <li><code>symlink_metadata</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var m = io.Path("data.bin").metadata();
-    if (m.is_ok()) {
-        var size = m.value().size;
-    }
+var m = io.Path("data.bin").metadata();
+if (m.is_ok()) {
+    var size = m.value().size;
+}
 </code></pre>
 <h4 id="symlink_metadata"><a class="header" href="#symlink_metadata">symlink_metadata</a></h4>
 <pre><code class="language-pepper">symlink_metadata(): IoResult&lt;Metadata&gt;
@@ -584,12 +584,12 @@ removed (<code>\\?\UNC\server\share</code> becomes <code>\\server\share</code>).
 <li><code>normalize</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var real = io.Path("a/../b.txt").canonicalize();
-    if (real.is_ok()) {
-        print(real.value().to_string());
-    }
+var real = io.Path("a/../b.txt").canonicalize();
+if (real.is_ok()) {
+    print(real.value().to_string());
+}
 </code></pre>
 <h4 id="operator-"><a class="header" href="#operator-">operator ==</a></h4>
 <pre><code class="language-pepper">==(rhs: Path): bool

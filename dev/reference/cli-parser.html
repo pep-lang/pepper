@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -205,20 +205,20 @@ takes one value is given twice, the last value wins.</p>
 made with <code>command</code>. Options before the command’s name belong to this
 parser, and everything after it to the command’s.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import cli;
+<pre><code class="language-pepper">import cli;
 
-    main(args: String[]): int {
-        var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
-        var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
-        var imports = parser.multiple("import-path", "I", "a directory to search for modules");
-        var verbose = parser.flag("verbose", "v", "say what is happening");
-        var source = parser.positional("source", "the program's entry file");
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        print($"{source.value()} -&gt; {output.value()}");
-        return 0;
+main(args: String[]): int {
+    var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
+    var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
+    var imports = parser.multiple("import-path", "I", "a directory to search for modules");
+    var verbose = parser.flag("verbose", "v", "say what is happening");
+    var source = parser.positional("source", "the program's entry file");
+    if (!parser.parse(args)) {
+        return 2;
     }
+    print($"{source.value()} -&gt; {output.value()}");
+    return 0;
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
@@ -390,27 +390,27 @@ help and errors read the same, and the two styles mix on one parser.</p>
 <li><code>options</code> — the struct whose fields to declare and fill in</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import cli;
+<pre><code class="language-pepper">import cli;
 
-    struct Options {
-        [cli.Option("o", "the executable to write")]
-        var output: String = "a.out";
-        [cli.Option("v", "say what is happening")]
-        var verbose: bool;
-        [cli.Positional("the program's entry file")]
-        var source: String;
-    }
+struct Options {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say what is happening")]
+    var verbose: bool;
+    [cli.Positional("the program's entry file")]
+    var source: String;
+}
 
-    main(args: String[]): int {
-        var options = Options();
-        var parser = cli.Parser("pepper", "Compiles a Pepper program");
-        parser.add_options(options);
-        if (!parser.parse(args)) {
-            return 2;
-        }
-        print($"{options.source} -&gt; {options.output}");
-        return 0;
+main(args: String[]): int {
+    var options = Options();
+    var parser = cli.Parser("pepper", "Compiles a Pepper program");
+    parser.add_options(options);
+    if (!parser.parse(args)) {
+        return 2;
     }
+    print($"{options.source} -&gt; {options.output}");
+    return 0;
+}
 </code></pre>
 <h4 id="usage"><a class="header" href="#usage">usage</a></h4>
 <pre><code class="language-pepper">usage(): String
@@ -481,10 +481,10 @@ close candidates the first wins.</p>
 <li>the closest candidate, or none when none is within 2 edits</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    names.append("build");
-    names.append("fmt");
-    var best = cli.closest("buidl", names);   # some("build")
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("build");
+names.append("fmt");
+var best = cli.closest("buidl", names);   # some("build")
 </code></pre>
 <h2 id="flag-1"><a class="header" href="#flag-1">Flag</a></h2>
 <pre><code class="language-pepper">struct Flag

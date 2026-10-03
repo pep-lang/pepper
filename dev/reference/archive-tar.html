@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -217,10 +217,10 @@ extracted safely into a directory, or written.</p>
 </code></pre>
 <p>One entry of a tar archive: its header, without its contents.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import archive;
+<pre><code class="language-pepper">import archive;
 
-    var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
-    entry.mode = 493;   # octal 755: rwxr-xr-x
+var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
+entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="path"><a class="header" href="#path">path</a></h4>
@@ -271,19 +271,19 @@ bsdtar and Git (<code>git archive</code>, and the <code>.tar.gz</code> snapshots
 and Codeberg serve) write. Global pax headers (<code>g</code>) are skipped.
 Wrap the source in a <code>compress.DecompressReader</code> to read a <code>.tar.gz</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import archive;
-    import compress;
-    import io;
+<pre><code class="language-pepper">import archive;
+import compress;
+import io;
 
-    var file = io.File.open(io.Path("release.tar.gz")).value();
-    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
-    while (true) {
-        var entry = tar.next_entry().value();
-        if (entry.is_empty()) {
-            break;
-        }
-        print(entry.value().path);
+var file = io.File.open(io.Path("release.tar.gz")).value();
+var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+while (true) {
+    var entry = tar.next_entry().value();
+    if (entry.is_empty()) {
+        break;
     }
+    print(entry.value().path);
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="tarreader-1"><a class="header" href="#tarreader-1">TarReader()</a></h4>
@@ -350,13 +350,13 @@ and FIFOs are skipped, as are permission bits and modification times.</p>
 <li>an Ok result once every entry is extracted; an <code>is_invalid_input()</code> error for an unsafe path or a damaged archive, or the error of a file that could not be written</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import archive;
-    import compress;
-    import io;
+<pre><code class="language-pepper">import archive;
+import compress;
+import io;
 
-    var file = io.File.open(io.Path("pepper-main.tar.gz")).value();
-    var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
-    tar.extract(io.Path(".pep/deps/pepper"), strip_components = 1).value();
+var file = io.File.open(io.Path("pepper-main.tar.gz")).value();
+var tar = archive.TarReader(compress.DecompressReader(file, compress.Format.Gzip));
+tar.extract(io.Path(".pep/deps/pepper"), strip_components = 1).value();
 </code></pre>
 <h2 id="tarwriter"><a class="header" href="#tarwriter">TarWriter</a></h2>
 <pre><code class="language-pepper">struct TarWriter
@@ -369,15 +369,15 @@ be split at a <code>/</code> into 155 and 100), so every path is kept whole. Own
 ids are 0 and owner names empty. Wrap the sink in a
 <code>compress.CompressWriter</code> to write a <code>.tar.gz</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import archive;
-    import io;
+<pre><code class="language-pepper">import archive;
+import io;
 
-    var out = io.ByteWriter();
-    var tar = archive.TarWriter(out);
-    tar.append_directory("docs");
-    tar.append_file("docs/readme.txt", "hello\n".bytes());
-    tar.finish();
-    assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
+var out = io.ByteWriter();
+var tar = archive.TarWriter(out);
+tar.append_directory("docs");
+tar.append_file("docs/readme.txt", "hello\n".bytes());
+tar.finish();
+assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="tarwriter-1"><a class="header" href="#tarwriter-1">TarWriter()</a></h4>
@@ -480,10 +480,10 @@ written is <code>data.count</code> for a file and 0 for anything else, whatever
 <li>if <code>entry.kind</code> is not <code>File</code> (“append_stream needs a file entry”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var file = io.File.open(io.Path("big.bin")).value();
-    var entry = archive.TarEntry("big.bin");
-    entry.size = file.metadata().value().size;
-    tar.append_stream(entry, file);
+<pre><code class="language-pepper">var file = io.File.open(io.Path("big.bin")).value();
+var entry = archive.TarEntry("big.bin");
+entry.size = file.metadata().value().size;
+tar.append_stream(entry, file);
 </code></pre>
 <h4 id="finish"><a class="header" href="#finish">finish</a></h4>
 <pre><code class="language-pepper">finish(): io.IoResult&lt;void&gt;

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -389,8 +389,55 @@ strings (<code>$"{field.name}: "</code>), <code>?:</code>, assignment to a compi
 <code>is_empty</code>.</p>
 <p>Emitted code can use a compile-time number, <code>bool</code>, string or enum case;
 the compiler writes it as a literal.</p>
+<h3 id="seeing-what-a-block-does"><a class="header" href="#seeing-what-a-block-does">Seeing what a block does</a></h3>
+<p>A <code>static</code> block runs inside the compiler, so a <code>print</code> in it would be
+emitted into the program instead of showing anything while compiling.
+These show what the block computes:</p>
+<ul>
+<li>
+<p><strong><code>reflect.print(value)</code></strong> writes <code>value</code> as a note each time the compiler
+runs it, on every compile, including one that succeeds. In an unrolled
+loop each note says which pass printed it:</p>
+<pre><code class="language-text">main.pep:9:17: note: static print: "describing Point"
+    9 |         reflect.print($"describing {reflect.name&lt;T&gt;()}");
+      |                 ^~~~~
+main.pep:11:21: note: static print: "x"
+   11 |             reflect.print(field.name);
+      |                     ^~~~~
+main.pep:10:27: note: in pass 1 of 2 (member 'x')
+   10 |         for (var field in reflect.properties&lt;T&gt;()) {
+      |                           ^~~~~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p><strong><code>reflect.assert(condition, message)</code></strong> and <strong><code>reflect.error(message)</code></strong>
+stop the compile at that point with <code>message</code>, which can be an
+interpolated string holding the values that matter
+(<code>reflect.assert(n &lt; 8, $"{reflect.name&lt;T&gt;()} has {n} fields")</code>). Like
+every error in a block, it carries the pass and, in generic code, the
+specialization it happened in (see <a href="#in-generic-code">In generic code</a>).</p>
+</li>
+<li>
+<p><strong>The emitted code runs like code written by hand.</strong> Each statement a
+block emits keeps the source line of the statement it came from, so a
+runtime <code>print</code> it emits shows values as the program runs, and a
+<a href="../tools/debugging.html">debugger</a> breakpoint on that line (with <code>-g</code>)
+stops there. The passes of an unrolled loop share the lines of its body,
+so a breakpoint on one stops only in the first pass, and stepping over
+the line runs the rest.</p>
+</li>
+<li>
+<p><strong><code>--emit-llvm</code></strong> writes the program’s LLVM IR into the build directory
+(<code>.pep/build/&lt;name&gt;.ll</code>), where the function a block expanded in shows
+exactly what it emitted, one copy per specialization
+(<code>describe&lt;Point&gt;</code>). <code>--emit-ast</code> prints the program as parsed, before
+any block runs, so it does not show the expansion.</p>
+</li>
+</ul>
 <h2 id="the-reflect-functions"><a class="header" href="#the-reflect-functions">The <code>reflect</code> functions</a></h2>
-<p><code>reflect</code> is built in: a <code>static</code> block uses it without an import.</p>
+<p><code>reflect</code> is built in: a <code>static</code> block uses it without an import. The
+<a href="../reference/reflect.html">reference</a> has an entry for each function and
+for the members, cases and functions they return.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -408,7 +455,7 @@ the compiler writes it as a literal.</p>
 <tr><td><code>reflect.has_attribute&lt;T, A&gt;()</code>, <code>reflect.attribute&lt;T, A&gt;()</code></td><td>attribute <code>A</code> on struct or enum <code>T</code></td></tr>
 <tr><td><code>reflect.has_build_option("NAME")</code></td><td>whether the build defines <a href="build-options.html">build option</a> <code>NAME</code> (<code>-D NAME</code>)</td></tr>
 <tr><td><code>reflect.build_option("NAME")</code>, <code>reflect.build_option("NAME", default)</code></td><td>the build option’s value as a <code>String</code>; without a default, an error when the build does not define it</td></tr>
-<tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling</td></tr>
+<tr><td><code>reflect.print(value)</code></td><td>writes <code>value</code> as a note while compiling (see <a href="#seeing-what-a-block-does">Seeing what a block does</a>)</td></tr>
 <tr><td><code>reflect.error(message)</code></td><td>fails the compile with <code>message</code></td></tr>
 <tr><td><code>reflect.assert(condition, message)</code></td><td>fails the compile with <code>message</code> when <code>condition</code> is false</td></tr>
 </tbody>

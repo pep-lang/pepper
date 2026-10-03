@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -242,7 +242,7 @@ pattern, so the result matches <code>text</code> literally.</li>
 </thead>
 <tbody>
 <tr><td><code>is_match(text)</code></td><td>whether there is a match anywhere; the fastest test</td></tr>
-<tr><td><code>find(text)</code></td><td>the leftmost <code>Match</code>, or none</td></tr>
+<tr><td><code>find(text)</code></td><td>the leftmost <code>Match</code>, or Empty</td></tr>
 <tr><td><code>find_at(text, start)</code></td><td>the leftmost match starting at or after byte <code>start</code></td></tr>
 <tr><td><code>find_all(text)</code></td><td>an iterator over every match, left to right, without overlaps</td></tr>
 <tr><td><code>replace(text, replacement)</code></td><td><code>text</code> with the first match replaced</td></tr>
@@ -253,7 +253,7 @@ pattern, so the result matches <code>text</code> literally.</li>
 </div>
 <p>A <code>Match</code> has <code>text()</code>, <code>start()</code> and <code>end()</code> (byte offsets, as <code>String.find</code>
 returns, for use with <code>substr_bytes</code>), and <code>group(index)</code> or <code>group(name)</code>,
-which give the group’s text or none when the group did not take part (as
+which give the group’s text or Empty when the group did not take part (as
 <code>(a)</code> in <code>(a)|b</code> matching <code>b</code>). Group 0 is the whole match; groups are
 numbered by their opening <code>(</code>. <code>group_range(index)</code> gives a group’s offsets.</p>
 <p>Matching is leftmost-first, as in Perl: the match that starts earliest wins,

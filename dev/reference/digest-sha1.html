@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,14 +197,14 @@ times and in pieces of any size, then read the 20-byte digest with
 same digest. Use it only where a format requires it, such as git object
 ids. <code>finish</code> resets the hasher, so it can hash a new input.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import digest;
+<pre><code class="language-pepper">import digest;
 
-    # The id git gives an empty file ("blob 0" and a NUL byte).
-    u8[] nul = [0];
-    var hasher = digest.Sha1();
-    hasher.update("blob 0");
-    hasher.update(nul);
-    assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
+# The id git gives an empty file ("blob 0" and a NUL byte).
+u8[] nul = [0];
+var hasher = digest.Sha1();
+hasher.update("blob 0");
+hasher.update(nul);
+assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
@@ -277,9 +277,9 @@ hexadecimal digits.</p>
 <li>the 20-byte digest</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import digest;
+<pre><code class="language-pepper">import digest;
 
-    assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d", "FIPS 180-4 example");
+assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d", "FIPS 180-4 example");
 </code></pre>
 
                     </main>

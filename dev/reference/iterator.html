@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -206,35 +206,35 @@ which a <code>for</code> loop drives through the trait.</p>
 <li><code>Iterable</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    struct Countdown {
-        int remaining;
-        int now;
+<pre><code class="language-pepper">struct Countdown {
+    int remaining;
+    int now;
 
-        construct(this.remaining = 0) {}
+    construct(this.remaining = 0) {}
 
-        bool next() {
-            if (remaining == 0) {
-                return false;
-            }
-            now = remaining;
-            remaining = remaining - 1;
-            return true;
+    bool next() {
+        if (remaining == 0) {
+            return false;
         }
-
-        int current() {
-            return now;
-        }
+        now = remaining;
+        remaining = remaining - 1;
+        return true;
     }
 
-    extend Countdown with Iterator&lt;int&gt;;
-
-    main(): int {
-        var total = 0;
-        for (int n in Countdown(3)) {
-            total = total + n;   # visits 3, 2, 1
-        }
-        return total;
+    int current() {
+        return now;
     }
+}
+
+extend Countdown with Iterator&lt;int&gt;;
+
+main(): int {
+    var total = 0;
+    for (int n in Countdown(3)) {
+        total = total + n;   # visits 3, 2, 1
+    }
+    return total;
+}
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
@@ -277,10 +277,10 @@ the result advances this iterator. Every type that declares
 <li>a <code>MapIterator&lt;T, U&gt;</code> over the transformed elements</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = Array&lt;String&gt;();
-    for (var size in names.iterate().map((name) =&gt; name.size)) {
-        print(size);
-    }
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+for (var size in names.iterate().map((name) =&gt; name.size)) {
+    print(size);
+}
 </code></pre>
 <h4 id="filter"><a class="header" href="#filter">filter</a></h4>
 <pre><code class="language-pepper">filter(keep: (T) =&gt; bool): FilterIterator&lt;T&gt;
@@ -299,10 +299,10 @@ gets this method.</p>
 <li>a <code>FilterIterator&lt;T&gt;</code> over the elements that pass</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var nums = Array&lt;int&gt;();
-    for (var even in nums.iterate().filter((n) =&gt; n % 2 == 0)) {
-        print(even);
-    }
+<pre><code class="language-pepper">var nums = Array&lt;int&gt;();
+for (var even in nums.iterate().filter((n) =&gt; n % 2 == 0)) {
+    print(even);
+}
 </code></pre>
 <h4 id="enumerate"><a class="header" href="#enumerate">enumerate</a></h4>
 <pre><code class="language-pepper">enumerate&lt;TIndex=ulong&gt;(): EnumerateIterator&lt;T, TIndex&gt;
@@ -322,10 +322,10 @@ declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
 <li>an <code>EnumerateIterator&lt;T, TIndex&gt;</code> over <code>(index, element)</code> tuples</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
-    for (var (i, name) in names.iterate().enumerate()) {
-        print($"{i}: {name}");   # 0: Ada, then 1: Grace
-    }
+<pre><code class="language-pepper">var names = ["Ada", "Grace"];
+for (var (i, name) in names.iterate().enumerate()) {
+    print($"{i}: {name}");   # 0: Ada, then 1: Grace
+}
 </code></pre>
 <h4 id="zip"><a class="header" href="#zip">zip</a></h4>
 <pre><code class="language-pepper">zip&lt;U&gt;(other: Iterator&lt;U&gt;): ZipIterator&lt;T, U&gt;
@@ -348,11 +348,11 @@ method.</p>
 <li>a <code>ZipIterator&lt;T, U&gt;</code> over <code>(element, other element)</code> tuples</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var names = ["Ada", "Grace"];
-    var ages = [36, 45];
-    for (var (name, age) in names.iterate().zip(ages.iterate())) {
-        print($"{name} is {age}");
-    }
+<pre><code class="language-pepper">var names = ["Ada", "Grace"];
+var ages = [36, 45];
+for (var (name, age) in names.iterate().zip(ages.iterate())) {
+    print($"{name} is {age}");
+}
 </code></pre>
 <h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
 <pre><code class="language-pepper">to_array(): Array&lt;T&gt;
@@ -367,7 +367,7 @@ method.</p>
 <li>the elements, possibly none</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
+<pre><code class="language-pepper">var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
 </code></pre>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct MapIterator&lt;T, U&gt;
@@ -551,13 +551,13 @@ returned iterator with <code>next()</code> and <code>current()</code>. When a ty
 <li><code>Iterator</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var nums = Array&lt;int&gt;();
-    nums.append(1);
-    nums.append(2);
-    var total = 0;
-    for (var x in nums) {
-        total = total + x;
-    }
+<pre><code class="language-pepper">var nums = Array&lt;int&gt;();
+nums.append(1);
+nums.append(2);
+var total = 0;
+for (var x in nums) {
+    total = total + x;
+}
 </code></pre>
 <h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>

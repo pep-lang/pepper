@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,24 +194,24 @@ request with a handler function. Bodies are read into memory in full.</p>
 <li><a href="http-server.html">Server</a>: <code>Server</code> and <code>reason_phrase</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import http;
-    import io;
+<pre><code class="language-pepper">import async;
+import http;
+import io;
 
-    main(): int {
-        async.run(() =&gt; {
-            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-            var port = server.local_address().value().port();
-            async.spawn&lt;void&gt;(() =&gt; {
-                server.serve((request) =&gt; {
-                    return http.Response(200).set_text("hello");
-                });
+main(): int {
+    async.run(() =&gt; {
+        var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = server.local_address().value().port();
+        async.spawn&lt;void&gt;(() =&gt; {
+            server.serve((request) =&gt; {
+                return http.Response(200).set_text("hello");
             });
-            var response = http.Client().get("http://127.0.0.1:" + to_string(port) + "/").value();
-            assert(response.text() == "hello", "served");
         });
-        return 0;
-    }
+        var response = http.Client().get("http://127.0.0.1:" + to_string(port) + "/").value();
+        assert(response.text() == "hello", "served");
+    });
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/http/module.pep</code></p>
 

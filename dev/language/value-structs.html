@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -339,10 +339,10 @@ value refers to. The box is a copy, so a mutating method called through the
 trait value changes the box and not the original, and two conversions of
 one value make two boxes. Copying the trait value shares the box, as for
 any trait value.</p>
-<p>The runtime’s iterators (<code>ArrayIterator</code>, <code>StringIterator</code>,
-<code>HashMapIterator</code>, <code>HashSetIterator</code>, <code>ChannelIterator</code>, and the <code>map</code> and
-<code>filter</code> adapters) are value structs, so a <code>for</code> loop over an <code>Array</code>, a
-<code>String</code> or a <code>HashMap</code> allocates no iterator.</p>
+<p>The runtime’s iterators (<code>ArrayIterator</code>, <code>StringIterator</code>, the map and
+set iterators, <code>ChannelIterator</code>, and the <code>map</code>, <code>filter</code>, <code>enumerate</code> and
+<code>zip</code> adapters) are value structs, so a <code>for</code> loop over an <code>Array</code>, a
+<code>String</code> or any map or set allocates no iterator.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
 <li>A <a href="enums.html#value-enums">value enum</a> stores the values of all its cases

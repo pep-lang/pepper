@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -204,23 +204,23 @@ unless the client asks to close (or speaks HTTP/1.0).</p>
 <code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
 when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import http;
-    import io;
+<pre><code class="language-pepper">import async;
+import http;
+import io;
 
-    hello(request: http.Request): http.Response {
-        var response = http.Response(200).set_text("hello from " + request.path());
-        response.headers["Content-Type"] = "text/plain";
-        return response;
-    }
+hello(request: http.Request): http.Response {
+    var response = http.Response(200).set_text("hello from " + request.path());
+    response.headers["Content-Type"] = "text/plain";
+    return response;
+}
 
-    main(): int {
-        async.run(() =&gt; {
-            var server = http.Server.bind(io.SocketAddress.parse("0.0.0.0:8080").value()).value();
-            server.serve(hello);
-        });
-        return 0;
-    }
+main(): int {
+    async.run(() =&gt; {
+        var server = http.Server.bind(io.SocketAddress.parse("0.0.0.0:8080").value()).value();
+        server.serve(hello);
+    });
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,14 +193,14 @@ from a struct’s fields.</p>
 short name, its help, and whether it is required. A field without it is
 still an option, named after the field.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import cli;
+<pre><code class="language-pepper">import cli;
 
-    struct Options {
-        [cli.Option("o", "the executable to write")]
-        var output: String = "a.out";
-        [cli.Option("v", "say what is happening")]
-        var verbose: bool;
-    }
+struct Options {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say what is happening")]
+    var verbose: bool;
+}
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
@@ -232,12 +232,12 @@ instead of an option. A <code>String</code> field takes one value, required unle
 the field starts with a value (its default); a <code>String?</code> field takes an
 optional one; a <code>String[]</code> field takes every value that is left.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import cli;
+<pre><code class="language-pepper">import cli;
 
-    struct Options {
-        [cli.Positional("the program's entry file")]
-        var source: String;
-    }
+struct Options {
+    [cli.Positional("the program's entry file")]
+    var source: String;
+}
 </code></pre>
 <h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="help-1"><a class="header" href="#help-1">help</a></h4>

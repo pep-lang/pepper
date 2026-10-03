@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,6 +183,8 @@
                     <main>
                         <!-- Generated from runtime/hash.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="hashmap-and-hashset"><a class="header" href="#hashmap-and-hashset">HashMap and HashSet</a></h1>
+<p>Hashing: <code>hash&lt;T&gt;(value)</code>, the 64-bit hash <code>HashMap</code> and <code>HashSet</code> use for
+their keys, and the hash maps and sets themselves.</p>
 <p>Source: <code>runtime/hash.pep</code></p>
 <h2 id="hash"><a class="header" href="#hash">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;T&gt;(value: T): u64
@@ -230,8 +232,8 @@ argument is released afterwards.</p>
 <li><code>hash&lt;String&gt;</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = hash&lt;int&gt;(5);
-    var b = hash&lt;int&gt;(5);   # a == b
+<pre><code class="language-pepper">var a = hash&lt;int&gt;(5);
+var b = hash&lt;int&gt;(5);   # a == b
 </code></pre>
 <h2 id="hash-1"><a class="header" href="#hash-1">hash</a></h2>
 <pre><code class="language-pepper">hash&lt;String&gt;(value: String): u64
@@ -251,7 +253,7 @@ at a time, in O(size). An empty String hashes to the FNV-1a offset basis
 <li>the 64-bit hash of the String’s content</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(hash&lt;String&gt;("hello") == hash&lt;String&gt;("hello"), "content hash");
+<pre><code class="language-pepper">assert(hash&lt;String&gt;("hello") == hash&lt;String&gt;("hello"), "content hash");
 </code></pre>
 <h2 id="hashmap"><a class="header" href="#hashmap">HashMap</a></h2>
 <pre><code class="language-pepper">struct HashMap&lt;K, V&gt;
@@ -277,13 +279,13 @@ never shrinks.</p>
 <li><code>V</code> — the value type</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var ages = HashMap&lt;String, int&gt;();
-    ages["ada"] = 36;
-    ages.insert("alan", 41);
-    assert(ages["ada"] == 36, "lookup");
-    assert(ages.get("grace") == 0, "a missing key reads as the default");
-    assert(ages.remove("alan"), "removed");
-    assert(ages.count == 1, "one entry left");
+<pre><code class="language-pepper">var ages = HashMap&lt;String, int&gt;();
+ages["ada"] = 36;
+ages.insert("alan", 41);
+assert(ages["ada"] == 36, "lookup");
+assert(ages.get("grace") == 0, "a missing key reads as the default");
+assert(ages.remove("alan"), "removed");
+assert(ages.count == 1, "one entry left");
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
@@ -314,7 +316,7 @@ three arrays of that many slots.</p>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
+<pre><code class="language-pepper">var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="grow"><a class="header" href="#grow">grow</a></h4>
@@ -384,9 +386,9 @@ table (see <code>grow</code>). Expected O(1); a grow costs O(capacity).</p>
 <li>true when a new key was added, false when an existing key’s value was overwritten</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var m = HashMap&lt;int, int&gt;();
-    m.insert(1, 10);   # true: added
-    m.insert(1, 20);   # false: overwritten; m.get(1) == 20
+<pre><code class="language-pepper">var m = HashMap&lt;int, int&gt;();
+m.insert(1, 10);   # true: added
+m.insert(1, 20);   # false: overwritten; m.get(1) == 20
 </code></pre>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
 <pre><code class="language-pepper">get(key: K): V
@@ -420,9 +422,9 @@ Expected O(1).</p>
 <li>the value for <code>key</code>, or none when absent</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (ages.try_get("ada") is Value(age)) {
-        print($"{age}");
-    }
+<pre><code class="language-pepper">if (ages.try_get("ada") is Value(age)) {
+    print($"{age}");
+}
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">remove(key: K): bool
@@ -455,8 +457,8 @@ same as <code>get</code>. A missing key is not inserted.</p>
 <li>the value for <code>key</code>, or the default of <code>V</code> when absent</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var m = HashMap&lt;String, int&gt;();
-    var n = m["missing"];   # 0; m is still empty
+<pre><code class="language-pepper">var m = HashMap&lt;String, int&gt;();
+var n = m["missing"];   # 0; m is still empty
 </code></pre>
 <h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
 <pre><code class="language-pepper">[](key: K, value: V): V
@@ -473,8 +475,8 @@ same as <code>insert</code>.</p>
 <li><code>value</code>, the value of the assignment expression</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var m = HashMap&lt;String, int&gt;();
-    m["hello"] = 5;
+<pre><code class="language-pepper">var m = HashMap&lt;String, int&gt;();
+m["hello"] = 5;
 </code></pre>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): HashMapIterator&lt;K, V&gt;
@@ -489,10 +491,10 @@ makes the iterator’s next <code>next()</code> or <code>current()</code> panic.
 <li>an iterator positioned before the first entry</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var total = 0;
-    for (var (name, age) in ages) {
-        total += age;
-    }
+<pre><code class="language-pepper">var total = 0;
+for (var (name, age) in ages) {
+    total += age;
+}
 </code></pre>
 <h2 id="hashset"><a class="header" href="#hashset">HashSet</a></h2>
 <pre><code class="language-pepper">struct HashSet&lt;K&gt;
@@ -520,12 +522,12 @@ may change, and writing to them breaks the set.</p>
 <li><code>K</code> — the element type; hashed with <code>hash&lt;K&gt;</code> and compared with <code>==</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var seen = HashSet&lt;String&gt;();
-    seen.insert("a");
-    seen["b"] = "b";   # the same as seen.insert("b")
-    assert(seen.contains("a"), "member");
-    assert(!seen.insert("a"), "already a member");
-    assert(seen.count == 2, "two members");
+<pre><code class="language-pepper">var seen = HashSet&lt;String&gt;();
+seen.insert("a");
+seen["b"] = "b";   # the same as seen.insert("b")
+assert(seen.contains("a"), "member");
+assert(!seen.insert("a"), "already a member");
+assert(seen.count == 2, "two members");
 </code></pre>
 <h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
@@ -564,8 +566,8 @@ a set is expected, so an array literal can initialize one.</p>
 <li><code>items</code> — the elements to insert; duplicates are kept once</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    HashSet&lt;String&gt; keywords = ["if", "else", "while"];
-    assert(keywords.contains("else"), "a member");
+<pre><code class="language-pepper">HashSet&lt;String&gt; keywords = ["if", "else", "while"];
+assert(keywords.contains("else"), "a member");
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="grow-1"><a class="header" href="#grow-1">grow</a></h4>
@@ -675,9 +677,9 @@ while iterating makes the iterator’s next <code>next()</code> or <code>current
 <li>an iterator positioned before the first member</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    for (var name in seen) {
-        print(name);
-    }
+<pre><code class="language-pepper">for (var name in seen) {
+    print(name);
+}
 </code></pre>
 <h4 id="copy-1"><a class="header" href="#copy-1">copy</a></h4>
 <pre><code class="language-pepper">copy(): HashSet&lt;K&gt;

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -202,13 +202,13 @@ instruction on most CPUs (<code>leading_zeros</code>, <code>trailing_zeros</code
 <code>double</code> have <code>square_root</code>, <code>floor</code>, <code>ceiling</code>, <code>truncate</code>, <code>round</code>,
 <code>abs</code>, <code>copy_sign</code>, <code>multiply_add</code>, <code>min</code> and <code>max</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var port = int.parse("8080");
-    assert(port.is_value() &amp;&amp; port.value() == 8080, "parsed");
-    assert(byte.parse("256").is_empty(), "too big for a byte");
-    int big = 2147483647;
-    assert(big.wrapping_add(1) == -2147483648, "wraps around");
-    assert(big.checked_add(1).is_empty(), "does not fit");
-    assert((40 as uint).trailing_zeros() == 3, "40 is 0b101000");
+<pre><code class="language-pepper">var port = int.parse("8080");
+assert(port.is_value() &amp;&amp; port.value() == 8080, "parsed");
+assert(byte.parse("256").is_empty(), "too big for a byte");
+int big = 2147483647;
+assert(big.wrapping_add(1) == -2147483648, "wraps around");
+assert(big.checked_add(1).is_empty(), "does not fit");
+assert((40 as uint).trailing_zeros() == 3, "40 is 0b101000");
 </code></pre>
 <p>Source: <code>runtime/number.pep</code></p>
 <h2 id="extend-char"><a class="header" href="#extend-char">extend char</a></h2>
@@ -236,7 +236,7 @@ are accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(i8.parse("-128").value() == -128, "the lowest");
+<pre><code class="language-pepper">assert(i8.parse("-128").value() == -128, "the lowest");
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="is_digit"><a class="header" href="#is_digit">is_digit</a></h4>
@@ -560,7 +560,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as char)).leading_zeros() == 7, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as char)).leading_zeros() == 7, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros"><a class="header" href="#trailing_zeros">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -573,7 +573,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as char).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as char).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones"><a class="header" href="#count_ones">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -585,7 +585,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as char).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as char).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros"><a class="header" href="#count_zeros">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -596,7 +596,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as char).count_zeros() == 5, "three bits set");
+<pre><code class="language-pepper">assert((11 as char).count_zeros() == 5, "three bits set");
 </code></pre>
 <h4 id="swap_bytes"><a class="header" href="#swap_bytes">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): char
@@ -617,7 +617,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 8 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as char)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as char)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left"><a class="header" href="#rotate_left">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): char
@@ -634,7 +634,7 @@ taken modulo 8, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as char).rotate_left(7) == (9 as char).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as char).rotate_left(7) == (9 as char).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right"><a class="header" href="#rotate_right">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): char
@@ -651,7 +651,7 @@ taken modulo 8, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as char)).rotate_right(1) == ((1 as char)).rotate_left(7), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as char)).rotate_right(1) == ((1 as char)).rotate_left(7), "the bottom bit to the top");
 </code></pre>
 <h4 id="min"><a class="header" href="#min">min</a></h4>
 <pre><code class="language-pepper">min(other: char): char
@@ -666,7 +666,7 @@ taken modulo 8, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as char).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as char).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max"><a class="header" href="#max">max</a></h4>
 <pre><code class="language-pepper">max(other: char): char
@@ -681,18 +681,14 @@ taken modulo 8, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as char).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as char).max(5) == 5, "larger");
 </code></pre>
 <h4 id="abs"><a class="header" href="#abs">abs</a></h4>
-<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): char
+<pre><code class="language-pepper">abs(): char
 </code></pre>
 <p>Returns the absolute value: <code>this</code> without its sign. The lowest
 value, -128, has no positive counterpart in a <code>char</code>, so it panics, as
 its negation does.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>-this</code> when this value is negative, else <code>this</code></li>
@@ -702,7 +698,7 @@ its negation does.</p>
 <li>if this value is -128 (“integer overflow in ‘char’ absolute value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-5 as char).abs() == 5, "negative");
+<pre><code class="language-pepper">assert((-5 as char).abs() == 5, "negative");
 </code></pre>
 <h2 id="extend-byte"><a class="header" href="#extend-byte">extend byte</a></h2>
 <pre><code class="language-pepper">extend byte
@@ -729,7 +725,7 @@ accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
+<pre><code class="language-pepper">assert(byte.parse("ff", 16).value() == 255, "hexadecimal");
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="is_digit-1"><a class="header" href="#is_digit-1">is_digit</a></h4>
@@ -745,8 +741,8 @@ letter, space or punctuation.</p>
 <li>true for <code>0</code> to <code>9</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(('7' as byte).is_digit(), "a digit");
-    assert(!('x' as byte).is_digit(), "a letter");
+<pre><code class="language-pepper">assert(('7' as byte).is_digit(), "a digit");
+assert(!('x' as byte).is_digit(), "a letter");
 </code></pre>
 <h4 id="is_hex_digit-1"><a class="header" href="#is_hex_digit-1">is_hex_digit</a></h4>
 <pre><code class="language-pepper">is_hex_digit(): bool
@@ -820,8 +816,8 @@ or space, like C’s <code>ispunct</code>. That is <code>!"#$%&amp;'()*+,-./:;&l
 <li>true for one of the 32 ASCII punctuation characters</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((';' as byte).is_punctuation(), "punctuation");
-    assert(!(' ' as byte).is_punctuation(), "a space is not");
+<pre><code class="language-pepper">assert((';' as byte).is_punctuation(), "punctuation");
+assert(!(' ' as byte).is_punctuation(), "a space is not");
 </code></pre>
 <h4 id="is_graphic-1"><a class="header" href="#is_graphic-1">is_graphic</a></h4>
 <pre><code class="language-pepper">is_graphic(): bool
@@ -868,8 +864,8 @@ value unchanged for anything else, like C’s <code>toupper</code>.</p>
 <li><code>A</code> to <code>Z</code> for <code>a</code> to <code>z</code>, otherwise this value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(('q' as byte).to_upper() == 'Q', "raised");
-    assert(('?' as byte).to_upper() == '?', "kept");
+<pre><code class="language-pepper">assert(('q' as byte).to_upper() == 'Q', "raised");
+assert(('?' as byte).to_upper() == '?', "kept");
 </code></pre>
 <h4 id="to_lower-1"><a class="header" href="#to_lower-1">to_lower</a></h4>
 <pre><code class="language-pepper">to_lower(): byte
@@ -898,9 +894,9 @@ and the letters, either case, are 10 and up (<code>a</code> is 10, <code>z</code
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(('7' as byte).digit_value().value() == 7, "decimal");
-    assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
-    assert(('9' as byte).digit_value(8).is_empty(), "not octal");
+<pre><code class="language-pepper">assert(('7' as byte).digit_value().value() == 7, "decimal");
+assert(('F' as byte).digit_value(16).value() == 15, "hexadecimal");
+assert(('9' as byte).digit_value(8).is_empty(), "not octal");
 </code></pre>
 <h4 id="wrapping_add-1"><a class="header" href="#wrapping_add-1">wrapping_add</a></h4>
 <pre><code class="language-pepper">wrapping_add(other: byte): byte
@@ -1069,7 +1065,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as byte)).leading_zeros() == 7, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as byte)).leading_zeros() == 7, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-1"><a class="header" href="#trailing_zeros-1">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -1082,7 +1078,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as byte).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as byte).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-1"><a class="header" href="#count_ones-1">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -1094,7 +1090,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as byte).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as byte).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-1"><a class="header" href="#count_zeros-1">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -1105,7 +1101,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 8</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as byte).count_zeros() == 5, "three bits set");
+<pre><code class="language-pepper">assert((11 as byte).count_zeros() == 5, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-1"><a class="header" href="#swap_bytes-1">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): byte
@@ -1126,7 +1122,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 8 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as byte)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as byte)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-1"><a class="header" href="#rotate_left-1">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): byte
@@ -1143,7 +1139,7 @@ taken modulo 8, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as byte).rotate_left(7) == (9 as byte).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as byte).rotate_left(7) == (9 as byte).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-1"><a class="header" href="#rotate_right-1">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): byte
@@ -1160,7 +1156,7 @@ taken modulo 8, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as byte)).rotate_right(1) == ((1 as byte)).rotate_left(7), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as byte)).rotate_right(1) == ((1 as byte)).rotate_left(7), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-1"><a class="header" href="#min-1">min</a></h4>
 <pre><code class="language-pepper">min(other: byte): byte
@@ -1175,7 +1171,7 @@ taken modulo 8, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as byte).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as byte).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-1"><a class="header" href="#max-1">max</a></h4>
 <pre><code class="language-pepper">max(other: byte): byte
@@ -1190,7 +1186,7 @@ taken modulo 8, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as byte).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as byte).max(5) == 5, "larger");
 </code></pre>
 <h2 id="extend-short"><a class="header" href="#extend-short">extend short</a></h2>
 <pre><code class="language-pepper">extend short
@@ -1217,7 +1213,7 @@ separators are accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(short.parse("-300").value() == -300, "decimal");
+<pre><code class="language-pepper">assert(short.parse("-300").value() == -300, "decimal");
 </code></pre>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="wrapping_add-2"><a class="header" href="#wrapping_add-2">wrapping_add</a></h4>
@@ -1387,7 +1383,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as short)).leading_zeros() == 15, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as short)).leading_zeros() == 15, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-2"><a class="header" href="#trailing_zeros-2">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -1400,7 +1396,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as short).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as short).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-2"><a class="header" href="#count_ones-2">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -1412,7 +1408,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as short).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as short).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-2"><a class="header" href="#count_zeros-2">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -1423,7 +1419,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as short).count_zeros() == 13, "three bits set");
+<pre><code class="language-pepper">assert((11 as short).count_zeros() == 13, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-2"><a class="header" href="#swap_bytes-2">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): short
@@ -1435,7 +1431,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 2 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x1234 as short).swap_bytes() == 0x3412, "bytes reversed");
+<pre><code class="language-pepper">assert((0x1234 as short).swap_bytes() == 0x3412, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-2"><a class="header" href="#reverse_bits-2">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): short
@@ -1447,7 +1443,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 16 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as short)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as short)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-2"><a class="header" href="#rotate_left-2">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): short
@@ -1464,7 +1460,7 @@ taken modulo 16, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as short).rotate_left(15) == (9 as short).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as short).rotate_left(15) == (9 as short).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-2"><a class="header" href="#rotate_right-2">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): short
@@ -1481,7 +1477,7 @@ taken modulo 16, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as short)).rotate_right(1) == ((1 as short)).rotate_left(15), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as short)).rotate_right(1) == ((1 as short)).rotate_left(15), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-2"><a class="header" href="#min-2">min</a></h4>
 <pre><code class="language-pepper">min(other: short): short
@@ -1496,7 +1492,7 @@ taken modulo 16, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as short).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as short).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-2"><a class="header" href="#max-2">max</a></h4>
 <pre><code class="language-pepper">max(other: short): short
@@ -1511,18 +1507,14 @@ taken modulo 16, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as short).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as short).max(5) == 5, "larger");
 </code></pre>
 <h4 id="abs-1"><a class="header" href="#abs-1">abs</a></h4>
-<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): short
+<pre><code class="language-pepper">abs(): short
 </code></pre>
 <p>Returns the absolute value: <code>this</code> without its sign. The lowest
 value, -32768, has no positive counterpart in a <code>short</code>, so it panics, as
 its negation does.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>-this</code> when this value is negative, else <code>this</code></li>
@@ -1532,7 +1524,7 @@ its negation does.</p>
 <li>if this value is -32768 (“integer overflow in ‘short’ absolute value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-5 as short).abs() == 5, "negative");
+<pre><code class="language-pepper">assert((-5 as short).abs() == 5, "negative");
 </code></pre>
 <h2 id="extend-ushort"><a class="header" href="#extend-ushort">extend ushort</a></h2>
 <pre><code class="language-pepper">extend ushort
@@ -1559,7 +1551,7 @@ accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(ushort.parse("8080").value() == 8080, "a port");
+<pre><code class="language-pepper">assert(ushort.parse("8080").value() == 8080, "a port");
 </code></pre>
 <h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
 <h4 id="wrapping_add-3"><a class="header" href="#wrapping_add-3">wrapping_add</a></h4>
@@ -1729,7 +1721,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ushort)).leading_zeros() == 15, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as ushort)).leading_zeros() == 15, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-3"><a class="header" href="#trailing_zeros-3">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -1742,7 +1734,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as ushort).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as ushort).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-3"><a class="header" href="#count_ones-3">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -1754,7 +1746,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as ushort).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as ushort).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-3"><a class="header" href="#count_zeros-3">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -1765,7 +1757,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 16</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as ushort).count_zeros() == 13, "three bits set");
+<pre><code class="language-pepper">assert((11 as ushort).count_zeros() == 13, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-3"><a class="header" href="#swap_bytes-3">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): ushort
@@ -1777,7 +1769,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 2 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x1234 as ushort).swap_bytes() == 0x3412, "bytes reversed");
+<pre><code class="language-pepper">assert((0x1234 as ushort).swap_bytes() == 0x3412, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-3"><a class="header" href="#reverse_bits-3">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): ushort
@@ -1789,7 +1781,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 16 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ushort)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as ushort)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-3"><a class="header" href="#rotate_left-3">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): ushort
@@ -1806,7 +1798,7 @@ taken modulo 16, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as ushort).rotate_left(15) == (9 as ushort).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as ushort).rotate_left(15) == (9 as ushort).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-3"><a class="header" href="#rotate_right-3">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): ushort
@@ -1823,7 +1815,7 @@ taken modulo 16, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ushort)).rotate_right(1) == ((1 as ushort)).rotate_left(15), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as ushort)).rotate_right(1) == ((1 as ushort)).rotate_left(15), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-3"><a class="header" href="#min-3">min</a></h4>
 <pre><code class="language-pepper">min(other: ushort): ushort
@@ -1838,7 +1830,7 @@ taken modulo 16, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as ushort).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as ushort).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-3"><a class="header" href="#max-3">max</a></h4>
 <pre><code class="language-pepper">max(other: ushort): ushort
@@ -1853,7 +1845,7 @@ taken modulo 16, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as ushort).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as ushort).max(5) == 5, "larger");
 </code></pre>
 <h2 id="extend-int"><a class="header" href="#extend-int">extend int</a></h2>
 <pre><code class="language-pepper">extend int
@@ -1880,9 +1872,9 @@ prefixes (<code>0x</code>) or separators are accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(int.parse("-42").value() == -42, "decimal");
-    assert(int.parse("ff", 16).value() == 255, "hexadecimal");
-    assert(int.parse("12x").is_empty(), "not a number");
+<pre><code class="language-pepper">assert(int.parse("-42").value() == -42, "decimal");
+assert(int.parse("ff", 16).value() == 255, "hexadecimal");
+assert(int.parse("12x").is_empty(), "not a number");
 </code></pre>
 <h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
 <h4 id="wrapping_add-4"><a class="header" href="#wrapping_add-4">wrapping_add</a></h4>
@@ -2052,7 +2044,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as int)).leading_zeros() == 31, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as int)).leading_zeros() == 31, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-4"><a class="header" href="#trailing_zeros-4">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -2065,7 +2057,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as int).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as int).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-4"><a class="header" href="#count_ones-4">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -2077,7 +2069,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as int).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as int).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-4"><a class="header" href="#count_zeros-4">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -2088,7 +2080,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as int).count_zeros() == 29, "three bits set");
+<pre><code class="language-pepper">assert((11 as int).count_zeros() == 29, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-4"><a class="header" href="#swap_bytes-4">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): int
@@ -2100,7 +2092,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 4 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x12345678 as int).swap_bytes() == 0x78563412, "bytes reversed");
+<pre><code class="language-pepper">assert((0x12345678 as int).swap_bytes() == 0x78563412, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-4"><a class="header" href="#reverse_bits-4">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): int
@@ -2112,7 +2104,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 32 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as int)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as int)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-4"><a class="header" href="#rotate_left-4">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): int
@@ -2129,7 +2121,7 @@ taken modulo 32, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as int).rotate_left(31) == (9 as int).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as int).rotate_left(31) == (9 as int).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-4"><a class="header" href="#rotate_right-4">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): int
@@ -2146,7 +2138,7 @@ taken modulo 32, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as int)).rotate_right(1) == ((1 as int)).rotate_left(31), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as int)).rotate_right(1) == ((1 as int)).rotate_left(31), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-4"><a class="header" href="#min-4">min</a></h4>
 <pre><code class="language-pepper">min(other: int): int
@@ -2161,7 +2153,7 @@ taken modulo 32, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as int).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as int).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-4"><a class="header" href="#max-4">max</a></h4>
 <pre><code class="language-pepper">max(other: int): int
@@ -2176,18 +2168,14 @@ taken modulo 32, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as int).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as int).max(5) == 5, "larger");
 </code></pre>
 <h4 id="abs-2"><a class="header" href="#abs-2">abs</a></h4>
-<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): int
+<pre><code class="language-pepper">abs(): int
 </code></pre>
 <p>Returns the absolute value: <code>this</code> without its sign. The lowest
 value, -2147483648, has no positive counterpart in a <code>int</code>, so it panics, as
 its negation does.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>-this</code> when this value is negative, else <code>this</code></li>
@@ -2197,7 +2185,7 @@ its negation does.</p>
 <li>if this value is -2147483648 (“integer overflow in ‘int’ absolute value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-5 as int).abs() == 5, "negative");
+<pre><code class="language-pepper">assert((-5 as int).abs() == 5, "negative");
 </code></pre>
 <h2 id="extend-uint"><a class="header" href="#extend-uint">extend uint</a></h2>
 <pre><code class="language-pepper">extend uint
@@ -2224,7 +2212,7 @@ accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(uint.parse("4294967295").value() == 4294967295, "the highest");
+<pre><code class="language-pepper">assert(uint.parse("4294967295").value() == 4294967295, "the highest");
 </code></pre>
 <h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
 <h4 id="wrapping_add-5"><a class="header" href="#wrapping_add-5">wrapping_add</a></h4>
@@ -2394,7 +2382,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as uint)).leading_zeros() == 31, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as uint)).leading_zeros() == 31, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-5"><a class="header" href="#trailing_zeros-5">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -2407,7 +2395,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as uint).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as uint).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-5"><a class="header" href="#count_ones-5">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -2419,7 +2407,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as uint).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as uint).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-5"><a class="header" href="#count_zeros-5">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -2430,7 +2418,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 32</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as uint).count_zeros() == 29, "three bits set");
+<pre><code class="language-pepper">assert((11 as uint).count_zeros() == 29, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-5"><a class="header" href="#swap_bytes-5">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): uint
@@ -2442,7 +2430,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 4 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
+<pre><code class="language-pepper">assert((0x12345678 as uint).swap_bytes() == 0x78563412, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-5"><a class="header" href="#reverse_bits-5">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): uint
@@ -2454,7 +2442,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 32 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as uint)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as uint)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-5"><a class="header" href="#rotate_left-5">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): uint
@@ -2471,7 +2459,7 @@ taken modulo 32, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as uint).rotate_left(31) == (9 as uint).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as uint).rotate_left(31) == (9 as uint).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-5"><a class="header" href="#rotate_right-5">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): uint
@@ -2488,7 +2476,7 @@ taken modulo 32, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as uint)).rotate_right(1) == ((1 as uint)).rotate_left(31), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as uint)).rotate_right(1) == ((1 as uint)).rotate_left(31), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-5"><a class="header" href="#min-5">min</a></h4>
 <pre><code class="language-pepper">min(other: uint): uint
@@ -2503,7 +2491,7 @@ taken modulo 32, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as uint).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as uint).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-5"><a class="header" href="#max-5">max</a></h4>
 <pre><code class="language-pepper">max(other: uint): uint
@@ -2518,7 +2506,7 @@ taken modulo 32, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as uint).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as uint).max(5) == 5, "larger");
 </code></pre>
 <h2 id="extend-long"><a class="header" href="#extend-long">extend long</a></h2>
 <pre><code class="language-pepper">extend long
@@ -2545,8 +2533,8 @@ are accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(long.parse("-9000000000").value() == -9000000000, "decimal");
-    assert(long.parse("9223372036854775808").is_empty(), "too big");
+<pre><code class="language-pepper">assert(long.parse("-9000000000").value() == -9000000000, "decimal");
+assert(long.parse("9223372036854775808").is_empty(), "too big");
 </code></pre>
 <h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
 <h4 id="wrapping_add-6"><a class="header" href="#wrapping_add-6">wrapping_add</a></h4>
@@ -2716,7 +2704,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as long)).leading_zeros() == 63, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as long)).leading_zeros() == 63, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-6"><a class="header" href="#trailing_zeros-6">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -2729,7 +2717,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as long).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as long).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-6"><a class="header" href="#count_ones-6">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -2741,7 +2729,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as long).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as long).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-6"><a class="header" href="#count_zeros-6">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -2752,7 +2740,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as long).count_zeros() == 61, "three bits set");
+<pre><code class="language-pepper">assert((11 as long).count_zeros() == 61, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-6"><a class="header" href="#swap_bytes-6">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): long
@@ -2764,7 +2752,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 8 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x0102030405060708 as long).swap_bytes() == 0x0807060504030201, "bytes reversed");
+<pre><code class="language-pepper">assert((0x0102030405060708 as long).swap_bytes() == 0x0807060504030201, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-6"><a class="header" href="#reverse_bits-6">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): long
@@ -2776,7 +2764,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 64 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as long)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as long)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-6"><a class="header" href="#rotate_left-6">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): long
@@ -2793,7 +2781,7 @@ taken modulo 64, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as long).rotate_left(63) == (9 as long).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as long).rotate_left(63) == (9 as long).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-6"><a class="header" href="#rotate_right-6">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): long
@@ -2810,7 +2798,7 @@ taken modulo 64, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as long)).rotate_right(1) == ((1 as long)).rotate_left(63), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as long)).rotate_right(1) == ((1 as long)).rotate_left(63), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-6"><a class="header" href="#min-6">min</a></h4>
 <pre><code class="language-pepper">min(other: long): long
@@ -2825,7 +2813,7 @@ taken modulo 64, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as long).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as long).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-6"><a class="header" href="#max-6">max</a></h4>
 <pre><code class="language-pepper">max(other: long): long
@@ -2840,18 +2828,14 @@ taken modulo 64, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as long).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as long).max(5) == 5, "larger");
 </code></pre>
 <h4 id="abs-3"><a class="header" href="#abs-3">abs</a></h4>
-<pre><code class="language-pepper">abs(location: __ptr&lt;char&gt; = __caller_location()): long
+<pre><code class="language-pepper">abs(): long
 </code></pre>
 <p>Returns the absolute value: <code>this</code> without its sign. The lowest
 value, -9223372036854775808, has no positive counterpart in a <code>long</code>, so it panics, as
 its negation does.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li><code>-this</code> when this value is negative, else <code>this</code></li>
@@ -2861,7 +2845,7 @@ its negation does.</p>
 <li>if this value is -9223372036854775808 (“integer overflow in ‘long’ absolute value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-5 as long).abs() == 5, "negative");
+<pre><code class="language-pepper">assert((-5 as long).abs() == 5, "negative");
 </code></pre>
 <h2 id="extend-ulong"><a class="header" href="#extend-ulong">extend ulong</a></h2>
 <pre><code class="language-pepper">extend ulong
@@ -2888,7 +2872,7 @@ accepted.</p>
 <li>if <code>base</code> is less than 2 or greater than 36</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
+<pre><code class="language-pepper">assert(ulong.parse("ffffffffffffffff", 16).is_value(), "the highest");
 </code></pre>
 <h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
 <h4 id="wrapping_add-7"><a class="header" href="#wrapping_add-7">wrapping_add</a></h4>
@@ -3058,7 +3042,7 @@ zero, 0 when the highest bit is set. One instruction on most CPUs
 <li>the count of leading zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ulong)).leading_zeros() == 63, "one bit, at the bottom");
+<pre><code class="language-pepper">assert(((1 as ulong)).leading_zeros() == 63, "one bit, at the bottom");
 </code></pre>
 <h4 id="trailing_zeros-7"><a class="header" href="#trailing_zeros-7">trailing_zeros</a></h4>
 <pre><code class="language-pepper">trailing_zeros(): int
@@ -3071,7 +3055,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of trailing zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((8 as ulong).trailing_zeros() == 3, "8 is 0b1000");
+<pre><code class="language-pepper">assert((8 as ulong).trailing_zeros() == 3, "8 is 0b1000");
 </code></pre>
 <h4 id="count_ones-7"><a class="header" href="#count_ones-7">count_ones</a></h4>
 <pre><code class="language-pepper">count_ones(): int
@@ -3083,7 +3067,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of one bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as ulong).count_ones() == 3, "three bits set");
+<pre><code class="language-pepper">assert((11 as ulong).count_ones() == 3, "three bits set");
 </code></pre>
 <h4 id="count_zeros-7"><a class="header" href="#count_zeros-7">count_zeros</a></h4>
 <pre><code class="language-pepper">count_zeros(): int
@@ -3094,7 +3078,7 @@ first set bit of a mask without a loop.</p>
 <li>the count of zero bits, from 0 to 64</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((11 as ulong).count_zeros() == 61, "three bits set");
+<pre><code class="language-pepper">assert((11 as ulong).count_zeros() == 61, "three bits set");
 </code></pre>
 <h4 id="swap_bytes-7"><a class="header" href="#swap_bytes-7">swap_bytes</a></h4>
 <pre><code class="language-pepper">swap_bytes(): ulong
@@ -3106,7 +3090,7 @@ convert between little-endian and big-endian byte order.</p>
 <li>the value with its 8 bytes reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((0x0102030405060708 as ulong).swap_bytes() == 0x0807060504030201, "bytes reversed");
+<pre><code class="language-pepper">assert((0x0102030405060708 as ulong).swap_bytes() == 0x0807060504030201, "bytes reversed");
 </code></pre>
 <h4 id="reverse_bits-7"><a class="header" href="#reverse_bits-7">reverse_bits</a></h4>
 <pre><code class="language-pepper">reverse_bits(): ulong
@@ -3118,7 +3102,7 @@ becomes the highest (<code>llvm.bitreverse</code>).</p>
 <li>the value with its 64 bits reversed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ulong)).reverse_bits().leading_zeros() == 0, "bottom to top");
+<pre><code class="language-pepper">assert(((1 as ulong)).reverse_bits().leading_zeros() == 0, "bottom to top");
 </code></pre>
 <h4 id="rotate_left-7"><a class="header" href="#rotate_left-7">rotate_left</a></h4>
 <pre><code class="language-pepper">rotate_left(count: int): ulong
@@ -3135,7 +3119,7 @@ taken modulo 64, so a negative count rotates right.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((9 as ulong).rotate_left(63) == (9 as ulong).rotate_right(1), "the same rotation");
+<pre><code class="language-pepper">assert((9 as ulong).rotate_left(63) == (9 as ulong).rotate_right(1), "the same rotation");
 </code></pre>
 <h4 id="rotate_right-7"><a class="header" href="#rotate_right-7">rotate_right</a></h4>
 <pre><code class="language-pepper">rotate_right(count: int): ulong
@@ -3152,7 +3136,7 @@ taken modulo 64, so a negative count rotates left.</p>
 <li>the rotated value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(((1 as ulong)).rotate_right(1) == ((1 as ulong)).rotate_left(63), "the bottom bit to the top");
+<pre><code class="language-pepper">assert(((1 as ulong)).rotate_right(1) == ((1 as ulong)).rotate_left(63), "the bottom bit to the top");
 </code></pre>
 <h4 id="min-7"><a class="header" href="#min-7">min</a></h4>
 <pre><code class="language-pepper">min(other: ulong): ulong
@@ -3167,7 +3151,7 @@ taken modulo 64, so a negative count rotates left.</p>
 <li><code>this</code> when it is not greater than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as ulong).min(5) == 3, "smaller");
+<pre><code class="language-pepper">assert((3 as ulong).min(5) == 3, "smaller");
 </code></pre>
 <h4 id="max-7"><a class="header" href="#max-7">max</a></h4>
 <pre><code class="language-pepper">max(other: ulong): ulong
@@ -3182,7 +3166,7 @@ taken modulo 64, so a negative count rotates left.</p>
 <li><code>this</code> when it is not less than <code>other</code>, else <code>other</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3 as ulong).max(5) == 5, "larger");
+<pre><code class="language-pepper">assert((3 as ulong).max(5) == 5, "larger");
 </code></pre>
 <h2 id="extend-float"><a class="header" href="#extend-float">extend float</a></h2>
 <pre><code class="language-pepper">extend float
@@ -3205,8 +3189,8 @@ hexadecimal are accepted.</p>
 <li>the value, or none when <code>text</code> is not decimal notation or its value is too large for a <code>float</code> (one too small rounds to zero)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(float.parse("0.25").value() == 0.25, "decimal");
-    assert(float.parse("1e39").is_empty(), "too big");
+<pre><code class="language-pepper">assert(float.parse("0.25").value() == 0.25, "decimal");
+assert(float.parse("1e39").is_empty(), "too big");
 </code></pre>
 <h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
 <h4 id="square_root"><a class="header" href="#square_root">square_root</a></h4>
@@ -3219,7 +3203,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the non-negative square root</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.25 as float).square_root() == 1.5, "exact");
+<pre><code class="language-pepper">assert((2.25 as float).square_root() == 1.5, "exact");
 </code></pre>
 <h4 id="floor"><a class="header" href="#floor">floor</a></h4>
 <pre><code class="language-pepper">floor(): float
@@ -3231,7 +3215,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward negative infinity</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as float).floor() == -2.0, "down");
+<pre><code class="language-pepper">assert((-1.5 as float).floor() == -2.0, "down");
 </code></pre>
 <h4 id="ceiling"><a class="header" href="#ceiling">ceiling</a></h4>
 <pre><code class="language-pepper">ceiling(): float
@@ -3243,7 +3227,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward positive infinity</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as float).ceiling() == -1.0, "up");
+<pre><code class="language-pepper">assert((-1.5 as float).ceiling() == -1.0, "up");
 </code></pre>
 <h4 id="truncate"><a class="header" href="#truncate">truncate</a></h4>
 <pre><code class="language-pepper">truncate(): float
@@ -3254,7 +3238,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward zero</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as float).truncate() == -1.0, "toward zero");
+<pre><code class="language-pepper">assert((-1.5 as float).truncate() == -1.0, "toward zero");
 </code></pre>
 <h4 id="round"><a class="header" href="#round">round</a></h4>
 <pre><code class="language-pepper">round(): float
@@ -3266,7 +3250,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the rounded value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.5 as float).round() == 3.0, "half away from zero");
+<pre><code class="language-pepper">assert((2.5 as float).round() == 3.0, "half away from zero");
 </code></pre>
 <h4 id="abs-4"><a class="header" href="#abs-4">abs</a></h4>
 <pre><code class="language-pepper">abs(): float
@@ -3278,7 +3262,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value without its sign</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-2.0 as float).abs() == 2.0, "negative");
+<pre><code class="language-pepper">assert((-2.0 as float).abs() == 2.0, "negative");
 </code></pre>
 <h4 id="copy_sign"><a class="header" href="#copy_sign">copy_sign</a></h4>
 <pre><code class="language-pepper">copy_sign(sign: float): float
@@ -3294,7 +3278,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li><code>abs()</code> of this value, negated when <code>sign</code> is negative</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3.0 as float).copy_sign(-0.0) == -3.0, "negative zero is negative");
+<pre><code class="language-pepper">assert((3.0 as float).copy_sign(-0.0) == -3.0, "negative zero is negative");
 </code></pre>
 <h4 id="multiply_add"><a class="header" href="#multiply_add">multiply_add</a></h4>
 <pre><code class="language-pepper">multiply_add(factor: float, addend: float): float
@@ -3312,7 +3296,7 @@ one instruction where the CPU has it.</p>
 <li>the fused product and sum</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.0 as float).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+<pre><code class="language-pepper">assert((2.0 as float).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
 </code></pre>
 <h4 id="min-8"><a class="header" href="#min-8">min</a></h4>
 <pre><code class="language-pepper">min(other: float): float
@@ -3328,7 +3312,7 @@ NaN, the other (<code>llvm.minnum</code>).</p>
 <li>the smaller value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((1.5 as float).min(-2.0) == -2.0, "smaller");
+<pre><code class="language-pepper">assert((1.5 as float).min(-2.0) == -2.0, "smaller");
 </code></pre>
 <h4 id="max-8"><a class="header" href="#max-8">max</a></h4>
 <pre><code class="language-pepper">max(other: float): float
@@ -3344,7 +3328,7 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
 <li>the larger value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((1.5 as float).max(-2.0) == 1.5, "larger");
+<pre><code class="language-pepper">assert((1.5 as float).max(-2.0) == 1.5, "larger");
 </code></pre>
 <h2 id="extend-double"><a class="header" href="#extend-double">extend double</a></h2>
 <pre><code class="language-pepper">extend double
@@ -3367,8 +3351,8 @@ hexadecimal are accepted.</p>
 <li>the value, or none when <code>text</code> is not decimal notation or its value is too large for a <code>double</code> (one too small rounds to zero)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
-    assert(double.parse("1.5.2").is_empty(), "not a number");
+<pre><code class="language-pepper">assert(double.parse("-2.5e3").value() == -2500.0, "an exponent");
+assert(double.parse("1.5.2").is_empty(), "not a number");
 </code></pre>
 <h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
 <h4 id="square_root-1"><a class="header" href="#square_root-1">square_root</a></h4>
@@ -3381,7 +3365,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the non-negative square root</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.25 as double).square_root() == 1.5, "exact");
+<pre><code class="language-pepper">assert((2.25 as double).square_root() == 1.5, "exact");
 </code></pre>
 <h4 id="floor-1"><a class="header" href="#floor-1">floor</a></h4>
 <pre><code class="language-pepper">floor(): double
@@ -3393,7 +3377,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward negative infinity</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as double).floor() == -2.0, "down");
+<pre><code class="language-pepper">assert((-1.5 as double).floor() == -2.0, "down");
 </code></pre>
 <h4 id="ceiling-1"><a class="header" href="#ceiling-1">ceiling</a></h4>
 <pre><code class="language-pepper">ceiling(): double
@@ -3405,7 +3389,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward positive infinity</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as double).ceiling() == -1.0, "up");
+<pre><code class="language-pepper">assert((-1.5 as double).ceiling() == -1.0, "up");
 </code></pre>
 <h4 id="truncate-1"><a class="header" href="#truncate-1">truncate</a></h4>
 <pre><code class="language-pepper">truncate(): double
@@ -3416,7 +3400,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value rounded toward zero</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-1.5 as double).truncate() == -1.0, "toward zero");
+<pre><code class="language-pepper">assert((-1.5 as double).truncate() == -1.0, "toward zero");
 </code></pre>
 <h4 id="round-1"><a class="header" href="#round-1">round</a></h4>
 <pre><code class="language-pepper">round(): double
@@ -3428,7 +3412,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the rounded value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.5 as double).round() == 3.0, "half away from zero");
+<pre><code class="language-pepper">assert((2.5 as double).round() == 3.0, "half away from zero");
 </code></pre>
 <h4 id="abs-5"><a class="header" href="#abs-5">abs</a></h4>
 <pre><code class="language-pepper">abs(): double
@@ -3440,7 +3424,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li>the value without its sign</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((-2.0 as double).abs() == 2.0, "negative");
+<pre><code class="language-pepper">assert((-2.0 as double).abs() == 2.0, "negative");
 </code></pre>
 <h4 id="copy_sign-1"><a class="header" href="#copy_sign-1">copy_sign</a></h4>
 <pre><code class="language-pepper">copy_sign(sign: double): double
@@ -3456,7 +3440,7 @@ NaN for a negative value, and <code>-0.0</code> for <code>-0.0</code>.</p>
 <li><code>abs()</code> of this value, negated when <code>sign</code> is negative</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((3.0 as double).copy_sign(-0.0) == -3.0, "negative zero is negative");
+<pre><code class="language-pepper">assert((3.0 as double).copy_sign(-0.0) == -3.0, "negative zero is negative");
 </code></pre>
 <h4 id="multiply_add-1"><a class="header" href="#multiply_add-1">multiply_add</a></h4>
 <pre><code class="language-pepper">multiply_add(factor: double, addend: double): double
@@ -3474,7 +3458,7 @@ one instruction where the CPU has it.</p>
 <li>the fused product and sum</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((2.0 as double).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
+<pre><code class="language-pepper">assert((2.0 as double).multiply_add(3.0, 1.0) == 7.0, "2 * 3 + 1");
 </code></pre>
 <h4 id="min-9"><a class="header" href="#min-9">min</a></h4>
 <pre><code class="language-pepper">min(other: double): double
@@ -3490,7 +3474,7 @@ NaN, the other (<code>llvm.minnum</code>).</p>
 <li>the smaller value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((1.5 as double).min(-2.0) == -2.0, "smaller");
+<pre><code class="language-pepper">assert((1.5 as double).min(-2.0) == -2.0, "smaller");
 </code></pre>
 <h4 id="max-9"><a class="header" href="#max-9">max</a></h4>
 <pre><code class="language-pepper">max(other: double): double
@@ -3506,7 +3490,7 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
 <li>the larger value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert((1.5 as double).max(-2.0) == 1.5, "larger");
+<pre><code class="language-pepper">assert((1.5 as double).max(-2.0) == 1.5, "larger");
 </code></pre>
 
                     </main>

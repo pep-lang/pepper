@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -272,8 +272,9 @@ the entries. <code>K</code> and <code>V</code> come from the first entry, or fro
 </ul>
 <h2 id="sets"><a class="header" href="#sets">Sets</a></h2>
 <p>There is no separate set literal. An array literal where a
-<a href="../reference/hash.html#hashset"><code>HashSet&lt;K&gt;</code></a> is expected converts to one
-through <code>HashSet</code>’s <a href="structs.html#implicit-conversions">implicit constructor</a>,
+<a href="../reference/hash.html#hashset"><code>HashSet&lt;K&gt;</code></a> or a
+<a href="maps.html#sorted-map-and-set"><code>Set&lt;K&gt;</code></a> is expected converts to one through
+the set’s <a href="structs.html#implicit-conversions">implicit constructor</a>,
 which keeps each element once: <code>HashSet&lt;String&gt; keywords = ["if", "else"];</code>.</p>
 <h2 id="types-of-specializations"><a class="header" href="#types-of-specializations">Types of specializations</a></h2>
 <p>A literal never changes a collection’s type after it is built:

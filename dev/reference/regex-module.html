@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,13 +191,13 @@ time linear in the size of the text whatever the pattern.</p>
 <li><a href="regex-regex.html">Regex and Match</a>: <code>Regex</code>, <code>Match</code>, <code>Matches</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import regex;
+<pre><code class="language-pepper">import regex;
 
-    main(): int {
-        var word = regex.Regex("\\b(\\w)(\\w*)\\b");
-        assert(word.replace_all("hello big world", "${1}.") == "h. b. w.", "initials");
-        return 0;
-    }
+main(): int {
+    var word = regex.Regex("\\b(\\w)(\\w*)\\b");
+    assert(word.replace_all("hello big world", "${1}.") == "h. b. w.", "initials");
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/regex/module.pep</code></p>
 

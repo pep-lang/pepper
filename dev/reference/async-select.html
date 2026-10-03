@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -213,29 +213,29 @@ tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
 <li><code>E</code> — the type every channel’s values are turned into</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    enum Event {
-        Job(job: Job),
-        Tick(count: long),
-        Stop,
-    }
+<pre><code class="language-pepper">enum Event {
+    Job(job: Job),
+    Tick(count: long),
+    Stop,
+}
 
-    var select = async.Select&lt;Event&gt;();
-    select.receive(jobs, (job: Job): Event =&gt; Event.Job(job));
-    select.receive(ticks, (count: long): Event =&gt; Event.Tick(count));
-    select.receive(quit, (stop: bool): Event =&gt; Event.Stop);
-    var running = true;
-    while (running) {
-        match (select.wait()) {
-            Ok(event) =&gt; {
-                match (event) {
-                    Job(job) =&gt; { run(job); }
-                    Tick(count) =&gt; { report(count); }
-                    Stop =&gt; { running = false; }
-                }
+var select = async.Select&lt;Event&gt;();
+select.receive(jobs, (job: Job): Event =&gt; Event.Job(job));
+select.receive(ticks, (count: long): Event =&gt; Event.Tick(count));
+select.receive(quit, (stop: bool): Event =&gt; Event.Stop);
+var running = true;
+while (running) {
+    match (select.wait()) {
+        Ok(event) =&gt; {
+            match (event) {
+                Job(job) =&gt; { run(job); }
+                Tick(count) =&gt; { report(count); }
+                Stop =&gt; { running = false; }
             }
-            Err(error) =&gt; { running = false; }   # every channel closed
         }
+        Err(error) =&gt; { running = false; }   # every channel closed
     }
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="select-2"><a class="header" href="#select-2">Select()</a></h4>
@@ -258,7 +258,7 @@ those <code>wait()</code> returns.</p>
 <li><code>wrap</code> — turns a value received from <code>channel</code> into an <code>E</code>; it runs on the waiting thread</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    select.receive(lines, (line: String): Event =&gt; Event.Line(line));
+<pre><code class="language-pepper">select.receive(lines, (line: String): Event =&gt; Event.Line(line));
 </code></pre>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">wait(): Result&lt;E&gt;

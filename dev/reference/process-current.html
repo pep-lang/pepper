@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -220,13 +220,13 @@ next to it with <code>executable_path().value().parent()</code>.</p>
 <li>the executable’s path, or an error when the system cannot report it</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import process;
+<pre><code class="language-pepper">import process;
 
-    main(): int {
-        var path = process.executable_path().value();
-        print(path.to_string());
-        return 0;
-    }
+main(): int {
+    var path = process.executable_path().value();
+    print(path.to_string());
+    return 0;
+}
 </code></pre>
 <h2 id="working_directory"><a class="header" href="#working_directory">working_directory</a></h2>
 <pre><code class="language-pepper">working_directory(): io.IoResult&lt;io.Path&gt;

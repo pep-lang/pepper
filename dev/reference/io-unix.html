@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -211,15 +211,15 @@ on Windows).</p>
 <li><code>UnixStream</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var path = io.Directory.temp().join("server.sock");
-    io.File.remove(path);   # left over from an earlier run
-    var listener = io.UnixListener.bind(path).value();
-    while (true) {
-        var stream = listener.accept().value();
-        stream.write_all("hello");
-    }
+var path = io.Directory.temp().join("server.sock");
+io.File.remove(path);   # left over from an earlier run
+var listener = io.UnixListener.bind(path).value();
+while (true) {
+    var stream = listener.accept().value();
+    stream.write_all("hello");
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
@@ -289,24 +289,24 @@ goes. The socket file stays.</p>
 <li><code>UnixListener</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import io;
+<pre><code class="language-pepper">import async;
+import io;
 
-    main(): int {
-        async.run(() =&gt; {
-            var listener = io.SharedUnixListener.bind(io.Path("/tmp/server.sock")).value();
-            async.spawn_on_each_worker(() =&gt; {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    accepted.value().write_all("hello");
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.SharedUnixListener.bind(io.Path("/tmp/server.sock")).value();
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
+                accepted.value().write_all("hello");
+            }
         });
-        return 0;
-    }
+    });
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="sharedunixlistener-1"><a class="header" href="#sharedunixlistener-1">SharedUnixListener()</a></h4>
@@ -363,12 +363,12 @@ closed stream fails with an error no <code>IoError</code> predicate identifies.<
 <li><code>UnixListener</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
-    stream.write_all("ping");
-    var reply = Array&lt;u8&gt;();
-    stream.read_exact(reply, 4).value();
+var stream = io.UnixStream.connect(io.Path("/tmp/server.sock")).value();
+stream.write_all("ping");
+var reply = Array&lt;u8&gt;();
+stream.read_exact(reply, 4).value();
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="unixstream-1"><a class="header" href="#unixstream-1">UnixStream()</a></h4>
@@ -481,7 +481,7 @@ No newline or terminator is added.</p>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    stream.write_all("ping");
+<pre><code class="language-pepper">stream.write_all("ping");
 </code></pre>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;

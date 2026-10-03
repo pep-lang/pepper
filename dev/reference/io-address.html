@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,12 +203,12 @@ that maps it are different values.</p>
 <li><code>SocketAddress</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var a = io.IpAddress.parse("192.168.1.10").value();
-    var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
-    print(a.is_v4());         # true
-    print(b.to_string());     # 2001:db8::1
+var a = io.IpAddress.parse("192.168.1.10").value();
+var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
+print(a.is_v4());         # true
+print(b.to_string());     # 2001:db8::1
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
@@ -232,7 +232,7 @@ that maps it are different values.</p>
 <li>the address <code>a.b.c.d</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var home = IpAddress.v4(127, 0, 0, 1);
+<pre><code class="language-pepper">var home = IpAddress.v4(127, 0, 0, 1);
 </code></pre>
 <h4 id="v6"><a class="header" href="#v6">v6</a></h4>
 <pre><code class="language-pepper">static v6(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16): IpAddress
@@ -254,7 +254,7 @@ that maps it are different values.</p>
 <li>the address</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
+<pre><code class="language-pepper">var loopback = IpAddress.v6(0, 0, 0, 0, 0, 0, 0, 1);   # ::1
 </code></pre>
 <h4 id="loopback_v4"><a class="header" href="#loopback_v4">loopback_v4</a></h4>
 <pre><code class="language-pepper">static loopback_v4(): IpAddress
@@ -311,8 +311,8 @@ accepted.</p>
 <li>the address; an error with <code>is_invalid_input()</code> when <code>text</code> is not a valid IPv4 or IPv6 address</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = IpAddress.parse("10.0.0.300");
-    print(r.is_err());   # true: 300 is out of range
+<pre><code class="language-pepper">var r = IpAddress.parse("10.0.0.300");
+print(r.is_err());   # true: 300 is out of range
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
@@ -359,7 +359,7 @@ IPv6.</p>
 <li>a new array of the address bytes</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
+<pre><code class="language-pepper">var bytes = IpAddress.v4(10, 0, 0, 1).to_bytes();   # [10, 0, 0, 1]
 </code></pre>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
@@ -412,11 +412,11 @@ form is <code>address:port</code> for IPv4 and <code>[address]:port</code> for I
 <li><code>resolve</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
-    var local = io.SocketAddress.parse("[::1]:443").value();
-    print(local.port());   # 443
+var any = io.SocketAddress(io.IpAddress.unspecified_v4(), 8080);
+var local = io.SocketAddress.parse("[::1]:443").value();
+print(local.port());   # 443
 </code></pre>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="socketaddress-1"><a class="header" href="#socketaddress-1">SocketAddress()</a></h4>
@@ -449,8 +449,8 @@ syntax of <code>IpAddress.parse</code> and a decimal port from 0 to 65535.</p>
 <li>the socket address; an error with <code>is_invalid_input()</code> when the text is malformed</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = SocketAddress.parse("127.0.0.1:8080").value();
-    var b = SocketAddress.parse("[::1]:8080").value();
+<pre><code class="language-pepper">var a = SocketAddress.parse("127.0.0.1:8080").value();
+var b = SocketAddress.parse("[::1]:8080").value();
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="address"><a class="header" href="#address">address</a></h4>
@@ -539,14 +539,14 @@ most once.</p>
 <li>at least one address; an error with <code>is_not_found()</code> when the name has no address, <code>is_invalid_input()</code> when <code>host</code> is empty, or another resolver error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var r = io.resolve("localhost", 8080);
-    if (r.is_ok()) {
-        for (var address in r.value()) {
-            print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
-        }
+var r = io.resolve("localhost", 8080);
+if (r.is_ok()) {
+    for (var address in r.value()) {
+        print(address.to_string());   # 127.0.0.1:8080, [::1]:8080, ...
     }
+}
 </code></pre>
 
                     </main>

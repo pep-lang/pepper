@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,11 +193,11 @@ unit takes two bytes, little-endian unless <code>big_endian</code> is set; a cod
 point past U+FFFF takes two units (a surrogate pair). No byte-order mark
 is written, and one read is kept as part of the text.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import text;
+<pre><code class="language-pepper">import text;
 
-    var bytes = text.Utf16.encode("hi");
-    assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
-    assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
+var bytes = text.Utf16.encode("hi");
+assert(bytes.count == 4 &amp;&amp; bytes[0] == 104 &amp;&amp; bytes[1] == 0, "little-endian");
+assert(text.Utf16.decode(bytes).value() == "hi", "round trip");
 </code></pre>
 <h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
 <h4 id="encode"><a class="header" href="#encode">encode</a></h4>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,9 +192,9 @@
 <p>How a child process ended: with an exit code, or (on POSIX) killed by a
 signal.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var status = process.Command("false").run().value().status;
-    assert(!status.success(), "false fails");
-    assert(status.code().value() == 1, "with code 1");
+<pre><code class="language-pepper">var status = process.Command("false").run().value().status;
+assert(!status.success(), "false fails");
+assert(status.code().value() == 1, "with code 1");
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
@@ -254,15 +254,15 @@ status): on POSIX a child that ended but was never waited for stays in
 the process table until the parent ends. Releasing the last reference to
 a Child neither waits for it nor kills it; the process runs on.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import process;
+<pre><code class="language-pepper">import process;
 
-    main(): int {
-        var child = process.Command("sleep").argument("10").spawn().value();
-        child.kill();
-        var status = child.wait().value();
-        assert(!status.success(), "killed");
-        return 0;
-    }
+main(): int {
+    var child = process.Command("sleep").argument("10").spawn().value();
+    child.kill();
+    var status = child.wait().value();
+    assert(!status.success(), "killed");
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="child-2"><a class="header" href="#child-2">Child()</a></h4>

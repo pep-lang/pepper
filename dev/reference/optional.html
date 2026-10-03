@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,21 +207,21 @@ optionals with <code>==</code>, not <code>===</code>.</p>
 <li><code>T</code> — the type of the value a Value optional holds</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    find_even(values: Array&lt;int&gt;): int? {
-        for (var v in values) {
-            if (v % 2 == 0) { return Optional&lt;int&gt;.Value(v); }
-        }
-        return Optional&lt;int&gt;.Empty;
+<pre><code class="language-pepper">find_even(values: Array&lt;int&gt;): int? {
+    for (var v in values) {
+        if (v % 2 == 0) { return Optional&lt;int&gt;.Value(v); }
     }
+    return Optional&lt;int&gt;.Empty;
+}
 
-    main(): int {
-        var values = Array&lt;int&gt;();
-        values.append(3);
-        values.append(4);
-        var found = find_even(values);
-        if (!found) { return 1; }
-        return found.value() - 4;   # 0
-    }
+main(): int {
+    var values = Array&lt;int&gt;();
+    values.append(3);
+    values.append(4);
+    var found = find_even(values);
+    if (!found) { return 1; }
+    return found.value() - 4;   # 0
+}
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="empty"><a class="header" href="#empty">Empty</a></h4>
@@ -271,8 +271,8 @@ instead.</p>
 <li>true when the optional is Value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.Value(7);
-    if (found.is_value()) { print(found.value()); }   # prints 7
+<pre><code class="language-pepper">var found = Optional&lt;int&gt;.Value(7);
+if (found.is_value()) { print(found.value()); }   # prints 7
 </code></pre>
 <h4 id="is_empty"><a class="header" href="#is_empty">is_empty</a></h4>
 <pre><code class="language-pepper">is_empty(): bool
@@ -283,8 +283,8 @@ instead.</p>
 <li>true when the optional is Empty</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var missing = Optional&lt;int&gt;.Empty;
-    if (missing.is_empty()) { print("missing"); }
+<pre><code class="language-pepper">var missing = Optional&lt;int&gt;.Empty;
+if (missing.is_empty()) { print("missing"); }
 </code></pre>
 <h4 id="is_some"><a class="header" href="#is_some">is_some</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'is_value' instead", "is_value")] is_some(): bool
@@ -317,19 +317,15 @@ optional can stand as a condition by itself.</p>
 <li>true when the optional is Value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var found = Optional&lt;int&gt;.Value(7);
-    if (found) { print(found.value()); }   # prints 7
+<pre><code class="language-pepper">var found = Optional&lt;int&gt;.Value(7);
+if (found) { print(found.value()); }   # prints 7
 </code></pre>
 <h4 id="value-1"><a class="header" href="#value-1">value</a></h4>
-<pre><code class="language-pepper">value(location: __ptr&lt;char&gt; = __caller_location()): T
+<pre><code class="language-pepper">value(): T
 </code></pre>
 <p>Returns the value, panicking if this optional is Empty.</p>
 <p>For a struct <code>T</code> the caller gets its own reference; the optional keeps
 its reference too.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the value of a Value optional</li>
@@ -339,7 +335,7 @@ its reference too.</p>
 <li>if the optional is Empty (“Optional.value on an Empty optional”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.Value(42).value();   # 42
+<pre><code class="language-pepper">var n = Optional&lt;int&gt;.Value(42).value();   # 42
 </code></pre>
 <h4 id="value_or"><a class="header" href="#value_or">value_or</a></h4>
 <pre><code class="language-pepper">value_or(fallback: T): T
@@ -356,7 +352,7 @@ is used.</p>
 <li>the value when the optional is Value, otherwise <code>fallback</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Optional&lt;int&gt;.Empty.value_or(-1);   # -1
+<pre><code class="language-pepper">var n = Optional&lt;int&gt;.Empty.value_or(-1);   # -1
 </code></pre>
 
                     </main>

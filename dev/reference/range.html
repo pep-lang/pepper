@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,12 +208,12 @@ advances that variable.</p>
 <li><code>T</code> — the number type, inferred from the bounds (<code>0..n</code> with a <code>ulong</code> <code>n</code> is a <code>Range&lt;ulong&gt;</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var total = 0;
-    for (var i in 1..&gt;4) {
-        total += i;   # 1 + 2 + 3 + 4
-    }
-    var r = 0..10;
-    assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
+<pre><code class="language-pepper">var total = 0;
+for (var i in 1..&gt;4) {
+    total += i;   # 1 + 2 + 3 + 4
+}
+var r = 0..10;
+assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="start"><a class="header" href="#start">start</a></h4>

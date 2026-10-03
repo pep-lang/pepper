@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -218,8 +218,8 @@ loses track of its keys.</p>
 <li><code>compare&lt;String&gt;</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(compare&lt;int&gt;(1, 2) &lt; 0, "1 sorts first");
-    assert(compare&lt;int&gt;(2, 2) == 0, "equal");
+<pre><code class="language-pepper">assert(compare&lt;int&gt;(1, 2) &lt; 0, "1 sorts first");
+assert(compare&lt;int&gt;(2, 2) == 0, "equal");
 </code></pre>
 <h2 id="compare-1"><a class="header" href="#compare-1">compare</a></h2>
 <pre><code class="language-pepper">compare&lt;String&gt;(a: String, b: String): int
@@ -236,7 +236,7 @@ keys in: the same as <code>a.compare(b)</code>.</p>
 <li>a negative number, zero or a positive number as <code>a</code> sorts before, equal to or after <code>b</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(compare&lt;String&gt;("apple", "pear") &lt; 0, "apple sorts first");
+<pre><code class="language-pepper">assert(compare&lt;String&gt;("apple", "pear") &lt; 0, "apple sorts first");
 </code></pre>
 <h2 id="map"><a class="header" href="#map">Map</a></h2>
 <pre><code class="language-pepper">struct Map&lt;K, V&gt;
@@ -262,13 +262,13 @@ expected O(1) lookups in no order, <code>HashMap</code>.</p>
 <li><code>V</code> — the value type</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var scores = Map&lt;String, int&gt;();
-    scores["carol"] = 91;
-    scores["alice"] = 84;
-    scores["bob"] = 77;
-    for (var (name, score) in scores) {
-        print($"{name}: {score}");   # alice, bob, carol
-    }
+<pre><code class="language-pepper">var scores = Map&lt;String, int&gt;();
+scores["carol"] = 91;
+scores["alice"] = 84;
+scores["bob"] = 77;
+for (var (name, score) in scores) {
+    print($"{name}: {score}");   # alice, bob, carol
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
@@ -351,9 +351,9 @@ O(log count).</p>
 <li>the value for <code>key</code>, or none when absent</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    if (scores.try_get("alice") is Value(score)) {
-        print($"{score}");
-    }
+<pre><code class="language-pepper">if (scores.try_get("alice") is Value(score)) {
+    print($"{score}");
+}
 </code></pre>
 <h4 id="remove"><a class="header" href="#remove">remove</a></h4>
 <pre><code class="language-pepper">remove(key: K): bool
@@ -425,7 +425,7 @@ count).</p>
 <li>the first <code>(key, value)</code> with a key <code>&gt;= key</code>, or none when every key is less</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var after_b = scores.lower_bound("b");   # ("bob", 77)
+<pre><code class="language-pepper">var after_b = scores.lower_bound("b");   # ("bob", 77)
 </code></pre>
 <h4 id="upper_bound"><a class="header" href="#upper_bound">upper_bound</a></h4>
 <pre><code class="language-pepper">upper_bound(key: K): (K, V)?
@@ -461,9 +461,9 @@ the same rules as <code>iterate</code>.</p>
 <li>an iterator positioned before the last entry</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    for (var (name, score) in scores.reversed()) {
-        print(name);   # carol, bob, alice
-    }
+<pre><code class="language-pepper">for (var (name, score) in scores.reversed()) {
+    print(name);   # carol, bob, alice
+}
 </code></pre>
 <h4 id="range"><a class="header" href="#range">range</a></h4>
 <pre><code class="language-pepper">range(from: K, to: K): SortedMapIterator&lt;K, V&gt;
@@ -481,9 +481,9 @@ and less than <code>to</code>, in ascending key order, under the same rules as
 <li>an iterator positioned before the first entry in the range</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    for (var (name, score) in scores.range("a", "c")) {
-        print(name);   # alice, bob
-    }
+<pre><code class="language-pepper">for (var (name, score) in scores.range("a", "c")) {
+    print(name);   # alice, bob
+}
 </code></pre>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
 <pre><code class="language-pepper">copy(): Map&lt;K, V&gt;
@@ -570,10 +570,10 @@ released on remove, on <code>clear</code>, or when the set is destroyed.</p>
 <li><code>K</code> — the element type; ordered by <code>compare&lt;K&gt;</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    Set&lt;int&gt; primes = [7, 2, 5, 3];
-    for (var p in primes) {
-        print($"{p}");   # 2, 3, 5, 7
-    }
+<pre><code class="language-pepper">Set&lt;int&gt; primes = [7, 2, 5, 3];
+for (var p in primes) {
+    print($"{p}");   # 2, 3, 5, 7
+}
 </code></pre>
 <h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
 <h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
@@ -600,8 +600,8 @@ a set is expected, so an array literal can initialize one.</p>
 <li><code>items</code> — the elements to insert; duplicates are kept once</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    Set&lt;String&gt; keywords = ["while", "if", "else"];
-    assert(keywords.first().value() == "else", "sorted");
+<pre><code class="language-pepper">Set&lt;String&gt; keywords = ["while", "if", "else"];
+assert(keywords.first().value() == "else", "sorted");
 </code></pre>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="clear-1"><a class="header" href="#clear-1">clear</a></h4>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -219,27 +219,27 @@ not end the wait for the lock.</p>
 <li><code>T</code> — the protected value’s type, a struct type</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    [Shared]
-    struct Account {
-        const checking: Atomic&lt;long&gt;;
-        const savings: Atomic&lt;long&gt;;
-        construct(long checking = 0, long savings = 0) {
-            this.checking = Atomic&lt;long&gt;(checking);
-            this.savings = Atomic&lt;long&gt;(savings);
-        }
+[Shared]
+struct Account {
+    const checking: Atomic&lt;long&gt;;
+    const savings: Atomic&lt;long&gt;;
+    construct(long checking = 0, long savings = 0) {
+        this.checking = Atomic&lt;long&gt;(checking);
+        this.savings = Atomic&lt;long&gt;(savings);
     }
+}
 
-    const account = async.Mutex&lt;Account&gt;(Account(100, 0));
+const account = async.Mutex&lt;Account&gt;(Account(100, 0));
 
-    save(long amount) {
-        with (var a = account.lock()) {
-            # No other thread sees the money in neither account.
-            a.checking.fetch_sub(amount);
-            a.savings.fetch_add(amount);
-        }
+save(long amount) {
+    with (var a = account.lock()) {
+        # No other thread sees the money in neither account.
+        a.checking.fetch_sub(amount);
+        a.savings.fetch_add(amount);
     }
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
@@ -258,7 +258,7 @@ its reference over, so nothing is copied.</p>
 <li>if the operating system cannot create a mutex</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+<pre><code class="language-pepper">const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="lock"><a class="header" href="#lock">lock</a></h4>
@@ -279,9 +279,9 @@ else holds the lock until its last reference is released.</p>
 <li>if the calling thread already holds the lock</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    with (var account = accounts.lock()) {
-        account.balance.fetch_add(10);
-    }
+<pre><code class="language-pepper">with (var account = accounts.lock()) {
+    account.balance.fetch_add(10);
+}
 </code></pre>
 <h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
 <pre><code class="language-pepper">try_lock(): MutexGuard&lt;T&gt;
@@ -295,11 +295,11 @@ calling thread already holding the lock counts as busy.</p>
 <li>the guard; its <code>enter()</code> returns the value, or null when the lock was busy</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    with (var account = accounts.try_lock()) {
-        account.balance.fetch_add(10);
-    } else {
-        print("busy; try later\n");
-    }
+<pre><code class="language-pepper">with (var account = accounts.try_lock()) {
+    account.balance.fetch_add(10);
+} else {
+    print("busy; try later\n");
+}
 </code></pre>
 <h4 id="replace"><a class="header" href="#replace">replace</a></h4>
 <pre><code class="language-pepper">replace([Move] value: T): T
@@ -321,7 +321,7 @@ the constructor, and is handed over without a copy.</p>
 <li>if the calling thread already holds the lock</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var done = pending.replace(Array&lt;Job&gt;());   # take every job at once
+<pre><code class="language-pepper">var done = pending.replace(Array&lt;Job&gt;());   # take every job at once
 </code></pre>
 <h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
 <pre><code class="language-pepper">is_held(): bool
@@ -343,8 +343,8 @@ waits or notifies must use the same Condition.</p>
 <li>a new Condition bound to this Mutex</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    const queue = async.Mutex&lt;Jobs&gt;(Jobs());
-    const not_empty = queue.condition();
+<pre><code class="language-pepper">const queue = async.Mutex&lt;Jobs&gt;(Jobs());
+const not_empty = queue.condition();
 </code></pre>
 <h2 id="mutexguard"><a class="header" href="#mutexguard">MutexGuard</a></h2>
 <pre><code class="language-pepper">[Isolated] struct MutexGuard&lt;T&gt;
@@ -363,9 +363,9 @@ with the confinement rule (see <code>Mutex</code>).</p>
 <li><code>T</code> — the protected value’s type</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    with (var totals = stats.lock()) {
-        totals.requests.fetch_add(1);
-    }   # unlocked here
+<pre><code class="language-pepper">with (var totals = stats.lock()) {
+    totals.requests.fetch_add(1);
+}   # unlocked here
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="locked"><a class="header" href="#locked">locked</a></h4>
@@ -424,32 +424,32 @@ cancel does not end it, since the caller’s loop would only wait again;
 <li><code>T</code> — the Mutex’s value type</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    [Shared]
-    struct Jobs {
-        const waiting: Atomic&lt;long&gt;;
-        construct() { waiting = Atomic&lt;long&gt;(0); }
-    }
+[Shared]
+struct Jobs {
+    const waiting: Atomic&lt;long&gt;;
+    construct() { waiting = Atomic&lt;long&gt;(0); }
+}
 
-    const jobs = async.Mutex&lt;Jobs&gt;(Jobs());
-    const has_work = jobs.condition();
+const jobs = async.Mutex&lt;Jobs&gt;(Jobs());
+const has_work = jobs.condition();
 
-    take_job() {
-        with (var j = jobs.lock()) {
-            while (j.waiting.load() == 0) {
-                has_work.wait();
-            }
-            j.waiting.fetch_sub(1);
+take_job() {
+    with (var j = jobs.lock()) {
+        while (j.waiting.load() == 0) {
+            has_work.wait();
         }
+        j.waiting.fetch_sub(1);
     }
+}
 
-    add_job() {
-        with (var j = jobs.lock()) {
-            j.waiting.fetch_add(1);
-            has_work.notify_one();
-        }
+add_job() {
+    with (var j = jobs.lock()) {
+        j.waiting.fetch_add(1);
+        has_work.notify_one();
     }
+}
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
@@ -478,11 +478,11 @@ that re-checks what it waits for.</p>
 <li>if the calling thread does not hold the Mutex</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    with (var q = queue.lock()) {
-        while (q.waiting.load() == 0) {
-            not_empty.wait();
-        }
+<pre><code class="language-pepper">with (var q = queue.lock()) {
+    while (q.waiting.load() == 0) {
+        not_empty.wait();
     }
+}
 </code></pre>
 <h4 id="wait_for"><a class="header" href="#wait_for">wait_for</a></h4>
 <pre><code class="language-pepper">wait_for(milliseconds: ulong): bool
@@ -522,10 +522,10 @@ value from outside.</p>
 <li>if the caller does not hold the Mutex</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    with (var queue = jobs.lock()) {
-        not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count == 0);
-        var job = queue.remove_at(0);
-    }
+<pre><code class="language-pepper">with (var queue = jobs.lock()) {
+    not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count == 0);
+    var job = queue.remove_at(0);
+}
 </code></pre>
 <h4 id="wait_while_for"><a class="header" href="#wait_while_for">wait_while_for</a></h4>
 <pre><code class="language-pepper">wait_while_for(milliseconds: ulong, [Locked] predicate: (T) =&gt; bool): bool

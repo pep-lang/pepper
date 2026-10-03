@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6599482c.js"></script>
+        <script src="toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -226,21 +226,21 @@ to WebAssembly for WASI (<code>--target wasm32-wasip1</code>, see
 <a href="language/platform-selection.html#webassembly">WebAssembly</a>).</p>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <p>Pepper is young. The core language works and is tested: variables, functions,
-structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
+structs with constructors, destructors, methods and <a href="language/properties.html">properties</a>, <a href="language/value-structs.html">value structs and enums</a> (<code>[Value]</code>), derived <code>==</code> and <code>hash</code> (<a href="language/hashing.html"><code>[Equatable]</code></a>), enums (with cases that carry values, methods and computed properties) and <code>match</code> (as a statement or a value, on enums, integers, characters, strings and trait values, with <code>is</code> tests, nested and tuple patterns, guards, ranges and constants), tuples
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
-closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code> and
-<code>filter</code> adapters),
+closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code>,
+<code>filter</code>, <code>enumerate</code> and <code>zip</code> adapters),
 <code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
-that take turns on a few worker threads, parking on sockets and timeouts), file-system access,
+that take turns on a few worker threads, parking on sockets and timeouts), file-system access, text encodings (UTF-16, ASCII; see <a href="language/text.html">text</a>),
 TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, and the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information). That is enough to write real
 programs, but expect gaps. <a href="tools/pep-fmt.html">pep-fmt</a>, the code formatter, and
 <a href="tools/pepper.html"><code>pepper</code></a>, the entry point that runs every tool, are
 themselves written in Pepper.
-Some that you will meet quickly:</p>
+Some things you will meet quickly:</p>
 <ul>
 <li>Functions are values: a named function, an <code>extern</code> C function, a method (<code>p.norm</code>,
 <code>Point.norm</code>), a constructor (<code>Point</code>), a generic function’s
@@ -267,8 +267,8 @@ skip defaulted parameters or pass them in any order (see
 <li>Generic parameters can require traits (<code>&lt;T: Shape &amp; Named&gt;</code>), checked
 wherever the generic is used and, inside the generic, against what the
 traits declare (see <a href="language/generics.html#constraints">constraints</a>).
-Numbers, <code>bool</code> and enums can declare traits too, for constraints, but
-are never trait values.</li>
+Numbers, <code>bool</code> and enums whose cases carry nothing can declare traits
+too, for constraints, but are never trait values.</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
@@ -297,11 +297,14 @@ then walks through the main features by building a small word-counting
 program.</li>
 <li><strong>Language guide.</strong> One chapter per part of the language, from
 <a href="language/types-and-variables.html">types and variables</a> to
-<a href="language/c-interop.html">calling C</a>. Read it in order, or jump to the topic
-you need.</li>
+<a href="language/naming.html">naming conventions</a>. Read it in order, or jump to the
+topic you need.</li>
+<li><strong>Tools.</strong> <a href="tools/pepper.html">The pepper command</a>,
+<a href="tools/pep-fmt.html">pep-fmt</a> and <a href="tools/debugging.html">debugging</a>.</li>
 <li><strong>Standard library reference.</strong> Every type and function in the runtime,
 generated from the runtime’s own documentation comments. Start at the
 <a href="reference/README.html">overview</a>.</li>
+<li><strong>Contributing.</strong> <a href="contributing/docs.html">Building this documentation</a>.</li>
 </ul>
 <p>Every complete program in this book lives in the repository’s
 <code>docs/examples/</code> folder and is compiled and run by the test suite, so what

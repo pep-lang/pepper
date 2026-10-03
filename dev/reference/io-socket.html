@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -209,14 +209,14 @@ closed listener fails with an error no <code>IoError</code> predicate identifies
 <li><code>TcpStream</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
-    print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
-    while (true) {
-        var (stream, peer) = listener.accept().value();
-        stream.write_all("hello " + peer.to_string());
-    }
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+print(listener.local_address().value().to_string());   # 127.0.0.1:&lt;port&gt;
+while (true) {
+    var (stream, peer) = listener.accept().value();
+    stream.write_all("hello " + peer.to_string());
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
@@ -269,16 +269,16 @@ is needed.</p>
 <li>a new <code>Incoming</code> positioned before the first connection</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
-    for (var connection in listener.incoming()) {
-        if (connection.is_err()) {
-            print(connection.error().message);
-            continue;
-        }
-        connection.value().write_all("hello");
+var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:8080").value()).value();
+for (var connection in listener.incoming()) {
+    if (connection.is_err()) {
+        print(connection.error().message);
+        continue;
     }
+    connection.value().write_all("hello");
+}
 </code></pre>
 <h4 id="local_address"><a class="header" href="#local_address">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
@@ -354,25 +354,25 @@ them (<code>accept</code> then fails and the loop returns).</p>
 <li><code>TcpListener</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import io;
+<pre><code class="language-pepper">import async;
+import io;
 
-    main(): int {
-        async.run(() =&gt; {
-            var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
-            async.spawn_on_each_worker(() =&gt; {
-                while (true) {
-                    var accepted = listener.accept();
-                    if (accepted.is_err()) {
-                        return;
-                    }
-                    var (stream, peer) = accepted.value();
-                    stream.write_all("hello");
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("0.0.0.0:7000").value()).value();
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;
                 }
-            });
+                var (stream, peer) = accepted.value();
+                stream.write_all("hello");
+            }
         });
-        return 0;
-    }
+    });
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="sharedtcplistener-1"><a class="header" href="#sharedtcplistener-1">SharedTcpListener()</a></h4>
@@ -440,13 +440,13 @@ closed stream fails with an error no <code>IoError</code> predicate identifies
 <li><code>TcpListener</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var stream = io.TcpStream.connect_host("example.com", 80).value();
-    stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
-    var reply = Array&lt;u8&gt;();
-    while (stream.read(reply, 4096).value() &gt; 0) {
-    }
+var stream = io.TcpStream.connect_host("example.com", 80).value();
+stream.write_all("HEAD / HTTP/1.0\r\n\r\n");
+var reply = Array&lt;u8&gt;();
+while (stream.read(reply, 4096).value() &gt; 0) {
+}
 </code></pre>
 <h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
 <h4 id="tcpstream-1"><a class="header" href="#tcpstream-1">TcpStream()</a></h4>
@@ -483,10 +483,10 @@ addresses that accepts, trying them in order.</p>
 <li>the connected stream; the error from <code>resolve</code> when the name has no address, or the error from the last address tried</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = TcpStream.connect_host("localhost", 8080);
-    if (r.is_err() &amp;&amp; r.error().is_connection_refused()) {
-        print("nothing is listening on 8080");
-    }
+<pre><code class="language-pepper">var r = TcpStream.connect_host("localhost", 8080);
+if (r.is_err() &amp;&amp; r.error().is_connection_refused()) {
+    print("nothing is listening on 8080");
+}
 </code></pre>
 <h4 id="adopt"><a class="header" href="#adopt">adopt</a></h4>
 <pre><code class="language-pepper">static adopt(transfer: SocketTransfer): IoResult&lt;TcpStream&gt;
@@ -526,8 +526,8 @@ gets the connection.</p>
 <li>the number of bytes appended, 0 once the peer has closed its side of the connection; an error with <code>is_connection_reset()</code> when the connection was reset, an error when the stream is closed, or another platform error</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var buffer = Array&lt;u8&gt;();
-    var n = stream.read(buffer, 4096).value();   # buffer.count == n
+<pre><code class="language-pepper">var buffer = Array&lt;u8&gt;();
+var n = stream.read(buffer, 4096).value();   # buffer.count == n
 </code></pre>
 <h4 id="read_exact"><a class="header" href="#read_exact">read_exact</a></h4>
 <pre><code class="language-pepper">read_exact(buffer: u8[], count: ulong): IoResult&lt;void&gt;
@@ -584,7 +584,7 @@ No newline or terminator is added.</p>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    stream.write_all("ping");
+<pre><code class="language-pepper">stream.write_all("ping");
 </code></pre>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): IoResult&lt;void&gt;
@@ -658,17 +658,17 @@ one started with <code>async.spawn</code>.</p>
 <li>the token; for a closed stream, one that <code>adopt</code> fails on</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
-    import io;
+<pre><code class="language-pepper">import async;
+import io;
 
-    serve(listener: io.TcpListener) {
-        var (stream, peer) = listener.accept().value();
-        var transfer = stream.into_transfer();
-        async.spawn&lt;void&gt;(() =&gt; {
-            var mine = io.TcpStream.adopt(transfer).value();
-            mine.write_all("hello from another worker");
-        });
-    }
+serve(listener: io.TcpListener) {
+    var (stream, peer) = listener.accept().value();
+    var transfer = stream.into_transfer();
+    async.spawn&lt;void&gt;(() =&gt; {
+        var mine = io.TcpStream.adopt(transfer).value();
+        mine.write_all("hello from another worker");
+    });
+}
 </code></pre>
 <h4 id="close-1"><a class="header" href="#close-1">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
@@ -712,12 +712,12 @@ largest datagram expected (at most 65507 bytes over IPv4).</p>
 <p>Closing: the destructor closes the socket when the last reference goes;
 <code>close()</code> closes it earlier and reports errors.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
-    var buffer = Array&lt;u8&gt;();
-    var (n, from) = socket.receive_from(buffer, 65507).value();
-    socket.send_to(buffer, from);   # echo it back
+var socket = io.UdpSocket.bind(io.SocketAddress.parse("0.0.0.0:9000").value()).value();
+var buffer = Array&lt;u8&gt;();
+var (n, from) = socket.receive_from(buffer, 65507).value();
+socket.send_to(buffer, from);   # echo it back
 </code></pre>
 <h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="udpsocket-1"><a class="header" href="#udpsocket-1">UdpSocket()</a></h4>

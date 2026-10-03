@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -288,7 +288,9 @@ wherever a literal flows into a <code>__ptr&lt;char&gt;</code>, <code>__ptr&lt;u
 <code>__ptr&lt;void&gt;</code> in Pepper code (a variable, field, argument, or return
 value), so <code>String("hello")</code> copies the literal’s five bytes.</li>
 <li>A <strong><code>String</code> value</strong> is passed with <code>c_str()</code>, which returns the String’s
-NUL-terminated buffer as a <code>__ptr&lt;char&gt;</code>. The pointer belongs to the String:
+buffer, NUL-terminated, as a <code>__ptr&lt;char&gt;</code>. A String is not guaranteed to
+be NUL-terminated otherwise, so always go through <code>c_str()</code> when C needs
+the terminator. The pointer belongs to the String:
 it is valid until the String is destroyed or grows (for example with
 <code>append</code> or <code>+=</code>). An empty <code>String()</code> has no buffer, so its <code>c_str()</code> is
 <code>__null</code>; check before you pass it to a C function that does not accept
@@ -828,7 +830,9 @@ so pair it with <a href="platform-selection.html"><code>[Target(Arch(...))]</cod
 your program. The C library is always linked. For anything else, attach
 <code>[Link("name")]</code> to the extern or pass <code>-l name</code> to the compiler. The
 <a href="linking.html">Linking</a> chapter covers both.</p>
-<pre><code class="language-pepper">[Target(OS(Windows))] [Link("gdi32")] extern ulong GetStockObject(int kind);
+<pre><code class="language-pepper">[Target(OS(Windows))]
+[Link("gdi32")]
+extern ulong GetStockObject(int kind);
 </code></pre>
 <h2 id="calling-pepper-from-c"><a class="header" href="#calling-pepper-from-c">Calling Pepper from C</a></h2>
 <p>C code can call Pepper functions: mark each one <code>[Export]</code>, and build the
@@ -996,6 +1000,27 @@ for every struct an export passes.</li>
 </ul>
 <p>A handle must not be null, and is freed at most once: C gets no checks on
 either.</p>
+<h3 id="why-a-string-is-freed-but-a-handle-is-released"><a class="header" href="#why-a-string-is-freed-but-a-handle-is-released">Why a string is freed but a handle is released</a></h3>
+<p>The two look alike from C, a pointer Pepper hands over, but they are
+different things, and the names say which:</p>
+<ul>
+<li><strong>A handle is a live Pepper object.</strong> Pepper may hold references to it
+too: a field, a global, another thread. C holds one or more of those
+references, so it uses the same counting Pepper does: <code>&lt;name&gt;_retain</code>
+adds one, <code>&lt;name&gt;_release</code> drops one, and the object is destroyed only
+when the last reference anywhere goes away. Releasing is not freeing.</li>
+<li><strong>A returned string is not a Pepper object.</strong> It is a plain copy of the
+bytes, made at the boundary like <code>strdup</code> makes one, with no count and no
+other owner. Pepper keeps no reference to it, so there is nothing to
+retain or share; the C code owns it outright and gives it back once with
+<code>pepper_string_free</code>.</li>
+<li><strong>Why not <code>free</code>:</strong> the copy comes from Pepper’s allocator, which tracks
+live allocations and, on Windows, may use a different C runtime’s heap
+than the caller’s. <code>pepper_string_free</code> returns it to the allocator that
+made it.</li>
+</ul>
+<p>A <code>String</code> parameter needs neither: Pepper copies the bytes for the call,
+and C’s buffer stays C’s.</p>
 <h3 id="building-the-library"><a class="header" href="#building-the-library">Building the library</a></h3>
 <p><code>--lib static</code> writes an archive of the program’s objects: <code>libname.a</code>
 (<code>name.lib</code> on Windows). <code>--lib shared</code> links a shared library:

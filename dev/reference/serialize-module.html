@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,17 +192,17 @@ property (or an enum or one of its cases: <code>Tag</code>, <code>Untagged</code
 <code>import serialize</code> brings them in, and <code>import json</code> alone is
 enough too, since <code>json</code> exports them.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct ServerConfig {
-        var host: String;
-        [Name("max-connections")]
-        var max_connections: int;
-        [Required]
-        var port: int;
-        [Ignore]
-        var started_at: long;
-    }
+struct ServerConfig {
+    var host: String;
+    [Name("max-connections")]
+    var max_connections: int;
+    [Required]
+    var port: int;
+    [Ignore]
+    var started_at: long;
+}
 </code></pre>
 <p>Source: <code>runtime/serialize/module.pep</code></p>
 <h2 id="name"><a class="header" href="#name">Name</a></h2>
@@ -211,12 +211,12 @@ enough too, since <code>json</code> exports them.</p>
 <p>Writes a property, or an enum case, under <code>value</code> rather than under its
 own name.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    struct Limits {
-        [Name("max-connections")]
-        var max_connections: int;
-    }
+struct Limits {
+    [Name("max-connections")]
+    var max_connections: int;
+}
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
@@ -245,13 +245,13 @@ under that key: <code>{"kind": "Circle", "data": {"radius": 2}}</code>. A case t
 carries no values is <code>{"kind": "Point"}</code> either way. Write it above an
 enum.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    [Tag("kind")]
-    enum Shape {
-        Circle(radius: int),
-        Point,
-    }
+[Tag("kind")]
+enum Shape {
+    Circle(radius: int),
+    Point,
+}
 </code></pre>
 <h3 id="fields-1"><a class="header" href="#fields-1">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">key</a></h4>
@@ -273,13 +273,13 @@ its name (<code>"Point"</code>).</p>
 an error, so list a case whose values are a superset of another’s first.
 Write it above an enum.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    [Untagged]
-    enum Size {
-        Fixed(px: int),
-        Auto,
-    }
+[Untagged]
+enum Size {
+    Fixed(px: int),
+    Auto,
+}
 </code></pre>
 
                     </main>

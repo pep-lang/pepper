@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -246,8 +246,7 @@ from 0 (stored, no compression) to 9 (smallest, slowest). Each level
 searches for matches with zlib’s settings for it, so the output is about
 the size zlib makes at the same level, at a similar speed: on 12 MB of
 source text, compressing at level 6 takes about 1.2 times as long as the
-<code>gzip</code> command, and decompressing is a little faster than <code>gzip -d</code>
-(<code>benchmarks/compress/bench.py</code> measures it).</li>
+<code>gzip</code> command, and decompressing is a little faster than <code>gzip -d</code>.</li>
 <li><code>decompress(data)</code> returns an <code>io.IoResult&lt;u8[]&gt;</code>. Damaged or truncated
 data is an error whose <code>is_invalid_input()</code> holds, and gzip and zlib
 data is checked against its CRC-32 or Adler-32 checksum.</li>
@@ -323,7 +322,7 @@ wrap the file in a <code>DecompressReader</code> to read a <code>.tar.gz</code>.
 <li><code>next_entry()</code> moves to the next entry and returns its <code>TarEntry</code>:
 <code>path</code>, <code>kind</code> (<code>File</code>, <code>Directory</code>, <code>Symlink</code>, <code>HardLink</code> or <code>Other</code>),
 <code>size</code>, <code>mode</code>, <code>modified</code> (seconds since 1970) and <code>link_target</code>. It
-returns none at the end of the archive.</li>
+returns Empty at the end of the archive.</li>
 <li>The reader is an <code>io.Reader</code> of the current entry’s contents: <code>read</code>,
 <code>read_all()</code>, <code>lines()</code>. Contents not read are skipped.</li>
 <li>It reads ustar archives with the pax and GNU extensions for long paths,

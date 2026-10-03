@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -214,9 +214,9 @@ is kept only when every <code>Target</code> on it matches. Other attributes on t
 item, such as <code>[Link(...)]</code>, do not affect the selection.</p>
 <h2 id="what-it-applies-to"><a class="header" href="#what-it-applies-to">What it applies to</a></h2>
 <p>Put <code>[Target(...)]</code> before any top-level declaration: a function, an <code>extern</code>,
-a struct, a trait, an extension, a type alias, a module-scope variable, an
-<code>import</code>, or a re-export. It also works on the methods inside a struct, trait
-or extension. When two declarations share a name, give them conditions that
+a struct, an enum, a trait, an extension, a type alias, a module-scope
+variable, an <code>import</code>, or a re-export. It also works on the methods inside a
+struct, trait or extension, and on an enum’s cases. When two declarations share a name, give them conditions that
 never match on the same platform, so exactly one survives:</p>
 <pre><code class="language-pepper"># One name, a different declaration per platform.
 
@@ -320,10 +320,11 @@ when you build, not in the editor.</p>
 <p>It still has to parse, and every <code>Target</code> condition is validated on every
 platform, even one inside removed code. A misspelled value is always an error,
 never a silent “no match”:</p>
-<pre><code class="language-pepper">[Target(OS(Darwin))] f(): int { return 1; }
+<pre><code class="language-pepper">[Target(OS(Darwin))]
+f(): int { return 1; }
 </code></pre>
 <pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi) in [Target(OS(Darwin))]
-    1 | [Target(OS(Darwin))] f(): int { return 1; }
+    1 | [Target(OS(Darwin))]
       | ^~~~~~~~~~~~~~~~~~~~
 </code></pre>
 <p>Other mistakes the compiler reports:</p>
@@ -363,7 +364,7 @@ and object format. The supported targets are each OS on each architecture:</p>
 <code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>). Any
 other triple is an error that lists these. <code>wasm32-wasi</code>,
 <code>wasm32-unknown-wasi</code> and <code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>.</p>
-<pre><code class="language-sh">pep-build --target aarch64-unknown-linux-gnu main.pep -o main
+<pre><code class="language-sh">pepper build --target aarch64-unknown-linux-gnu main.pep -o main
 </code></pre>
 <p>Linking an executable for another platform needs that platform’s system
 libraries and LLVM’s linker, <code>lld</code>: the compiler looks for it beside clang,

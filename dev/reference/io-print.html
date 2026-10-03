@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,18 +196,18 @@ to standard output.</p>
 <code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes of a
 value (the text <code>$"{value}"</code> would hold).</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    main(): int {
-        var path = io.Directory.temp().join("report.txt");
-        var file = io.File.create(path).value();
-        file.print("total: ");
-        file.print_line(42);
-        file.close();
-        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
-        io.File.remove(path);
-        return 0;
-    }
+main(): int {
+    var path = io.Directory.temp().join("report.txt");
+    var file = io.File.create(path).value();
+    file.print("total: ");
+    file.print_line(42);
+    file.close();
+    assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+    io.File.remove(path);
+    return 0;
+}
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="write_all"><a class="header" href="#write_all">write_all</a></h4>
@@ -240,8 +240,8 @@ it is, anything else through <code>to_string</code>.</p>
 <li>an Ok result once the text is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    file.print("n = ");
-    file.print(3);   # the file now holds "n = 3"
+<pre><code class="language-pepper">file.print("n = ");
+file.print(3);   # the file now holds "n = 3"
 </code></pre>
 <h4 id="print_line"><a class="header" href="#print_line">print_line</a></h4>
 <pre><code class="language-pepper">print_line&lt;T&gt;(value: T): IoResult&lt;void&gt;
@@ -261,8 +261,8 @@ it is, anything else through <code>to_string</code>.</p>
 <li>an Ok result once the line is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    file.print_line($"total: {total}");
-    file.print_line((1, "two"));   # (1, two)
+<pre><code class="language-pepper">file.print_line($"total: {total}");
+file.print_line((1, "two"));   # (1, two)
 </code></pre>
 
                     </main>

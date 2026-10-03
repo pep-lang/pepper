@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,26 +212,26 @@ threads.</p>
 <li><code>T</code> — the type of the values carried</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const jobs = async.Channel&lt;long&gt;(64);
-    const total = Atomic&lt;long&gt;(0);
+const jobs = async.Channel&lt;long&gt;(64);
+const total = Atomic&lt;long&gt;(0);
 
-    worker() {
-        for (var job in jobs) {
-            total.fetch_add(job);
-        }
+worker() {
+    for (var job in jobs) {
+        total.fetch_add(job);
     }
+}
 
-    main(): int {
-        var thread = async.Thread.spawn(worker);
-        jobs.send(20);
-        jobs.send(22);
-        jobs.close();
-        thread.join();
-        assert(total.load() == 42, "the worker received both jobs");
-        return 0;
-    }
+main(): int {
+    var thread = async.Thread.spawn(worker);
+    jobs.send(20);
+    jobs.send(22);
+    jobs.close();
+    thread.join();
+    assert(total.load() == 42, "the worker received both jobs");
+    return 0;
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="count"><a class="header" href="#count">count</a></h4>
@@ -253,8 +253,8 @@ change it as soon as it returns.</p>
 <li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var bounded = async.Channel&lt;long&gt;(16);
-    var unbounded = async.Channel&lt;long&gt;();
+<pre><code class="language-pepper">var bounded = async.Channel&lt;long&gt;(16);
+var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="send"><a class="header" href="#send">send</a></h4>
@@ -276,10 +276,10 @@ other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <li>true if the value was queued, false if the channel is closed or the task’s wait was cancelled or timed out (the value is dropped)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var line = "hello";
-    lines.send(copy(line));
-    line.append(" again");   # the receiver still gets "hello"
-    lines.send(move(line));   # line is null now
+<pre><code class="language-pepper">var line = "hello";
+lines.send(copy(line));
+line.append(" again");   # the receiver still gets "hello"
+lines.send(move(line));   # line is null now
 </code></pre>
 <h4 id="try_send"><a class="header" href="#try_send">try_send</a></h4>
 <pre><code class="language-pepper">try_send([Move] value: T): bool
@@ -305,10 +305,10 @@ other tasks; a cancel or the task’s <code>timeout</code> ends the wait.</p>
 <li>the value, or an error once the channel is closed and empty, or when the task’s wait was cancelled or timed out</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var job = jobs.receive();
-    if (job.is_ok()) {
-        run(job.value());
-    }
+<pre><code class="language-pepper">var job = jobs.receive();
+if (job.is_ok()) {
+    run(job.value());
+}
 </code></pre>
 <h4 id="try_receive"><a class="header" href="#try_receive">try_receive</a></h4>
 <pre><code class="language-pepper">try_receive(): Result&lt;T&gt;
@@ -357,9 +357,9 @@ exactly one of them.</p>
 <li>the iterator a <code>for</code> loop drives</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    for (var line in lines) {
-        print(line, "\n");
-    }   # ends once `lines` is closed and empty
+<pre><code class="language-pepper">for (var line in lines) {
+    print(line, "\n");
+}   # ends once `lines` is closed and empty
 </code></pre>
 <h2 id="channeliterator"><a class="header" href="#channeliterator">ChannelIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ChannelIterator&lt;T&gt;
@@ -373,10 +373,10 @@ without naming it. It belongs to the thread that runs the loop.</p>
 <li><code>T</code> — the type of the values carried</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var values = jobs.iterate();
-    while (values.next()) {
-        total = total + values.current();
-    }
+<pre><code class="language-pepper">var values = jobs.iterate();
+while (values.next()) {
+    total = total + values.current();
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>

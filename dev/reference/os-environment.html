@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,15 +207,15 @@ page survives.</p>
 <li>its value, or none when it is not set</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import os;
+<pre><code class="language-pepper">import os;
 
-    main(): int {
-        var home = os.environment("HOME");
-        if (home) {
-            print(home.value());
-        }
-        return 0;
+main(): int {
+    var home = os.environment("HOME");
+    if (home) {
+        print(home.value());
     }
+    return 0;
+}
 </code></pre>
 <h2 id="environment_variables"><a class="header" href="#environment_variables">environment_variables</a></h2>
 <pre><code class="language-pepper">environment_variables(): HashMap&lt;String, String&gt;
@@ -232,14 +232,14 @@ returns it.</p>
 <li>a new map from each variable’s name to its value</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import os;
+<pre><code class="language-pepper">import os;
 
-    main(): int {
-        for (var (name, value) in os.environment_variables()) {
-            print($"{name}={value}");
-        }
-        return 0;
+main(): int {
+    for (var (name, value) in os.environment_variables()) {
+        print($"{name}={value}");
     }
+    return 0;
+}
 </code></pre>
 
                     </main>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,14 +195,14 @@
 <code>from_nanoseconds</code>, or by subtracting two <code>Instant</code>s. A value struct: it
 is copied, compared with <code>==</code>, and allocates nothing.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import os;
+<pre><code class="language-pepper">import os;
 
-    main(): int {
-        var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
-        print(timeout.milliseconds());   # 2500
-        print(timeout);                  # 2.5s
-        return 0;
-    }
+main(): int {
+    var timeout = os.Duration.from_seconds(2) + os.Duration.from_milliseconds(500);
+    print(timeout.milliseconds());   # 2500
+    print(timeout);                  # 2.5s
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
@@ -456,18 +456,18 @@ processes or reboots. Use <code>SystemTime</code> for the date and time.</p>
 <p>The clock is <code>CLOCK_MONOTONIC</code> on Linux and macOS and
 <code>QueryPerformanceCounter</code> on Windows, read to the nanosecond.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import os;
+<pre><code class="language-pepper">import os;
 
-    main(): int {
-        var start = os.Instant.now();
-        var total = 0;
-        for (var i in 0..1000000) {
-            total = total + i;
-        }
-        var elapsed = os.Instant.now() - start;
-        print($"summed in {elapsed.milliseconds()} ms");
-        return 0;
+main(): int {
+    var start = os.Instant.now();
+    var total = 0;
+    for (var i in 0..1000000) {
+        total = total + i;
     }
+    var elapsed = os.Instant.now() - start;
+    print($"summed in {elapsed.milliseconds()} ms");
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="instant-1"><a class="header" href="#instant-1">Instant()</a></h4>
@@ -599,13 +599,13 @@ the Unix epoch (1970-01-01 00:00:00 UTC), like Rust’s
 so measure how long something takes with <code>Instant</code> instead. Dates, time
 zones and formatting are not part of <code>os</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import os;
+<pre><code class="language-pepper">import os;
 
-    main(): int {
-        var now = os.SystemTime.now();
-        print($"{now.unix_seconds()} seconds since 1970");
-        return 0;
-    }
+main(): int {
+    var now = os.SystemTime.now();
+    print($"{now.unix_seconds()} seconds since 1970");
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="systemtime-1"><a class="header" href="#systemtime-1">SystemTime()</a></h4>

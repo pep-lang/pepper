@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,16 +203,16 @@ array shortened past it) is not written; one whose path names another
 value afterwards (an element shifted into its index) goes with that
 value.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import json;
+<pre><code class="language-pepper">import json;
 
-    var text = "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": true\n}";
-    var document = json.parse_document(text).value();
-    document.root["wrap"] = json.JsonValue.Bool(false);
-    assert(
-        document.to_string() == "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": false\n}",
-        "the comments stay"
-    );
-    assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
+var text = "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": true\n}";
+var document = json.parse_document(text).value();
+document.root["wrap"] = json.JsonValue.Bool(false);
+assert(
+    document.to_string() == "{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"wrap\": false\n}",
+    "the comments stay"
+);
+assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>

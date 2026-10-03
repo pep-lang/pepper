@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,18 +197,18 @@ everything the body did once <code>call</code> returns.</p>
 <p>A Once is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
 threads.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const setup = async.Once();
-    const setups = Atomic&lt;long&gt;(0);
+const setup = async.Once();
+const setups = Atomic&lt;long&gt;(0);
 
-    initialize() {
-        setups.fetch_add(1);
-    }
+initialize() {
+    setups.fetch_add(1);
+}
 
-    work() {
-        setup.call(initialize);   # only the first caller runs it
-    }
+work() {
+    setup.call(initialize);   # only the first caller runs it
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
@@ -236,7 +236,7 @@ when this returns.</p>
 <li>if <code>body</code> itself calls <code>call</code> on the same Once (it would wait for itself forever)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    config_once.call(load_config);
+<pre><code class="language-pepper">config_once.call(load_config);
 </code></pre>
 <h4 id="is_done"><a class="header" href="#is_done">is_done</a></h4>
 <pre><code class="language-pepper">is_done(): bool
@@ -262,24 +262,24 @@ gets the same value; <code>Lazy&lt;String&gt;</code> is a compile error.</p>
 <li><code>T</code> — the value’s type, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    [Shared]
-    struct Settings {
-        const workers: long;
-        construct(this.workers = 1) {}
-    }
+[Shared]
+struct Settings {
+    const workers: long;
+    construct(this.workers = 1) {}
+}
 
-    load_settings(): Settings {
-        return Settings(async.logical_cpus() as long);
-    }
+load_settings(): Settings {
+    return Settings(async.logical_cpus() as long);
+}
 
-    const settings = async.Lazy&lt;Settings&gt;(load_settings);
+const settings = async.Lazy&lt;Settings&gt;(load_settings);
 
-    main(): int {
-        var workers = settings.get().workers;   # built here, on first use
-        return 0;
-    }
+main(): int {
+    var workers = settings.get().workers;   # built here, on first use
+    return 0;
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>

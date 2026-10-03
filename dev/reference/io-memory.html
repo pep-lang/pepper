@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,14 +195,14 @@ the array, and the stream ends after its last byte.</p>
 <p>The reader keeps a reference to the array and does not copy it; changing
 the array while reading changes what is read.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var data = "one\ntwo\n".bytes();
-    var count = 0;
-    for (var line in io.ByteReader(data).lines()) {
-        count += 1;
-    }
-    assert(count == 2, "two lines");
+var data = "one\ntwo\n".bytes();
+var count = 0;
+for (var line in io.ByteReader(data).lines()) {
+    count += 1;
+}
+assert(count == 2, "two lines");
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="remaining"><a class="header" href="#remaining">remaining</a></h4>
@@ -238,12 +238,12 @@ the array while reading changes what is read.</p>
 <p>A <code>Writer</code> that appends everything written to an array in memory,
 <code>bytes</code>.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    var out = io.ByteWriter();
-    out.print("n = ");
-    out.print_line(3);
-    assert(out.bytes == "n = 3\n".bytes(), "collected");
+var out = io.ByteWriter();
+out.print("n = ");
+out.print_line(3);
+assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="bytes"><a class="header" href="#bytes">bytes</a></h4>

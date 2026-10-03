@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -226,22 +226,22 @@ thread: it keeps running, and its resources are freed when it finishes.</p>
 <p>The body runs until it returns; there is no way to stop a thread from the
 outside. A <code>panic</code> or failed <code>assert</code> on any thread ends the whole program.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const total = Atomic&lt;long&gt;(0);
+const total = Atomic&lt;long&gt;(0);
 
-    add_ten() {
-        total.fetch_add(10);
-    }
+add_ten() {
+    total.fetch_add(10);
+}
 
-    main(): int {
-        var a = async.Thread.spawn(add_ten, "adder a");
-        var b = async.Thread.spawn(add_ten, "adder b");
-        a.join();
-        b.join();
-        assert(total.load() == 20, "both threads ran");
-        return 0;
-    }
+main(): int {
+    var a = async.Thread.spawn(add_ten, "adder a");
+    var b = async.Thread.spawn(add_ten, "adder b");
+    a.join();
+    b.join();
+    assert(total.load() == 20, "both threads ran");
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
@@ -276,8 +276,8 @@ directly is not attached to any thread and cannot be joined.</p>
 <li>if the operating system cannot create another thread</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var worker = Thread.spawn(do_work, "worker");
-    worker.join();
+<pre><code class="language-pepper">var worker = Thread.spawn(do_work, "worker");
+worker.join();
 </code></pre>
 <h4 id="current"><a class="header" href="#current">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
@@ -293,8 +293,8 @@ cannot be joined.</p>
 <li>the calling thread</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var me = Thread.current();
-    print(me.name(), "\n");   # "main" on the main thread
+<pre><code class="language-pepper">var me = Thread.current();
+print(me.name(), "\n");   # "main" on the main thread
 </code></pre>
 <h4 id="sleep"><a class="header" href="#sleep">sleep</a></h4>
 <pre><code class="language-pepper">static sleep(milliseconds: ulong)

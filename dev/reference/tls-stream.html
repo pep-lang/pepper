@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,11 +203,11 @@ task. Configure it (<code>add_root_certificate</code>) before the first <code>co
 <li><code>TlsStream</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import tls;
+<pre><code class="language-pepper">import tls;
 
-    var connector = tls.TlsConnector.create().value();
-    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_all("ping");
+var connector = tls.TlsConnector.create().value();
+var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
@@ -284,18 +284,18 @@ one.</p>
 <li><code>TlsStream</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
-    import tls;
+<pre><code class="language-pepper">import io;
+import tls;
 
-    var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
-    var listener = io.TcpListener.bind(io.SocketAddress.parse("0.0.0.0:8443").value()).value();
-    while (true) {
-        var (tcp, peer) = listener.accept().value();
-        var accepted = acceptor.accept(tcp);
-        if (accepted.is_ok()) {
-            accepted.value().write_all("hello over TLS");
-        }
+var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+var listener = io.TcpListener.bind(io.SocketAddress.parse("0.0.0.0:8443").value()).value();
+while (true) {
+    var (tcp, peer) = listener.accept().value();
+    var accepted = acceptor.accept(tcp);
+    if (accepted.is_ok()) {
+        accepted.value().write_all("hello over TLS");
     }
+}
 </code></pre>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
@@ -355,11 +355,11 @@ goes; <code>close()</code> closes it earlier. Neither sends close_notify; call
 <li><code>TlsAcceptor</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var stream = connector.connect_host("localhost", 8443).value();
-    stream.write_all("ping");
-    var reply = Array&lt;u8&gt;();
-    while (stream.read(reply, 4096).value() &gt; 0) {
-    }
+<pre><code class="language-pepper">var stream = connector.connect_host("localhost", 8443).value();
+stream.write_all("ping");
+var reply = Array&lt;u8&gt;();
+while (stream.read(reply, 4096).value() &gt; 0) {
+}
 </code></pre>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
@@ -447,7 +447,7 @@ No newline or terminator is added.</p>
 <li>an Ok result once every byte is sent; an error as for <code>write</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    stream.write_all("ping");
+<pre><code class="language-pepper">stream.write_all("ping");
 </code></pre>
 <h4 id="write_string"><a class="header" href="#write_string">write_string</a></h4>
 <pre><code class="language-pepper">[Deprecated("use 'write_all' instead", "write_all")] write_string(text: String): io.IoResult&lt;void&gt;

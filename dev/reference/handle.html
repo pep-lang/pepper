@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -206,14 +206,14 @@ holding it in the closure keeps it alive until the release runs).</p>
 <li><code>T</code> — the type of the raw resource, usually <code>__ptr&lt;void&gt;</code> or an integer</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    extern void* malloc(ulong size);
-    extern void free(void* p);
+<pre><code class="language-pepper">extern void* malloc(ulong size);
+extern void free(void* p);
 
-    main(): int {
-        var buffer = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(16), (p) =&gt; free(p));
-        # use buffer.value; free runs when `buffer` goes out of scope
-        return 0;
-    }
+main(): int {
+    var buffer = Handle&lt;__ptr&lt;void&gt;&gt;(malloc(16), (p) =&gt; free(p));
+    # use buffer.value; free runs when `buffer` goes out of scope
+    return 0;
+}
 </code></pre>
 <h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
 <h4 id="value"><a class="header" href="#value">value</a></h4>

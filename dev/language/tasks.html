@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -743,12 +743,13 @@ the system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and
 program, for testing and benchmarks. <code>async.current_backend()</code> says which one is running.</p>
 <p>io_uring usually pays off as the amount of multiplexed I/O grows: many
 operations in flight, submitted and completed in batches through the ring
-rather than one system call each. Pepper’s <code>IoUring</code> backend does not do
-that yet. It uses the ring only to learn when a socket is ready, then reads
-and writes with ordinary <code>recv</code> and <code>send</code> calls, as epoll does, so it makes
-the same number of system calls. In our echo benchmark it kept level with
+rather than one system call each. For sockets, Pepper’s <code>IoUring</code> backend
+does not do that yet: it uses the ring only to learn when a socket is
+ready, then reads and writes with ordinary <code>recv</code> and <code>send</code> calls, as epoll
+does, so it makes the same number of system calls. (File reads and writes
+do go through the ring; see <a href="#files">Files</a>.) In our echo benchmark it kept level with
 epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
-the reads and writes themselves through the ring is future work.</p>
+the socket reads and writes themselves through the ring is future work.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>

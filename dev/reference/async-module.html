@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -210,28 +210,28 @@ a <code>Mutex</code>, whose <code>with</code> blocks the compiler keeps apart fr
 the program. <code>Lazy&lt;T&gt;</code> holds thread-safe
 values only. See the language guide’s Threads chapter.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import async;
+<pre><code class="language-pepper">import async;
 
-    const hits = async.Atomic&lt;long&gt;(0);
+const hits = async.Atomic&lt;long&gt;(0);
 
-    work() {
-        hits.fetch_add(1);
+work() {
+    hits.fetch_add(1);
+}
+
+main(): int {
+    var workers = Array&lt;async.Thread&gt;();
+    var n = async.logical_cpus();
+    var i: ulong = 0;
+    while (i &lt; n) {
+        workers.append(async.Thread.spawn(work));
+        i = i + 1;
     }
-
-    main(): int {
-        var workers = Array&lt;async.Thread&gt;();
-        var n = async.logical_cpus();
-        var i: ulong = 0;
-        while (i &lt; n) {
-            workers.append(async.Thread.spawn(work));
-            i = i + 1;
-        }
-        for (var worker in workers) {
-            worker.join();
-        }
-        assert(hits.load() == n as long, "every worker ran");
-        return 0;
+    for (var worker in workers) {
+        worker.join();
     }
+    assert(hits.load() == n as long, "every worker ran");
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/async/module.pep</code></p>
 

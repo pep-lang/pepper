@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -333,7 +333,7 @@ includes <code>b</code>. Looping over one is how you count:</p>
     }
     assert(product == 120, "5 factorial");
 
-    # The bounds give the type: count() is a ulong, so i is too.
+    # The bounds give the type: `count` is a ulong, so i is too.
     var names = ["Ada", "Grace", "Edsger"];
     ulong letters = 0;
     for (var i in 0..names.count) {
@@ -383,7 +383,8 @@ there without overflowing.</p>
 <li>
 <p><strong>A range is a value</strong>, a <a href="../reference/range.html"><code>Range&lt;T&gt;</code></a>. It has
 <code>contains(x)</code> and the <code>is_empty</code> property, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
-<a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>. Looping over one allocates
+<a href="#adapters">adapters</a> (<code>map</code>, <code>filter</code>, <code>enumerate</code>, <code>zip</code>) and
+<code>to_array()</code>. Looping over one allocates
 nothing; the optimizer turns it into a plain counting loop.</p>
 </li>
 </ul>
@@ -393,8 +394,8 @@ that has the right methods, described by two traits in the runtime
 (<code>runtime/iterator.pep</code>, documented in the <a href="../reference/iterator.html">Iterators</a>
 reference):</p>
 <pre><code class="language-pepper">export trait Iterator&lt;T&gt; {
-    bool next();     # advance; true if there is a current element
-    T current();     # the element next() just moved to
+    next(): bool;    # advance; true if there is a current element
+    current(): T;    # the element next() just moved to
 }
 
 export trait Iterable&lt;T&gt; {
@@ -678,7 +679,8 @@ intent, and the compiler then checks that <code>Countdown</code> has both <code>
 <code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
 <code>for</code> loop over such a value calls the methods through the trait. It also
-gives the type the <a href="#adapters">adapters</a> <code>map</code> and <code>filter</code>.</li>
+gives the type the <a href="#adapters">adapters</a> (<code>map</code>, <code>filter</code>, <code>enumerate</code>,
+<code>zip</code>) and <code>to_array()</code>.</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that variable in place, so
 it is exhausted afterwards, and a loop left with <code>break</code> can be resumed by

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -440,7 +440,7 @@ main.pep:6:29: note: 'Cell&lt;String&gt;' is required here, in 'make&lt;String&g
 main.pep:3:18: note: required by field 'value' declared here
     3 |     const value: T;
       |                  ^
-runtime/string.pep:41:15: note: 'String' is not declared [Shared]
+runtime/string.pep:54:15: note: 'String' is not declared [Shared]
 </code></pre>
 <p>A generic can state the rule up front with the built-in constraint
 <a href="generics.html#the-shared-constraint"><code>T: Shared</code></a>: <code>[Shared] struct Cell&lt;T: Shared&gt;</code> accepts exactly the type arguments above, and a wrong one
@@ -652,9 +652,9 @@ the editor offers both fixes:</p>
     7 |     lines.send(line);
       |                ^~~~
       |                move(line)
-runtime/async/channel.pep:151:27: note: 'value' is declared [Move] here
-  151 |     bool send([Move] T value) {
-      |                           ^~~~~
+runtime/async/channel.pep:173:17: note: 'value' is declared [Move] here
+  173 |     send([Move] value: T): bool {
+      |                 ^~~~~
 note: hand it over with 'move(line)', or pass a new value, such as 'copy(line)'
 </code></pre>
 <p>A thread-safe value (a number, a <code>[Shared]</code> struct, a <code>shared</code> function value

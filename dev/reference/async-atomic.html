@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,12 +207,12 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <li><code>T</code> — the type of the stored value, which must be thread-safe (<code>T: Shared</code>)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    main(): int {
-        var counter = async.Atomic&lt;long&gt;(0);
-        var before = counter.fetch_add(5);   # before == 0
-        if (counter.load() != 5) { return 1; }
-        return 0;
-    }
+<pre><code class="language-pepper">main(): int {
+    var counter = async.Atomic&lt;long&gt;(0);
+    var before = counter.fetch_add(5);   # before == 0
+    if (counter.load() != 5) { return 1; }
+    return 0;
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
@@ -225,8 +225,8 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <li><code>value</code> — the initial value; defaults to zero for a POD <code>T</code> and null for a struct <code>T</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var a = async.Atomic&lt;int&gt;(41);
-    var p = async.Atomic&lt;Point&gt;();   # holds null until a store
+<pre><code class="language-pepper">var a = async.Atomic&lt;int&gt;(41);
+var p = async.Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
@@ -271,10 +271,10 @@ failure no reference count changes.</p>
 <li>true if the slot held <code>expected</code> and now holds <code>desired</code>, false if it was left unchanged</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var cur = counter.load();
-    while (!counter.compare_exchange(cur, cur + 1)) {
-        cur = counter.load();
-    }
+<pre><code class="language-pepper">var cur = counter.load();
+while (!counter.compare_exchange(cur, cur + 1)) {
+    cur = counter.load();
+}
 </code></pre>
 <h4 id="exchange"><a class="header" href="#exchange">exchange</a></h4>
 <pre><code class="language-pepper">exchange(v: T): T
@@ -293,8 +293,8 @@ acquires <code>v</code>, and the caller owns the returned reference.</p>
 <li>the value stored immediately before the exchange</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var e = async.Atomic&lt;int&gt;(1);
-    var old = e.exchange(2);   # old == 1, e.load() == 2
+<pre><code class="language-pepper">var e = async.Atomic&lt;int&gt;(1);
+var old = e.exchange(2);   # old == 1, e.load() == 2
 </code></pre>
 <h4 id="is_lock_free"><a class="header" href="#is_lock_free">is_lock_free</a></h4>
 <pre><code class="language-pepper">is_lock_free(): bool
@@ -325,8 +325,8 @@ program when it runs.</p>
 <li>the value stored immediately before the addition</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var c = async.Atomic&lt;long&gt;(10);
-    var old = c.fetch_add(5);   # old == 10, c.load() == 15
+<pre><code class="language-pepper">var c = async.Atomic&lt;long&gt;(10);
+var old = c.fetch_add(5);   # old == 10, c.load() == 15
 </code></pre>
 <h4 id="fetch_sub"><a class="header" href="#fetch_sub">fetch_sub</a></h4>
 <pre><code class="language-pepper">fetch_sub(v: T): T

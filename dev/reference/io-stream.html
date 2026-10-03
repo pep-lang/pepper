@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -196,18 +196,18 @@ or <code>tls.TlsStream</code>, or any type with <code>read(buffer, max)</code>.<
 <code>chunks(size)</code>, which read the stream as a <code>for</code> loop asks for more.
 Take a <code>Reader</code> (or <code>&lt;R: Reader&gt;</code>) to accept any stream.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    count_lines(source: io.Reader): int {
-        var count = 0;
-        for (var line in source.lines()) {
-            if (line.is_err()) {
-                break;
-            }
-            count += 1;
+count_lines(source: io.Reader): int {
+    var count = 0;
+    for (var line in source.lines()) {
+        if (line.is_err()) {
+            break;
         }
-        return count;
+        count += 1;
     }
+    return count;
+}
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
@@ -241,10 +241,10 @@ the last line returned.</p>
 <li>a new <code>Lines</code> positioned before the first line</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    for (var line in f.lines()) {
-        print(line.value());
-    }
+<pre><code class="language-pepper">var f = File.open(Path("notes.txt")).value();
+for (var line in f.lines()) {
+    print(line.value());
+}
 </code></pre>
 <h4 id="chunks"><a class="header" href="#chunks">chunks</a></h4>
 <pre><code class="language-pepper">chunks(size: ulong): Chunks
@@ -268,10 +268,10 @@ error is yielded and ends it.</p>
 <li>if <code>size</code> is 0 (“Reader.chunks() needs a size above 0”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var total = 0;
-    for (var chunk in stream.chunks(4096)) {
-        total += chunk.value().count;
-    }
+<pre><code class="language-pepper">var total = 0;
+for (var chunk in stream.chunks(4096)) {
+    total += chunk.value().count;
+}
 </code></pre>
 <h2 id="writer"><a class="header" href="#writer">Writer</a></h2>
 <pre><code class="language-pepper">trait Writer
@@ -283,18 +283,18 @@ error is yielded and ends it.</p>
 then gets <code>print</code> and <code>print_line</code>, which write the text <code>to_string</code> makes
 of a value (the text <code>$"{value}"</code> would hold).</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import io;
+<pre><code class="language-pepper">import io;
 
-    main(): int {
-        var path = io.Directory.temp().join("report.txt");
-        var file = io.File.create(path).value();
-        file.print("total: ");
-        file.print_line(42);
-        file.close();
-        assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
-        io.File.remove(path);
-        return 0;
-    }
+main(): int {
+    var path = io.Directory.temp().join("report.txt");
+    var file = io.File.create(path).value();
+    file.print("total: ");
+    file.print_line(42);
+    file.close();
+    assert(io.File.read_to_string(path).value() == "total: 42\n", "printed");
+    io.File.remove(path);
+    return 0;
+}
 </code></pre>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="write"><a class="header" href="#write">write</a></h4>
@@ -340,8 +340,8 @@ it is, anything else through <code>to_string</code>.</p>
 <li>an Ok result once the text is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    file.print("n = ");
-    file.print(3);   # the file now holds "n = 3"
+<pre><code class="language-pepper">file.print("n = ");
+file.print(3);   # the file now holds "n = 3"
 </code></pre>
 <h4 id="print_line"><a class="header" href="#print_line">print_line</a></h4>
 <pre><code class="language-pepper">print_line&lt;T&gt;(value: T): IoResult&lt;void&gt;
@@ -361,8 +361,8 @@ it is, anything else through <code>to_string</code>.</p>
 <li>an Ok result once the line is written; an error as for <code>write_all</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    file.print_line($"total: {total}");
-    file.print_line((1, "two"));   # (1, two)
+<pre><code class="language-pepper">file.print_line($"total: {total}");
+file.print_line((1, "two"));   # (1, two)
 </code></pre>
 <h2 id="lines-1"><a class="header" href="#lines-1">Lines</a></h2>
 <pre><code class="language-pepper">struct Lines
@@ -374,11 +374,11 @@ chunks as the loop asks for them, each as an <code>IoResult&lt;String&gt;</code>
 <li><code>Reader.lines</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var f = File.open(Path("notes.txt")).value();
-    var it = f.lines();
-    while (it.next()) {
-        var line = it.current();
-    }
+<pre><code class="language-pepper">var f = File.open(Path("notes.txt")).value();
+var it = f.lines();
+while (it.next()) {
+    var line = it.current();
+}
 </code></pre>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="lines-2"><a class="header" href="#lines-2">Lines()</a></h4>

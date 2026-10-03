@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,8 +183,9 @@
                     <main>
                         <h1 id="linking"><a class="header" href="#linking">Linking</a></h1>
 <p>The Pepper compiler turns your program into a native executable in two steps:
-it compiles all of your files, and the runtime, into one object file, and
-then links that object file with the system libraries it needs. When you
+it compiles your files and the runtime into object files (one per source
+file; see <a href="#output-files">Output files</a>), and then links them with the
+system libraries it needs. When you
 <a href="c-interop.html">call C functions</a>, linking is where their definitions come
 from, so this chapter explains what is linked by default and how to add more.</p>
 <h2 id="what-the-compiler-links"><a class="header" href="#what-the-compiler-links">What the compiler links</a></h2>
@@ -316,6 +317,8 @@ directory you pass to <code>--build</code>: one object per file of the program i
 <code>&lt;name&gt;.units/</code>, and <code>&lt;name&gt;.o</code>, which runs the program’s global
 initializers. Unchanged objects come from the build cache in <code>.pep/cache/</code>
 (<code>--no-cache</code> skips it).</p>
+<p>With <code>--lib static</code> or <code>--lib shared</code>, the output is a library and a C
+header instead (see <a href="c-interop.html#building-the-library">Building the library</a>).</p>
 
                     </main>
 

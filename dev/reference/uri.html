@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,14 +200,14 @@ nothing else is changed. <code>to_string()</code> puts the parts back together.<
 <p>A component that can be absent is optional, so an empty one (<code>http://h/?</code>
 has an empty query) differs from a missing one (<code>http://h/</code> has none).</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var uri = Uri.parse("HTTPS://user@example.com:8443/a%20b?x=1#top").value();
-    assert(uri.scheme == "https", "the scheme is lowercased");
-    assert(uri.user_info.value() == "user", "user information");
-    assert(uri.host.value() == "example.com", "host");
-    assert(uri.port.value() == 8443, "port");
-    assert(uri.path == "/a%20b", "the path keeps its escapes");
-    assert(Uri.decode(uri.path).value() == "/a b", "decoded");
-    assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
+<pre><code class="language-pepper">var uri = Uri.parse("HTTPS://user@example.com:8443/a%20b?x=1#top").value();
+assert(uri.scheme == "https", "the scheme is lowercased");
+assert(uri.user_info.value() == "user", "user information");
+assert(uri.host.value() == "example.com", "host");
+assert(uri.port.value() == 8443, "port");
+assert(uri.path == "/a%20b", "the path keeps its escapes");
+assert(Uri.decode(uri.path).value() == "/a b", "decoded");
+assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
@@ -263,10 +263,10 @@ followed by two hexadecimal digits.</p>
 <li>the parsed URI, or an error saying what is wrong: an invalid scheme, a character that must be encoded, a bad escape, an IPv6 host with no <code>]</code>, or a port that is not a number from 0 to 65535</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var mail = Uri.parse("mailto:someone@example.com").value();
-    assert(mail.scheme == "mailto" &amp;&amp; mail.host.is_empty(), "no authority");
-    assert(mail.path == "someone@example.com", "the path holds the address");
-    assert(Uri.parse("a b").is_err(), "a space must be encoded");
+<pre><code class="language-pepper">var mail = Uri.parse("mailto:someone@example.com").value();
+assert(mail.scheme == "mailto" &amp;&amp; mail.host.is_empty(), "no authority");
+assert(mail.path == "someone@example.com", "the path holds the address");
+assert(Uri.parse("a b").is_err(), "a space must be encoded");
 </code></pre>
 <h4 id="decode"><a class="header" href="#decode">decode</a></h4>
 <pre><code class="language-pepper">static decode(text: String): Result&lt;String&gt;
@@ -283,8 +283,8 @@ uses <code>+</code> for a space needs that replaced first.</p>
 <li>the decoded text, where each byte sequence that is not valid UTF-8 becomes U+FFFD, the replacement character, or an error when a <code>%</code> is not followed by two hexadecimal digits</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
-    assert(Uri.decode("100%").is_err(), "a lone '%'");
+<pre><code class="language-pepper">assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
+assert(Uri.decode("100%").is_err(), "a lone '%'");
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
@@ -334,7 +334,7 @@ scheme is lowercased.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/io-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/reflect.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -348,7 +348,7 @@ scheme is lowercased.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/io-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/reflect.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

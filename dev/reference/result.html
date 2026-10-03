@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,14 +183,16 @@
                     <main>
                         <!-- Generated from runtime/result.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="result"><a class="header" href="#result">Result</a></h1>
+<p><code>Result&lt;T, E&gt;</code>: the value of an operation that can fail, either <code>Ok</code>
+holding its value or <code>Err</code> holding its error, like Rust’s <code>Result</code>.</p>
 <p>Source: <code>runtime/result.pep</code></p>
 <h2 id="error"><a class="header" href="#error">Error</a></h2>
 <pre><code class="language-pepper">struct Error
 </code></pre>
 <p>The default error type of <code>Result</code>: a human-readable message.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
-    var n = r.error().message.length;   # 4
+<pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
+var n = r.error().message.length;   # 4
 </code></pre>
 <h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
 <h4 id="message"><a class="header" href="#message">message</a></h4>
@@ -230,14 +232,14 @@ nothing, so it only checks that the result is Ok.</p>
 <li><code>TError</code> — the type of the error an Err result carries; defaults to <code>Error</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    main(): int {
-        var a = Result&lt;int&gt;.ok(42);
-        if (a.value() != 42) { return 1; }
-        var b = Result&lt;int&gt;.err(Error("boom"));
-        if (!b.is_err()) { return 2; }
-        var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length };   # 4
-        return b.ok_or(0);   # 0
-    }
+<pre><code class="language-pepper">main(): int {
+    var a = Result&lt;int&gt;.ok(42);
+    if (a.value() != 42) { return 1; }
+    var b = Result&lt;int&gt;.err(Error("boom"));
+    if (!b.is_err()) { return 2; }
+    var n = match (b) { Ok(v) =&gt; v, Err(e) =&gt; e.message.length };   # 4
+    return b.ok_or(0);   # 0
+}
 </code></pre>
 <h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
 <h4 id="ok"><a class="header" href="#ok">Ok</a></h4>
@@ -272,8 +274,8 @@ nothing, so it only checks that the result is Ok.</p>
 <li>an Ok result whose <code>value()</code> is <code>v</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = Result&lt;int&gt;.ok(42);
-    var done = Result&lt;void&gt;.ok();
+<pre><code class="language-pepper">var r = Result&lt;int&gt;.ok(42);
+var done = Result&lt;void&gt;.ok();
 </code></pre>
 <h4 id="err-1"><a class="header" href="#err-1">err</a></h4>
 <pre><code class="language-pepper">static err(e: TError): Result&lt;TValue, TError&gt;
@@ -289,7 +291,7 @@ nothing, so it only checks that the result is Ok.</p>
 <li>an Err result whose <code>error()</code> is <code>e</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var r = Result&lt;int&gt;.err(Error("boom"));
+<pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
@@ -309,17 +311,13 @@ nothing, so it only checks that the result is Ok.</p>
 <li>true when the result holds an error</li>
 </ul>
 <h4 id="value"><a class="header" href="#value">value</a></h4>
-<pre><code class="language-pepper">value(location: __ptr&lt;char&gt; = __caller_location()): TValue
+<pre><code class="language-pepper">value(): TValue
 </code></pre>
 <p>Returns the success value, panicking if this result is Err.</p>
 <p>For a struct <code>TValue</code> the caller gets its own reference; the result
 keeps its reference too.</p>
 <p>For <code>Result&lt;void&gt;</code> it returns nothing: calling it only checks that the
 result is Ok.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the value of an Ok result</li>
@@ -329,18 +327,14 @@ result is Ok.</p>
 <li>if the result is Err (“Result.value on an Err value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Result&lt;int&gt;.ok(42).value();   # 42
+<pre><code class="language-pepper">var n = Result&lt;int&gt;.ok(42).value();   # 42
 </code></pre>
 <h4 id="error-2"><a class="header" href="#error-2">error</a></h4>
-<pre><code class="language-pepper">error(location: __ptr&lt;char&gt; = __caller_location()): TError
+<pre><code class="language-pepper">error(): TError
 </code></pre>
 <p>Returns the failure value, panicking if this result is Ok.</p>
 <p>For a struct <code>TError</code> the caller gets its own reference; the result
 keeps its reference too.</p>
-<p><strong>Parameters</strong></p>
-<ul>
-<li><code>location</code> — where a failure is reported; left out, this call’s location</li>
-</ul>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the error of an Err result</li>
@@ -350,7 +344,7 @@ keeps its reference too.</p>
 <li>if the result is Ok (“Result.error on an Ok value”)</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var e = Result&lt;int&gt;.err(Error("boom")).error();   # e.message == "boom"
+<pre><code class="language-pepper">var e = Result&lt;int&gt;.err(Error("boom")).error();   # e.message == "boom"
 </code></pre>
 <h4 id="ok_or"><a class="header" href="#ok_or">ok_or</a></h4>
 <pre><code class="language-pepper">ok_or(fallback: TValue): TValue
@@ -367,7 +361,7 @@ is used.</p>
 <li>the value when the result is Ok, otherwise <code>fallback</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    var n = Result&lt;int&gt;.err(Error("e")).ok_or(-1);   # -1
+<pre><code class="language-pepper">var n = Result&lt;int&gt;.err(Error("e")).ok_or(-1);   # -1
 </code></pre>
 
                     </main>

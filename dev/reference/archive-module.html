@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,21 +194,21 @@ in a <code>compress.CompressWriter</code> to write one. A damaged archive is an
 <code>EntryKind</code></li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import archive;
-    import io;
+<pre><code class="language-pepper">import archive;
+import io;
 
-    main(): int {
-        var out = io.ByteWriter();
-        var writer = archive.TarWriter(out);
-        writer.append_file("hello.txt", "hi\n".bytes());
-        writer.finish();
+main(): int {
+    var out = io.ByteWriter();
+    var writer = archive.TarWriter(out);
+    writer.append_file("hello.txt", "hi\n".bytes());
+    writer.finish();
 
-        var reader = archive.TarReader(io.ByteReader(out.bytes));
-        var entry = reader.next_entry().value().value();
-        assert(entry.path == "hello.txt" &amp;&amp; entry.size == 3, "the header");
-        assert(reader.read_all().value() == "hi\n".bytes(), "the contents");
-        return 0;
-    }
+    var reader = archive.TarReader(io.ByteReader(out.bytes));
+    var entry = reader.next_entry().value().value();
+    assert(entry.path == "hello.txt" &amp;&amp; entry.size == 3, "the header");
+    assert(reader.read_all().value() == "hi\n".bytes(), "the contents");
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/archive/module.pep</code></p>
 

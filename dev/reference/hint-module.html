@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -191,14 +191,14 @@ Where the CPU has no prefetch instruction it does nothing.</p>
 <code>[Unlikely]</code> above the <code>if</code> or <code>match</code> arm; <code>likely</code> and <code>unlikely</code>
 here are deprecated.</p>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    import hint;
+<pre><code class="language-pepper">import hint;
 
-    main(): int {
-        var text = "a long text that a loop will read";
-        hint.prefetch_read(text.c_str());
-        assert(text.length &gt; 0, "a prefetch changes nothing");
-        return 0;
-    }
+main(): int {
+    var text = "a long text that a loop will read";
+    hint.prefetch_read(text.c_str());
+    assert(text.length &gt; 0, "a prefetch changes nothing");
+    return 0;
+}
 </code></pre>
 <p>Source: <code>runtime/hint/module.pep</code></p>
 <h2 id="likely"><a class="header" href="#likely">likely</a></h2>
@@ -241,7 +241,7 @@ the CPU has no prefetch instruction.</p>
 <li><code>address</code> — memory that will be read soon</li>
 </ul>
 <p><strong>Example</strong></p>
-<pre><code class="language-pepper">    hint.prefetch_read(text.c_str());
+<pre><code class="language-pepper">hint.prefetch_read(text.c_str());
 </code></pre>
 <h2 id="prefetch_write"><a class="header" href="#prefetch_write">prefetch_write</a></h2>
 <pre><code class="language-pepper">prefetch_write(address: __ptr&lt;void&gt;)

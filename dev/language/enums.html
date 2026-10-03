@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b497d6a9.js";
+            window.path_to_searchindex_js = "../searchindex-e6e6c4d6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6599482c.js"></script>
+        <script src="../toc-b1472c6c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -681,7 +681,7 @@ keyword(word: String): int {
 }
 
 # The arms' values are numbers of different types (`0` is an `int`,
-# `length()` a `long`), so the `match` has their common type, `long`, and
+# `length` a `ulong`), so the `match` has their common type, `ulong`, and
 # converts to the `int` this function returns.
 length_of(word: String): int {
     return match (word) {
@@ -733,7 +733,7 @@ must handle every case unless there is an <code>else</code>. The value has the f
 arm’s type, and every other arm’s value must convert to it. When the arms
 are numbers of different types, the value has their common type, as C’s
 <code>? :</code> does (<code>int</code> and <code>long</code> give <code>long</code>), and converts from it wherever
-it goes (<code>0</code> or a <code>long</code> <code>length</code>, returned as an <code>int</code>). A closure in
+it goes (<code>0</code> or a <code>ulong</code> <code>length</code>, returned as an <code>int</code>). A closure in
 an arm’s value cannot use a name the arm binds; use a <code>match</code> statement
 there.</li>
 <li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case
@@ -985,11 +985,10 @@ case.</li>
 <li>An enum whose cases carry nothing cannot be generic, by design: its value
 is a plain integer, so a type parameter would have nothing to describe.
 An enum whose cases carry values can be (<code>enum List&lt;T&gt;</code>).</li>
-<li>An enum whose cases carry values has no derived <code>==</code> that compares the
-values: <code>==</code> compares identity, as for a struct, unless the enum declares
-<code>==</code> (with a matching <code>hash&lt;T&gt;</code> to be a key), or is a
-<a href="#value-enums"><code>[Value]</code> enum</a>. Deriving <code>==</code> and <code>hash</code> from the values
-is planned together with the same for structs.</li>
+<li>An enum whose cases carry values compares by identity with <code>==</code>, as a
+struct does, unless it is a <a href="#value-enums"><code>[Value]</code> enum</a>, is
+<a href="hashing.html#deriving-both-with-equatable"><code>[Equatable]</code></a>, or declares
+<code>==</code> (with a matching <code>hash&lt;T&gt;</code> to be a key).</li>
 <li>A constant is a pattern only when it is declared at module scope.</li>
 <li>A <code>match</code> cannot examine floating-point values.</li>
 <li>The methods of an enum whose cases carry nothing have no value form:
