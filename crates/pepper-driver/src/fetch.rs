@@ -2,8 +2,9 @@
 //! the driver fetches whatever `pep.lock` lists and `.pep/deps` lacks, so a
 //! fresh clone builds with `pepper build` alone. `pep-package fetch` does the
 //! work (it also resolves dependencies `pep.toml` gained since `pep.lock` was
-//! written); without `pep-package`, the driver checks the locked commits out
-//! with git itself, which is how `pep-package` builds its own dependencies.
+//! written, and downloads the hosts' archives where git is missing); without
+//! `pep-package`, the driver checks the locked commits out with git itself,
+//! which is how `pep-package` builds its own dependencies.
 
 use pepper_files::project::{LOCK_FILE, LockedPackage, MANIFEST_FILE, Manifest, find_project, package_directory, read_lock};
 use std::path::{Path, PathBuf};

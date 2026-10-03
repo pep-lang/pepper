@@ -9,6 +9,7 @@
 # package is being updated.
 
 import [Path] from io;
+import "archive";
 import "git";
 import "lock";
 import "manifest";
@@ -113,11 +114,13 @@ export struct Resolver {
                 }
                 var (host, repository) = split_source(source);
                 var dir = package_dir(project, host, repository);
-                var checked = check_out(repository_url(host, repository), dir, pick.commit);
-                if (checked.is_err()) {
-                    return Result<Graph>.Err($"cannot fetch {source}: {checked.error().message}");
+                var fetched = _fetch(host, repository, dir, pick.commit);
+                if (fetched.is_err()) {
+                    return Result<Graph>.Err($"cannot fetch {source}: {fetched.error().message}");
                 }
-                pick.commit = checked.value();
+                var (commit, sha256) = fetched.value();
+                pick.commit = commit;
+                pick.sha256 = sha256;
                 pick.name = _package_name(dir, repository);
                 chosen[source] = pick;
                 changed = true;
@@ -205,11 +208,67 @@ export struct Resolver {
         return Result<OrderedMap<String, Array<Wanted>>>.Ok(wanted);
     }
 
+    # The checksum pep.lock records for `commit` of `source`, if any.
+    _locked_sha256(source: String, commit: String): String {
+        for (var locked in previous) {
+            if (locked.source == source and !locked.commit.is_empty and locked.commit.starts_with(commit)) {
+                return locked.sha256;
+            }
+        }
+        return "";
+    }
+
+    # Puts `commit` of `repository` on `host` in `dir`: a git checkout when
+    # git is on the PATH, else the host's archive of it. Returns the full
+    # commit and the checksum of its files, which must match the one
+    # pep.lock records for that commit.
+    _fetch(host: String, repository: String, dir: Path, commit: String): Result<(String, String)> {
+        var source = host + ":" + repository;
+        if (!has_git()) {
+            var expected = _locked_sha256(source, commit);
+            var at = unpacked(dir);
+            if (at.is_value() and at.value() == commit and !expected.is_empty) {
+                return Result<(String, String)>.Ok((commit, expected));
+            }
+            if (commit.length != 40) {
+                return Result<(String, String)>.Err(
+                    $"git is not on the PATH, and fetching the commit '{commit}' without it needs all 40 digits"
+                );
+            }
+            var fetched = fetch_archive(host, repository, dir, commit, expected);
+            if (fetched.is_err()) {
+                return Result<(String, String)>.Err(fetched.error().message);
+            }
+            return Result<(String, String)>.Ok((commit, fetched.value()));
+        }
+        var checked = check_out(repository_url(host, repository), dir, commit);
+        if (checked.is_err()) {
+            return Result<(String, String)>.Err(checked.error().message);
+        }
+        var full = checked.value();
+        var sha256 = checkout_sha256(dir, full);
+        if (sha256.is_err()) {
+            return Result<(String, String)>.Err(sha256.error().message);
+        }
+        var expected = _locked_sha256(source, full);
+        if (!expected.is_empty and sha256.value() != expected) {
+            return Result<(String, String)>.Err(
+                $"the files of {source} {full.substr(0, 12)} do not match pep.lock: sha256 {sha256.value()}, expected {expected}"
+            );
+        }
+        return Result<(String, String)>.Ok((full, sha256.value()));
+    }
+
     # What `url`'s repository offers, read once per source.
     _remote(source: String): Result<Array<RemoteRef>> {
         var known = _refs.try_get(source);
         if (known.is_value()) {
             return Result<Array<RemoteRef>>.Ok(known.value());
+        }
+        if (!has_git()) {
+            return Result<Array<RemoteRef>>.Err(
+                $"git is not on the PATH: reading which revisions {source} offers needs it (fetching what pep.lock lists does not); install git"
+            );
         }
         var (host, repository) = split_source(source);
         var refs = remote_refs(repository_url(host, repository));
@@ -260,7 +319,8 @@ export struct Resolver {
                 }
                 return Result<Locked>.Ok(Locked("", source, "", commit));
             }
-            if (kept.is_value() and first.kind != "tag") {
+            # A tag can move, so it is looked up again when git can.
+            if (kept.is_value() and (first.kind != "tag" or !has_git())) {
                 return Result<Locked>.Ok(Locked("", source, "", kept.value().commit));
             }
             var refs = _remote(source);

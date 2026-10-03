@@ -57,6 +57,9 @@ pub struct Manifest {
     pub build: Build,
     /// In the order they are written.
     pub dependencies: Vec<Dependency>,
+    /// `[fetch]`'s `hosts`: where `pepper package add` looks a repository
+    /// up, in order.
+    pub hosts: Vec<Host>,
 }
 
 /// `[package]`: the project's metadata.
@@ -258,6 +261,7 @@ impl Manifest {
             package: Package::default(),
             build: Build::default(),
             dependencies: vec![],
+            hosts: Host::ALL.to_vec(),
         };
         let mut package_seen = false;
         for (key, value) in root.get_ref() {
@@ -278,8 +282,13 @@ impl Manifest {
                         manifest.dependencies = parse_dependencies(table, &mut errors);
                     }
                 }
+                "fetch" => {
+                    if let Some(table) = table(key, value, &mut errors) {
+                        manifest.hosts = parse_fetch(table, &mut errors);
+                    }
+                }
                 other => errors.push(ManifestError {
-                    message: format!("unknown table '{}'; a pep.toml has '[package]', '[build]' and '[dependencies]'", other),
+                    message: format!("unknown table '{}'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'", other),
                     span: key.span(),
                 }),
             }
@@ -460,6 +469,40 @@ fn parse_build(table: &DeTable, errors: &mut Vec<ManifestError>) -> Build {
         }
     }
     build
+}
+
+fn parse_fetch(table: &DeTable, errors: &mut Vec<ManifestError>) -> Vec<Host> {
+    const KEYS: [&str; 1] = ["hosts"];
+    let mut hosts = Host::ALL.to_vec();
+    for (key, value) in table {
+        match key.get_ref().as_ref() {
+            "hosts" => {
+                let DeValue::Array(items) = value.get_ref() else {
+                    errors.push(ManifestError {
+                        message: format!("'hosts' must be an array of strings, not {}", kind(value.get_ref())),
+                        span: value.span(),
+                    });
+                    continue;
+                };
+                hosts = vec![];
+                for item in items {
+                    let host = match item.get_ref() {
+                        DeValue::String(s) => Host::ALL.into_iter().find(|h| h.key() == s.as_ref()),
+                        _ => None,
+                    };
+                    match host {
+                        Some(host) => hosts.push(host),
+                        None => errors.push(ManifestError {
+                            message: "'hosts' lists 'github', 'gitlab' or 'codeberg'".to_string(),
+                            span: item.span(),
+                        }),
+                    }
+                }
+            }
+            _ => unknown_key(key, "fetch", &KEYS, errors),
+        }
+    }
+    hosts
 }
 
 fn parse_dependencies(table: &DeTable, errors: &mut Vec<ManifestError>) -> Vec<Dependency> {
@@ -776,8 +819,11 @@ local = { path = "../local" }
         assert_eq!(errors("[package]\nversion = \"1\"\n"), ["package: '[package]' needs a 'name'"]);
         assert_eq!(
             errors("[package]\nname = \"a\"\n[bulid]\n"),
-            ["bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]' and '[dependencies]'"]
+            ["bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'"]
         );
+        assert_eq!(errors("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"gitub\"]\n"), ["\"gitub\": 'hosts' lists 'github', 'gitlab' or 'codeberg'"]);
+        let fetch = parse("[package]\nname = \"a\"\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n").unwrap();
+        assert_eq!(fetch.hosts, [Host::Codeberg, Host::GitHub]);
         assert_eq!(
             errors("[package]\nname = \"a\"\n[build]\nentyr = \"x\"\n"),
             ["entyr: unknown key 'entyr' in '[build]'; expected one of 'entry', 'output', 'include', 'link'"]

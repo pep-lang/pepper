@@ -55,9 +55,12 @@ export struct Manifest {
     # `[package]`'s `name`.
     var name: String = "";
     var requirements: Array<Requirement> = __null;
+    # `[fetch]`'s `hosts`: where `add` looks a repository up, in order.
+    var hosts: Array<String> = __null;
 
     construct() {
         requirements = Array<Requirement>();
+        hosts = ["github", "gitlab", "codeberg"];
     }
 
     # The folder holding it: the package's root.
@@ -99,6 +102,23 @@ export parse_manifest(path: Path, text: String): Result<Manifest> {
     var name = root.lookup("package.name");
     if (name.is_value() and name.value().as_string().is_value()) {
         manifest.name = name.value().as_string().value();
+    }
+    var hosts = root.lookup("fetch.hosts");
+    if (hosts.is_value()) {
+        var items = hosts.value().as_array();
+        if (items.is_empty()) {
+            return Result<Manifest>.Err($"{path.to_string()}: '[fetch]' 'hosts' must be an array of hosts");
+        }
+        manifest.hosts = Array<String>();
+        for (var item in items.value()) {
+            var host = item.as_string();
+            if (host.is_empty() or !is_host(host.value())) {
+                return Result<Manifest>.Err(
+                    $"{path.to_string()}: '[fetch]' 'hosts' lists 'github', 'gitlab' or 'codeberg'"
+                );
+            }
+            manifest.hosts.append(host.value());
+        }
     }
     var dependencies = root.try_get("dependencies");
     if (dependencies.is_empty()) {

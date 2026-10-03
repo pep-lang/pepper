@@ -18,9 +18,12 @@ pep-package [-C <dir>] <command> [arguments]
 
 It works on the project whose `pep.toml` is in the current folder or the
 nearest folder above it (see [Projects: pep.toml](projects.md)). Packages
-are fetched with `git`, which must be on the `PATH`; signing in to a private
+are fetched with `git` when it is on the `PATH`; signing in to a private
 repository is git's concern (its credential helpers and SSH keys), so
 whatever lets `git clone` reach a repository lets `pep-package` fetch it.
+Without git, `pep-package` downloads the host's archive of each commit
+`pep.lock` pins over HTTPS instead (see [Fetching without git](#fetching-without-git)),
+so a project with a `pep.lock` builds on a machine with no git.
 
 `pepper build` fetches on its own what `pep.lock` lists and `.pep/deps`
 lacks, so a fresh clone of a project builds with `pepper build` alone.
@@ -52,12 +55,21 @@ and updates `pep.lock`; everything else keeps its locked revision.
 ### `add <owner/name>[@<range>]`
 
 Adds a dependency to `pep.toml`'s `[dependencies]` and fetches it, keeping
-the file's comments and layout. The repository is on GitHub unless the
-argument starts with `gitlab:` or `codeberg:` (`gitlab:group/pepper-json`).
+the file's comments and layout. An argument that starts with `github:`,
+`gitlab:` or `codeberg:` (`gitlab:group/pepper-json`) names its host.
+Without one, `add` looks the repository up on each host in the order
+`pep.toml`'s `[fetch]` `hosts` lists (GitHub, GitLab, then Codeberg by
+default; see [Projects: pep.toml](projects.md#fetch)) and uses the first
+that has it. When more than one does, it says so:
+
+```text
+pep-package: other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)
+```
 
 ```bash
 pepper package add someone/geometry        # geometry = { github = "someone/geometry", version = "1.4.2" }
 pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
+pepper package add codeberg:third/shapes   # only Codeberg, without looking elsewhere
 ```
 
 Without a range, the dependency gets the newest version tag (as a range
@@ -95,8 +107,9 @@ back.
 ## pep.lock
 
 `pep.lock`, beside `pep.toml`, records the exact commit of every package in
-the dependency graph, its dependencies' dependencies included. Commit it
-with `pep.toml`: it is what makes a fresh clone build the same code.
+the dependency graph, its dependencies' dependencies included, and the
+`sha256` checksum of its files. Commit it with `pep.toml`: it is what makes
+a fresh clone build the same code.
 
 ```toml
 version = 1
@@ -106,7 +119,45 @@ name = "geometry"
 source = "github:someone/geometry"
 version = "1.1.0"
 commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
+sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 ```
+
+The checksum covers the files of the commit as the host's archive of it
+holds them, not the archive's bytes, which a host may compress
+differently from one download to the next. It is the SHA-256 of every
+file, symlink and hard link, in path order, each written as its kind
+(`f`, `x` for a file anyone may run, `l`, `h`), its path, its length and
+its contents. With git, `pep-package` computes it from `git archive` of
+the checkout, which holds the same files, so a lock written with git
+verifies a later fetch without it. A lock from before checksums were kept
+gains them on the next fetch.
+
+A package whose files do not match is an error that names it and both
+checksums:
+
+```text
+pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+```
+
+## Fetching without git
+
+When git is not on the `PATH`, `pep-package` fetches each commit
+`pep.lock` pins as the host's archive of it, over HTTPS, checks its files
+against the lock's `sha256` and unpacks it, without its top-level folder,
+into `.pep/deps`:
+
+| Host | Archive |
+| --- | --- |
+| GitHub | `https://codeload.github.com/<owner>/<name>/tar.gz/<commit>` |
+| GitLab | `https://gitlab.com/<owner>/<name>/-/archive/<commit>/<name>-<commit>.tar.gz` |
+| Codeberg | `https://codeberg.org/<owner>/<name>/archive/<commit>.tar.gz` |
+
+An unpacked package has a `.pep-commit` file naming its commit in place of
+`.git`. Choosing a revision still needs git, since it reads which tags
+and branches a repository offers: `add`, `update`, and a `fetch` that must
+resolve a dependency `pep.lock` does not pin (or a tag, which may have
+moved) fail without it, saying so. Private repositories need git too, as
+authentication is git's concern.
 
 ## Resolving versions
 
@@ -129,6 +180,7 @@ name each imports it by.
 | Variable | What it does |
 | --- | --- |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Fetches that host's repositories from another address (a mirror, or a folder of repositories as a `file://` URL): `<address>/<owner>/<name>.git` |
+| `PEPPER_PACKAGE_GITHUB_ARCHIVE_URL`, `PEPPER_PACKAGE_GITLAB_ARCHIVE_URL`, `PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL` | Downloads that host's archives, when git is missing, from another `http://` or `https://` address (a mirror): `<address>/<owner>/<name>/<commit>.tar.gz` |
 | `PEPPER_RUNTIME` | The runtime folder whose modules a dependency may not be named like, as for the compiler |
 
 ## Building it
@@ -142,6 +194,3 @@ network:
 cargo build --release
 target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
 ```
-
-Not yet: fetching without git (downloading a host's archive over HTTPS),
-and `add` looking a name up on several hosts.

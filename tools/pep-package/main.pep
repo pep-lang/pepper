@@ -1,5 +1,6 @@
 # pep-package: the package manager, run as `pepper package`. It reads a
-# project's pep.toml, fetches its dependencies with git into the project's
+# project's pep.toml, fetches its dependencies with git (or, without git,
+# as the host's archive of each locked commit) into the project's
 # `.pep/deps`, and records the exact revision of each in pep.lock.
 #
 #     pepper package fetch                      # what pep.lock lists, resolving pep.toml's changes
@@ -44,7 +45,7 @@ main(args: String[]): int {
     var fetch = parser.command("fetch", "Fetches what pep.lock lists, resolving what pep.toml changed since");
     var add = parser.command("add", "Adds a dependency at its newest version, or at a range given after @");
     var add_package = add.positional(
-        "package", "owner/name[@range], on GitHub unless it starts with gitlab: or codeberg:"
+        "package", "[host:]owner/name[@range]; without a host, the first of pep.toml's [fetch] hosts that has it"
     );
     var add_name = add.option(
         "name", "n", "the name source code imports it by (default: the repository's name)", value_name = "NAME"
@@ -169,9 +170,6 @@ struct Project {
         if (previous.is_err()) {
             return Result<Graph>.Err(previous.error().message);
         }
-        if (!has_git() and !manifest.value().requirements.is_empty) {
-            return Result<Graph>.Err("git is not on the PATH; install git to fetch dependencies");
-        }
         var resolver = Resolver(dir, manifest.value(), previous.value());
         resolver.update_all = update_all;
         resolver.update = update;
@@ -243,7 +241,7 @@ struct Project {
     }
 
     add(spec: String, given_name: String): int {
-        var host = "github";
+        var host = "";
         var rest = spec;
         var prefixed = spec.split_once(":");
         if (prefixed.is_value() and is_host(prefixed.value().0)) {
@@ -261,7 +259,7 @@ struct Project {
             }
         }
         var parts = rest.split("/");
-        if (parts.count < 2 or (parts.count > 2 and host != "gitlab") or parts.contains("")) {
+        if (parts.count < 2 or (parts.count > 2 and host != "gitlab" and !host.is_empty) or parts.contains("")) {
             return fail($"'{spec}' must name a repository as owner/name");
         }
         var name = given_name.is_empty ? default_name(rest) : given_name;
@@ -281,15 +279,27 @@ struct Project {
         if (runtime_has_module(name)) {
             return fail($"'{name}' is the name of a runtime module; add the dependency with --name");
         }
+        var refs = Array<RemoteRef>();
+        if (host.is_empty) {
+            var found = _look_up(rest, manifest.value().hosts);
+            if (found.is_err()) {
+                return fail(found.error().message);
+            }
+            var (found_host, found_refs) = found.value();
+            host = found_host;
+            refs = found_refs;
+        } else if (range.is_empty) {
+            var read = remote_refs(repository_url(host, rest));
+            if (read.is_err()) {
+                return fail($"cannot read {host}:{rest}: {read.error().message}");
+            }
+            refs = read.value();
+        }
         if (range.is_empty) {
             # The newest version, as a caret range; none when the
             # repository has no version tags (then its default branch).
-            var refs = remote_refs(repository_url(host, rest));
-            if (refs.is_err()) {
-                return fail($"cannot read {host}:{rest}: {refs.error().message}");
-            }
             var newest = Optional<Version>.Empty;
-            for (var ref in refs.value()) {
+            for (var ref in refs) {
                 if (ref.name.starts_with("refs/tags/")) {
                     var version = parse_version(ref.name.substr(10, ref.name.length));
                     if (version.is_value()
@@ -331,6 +341,47 @@ struct Project {
         _notes(graph.value());
         say($"'import {name};' now imports {host}:{rest}");
         return 0;
+    }
+
+    # The first of `hosts` that has `repository`, and what it offers. Says
+    # so when another host has it too.
+    _look_up(repository: String, hosts: Array<String>): Result<(String, Array<RemoteRef>)> {
+        if (!has_git()) {
+            return Result<(String, Array<RemoteRef>)>.Err(
+                $"git is not on the PATH: looking {repository} up needs it; install git"
+            );
+        }
+        var found = Array<String>();
+        var chosen = Array<RemoteRef>();
+        var failures = Array<String>();
+        for (var host in hosts) {
+            # Only GitLab has nested groups.
+            if (repository.split("/").count > 2 and host != "gitlab") {
+                continue;
+            }
+            var refs = remote_refs(repository_url(host, repository));
+            if (refs.is_err()) {
+                failures.append($"{host}: {refs.error().message}");
+                continue;
+            }
+            if (found.is_empty) {
+                chosen = refs.value();
+            }
+            found.append(host);
+        }
+        if (found.is_empty) {
+            var text = $"no host has {repository} (looked on {", ".join(hosts)})";
+            for (var failure in failures) {
+                text += "\n  " + failure;
+            }
+            return Result<(String, Array<RemoteRef>)>.Err(text);
+        }
+        if (found.count > 1) {
+            say(
+                $"{repository} is on {" and ".join(found)}; adding {found[0]}:{repository} (prefix it with '{found[1]}:' for another)"
+            );
+        }
+        return Result<(String, Array<RemoteRef>)>.Ok((found[0], chosen));
     }
 
     remove(spec: String): int {

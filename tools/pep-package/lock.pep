@@ -9,6 +9,7 @@
 #     source = "github:someone/geometry"
 #     version = "1.2.3"
 #     commit = "0123456789abcdef0123456789abcdef01234567"
+#     sha256 = "<the checksum of its files: see archive.pep>"
 
 import [File, Path] from io;
 import toml;
@@ -23,6 +24,9 @@ export struct Locked {
     var version: String = "";
     # The full commit.
     var commit: String = "";
+    # The checksum of the package's files (`files_sha256`), which a fetch
+    # without git verifies; empty in a lock written before it was kept.
+    var sha256: String = "";
 
     construct() {}
 
@@ -72,6 +76,7 @@ export read_lock(path: Path): Result<Array<Locked>> {
         locked.source = _text(item, "source");
         locked.version = _text(item, "version");
         locked.commit = _text(item, "commit");
+        locked.sha256 = _text(item, "sha256");
         if (locked.source.is_empty or locked.commit.is_empty) {
             return Result<Array<Locked>>.Err($"{path.to_string()}: every package needs a 'source' and a 'commit'");
         }
@@ -104,6 +109,9 @@ export lock_text(packages: Array<Locked>): String {
             text += "version = " + toml.TomlValue.String(locked.version).to_string() + "\n";
         }
         text += "commit = " + toml.TomlValue.String(locked.commit).to_string() + "\n";
+        if (!locked.sha256.is_empty) {
+            text += "sha256 = " + toml.TomlValue.String(locked.sha256).to_string() + "\n";
+        }
     }
     return text;
 }

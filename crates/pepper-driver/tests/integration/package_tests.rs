@@ -256,3 +256,184 @@ fn pep_build_dir() -> PathBuf {
     assert!(exe.is_file(), "{} is missing; build it with `cargo build` (or run `cargo test --workspace`)", exe.display());
     dir
 }
+
+/// An HTTP server on 127.0.0.1 that stands in for the hosts' archive
+/// downloads: `GET /<path>` answers with the file `<root>/<path>`, or 404.
+/// Returns its address, `http://127.0.0.1:<port>`.
+fn archive_server(root: PathBuf) -> String {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut request = vec![];
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && stream.read(&mut byte).is_ok_and(|n| n == 1) {
+                request.push(byte[0]);
+            }
+            let request = String::from_utf8_lossy(&request).to_string();
+            let path = request.split(' ').nth(1).unwrap_or("/").trim_start_matches('/').to_string();
+            let response = match std::fs::read(root.join(&path)) {
+                Ok(body) => {
+                    let mut response = format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).into_bytes();
+                    response.extend(body);
+                    response
+                }
+                Err(_) => b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+            };
+            let _ = stream.write_all(&response);
+        }
+    });
+    address
+}
+
+/// The full commit `revision` names in the bare repository `name` of the
+/// test hosts.
+fn commit_of(name: &str, revision: &str) -> String {
+    let output = Command::new("git")
+        .args(["rev-parse", &format!("{revision}^{{commit}}")])
+        .current_dir(hosts().unwrap().join(format!("{name}.git")))
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+/// Writes GitHub's archive of `revision` of `name` (a `.tar.gz` whose files
+/// sit in one top-level folder) where the archive server serves the
+/// archive of `commit`: `<root>/<name>/<commit>.tar.gz`.
+fn write_archive(root: &Path, name: &str, revision: &str, commit: &str) {
+    let file = root.join(name).join(format!("{commit}.tar.gz"));
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    let short = name.rsplit('/').next().unwrap();
+    let prefix = format!("--prefix={short}-{commit}/");
+    let output = format!("--output={}", file.display());
+    git(&hosts().unwrap().join(format!("{name}.git")), &["archive", "--format=tar.gz", &prefix, &output, revision]);
+}
+
+/// Runs `pep-package` with `arguments` in `dir`, with no git on the PATH
+/// and archives downloaded from `archives`.
+fn package_without_git(dir: &Path, arguments: &[&str], archives: &str) -> Output {
+    let empty = dir.join("no_git_bin");
+    std::fs::create_dir_all(&empty).unwrap();
+    Command::new(support::pepper_tool("pep-package"))
+        .args(arguments)
+        .current_dir(dir)
+        .env("PATH", &empty)
+        .env("PEPPER_RUNTIME", repo_root().join("runtime"))
+        .env("PEPPER_PACKAGE_GITHUB_ARCHIVE_URL", archives)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn a_locked_project_fetches_archives_without_git_and_checks_their_files() {
+    if hosts().is_none() {
+        return;
+    }
+    let dir = project("no_git", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    let fetched = package(&dir, &["fetch"]);
+    assert!(fetched.status.success(), "{}", stderr(&fetched));
+    // Fetching with git records the checksum of each package's files.
+    let locked = lock(&dir);
+    assert_eq!(locked.matches("\nsha256 = \"").count(), 2, "{}", locked);
+
+    let archives = dir.join("archives");
+    let geometry = commit_of("someone/geometry", "v1.1.0");
+    let numbers = commit_of("other/numbers", "v1.3.1");
+    write_archive(&archives, "someone/geometry", &geometry, &geometry);
+    write_archive(&archives, "other/numbers", &numbers, &numbers);
+    let server = archive_server(archives.clone());
+
+    // A fresh clone on a machine with no git: the archives of the locked
+    // commits, whose files match pep.lock's checksums.
+    std::fs::remove_dir_all(dir.join(".pep")).unwrap();
+    let unpacked = package_without_git(&dir, &["fetch"], &server);
+    assert!(unpacked.status.success(), "{}", stderr(&unpacked));
+    assert_eq!(lock(&dir), locked, "the lock stays as it was");
+    assert_eq!(build_and_run(&dir), Ok("1.1.0 1.3.1\n".to_string()));
+    // Fetching again finds them in place.
+    let again = package_without_git(&dir, &["fetch"], &server);
+    assert!(again.status.success(), "{}", stderr(&again));
+
+    // A tampered archive: 1.3.1's commit serves 2.0.0's files.
+    write_archive(&archives, "other/numbers", "v2.0.0", &numbers);
+    std::fs::remove_dir_all(dir.join(".pep")).unwrap();
+    let tampered = package_without_git(&dir, &["fetch"], &server);
+    assert_eq!(tampered.status.code(), Some(1));
+    let message = stderr(&tampered);
+    let expected = locked.split("source = \"github:other/numbers\"").nth(1).unwrap().split("sha256 = \"").nth(1).unwrap().split('"').next().unwrap();
+    assert!(
+        message.contains(&format!("cannot fetch github:other/numbers: the files of github:other/numbers {} do not match pep.lock: sha256 ", &numbers[..12]))
+            && message.contains(&format!(", expected {expected}")),
+        "{}",
+        message
+    );
+
+    // Resolving what pep.lock does not pin needs git.
+    let added = package_without_git(&dir, &["add", "other/numbers", "--name", "more"], &server);
+    assert_eq!(added.status.code(), Some(1));
+    assert!(stderr(&added).contains("git is not on the PATH"), "{}", stderr(&added));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn add_looks_a_repository_up_on_each_host() {
+    if hosts().is_none() {
+        return;
+    }
+    // A Codeberg with `third/shapes`, and a GitLab with nothing, so no
+    // lookup leaves the machine.
+    let codeberg = std::env::temp_dir().join(format!("pepper_package_codeberg_{}", std::process::id()));
+    let gitlab = std::env::temp_dir().join(format!("pepper_package_gitlab_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&codeberg);
+    std::fs::create_dir_all(&gitlab).unwrap();
+    repository(&codeberg, "third/shapes", &["0.2.0"], |_| vec![("module.pep", "export sides(): int {\n    return 4;\n}\n".to_string())]);
+    repository(&codeberg, "other/numbers", &["9.0.0"], |_| vec![("module.pep", String::new())]);
+    let add = |dir: &Path, spec: &str| {
+        Command::new(support::pepper_tool("pep-package"))
+            .args(["add", spec])
+            .current_dir(dir)
+            .env("PEPPER_RUNTIME", repo_root().join("runtime"))
+            .env("PEPPER_PACKAGE_CODEBERG_URL", format!("file://{}", codeberg.display()))
+            .env("PEPPER_PACKAGE_GITLAB_URL", format!("file://{}", gitlab.display()))
+            .output()
+            .unwrap()
+    };
+
+    // Only Codeberg has it: no prefix needed.
+    let dir = project("lookup", "");
+    let added = add(&dir, "third/shapes");
+    assert!(added.status.success(), "{}", stderr(&added));
+    assert!(
+        std::fs::read_to_string(dir.join("pep.toml")).unwrap().contains("shapes = { codeberg = \"third/shapes\", version = \"0.2.0\" }"),
+        "{}",
+        std::fs::read_to_string(dir.join("pep.toml")).unwrap()
+    );
+    assert!(stderr(&added).contains("'import shapes;' now imports codeberg:third/shapes"), "{}", stderr(&added));
+
+    // On two hosts: the first in the order wins, and add says so.
+    let both = add(&dir, "other/numbers");
+    assert!(both.status.success(), "{}", stderr(&both));
+    assert!(
+        stderr(&both).contains("other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)"),
+        "{}",
+        stderr(&both)
+    );
+
+    // pep.toml's [fetch] hosts changes the order.
+    let ordered = project("lookup_order", "");
+    let toml = std::fs::read_to_string(ordered.join("pep.toml")).unwrap();
+    std::fs::write(ordered.join("pep.toml"), toml + "\n[fetch]\nhosts = [\"codeberg\", \"github\"]\n").unwrap();
+    let first = add(&ordered, "other/numbers");
+    assert!(first.status.success(), "{}", stderr(&first));
+    assert!(std::fs::read_to_string(ordered.join("pep.toml")).unwrap().contains("numbers = { codeberg = \"other/numbers\", version = \"9.0.0\" }"));
+
+    // On no host.
+    let missing = add(&dir, "nobody/nothing");
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(stderr(&missing).contains("no host has nobody/nothing (looked on github, gitlab, codeberg)"), "{}", stderr(&missing));
+    for dir in [&dir, &ordered, &codeberg, &gitlab] {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
