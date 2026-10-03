@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5f641bd7.js";
+            window.path_to_searchindex_js = "searchindex-0e249424.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8e9cc5d7.js"></script>
@@ -18606,12 +18606,28 @@ same copies.</p>
 <p><code>pepper package</code> fetches them there and records the commit of each, the
 dependencies’ dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
 <code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
-<code>.pep/deps</code> lacks, so a fresh clone builds with <code>pepper build</code> alone. See
+<code>.pep/deps</code> lacks, so a fresh clone builds with <code>pepper build</code> alone, with
+git or, where git is missing, by downloading each locked commit’s archive
+over HTTPS and checking it against the checksum <code>pep.lock</code> records. See
 <a href="#the-package-manager-pep-package">The package manager: pep-package</a>, which also says how
 versions are chosen when several packages need one.</p>
 <pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
 pepper build
 </code></pre>
+<h2 id="fetch"><a class="header" href="#fetch"><code>[fetch]</code></a></h2>
+<pre><code class="language-toml">[fetch]
+hosts = ["codeberg", "github"]
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>What it is</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>hosts</code></td><td>The hosts <code>pepper package add owner/name</code> looks a repository up on, in order, when the argument names none; it adds the first that has it</td><td><code>["github", "gitlab", "codeberg"]</code></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="errors-4"><a class="header" href="#errors-4">Errors</a></h2>
 <p>A problem in <code>pep.toml</code> is an error located at the key or value to change:</p>
 <pre><code class="language-text">pep.toml:9:1: error: dependency 'io' has the name of the runtime module 'io'; give it another name, which source code then imports
@@ -18649,9 +18665,12 @@ pepper package fetch                         # what pep.lock lists
 </code></pre>
 <p>It works on the project whose <code>pep.toml</code> is in the current folder or the
 nearest folder above it (see <a href="#projects-peptoml">Projects: pep.toml</a>). Packages
-are fetched with <code>git</code>, which must be on the <code>PATH</code>; signing in to a private
+are fetched with <code>git</code> when it is on the <code>PATH</code>; signing in to a private
 repository is git’s concern (its credential helpers and SSH keys), so
-whatever lets <code>git clone</code> reach a repository lets <code>pep-package</code> fetch it.</p>
+whatever lets <code>git clone</code> reach a repository lets <code>pep-package</code> fetch it.
+Without git, <code>pep-package</code> downloads the host’s archive of each commit
+<code>pep.lock</code> pins over HTTPS instead (see <a href="#fetching-without-git">Fetching without git</a>),
+so a project with a <code>pep.lock</code> builds on a machine with no git.</p>
 <p><code>pepper build</code> fetches on its own what <code>pep.lock</code> lists and <code>.pep/deps</code>
 lacks, so a fresh clone of a project builds with <code>pepper build</code> alone.</p>
 <h2 id="options-and-commands"><a class="header" href="#options-and-commands">Options and commands</a></h2>
@@ -18675,17 +18694,24 @@ lacks, so a fresh clone of a project builds with <code>pepper build</code> alone
 </div>
 <p>The exit status is 0 on success, 1 when a command fails, and 2 for a
 mistake on the command line.</p>
-<h3 id="fetch"><a class="header" href="#fetch"><code>fetch</code></a></h3>
+<h3 id="fetch-1"><a class="header" href="#fetch-1"><code>fetch</code></a></h3>
 <p>Fetches every package in <code>pep.lock</code> into the project’s <code>.pep/deps</code> at its
 locked commit. When <code>pep.toml</code> names a dependency <code>pep.lock</code> does not list,
 or asks for a revision the locked one does not satisfy, <code>fetch</code> resolves it
 and updates <code>pep.lock</code>; everything else keeps its locked revision.</p>
 <h3 id="add-ownernamerange"><a class="header" href="#add-ownernamerange"><code>add &lt;owner/name&gt;[@&lt;range&gt;]</code></a></h3>
 <p>Adds a dependency to <code>pep.toml</code>’s <code>[dependencies]</code> and fetches it, keeping
-the file’s comments and layout. The repository is on GitHub unless the
-argument starts with <code>gitlab:</code> or <code>codeberg:</code> (<code>gitlab:group/pepper-json</code>).</p>
+the file’s comments and layout. An argument that starts with <code>github:</code>,
+<code>gitlab:</code> or <code>codeberg:</code> (<code>gitlab:group/pepper-json</code>) names its host.
+Without one, <code>add</code> looks the repository up on each host in the order
+<code>pep.toml</code>’s <code>[fetch]</code> <code>hosts</code> lists (GitHub, GitLab, then Codeberg by
+default; see <a href="#fetch">Projects: pep.toml</a>) and uses the first
+that has it. When more than one does, it says so:</p>
+<pre><code class="language-text">pep-package: other/numbers is on github and codeberg; adding github:other/numbers (prefix it with 'codeberg:' for another)
+</code></pre>
 <pre><code class="language-bash">pepper package add someone/geometry        # geometry = { github = "someone/geometry", version = "1.4.2" }
 pepper package add someone/geometry@1.2.x  # ... version = "1.2.x"
+pepper package add codeberg:third/shapes   # only Codeberg, without looking elsewhere
 </code></pre>
 <p>Without a range, the dependency gets the newest version tag (as a range
 that accepts compatible later versions: <code>1.4.2</code> accepts 1.4.2 up to, not
@@ -18711,8 +18737,9 @@ that does not build is rolled back, and the command lists those it rolled
 back.</p>
 <h2 id="peplock"><a class="header" href="#peplock">pep.lock</a></h2>
 <p><code>pep.lock</code>, beside <code>pep.toml</code>, records the exact commit of every package in
-the dependency graph, its dependencies’ dependencies included. Commit it
-with <code>pep.toml</code>: it is what makes a fresh clone build the same code.</p>
+the dependency graph, its dependencies’ dependencies included, and the
+<code>sha256</code> checksum of its files. Commit it with <code>pep.toml</code>: it is what makes
+a fresh clone build the same code.</p>
 <pre><code class="language-toml">version = 1
 
 [[package]]
@@ -18720,7 +18747,44 @@ name = "geometry"
 source = "github:someone/geometry"
 version = "1.1.0"
 commit = "0582024b9cd7a71044ee1aaa7099286f59e2df46"
+sha256 = "7546a83a7f23d13454fd8b8f94281b6fd35f8dce49e9db9729c81208d35dacc8"
 </code></pre>
+<p>The checksum covers the files of the commit as the host’s archive of it
+holds them, not the archive’s bytes, which a host may compress
+differently from one download to the next. It is the SHA-256 of every
+file, symlink and hard link, in path order, each written as its kind
+(<code>f</code>, <code>x</code> for a file anyone may run, <code>l</code>, <code>h</code>), its path, its length and
+its contents. With git, <code>pep-package</code> computes it from <code>git archive</code> of
+the checkout, which holds the same files, so a lock written with git
+verifies a later fetch without it. A lock from before checksums were kept
+gains them on the next fetch.</p>
+<p>A package whose files do not match is an error that names it and both
+checksums:</p>
+<pre><code class="language-text">pep-package: error: cannot fetch github:other/numbers: the files of github:other/numbers 2c7a9e01d4f3 do not match pep.lock: sha256 9f2c..., expected 41b0...
+</code></pre>
+<h2 id="fetching-without-git"><a class="header" href="#fetching-without-git">Fetching without git</a></h2>
+<p>When git is not on the <code>PATH</code>, <code>pep-package</code> fetches each commit
+<code>pep.lock</code> pins as the host’s archive of it, over HTTPS, checks its files
+against the lock’s <code>sha256</code> and unpacks it, without its top-level folder,
+into <code>.pep/deps</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Host</th><th>Archive</th></tr>
+</thead>
+<tbody>
+<tr><td>GitHub</td><td><code>https://codeload.github.com/&lt;owner&gt;/&lt;name&gt;/tar.gz/&lt;commit&gt;</code></td></tr>
+<tr><td>GitLab</td><td><code>https://gitlab.com/&lt;owner&gt;/&lt;name&gt;/-/archive/&lt;commit&gt;/&lt;name&gt;-&lt;commit&gt;.tar.gz</code></td></tr>
+<tr><td>Codeberg</td><td><code>https://codeberg.org/&lt;owner&gt;/&lt;name&gt;/archive/&lt;commit&gt;.tar.gz</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>An unpacked package has a <code>.pep-commit</code> file naming its commit in place of
+<code>.git</code>. Choosing a revision still needs git, since it reads which tags
+and branches a repository offers: <code>add</code>, <code>update</code>, and a <code>fetch</code> that must
+resolve a dependency <code>pep.lock</code> does not pin (or a tag, which may have
+moved) fail without it, saying so. Private repositories need git too, as
+authentication is git’s concern.</p>
 <h2 id="resolving-versions"><a class="header" href="#resolving-versions">Resolving versions</a></h2>
 <p>The whole project uses one version of each package: one checkout of
 <code>github:other/numbers</code> serves every package that depends on it, whatever
@@ -18744,6 +18808,7 @@ declares, and <code>pep-package</code> says which requirement it overrode.</li>
 </thead>
 <tbody>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Fetches that host’s repositories from another address (a mirror, or a folder of repositories as a <code>file://</code> URL): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;.git</code></td></tr>
+<tr><td><code>PEPPER_PACKAGE_GITHUB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_GITLAB_ARCHIVE_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_ARCHIVE_URL</code></td><td>Downloads that host’s archives, when git is missing, from another <code>http://</code> or <code>https://</code> address (a mirror): <code>&lt;address&gt;/&lt;owner&gt;/&lt;name&gt;/&lt;commit&gt;.tar.gz</code></td></tr>
 <tr><td><code>PEPPER_RUNTIME</code></td><td>The runtime folder whose modules a dependency may not be named like, as for the compiler</td></tr>
 </tbody>
 </table>
@@ -18756,8 +18821,6 @@ network:</p>
 <pre><code class="language-bash">cargo build --release
 target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
 </code></pre>
-<p>Not yet: fetching without git (downloading a host’s archive over HTTPS),
-and <code>add</code> looking a name up on several hosts.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="formatting-with-pep-fmt"><a class="header" href="#formatting-with-pep-fmt">Formatting with pep-fmt</a></h1>
 <p><code>pep-fmt</code> rewrites Pepper source in one standard style, so that every Pepper
