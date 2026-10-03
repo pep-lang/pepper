@@ -361,8 +361,24 @@ export struct TarReader {
     ## (which Windows would read as a separator or a drive) is an
     ## `is_invalid_input()` error. Files are written (replacing a file
     ## already there) and directories created; a hard link becomes a copy of
-    ## the file it names, which must be an earlier entry. Symlinks, devices
-    ## and FIFOs are skipped, as are permission bits and modification times.
+    ## the file it names, which must be an earlier entry. Devices and FIFOs
+    ## are skipped.
+    ##
+    ## Each file and directory gets the entry's modification time and, on
+    ## Linux and macOS, its permission bits less the process umask, as
+    ## `tar` gives them by default, so a script keeps its executable bit;
+    ## the setuid, setgid and sticky bits are never applied. A directory's
+    ## mode and time are set once everything inside it is written, so a
+    ## read-only directory can still be filled. A directory that already
+    ## exists keeps its own. On Windows and WASI permission bits are not
+    ## applied.
+    ##
+    ## Symlinks are made after every other entry, so no file is ever
+    ## written through one, and only when they stay inside `target`: a link
+    ## whose target is absolute or climbs out of `target` with `..`, or that
+    ## would be made inside another symlink, is skipped. Windows, where
+    ## making a symlink needs Developer Mode or an administrator, skips them
+    ## all.
     ##
     ## @param target the directory to extract into
     ## @param strip_components how many leading path components to drop
@@ -385,16 +401,20 @@ export struct TarReader {
         if (created.is_err()) {
             return created;
         }
+        # The directories this extraction made, with their mode and time,
+        # and the symlinks it makes at the end.
+        var directories = Array<(io.Path, uint, long)>();
+        var links = Array<(String[], String)>();
         while (true) {
             var next = next_entry();
             if (next.is_err()) {
                 return io.IoResult<void>.err(next.error());
             }
             if (next.value().is_empty()) {
-                return io.IoResult<void>.ok();
+                break;
             }
             var entry = next.value().value();
-            if (entry.kind != EntryKind.File && entry.kind != EntryKind.Directory && entry.kind != EntryKind.HardLink) {
+            if (entry.kind == EntryKind.Other) {
                 continue;
             }
             var relative = _tar_safe_components(entry.path, strip_components);
@@ -404,12 +424,31 @@ export struct TarReader {
             if (relative.value().is_empty) {
                 continue;
             }
+            if (entry.kind == EntryKind.Symlink) {
+                links.append((relative.value(), entry.link_target));
+                continue;
+            }
             var destination = _tar_join(target, relative.value());
+            var mode = entry.mode & 511;  # never setuid, setgid or sticky
+            var modified = entry.modified * 1000000000;
             if (entry.kind == EntryKind.Directory) {
-                var made = io.Directory.create_all(destination);
+                if (destination.is_directory()) {
+                    continue;
+                }
+                var parent = destination.parent();
+                if (parent.is_value()) {
+                    var made = io.Directory.create_all(parent.value());
+                    if (made.is_err()) {
+                        return made;
+                    }
+                }
+                # The owner may fill it whatever its mode; `_tar_finish`
+                # takes away what the entry does not grant.
+                var made = io.Directory.create(destination, mode = mode | 448);
                 if (made.is_err()) {
                     return made;
                 }
+                directories.append((destination, mode, modified));
                 continue;
             }
             var parent = destination.parent();
@@ -419,6 +458,12 @@ export struct TarReader {
                     return made;
                 }
             }
+            var opened = _tar_create(destination, mode);
+            if (opened.is_err()) {
+                return io.IoResult<void>.err(opened.error());
+            }
+            var file = opened.value();
+            io.IoResult<void> written;
             if (entry.kind == EntryKind.HardLink) {
                 var linked = _tar_safe_components(entry.link_target, strip_components);
                 if (linked.is_err()) {
@@ -427,42 +472,184 @@ export struct TarReader {
                 if (linked.value().is_empty) {
                     return io.IoResult<void>.err(_tar_error($"tar hard link '{entry.path}' has an invalid target"));
                 }
-                var copied = io.File.copy(_tar_join(target, linked.value()), destination);
-                if (copied.is_err()) {
-                    return io.IoResult<void>.err(copied.error());
-                }
-                continue;
+                written = _tar_copy(_tar_join(target, linked.value()), file);
+            } else {
+                written = _write_entry(file);
             }
-            var written = _write_entry(destination);
+            if (written.is_ok()) {
+                written = file.set_modified(modified);
+            }
+            var closed = file.close();
+            if (written.is_err()) {
+                return written;
+            }
+            if (closed.is_err()) {
+                return closed;
+            }
+        }
+        for (var (relative, link_target) in links) {
+            var made = _tar_symlink(target, relative, link_target);
+            if (made.is_err()) {
+                return made;
+            }
+        }
+        # Deepest first: setting a directory's time does not change its
+        # parent's.
+        var index = directories.count;
+        while (index > 0) {
+            index -= 1;
+            var (path, mode, modified) = directories[index];
+            var finished = _tar_finish(path, mode, modified);
+            if (finished.is_err()) {
+                return finished;
+            }
+        }
+        return io.IoResult<void>.ok();
+    }
+
+    # Writes the current entry's contents to `file`.
+    _write_entry(file: io.File): io.IoResult<void> {
+        while (_left > 0) {
+            var chunk = Array<u8>();
+            var read = read(chunk, 65536);
+            if (read.is_err()) {
+                return io.IoResult<void>.err(read.error());
+            }
+            var written = file.write_all(chunk);
             if (written.is_err()) {
                 return written;
             }
         }
         return io.IoResult<void>.ok();
     }
+}
 
-    # Writes the current entry's contents to a new file at `destination`.
-    _write_entry(destination: io.Path): io.IoResult<void> {
-        var opened = io.File.create(destination);
-        if (opened.is_err()) {
-            return io.IoResult<void>.err(opened.error());
+# A new file at `destination` with permission bits `mode` (less the umask),
+# replacing whatever non-directory is there: removing it first means a file
+# another path also links to is left alone, and so is a symlink's target.
+_tar_create(destination: io.Path, mode: uint): io.IoResult<io.File> {
+    var existing = destination.symlink_metadata();
+    if (existing.is_ok() && (existing.value().is_symlink || !existing.value().is_directory)) {
+        var removed = io.File.remove(destination);
+        if (removed.is_err()) {
+            return io.IoResult<io.File>.err(removed.error());
         }
-        var file = opened.value();
-        while (_left > 0) {
-            var chunk = Array<u8>();
-            var read = read(chunk, 65536);
-            if (read.is_err()) {
-                file.close();
-                return io.IoResult<void>.err(read.error());
-            }
-            var written = file.write_all(chunk);
-            if (written.is_err()) {
-                file.close();
-                return written;
-            }
-        }
-        return file.close();
     }
+    return io.OpenOptions().write(true).create_new(true).mode(mode).open(destination);
+}
+
+# Copies the file at `from`, an entry extracted earlier, into `to`.
+_tar_copy(from: io.Path, to: io.File): io.IoResult<void> {
+    var opened = io.File.open(from);
+    if (opened.is_err()) {
+        return io.IoResult<void>.err(opened.error());
+    }
+    var source = opened.value();
+    while (true) {
+        var chunk = Array<u8>();
+        var read = source.read(chunk, 65536);
+        if (read.is_err()) {
+            return io.IoResult<void>.err(read.error());
+        }
+        if (read.value() == 0) {
+            return io.IoResult<void>.ok();
+        }
+        var written = to.write_all(chunk);
+        if (written.is_err()) {
+            return written;
+        }
+    }
+    return io.IoResult<void>.ok();
+}
+
+# Makes the symlink at `relative` under `target` pointing to `link_target`,
+# unless the link would leave `target` (see `TarReader.extract`); succeeds
+# without making it then.
+[Target(!OS(Windows))]
+_tar_symlink(target: io.Path, relative: String[], link_target: String): io.IoResult<void> {
+    if (!_tar_link_inside(relative, link_target)) {
+        return io.IoResult<void>.ok();
+    }
+    # A symlink among the link's parents (one this extraction just made, or
+    # one already there) could take a relative target somewhere else.
+    var parent = target;
+    var index: ulong = 0;
+    while (index + 1 < relative.count) {
+        parent = parent.join(relative[index]);
+        var m = parent.symlink_metadata();
+        if (m.is_ok() && m.value().is_symlink) {
+            return io.IoResult<void>.ok();
+        }
+        index += 1;
+    }
+    var made = io.Directory.create_all(parent);
+    if (made.is_err()) {
+        return made;
+    }
+    var destination = parent.join(relative[relative.count - 1]);
+    var existing = destination.symlink_metadata();
+    if (existing.is_ok() && (existing.value().is_symlink || !existing.value().is_directory)) {
+        var removed = io.File.remove(destination);
+        if (removed.is_err()) {
+            return removed;
+        }
+    }
+    return io.File.symlink(io.Path(link_target), destination);
+}
+
+[Target(OS(Windows))]
+_tar_symlink(target: io.Path, relative: String[], link_target: String): io.IoResult<void> {
+    return io.IoResult<void>.ok();
+}
+
+# Whether a symlink at `relative` pointing to `link_target` stays inside
+# the directory it is extracted into: the target is relative, and its `..`
+# components never climb above that directory, counted from the link's.
+_tar_link_inside(relative: String[], link_target: String): bool {
+    if (link_target.is_empty
+        || link_target.starts_with("/")
+        || link_target.contains("\\")
+        || link_target.contains(":")) {
+        return false;
+    }
+    var depth = relative.count - 1;
+    for (var component in link_target.split("/")) {
+        if (component == "..") {
+            if (depth == 0) {
+                return false;
+            }
+            depth -= 1;
+        } else if (!component.is_empty && component != ".") {
+            depth += 1;
+        }
+    }
+    return true;
+}
+
+# Gives a directory this extraction made its entry's time and, where there
+# are permission bits, takes away the owner bits (octal 700) it was made
+# with that the entry's `mode` does not grant; mkdir already applied the
+# umask to the rest.
+[Target(OS(Linux) || OS(Mac))]
+_tar_finish(path: io.Path, mode: uint, modified: long): io.IoResult<void> {
+    var timed = path.set_modified(modified);
+    if (timed.is_err()) {
+        return timed;
+    }
+    if ((mode & 448) == 448) {
+        return io.IoResult<void>.ok();
+    }
+    var m = path.metadata();
+    if (m.is_err()) {
+        return io.IoResult<void>.err(m.error());
+    }
+    var extra = 448 ^ (mode & 448);
+    return path.set_permissions((m.value().permissions | extra) ^ extra);
+}
+
+[Target(OS(Windows) || OS(Wasi))]
+_tar_finish(path: io.Path, mode: uint, modified: long): io.IoResult<void> {
+    return path.set_modified(modified);
 }
 
 extend TarReader with io.Reader;

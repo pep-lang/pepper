@@ -521,6 +521,183 @@ if (real.is_ok()) {
 }
 ```
 
+#### read_link
+
+```pepper
+read_link(): IoResult<Path>
+```
+
+Returns the target a symbolic link points to, as stored in the link
+(`readlink` on POSIX; on Windows the reparse point's target, junctions
+included). Only the link itself is read: a relative target stays
+relative to the directory holding the link, and the target need not
+exist.
+
+On Windows the `\??\` prefix of an absolute target is removed
+(`\??\UNC\server\share` becomes `\\server\share`).
+
+**Returns**
+- the link's target; an error with `is_invalid_input()` when the path is not a symlink, `is_not_found()` when it is missing or empty, or another platform error
+
+**See also**
+- `File.symlink`
+- `Directory.symlink`
+
+**Example**
+```pepper
+import io;
+
+var target = io.Path("current").read_link();
+if (target.is_ok()) {
+    print(target.value().to_string());
+}
+```
+
+#### set_permissions
+
+```pepper
+set_permissions(mode: Mode): IoResult<void>
+```
+
+Sets the permission bits of the file or directory at this path,
+following symlinks (`chmod` on POSIX).
+
+`mode` holds the raw platform bits, as `Metadata.permissions` reports
+them: on POSIX the `mode_t` bits `mode & 07777` (493, octal 755, for
+`rwxr-xr-x`). A directory's bits control listing it (r), creating and
+removing entries in it (w) and reaching anything inside it (x). On
+Windows `mode` is the `FILE_ATTRIBUTE_*` word, and only
+`FILE_ATTRIBUTE_READONLY` (1) is applied. WASI has no permission
+bits, and this fails. `set_read_only` and `set_executable` change one
+property portably.
+
+**Parameters**
+- `mode` — the new permission bits
+
+**Returns**
+- an Ok result once they are set; an error with `is_not_found()` when the path is missing or empty, `is_permission_denied()` when the caller does not own it, or another platform error
+
+**See also**
+- `File.set_permissions`
+
+**Example**
+```pepper
+import io;
+
+io.Path("deploy.sh").set_permissions(493);   # octal 755: rwxr-xr-x
+```
+
+#### set_read_only
+
+```pepper
+set_read_only(read_only: bool): IoResult<void>
+```
+
+Makes the file or directory at this path read-only, or writable
+again, following symlinks: the portable part of `set_permissions`.
+
+On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner's (octal 200), so nothing becomes writable by
+group or others this way. On Windows it sets or clears
+`FILE_ATTRIBUTE_READONLY`, which Windows ignores on a directory. Fails
+on WASI, which has no permission bits.
+
+**Parameters**
+- `read_only` — true to make it read-only, false to make it writable by its owner
+
+**Returns**
+- an Ok result once it is changed; an error as for `metadata()` or `set_permissions`
+
+**See also**
+- `Metadata.read_only`
+
+**Example**
+```pepper
+import io;
+
+var config = io.Path("settings.toml");
+config.set_read_only(true);
+var ro = config.metadata().value().read_only;   # true
+```
+
+#### set_executable
+
+```pepper
+set_executable(executable: bool): IoResult<void>
+```
+
+Makes the file at this path executable, or not, following symlinks,
+without raw permission bits.
+
+On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as `chmod +x` does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as `.exe` decides) and WASI no permission bits, so
+there this does nothing and succeeds.
+
+**Parameters**
+- `executable` — true to make the file executable, false to stop it
+
+**Returns**
+- an Ok result once it is changed; an error as for `metadata()` or `set_permissions`
+
+**Example**
+```pepper
+import io;
+
+io.File.write_text(io.Path("hello.sh"), "#!/bin/sh\necho hello\n");
+io.Path("hello.sh").set_executable(true);
+```
+
+#### set_modified
+
+```pepper
+set_modified(time: long): IoResult<void>
+```
+
+Sets the modification time of the file or directory at this path,
+following symlinks and leaving its access time alone (`utimensat` on
+POSIX, `SetFileTime` on Windows, where the time is kept to 100 ns).
+
+A directory's modification time changes whenever an entry is added or
+removed, so set it after its contents are final.
+
+**Parameters**
+- `time` — the new time, in nanoseconds since the Unix epoch, as `Metadata.modified` reports it
+
+**Returns**
+- an Ok result once the time is set; an error with `is_not_found()` when the path is missing or empty, `is_permission_denied()` when the caller may not change it, or another platform error
+
+**See also**
+- `File.set_modified`
+
+**Example**
+```pepper
+import io;
+
+var source = io.Path("a.txt").metadata().value();
+io.Path("b.txt").set_modified(source.modified);
+```
+
+#### set_accessed
+
+```pepper
+set_accessed(time: long): IoResult<void>
+```
+
+Sets the access time of the file or directory at this path, following
+symlinks and leaving its modification time alone (`utimensat` on
+POSIX, `SetFileTime` on Windows, where the time is kept to 100 ns).
+
+**Parameters**
+- `time` — the new time, in nanoseconds since the Unix epoch, as `Metadata.accessed` reports it
+
+**Returns**
+- an Ok result once the time is set; an error as for `set_modified`
+
+**See also**
+- `File.set_accessed`
+
 #### operator ==
 
 ```pepper

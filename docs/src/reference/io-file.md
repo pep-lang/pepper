@@ -33,8 +33,8 @@ the file is opened:
 - Without `create` or `create_new`, a missing file fails with
   `is_not_found()`.
 
-On POSIX a created file gets mode 0666 less the process umask, and the
-descriptor is opened close-on-exec. On Windows every file is opened
+On POSIX a created file gets mode 0666 (or the `mode` set) less the
+process umask, and the descriptor is opened close-on-exec. On Windows every file is opened
 sharing read, write and delete access with other openers.
 
 **See also**
@@ -153,6 +153,29 @@ creation are one atomic step. Requires `write` or `append`.
 
 **Returns**
 - this `OpenOptions`, for chaining
+
+#### mode
+
+```pepper
+mode(mode: Mode): OpenOptions
+```
+
+Sets the permission bits a file gets when this open creates it, so it
+never exists with the default mode: on POSIX the `mode_t` bits passed
+to `open`, less the process umask, as `Metadata.permissions` reports
+them (493, octal 755, for `rwxr-xr-x`). An existing file keeps its
+mode. Ignored on Windows and WASI; use `File.set_read_only` there.
+
+**Parameters**
+- `mode` — the permission bits for a new file; 438 (octal 666) by default
+
+**Returns**
+- this `OpenOptions`, for chaining
+
+**Example**
+```pepper
+var script = OpenOptions().write(true).create_new(true).mode(493).open(Path("run.sh"));
+```
 
 #### open
 
@@ -859,6 +882,38 @@ fails rather than copying.
 File.rename(Path("draft.txt"), Path("final.txt"));
 ```
 
+#### symlink
+
+```pepper
+static symlink(target: Path, link: Path): IoResult<void>
+```
+
+Creates a symbolic link at `link` that points to the file `target`
+(`symlink` on POSIX, `CreateSymbolicLinkW` on Windows). Use
+`Directory.symlink` for a link to a directory: Windows makes the two
+kinds differently, and a file link to a directory does not open
+there. POSIX makes the same link either way.
+
+`target` is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with `is_permission_denied()` otherwise.
+
+**Parameters**
+- `target` — the path the link points to
+- `link` — where to create the link
+
+**Returns**
+- an Ok result once the link exists; an error with `is_already_exists()` when something is already at `link`, `is_not_found()` when its parent is missing or a path is empty, `is_permission_denied()`, or another platform error
+
+**See also**
+- `Path.read_link`
+
+**Example**
+```pepper
+File.symlink(Path("app-1.2.so"), Path("lib/app.so"));
+```
+
 #### remove
 
 ```pepper
@@ -1218,6 +1273,130 @@ permission bits and timestamps.
 ```pepper
 var size = f.metadata().value().size;
 ```
+
+#### set_permissions
+
+```pepper
+set_permissions(mode: Mode): IoResult<void>
+```
+
+Sets the permission bits of the open file (`fchmod` on POSIX).
+
+`mode` holds the raw platform bits, as `Metadata.permissions` reports
+them: on POSIX the `mode_t` bits `mode & 07777` (493, octal 755, for
+`rwxr-xr-x`). On Windows it is the `FILE_ATTRIBUTE_*` word, and only
+`FILE_ATTRIBUTE_READONLY` (1) is applied; the File needs write access
+there. WASI has no permission bits, and this fails. `set_read_only`
+and `set_executable` change one property portably.
+
+**Parameters**
+- `mode` — the new permission bits
+
+**Returns**
+- an Ok result once they are set; an error when the File is closed, `is_permission_denied()` when the caller does not own the file (or on Windows the File was opened without write access), or another platform error
+
+**See also**
+- `Path.set_permissions`
+
+**Example**
+```pepper
+var f = File.create(Path("run.sh")).value();
+f.set_permissions(493);   # octal 755: rwxr-xr-x
+```
+
+#### set_read_only
+
+```pepper
+set_read_only(read_only: bool): IoResult<void>
+```
+
+Makes the open file read-only, or writable again: the portable part
+of `set_permissions`.
+
+On POSIX, read-only clears every write bit (octal 222), and writable
+sets only the owner's (octal 200), so a file never becomes writable
+by group or others this way. On Windows it sets or clears
+`FILE_ATTRIBUTE_READONLY`, and the File needs write access. Fails on
+WASI, which has no permission bits.
+
+**Parameters**
+- `read_only` — true to make the file read-only, false to make it writable by its owner
+
+**Returns**
+- an Ok result once the file is changed; an error as for `metadata()` or `set_permissions`
+
+**See also**
+- `Metadata.read_only`
+
+#### set_executable
+
+```pepper
+set_executable(executable: bool): IoResult<void>
+```
+
+Makes the open file executable, or not, without raw permission bits.
+
+On POSIX, executable adds an execute bit for each class (owner, group,
+others) that may read the file, as `chmod +x` does with the usual
+umask; not executable clears all three. Windows has no execute bit
+(an extension such as `.exe` decides) and WASI no permission bits, so
+there this does nothing and succeeds.
+
+**Parameters**
+- `executable` — true to make the file executable, false to stop it
+
+**Returns**
+- an Ok result once the file is changed; an error as for `metadata()` or `set_permissions`
+
+**Example**
+```pepper
+var f = File.create(Path("run.sh")).value();
+f.write_all("#!/bin/sh\necho hi\n");
+f.set_executable(true);
+```
+
+#### set_modified
+
+```pepper
+set_modified(time: long): IoResult<void>
+```
+
+Sets the open file's modification time, leaving its access time
+alone (`futimens` on POSIX, `SetFileTime` on Windows).
+
+On Windows the File needs write access, and the time is kept to 100
+ns. A later write to the file sets its modification time again, so
+call this after the last write.
+
+**Parameters**
+- `time` — the new time, in nanoseconds since the Unix epoch, as `Metadata.modified` reports it
+
+**Returns**
+- an Ok result once the time is set; an error when the File is closed, `is_permission_denied()` when the caller does not own the file (or on Windows the File was opened without write access), or another platform error
+
+**See also**
+- `Path.set_modified`
+
+#### set_accessed
+
+```pepper
+set_accessed(time: long): IoResult<void>
+```
+
+Sets the open file's access time, leaving its modification time
+alone (`futimens` on POSIX, `SetFileTime` on Windows).
+
+On Windows the File needs write access, and the time is kept to 100
+ns.
+
+**Parameters**
+- `time` — the new time, in nanoseconds since the Unix epoch, as `Metadata.accessed` reports it
+
+**Returns**
+- an Ok result once the time is set; an error as for `set_modified`
+
+**See also**
+- `Path.set_accessed`
 
 #### close
 

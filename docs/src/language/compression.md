@@ -105,10 +105,20 @@ the directory `target`:
 - `strip_components` drops leading path components, as tar's
   `--strip-components` does. A GitHub snapshot puts everything under
   `name-version/`, which `strip_components = 1` removes.
-- Files and directories are created. A hard link becomes a copy of the
-  file it names. Symlinks, devices and FIFOs are skipped.
-- Permission bits and modification times are not applied yet: extracted
-  files get the default permissions, so a script loses its executable bit.
+- Files and directories are created, replacing a file already there. A
+  hard link becomes a copy of the file it names. Devices and FIFOs are
+  skipped.
+- Each file and directory gets the entry's modification time and, on Linux
+  and macOS, its permission bits less the umask, as `tar` does, so a
+  script keeps its executable bit. Setuid, setgid and sticky bits are
+  never applied. A directory gets its mode and time after its contents are
+  written, so a read-only directory can still be filled; one that already
+  existed keeps its own. Windows and WASI apply no permission bits.
+- Symlinks are made after everything else, so no file is written through
+  one. A link whose target is absolute or climbs out of `target` with
+  `..`, or that would be made inside another symlink, is skipped. Windows,
+  where making a symlink needs Developer Mode or an administrator, skips
+  every symlink.
 
 `archive.TarWriter(sink)` writes an archive: `append_file(path, data)`,
 `append_directory(path)`, `append_symlink(path, target)`, `append(entry,

@@ -244,8 +244,24 @@ outside `target`: an absolute path, a `..` component, a `\` or a `:`
 (which Windows would read as a separator or a drive) is an
 `is_invalid_input()` error. Files are written (replacing a file
 already there) and directories created; a hard link becomes a copy of
-the file it names, which must be an earlier entry. Symlinks, devices
-and FIFOs are skipped, as are permission bits and modification times.
+the file it names, which must be an earlier entry. Devices and FIFOs
+are skipped.
+
+Each file and directory gets the entry's modification time and, on
+Linux and macOS, its permission bits less the process umask, as
+`tar` gives them by default, so a script keeps its executable bit;
+the setuid, setgid and sticky bits are never applied. A directory's
+mode and time are set once everything inside it is written, so a
+read-only directory can still be filled. A directory that already
+exists keeps its own. On Windows and WASI permission bits are not
+applied.
+
+Symlinks are made after every other entry, so no file is ever
+written through one, and only when they stay inside `target`: a link
+whose target is absolute or climbs out of `target` with `..`, or that
+would be made inside another symlink, is skipped. Windows, where
+making a symlink needs Developer Mode or an administrator, skips them
+all.
 
 **Parameters**
 - `target` — the directory to extract into

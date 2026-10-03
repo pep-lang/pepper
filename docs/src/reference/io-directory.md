@@ -197,14 +197,20 @@ if (d.is_err() && d.error().is_not_a_directory()) {
 #### create
 
 ```pepper
-static create(path: Path): IoResult<void>
+static create(path: Path, mode: Mode = 511): IoResult<void>
 ```
 
-Creates one directory (`mkdir` on POSIX, with mode 0777 less the
+Creates one directory (`mkdir` on POSIX, with `mode` less the
 umask; `CreateDirectoryW` on Windows). Its parent must already exist.
+
+Giving the mode here means the directory never exists with another
+one. `mode` is the POSIX `mode_t` permission bits (448, octal 700,
+for a directory only its owner may use); it is ignored on Windows
+and WASI.
 
 **Parameters**
 - `path` — the directory to create
+- `mode` — the permission bits on POSIX, less the umask; 511 (octal 777) by default
 
 **Returns**
 - an Ok result on success; an error when the directory cannot be created: `is_already_exists()` when anything (a file too) is already at `path`, `is_not_found()` when the parent is missing or the path is empty, `is_permission_denied()` when the parent is not writable
@@ -212,10 +218,17 @@ umask; `CreateDirectoryW` on Windows). Its parent must already exist.
 **See also**
 - `create_all`
 
+**Example**
+```pepper
+import io;
+
+var keys = io.Directory.create(io.Path("keys"), mode = 448);   # octal 700
+```
+
 #### create_all
 
 ```pepper
-static create_all(path: Path): IoResult<void>
+static create_all(path: Path, mode: Mode = 511): IoResult<void>
 ```
 
 Creates a directory and any missing parents, like `mkdir -p`.
@@ -225,8 +238,14 @@ directory (or a symlink to one). Parents are found lexically with
 directory. It is safe against another process creating the same
 directories at the same time.
 
+`mode` applies to `path` itself when it is created, as `mkdir -p -m`
+does: missing parents get the default, 511 (octal 777) less the
+umask, so the new directory can always be made inside them. An
+existing directory keeps its mode. Ignored on Windows and WASI.
+
 **Parameters**
 - `path` — the directory to create, with its parents
+- `mode` — the permission bits of `path` on POSIX, less the umask; 511 (octal 777) by default
 
 **Returns**
 - an Ok result on success; an error when a directory cannot be created: `is_already_exists()` when a file (not a directory) is at `path` or at one of its parents, `is_permission_denied()`, and so on. Parents created before the failure are left in place
@@ -236,6 +255,40 @@ directories at the same time.
 import io;
 
 var r = io.Directory.create_all(io.Path("build").join("out").join("logs"));
+```
+
+#### symlink
+
+```pepper
+static symlink(target: Path, link: Path): IoResult<void>
+```
+
+Creates a symbolic link at `link` that points to the directory
+`target` (`symlink` on POSIX; `CreateSymbolicLinkW` with
+`SYMBOLIC_LINK_FLAG_DIRECTORY` on Windows). Use `File.symlink` for a
+link to a file: Windows makes the two kinds differently. POSIX makes
+the same link either way.
+
+`target` is stored as given and need not exist; a relative target is
+resolved against the directory that holds the link, not the current
+directory. On Windows, making a symlink needs Developer Mode or an
+administrator, and fails with `is_permission_denied()` otherwise.
+
+**Parameters**
+- `target` — the directory the link points to
+- `link` — where to create the link
+
+**Returns**
+- an Ok result once the link exists; an error with `is_already_exists()` when something is already at `link`, `is_not_found()` when its parent is missing or a path is empty, `is_permission_denied()`, or another platform error
+
+**See also**
+- `Path.read_link`
+
+**Example**
+```pepper
+import io;
+
+io.Directory.symlink(io.Path("releases/1.2"), io.Path("current"));
 ```
 
 #### remove

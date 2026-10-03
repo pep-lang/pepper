@@ -33,8 +33,8 @@ extern int fflush(void* stream);
 ## - Without `create` or `create_new`, a missing file fails with
 ##   `is_not_found()`.
 ##
-## On POSIX a created file gets mode 0666 less the process umask, and the
-## descriptor is opened close-on-exec. On Windows every file is opened
+## On POSIX a created file gets mode 0666 (or the `mode` set) less the
+## process umask, and the descriptor is opened close-on-exec. On Windows every file is opened
 ## sharing read, write and delete access with other openers.
 ##
 ## @see File.open_with
@@ -57,10 +57,14 @@ export struct OpenOptions {
     bool _create;
     ## Whether the file must be newly created: opening fails if it exists (`O_EXCL` on POSIX, `CREATE_NEW` on Windows); needs write or append. Off by default.
     bool _create_new;
+    ## The permission bits a newly created file gets on POSIX, less the umask. 438 (octal 666) by default.
+    Mode _mode;
 
     ## Creates an `OpenOptions` with every option off. Set at least one of
     ## `read`, `write` or `append` before opening.
-    construct() {}
+    construct() {
+        _mode = 438;  # 0666
+    }
 
     ## Sets whether the file is opened for reading.
     ##
@@ -121,6 +125,22 @@ export struct OpenOptions {
     ## @returns this `OpenOptions`, for chaining
     create_new(v: bool): OpenOptions {
         _create_new = v;
+        return this;
+    }
+
+    ## Sets the permission bits a file gets when this open creates it, so it
+    ## never exists with the default mode: on POSIX the `mode_t` bits passed
+    ## to `open`, less the process umask, as `Metadata.permissions` reports
+    ## them (493, octal 755, for `rwxr-xr-x`). An existing file keeps its
+    ## mode. Ignored on Windows and WASI; use `File.set_read_only` there.
+    ##
+    ## @param mode the permission bits for a new file; 438 (octal 666) by
+    ##   default
+    ## @returns this `OpenOptions`, for chaining
+    ## @example
+    ##     var script = OpenOptions().write(true).create_new(true).mode(493).open(Path("run.sh"));
+    mode(mode: Mode): OpenOptions {
+        _mode = mode;
         return this;
     }
 
@@ -877,6 +897,122 @@ export struct File {
         return _io_sys_fstat(_handle);
     }
 
+    ## Sets the permission bits of the open file (`fchmod` on POSIX).
+    ##
+    ## `mode` holds the raw platform bits, as `Metadata.permissions` reports
+    ## them: on POSIX the `mode_t` bits `mode & 07777` (493, octal 755, for
+    ## `rwxr-xr-x`). On Windows it is the `FILE_ATTRIBUTE_*` word, and only
+    ## `FILE_ATTRIBUTE_READONLY` (1) is applied; the File needs write access
+    ## there. WASI has no permission bits, and this fails. `set_read_only`
+    ## and `set_executable` change one property portably.
+    ##
+    ## @param mode the new permission bits
+    ## @returns an Ok result once they are set; an error when the File is
+    ##   closed, `is_permission_denied()` when the caller does not own the
+    ##   file (or on Windows the File was opened without write access), or
+    ##   another platform error
+    ## @example
+    ##     var f = File.create(Path("run.sh")).value();
+    ##     f.set_permissions(493);   # octal 755: rwxr-xr-x
+    ## @see Path.set_permissions
+    set_permissions(mode: Mode): IoResult<void> {
+        var c = check_open();
+        if (c.is_err()) {
+            return c;
+        }
+        return _io_sys_fchmod(_handle, mode);
+    }
+
+    ## Makes the open file read-only, or writable again: the portable part
+    ## of `set_permissions`.
+    ##
+    ## On POSIX, read-only clears every write bit (octal 222), and writable
+    ## sets only the owner's (octal 200), so a file never becomes writable
+    ## by group or others this way. On Windows it sets or clears
+    ## `FILE_ATTRIBUTE_READONLY`, and the File needs write access. Fails on
+    ## WASI, which has no permission bits.
+    ##
+    ## @param read_only true to make the file read-only, false to make it
+    ##   writable by its owner
+    ## @returns an Ok result once the file is changed; an error as for
+    ##   `metadata()` or `set_permissions`
+    ## @see Metadata.read_only
+    set_read_only(read_only: bool): IoResult<void> {
+        var m = metadata();
+        if (m.is_err()) {
+            return IoResult<void>.err(m.error());
+        }
+        return _io_sys_fchmod(_handle, _io_sys_read_only_mode(m.value().permissions, read_only));
+    }
+
+    ## Makes the open file executable, or not, without raw permission bits.
+    ##
+    ## On POSIX, executable adds an execute bit for each class (owner, group,
+    ## others) that may read the file, as `chmod +x` does with the usual
+    ## umask; not executable clears all three. Windows has no execute bit
+    ## (an extension such as `.exe` decides) and WASI no permission bits, so
+    ## there this does nothing and succeeds.
+    ##
+    ## @param executable true to make the file executable, false to stop it
+    ## @returns an Ok result once the file is changed; an error as for
+    ##   `metadata()` or `set_permissions`
+    ## @example
+    ##     var f = File.create(Path("run.sh")).value();
+    ##     f.write_all("#!/bin/sh\necho hi\n");
+    ##     f.set_executable(true);
+    set_executable(executable: bool): IoResult<void> {
+        var m = metadata();
+        if (m.is_err()) {
+            return IoResult<void>.err(m.error());
+        }
+        var mode = _io_sys_executable_mode(m.value().permissions, executable);
+        if (mode == m.value().permissions) {
+            return _io_ok_void();
+        }
+        return _io_sys_fchmod(_handle, mode);
+    }
+
+    ## Sets the open file's modification time, leaving its access time
+    ## alone (`futimens` on POSIX, `SetFileTime` on Windows).
+    ##
+    ## On Windows the File needs write access, and the time is kept to 100
+    ## ns. A later write to the file sets its modification time again, so
+    ## call this after the last write.
+    ##
+    ## @param time the new time, in nanoseconds since the Unix epoch, as
+    ##   `Metadata.modified` reports it
+    ## @returns an Ok result once the time is set; an error when the File is
+    ##   closed, `is_permission_denied()` when the caller does not own the
+    ##   file (or on Windows the File was opened without write access), or
+    ##   another platform error
+    ## @see Path.set_modified
+    set_modified(time: long): IoResult<void> {
+        var c = check_open();
+        if (c.is_err()) {
+            return c;
+        }
+        return _io_sys_fset_times(_handle, Optional<long>.Empty, Optional<long>.Value(time));
+    }
+
+    ## Sets the open file's access time, leaving its modification time
+    ## alone (`futimens` on POSIX, `SetFileTime` on Windows).
+    ##
+    ## On Windows the File needs write access, and the time is kept to 100
+    ## ns.
+    ##
+    ## @param time the new time, in nanoseconds since the Unix epoch, as
+    ##   `Metadata.accessed` reports it
+    ## @returns an Ok result once the time is set; an error as for
+    ##   `set_modified`
+    ## @see Path.set_accessed
+    set_accessed(time: long): IoResult<void> {
+        var c = check_open();
+        if (c.is_err()) {
+            return c;
+        }
+        return _io_sys_fset_times(_handle, Optional<long>.Value(time), Optional<long>.Empty);
+    }
+
     ## Closes the File now, to observe the error the system reports (for
     ## example a deferred write failure). Without it the destructor closes
     ## the handle and ignores errors.
@@ -1084,6 +1220,30 @@ export struct File {
     ##     File.rename(Path("draft.txt"), Path("final.txt"));
     static rename(from: Path, to: Path): IoResult<void> {
         return _io_sys_rename(from, to);
+    }
+
+    ## Creates a symbolic link at `link` that points to the file `target`
+    ## (`symlink` on POSIX, `CreateSymbolicLinkW` on Windows). Use
+    ## `Directory.symlink` for a link to a directory: Windows makes the two
+    ## kinds differently, and a file link to a directory does not open
+    ## there. POSIX makes the same link either way.
+    ##
+    ## `target` is stored as given and need not exist; a relative target is
+    ## resolved against the directory that holds the link, not the current
+    ## directory. On Windows, making a symlink needs Developer Mode or an
+    ## administrator, and fails with `is_permission_denied()` otherwise.
+    ##
+    ## @param target the path the link points to
+    ## @param link where to create the link
+    ## @returns an Ok result once the link exists; an error with
+    ##   `is_already_exists()` when something is already at `link`,
+    ##   `is_not_found()` when its parent is missing or a path is empty,
+    ##   `is_permission_denied()`, or another platform error
+    ## @example
+    ##     File.symlink(Path("app-1.2.so"), Path("lib/app.so"));
+    ## @see Path.read_link
+    static symlink(target: Path, link: Path): IoResult<void> {
+        return _io_sys_symlink(target, link, false);
     }
 
     ## Deletes the file at `path`. A symlink is removed itself, not its

@@ -33,6 +33,14 @@ extern int SetFileInformationByHandle(void* h, int info_class, void* info, uint 
 [Target(OS(Windows))]
 extern int FlushFileBuffers(void* h);
 [Target(OS(Windows))]
+extern int SetFileTime(void* h, void* created, void* accessed, void* written);
+[Target(OS(Windows))]
+extern u8 CreateSymbolicLinkW(ushort* link, ushort* target, uint flags);
+[Target(OS(Windows))]
+extern int DeviceIoControl(
+    void* h, uint code, void* input, uint input_size, void* output, uint output_size, uint* returned, void* overlapped
+);
+[Target(OS(Windows))]
 extern int GetFileInformationByHandle(void* h, void* info);
 [Target(OS(Windows))]
 extern void* FindFirstFileW(ushort* pattern, void* data);
@@ -149,20 +157,20 @@ export _io_sys_error_message(code: ErrorCode): String {
 [Target(OS(Windows))]
 export _io_sys_error_kind(code: ErrorCode): ErrorKind {
     return match (code) {
-        2, 3 => ErrorKind.NotFound,                 # FILE_NOT_FOUND, PATH_NOT_FOUND
-        5 => ErrorKind.PermissionDenied,            # ACCESS_DENIED
-        80, 183 => ErrorKind.AlreadyExists,         # FILE_EXISTS, ALREADY_EXISTS
-        267 => ErrorKind.NotADirectory,             # DIRECTORY (invalid directory name)
-        336 => ErrorKind.IsADirectory,              # DIRECTORY_NOT_SUPPORTED
-        145 => ErrorKind.DirectoryNotEmpty,         # DIR_NOT_EMPTY
-        87, 123, 131 => ErrorKind.InvalidInput,     # INVALID_PARAMETER, INVALID_NAME, NEGATIVE_SEEK
-        10004 => ErrorKind.Interrupted,             # WSAEINTR
-        10061 => ErrorKind.ConnectionRefused,       # WSAECONNREFUSED
-        10054, 10053 => ErrorKind.ConnectionReset,  # WSAECONNRESET, WSAECONNABORTED
-        10048 => ErrorKind.AddressInUse,            # WSAEADDRINUSE
-        10049 => ErrorKind.AddressNotAvailable,     # WSAEADDRNOTAVAIL
-        10060 => ErrorKind.TimedOut,                # WSAETIMEDOUT
-        995, 1223 => ErrorKind.Cancelled,           # OPERATION_ABORTED, CANCELLED
+        2, 3 => ErrorKind.NotFound,                    # FILE_NOT_FOUND, PATH_NOT_FOUND
+        5, 1314 => ErrorKind.PermissionDenied,         # ACCESS_DENIED, PRIVILEGE_NOT_HELD
+        80, 183 => ErrorKind.AlreadyExists,            # FILE_EXISTS, ALREADY_EXISTS
+        267 => ErrorKind.NotADirectory,                # DIRECTORY (invalid directory name)
+        336 => ErrorKind.IsADirectory,                 # DIRECTORY_NOT_SUPPORTED
+        145 => ErrorKind.DirectoryNotEmpty,            # DIR_NOT_EMPTY
+        87, 123, 131, 4390 => ErrorKind.InvalidInput,  # INVALID_PARAMETER, INVALID_NAME, NEGATIVE_SEEK, NOT_A_REPARSE_POINT
+        10004 => ErrorKind.Interrupted,                # WSAEINTR
+        10061 => ErrorKind.ConnectionRefused,          # WSAECONNREFUSED
+        10054, 10053 => ErrorKind.ConnectionReset,     # WSAECONNRESET, WSAECONNABORTED
+        10048 => ErrorKind.AddressInUse,               # WSAEADDRINUSE
+        10049 => ErrorKind.AddressNotAvailable,        # WSAEADDRNOTAVAIL
+        10060 => ErrorKind.TimedOut,                   # WSAETIMEDOUT
+        995, 1223 => ErrorKind.Cancelled,              # OPERATION_ABORTED, CANCELLED
         else => ErrorKind.Other,
     };
 }
@@ -531,7 +539,7 @@ export _io_sys_directory_close(handle: __ptr<void>) {
 }
 
 [Target(OS(Windows))]
-export _io_sys_mkdir(path: Path): IoResult<void> {
+export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
     var w = _io_win_wide(path._value);
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
@@ -648,6 +656,180 @@ export _io_sys_temp_dir(): Path {
     var s = _io_win_narrow(buf, n);
     _pep_free(buf);
     return Path(_io_slice(s, 0, _io_path_trimmed_end(s)));
+}
+
+# ── Permissions, times and links ─────────────────────────────────────────────
+
+# Only FILE_ATTRIBUTE_READONLY (1) of `mode` is applied, through
+# FILE_BASIC_INFO (40 bytes: four LARGE_INTEGER times, 0 meaning unchanged,
+# then FileAttributes u32 @32), where 0 attributes would also mean
+# unchanged, so a file left with none gets FILE_ATTRIBUTE_NORMAL.
+[Target(OS(Windows))]
+export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+    var query = _IoBuffer(52);
+    if (GetFileInformationByHandle(h, query._bytes) == 0) {
+        return IoResult<void>.err(IoError.last());
+    }
+    var attributes = ((_io_win_u32(query._bytes, 0) | 1) ^ 1) | ((mode & 1) as ulong);
+    if (attributes == 0) {
+        attributes = 128;  # FILE_ATTRIBUTE_NORMAL
+    }
+    var info = _IoBuffer(40);
+    var fields = unsafe_cast<__ptr<long>>(info._bytes);
+    fields[0] = 0;
+    fields[1] = 0;
+    fields[2] = 0;
+    fields[3] = 0;
+    fields[4] = attributes as long;
+    var ok = SetFileInformationByHandle(h, 0, info._bytes, 40);  # FileBasicInfo
+    return _io_win_check(ok);
+}
+
+# Opens `path`, following links, to change its attributes or times
+# (FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES).
+[Target(OS(Windows))]
+_io_win_open_attributes(path: Path): IoResult<FileHandle> {
+    if (path._value.size == 0) {
+        return IoResult<FileHandle>.err(IoError(_io_sys_code_not_found(), "empty path"));
+    }
+    return _io_win_create(path, 384, 3, 0);  # OPEN_EXISTING
+}
+
+[Target(OS(Windows))]
+export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+    var h = _io_win_open_attributes(path);
+    if (h.is_err()) {
+        return IoResult<void>.err(h.error());
+    }
+    var r = _io_sys_fchmod(h.value(), mode);
+    CloseHandle(h.value());
+    return r;
+}
+
+[Target(OS(Windows))]
+export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
+    if (read_only) {
+        return current | 1;
+    }
+    return (current | 1) ^ 1;
+}
+
+# Windows has no execute bit: whether a file runs depends on its extension.
+[Target(OS(Windows))]
+export _io_sys_executable_mode(current: Mode, executable: bool): Mode {
+    return current;
+}
+
+# A FILETIME (100 ns ticks since 1601) for ns since the Unix epoch, written
+# at `at`; null for a time left alone.
+[Target(OS(Windows))]
+_io_win_filetime(at: __ptr<u8>, time: long?): __ptr<void> {
+    if (time.is_empty()) {
+        return __null;
+    }
+    var ns = time.value();
+    var ticks = ns / 100;
+    if (ticks * 100 > ns) {  # round toward the past, as POSIX truncates
+        ticks = ticks - 1;
+    }
+    unsafe_cast<__ptr<long>>(at)[0] = ticks + 116444736000000000;
+    return at;
+}
+
+[Target(OS(Windows))]
+export _io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
+    var buf = _IoBuffer(16);
+    var a = _io_win_filetime(buf._bytes, accessed);
+    var m = _io_win_filetime(buf._bytes + 8, modified);
+    return _io_win_check(SetFileTime(h, __null, a, m));
+}
+
+[Target(OS(Windows))]
+export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
+    var h = _io_win_open_attributes(path);
+    if (h.is_err()) {
+        return IoResult<void>.err(h.error());
+    }
+    var r = _io_sys_fset_times(h.value(), accessed, modified);
+    CloseHandle(h.value());
+    return r;
+}
+
+# SYMBOLIC_LINK_FLAG_DIRECTORY (1) for a link to a directory, and
+# SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE (2), which Developer Mode
+# needs; Windows before 10 1703 rejects that flag, so try again without it.
+[Target(OS(Windows))]
+export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
+    if (target._value.size == 0 || link._value.size == 0) {
+        return IoResult<void>.err(IoError(_io_sys_code_not_found(), "empty path"));
+    }
+    uint flags = 2;
+    if (directory) {
+        flags = 3;
+    }
+    var wt = _io_win_wide(target._value);
+    var wl = _io_win_wide(link._value);
+    var ok = CreateSymbolicLinkW(wl, wt, flags);
+    var code = GetLastError();
+    if (ok == 0 && code == 87) {  # INVALID_PARAMETER
+        ok = CreateSymbolicLinkW(wl, wt, flags ^ 2);
+        code = GetLastError();
+    }
+    _pep_free(wt);
+    _pep_free(wl);
+    return _io_win_check_code(ok as int, code);
+}
+
+# FSCTL_GET_REPARSE_POINT fills a REPARSE_DATA_BUFFER: ReparseTag u32 @0,
+# then SubstituteNameOffset and SubstituteNameLength u16 @8 and @10 (bytes
+# into the path buffer), and the path buffer itself at @20 for a symlink
+# (after its Flags u32 @16) or @16 for a junction. The substitute name of an
+# absolute target starts `\??\`, dropped here (`\??\UNC\` becomes `\\`).
+[Target(OS(Windows))]
+export _io_sys_readlink(path: Path): IoResult<Path> {
+    if (path._value.size == 0) {
+        return IoResult<Path>.err(IoError(_io_sys_code_not_found(), "empty path"));
+    }
+    var h = _io_win_open_query(path, false);
+    if (h.is_err()) {
+        return IoResult<Path>.err(h.error());
+    }
+    var size: uint = 16384;  # MAXIMUM_REPARSE_DATA_BUFFER_SIZE
+    var buf = _IoBuffer(size as ulong);
+    var returned = _IoBuffer(4);
+    var ok = DeviceIoControl(
+        h.value(), 589992, __null, 0, buf._bytes, size, unsafe_cast<__ptr<uint>>(returned._bytes), __null
+    );
+    var code = GetLastError();
+    CloseHandle(h.value());
+    if (ok == 0) {
+        return IoResult<Path>.err(IoError(code, _io_sys_error_message(code)));
+    }
+    var tag = _io_win_u32(buf._bytes, 0);
+    ulong names = 0;
+    if (tag == 2684354572) {  # IO_REPARSE_TAG_SYMLINK
+        names = 20;
+    } else if (tag == 2684354563) {  # IO_REPARSE_TAG_MOUNT_POINT
+        names = 16;
+    } else {
+        return IoResult<Path>.err(IoError(4390, _io_sys_error_message(4390)));  # NOT_A_REPARSE_POINT
+    }
+    var offset = _io_win_u16(buf._bytes, 8);
+    var length = _io_win_u16(buf._bytes, 10);
+    var name = unsafe_cast<__ptr<u16>>(buf._bytes + names + offset);
+    var s = _io_win_narrow(name, (length / 2) as int);
+    if (s.starts_with("\\??\\UNC\\")) {
+        return IoResult<Path>.ok(Path("\\\\" + _io_slice(s, 8, s.size)));
+    }
+    if (s.starts_with("\\??\\")) {
+        return IoResult<Path>.ok(Path(_io_slice(s, 4, s.size)));
+    }
+    return IoResult<Path>.ok(Path(s));
+}
+
+[Target(OS(Windows))]
+_io_win_u16(buf: __ptr<void>, offset: ulong): ulong {
+    return ((buf + offset) as __ptr<u16>)[0] as ulong;
 }
 
 # ── Thread-local keys ────────────────────────────────────────────────────────

@@ -221,8 +221,6 @@ fn fs_program(scratch: &str) -> String {
     r##"
 import [File, OpenOptions, Directory, DirEntry, Path, IoError, IoResult, Metadata] from io;
 
-[Target(!OS(Windows))] extern int symlink(char* target, char* link);
-
 text(f: Path): String {
     return File.read_to_string(f).value();
 }
@@ -488,14 +486,14 @@ directories(base: Path) {
     var tree = base.join("tree");
     assert(Directory.create_all(tree.join("inner").join("deep")).is_ok(), "tree");
     assert(File.write_text(tree.join("inner").join("f.txt"), "f").is_ok(), "tree file");
-    # A symlink inside it is removed, never what it points to. The link is
-    # made with POSIX `symlink` (Windows needs a privilege for symlinks).
+    # A symlink inside it is removed, never what it points to. Not on
+    # Windows, which needs a privilege for symlinks.
     var keep = base.join("keep");
     assert(Directory.create(keep).is_ok(), "keep");
     assert(File.write_text(keep.join("k.txt"), "k").is_ok(), "k.txt");
     [Target(!OS(Windows))] {
         var link = tree.join("link");
-        assert(symlink(keep.to_string().c_str(), link.to_string().c_str()) == 0, "symlink");
+        assert(Directory.symlink(keep, link).is_ok(), "symlink");
         var lm = link.symlink_metadata();
         assert(lm.is_ok(), "symlink_metadata");
         assert(lm.value().is_symlink, "symlink_metadata");
@@ -509,6 +507,97 @@ directories(base: Path) {
     assert(Directory.remove_all(base.join("absent")).error().is_not_found(), "remove_all missing");
 }
 
+# set_permissions, set_read_only, set_executable, set_modified and
+# set_accessed on Path and File, OpenOptions.mode, Directory.create with a
+# mode, and symlinks made and read back.
+permissions_and_times(base: Path) {
+    var d = base.join("perm");
+    assert(Directory.create(d, mode = 448).is_ok(), "create with mode");
+    var f = d.join("run.sh");
+    var file = OpenOptions().write(true).create_new(true).mode(448).open(f).value();
+    assert(file.write_all("#!/bin/sh\n").is_ok(), "write");
+    [Target(OS(Linux) || OS(Mac))] {
+        assert((d.metadata().value().permissions & 511) == 448, "directory mode");
+        assert(file.metadata().value().permissions == 448, "OpenOptions.mode");
+        assert(file.set_permissions(420).is_ok(), "File.set_permissions");
+        assert(f.metadata().value().permissions == 420, "644");
+        assert(file.set_executable(true).is_ok(), "File.set_executable");
+        assert(f.metadata().value().permissions == 493, "755");
+        assert(f.set_executable(false).is_ok(), "Path.set_executable");
+        assert(f.metadata().value().permissions == 420, "644 again");
+        assert(f.set_permissions(256).is_ok(), "Path.set_permissions");
+        assert(f.set_executable(true).is_ok(), "x only where readable");
+        assert(f.metadata().value().permissions == 320, "500");
+        assert(f.set_read_only(false).is_ok(), "writable by the owner only");
+        assert(f.metadata().value().permissions == 448, "700");
+    }
+    # Times are nanoseconds since the epoch; before 1970 too. Windows keeps
+    # 100 ns.
+    assert(file.set_modified(1000000000123456700).is_ok(), "File.set_modified");
+    assert(file.set_accessed(-1500000000).is_ok(), "File.set_accessed");
+    var m = file.metadata().value();
+    assert(m.modified == 1000000000123456700, "modified set");
+    assert(m.accessed == -1500000000, "accessed set");
+    assert(file.close().is_ok(), "close");
+    assert(f.set_accessed(2000000000).is_ok(), "Path.set_accessed");
+    assert(f.metadata().value().accessed == 2000000000, "accessed");
+    assert(f.metadata().value().modified == 1000000000123456700, "modified left alone");
+    assert(f.set_modified(3000000000).is_ok(), "Path.set_modified");
+    assert(f.metadata().value().modified == 3000000000, "modified");
+    assert(f.metadata().value().accessed == 2000000000, "accessed left alone");
+
+    # Read-only, portably.
+    assert(f.set_read_only(true).is_ok(), "set_read_only");
+    assert(f.metadata().value().read_only, "read-only");
+    assert(_is_root() || OpenOptions().write(true).open(f).error().is_permission_denied(), "no writing");
+    assert(f.set_read_only(false).is_ok(), "set_read_only false");
+    assert(!f.metadata().value().read_only, "writable");
+    assert(File.write_text(f, "again").is_ok(), "write again");
+
+    # A directory's time; set after its contents.
+    assert(d.set_modified(4000000000).is_ok(), "directory time");
+    assert(d.metadata().value().modified == 4000000000, "directory modified");
+
+    var missing = d.join("none");
+    assert(missing.set_permissions(420).error().is_not_found(), "missing set_permissions");
+    assert(missing.set_modified(0).error().is_not_found(), "missing set_modified");
+    assert(missing.set_read_only(true).error().is_not_found(), "missing set_read_only");
+    assert(Path("").set_modified(0).error().is_not_found(), "empty set_modified");
+    assert(File().set_permissions(420).is_err(), "closed set_permissions");
+    assert(File().set_modified(0).is_err(), "closed set_modified");
+    assert(f.read_link().error().is_invalid_input(), "read_link of a file");
+
+    [Target(!OS(Windows))] {
+        var link = d.join("latest");
+        assert(File.symlink(Path("run.sh"), link).is_ok(), "File.symlink");
+        assert(link.read_link().value() == Path("run.sh"), "read_link");
+        assert(link.symlink_metadata().value().is_symlink, "is a symlink");
+        assert(text(link) == "again", "read through the link");
+        assert(File.symlink(Path("x"), link).error().is_already_exists(), "symlink exists");
+        var up = d.join("up");
+        assert(Directory.symlink(Path(".."), up).is_ok(), "Directory.symlink");
+        assert(up.join("perm").is_directory(), "through the directory link");
+        var dangling = d.join("dangling");
+        assert(File.symlink(Path("nowhere"), dangling).is_ok(), "dangling symlink");
+        assert(dangling.read_link().value() == Path("nowhere"), "read a dangling link");
+        assert(d.join("none").read_link().error().is_not_found(), "read_link missing");
+    }
+}
+
+# Root ignores permission bits, so a read-only file still opens for writing.
+[Target(OS(Linux) || OS(Mac))]
+extern uint geteuid();
+
+[Target(OS(Linux) || OS(Mac))]
+_is_root(): bool {
+    return geteuid() == 0;
+}
+
+[Target(!(OS(Linux) || OS(Mac)))]
+_is_root(): bool {
+    return false;
+}
+
 run_all(scratch: String): int {
     var tmp = Directory.temp();
     assert(tmp.is_absolute() && tmp.is_dir(), "temp");
@@ -518,6 +607,7 @@ run_all(scratch: String): int {
     files_and_text(base);
     seeking(base);
     directories(base);
+    permissions_and_times(base);
     assert(Directory.remove_all(base).is_ok(), "remove base");
     assert(!base.exists(), "base removed");
     return 0;

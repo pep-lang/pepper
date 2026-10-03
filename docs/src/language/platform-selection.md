@@ -226,7 +226,10 @@ things work differently:
 - Sockets, TLS, HTTP connections and starting processes return an
   `IoError` saying they are not supported on WASI.
 - Files work through the directories the runtime grants. `Metadata` has no
-  permission bits (`read_only` is false) and no creation time.
+  permission bits (`read_only` is false) and no creation time, and
+  `set_permissions` and `set_read_only` return an error;
+  `set_executable` and the `mode` of `OpenOptions` and `Directory.create`
+  do nothing. Timestamps and symlinks work.
 - `os` reports `OperatingSystem.Wasi`, `"wasm32"`, an empty host name and
   version, and no total memory.
 - Pointers and C's `long` and `size_t` are 32 bits; see

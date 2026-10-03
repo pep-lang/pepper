@@ -58,6 +58,20 @@ extern char* strerror(int code);
 extern char* getenv(char* name);
 [Target(!OS(Windows))]
 extern int closedir(void* dir);
+[Target(!OS(Windows))]
+extern int utimensat(int dirfd, char* path, void* times, int flags);
+[Target(!OS(Windows))]
+extern int futimens(int fd, void* times);
+[Target(!OS(Windows))]
+extern int symlink(char* target, char* link);
+[Target(!OS(Windows))]
+extern long readlink(char* path, char* buf, ulong size);
+
+# WASI preview 1 has no permission bits, and wasi-libc no chmod.
+[Target(OS(Linux) || OS(Mac))]
+extern int chmod(char* path, uint mode);
+[Target(OS(Linux) || OS(Mac))]
+extern int fchmod(int fd, uint mode);
 
 # Linux: errno through glibc's accessor (bionic's on Android); statx for
 # stat (one layout on x64 and aarch64, and present where glibc < 2.33 has no
@@ -459,7 +473,7 @@ export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
     }
     flags = flags | _io_o_cloexec();
     while (true) {
-        var fd = open(path._value.c_str(), flags, 438);  # 0666, less the umask
+        var fd = open(path._value.c_str(), flags, options._mode);  # less the umask
         if (fd >= 0) {
             return IoResult<FileHandle>.ok(fd);
         }
@@ -837,11 +851,11 @@ export _io_sys_directory_close(handle: __ptr<void>) {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_mkdir(path: Path): IoResult<void> {
+export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
-    return _io_posix_check(mkdir(path._value.c_str(), 511));  # 0777, less the umask
+    return _io_posix_check(mkdir(path._value.c_str(), mode));  # less the umask
 }
 
 [Target(!OS(Windows))]
@@ -933,6 +947,148 @@ export _io_sys_temp_dir(): Path {
         n = n - 1;
     }
     return Path(_io_slice(s, 0, n));
+}
+
+# ── Permissions, times and links ─────────────────────────────────────────────
+
+[Target(OS(Linux) || OS(Mac))]
+export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+    if (path._value.size == 0) {
+        return IoResult<void>.err(_io_posix_empty_path());
+    }
+    return _io_posix_check(chmod(path._value.c_str(), mode));
+}
+
+[Target(OS(Linux) || OS(Mac))]
+export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+    return _io_posix_check(fchmod(h, mode));
+}
+
+# WASI's ENOTSUP.
+[Target(OS(Wasi))]
+_io_wasi_no_permissions(): IoResult<void> {
+    return IoResult<void>.err(IoError(58, "WASI has no permission bits"));
+}
+
+[Target(OS(Wasi))]
+export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+    return _io_wasi_no_permissions();
+}
+
+[Target(OS(Wasi))]
+export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+    return _io_wasi_no_permissions();
+}
+
+# `current` with every write bit (0222) cleared, or with the owner's (0200)
+# set: making a file writable never opens it to group or others.
+[Target(!OS(Windows))]
+export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
+    if (read_only) {
+        return (current | 146) ^ 146;
+    }
+    return current | 128;
+}
+
+# `current` with an execute bit (0111) for each class that may read it
+# (0444), as `chmod +x` gives, or with every execute bit cleared.
+[Target(!OS(Windows))]
+export _io_sys_executable_mode(current: Mode, executable: bool): Mode {
+    if (executable) {
+        return current | ((current & 292) >> 2);
+    }
+    return (current | 73) ^ 73;
+}
+
+# AT_FDCWD.
+[Target(OS(Linux))]
+_io_at_fdcwd(): int { return -100; }
+
+[Target(OS(Mac) || OS(Wasi))]
+_io_at_fdcwd(): int { return -2; }
+
+# UTIME_OMIT, for the time a `utimensat` leaves alone.
+[Target(OS(Linux))]
+_io_utime_omit(): long { return 1073741822; }
+
+[Target(OS(Mac) || OS(Wasi))]
+_io_utime_omit(): long { return -2; }
+
+# Writes the two timespecs `utimensat` and `futimens` take (access, then
+# modification) into a 32-byte buffer. The nanoseconds are written as 64
+# bits: wasi-libc's 32-bit `long` takes the low half, and the rest is
+# padding.
+[Target(!OS(Windows))]
+_io_posix_times(accessed: long?, modified: long?): _IoBuffer {
+    var buf = _IoBuffer(32);
+    _io_posix_timespec(buf._bytes, accessed);
+    _io_posix_timespec(buf._bytes + 16, modified);
+    return buf;
+}
+
+[Target(!OS(Windows))]
+_io_posix_timespec(at: __ptr<u8>, time: long?) {
+    var fields = unsafe_cast<__ptr<long>>(at);
+    if (time.is_empty()) {
+        fields[0] = 0;
+        fields[1] = _io_utime_omit();
+        return;
+    }
+    var ns = time.value();
+    var seconds = ns / 1000000000;
+    var rest = ns - seconds * 1000000000;
+    if (rest < 0) {  # division truncates toward zero
+        seconds = seconds - 1;
+        rest = rest + 1000000000;
+    }
+    fields[0] = seconds;
+    fields[1] = rest;
+}
+
+[Target(!OS(Windows))]
+export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
+    if (path._value.size == 0) {
+        return IoResult<void>.err(_io_posix_empty_path());
+    }
+    var times = _io_posix_times(accessed, modified);
+    return _io_posix_check(utimensat(_io_at_fdcwd(), path._value.c_str(), times._bytes, 0));
+}
+
+[Target(!OS(Windows))]
+export _io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
+    var times = _io_posix_times(accessed, modified);
+    return _io_posix_check(futimens(h, times._bytes));
+}
+
+# POSIX makes one kind of symlink, whatever it points to.
+[Target(!OS(Windows))]
+export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
+    if (target._value.size == 0 || link._value.size == 0) {
+        return IoResult<void>.err(_io_posix_empty_path());
+    }
+    return _io_posix_check(symlink(target._value.c_str(), link._value.c_str()));
+}
+
+# readlink does not say when the buffer was too small, only fills it: retry
+# with a bigger one until the target fits with room to spare.
+[Target(!OS(Windows))]
+export _io_sys_readlink(path: Path): IoResult<Path> {
+    if (path._value.size == 0) {
+        return IoResult<Path>.err(_io_posix_empty_path());
+    }
+    ulong size = 256;
+    while (true) {
+        var buf = _IoBuffer(size);
+        var n = readlink(path._value.c_str(), unsafe_cast<__ptr<char>>(buf._bytes), size);
+        if (n < 0) {
+            return IoResult<Path>.err(IoError.last());
+        }
+        if ((n as ulong) < size) {
+            return IoResult<Path>.ok(Path(_io_string_from(unsafe_cast<__ptr<char>>(buf._bytes), n as ulong)));
+        }
+        size = size * 2;
+    }
+    return IoResult<Path>.err(IoError(_io_posix_code_range(), "link target too long"));
 }
 
 # ── Thread-local keys ────────────────────────────────────────────────────────

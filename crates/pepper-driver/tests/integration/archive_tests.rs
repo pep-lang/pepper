@@ -1,7 +1,9 @@
 //! The `archive` module: tar archives written and read back (long paths
 //! through the ustar prefix and pax headers), archives made by GNU tar and
 //! Python's tarfile, `.tar.gz` through `compress`, extraction with
-//! `strip_components`, unsafe paths (`archive.safe_components`), and damaged archives. Each check
+//! `strip_components`, modes, times and symlinks restored by extraction,
+//! unsafe paths (`archive.safe_components`) and link targets, and damaged
+//! archives. Each check
 //! returns 0 on success or a distinct negative code per check, and must
 //! leave no allocation behind.
 
@@ -101,7 +103,7 @@ extracts_into_a_directory(): int {
     var link = archive.TarEntry("pkg-1.0/copy.pep", archive.EntryKind.HardLink);
     link.link_target = "pkg-1.0/src/main.pep";
     tar.append(link, Array<u8>());
-    tar.append_symlink("pkg-1.0/skipped", "src");
+    tar.append_symlink("pkg-1.0/sources", "src");
     tar.append_file("pkg-1.0/./docs//readme.md", "# pkg\n".bytes());
     tar.finish();
     gzip.finish();
@@ -115,7 +117,14 @@ extracts_into_a_directory(): int {
     if (io.File.read_to_string(target.join("src").join("main.pep")).value() != "main(): int { return 0; }\n") { return -2; }
     if (io.File.read_to_string(target.join("copy.pep")).value() != "main(): int { return 0; }\n") { return -3; }
     if (io.File.read_to_string(target.join("docs").join("readme.md")).value() != "# pkg\n") { return -4; }
-    if (target.join("skipped").exists()) { return -5; }
+    # The symlink is made, except on Windows.
+    var sources = target.join("sources").symlink_metadata();
+    [Target(!OS(Windows))] {
+        if (sources.is_err() || !sources.value().is_symlink || !target.join("sources").join("main.pep").is_file()) { return -5; }
+    }
+    [Target(OS(Windows))] {
+        if (sources.is_ok()) { return -5; }
+    }
     if (target.join("pkg-1.0").exists()) { return -6; }
 
     # An entry that would land outside the target is refused.
@@ -132,6 +141,85 @@ extracts_into_a_directory(): int {
     }
     if (io.Directory.temp().join("escape.txt").exists()) { return -8; }
     io.Directory.remove_all(target);
+    return 0;
+}
+
+restores_modes_times_and_links(): int {
+    var target = io.Directory.temp().join("SCRATCH-modes");
+    io.Directory.remove_all(target);
+    var outside = io.Directory.temp().join("SCRATCH-outside");
+    io.Directory.remove_all(outside);
+    io.File.write_text(outside, "outside");
+
+    var out = io.ByteWriter();
+    var tar = archive.TarWriter(out);
+    var bin = archive.TarEntry("bin", archive.EntryKind.Directory);
+    bin.mode = 365;  # octal 555: nothing can be added to it once extracted
+    bin.modified = 1600000000;
+    tar.append(bin, Array<u8>());
+    var run = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
+    run.mode = 2541;  # octal 4755: setuid is never applied
+    run.modified = 1500000000;
+    run.size = 10;
+    tar.append(run, "#!/bin/sh\n".bytes());
+    tar.append_file("notes.txt", "notes".bytes(), mode = 420);
+    var copy = archive.TarEntry("bin/again.sh", archive.EntryKind.HardLink);
+    copy.link_target = "bin/run.sh";
+    copy.mode = 493;
+    tar.append(copy, Array<u8>());
+    tar.append_symlink("bin/latest", "run.sh");
+    tar.append_symlink("up", "bin/../notes.txt");
+    # These would reach outside `target` and are skipped.
+    tar.append_symlink("escape", "../SCRATCH-outside");
+    tar.append_symlink("absolute", "/etc/passwd");
+    tar.append_symlink("bin/deep", "../../SCRATCH-outside");
+    # A link made inside another link could land anywhere.
+    tar.append_symlink("hop", ".");
+    tar.append_symlink("hop/escape", "../SCRATCH-outside");
+    tar.finish();
+
+    var extracted = archive.TarReader(io.ByteReader(out.bytes)).extract(target);
+    if (extracted.is_err()) {
+        print(extracted.error().message);
+        return -1;
+    }
+    var script = target.join("bin").join("run.sh").metadata().value();
+    if (script.modified != 1500000000000000000 || io.File.read_to_string(target.join("bin").join("run.sh")).value() != "#!/bin/sh\n") { return -2; }
+    var directory = target.join("bin").metadata().value();
+    if (directory.modified != 1600000000000000000) { return -3; }
+    if (target.join("bin").join("again.sh").metadata().value().modified != 0) { return -4; }
+    [Target(OS(Linux) || OS(Mac))] {
+        if (script.permissions != 493) { return -5; }
+        if (directory.permissions != 365) { return -6; }
+        if (target.join("notes.txt").metadata().value().permissions != 420) { return -7; }
+        if (target.join("bin").join("again.sh").metadata().value().permissions != 493) { return -8; }
+    }
+    [Target(!OS(Windows))] {
+        if (target.join("bin").join("latest").read_link().value() != io.Path("run.sh")) { return -9; }
+        if (io.File.read_to_string(target.join("up")).value() != "notes") { return -10; }
+        if (target.join("hop").read_link().value() != io.Path(".")) { return -11; }
+    }
+    var skipped = ["escape", "absolute", "bin/deep", "hop/escape"];
+    for (var name in skipped) {
+        if (target.join(name).symlink_metadata().is_ok()) { return -12; }
+    }
+
+    # Extracting again replaces a symlink in a file's place, never writing
+    # through it.
+    target.join("bin").set_permissions(493);
+    io.File.remove(target.join("notes.txt"));
+    [Target(!OS(Windows))] {
+        io.File.symlink(outside, target.join("notes.txt")).value();
+    }
+    out = io.ByteWriter();
+    tar = archive.TarWriter(out);
+    tar.append_file("notes.txt", "new".bytes());
+    tar.finish();
+    if (archive.TarReader(io.ByteReader(out.bytes)).extract(target).is_err()) { return -13; }
+    if (io.File.read_to_string(target.join("notes.txt")).value() != "new") { return -14; }
+    if (io.File.read_to_string(outside).value() != "outside") { return -15; }
+    io.Directory.remove_all(target);
+    io.File.remove(outside);
     return 0;
 }
 
@@ -183,5 +271,5 @@ checks_entry_paths(): int {
 #[test]
 fn tar_archives() {
     let program = PROGRAM.replace("SCRATCH", &support::scratch_name("tar_extract"));
-    support::jit_cases(&program, &["writes_and_reads_back", "reads_archives_from_other_tools", "extracts_into_a_directory", "reports_damaged_archives", "checks_entry_paths"]);
+    support::jit_cases(&program, &["writes_and_reads_back", "reads_archives_from_other_tools", "extracts_into_a_directory", "restores_modes_times_and_links", "reports_damaged_archives", "checks_entry_paths"]);
 }

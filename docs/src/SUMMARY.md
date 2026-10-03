@@ -42,6 +42,7 @@
 - [Atomics](language/atomics.md)
 - [Threads and shared data](language/threads.md)
 - [Tasks](language/tasks.md)
+- [Files and directories](language/files.md)
 - [Networking](language/networking.md)
 - [HTTP](language/http.md)
 - [Processes](language/processes.md)
