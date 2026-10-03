@@ -195,7 +195,8 @@ var (quotient, remainder) = divide(17, 5);
 
 ## Overloading
 
-Functions of one file (or of one module's files) can share a name when their parameter lists differ,
+Functions can share a name when their parameter lists differ, in one file,
+across a module's files, or across the modules a file imports,
 and each call picks the best fit for its arguments. See
 [Overloading](overloading.md).
 

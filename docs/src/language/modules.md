@@ -160,8 +160,8 @@ A `module.pep` that only passes on its files' exports would repeat every name.
 - **Collisions are errors.** If two re-exports, or a re-export and one of the
   file's own exports, publish one name for different declarations, the
   compiler reports it at the `export ... from` that adds the second one. List the names you want instead, or
-  rename one with `as`. The exception is functions of one name from files
-  of the same module: they join one
+  rename one with `as`. The exception is functions declared under one
+  name: they join one
   [overload set](overloading.md#files-of-one-module-share-a-set).
   Anything else collides:
 
@@ -305,12 +305,14 @@ runtime/iterator.pep:182:15: note: also exported here
   parameter, or struct member hides a qualifier or an imported name of the
   same name.
 - **A file may not import a name it also declares** at top level:
-  `'make' is imported but also declared in this file`.
+  `'make' is imported but also declared in this file`. Functions are the
+  exception: a file's own functions of a name join the imported ones in
+  one [overload set](overloading.md#imported-sets-merge).
 - **An import list wins.** A name listed in `import [...]` takes priority over
   the same name from a whole-file import. When two whole-file imports provide
   the same name differently, using that name is an error because it is
-  ambiguous, unless both are functions of that name from files of one
-  module, which join one [overload set](overloading.md#files-of-one-module-share-a-set).
+  ambiguous, unless both are functions declared under that name, which
+  join one [overload set](overloading.md#imported-sets-merge).
 - **A local may share an imported declaration's name.** If `g.rect_area` is
   `shapes.pep`'s `area`, calling `g.rect_area(1, 2)` inside a function with a
   parameter named `area` calls `shapes.pep`'s function. The one exception is a

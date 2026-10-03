@@ -258,12 +258,17 @@ with no extension (with `--lib`, the library's file name for the stem,
   visibility check applies the same override rule (`Decl::is_override`).
   A file's overloads of a name take one name whatever their visibility, so
   an import binds the whole set. Where an import or re-export would bind
-  one name to functions of two files of one module, it binds a union
-  instead (`Unions::merge`, a name like `f@geo/a#set1`); `link` returns
-  them (`Linked::overload_unions`, carried to `Module::overload_unions`),
-  and `name_overloads` records each as a set of every member; sema hides a mixed set's private members
-  (`Module::private_functions`) from calls in other files
-  (`Overloads::set`, by the call's location).
+  one name to functions of two files (of one module or of several), or a
+  file's own functions of a name meet an import of it, it binds a union
+  instead (`Unions::merge`, a name like `f@geo/a#set1`; the prelude never
+  joins); `link` returns them grouped by module
+  (`Linked::overload_unions`, carried to `Module::overload_unions`), and
+  `name_overloads` records each as a set of every member, reporting two
+  members of one module with the same parameters as a redefinition (two
+  modules' such members only make a call ambiguous). Sema hides a mixed
+  set's private members (`Module::private_functions`) from calls in other
+  files, and an imported member with the same parameters as one of the
+  calling file's own (`Overloads::set`, by the call's location).
   Codegen gives every mangled declaration internal linkage
   (`set_private_linkage`): no other object can name it, and ELF linkers
   read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged

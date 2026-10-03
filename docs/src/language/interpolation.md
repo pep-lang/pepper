@@ -66,8 +66,9 @@ Runtime types such as `String`, `StringBuilder`, `io.Path`, `Uri` and
 interpolated through a `to_string()` method it declares (`return name();`
 gives the case's name).
 
-A plain overload such as `to_string(p: Point)` is not used: overloads of a name do not merge across modules (see
-[overloading](overloading.md#files-of-one-module-share-a-set)), so the runtime cannot see yours. Write a
+A plain overload such as `to_string(p: Point)` is not used: the runtime's
+code does not import your file, so it cannot see yours (see
+[overloading](overloading.md#imported-sets-merge)). Write a
 `to_string<Point>` override or a method instead.
 
 ## Format specifications

@@ -269,7 +269,7 @@ fn qualifier_must_name_an_imported_module() {
 fn import_may_not_redeclare_a_local_name() {
     let err = error(
         "redeclare",
-        &with_geometry("import [make] from geometry;\nmake(): int { return 0; }\ntest(): int { return 0; }"),
+        &with_geometry("import [make] from geometry;\nconst make = 0;\ntest(): int { return 0; }"),
     );
     assert!(err.contains("'make' is imported but also declared in this file"), "{}", err);
 }
@@ -303,7 +303,9 @@ fn the_same_export_from_two_imports_is_ambiguous_only_where_used() {
         ("main.pep", "import \"x\";\nimport \"y\";\ntest(): int { return f(); }"),
     ];
     let err = error("same_export_ambiguous", &files);
-    assert!(err.contains("'f' is ambiguous: more than one import provides it"), "{}", err);
+    assert!(err.contains("main.pep:3:22: error: call to 'f' is ambiguous"), "{}", err);
+    assert!(err.contains("x.pep:1:8: note: candidate function"), "{}", err);
+    assert!(err.contains("y.pep:1:8: note: candidate function"), "{}", err);
     // An import list tells them apart; `g`, which only one provides, needs none.
     let files = [
         ("x.pep", "export f(): int { return 1; }\nexport g(): int { return 3; }"),
@@ -2190,22 +2192,65 @@ fn a_mixed_set_keeps_its_private_members_from_a_re_export() {
 }
 
 #[test]
-fn overload_sets_of_one_name_from_two_modules_are_ambiguous() {
+fn overload_sets_of_one_name_from_two_modules_merge() {
+    let a = "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n";
+    let b = "export parse(x: String): int { return 3; }\nexport parse(x: double): int { return 4; }\n";
     let files = [
-        ("a.pep", "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n"),
-        ("b.pep", "export parse(x: String): int { return 3; }\nexport parse(x: double): int { return 4; }\n"),
-        ("main.pep", "import \"a\";\nimport \"b\";\ntest(): int { return parse(1); }"),
+        ("a.pep", a),
+        ("b.pep", b),
+        (
+            "main.pep",
+            "import \"a\";\nimport \"b\";\ntest(): int {\n    var f: (String) => int = parse;\n    return parse(1) * 1000 + parse(true) * 100 + f(\"s\") * 10 + parse(1.5);\n}",
+        ),
     ];
-    let err = error("overload_two_modules_ambiguous", &files);
-    assert!(err.contains("'parse' is ambiguous: more than one import provides it"), "{}", err);
+    assert_eq!(run("overload_two_modules_merge", &files), 1234);
 
-    // A qualifier or an import list picks one module's set.
+    // An import list merges too, and a qualifier picks one module's set.
     let files = [
-        ("a.pep", "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n"),
-        ("b.pep", "export parse(x: String): int { return 3; }\nexport parse(x: double): int { return 4; }\n"),
-        ("main.pep", "import \"a\" as a;\nimport [parse] from \"b\";\ntest(): int { return a.parse(true) * 10 + parse(1.5); }"),
+        ("a.pep", a),
+        ("b.pep", b),
+        ("main.pep", "import \"a\" as a;\nimport [parse] from \"a\";\nimport [parse] from \"b\";\ntest(): int { return a.parse(true) * 10 + parse(1.5); }"),
     ];
     assert_eq!(run("overload_two_modules_qualified", &files), 24);
+}
+
+#[test]
+fn members_of_two_modules_with_the_same_parameters_are_ambiguous_where_called() {
+    let files = [
+        ("a.pep", "export parse(x: int): int { return 1; }\n"),
+        ("b.pep", "export parse(x: int): int { return 2; }\nexport parse(x: bool): int { return 3; }\n"),
+        ("main.pep", "import \"a\";\nimport \"b\";\ntest(): int { return parse(1); }"),
+    ];
+    let err = error("overload_two_modules_same_member", &files);
+    assert!(err.contains("main.pep:3:22: error: call to 'parse' is ambiguous"), "{}", err);
+    assert!(err.contains("a.pep:1:8: note: candidate function"), "{}", err);
+    assert!(err.contains("b.pep:1:8: note: candidate function"), "{}", err);
+
+    // A call the other members decide is fine, and a qualifier picks one.
+    let files = [
+        ("a.pep", "export parse(x: int): int { return 1; }\n"),
+        ("b.pep", "export parse(x: int): int { return 2; }\nexport parse(x: bool): int { return 3; }\n"),
+        ("main.pep", "import \"a\" as a;\nimport \"b\";\ntest(): int { return parse(true) * 10 + a.parse(1); }"),
+    ];
+    assert_eq!(run("overload_two_modules_same_member_qualified", &files), 31);
+}
+
+#[test]
+fn a_files_own_overloads_join_an_imported_set() {
+    let a = "export parse(x: int): int { return 1; }\nexport parse(x: bool): int { return 2; }\n";
+    let files = [
+        ("a.pep", a),
+        ("main.pep", "import \"a\";\nparse(x: String): int { return 3; }\ntest(): int { return parse(1) * 100 + parse(true) * 10 + parse(\"s\"); }"),
+    ];
+    assert_eq!(run("overload_own_joins_import", &files), 123);
+
+    // An import list too; the file's own member hides an imported one with
+    // the same parameters.
+    let files = [
+        ("a.pep", a),
+        ("main.pep", "import [parse] from \"a\";\nparse(x: int): int { return 7; }\ntest(): int { return parse(1) * 10 + parse(true); }"),
+    ];
+    assert_eq!(run("overload_own_hides_import_member", &files), 72);
 }
 
 /// `geo`'s `area` overloads live in two files of the module.

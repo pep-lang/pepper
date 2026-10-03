@@ -59,9 +59,9 @@ pub struct Program {
     /// Files the load found but could not read or parse, and so left out
     /// (lenient mode only): an editor watches them for a fix.
     pub failed: Vec<PathBuf>,
-    /// The overload sets that span files of one module, from linking: each
-    /// union's name -> the functions or single-file sets it joins.
-    pub overload_unions: std::collections::BTreeMap<String, Vec<String>>,
+    /// The overload sets that span files, from linking: each union's name
+    /// -> the functions or single-file sets it joins, grouped by module.
+    pub overload_unions: std::collections::BTreeMap<String, Vec<Vec<String>>>,
 }
 
 impl Program {

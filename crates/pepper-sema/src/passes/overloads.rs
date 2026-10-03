@@ -23,9 +23,12 @@
 //!   final: no viable member, an ambiguous call, an overloaded name with no
 //!   function type to pick a member by.
 //!
-//! A set may span several files of one module: linking binds a name it
-//! takes from two such files to a union (`Module::overload_unions`), which
-//! `name_overloads` records as one more set of the members it joins.
+//! A set may span files and modules: linking binds a name it takes from two
+//! files, or from a file's own functions and its imports, to a union
+//! (`Module::overload_unions`), which `name_overloads` records as one more
+//! set of the members it joins. Two members of one module may not take the
+//! same parameters; two modules' members may, and a call that cannot tell
+//! them apart is ambiguous.
 //!
 //! A set's members may differ in visibility: a private member of a set with
 //! exported members is a candidate only for calls and values in its own
@@ -187,37 +190,41 @@ pub fn name_overloads(module: &mut Module) {
     attach_overrides(module);
 }
 
-/// Record each set that spans files of one module (`Module::overload_unions`)
-/// with the members of every set or function it joins, after checking that
-/// no two of those members take the same parameters. Returns false after
-/// reporting an error.
+/// Record each set that spans files (`Module::overload_unions`) with the
+/// members of every set or function it joins, after checking that no two
+/// members of one module take the same parameters. Two modules' members
+/// may: a call that cannot tell them apart is ambiguous, and a qualifier
+/// (`a.parse(1)`) picks one. Returns false after reporting an error.
 fn name_unions(module: &mut Module) -> bool {
-    for (union, parts) in module.overload_unions.clone() {
-        let members: Vec<usize> = parts
-            .iter()
-            .flat_map(|part| module.overload_sets.get(part).cloned().unwrap_or_else(|| vec![part.clone()]))
-            .filter_map(|member| module.functions.iter().position(|f| f.name == member))
-            .collect();
-        for (j, &later) in members.iter().enumerate() {
-            let function = &module.functions[later];
-            let key = parameter_key(function);
-            let Some(&earlier) = members[..j].iter().find(|&&i| parameter_key(&module.functions[i]) == key) else {
-                continue;
-            };
-            let previous = &module.functions[earlier];
-            let diagnostic = if return_key(previous) == return_key(function) {
-                Diagnostic::error(format!("redefinition of '{}'", demangle_name(&function.name)))
-                    .at(function.loc)
-                    .with_note("previous definition is here", Some(previous.loc))
-            } else {
-                Diagnostic::error("functions that differ only in their return type cannot be overloaded")
-                    .at(function.loc)
-                    .with_note("previous declaration is here", Some(previous.loc))
-            };
-            crate::errors::report(diagnostic);
-            return false;
+    for (union, groups) in module.overload_unions.clone() {
+        let mut names = vec![];
+        for parts in groups {
+            let members: Vec<usize> = parts
+                .iter()
+                .flat_map(|part| module.overload_sets.get(part).cloned().unwrap_or_else(|| vec![part.clone()]))
+                .filter_map(|member| module.functions.iter().position(|f| f.name == member))
+                .collect();
+            for (j, &later) in members.iter().enumerate() {
+                let function = &module.functions[later];
+                let key = parameter_key(function);
+                let Some(&earlier) = members[..j].iter().find(|&&i| parameter_key(&module.functions[i]) == key) else {
+                    continue;
+                };
+                let previous = &module.functions[earlier];
+                let diagnostic = if return_key(previous) == return_key(function) {
+                    Diagnostic::error(format!("redefinition of '{}'", demangle_name(&function.name)))
+                        .at(function.loc)
+                        .with_note("previous definition is here", Some(previous.loc))
+                } else {
+                    Diagnostic::error("functions that differ only in their return type cannot be overloaded")
+                        .at(function.loc)
+                        .with_note("previous declaration is here", Some(previous.loc))
+                };
+                crate::errors::report(diagnostic);
+                return false;
+            }
+            names.extend(members.iter().map(|&i| module.functions[i].name.clone()));
         }
-        let names = members.iter().map(|&i| module.functions[i].name.clone()).collect();
         module.overload_sets.insert(union, names);
     }
     true
@@ -436,6 +443,10 @@ pub struct Member {
     pub ret: TypeName,
     /// Present for a generic member.
     pub generic: Option<GenericSignature>,
+    /// Its parameter types with generic parameters named by position
+    /// (`parameter_key`): one file's member hides another file's member
+    /// with the same key from calls in that file.
+    key: Vec<String>,
 }
 
 impl Member {
@@ -447,6 +458,7 @@ impl Member {
             required: function.parameters.iter().filter(|p| p.default.is_none()).count(),
             ret: function.ty.clone(),
             generic: function.is_generic_func.then(|| GenericSignature::of(function)),
+            key: parameter_key(function),
         }
     }
 
@@ -749,10 +761,19 @@ impl Overloads {
 
     /// The members of `set` that code at `at` can see: all of them, except
     /// that the private members of a set with exported ones are seen only
-    /// in their own file. A synthesized location (`Loc::NONE`) sees all.
+    /// in their own file, and a file's own member hides an imported member
+    /// with the same parameters. A synthesized location (`Loc::NONE`) sees
+    /// all.
     fn set(&self, set: &str, at: Loc) -> Option<impl Iterator<Item = &Member>> {
-        let visible = move |m: &&Member| at == Loc::NONE || m.loc.file == at.file || !self.hidden.contains(&m.loc);
-        Some(self.sets.get(set)?.iter().filter(visible))
+        let members = self.sets.get(set)?;
+        let own: Vec<&Vec<String>> = match at == Loc::NONE {
+            true => vec![],
+            false => members.iter().filter(|m| m.loc.file == at.file).map(|m| &m.key).collect(),
+        };
+        let visible = move |m: &&Member| {
+            at == Loc::NONE || m.loc.file == at.file || (!self.hidden.contains(&m.loc) && !own.contains(&&m.key))
+        };
+        Some(members.iter().filter(visible))
     }
 
     /// The function types of the non-generic members of `set` visible at

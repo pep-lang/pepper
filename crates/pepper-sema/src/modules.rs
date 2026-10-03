@@ -123,18 +123,22 @@ struct Bindings {
     unresolved_whole_file: bool,
 }
 
-/// Overload sets that span several files of one module. Each file's
-/// functions of a name keep the name linking gives them; where one binding
-/// (an import, a re-export) would take a name from two files of the same
-/// module and both denote free functions, it takes a *union* instead: a name
-/// of its own (`f@geo/a#set1`) that sema resolves as one overload set of
-/// every member (`Module::overload_unions`). Anything else that binds one
-/// name twice is ambiguous, as before: two modules' sets never merge, and
-/// neither do functions of different names (`export size as area`).
+/// Overload sets that span files and modules. Each file's functions of a
+/// name keep the name linking gives them; where one binding (an import, a
+/// re-export) would take a name from two files and both denote free
+/// functions declared under that name, it takes a *union* instead: a name of
+/// its own (`f@geo/a#set1`) that sema resolves as one overload set of every
+/// member (`Module::overload_unions`). A file's own functions of a name join
+/// the set its imports bind to that name the same way. Anything else that
+/// binds one name twice is ambiguous, as before: a struct or variable never
+/// joins, and neither do functions of different names (`export size as
+/// area`) or the prelude's functions, which a file's own and imported
+/// functions hide.
 #[derive(Default)]
 struct Unions {
-    /// Each free function a file of a (non-prelude) module declares, by the
-    /// name it takes in the merged program: the folder of its module.
+    /// Each free function a non-prelude file declares, by the name it takes
+    /// in the merged program -> the module it belongs to: its module's
+    /// folder, or the file's name outside a module.
     functions: HashMap<String, std::path::PathBuf>,
     /// Each union's parts, sorted, -> its name.
     by_parts: HashMap<Vec<String>, String>,
@@ -146,15 +150,15 @@ struct Unions {
 impl Unions {
     fn of(files: &[ProgramFile], own: &[Own], overrides: &Overrides) -> Unions {
         let mut functions = HashMap::new();
-        for (i, f) in files.iter().enumerate() {
-            let Some(root) = f.module_root.as_ref().filter(|_| !f.prelude && !f.prelude_part) else { continue };
+        for (i, f) in files.iter().enumerate().filter(|(_, f)| !f.prelude && !f.prelude_part) {
+            let module = f.module_root.clone().unwrap_or_else(|| std::path::PathBuf::from(&f.name));
             for d in named_decls(&f.module) {
                 if let Declaration::Function(func) = d
                     && !func.external
                     && !overrides.is(func, i)
                     && let Some(name) = own[i].get(&func.name)
                 {
-                    functions.insert(name.clone(), root.clone());
+                    functions.insert(name.clone(), module.clone());
                 }
             }
         }
@@ -163,7 +167,7 @@ impl Unions {
 
     /// The one name a binding takes for both `a` and `b` (each a function,
     /// a single-file set, or a union): their union, when every part is a
-    /// free function of one module's files declared under the same name;
+    /// free function of a non-prelude file declared under the same name;
     /// else `None`.
     fn merge(&mut self, a: &str, b: &str) -> Option<String> {
         let expand = |name: &str| self.parts.get(name).cloned().unwrap_or_else(|| vec![name.to_string()]);
@@ -171,11 +175,10 @@ impl Unions {
         parts.extend(expand(b));
         parts.sort();
         parts.dedup();
-        // One module's functions, all declared under one name: a re-export
-        // that renames (`export size as area`) still collides.
-        let root = self.functions.get(&parts[0])?;
+        // Functions all declared under one name: a re-export that renames
+        // (`export size as area`) still collides.
         let name = namespace::demangle_name(&parts[0]);
-        if !parts.iter().all(|p| self.functions.get(p) == Some(root) && namespace::demangle_name(p) == name) {
+        if !parts.iter().all(|p| self.functions.contains_key(p) && namespace::demangle_name(p) == name) {
             return None;
         }
         if let [only] = parts.as_slice() {
@@ -184,10 +187,32 @@ impl Unions {
         if let Some(name) = self.by_parts.get(&parts) {
             return Some(name.clone());
         }
-        let name = format!("{}#set{}", parts[0], self.parts.len() + 1);
+        // A namespace of its own, so diagnostics demangle it even when its
+        // first part is a root file's bare `f`.
+        let name = match parts[0].contains(namespace::SEPARATOR) {
+            true => format!("{}#set{}", parts[0], self.parts.len() + 1),
+            false => namespace::mangle(&parts[0], &format!("#set{}", self.parts.len() + 1)),
+        };
         self.by_parts.insert(parts.clone(), name.clone());
         self.parts.insert(name.clone(), parts);
         Some(name)
+    }
+
+    /// Each union's parts grouped by module: members of one group that take
+    /// the same parameters redefine each other, while members of two
+    /// modules' groups only make a call that cannot tell them apart
+    /// ambiguous.
+    fn by_module(&self) -> std::collections::BTreeMap<String, Vec<Vec<String>>> {
+        self.parts
+            .iter()
+            .map(|(union, parts)| {
+                let mut groups: std::collections::BTreeMap<&std::path::PathBuf, Vec<String>> = Default::default();
+                for part in parts {
+                    groups.entry(&self.functions[part]).or_default().push(part.clone());
+                }
+                (union.clone(), groups.into_values().collect())
+            })
+            .collect()
     }
 }
 
@@ -839,7 +864,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
     }
     errors.sort_by_key(|e| (e.file, e.span.start));
     errors.dedup();
-    Linked { scopes, errors, overload_unions: unions.parts }
+    Linked { scopes, errors, overload_unions: unions.by_module() }
 }
 
 /// What [`link`] returns.
@@ -848,10 +873,10 @@ pub struct Linked {
     pub scopes: Vec<FileScope>,
     /// Every linking error.
     pub errors: Vec<ModuleError>,
-    /// The overload sets that span files of one module: each union's name
-    /// -> the names of the functions or single-file sets it joins (see
+    /// The overload sets that span files: each union's name -> the names
+    /// of the functions or single-file sets it joins, grouped by module (see
     /// [`Unions`]).
-    pub overload_unions: std::collections::BTreeMap<String, Vec<String>>,
+    pub overload_unions: std::collections::BTreeMap<String, Vec<Vec<String>>>,
 }
 
 /// Per file, the other files whose exported extensions it may use (see
@@ -1176,10 +1201,19 @@ fn bind_imports(
             }
             continue;
         }
-        // The merge is order-independent: equal keeps, functions of one
-        // module's files join a union, anything else different -> None.
+        // The merge is order-independent: equal keeps, functions declared
+        // under one name join a union, anything else different -> None.
         for (name, c) in &exports[target] {
-            if own.contains_key(name) {
+            // The file's own functions of the name join an imported set of
+            // it; anything else of the file's own hides the import.
+            if let Some(o) = own.get(name) {
+                let seed = match b.unqualified.get(name) {
+                    Some(Some(union)) => union.clone(),
+                    _ => o.clone(),
+                };
+                if let Some(union) = unions.merge(&seed, c) {
+                    b.unqualified.insert(name.clone(), Some(union));
+                }
                 continue;
             }
             match b.unqualified.get(name) {
@@ -1210,7 +1244,9 @@ fn bind_imports(
                 continue;
             };
             let local = s.local_name();
-            if own.contains_key(local) {
+            // Only functions join the file's own of the name.
+            let existing = explicit.get(local).or_else(|| own.get(local));
+            if own.contains_key(local) && unions.merge(existing.unwrap(), c).is_none() {
                 errors.push(ModuleError { note: None,
                     unresolved: false,
                     file: i,
@@ -1219,8 +1255,8 @@ fn bind_imports(
                 });
                 continue;
             }
-            let c = match explicit.get(local) {
-                Some(existing) if existing != c => unions.merge(existing, c),
+            let c = match existing {
+                Some(existing) if existing != c => unions.merge(&existing.clone(), c),
                 _ => Some(c.clone()),
             };
             match c {
@@ -1376,8 +1412,12 @@ impl Rewriter<'_, '_> {
         if self.is_hidden(name, value) {
             return None;
         }
-        // The file's own declaration: renamed when it is private.
+        // The file's own declaration: renamed when it is private, or the
+        // union its functions of the name form with an imported set.
         if let Some(c) = self.own.get(name) {
+            if let Some(Some(union)) = self.bindings.unqualified.get(name) {
+                return self.denote(name, union.clone(), span, value, true);
+            }
             return (c != name).then(|| c.clone());
         }
         // A prelude name is recorded like an import even when it needs no

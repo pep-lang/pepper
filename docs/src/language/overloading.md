@@ -10,7 +10,7 @@ best:
 
 The functions of one name in one file are an **overload set**, and each is a
 member of it; the files of one [module](modules.md#modules) may share a
-set. [Methods](#methods-and-operators) of one name in a struct are a
+set, and so do the sets a file imports and its own functions of that name. [Methods](#methods-and-operators) of one name in a struct are a
 set too, and so are its static methods, its operators, its
 [constructors](#constructors), and the methods its
 [extensions](#extensions-and-traits) add.
@@ -33,9 +33,9 @@ set too, and so are its static methods, its operators, its
 
   Two functions with the same parameter types and the same return type are
   a `redefinition of 'f'`.
-- **A file's own functions hide imported ones.** A file's functions of a
-  name hide an imported function of that name: a file cannot add
-  members to an imported set.
+- **A file's own functions join imported ones.** A file's functions of a
+  name and the functions its imports bind to that name are one set (see
+  [Imported sets merge](#imported-sets-merge)).
 
 ### Files of one module share a set
 
@@ -67,10 +67,48 @@ parameters (`redefinition of 'area'`). Names that are not all functions,
 such as two structs `Point`, and a renaming re-export
 (`export size as area` beside an `area`) are still `exported twice`.
 
-Two modules' sets do not merge. When two imported modules, or two files
-outside any module, each export a set named `parse`, an unqualified `parse(…)` is an error (`'parse' is ambiguous: more than one
-import provides it`), even when their parameters differ. A qualifier
-(`a.parse`) or an import list (`import [parse] from "b"`) picks one.
+### Imported sets merge
+
+Sets of one name from different modules merge too, as they do in Swift:
+where two imports bind `describe`, and where the file declares `describe`
+itself, an unqualified `describe(…)` picks among every member. Here two
+modules each export one member and the file adds a third:
+
+```pepper
+{{#include ../../examples/overloading-imports/numbers/module.pep}}
+```
+
+```pepper
+{{#include ../../examples/overloading-imports/flags/module.pep}}
+```
+
+```pepper
+{{#include ../../examples/overloading-imports/main.pep}}
+```
+
+Unlike files of one module, two modules may each export a member with the
+same parameters. That is no error until a call cannot tell them apart:
+
+```text
+main.pep:3:22: error: call to 'parse' is ambiguous
+    3 | main(): int { return parse(1); }
+      |                      ^~~~~
+a.pep:1:8: note: candidate function
+    1 | export parse(x: int): int { return 1; }
+      |        ^~~~~
+b.pep:1:8: note: candidate function
+    1 | export parse(x: int): int { return 2; }
+      |        ^~~~~
+```
+
+A qualifier (`a.parse(1)`) picks one module's set. A file's own member
+hides an imported member with the same parameters, so a file can replace
+one member of an imported set. Only functions merge: a struct or variable
+of the name hides imported functions of it (or, named in an import list,
+is `'parse' is imported but also declared in this file`), and the
+[prelude](modules.md)'s functions, such as the runtime's `print`, are
+hidden by a file's own or imported functions of the name rather than
+joined.
 
 ### Members may differ in visibility
 
@@ -329,6 +367,6 @@ An expected type that matches no member is `address of overloaded function
 
 ## What is not supported yet
 
-- **Overloads across modules** do not merge: two modules' sets of one name
-  are ambiguous where both are imported, and a file's own functions of a
-  name hide an imported set of that name.
+- **Joining the runtime's sets**: a file's own or imported functions of a
+  name that the runtime declares (`print`, `to_string`) hide the runtime's
+  functions of that name instead of joining them.
