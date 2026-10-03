@@ -1695,6 +1695,18 @@ fn with_block(w: &ast::With) -> Result<Statement, Diagnostic> {
 }
 
 fn function_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
+    // Only a trait method (a requirement), an `extern`, or a `[__BuiltIn]`
+    // declaration, which never reaches the builder, may end with `;`.
+    if decl.body.is_none() && !decl.external {
+        let name = if decl.is_indexer { "[]" } else { decl.name.as_str() };
+        return Err(Diagnostic::error(format!("'{}' has no body; only a trait method or a '[__BuiltIn]' declaration may end with ';'", name))
+            .at(loc(decl.name_span)));
+    }
+    trait_method_def(decl, parent)
+}
+
+/// A trait's method, whose body is optional: one without is a requirement.
+fn trait_method_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<FunctionDef, Diagnostic> {
     reject_implicit(&decl.attributes)?;
     member_def(decl, parent)
 }
@@ -1863,7 +1875,7 @@ fn trait_def(t: &ast::TraitDecl) -> Result<TraitDef, Diagnostic> {
         name: t.name.clone(),
         generic_params: t.generic_params.iter().map(generic_param_from).collect(),
         methods: {
-            let mut methods = t.methods.iter().map(|m| function_def(m, None)).collect::<Result<Vec<_>, _>>()?;
+            let mut methods = t.methods.iter().map(|m| trait_method_def(m, None)).collect::<Result<Vec<_>, _>>()?;
             for property in &t.properties {
                 methods.extend(property_members(property, PropertyOwner::Trait { name: &t.name })?.accessors);
             }

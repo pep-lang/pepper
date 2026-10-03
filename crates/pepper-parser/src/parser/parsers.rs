@@ -3614,6 +3614,18 @@ fn generic_params(input: &mut &str) -> Result<Vec<GenericParam>> {
 /// Function declaration — supports two syntaxes:
 ///   1. `name [generic_params] (params) [: TypeName] { body }`
 ///   2. `TypeName name (params) { body }`  (return-type prefix style)
+/// A function's body, or `;` after a parameter list (`parameters`) for a
+/// declaration without one: a compiler built-in's, which the builder accepts
+/// only under `[__BuiltIn]`. Without a parameter list, `T name;` stays a
+/// variable.
+fn body_or_semicolon(input: &mut &str, parameters: bool) -> Result<Option<Block>> {
+    if parameters && input.starts_with(';') {
+        *input = &input[1..];
+        return Ok(None);
+    }
+    Ok(Some(block(input, vec![])?))
+}
+
 fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<FunctionDecl> {
     let start = pos(input);
     // Widen the node span to cover any preceding attributes.
@@ -3641,6 +3653,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         };
         ws(input)?;
 
+        let written = input.starts_with('(');
         let parameters = if input.starts_with('(') {
             function_parameters(input)?
         } else {
@@ -3655,7 +3668,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             return_type = type_name(input)?;
             ws(input)?;
         }
-        let body = block(input, vec![])?;
+        let body = body_or_semicolon(input, written)?;
         ws(input)?;
 
         return Ok(FunctionDecl {
@@ -3666,7 +3679,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             return_type,
             parameters,
             external: false,
-            body: Some(body),
+            body,
             is_static: false,
             is_indexer: false,
             is_variadic: false,
@@ -3695,6 +3708,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         let name_span_end = pos(input);
         ws(input)?;
 
+        let written = input.starts_with('(');
         let parameters = if input.starts_with('(') {
             function_parameters(input)?
         } else {
@@ -3711,7 +3725,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             ws(input)?;
         }
 
-        let body = block(input, vec![])?;
+        let body = body_or_semicolon(input, written)?;
         ws(input)?;
 
         return Ok(FunctionDecl {
@@ -3722,7 +3736,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             return_type: effective_return,
             parameters,
             external: false,
-            body: Some(body),
+            body,
             is_static: false,
             is_indexer: false,
             is_variadic: false,
@@ -3884,6 +3898,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, start: usize,
         vec![]
     };
     ws(input)?;
+    let written = input.starts_with('(');
     let parameters = if input.starts_with('(') {
         function_parameters(input)?
     } else {
@@ -3897,7 +3912,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, start: usize,
         return_type = type_name(input)?;
         ws(input)?;
     }
-    let body = block(input, vec![])?;
+    let body = body_or_semicolon(input, written)?;
     ws(input)?;
     Ok(FunctionDecl {
         is_exported: false,
@@ -3907,7 +3922,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, start: usize,
         return_type,
         parameters,
         external: false,
-        body: Some(body),
+        body,
         is_static: false,
         is_indexer: false,
         is_variadic: false,
@@ -5134,7 +5149,7 @@ pub fn parse_module(input: &mut &str) -> Result<Module> {
         let decl = declaration(input).inspect_err(|_| expected(at, "declaration"))?;
         let needs_semicolon = match &decl {
             Declaration::Variable(_) | Declaration::TypeAlias(_) => true,
-            Declaration::Function(f) => f.body.is_none(),
+            Declaration::Function(f) => f.external,
             _ => false,
         };
         if needs_semicolon {
@@ -6936,6 +6951,18 @@ f() { var r = c.Result<int>.ok(1); }");
             }
             other => panic!("{:?}", other),
         }
+    }
+
+    #[test]
+    fn declarations_without_a_body_end_in_a_semicolon() {
+        let m = parse("[__BuiltIn]\nexport f<T>(x: T): int;\nstruct S { m(): int; T value; }\nint g;\n");
+        let Declaration::Function(f) = &m.declarations[0] else { panic!("{:?}", m.declarations[0]) };
+        assert!(f.body.is_none() && !f.external);
+        let Declaration::Struct(s) = &m.declarations[1] else { panic!("{:?}", m.declarations[1]) };
+        assert!(s.methods[0].body.is_none());
+        // Without a parameter list, `T name;` is still a field or a variable.
+        assert_eq!(s.fields[0].name, "value");
+        assert!(matches!(&m.declarations[2], Declaration::Variable(v) if v.name == "g"));
     }
 
     #[test]

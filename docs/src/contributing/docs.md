@@ -59,7 +59,8 @@ not match the runtime, and CI runs it.
 What the compiler provides rather than the runtime declares is still
 declared in the runtime, marked `[__BuiltIn]`: `runtime/reflect.pep`
 declares the `reflect` functions of `static` blocks and the values they
-return. The compiler ignores such a declaration (its body is only `{}`), so
+return. The compiler ignores such a declaration (its functions and methods end in
+`;`, with no body), so
 it costs nothing and cannot clash with the built-in; the reference, the doc
 comment check and the language server read it like any other. A string
 argument names the built-in when it is not the declaration's own name:

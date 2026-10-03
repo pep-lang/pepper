@@ -773,7 +773,10 @@ top-level declaration (`build_module`), so it declares, links and generates
 nothing, while docgen, `doc::check_documented` and the language server
 read it under the built-in's name (`ast::built_in_name`, `reflect.name`).
 `Program::built_in_errors` rejects the attribute outside the runtime
-(`checked::in_runtime`).
+(`checked::in_runtime`). Its functions and methods end in `;` after their
+parameter list (`body_or_semicolon` in the parser; `_function_body` in
+`tools/syntax`); the builder's `function_def` rejects a bodyless function
+anywhere else, since only a trait method may lack one.
 The target is a `platform::Target` (`os`, `arch`, and the LLVM triple, or
 `None` for the host's own): `Target::parse` reads a `--target` triple (the
 supported ones are `SUPPORTED_TRIPLES`), and `with_target(target, f)` runs

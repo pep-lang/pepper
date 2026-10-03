@@ -1870,9 +1870,17 @@ struct Parser {
         return node;
     }
 
-    # The body of a function: a block, or `;` where `bodyless` allows one.
+    # The body of a function: a block, or `;` where `bodyless` allows one (a
+    # trait's requirement) or after a parameter list (a compiler built-in's
+    # `[__BuiltIn]` declaration; the compiler rejects it anywhere else).
     _function_body(node: Node, bodyless: bool) {
-        if (bodyless and _at(";")) {
+        bool parameters = false;
+        for (var child in node.children) {
+            if (child.kind == NodeKind.Parameters) {
+                parameters = true;
+            }
+        }
+        if ((bodyless or parameters) and _at(";")) {
             _take(node);
             return;
         }

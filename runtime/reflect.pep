@@ -14,7 +14,7 @@
 ## @typeParam T the type to name
 ## @returns the type's name
 [__BuiltIn("reflect.name")]
-export name<T>(): String {}
+export name<T>(): String;
 
 ## The public fields and [properties](../language/properties.md) of struct
 ## `T`, in declaration order, as members.
@@ -22,7 +22,7 @@ export name<T>(): String {}
 ## @typeParam T a struct
 ## @returns one member per public field or property
 [__BuiltIn("reflect.properties")]
-export properties<T>(): List<Member> {}
+export properties<T>(): List<Member>;
 
 ## Every field of struct `T`, private ones and a property's storage included,
 ## in declaration order, as members. It is meant for code a struct's author
@@ -33,21 +33,21 @@ export properties<T>(): List<Member> {}
 ## @typeParam T a struct declared in this file
 ## @returns one member per field
 [__BuiltIn("reflect.fields")]
-export fields<T>(): List<Member> {}
+export fields<T>(): List<Member>;
 
 ## The cases of enum `E`, in declaration order.
 ##
 ## @typeParam E an enum
 ## @returns one case per enum case
 [__BuiltIn("reflect.cases")]
-export cases<E>(): List<Case> {}
+export cases<E>(): List<Case>;
 
 ## Every free function in the program that carries attribute `A`.
 ##
 ## @typeParam A an [attribute struct](../language/reflection.md#attributes)
 ## @returns one function per function marked `[A]`
 [__BuiltIn("reflect.functions_with")]
-export functions_with<A>(): List<Function> {}
+export functions_with<A>(): List<Function>;
 
 ## Whether `T` is a struct. A number, `bool` or `char` is not, nor is an
 ## enum or a trait.
@@ -55,21 +55,21 @@ export functions_with<A>(): List<Function> {}
 ## @typeParam T the type to test
 ## @returns whether `T` is a struct
 [__BuiltIn("reflect.is_struct")]
-export is_struct<T>(): bool {}
+export is_struct<T>(): bool;
 
 ## Whether `T` is an enum.
 ##
 ## @typeParam T the type to test
 ## @returns whether `T` is an enum
 [__BuiltIn("reflect.is_enum")]
-export is_enum<T>(): bool {}
+export is_enum<T>(): bool;
 
 ## Whether `T` is a trait.
 ##
 ## @typeParam T the type to test
 ## @returns whether `T` is a trait
 [__BuiltIn("reflect.is_trait")]
-export is_trait<T>(): bool {}
+export is_trait<T>(): bool;
 
 ## Whether `T` is a reference type, whose slots can be null: a struct, or an
 ## enum whose cases carry values, unless it is `[Value]`.
@@ -77,7 +77,7 @@ export is_trait<T>(): bool {}
 ## @typeParam T the type to test
 ## @returns whether `T` is a reference type
 [__BuiltIn("reflect.is_reference")]
-export is_reference<T>(): bool {}
+export is_reference<T>(): bool;
 
 ## Whether `A` and `B` are the same type, after aliases (`int` and `i32`
 ## are). A member's `Type` can be either argument:
@@ -87,7 +87,7 @@ export is_reference<T>(): bool {}
 ## @typeParam B the second type
 ## @returns whether they are the same type
 [__BuiltIn("reflect.is_same")]
-export is_same<A, B>(): bool {}
+export is_same<A, B>(): bool;
 
 ## Whether struct or enum `T` carries attribute `A`. A member, case or
 ## function has the same test as a method with one type argument
@@ -97,7 +97,7 @@ export is_same<A, B>(): bool {}
 ## @typeParam A the attribute struct
 ## @returns whether `T` carries `A`
 [__BuiltIn("reflect.has_attribute")]
-export has_attribute<T, A>(): bool {}
+export has_attribute<T, A>(): bool;
 
 ## The value of attribute `A` on struct or enum `T`: each field of attribute
 ## struct `A` by name (`reflect.attribute<T, Deprecated>().message`). It is
@@ -108,7 +108,7 @@ export has_attribute<T, A>(): bool {}
 ## @typeParam A the attribute struct
 ## @returns the attribute's value
 [__BuiltIn("reflect.attribute")]
-export attribute<T, A>(): A {}
+export attribute<T, A>(): A;
 
 ## Whether the build defines [build option](../language/build-options.md)
 ## `name` (`-D NAME` or `-D NAME=value`).
@@ -117,7 +117,7 @@ export attribute<T, A>(): A {}
 ##   `_`
 ## @returns whether it is defined
 [__BuiltIn("reflect.has_build_option")]
-export has_build_option(name: String): bool {}
+export has_build_option(name: String): bool;
 
 ## The value of [build option](../language/build-options.md) `name`, as a
 ## string (`-D NAME` alone is `"1"`). It is an error when the build does not
@@ -126,7 +126,7 @@ export has_build_option(name: String): bool {}
 ## @param name the option's name
 ## @returns the option's value
 [__BuiltIn("reflect.build_option")]
-export build_option(name: String): String {}
+export build_option(name: String): String;
 
 ## The value of [build option](../language/build-options.md) `name`, as a
 ## string, or `default` when the build does not define it.
@@ -135,7 +135,7 @@ export build_option(name: String): String {}
 ## @param default the value when the build does not define it
 ## @returns the option's value, else `default`
 [__BuiltIn("reflect.build_option")]
-export build_option(name: String, default: String): String {}
+export build_option(name: String, default: String): String;
 
 ## Writes `value` as a note each time the compiler runs the call, on every
 ## compile, including one that succeeds; in an unrolled loop the note says
@@ -145,21 +145,21 @@ export build_option(name: String, default: String): String {}
 ## @typeParam T the value's compile-time kind
 ## @param value any compile-time value
 [__BuiltIn("reflect.print")]
-export print<T>(value: T) {}
+export print<T>(value: T);
 
 ## Stops the compile with an error at the call.
 ##
 ## @param message the error's text; an interpolated string can show the
 ##   values that matter
 [__BuiltIn("reflect.error")]
-export error(message: String) {}
+export error(message: String);
 
 ## Stops the compile with an error at `condition` when it is false.
 ##
 ## @param condition a compile-time condition
 ## @param message the error's text
 [__BuiltIn("reflect.assert")]
-export assert(condition: bool, message: String) {}
+export assert(condition: bool, message: String);
 
 ## A field or property, from `properties` or `fields`. A compile-time value:
 ## no program can name its type.
@@ -185,27 +185,27 @@ export struct Member {
     ##
     ## @typeParam A the attribute struct
     ## @returns whether it carries `A`
-    has_attribute<A>(): bool {}
+    has_attribute<A>(): bool;
 
     ## The value of attribute `A` on it; an error when it does not carry `A`.
     ##
     ## @typeParam A the attribute struct
     ## @returns the attribute's value
-    attribute<A>(): A {}
+    attribute<A>(): A;
 
     ## Emits `value.name`, a read of this member of `value`.
     ##
     ## @typeParam T the struct
     ## @param value the struct to read from
     ## @returns the member's value
-    get<T>(value: T): Type {}
+    get<T>(value: T): Type;
 
     ## Emits `value.name = x`, a store to this member of `value`.
     ##
     ## @typeParam T the struct
     ## @param value the struct to store into
     ## @param x the value to store
-    set<T>(value: T, x: Type) {}
+    set<T>(value: T, x: Type);
 }
 
 ## An enum case, from `cases`. A compile-time value: no program can name its
@@ -228,20 +228,20 @@ export struct Case {
     ##
     ## @typeParam A the attribute struct
     ## @returns whether it carries `A`
-    has_attribute<A>(): bool {}
+    has_attribute<A>(): bool;
 
     ## The value of attribute `A` on it; an error when it does not carry `A`.
     ##
     ## @typeParam A the attribute struct
     ## @returns the attribute's value
-    attribute<A>(): A {}
+    attribute<A>(): A;
 
     ## Emits a test of whether `v` holds this case.
     ##
     ## @typeParam E the enum
     ## @param v the enum value to test
     ## @returns whether `v` holds this case
-    matches<E>(v: E): bool {}
+    matches<E>(v: E): bool;
 
     ## Emits the case made with `values` (`case.get()` for one that carries
     ## none); at module scope, the case itself.
@@ -250,7 +250,7 @@ export struct Case {
     ## @typeParam TValues the types of the values
     ## @param values the values the case carries, one argument each
     ## @returns the enum value
-    get<E, TValues>(values: TValues): E {}
+    get<E, TValues>(values: TValues): E;
 }
 
 ## A function, from `functions_with`. A compile-time value: no program can
@@ -264,13 +264,13 @@ export struct Function {
     ##
     ## @typeParam A the attribute struct
     ## @returns whether it carries `A`
-    has_attribute<A>(): bool {}
+    has_attribute<A>(): bool;
 
     ## The value of attribute `A` on it; an error when it does not carry `A`.
     ##
     ## @typeParam A the attribute struct
     ## @returns the attribute's value
-    attribute<A>(): A {}
+    attribute<A>(): A;
 
     ## Emits a direct call of the function with `arguments`.
     ##
@@ -278,7 +278,7 @@ export struct Function {
     ## @typeParam TArguments the types of the arguments
     ## @param arguments the call's arguments, one argument each
     ## @returns what the call returns
-    call<R, TArguments>(arguments: TArguments): R {}
+    call<R, TArguments>(arguments: TArguments): R;
 }
 
 ## What `properties`, `fields`, `cases`, `functions_with` and a case's
@@ -296,7 +296,7 @@ export struct List<T> {
     ##
     ## @param i its position, from 0
     ## @returns the item
-    [](i: int): T {}
+    [](i: int): T;
 }
 
 ## A compile-time string: a literal, a member's `name`, or the result of
@@ -312,23 +312,23 @@ export struct String {
     ##
     ## @param s the prefix
     ## @returns whether it starts with `s`
-    starts_with(s: String): bool {}
+    starts_with(s: String): bool;
 
     ## Whether it ends with `s`.
     ##
     ## @param s the suffix
     ## @returns whether it ends with `s`
-    ends_with(s: String): bool {}
+    ends_with(s: String): bool;
 
     ## Whether `s` occurs in it.
     ##
     ## @param s the text to find
     ## @returns whether it contains `s`
-    contains(s: String): bool {}
+    contains(s: String): bool;
 
     ## A new compile-time string: this one followed by `rhs`.
     ##
     ## @param rhs the string to append
     ## @returns the joined string
-    +(rhs: String): String {}
+    +(rhs: String): String;
 }

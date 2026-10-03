@@ -350,8 +350,9 @@ T remove_at(ulong index) { ... }
   inside the body; the doc comment is the API contract.
 - **Compiler built-ins** (`reflect.*`) are documented the same way, by a
   declaration in the runtime marked `[__BuiltIn]` (`[__BuiltIn("reflect.name")]`
-  when the built-in's name is not the declaration's), with an empty body.
-  The compiler ignores it; the reference and the language server read it.
+  when the built-in's name is not the declaration's), whose functions end in
+  `;` instead of a body. The compiler ignores it; the reference and the
+  language server read it.
 - **Deprecating** a public API: put `[Deprecated("use 'x' instead", "x")]`
   between its doc comment and the declaration, and start the description
   with "Deprecated: use `x` instead." (the reference shows the attribute

@@ -5101,3 +5101,13 @@ fn built_in_outside_the_runtime() {
          \x20     |  ^~~~~~~~~"
     );
 }
+
+#[test]
+fn function_without_a_body() {
+    assert_eq!(
+        error_of("function_without_a_body", "struct S {\n    var x: int;\n    m(): int;\n}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:3:5: error: 'm' has no body; only a trait method or a '[__BuiltIn]' declaration may end with ';'\n\
+         \x20   3 |     m(): int;\n\
+         \x20     |     ^"
+    );
+}
