@@ -68,6 +68,7 @@ main(args: String[]): int {
     );
     var imports = parser.multiple("import-path", "I", "a directory pep-build searches for imports", value_name = "DIR");
     var lines = parser.flag("lines", "l", "end each frame's name with its file and line");
+    var idle = parser.flag("idle", help = "keep samples of threads that were waiting, not running (samply)");
     var open = parser.flag("open", help = "open the flame graph when it is written");
     var command = parser.positionals(
         "program", "the .pep file or executable to profile, then its arguments (after --, if any start with -)"
@@ -85,6 +86,7 @@ main(args: String[]): int {
     options.input = input.value_or("");
     options.title = title.value_or("");
     options.lines = lines.is_set;
+    options.idle = idle.is_set;
     options.imports = imports.values();
     options.command = command.values();
     var hz = uint.parse(frequency.value());
@@ -143,6 +145,7 @@ struct Options {
     var input: String = "";
     var title: String = "";
     var lines: bool = false;
+    var idle: bool = false;
     var imports: Array<String> = __null;
     var command: Array<String> = __null;
 
@@ -157,7 +160,7 @@ struct Options {
 profile_and_draw(options: Options, render_with: String, scratch: Path, symbolizer_name: String): int {
     var stacks = "";
     if (!options.input.is_empty) {
-        var read = read_recording(options.input, options.profiler, options.lines, symbolizer_name);
+        var read = read_recording(options.input, options.profiler, options.lines, options.idle, symbolizer_name);
         if (read.is_err()) {
             return fail(read.error().message);
         }
@@ -178,7 +181,7 @@ profile_and_draw(options: Options, render_with: String, scratch: Path, symbolize
                 File.copy(symbols, Path(sidecar_path(options.raw)));
             }
         }
-        var read = read_recording(recording, options.profiler, options.lines, symbolizer_name);
+        var read = read_recording(recording, options.profiler, options.lines, options.idle, symbolizer_name);
         if (read.is_err()) {
             return fail(read.error().message);
         }
@@ -484,8 +487,9 @@ answers_version(program: Path): bool {
 
 # The folded stacks of a recording: a samply profile, a perf.data file,
 # `perf script` text, a `sample` report, or folded stacks themselves,
-# told apart by what the file holds.
-read_recording(path: String, profiler: String, lines: bool, symbolizer_name: String): Result<String> {
+# told apart by what the file holds. Without `idle`, a samply profile's
+# samples of threads that used no CPU are left out.
+read_recording(path: String, profiler: String, lines: bool, idle: bool, symbolizer_name: String): Result<String> {
     var bytes = File.read_bytes(Path(path));
     if (bytes.is_err()) {
         return Result<String>.Err($"cannot read '{path}': {bytes.error().message}");
@@ -536,7 +540,7 @@ read_recording(path: String, profiler: String, lines: bool, symbolizer_name: Str
                 symbols = parsed.value();
             }
         }
-        var profile = read_samply(document.value(), symbols);
+        var profile = read_samply(document.value(), symbols, idle);
         if (profile.is_err()) {
             return Result<String>.Err($"'{path}': {profile.error().message}");
         }

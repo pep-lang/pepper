@@ -288,8 +288,11 @@ without_version(symbol: String): String {
 # frame and the entry for its caller, and each sample's stack entry.
 # `symbols` is samply's `.syms.json` file beside it, or `Null`: it names
 # each library's functions by address, for frames no debug info on this
-# machine covers.
-export read_samply(document: json.JsonValue, symbols: json.JsonValue): Result<Profile> {
+# machine covers. Without `idle`, a sample whose thread used no CPU since
+# the last one (`threadCPUDelta` 0) is left out: samply records a waiting
+# thread too, as one sample weighted by how long it waited, and a thread
+# pool's idle worker would otherwise fill half the graph.
+export read_samply(document: json.JsonValue, symbols: json.JsonValue, idle: bool): Result<Profile> {
     var profile = Profile();
     profile.relative = true;
     var libraries = document["libs"].as_array();
@@ -320,6 +323,10 @@ export read_samply(document: json.JsonValue, symbols: json.JsonValue): Result<Pr
                 continue;
             }
             var weight = samples["weight"][sample].as_int();
+            var cpu = samples["threadCPUDelta"][sample].as_int();
+            if (!idle and cpu.is_value() and cpu.value() == 0) {
+                continue;
+            }
             if (!made.contains(entry.value())) {
                 var stack = Array<ulong>();
                 var at = entry;

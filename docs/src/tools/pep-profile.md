@@ -60,6 +60,7 @@ pep-profile [options] --input <FILE>
 | `--profiler <name>` | Record with `samply`, `perf` or `sample`, or the profiler at a path | the first installed |
 | `--symbolizer <path>` | The `llvm-symbolizer` that names frames, or `none` | found on the `PATH` |
 | `-l`, `--lines` | End each frame's name with its file and line | off |
+| `--idle` | Keep the samples of threads that were waiting, not running (samply) | off |
 | `--title <text>` | The flame graph's title | `Flame graph: <name>` |
 | `--renderer <name>` | What draws the flame graph: `builtin`, `inferno` or `flamegraph.pl` | `builtin` |
 | `--folded <file>` | Also write the folded stacks | |
@@ -102,6 +103,14 @@ seconds (10 by default). samply and perf need permission to do that: on
 Linux, `kernel.perf_event_paranoid` must allow it (samply asks for 1 or
 lower) or the profiler must run as root; on macOS, `sample` can attach to
 your own processes.
+
+samply also records each thread while it waits, as samples that used no
+CPU. On Windows, a thread pool that Windows starts in every process sits
+waiting the whole run, and alone would fill half the graph. So
+`pep-profile` leaves out every sample of a samply recording in which its
+thread used no CPU, and the graph shows where the program ran. `--idle`
+keeps them, to see where threads block. It changes nothing with perf or
+`sample`.
 
 ## Names in the flame graph
 

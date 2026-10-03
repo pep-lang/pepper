@@ -28,11 +28,16 @@ fn run(arguments: &[&str]) -> Output {
 /// The folded stacks pep-profile reads from `recording`, with no
 /// symbolizer, so names come from the recording alone.
 fn folded(dir: &Path, recording: &str, contents: &str) -> String {
+    folded_with(dir, recording, contents, &[])
+}
+
+/// [`folded`] with more command-line arguments.
+fn folded_with(dir: &Path, recording: &str, contents: &str, extra: &[&str]) -> String {
     let input = dir.join(recording);
     std::fs::write(&input, contents).unwrap();
     let folded = dir.join("stacks.folded");
     let svg = dir.join("graph.svg");
-    let output = run(&[
+    let mut arguments = vec![
         "--input",
         input.to_str().unwrap(),
         "--symbolizer",
@@ -41,7 +46,9 @@ fn folded(dir: &Path, recording: &str, contents: &str) -> String {
         folded.to_str().unwrap(),
         "-o",
         svg.to_str().unwrap(),
-    ]);
+    ];
+    arguments.extend_from_slice(extra);
+    let output = run(&arguments);
     assert!(output.status.success(), "pep-profile failed:\n{}", String::from_utf8_lossy(&output.stderr));
     std::fs::read_to_string(folded).unwrap()
 }
@@ -136,6 +143,38 @@ fn samply_profiles_name_frames_from_their_symbol_file() {
 }
 
 #[test]
+fn samples_of_waiting_threads_are_left_out_unless_idle() {
+    let dir = scratch("samply_idle");
+    // A working thread (two samples that used CPU, one that did not) and a
+    // thread pool's idle worker, which samply records as one sample
+    // weighted by how long it waited, with no CPU used.
+    let profile = r#"{
+  "libs": [{"name": "program", "path": "/missing/program", "debugName": "program"}],
+  "threads": [{
+    "stringArray": ["main", "work"],
+    "samples": {"length": 3, "stack": [1, 1, 0], "weight": [1, 1, 1], "threadCPUDelta": [5, 990, 0]},
+    "stackTable": {"length": 2, "prefix": [null, 0], "frame": [0, 1]},
+    "frameTable": {"length": 2, "address": [-1, -1], "func": [0, 1]},
+    "funcTable": {"length": 2, "name": [0, 1], "resource": [-1, -1]},
+    "resourceTable": {"length": 0, "lib": []}
+  }, {
+    "stringArray": ["RtlUserThreadStart", "NtWaitForWorkViaWorkerFactory"],
+    "samples": {"length": 1, "stack": [1], "weight": [767], "threadCPUDelta": [0]},
+    "stackTable": {"length": 2, "prefix": [null, 0], "frame": [0, 1]},
+    "frameTable": {"length": 2, "address": [-1, -1], "func": [0, 1]},
+    "funcTable": {"length": 2, "name": [0, 1], "resource": [-1, -1]},
+    "resourceTable": {"length": 0, "lib": []}
+  }]
+}"#;
+    assert_eq!(folded(&dir, "profile.json", profile), "main;work 2\n");
+    assert_eq!(
+        folded_with(&dir, "profile.json", profile, &["--idle"]),
+        "RtlUserThreadStart;NtWaitForWorkViaWorkerFactory 767\nmain 1\nmain;work 2\n"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn sample_reports_fold_their_call_trees() {
     let dir = scratch("sample");
     let report = "\
@@ -220,7 +259,10 @@ main(): int {\n    print(to_string(spin(200000000)));\n    return 0;\n}\n",
         .output()
         .expect("run pep-profile");
     let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() && stderr.contains("did not record a profile") {
+    // On Windows, samply records only from an Administrator terminal.
+    if !output.status.success()
+        && (stderr.contains("did not record a profile") || stderr.contains("needs administrator rights"))
+    {
         eprintln!("skipped: {profiler} cannot record here:\n{stderr}");
         return;
     }
