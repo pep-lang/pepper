@@ -2,7 +2,9 @@
 ## call or as streams, and the CRC-32 and Adler-32 checksums.
 ##
 ## Bring it in with `import compress`. It is written in Pepper, so it needs
-## no zlib. Corrupt data is an `io.IoError` whose `is_invalid_input()` holds.
+## no zlib, unless the program is built with `-D USE_ZLIB`, which makes it
+## use zlib with the same API. Corrupt data is an `io.IoError` whose
+## `is_invalid_input()` holds.
 ##
 ## - [Formats and streams](compress-format.md): `Format`, `Deflate`, `Zlib`,
 ##   `Gzip`, `DecompressReader`, `CompressWriter`
@@ -21,8 +23,10 @@
 # This file only gathers the module's public API from its other files.
 
 import "checksum";
+[Target(!BuildOption(USE_ZLIB))]
 import "deflate";
 import "format";
+[Target(!BuildOption(USE_ZLIB))]
 import "inflate";
 
 export Format;

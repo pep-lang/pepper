@@ -2,6 +2,7 @@
 ## sign data.
 
 import "hex";
+import "libcrypto";
 import "words";
 
 ## An incremental SHA-256 hasher: feed it bytes with `update`, any number of
@@ -19,6 +20,58 @@ import "words";
 ##     hasher.update("world");
 ##     assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 export struct Sha256 {
+    # The portable Pepper code, or libcrypto or CNG under `USE_LIBCRYPTO`.
+    var _engine: _Sha256Engine;
+
+    ## Creates a hasher in the initial state, with no input.
+    construct() {
+        _engine = _Sha256Engine();
+    }
+
+    ## Discards the input given so far, returning the hasher to its initial
+    ## state.
+    reset() {
+        _engine.reset();
+    }
+
+    ## Hashes `bytes` as the next part of the input.
+    ##
+    ## @param bytes the bytes to add
+    update(bytes: u8[]) {
+        _engine.update(bytes._data, bytes.count);
+    }
+
+    ## Hashes the UTF-8 bytes of `text` (without a terminating NUL) as the
+    ## next part of the input.
+    ##
+    ## @param text the text to add
+    update(text: String) {
+        _engine.update(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
+    }
+
+    ## Returns the 32-byte digest of the input given since the hasher was
+    ## created or last reset, then resets it.
+    ##
+    ## @returns the digest, most significant byte first
+    finish(): u8[] {
+        var out = Array<u8>(32);
+        _engine.finish(out);
+        return out;
+    }
+
+    ## Returns the digest as `finish` does, written as 64 lowercase
+    ## hexadecimal digits.
+    ##
+    ## @returns the digest in hexadecimal
+    finish_hex(): String {
+        return to_hex(finish());
+    }
+}
+
+# The portable SHA-256, used unless the build defines `USE_LIBCRYPTO`
+# (see libcrypto.pep).
+[Target(!BuildOption(USE_LIBCRYPTO))]
+export struct _Sha256Engine {
     # The eight state words (H0-H7).
     var _state: uint[];
     # The 64-word message schedule, scratch space for `_compress`.
@@ -28,7 +81,6 @@ export struct Sha256 {
     # The input not yet compressed.
     var _buffer: _DigestBuffer;
 
-    ## Creates a hasher in the initial state, with no input.
     construct() {
         _state = _digest_words(8);
         _schedule = _digest_words(64);
@@ -37,8 +89,6 @@ export struct Sha256 {
         reset();
     }
 
-    ## Discards the input given so far, returning the hasher to its initial
-    ## state.
     reset() {
         uint[] initial = [
             0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
@@ -51,47 +101,19 @@ export struct Sha256 {
         _buffer.reset();
     }
 
-    ## Hashes `bytes` as the next part of the input.
-    ##
-    ## @param bytes the bytes to add
-    update(bytes: u8[]) {
-        _update_raw(bytes._data, bytes.count);
+    update(data: __ptr<u8>, size: ulong) {
+        _buffer.feed<_Sha256Engine>(this, data, size);
     }
 
-    ## Hashes the UTF-8 bytes of `text` (without a terminating NUL) as the
-    ## next part of the input.
-    ##
-    ## @param text the text to add
-    update(text: String) {
-        _update_raw(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
-    }
-
-    _update_raw(data: __ptr<u8>, size: ulong) {
-        _buffer.feed<Sha256>(this, data, size);
-    }
-
-    ## Returns the 32-byte digest of the input given since the hasher was
-    ## created or last reset, then resets it.
-    ##
-    ## @returns the digest, most significant byte first
-    finish(): u8[] {
-        _buffer.pad<Sha256>(this);
-        var out = Array<u8>(32);
+    # Appends the digest to `out`, then resets.
+    finish(out: u8[]) {
+        _buffer.pad<_Sha256Engine>(this);
         ulong index = 0;
         while (index < 8) {
             _digest_append_be(out, _state[index]);
             index += 1;
         }
         reset();
-        return out;
-    }
-
-    ## Returns the digest as `finish` does, written as 64 lowercase
-    ## hexadecimal digits.
-    ##
-    ## @returns the digest in hexadecimal
-    finish_hex(): String {
-        return to_hex(finish());
     }
 
     # Runs the compression function over the 64 bytes at `block`.
@@ -149,7 +171,8 @@ export struct Sha256 {
     }
 }
 
-extend Sha256 with _DigestCompressor;
+[Target(!BuildOption(USE_LIBCRYPTO))]
+extend _Sha256Engine with _DigestCompressor;
 
 ## Returns the SHA-256 digest of `bytes`.
 ##
@@ -183,6 +206,7 @@ export sha256(text: String): u8[] {
 
 # SHA-256's round constants: the first 32 bits of the fractional parts of
 # the cube roots of the first 64 primes.
+[Target(!BuildOption(USE_LIBCRYPTO))]
 _digest_sha256_constants(): uint[] {
     # format: off
     uint[] constants = [

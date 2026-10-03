@@ -3,6 +3,7 @@
 ## and SHA-256 or BLAKE3 for anything new.
 
 import "hex";
+import "libcrypto";
 import "words";
 
 ## An incremental SHA-1 hasher: feed it bytes with `update`, any number of
@@ -23,37 +24,25 @@ import "words";
 ##     hasher.update(nul);
 ##     assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 export struct Sha1 {
-    # The five state words (H0-H4).
-    var _state: uint[];
-    # The 80-word message schedule, scratch space for `_compress`.
-    var _schedule: uint[];
-    # The input not yet compressed.
-    var _buffer: _DigestBuffer;
+    # The portable Pepper code, or libcrypto or CNG under `USE_LIBCRYPTO`.
+    var _engine: _Sha1Engine;
 
     ## Creates a hasher in the initial state, with no input.
     construct() {
-        _state = _digest_words(5);
-        _schedule = _digest_words(80);
-        _buffer = _DigestBuffer();
-        reset();
+        _engine = _Sha1Engine();
     }
 
     ## Discards the input given so far, returning the hasher to its initial
     ## state.
     reset() {
-        _state[0] = 0x67452301;
-        _state[1] = 0xefcdab89;
-        _state[2] = 0x98badcfe;
-        _state[3] = 0x10325476;
-        _state[4] = 0xc3d2e1f0;
-        _buffer.reset();
+        _engine.reset();
     }
 
     ## Hashes `bytes` as the next part of the input.
     ##
     ## @param bytes the bytes to add
     update(bytes: u8[]) {
-        _buffer.feed<Sha1>(this, bytes._data, bytes.count);
+        _engine.update(bytes._data, bytes.count);
     }
 
     ## Hashes the UTF-8 bytes of `text` (without a terminating NUL) as the
@@ -61,7 +50,7 @@ export struct Sha1 {
     ##
     ## @param text the text to add
     update(text: String) {
-        _buffer.feed<Sha1>(this, unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
+        _engine.update(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
     }
 
     ## Returns the 20-byte digest of the input given since the hasher was
@@ -69,14 +58,8 @@ export struct Sha1 {
     ##
     ## @returns the digest, most significant byte first
     finish(): u8[] {
-        _buffer.pad<Sha1>(this);
         var out = Array<u8>(20);
-        ulong index = 0;
-        while (index < 5) {
-            _digest_append_be(out, _state[index]);
-            index += 1;
-        }
-        reset();
+        _engine.finish(out);
         return out;
     }
 
@@ -86,6 +69,49 @@ export struct Sha1 {
     ## @returns the digest in hexadecimal
     finish_hex(): String {
         return to_hex(finish());
+    }
+}
+
+# The portable SHA-1, used unless the build defines `USE_LIBCRYPTO` (see
+# libcrypto.pep).
+[Target(!BuildOption(USE_LIBCRYPTO))]
+export struct _Sha1Engine {
+    # The five state words (H0-H4).
+    var _state: uint[];
+    # The 80-word message schedule, scratch space for `_compress`.
+    var _schedule: uint[];
+    # The input not yet compressed.
+    var _buffer: _DigestBuffer;
+
+    construct() {
+        _state = _digest_words(5);
+        _schedule = _digest_words(80);
+        _buffer = _DigestBuffer();
+        reset();
+    }
+
+    reset() {
+        _state[0] = 0x67452301;
+        _state[1] = 0xefcdab89;
+        _state[2] = 0x98badcfe;
+        _state[3] = 0x10325476;
+        _state[4] = 0xc3d2e1f0;
+        _buffer.reset();
+    }
+
+    update(data: __ptr<u8>, size: ulong) {
+        _buffer.feed<_Sha1Engine>(this, data, size);
+    }
+
+    # Appends the digest to `out`, then resets.
+    finish(out: u8[]) {
+        _buffer.pad<_Sha1Engine>(this);
+        ulong index = 0;
+        while (index < 5) {
+            _digest_append_be(out, _state[index]);
+            index += 1;
+        }
+        reset();
     }
 
     # Runs the compression function over the 64 bytes at `block`.
@@ -139,7 +165,8 @@ export struct Sha1 {
     }
 }
 
-extend Sha1 with _DigestCompressor;
+[Target(!BuildOption(USE_LIBCRYPTO))]
+extend _Sha1Engine with _DigestCompressor;
 
 ## Returns the SHA-1 digest of `bytes`.
 ##

@@ -303,6 +303,23 @@ pub fn jit_cases(source: &str, names: &[&str]) {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// [`jit_cases`] for a linked executable: compiles `source` with the extra
+/// command-line arguments `args` (such as `-D USE_ZLIB`, for code that
+/// links a C library the test process has not loaded) and runs it. Each of
+/// its `(): int` functions in `names` must return 0 and leave no runtime
+/// allocation behind.
+pub fn linked_cases(name: &str, source: &str, names: &[&str], args: &[&str]) {
+    let mut program = format!("{source}\nmain(): int {{\n    var failures = 0;\n");
+    for case in names {
+        program.push_str(&format!(
+            "    {{\n        var before = _pep_live_allocs();\n        var result = {case}();\n        var leaked = _pep_live_allocs() - before;\n        if (result != 0 || leaked != 0) {{\n            print($\"{case} returned {{result}}, leaked {{leaked}}\");\n            failures += 1;\n        }}\n    }}\n"
+        ));
+    }
+    program.push_str("    return failures;\n}\n");
+    let output = run_linked_with(name, &program, args, |_| {});
+    assert!(output.status.success(), "{}", output_text(&output));
+}
+
 /// (name, entry point) of every documentation example, sorted by name: a
 /// single `docs/examples/name.pep`, or a folder `name/` whose entry point is
 /// `main.pep`.

@@ -2,8 +2,11 @@
 ## streaming `DecompressReader` and `CompressWriter`.
 
 import io;
+[Target(!BuildOption(USE_ZLIB))]
 import "deflate";
+[Target(!BuildOption(USE_ZLIB))]
 import "inflate";
+import "zlib";
 
 ## The framing around DEFLATE-compressed data.
 ##

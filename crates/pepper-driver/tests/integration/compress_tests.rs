@@ -2,7 +2,8 @@
 //! gzip framings at every level, streams made by zlib and Python's gzip,
 //! the streaming reader and writer, and corrupt input. Each check returns 0
 //! on success or a distinct negative code per check, and must leave no
-//! allocation behind.
+//! allocation behind. Every check runs twice: with the portable code, and
+//! with zlib (`-D USE_ZLIB`, #370).
 
 use crate::support;
 
@@ -236,8 +237,35 @@ reads_and_writes_bytes_in_memory(): int {
 }
 "##;
 
+const CASES: &[&str] = &[
+    "computes_checksums",
+    "round_trips_every_format_and_level",
+    "decodes_streams_from_other_encoders",
+    "reports_corrupt_data",
+    "streams_through_readers_and_writers",
+    "reads_and_writes_bytes_in_memory",
+];
+
 /// Each check is a function of one program, compiled once.
 #[test]
 fn compression() {
-    support::jit_cases(PROGRAM, &["computes_checksums", "round_trips_every_format_and_level", "decodes_streams_from_other_encoders", "reports_corrupt_data", "streams_through_readers_and_writers", "reads_and_writes_bytes_in_memory"]);
+    support::jit_cases(PROGRAM, CASES);
+}
+
+/// The same checks with zlib in place of the portable code. Windows has no
+/// zlib of its own, so there the check needs `PEPPER_TEST_ZLIB_DIR`, a
+/// folder holding `zlib.lib` (and `zlib1.dll` on `PATH` when it is the
+/// import library), and is skipped without it.
+#[test]
+fn compression_with_zlib() {
+    let mut args = vec!["-D".to_string(), "USE_ZLIB".to_string()];
+    if cfg!(windows) {
+        let Some(dir) = std::env::var_os("PEPPER_TEST_ZLIB_DIR") else {
+            eprintln!("compression_with_zlib: skipped; set PEPPER_TEST_ZLIB_DIR to a folder holding zlib.lib");
+            return;
+        };
+        args.extend(["-L".to_string(), dir.to_string_lossy().into_owned()]);
+    }
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    support::linked_cases("compress_zlib", PROGRAM, CASES, &args);
 }

@@ -55,6 +55,14 @@ import "linux_trace";
 
 Several attributes on one item combine with "and", as `[Target]` does.
 
+## Options the runtime reads
+
+| Option | Effect |
+|--------|--------|
+| `USE_LIBCRYPTO` | `digest`'s SHA-256 and SHA-1 use libcrypto (CNG on Windows); see [Cryptographic hashes](digest.md#using-the-systems-crypto-library) |
+| `USE_ZLIB` | `compress` uses zlib; see [Compression](compression.md#using-zlib) |
+| `TEST` | defined by `pep-build --test`; see [Unit tests](testing.md#test-builds) |
+
 ## Comparing values
 
 `BuildOption(NAME)` may be compared with a literal using `==`, `!=`, `<`,

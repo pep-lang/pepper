@@ -272,6 +272,14 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
+      # digest_tests link Homebrew's libcrypto under `-D USE_LIBCRYPTO`
+      # (#370); zlib comes with macOS.
+      - name: Provision libcrypto
+        shell: bash
+        run: |
+          set -euxo pipefail
+          brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
+
       - name: Test
         run: cargo test --workspace --locked
 
@@ -318,6 +326,14 @@ jobs:
         run: |
           set -euxo pipefail
           bash scripts/ci-provision-wasi.sh "$RUNNER_WORKSPACE/wasi-cache" >> "$GITHUB_ENV"
+
+      # digest_tests and compress_tests also run with `-D USE_LIBCRYPTO`
+      # and `-D USE_ZLIB` (#370), which link libcrypto and zlib.
+      - name: Provision libcrypto and zlib
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
       - name: Test
         shell: bash

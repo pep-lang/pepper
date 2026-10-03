@@ -3,7 +3,8 @@
 The `compress` module compresses and decompresses DEFLATE data, plain or
 in its zlib and gzip framings, and the `archive` module reads and writes
 tar archives. Together they handle `.gz` and `.tar.gz` files. Both are
-written in Pepper, so a program that uses them links no extra library.
+written in Pepper, so a program that uses them links no extra library,
+unless it is built to use zlib (see [Using zlib](#using-zlib)).
 
 ```pepper
 {{#include ../../examples/compression-basics.pep}}
@@ -52,6 +53,27 @@ the writer does not finish it, and `finish()` does not close the sink.
 
 `io.ByteReader(bytes)` and `io.ByteWriter()` stand in for a stream when
 the data is in memory.
+
+## Using zlib
+
+Building with `-D USE_ZLIB` (see [Build options](build-options.md)) makes
+`compress` use zlib, the reference DEFLATE library, for compressing,
+decompressing, CRC-32 and Adler-32, in place of its Pepper code:
+
+```sh
+pep-build main.pep -D USE_ZLIB -o app
+```
+
+- The API is the same, and so are the errors for damaged data, worded as
+  the Pepper code words them where zlib tells the causes apart. Compressed
+  output can differ byte for byte (zlib's gzip header names the operating
+  system), but each side decompresses the other's.
+- Linux links `-lz`, from the development package (`zlib1g-dev`,
+  `zlib-devel`). macOS has zlib already. Windows has none: install it
+  (`vcpkg install zlib`) and name the folder holding `zlib.lib` with `-L`
+  or `PEPPER_LIBRARY_PATH`.
+- zlib compresses faster than the Pepper code at the same level, and
+  makes output of about the same size.
 
 ## Tar archives
 

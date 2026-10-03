@@ -1,6 +1,8 @@
 ## `Crc32` and `Adler32`: the checksums gzip and zlib streams carry, for
 ## checking data as it is read or written.
 
+import "zlib";
+
 ## The CRC-32 checksum (IEEE 802.3, the polynomial gzip, zip and PNG use),
 ## computed over data given in one or more pieces.
 ##
@@ -41,6 +43,7 @@ export struct Crc32 {
     }
 
     # Adds the `count` bytes at `data`.
+    [Target(!BuildOption(USE_ZLIB))]
     _update(data: __ptr<u8>, count: ulong) {
         var state = _state;
         __ptr<uint> table = _table._data;
@@ -64,6 +67,12 @@ export struct Crc32 {
         _state = state;
     }
 
+    # Adds the `count` bytes at `data`, with zlib.
+    [BuildOption("USE_ZLIB")]
+    _update(data: __ptr<u8>, count: ulong) {
+        _state = _compress_zlib_crc32(_state ^ 0xFFFFFFFF, data, count) ^ 0xFFFFFFFF;
+    }
+
     ## Starts over, as if no data had been given.
     reset() {
         _state = 0xFFFFFFFF;
@@ -83,6 +92,7 @@ export struct Crc32 {
 # The slicing-by-8 tables of the reflected polynomial 0xEDB88320: table 0
 # is the classic byte-at-a-time table, and table `k` entry `n` is
 # `table[k - 1][n]` advanced by one more zero byte.
+[Target(!BuildOption(USE_ZLIB))]
 _compress_crc_table(): uint[] {
     var table = Array<uint>(2048);
     uint n = 0;
@@ -107,6 +117,12 @@ _compress_crc_table(): uint[] {
         index += 1;
     }
     return table;
+}
+
+# zlib has its own tables.
+[BuildOption("USE_ZLIB")]
+_compress_crc_table(): uint[] {
+    return Array<uint>();
 }
 
 # The eight bytes at `data + at` as a little-endian number. LLVM turns the
@@ -164,6 +180,7 @@ export struct Adler32 {
     }
 
     # Adds the `count` bytes at `data`.
+    [Target(!BuildOption(USE_ZLIB))]
     _update(data: __ptr<u8>, count: ulong) {
         var a = _a;
         var b = _b;
@@ -184,6 +201,14 @@ export struct Adler32 {
         }
         _a = a;
         _b = b;
+    }
+
+    # Adds the `count` bytes at `data`, with zlib.
+    [BuildOption("USE_ZLIB")]
+    _update(data: __ptr<u8>, count: ulong) {
+        var adler = _compress_zlib_adler32((_b << 16) | _a, data, count);
+        _a = adler & 0xFFFF;
+        _b = adler >> 16;
     }
 
     ## Starts over, as if no data had been given.

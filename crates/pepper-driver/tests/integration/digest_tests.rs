@@ -1,14 +1,31 @@
 //! The `digest` module (runtime/digest/): SHA-256, SHA-1 and BLAKE3 against
 //! published test vectors and digests from reference implementations
 //! (Python's `hashlib` and the `blake3` package), one-shot and incremental
-//! in uneven pieces, with no allocation left behind.
+//! in uneven pieces, with no allocation left behind. Every check runs
+//! twice: with the portable code, and with libcrypto (CNG on Windows) under
+//! `-D USE_LIBCRYPTO` (#370).
 
-use crate::support::jit_census;
+use crate::support::{jit_census, linked_cases};
 
-fn run(source: &str) -> i32 {
+/// Checks that `source`'s `test` returns 0 with no allocation left behind,
+/// with the portable code and then linked with libcrypto (`name` names the
+/// executable).
+fn check(name: &str, source: &str) {
     let (result, leaked) = jit_census(source);
     assert_eq!(leaked, 0, "allocations leaked or double-released");
-    result
+    assert_eq!(result, 0);
+    let mut args = vec!["-D".to_string(), "USE_LIBCRYPTO".to_string()];
+    // macOS has no libcrypto to link against; Homebrew's openssl@3 is the
+    // usual one.
+    if cfg!(target_os = "macos") {
+        for dir in ["/opt/homebrew/opt/openssl@3/lib", "/usr/local/opt/openssl@3/lib"] {
+            if std::path::Path::new(dir).exists() {
+                args.extend(["-L".to_string(), dir.to_string()]);
+            }
+        }
+    }
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    linked_cases(name, source, &["test"], &args);
 }
 
 /// A program that checks the digests of `size` bytes `index % 251` for each
@@ -93,7 +110,7 @@ fn digests_match_reference_implementations() {
         (5121, "f19db61046ca889db9bd34d779cd362c6a7198cb5a0e3a2882e7bd24a901cc1d", "b8af1be942099162396c64018eaca2dfdf685ebb", "628bd2cb2004694adaab7bbd778a25df25c47b9d4155a55f8fbd79f2fe154cff"),
         (8193, "7e3691790cd64b19d4edb1a80e988214515abeb53aa0f34ffbfe4b4bf405d120", "c7fac2a2751ad1552813f366c3daef8eba512436", "bab6c09cb8ce8cf459261398d2e7aef35700bf488116ceb94a36d0f5f1b7bc3b"),
     ];
-    assert_eq!(run(&check_rows(&rows)), 0);
+    check("digest_rows", &check_rows(&rows));
 }
 
 #[test]
@@ -133,5 +150,5 @@ test(): int {
     return 0;
 }
 "##;
-    assert_eq!(run(source), 0);
+    check("digest_strings", source);
 }

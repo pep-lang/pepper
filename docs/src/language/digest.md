@@ -46,11 +46,33 @@ None of these is the hash for a hash table: `HashMap` and `HashSet` use
 [`hash<T>`](hashing.md), which is much faster but neither cryptographic nor
 stable between versions.
 
+## Using the system's crypto library
+
+By default the hashes are written in Pepper, so a program that uses them
+links no extra library. Building with `-D USE_LIBCRYPTO` (see
+[Build options](build-options.md)) makes SHA-256 and SHA-1 call the
+platform's crypto library instead, which uses the CPU's SHA instructions
+where it has them: several times faster (about 1.7 GB/s instead of
+250 MB/s for SHA-256 on an x86-64 with SHA-NI).
+
+```sh
+pep-build main.pep -D USE_LIBCRYPTO -o app
+```
+
+| Platform | Library | What it needs |
+|---|---|---|
+| Linux | OpenSSL's libcrypto (`EVP_Digest*`), linked as `-lcrypto` | the development package (`libssl-dev`, `openssl-devel`) |
+| macOS | OpenSSL's libcrypto, linked as `-lcrypto` | Homebrew's `openssl@3`, and its `lib` folder named with `-L` or `PEPPER_LIBRARY_PATH` (`-L $(brew --prefix openssl@3)/lib`) |
+| Windows | CNG (`BCryptHash*`), linked as `bcrypt.lib` | nothing: CNG is part of Windows 10 and later |
+
+The API and the digests are the same either way. `Blake3` stays portable
+Pepper, since libcrypto has no BLAKE3.
+
 ## Limitations
 
-- The hashes are written in Pepper, with no link dependency. They run at a
-  few hundred megabytes per second, below OpenSSL's SHA-256 with CPU SHA
-  instructions and the official BLAKE3, which uses SIMD and threads.
+- Without `USE_LIBCRYPTO`, SHA-256 and SHA-1 run at a few hundred
+  megabytes per second. BLAKE3 is always the portable code, below the
+  official BLAKE3, which uses SIMD and threads.
 - BLAKE3's keyed hashing, key derivation and extended output are not
   supported yet; `Blake3` computes the default 32-byte hash.
 - The code is not hardened against timing side channels, which matters only
