@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
+            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-7be3830a.js"></script>
+        <script src="../toc-6599482c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -239,33 +239,30 @@ a <code>redefinition of 'f'</code>.</p>
 name hide an imported function of that name, as before: a file cannot add
 members to an imported set.</p>
 </li>
-<li>
-<p><strong>Files of one module share a set.</strong> When an import or a re-export takes
-one name from two files of the same module, and both are functions
-declared under that name, it takes their union: one set of every member. Here <code>shapes/module.pep</code>
-re-exports <code>area</code> from two files:</p>
-<pre><code class="language-pepper"># Each file adds members to `area`; the module exports one set.
-</code></pre>
-</li>
 </ul>
-<p>export * from “square”;
-export * from “rect”;</p>
-<pre><code>
-```pepper
-export area(side: int): int {
-  return side * side;
+<h3 id="files-of-one-module-share-a-set"><a class="header" href="#files-of-one-module-share-a-set">Files of one module share a set</a></h3>
+<p>When an import or a re-export takes one name from two files of the same
+module, and both are functions declared under that name, it takes their
+union: one set of every member. Here <code>shapes/module.pep</code> re-exports <code>area</code>
+from two files:</p>
+<pre><code class="language-pepper"># Each file adds members to `area`; the module exports one set.
+export * from "square";
+export * from "rect";
+</code></pre>
+<pre><code class="language-pepper">export area(side: int): int {
+    return side * side;
 }
 </code></pre>
 <pre><code class="language-pepper">export area(width: int, height: int): int {
-  return width * height;
+    return width * height;
 }
 </code></pre>
 <pre><code class="language-pepper">import "shapes";
 
 main(): int {
-  assert(area(3) == 9, "square.pep's member");
-  assert(area(2, 5) == 10, "rect.pep's member");
-  return 0;
+    assert(area(3) == 9, "square.pep's member");
+    assert(area(2, 5) == 10, "rect.pep's member");
+    return 0;
 }
 </code></pre>
 <p>A file of the module that imports both files (<code>import "square";</code> and
@@ -274,31 +271,29 @@ same set. Members from different files must still differ in their
 parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
 such as two structs <code>Point</code>, and a renaming re-export
 (<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
-<ul>
-<li>
-<p><strong>Members may differ in visibility.</strong> Exported members are what other
-files see; a private member is a candidate only for calls in its own
-file. Here <code>shapes.pep</code> exports <code>area(int)</code> and keeps the two-argument
-form as a helper:</p>
+<p>Two modules’ sets do not merge. When two imported modules, or two files
+outside any module, each export a set named <code>parse</code>, an unqualified <code>parse(…)</code> is an error (<code>'parse' is ambiguous: more than one import provides it</code>), even when their parameters differ. A qualifier
+(<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</p>
+<h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
+<p>Exported members are what other files see; a private member is a candidate
+only for calls in its own file. Here <code>shapes.pep</code> exports <code>area(int)</code> and
+keeps the two-argument form as a helper:</p>
 <pre><code class="language-pepper"># One set: `area(int)` is exported; `area(int, int)` is private to this file.
+export area(side: int): int {
+    return area(side, side);
+}
+
+area(width: int, height: int): int {
+    return width * height;
+}
 </code></pre>
-</li>
-</ul>
-<p>export area(side: int): int {
-return area(side, side);
-}</p>
-<p>area(width: int, height: int): int {
-return width * height;
-}</p>
-<pre><code>
-```pepper
-import "shapes";
+<pre><code class="language-pepper">import "shapes";
 
 main(): int {
-  # Only the exported member is a candidate here: `area(2, 3)` would be
-  # an error, since `area(int, int)` is private to shapes.pep.
-  assert(area(3) == 9, "the exported member");
-  return 0;
+    # Only the exported member is a candidate here: `area(2, 3)` would be
+    # an error, since `area(int, int)` is private to shapes.pep.
+    assert(area(3) == 9, "the exported member");
+    return 0;
 }
 </code></pre>
 <p>A call that only the private member fits is an error in another file,
@@ -315,15 +310,8 @@ brings every exported member, and <code>import [area as size]</code> renames the
 whole set. A re-export (<code>export area;</code>, <code>export * from "shapes"</code>) passes
 on the exported members too; a set whose members are all private is
 re-exported whole.</p>
-<ul>
-<li>
-<p><strong>Two modules’ sets do not merge.</strong> When two imported modules, or two
-files outside any module, each export a set named <code>parse</code>, an
-unqualified <code>parse(…)</code> is an error (<code>'parse' is ambiguous: more than one import provides it</code>), even when their parameters differ. A qualifier
-(<code>a.parse</code>) or an import list (<code>import [parse] from "b"</code>) picks one.</p>
-</li>
-<li>
-<p><strong><code>extern</code> functions do not overload</strong>, by design: an extern is a C
+<h3 id="extern-functions-do-not-overload"><a class="header" href="#extern-functions-do-not-overload"><code>extern</code> functions do not overload</a></h3>
+<p>An <code>extern</code> function does not overload, by design: an extern is a C
 function, which has one symbol, and keeping one extern per name keeps
 the binding to C one-to-one. To put a family of C functions such as
 <code>abs</code> and <code>llabs</code> behind one name, give each extern a name of its own
@@ -331,60 +319,58 @@ the binding to C one-to-one. To put a family of C functions such as
 functions that call them. With optimization on (<code>-O2</code>), LLVM inlines
 the small wrappers:</p>
 <pre><code class="language-pepper"># C's `abs` and `llabs` behind one Pepper name. An extern binds one C
-</code></pre>
-</li>
-</ul>
-<h1 id="symbol-so-each-gets-its-own-name-and-pepper-functions-overload-them"><a class="header" href="#symbol-so-each-gets-its-own-name-and-pepper-functions-overload-them">symbol, so each gets its own name, and Pepper functions overload them.</a></h1>
-<p>[Link(name = “abs”)]
+# symbol, so each gets its own name, and Pepper functions overload them.
+[Link(name = "abs")]
 extern int c_abs(int x);
-[Link(name = “llabs”)]
-extern i64 c_llabs(i64 x);</p>
-<p>magnitude(x: int): int { return c_abs(x); }
-magnitude(x: long): long { return c_llabs(x); }</p>
-<p>main(): int {
-assert(magnitude(-3) == 3, “int”);
-var big: long = -5000000000;
-assert(magnitude(big) == 5000000000, “long”);
-return 0;
-}</p>
-<pre><code>
-Overloading the extern itself is an error that says so (`extern 'abs'
-cannot be overloaded; rename it and overload Pepper functions named
-'abs' that call it`).
+[Link(name = "llabs")]
+extern i64 c_llabs(i64 x);
 
-## How a call picks a member
+magnitude(x: int): int { return c_abs(x); }
+magnitude(x: long): long { return c_llabs(x); }
 
-A member is **viable** when the call has between its required and total
+main(): int {
+    assert(magnitude(-3) == 3, "int");
+    var big: long = -5000000000;
+    assert(magnitude(big) == 5000000000, "long");
+    return 0;
+}
+</code></pre>
+<p>Overloading the extern itself is an error that says so (<code>extern 'abs' cannot be overloaded; rename it and overload Pepper functions named 'abs' that call it</code>).</p>
+<h2 id="how-a-call-picks-a-member"><a class="header" href="#how-a-call-picks-a-member">How a call picks a member</a></h2>
+<p>A member is <strong>viable</strong> when the call has between its required and total
 number of parameters and each argument converts to its parameter. For each
-argument, the conversion has a rank, best first:
-
-| Rank | What converts |
-|------|---------------|
-| exact | the same type; a string literal to `__ptr&lt;char&gt;` |
-| promotion | an integer widening that loses nothing (`int` to `long`, `u8` to `int`; the narrower target ranks better, so a `short` picks `int` over `long`), `float` to `double`, an integer literal to any integer type it fits, a struct to a [trait it declares](traits-and-extensions.md#traits-as-types), `__null` to a reference, a string literal to `String` |
-| conversion | any other numeric conversion (`bool` included), and pointer conversions |
-| implicit constructor | a value to a struct whose [`[Implicit]` constructor](structs.md#implicit-conversions) takes it |
-
-One viable member is **better** than another when none of its arguments
+argument, the conversion has a rank, best first:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Rank</th><th>What converts</th></tr>
+</thead>
+<tbody>
+<tr><td>exact</td><td>the same type; a string literal to <code>__ptr&lt;char&gt;</code></td></tr>
+<tr><td>promotion</td><td>an integer widening that loses nothing (<code>int</code> to <code>long</code>, <code>u8</code> to <code>int</code>; the narrower target ranks better, so a <code>short</code> picks <code>int</code> over <code>long</code>), <code>float</code> to <code>double</code>, an integer literal to any integer type it fits, a struct to a <a href="traits-and-extensions.html#traits-as-types">trait it declares</a>, <code>__null</code> to a reference, a string literal to <code>String</code></td></tr>
+<tr><td>conversion</td><td>any other numeric conversion (<code>bool</code> included), and pointer conversions</td></tr>
+<tr><td>implicit constructor</td><td>a value to a struct whose <a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a> takes it</td></tr>
+</tbody>
+</table>
+</div>
+<p>One viable member is <strong>better</strong> than another when none of its arguments
 ranks worse and at least one ranks better, as in C++. Between two members
 whose arguments rank the same, a non-generic one is better than a generic
-one, and of two generic ones the **more specialized** is better: the one
-whose parameter types the other's could take but not the reverse. So
-`describe&lt;A, B&gt;(pair: (A, B))` takes a tuple argument over
-`describe&lt;T&gt;(value: T)`, which takes anything else. The call picks the
+one, and of two generic ones the <strong>more specialized</strong> is better: the one
+whose parameter types the other’s could take but not the reverse. So
+<code>describe&lt;A, B&gt;(pair: (A, B))</code> takes a tuple argument over
+<code>describe&lt;T&gt;(value: T)</code>, which takes anything else. The call picks the
 member that is better than every other viable one. When there is none, the
-call is an error that lists the candidates:
-
-```text
-main.pep:3:22: error: call to 'f' is ambiguous
-  3 | main(): int { return f(1); }
-    |                      ^
+call is an error that lists the candidates:</p>
+<pre><code class="language-text">main.pep:3:22: error: call to 'f' is ambiguous
+    3 | main(): int { return f(1); }
+      |                      ^
 main.pep:1:1: note: candidate function
-  1 | f(x: long): int { return 1; }
-    | ^
+    1 | f(x: long): int { return 1; }
+      | ^
 main.pep:2:1: note: candidate function
-  2 | f(x: short): int { return 2; }
-    | ^
+    2 | f(x: short): int { return 2; }
+      | ^
 </code></pre>
 <p>An integer literal fits every integer type that holds its value equally
 well, so <code>f(1)</code> above is ambiguous; an <code>int</code> member would take it exactly.

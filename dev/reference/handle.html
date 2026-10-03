@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>handle.pep - The Pepper Programming Language</title>
+        <title>Handle - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
+            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-7be3830a.js"></script>
+        <script src="../toc-6599482c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -182,12 +182,12 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <!-- Generated from runtime/handle.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
-<h1 id="handlepep"><a class="header" href="#handlepep">handle.pep</a></h1>
+<h1 id="handle"><a class="header" href="#handle">Handle</a></h1>
 <p><code>Handle&lt;T&gt;</code>: owns a resource that Pepper’s reference counting does not
 know about, such as a C library’s object, and releases it when the last
 reference to the handle goes away, like C#’s <code>SafeHandle</code>.</p>
 <p>Source: <code>runtime/handle.pep</code></p>
-<h2 id="handle"><a class="header" href="#handle">Handle</a></h2>
+<h2 id="handle-1"><a class="header" href="#handle-1">Handle</a></h2>
 <pre><code class="language-pepper">struct Handle&lt;T&gt;
 </code></pre>
 <p>Owns a raw resource and calls a release function on it once, when the
@@ -222,7 +222,7 @@ holding it in the closure keeps it alive until the release runs).</p>
 <p>The resource. It stays readable after the handle is released or
 detached, but it no longer refers to anything the handle owns.</p>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
-<h4 id="handle-1"><a class="header" href="#handle-1">Handle()</a></h4>
+<h4 id="handle-2"><a class="header" href="#handle-2">Handle()</a></h4>
 <pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
 </code></pre>
 <p>Creates a handle that owns <code>value</code> and calls <code>release(value)</code> when
@@ -261,11 +261,11 @@ then frees itself.</p>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../reference/copy.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../reference/weak.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/hint-module.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/result.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -275,11 +275,11 @@ then frees itself.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../reference/copy.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../reference/weak.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/hint-module.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/result.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

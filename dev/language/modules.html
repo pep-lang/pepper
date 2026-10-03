@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
+            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-7be3830a.js"></script>
+        <script src="../toc-6599482c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -413,7 +413,7 @@ file’s own exports, publish one name for different declarations, the
 compiler reports it at the <code>export ... from</code> that adds the second one. List the names you want instead, or
 rename one with <code>as</code>. The exception is functions of one name from files
 of the same module: they join one
-<a href="overloading.html#declaring-overloads">overload set</a>.
+<a href="overloading.html#files-of-one-module-share-a-set">overload set</a>.
 Anything else collides:</p>
 <pre><code class="language-text">shapes/module.pep:2:1: error: 'area' is exported twice by module 'shapes'
     2 | export * from "measure";
@@ -512,7 +512,7 @@ same name.</li>
 the same name from a whole-file import. When two whole-file imports provide
 the same name differently, using that name is an error because it is
 ambiguous, unless both are functions of that name from files of one
-module, which join one <a href="overloading.html#declaring-overloads">overload set</a>.</li>
+module, which join one <a href="overloading.html#files-of-one-module-share-a-set">overload set</a>.</li>
 <li><strong>A local may share an imported declaration’s name.</strong> If <code>g.rect_area</code> is
 <code>shapes.pep</code>’s <code>area</code>, calling <code>g.rect_area(1, 2)</code> inside a function with a
 parameter named <code>area</code> calls <code>shapes.pep</code>’s function. The one exception is a

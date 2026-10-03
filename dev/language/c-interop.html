@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
+            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-7be3830a.js"></script>
+        <script src="../toc-6599482c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -633,68 +633,27 @@ main.pep:3:9: note: pass what the callback needs through the C function's contex
 <p>This is a design decision, not a missing feature: a C function pointer is
 a bare address, and giving each capturing closure an address of its own
 would mean writing executable code at run time, which some platforms
-forbid. A callback that needs state gets it another way:</p>
-<ul>
-<li>
-<p><strong>The C function’s context argument.</strong> Most C APIs that take a callback
-also take a <code>void*</code> context argument that they hand back to it; pass a
-pointer to the data the callback needs through that.</p>
-</li>
-<li>
-<p><strong>A thread-local or module-scope value.</strong> Set an
-<a href="threads.html#per-thread-values-with-threadlocal"><code>async.ThreadLocal&lt;T&gt;</code></a> (or an <code>Atomic&lt;T&gt;</code>) before calling
-C, and read it in the callback, which is a named function:</p>
-<pre><code class="language-pepper"># A C function pointer holds no captured values, so a callback that needs
-</code></pre>
-</li>
-</ul>
-</li>
-</ul>
-<h1 id="state-reads-it-from-somewhere-c-does-not-have-to-carry-here-a"><a class="header" href="#state-reads-it-from-somewhere-c-does-not-have-to-carry-here-a">state reads it from somewhere C does not have to carry: here, a</a></h1>
-<h1 id="thread-local-the-caller-sets-before-handing-the-callback-to-c"><a class="header" href="#thread-local-the-caller-sets-before-handing-the-callback-to-c">thread-local the caller sets before handing the callback to C.</a></h1>
-<p>import async;</p>
-<p>extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);</p>
-<h1 id="the-value-to-sort-around-for-the-calling-thread"><a class="header" href="#the-value-to-sort-around-for-the-calling-thread">The value to sort around, for the calling thread.</a></h1>
-<p>const pivot = async.ThreadLocal<int>();</int></p>
-<p>distance(x: int): int {
-var d = x - pivot.get();
-return d &lt; 0 ? -d : d;
-}</p>
-<p>closest_first(a: __ptr<void>, b: __ptr<void>): int {
-__ptr<int> x = a;
-__ptr<int> y = b;
-return distance(x[0]) - distance(y[0]);
-}</int></int></void></void></p>
-<p>main(): int {
-__ptr<int> numbers = _pep_malloc(4 * sizeof<int>());
-numbers[0] = 10;
-numbers[1] = 40;
-numbers[2] = 22;
-numbers[3] = 31;</int></int></p>
-<pre><code>pivot.set(30);
-qsort(numbers, 4, sizeof&lt;int&gt;(), closest_first);
-assert(numbers[0] == 31 &amp;&amp; numbers[3] == 10, "closest to 30 first");
-
-_pep_free(numbers);
-return 0;
-</code></pre>
-<p>}
-```</p>
+forbid. A callback that needs state gets it another way (see
+<a href="#callbacks-that-need-state">Callbacks that need state</a>).</p>
 <p>A function value held in a variable does not convert either, since it may
 be a closure.</p>
-<ul>
-<li><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
+</li>
+<li>
+<p><strong>C types only.</strong> C knows nothing of reference counts, so the parameter
 and return types must be numbers, <code>bool</code>, pointers, or other C function
 pointer types. A struct is an error:
 <code>C function pointer type 'extern (String) =&gt; int' cannot use 'String'; C passes only numbers, 'bool' and pointers</code>.
 Write pointers as <code>void*</code> in an <code>extern</code> declaration and as <code>__ptr&lt;void&gt;</code>
-elsewhere, as for any pointer.</li>
-<li><strong>A value like a number.</strong> A C function pointer has no reference count.
+elsewhere, as for any pointer.</p>
+</li>
+<li>
+<p><strong>A value like a number.</strong> A C function pointer has no reference count.
 Store it in a variable, field or module-scope <code>const</code>, return it, pass it
 to other threads, or call it: <code>compare(a, b)</code> calls through it with the C
 calling convention. Calling a null one (from C) panics. It converts to
 <code>void*</code> but not to a Pepper function type; wrap it in a closure that calls
-it, <code>(x) =&gt; f(x)</code>, to use it as one.</li>
+it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
+</li>
 </ul>
 <p><code>__function_pointer(name)</code> also gives a function’s address, as an untyped
 <code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
@@ -702,6 +661,54 @@ whose method uses it. Inside a generic struct the static method is the one
 for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> gives the
 operating system a destructor for its <code>T</code>. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.</p>
+<h3 id="callbacks-that-need-state"><a class="header" href="#callbacks-that-need-state">Callbacks that need state</a></h3>
+<p>Since a C function pointer holds no captured values, a callback that needs
+state gets it another way:</p>
+<ul>
+<li><strong>The C function’s context argument.</strong> Most C APIs that take a callback
+also take a <code>void*</code> context argument that they hand back to it; pass a
+pointer to the data the callback needs through that.</li>
+<li><strong>A thread-local or module-scope value.</strong> Set an
+<a href="threads.html#per-thread-values-with-threadlocal"><code>async.ThreadLocal&lt;T&gt;</code></a>
+(or an <code>Atomic&lt;T&gt;</code>) before calling C, and read it in the callback, which
+is a named function:</li>
+</ul>
+<pre><code class="language-pepper"># A C function pointer holds no captured values, so a callback that needs
+# state reads it from somewhere C does not have to carry: here, a
+# thread-local the caller sets before handing the callback to C.
+import async;
+
+extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
+
+# The value to sort around, for the calling thread.
+const pivot = async.ThreadLocal&lt;int&gt;();
+
+distance(x: int): int {
+    var d = x - pivot.get();
+    return d &lt; 0 ? -d : d;
+}
+
+closest_first(a: __ptr&lt;void&gt;, b: __ptr&lt;void&gt;): int {
+    __ptr&lt;int&gt; x = a;
+    __ptr&lt;int&gt; y = b;
+    return distance(x[0]) - distance(y[0]);
+}
+
+main(): int {
+    __ptr&lt;int&gt; numbers = _pep_malloc(4 * sizeof&lt;int&gt;());
+    numbers[0] = 10;
+    numbers[1] = 40;
+    numbers[2] = 22;
+    numbers[3] = 31;
+
+    pivot.set(30);
+    qsort(numbers, 4, sizeof&lt;int&gt;(), closest_first);
+    assert(numbers[0] == 31 &amp;&amp; numbers[3] == 10, "closest to 30 first");
+
+    _pep_free(numbers);
+    return 0;
+}
+</code></pre>
 <h2 id="binding-to-a-different-symbol-name"><a class="header" href="#binding-to-a-different-symbol-name">Binding to a different symbol name</a></h2>
 <p><code>[Link(name = "symbol")]</code> binds an extern to a C symbol whose name differs
 from the declared one. Pepper code calls the extern by its declared name, and

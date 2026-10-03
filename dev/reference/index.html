@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-26f9bf26.js";
+            window.path_to_searchindex_js = "../searchindex-b6a3cea6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-7be3830a.js"></script>
+        <script src="../toc-6599482c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,9 +183,11 @@
                     <main>
                         <h1 id="standard-library-reference"><a class="header" href="#standard-library-reference">Standard library reference</a></h1>
 <p>The standard library is the Pepper runtime: the files under <code>runtime/</code> that
-every program is compiled with. Everything here is available without an
-import, except the <code>io</code> module, which a program brings in with <code>import io</code>
-(or <code>import [File, Path] from io</code>).</p>
+every program is compiled with. The pages listed first (from Built-in
+functions to URI) are the prelude, available without an import. Each module
+after them (<code>io</code>, <code>async</code>, <code>json</code>, …) is brought in with an import, such
+as <code>import io</code> or <code>import [File, Path] from io</code>; its other pages are listed
+under it.</p>
 <p>These pages are generated from the doc comments in the runtime’s source (see
 <a href="../language/doc-comments.html">Documentation comments</a>), so they always match
 the version of Pepper they were built with. Use the version picker at the top
