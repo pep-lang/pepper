@@ -433,6 +433,8 @@ Packaging (`vsce package`, run by the script and the VSIX workflow) bundles
   Tested on Linux x64 with LLVM 20: the docs examples and the corpus pass
   except those that need threads, tasks, sockets or processes, which WASI
   preview 1 lacks (run them with `WASI_SDK_PATH`, see Build and test).
+  CI's `test-linux` job runs them, with the wasi-sdk and wasmtime that
+  `scripts/ci-provision-wasi.sh` installs.
 - **macOS x86_64** is untested. Homebrew serves it, which is the path that
   works on macOS anyway; of the supported majors only LLVM 19 publishes a
   `macOS-X64` archive, and the fallback reports that the version has no build

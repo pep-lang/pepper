@@ -41,7 +41,7 @@ names and the pass order come from that implementation.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), and `install-vscode-extension.ps1`. |
+| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -2546,7 +2546,10 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     --workspace --locked`, `cargo test --workspace --locked`, and
     `cargo run -p pepper-docgen -- check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
-    run the suite against the default LLVM. `test-linux` is required,
+    run the suite against the default LLVM; `test-linux` first installs a
+    wasi-sdk and wasmtime (`scripts/ci-provision-wasi.sh`, kept in the
+    runner's `wasi-cache`), so its suite also runs the WebAssembly tests.
+    `test-linux` is required,
     through `test`; `test-macos` is not for now (it takes about twice as
     long and held up the merge queue), so `test` does not wait for it.
   - `changes` runs first. It asks the API whether the PR is a draft now (the

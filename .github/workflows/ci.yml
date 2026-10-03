@@ -306,6 +306,19 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
+      # WebAssembly (`--target wasm32-wasip1`): with WASI_SDK_PATH and
+      # WASMTIME set, the suite builds every docs example and corpus fixture
+      # for wasm32 and runs it under wasmtime (cross_compile_tests,
+      # docs_examples_tests, corpus_tests). The downloads stay in the
+      # runner's cache between jobs.
+      - name: Provision wasi-sdk and wasmtime
+        shell: bash
+        env:
+          PEPPER_LLVM_MAJOR: 20
+        run: |
+          set -euxo pipefail
+          bash scripts/ci-provision-wasi.sh "$RUNNER_WORKSPACE/wasi-cache" >> "$GITHUB_ENV"
+
       - name: Test
         shell: bash
         run: |
