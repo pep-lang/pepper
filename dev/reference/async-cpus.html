@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc5c0259.js";
+            window.path_to_searchindex_js = "../searchindex-6a4f6fbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -193,7 +193,11 @@ threads on: every hardware thread, so a core with hyperthreading (SMT)
 counts two or more times.</p>
 <p>This is the upper bound on how many threads can run at the same moment,
 and a sensible default size for a pool of CPU-bound worker threads. Inside
-a virtual machine or container it counts the processors the guest sees.</p>
+a virtual machine it counts the processors the guest sees. On Linux, a
+CPU quota on the process’s cgroup or any cgroup above it (cgroup v2’s
+<code>cpu.max</code>, or v1’s <code>cpu.cfs_quota_us</code> over <code>cpu.cfs_period_us</code>, as
+<code>docker run --cpus</code> sets) caps the count, rounded up to whole processors,
+as Go and the JVM do: a quota of 1.5 processors counts as 2.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the number of logical processors, at least 1</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc5c0259.js";
+            window.path_to_searchindex_js = "../searchindex-6a4f6fbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -304,7 +304,8 @@ DNS host name). WASI does not report one.</p>
 <pre><code class="language-pepper">logical_cpus(): ulong
 </code></pre>
 <p>Returns the number of logical processors: every hardware thread, so a
-core with hyperthreading counts two or more times. The same as
+core with hyperthreading counts two or more times. On Linux a cgroup
+CPU quota (<code>docker run --cpus</code>) caps it, rounded up. The same as
 <code>async.logical_cpus()</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
@@ -331,11 +332,13 @@ share a core count once. The same as <code>async.physical_cpus()</code>.</p>
 <pre><code class="language-pepper">total_memory(): ulong
 </code></pre>
 <p>Returns the machine’s physical memory in bytes. Inside a virtual
-machine this is what the guest sees; a container’s memory limit is not
-taken into account. WASI does not report it.</p>
+machine this is what the guest sees. On Linux, a lower memory limit on
+the process’s cgroup or any cgroup above it (cgroup v2’s <code>memory.max</code>
+or v1’s <code>memory.limit_in_bytes</code>, as <code>docker run --memory</code> sets) is
+returned instead, as the JVM does. WASI does not report it.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the total physical memory in bytes, or 0 when the system does not report it</li>
+<li>the total physical memory, or the container’s memory limit when that is lower, in bytes; 0 when the system does not report it</li>
 </ul>
 <h2 id="page_size"><a class="header" href="#page_size">page_size</a></h2>
 <pre><code class="language-pepper">page_size(): ulong

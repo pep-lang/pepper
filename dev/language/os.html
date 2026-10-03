@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc5c0259.js";
+            window.path_to_searchindex_js = "../searchindex-6a4f6fbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -302,8 +302,8 @@ main(): int {
 <tr><td><code>system_version()</code></td><td>the kernel release on Linux, the product version on macOS (<code>14.5</code>), <code>major.minor.build</code> on Windows</td></tr>
 <tr><td><code>architecture()</code></td><td><code>"x64"</code>, <code>"aarch64"</code> or <code>"wasm32"</code>, as <code>[Target(Arch(...))]</code> names them</td></tr>
 <tr><td><code>hostname()</code></td><td>the machine’s host name</td></tr>
-<tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>’s</td></tr>
-<tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory and the virtual memory page size, in bytes</td></tr>
+<tr><td><code>logical_cpus()</code>, <code>physical_cpus()</code></td><td>processor counts, the same as <code>async</code>’s, capped by a Linux container’s CPU quota</td></tr>
+<tr><td><code>total_memory()</code>, <code>page_size()</code></td><td>physical memory, or a Linux container’s lower memory limit, and the virtual memory page size, in bytes</td></tr>
 <tr><td><code>user_name()</code></td><td>the user the program runs as, or none</td></tr>
 <tr><td><code>home_directory()</code></td><td><code>HOME</code> (on Windows <code>USERPROFILE</code>), or the user database’s entry, or none</td></tr>
 <tr><td><code>temp_directory()</code></td><td>the directory for temporary files, the same as <code>io.Directory.temp()</code></td></tr>
@@ -311,10 +311,24 @@ main(): int {
 </tbody>
 </table>
 </div>
+<h2 id="containers"><a class="header" href="#containers">Containers</a></h2>
+<p>On Linux, <code>total_memory()</code> and <code>logical_cpus()</code> report what a container
+lets the program use, as the JVM and Go do, so a pool or a cache sized from
+them fits inside it. Both read the process’s cgroup and each cgroup above
+it, under <code>/sys/fs/cgroup</code>, with cgroup v2 or v1:</p>
+<ul>
+<li><code>total_memory()</code> returns the smallest of the physical memory and every
+memory limit found (<code>memory.max</code>, or v1’s <code>memory.limit_in_bytes</code>), as
+<code>docker run --memory</code> sets it.</li>
+<li><code>logical_cpus()</code> returns the smaller of the online processors and the
+smallest CPU quota (<code>cpu.max</code>, or v1’s <code>cpu.cfs_quota_us</code> over
+<code>cpu.cfs_period_us</code>), rounded up to whole processors: <code>docker run --cpus=1.5</code> counts as 2. <code>physical_cpus()</code> is never more than that.</li>
+</ul>
+<p>Where no limit is set, or the files cannot be read, they report the
+machine.</p>
 <h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
 <li><code>async.timeout</code> still takes milliseconds, not a <code>Duration</code>.</li>
-<li><code>total_memory()</code> does not take a container’s memory limit into account.</li>
 </ul>
 
                     </main>

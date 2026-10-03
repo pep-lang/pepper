@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dc5c0259.js";
+            window.path_to_searchindex_js = "../searchindex-6a4f6fbf.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -271,7 +271,9 @@ use one (see <a href="#module-scope-variables">below</a>).</p>
 <ul>
 <li><code>async.logical_cpus()</code> returns how many threads the machine can run at the
 same moment. A core with hyperthreading (SMT) counts two or more times.
-This is a good default size for a pool of CPU-bound worker threads.</li>
+This is a good default size for a pool of CPU-bound worker threads.
+In a Linux container with a CPU quota (<code>docker run --cpus</code>), it is the
+quota rounded up, when that is fewer (see <a href="os.html#containers">Containers</a>).</li>
 <li><code>async.physical_cpus()</code> counts each physical core once. On Linux it reads
 the kernel’s CPU topology, on macOS <code>hw.physicalcpu</code>, and on Windows
 <code>GetLogicalProcessorInformationEx</code>. Inside a virtual machine it counts the
