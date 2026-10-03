@@ -1,8 +1,0 @@
-# Written by `pepper package`: the exact revision of every dependency.
-# Commit it with pep.toml; do not edit it by hand.
-version = 1
-
-[[package]]
-name = "toml"
-source = "github:justinboswell/pepper-toml"
-commit = "707c4593480d5eb95b153681a901fb9a98763c41"

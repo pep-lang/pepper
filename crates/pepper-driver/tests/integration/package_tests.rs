@@ -234,18 +234,25 @@ fn update_verify_keeps_only_updates_that_build() {
         .args(["update", "--verify"])
         .current_dir(&dir)
         .env("PATH", path)
+        // CI's build folder is outside the repository, where pep-build
+        // would not find the runtime on its own.
+        .env("PEPPER_RUNTIME", repo_root().join("runtime"))
         .output()
         .unwrap();
     assert!(verified.status.success(), "{}", stderr(&verified));
     assert!(stderr(&verified).contains("rolled back, because the project did not build with them: github:other/numbers"), "{}", stderr(&verified));
     let locked = lock(&dir);
     assert!(locked.contains("source = \"github:other/numbers\"\nversion = \"1.0.0\""), "numbers stays at 1.0.0: {}", locked);
-    assert!(locked.contains("source = \"github:someone/geometry\"\nversion = \"1.1.0\""), "{}", locked);
+    assert!(locked.contains("source = \"github:someone/geometry\"\nversion = \"1.1.0\""), "{}\n{}", locked, stderr(&verified));
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A folder holding `pep-build`, for `update --verify` to find on the PATH:
-/// the workspace's release build of the compiler.
+/// The folder holding `pep-build`, for `update --verify` to find on the
+/// PATH: this build's own, beside the `deps` folder this test runs from.
+/// `cargo test --workspace` builds it (for `tests/pep_build.rs`).
 fn pep_build_dir() -> PathBuf {
-    repo_root().join("target").join("release")
+    let dir = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().to_path_buf();
+    let exe = dir.join(if cfg!(windows) { "pep-build.exe" } else { "pep-build" });
+    assert!(exe.is_file(), "{} is missing; build it with `cargo build` (or run `cargo test --workspace`)", exe.display());
+    dir
 }

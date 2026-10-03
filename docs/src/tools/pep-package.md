@@ -134,8 +134,9 @@ name each imports it by.
 ## Building it
 
 `pep-package` is written in Pepper (`tools/pep-package`) and depends on the
-[toml package](https://github.com/justinboswell/pepper-toml). Its
-`pep.toml` and `pep.lock` name it, and building it fetches it:
+[toml package](https://github.com/justinboswell/pepper-toml) through a
+`path` dependency on its copy in `tools/toml`, so building it needs no
+network:
 
 ```bash
 cargo build --release
