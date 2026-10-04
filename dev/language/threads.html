@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7d3dc32c.js";
+            window.path_to_searchindex_js = "../searchindex-6cec6064.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4d1777b9.js"></script>
+        <script src="../toc-5dbede3d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1159,6 +1159,76 @@ PEP_CHECK_SYNC: an object in the value locked by a 'Mutex&lt;Box&gt;' is still r
 costs time and memory in proportion to the value’s size at each unlock; it
 is off unless the variable is set. It checks a <code>Mutex&lt;T&gt;</code> whose <code>T</code> is not
 thread-safe and can be <a href="memory.html#copying-a-value-with-copy">copied</a>.</p>
+<h2 id="semaphores-barriers-and-latches"><a class="header" href="#semaphores-barriers-and-latches">Semaphores, barriers and latches</a></h2>
+<p>Three types coordinate threads by counting. Each is <code>[Shared]</code>, so keep it
+in a module-scope variable or pass it to threads:</p>
+<ul>
+<li>A <code>Semaphore(permits)</code> lets at most <code>permits</code> threads hold a permit at
+once. <code>acquire()</code> waits for a free permit and takes it, <code>try_acquire()</code>
+takes one only if one is free, and <code>release()</code> gives one back.
+<code>with (semaphore.permit()) { ... }</code> holds a permit for the block and gives
+it back on every path out.</li>
+<li>A <code>Barrier(count)</code> makes groups of <code>count</code> threads meet: <code>wait()</code> sleeps
+until <code>count</code> threads have called it, then all go on together. It returns
+<code>true</code> on exactly one of them, the leader, and resets for the next round.</li>
+<li>A <code>Latch(count)</code> opens once <code>count_down()</code> has been called <code>count</code> times.
+<code>wait()</code> sleeps until it is open, and <code>is_ready()</code> asks without waiting.
+It is one-shot: counting down an open latch panics.</li>
+</ul>
+<pre><code class="language-pepper">import async;
+
+const WORKERS = 4;
+
+# At most two workers use the printer at once.
+const printer = async.Semaphore(2);
+const printing = async.Atomic&lt;long&gt;(0);
+const most_printing = async.Atomic&lt;long&gt;(0);
+
+# Every worker finishes a step before any starts the next.
+const step_done = async.Barrier(WORKERS);
+const steps_led = async.Atomic&lt;long&gt;(0);
+
+# The main thread waits until every worker has set up.
+const ready = async.Latch(WORKERS);
+
+work() {
+    ready.count_down();
+    var step = 0;
+    while (step &lt; 3) {
+        with (printer.permit()) {
+            var now = printing.fetch_add(1) + 1;
+            if (now &gt; most_printing.load()) {
+                most_printing.store(now);
+            }
+            printing.fetch_sub(1);
+        }   # the permit is given back here
+        if (step_done.wait()) {
+            steps_led.fetch_add(1);   # one leader per step
+        }
+        step = step + 1;
+    }
+}
+
+main(): int {
+    var workers = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; WORKERS) {
+        workers.append(async.Thread.spawn(work));
+        i = i + 1;
+    }
+    ready.wait();
+    assert(ready.is_ready(), "every worker counted down");
+    for (var worker in workers) {
+        worker.join();
+    }
+    assert(most_printing.load() &lt;= 2, "the semaphore let two in at most");
+    assert(steps_led.load() == 3, "each step had exactly one leader");
+    return 0;
+}
+</code></pre>
+<p>Each is a <code>Mutex</code> over its counts with a <code>Condition</code> to sleep on, so in a
+<a href="tasks.html#mutexes-channels-and-conditions">task</a> their waits park the task,
+not its worker.</p>
 <h2 id="once-and-lazy"><a class="header" href="#once-and-lazy">Once and Lazy</a></h2>
 <p><code>Once</code> runs a function exactly once, however many threads ask, and <code>Lazy&lt;T&gt;</code>
 builds a value the first time a thread asks for it:</p>

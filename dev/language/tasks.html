@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7d3dc32c.js";
+            window.path_to_searchindex_js = "../searchindex-6cec6064.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4d1777b9.js"></script>
+        <script src="../toc-5dbede3d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -353,7 +353,8 @@ waiting keeps every other task waiting, so a long loop should call
 <h2 id="mutexes-channels-and-conditions"><a class="header" href="#mutexes-channels-and-conditions">Mutexes, channels and conditions</a></h2>
 <p>The <a href="threads.html">synchronization types</a> work in tasks too. When a task
 has to wait for a <code>Mutex</code>, for a value from a <code>Channel</code> or for room in a
-bounded one, or in <code>Condition.wait</code>, it parks and its worker runs other
+bounded one, in <code>Condition.wait</code>, or in <code>Semaphore.acquire</code>, <code>Barrier.wait</code>
+or <code>Latch.wait</code>, it parks and its worker runs other
 tasks, just as it does for a socket. The task that holds the lock or will
 send the value can be on the same worker, on another worker, or a plain
 thread:</p>
