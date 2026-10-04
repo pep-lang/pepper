@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3693afab.js";
+            window.path_to_searchindex_js = "../searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -833,6 +833,10 @@ it panics instead of deadlocking. <code>is_held()</code> reports whether the cal
 thread holds it.</li>
 <li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
 “poisoned”.</li>
+<li>Taking a free lock is one atomic instruction, and a thread that finds it
+held spins briefly before it sleeps. Locks sleep on the operating system’s
+wait-on-address call (<code>futex</code> on Linux, <code>__ulock_wait</code> on macOS,
+<code>WaitOnAddress</code> on Windows), as Rust’s do.</li>
 </ul>
 <p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
 <code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.

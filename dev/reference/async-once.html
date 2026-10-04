@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3693afab.js";
+            window.path_to_searchindex_js = "../searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -215,10 +215,6 @@ work() {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Once whose body has not run.</p>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
-</ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="call"><a class="header" href="#call">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
@@ -290,10 +286,6 @@ Nothing runs yet.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>initializer</code> — builds the value; runs at most once, on the thread that first calls <code>get()</code></li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
 <h4 id="get"><a class="header" href="#get">get</a></h4>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3693afab.js";
+            window.path_to_searchindex_js = "../searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -206,7 +206,9 @@ platform-version flags. clang adds all of these, using the Xcode Command
 Line Tools.</li>
 <li><strong>Windows:</strong> the Microsoft C runtime (the UCRT, <code>vcruntime</code> and the CRT
 startup library), which clang adds, plus <code>kernel32</code>, <code>user32</code> and <code>shell32</code>,
-which the Pepper compiler adds. clang finds the Visual Studio and Windows SDK
+which the Pepper compiler adds. A program that uses <code>async</code> also links
+<code>synchronization</code>, which the runtime names with <code>[Link]</code> for its locks
+(<code>WaitOnAddress</code>). clang finds the Visual Studio and Windows SDK
 libraries itself, so you do not need a Developer Command Prompt.</li>
 </ul>
 <p>Any library file named <code>lib&lt;name&gt;.a</code> in the runtime directory is linked too.</p>

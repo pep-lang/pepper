@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3693afab.js";
+            window.path_to_searchindex_js = "../searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -247,10 +247,6 @@ change it as soon as it returns.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>capacity</code> — how many values may wait before <code>send</code> blocks; 0 (the default) for no limit</li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var bounded = async.Channel&lt;long&gt;(16);

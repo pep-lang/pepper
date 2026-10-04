@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3693afab.js";
+            window.path_to_searchindex_js = "../searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -253,10 +253,6 @@ its reference over, so nothing is copied.</p>
 <ul>
 <li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
 </ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex</li>
-</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
@@ -460,10 +456,6 @@ does the same.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>mutex</code> — the Mutex that waiters hold</li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a condition variable</li>
 </ul>
 <h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>

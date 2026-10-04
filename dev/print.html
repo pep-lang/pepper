@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3693afab.js";
+            window.path_to_searchindex_js = "searchindex-73a20536.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4d1777b9.js"></script>
@@ -13267,6 +13267,10 @@ it panics instead of deadlocking. <code>is_held()</code> reports whether the cal
 thread holds it.</li>
 <li>A <code>panic</code> while a Mutex is held ends the program, so a Mutex is never left
 “poisoned”.</li>
+<li>Taking a free lock is one atomic instruction, and a thread that finds it
+held spins briefly before it sleeps. Locks sleep on the operating system’s
+wait-on-address call (<code>futex</code> on Linux, <code>__ulock_wait</code> on macOS,
+<code>WaitOnAddress</code> on Windows), as Rust’s do.</li>
 </ul>
 <p><code>T</code> is a struct type: a struct of your own, an <code>Array&lt;String&gt;</code>, or a
 <code>[Shared]</code> struct whose <code>Atomic</code> fields must change as a unit.
@@ -17957,7 +17961,9 @@ platform-version flags. clang adds all of these, using the Xcode Command
 Line Tools.</li>
 <li><strong>Windows:</strong> the Microsoft C runtime (the UCRT, <code>vcruntime</code> and the CRT
 startup library), which clang adds, plus <code>kernel32</code>, <code>user32</code> and <code>shell32</code>,
-which the Pepper compiler adds. clang finds the Visual Studio and Windows SDK
+which the Pepper compiler adds. A program that uses <code>async</code> also links
+<code>synchronization</code>, which the runtime names with <code>[Link]</code> for its locks
+(<code>WaitOnAddress</code>). clang finds the Visual Studio and Windows SDK
 libraries itself, so you do not need a Developer Command Prompt.</li>
 </ul>
 <p>Any library file named <code>lib&lt;name&gt;.a</code> in the runtime directory is linked too.</p>
@@ -36755,10 +36761,6 @@ its reference over, so nothing is copied.</p>
 <ul>
 <li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
 </ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex</li>
-</ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
@@ -36963,10 +36965,6 @@ does the same.</p>
 <ul>
 <li><code>mutex</code> — the Mutex that waiters hold</li>
 </ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a condition variable</li>
-</ul>
 <h3 id="methods-2-11"><a class="header" href="#methods-2-11">Methods</a></h3>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">wait()
@@ -37092,10 +37090,6 @@ work() {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Once whose body has not run.</p>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
-</ul>
 <h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="call-1"><a class="header" href="#call-1">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
@@ -37167,10 +37161,6 @@ Nothing runs yet.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>initializer</code> — builds the value; runs at most once, on the thread that first calls <code>get()</code></li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <h3 id="methods-1-18"><a class="header" href="#methods-1-18">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
@@ -37260,10 +37250,6 @@ change it as soon as it returns.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>capacity</code> — how many values may wait before <code>send</code> blocks; 0 (the default) for no limit</li>
-</ul>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system cannot create a mutex or condition variable</li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var bounded = async.Channel&lt;long&gt;(16);
