@@ -5,13 +5,15 @@
 #     pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #     pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
-#     pepc --emit-model [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#     pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
 # print the file's syntax tree, or the whole program after linking, as the
 # JSON that `pep-build` prints with the same options, or what the checks
-# after linking report, or the sema model before any pass, as `pep-build`
+# after linking report, or the sema model before any pass (or after the
+# first N steps of the passes, or the error one reports), as `pep-build`
 # prints it, so the two can be compared.
 
+import [render_all] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
 import compiler.link;
@@ -23,6 +25,7 @@ main(args: String[]): int {
     bool linked = false;
     bool checked = false;
     bool model = false;
+    var step = Optional<ulong>.Empty;
     var setup = link.Setup();
     ulong i = 1;
     while (i < args.count) {
@@ -33,6 +36,18 @@ main(args: String[]): int {
             checked = true;
         } else if (arg == "--emit-model") {
             model = true;
+        } else if (arg == "--emit-model-step") {
+            if (i + 1 >= args.count) {
+                print($"pepc: {arg} needs a value");
+                return 2;
+            }
+            i += 1;
+            var parsed = ulong.parse(args[i]);
+            if (!parsed.is_value()) {
+                print($"pepc: {arg} needs a number, not '{args[i]}'");
+                return 2;
+            }
+            step = Optional<ulong>.Value(parsed.value());
         } else if (arg == "--no-runtime") {
             setup.runtime = false;
         } else if (arg == "-I" or arg == "--import" or arg == "-D" or arg.starts_with("-I") or arg.starts_with("-D")) {
@@ -68,7 +83,9 @@ main(args: String[]): int {
         print("usage: pepc --emit-ast=json <file.pep>");
         print("       pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         print("       pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
-        print("       pepc --emit-model [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
+        print(
+            "       pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>"
+        );
         return 2;
     }
     if (linked or checked or model) {
@@ -82,6 +99,15 @@ main(args: String[]): int {
             if (built.is_err()) {
                 print(built.error());
                 return 1;
+            }
+            if (step.is_value()) {
+                var ran = sema.run_steps(
+                    built.value(), program.value().target, step.value(), program.value().sources()
+                );
+                if (ran.is_err()) {
+                    print(render_all([ran.error()], program.value().sources()));
+                    return 1;
+                }
             }
             print(sema.model_json(built.value()));
         } else if (linked) {

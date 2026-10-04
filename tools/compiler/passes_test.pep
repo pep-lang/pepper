@@ -1,10 +1,10 @@
 # The compiler's sema passes in Pepper change the model as the Rust passes
-# do: after the steps ported so far (`sema.PORTED_STEPS`), the model's JSON
+# do: after the steps ported so far (through the specialization loop), the model's JSON
 # from `compiler.sema` here and from `pep-build --emit-model
 # --emit-model-step N` match byte for byte, and a program a step rejects
 # gets the same error.
 
-import [render_all] from compiler.diagnostic;
+import [Diagnostic, render_all] from compiler.diagnostic;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -13,7 +13,8 @@ import compiler.sema;
 import [TempFolder] from testing;
 
 # The programs are split in parts, each a test of its own, to keep each
-# within the time a test may take.
+# within the time a test may take. The programs that use much of the
+# runtime take the longest, so each is a test of its own.
 [Test]
 runs_the_passes_over_the_test_programs_part_1() {
     runs_passes(0);
@@ -75,26 +76,52 @@ runs_the_passes_over_the_test_programs_part_12() {
 }
 
 [Test]
-runs_the_passes_over_the_test_programs_part_13() {
-    runs_passes(12);
+runs_the_passes_over_the_atomics_test() {
+    runs_passes_over(Path("../tests/Atomic.Basic").join("test.pep"));
 }
 
 [Test]
-runs_the_passes_over_the_test_programs_part_14() {
-    runs_passes(13);
+runs_the_passes_over_the_generic_shared_constraints_test() {
+    runs_passes_over(Path("../tests/Generic.SharedConstraint").join("test.pep"));
 }
 
 [Test]
-runs_the_passes_over_the_test_programs_part_15() {
-    runs_passes(14);
+runs_the_passes_over_the_globals_test() {
+    runs_passes_over(Path("../tests/Globals.Basic").join("test.pep"));
 }
 
 [Test]
-runs_the_passes_over_the_test_programs_part_16() {
-    runs_passes(15);
+runs_the_passes_over_the_io_test() {
+    runs_passes_over(Path("../tests/Io.Basic").join("test.pep"));
 }
 
-const PARTS = 16;
+[Test]
+runs_the_passes_over_the_threads_copy_example() {
+    runs_passes_over(Path("../docs/examples").join("threads-copy.pep"));
+}
+
+[Test]
+runs_the_passes_over_the_threads_lock_body_example() {
+    runs_passes_over(Path("../docs/examples").join("threads-lock-body.pep"));
+}
+
+const PARTS = 12;
+
+# The corpus's programs with tests of their own.
+slow_programs(): String[] {
+    return ["Atomic.Basic", "Generic.SharedConstraint", "Globals.Basic", "Io.Basic"];
+}
+
+# Runs the passes over `program` with both compilers.
+runs_passes_over(program: Path) {
+    var compiler = process.find_companion("pep-build");
+    expect_true(compiler.is_value(), "pep-build is beside pep-test or on the PATH");
+    if (!compiler.is_value()) {
+        return;
+    }
+    expect_true(program.is_file(), "the program is found from tools/");
+    expect_true(same_passes(compiler.value(), program, Array<String>(), true), "the passes agree");
+}
 
 # Runs the passes over every `PARTS`th program of the corpus and the
 # documentation's programs of several files, from the `part`th, with both
@@ -118,7 +145,7 @@ runs_passes(part: ulong) {
     names.sort((a, b) => a.compare(b));
     for (var name in names) {
         var program = Path("../tests").join(name).join("test.pep");
-        if (program.is_file()) {
+        if (program.is_file() and !slow_programs().contains(name)) {
             programs.append(program);
         }
     }
@@ -133,14 +160,19 @@ runs_passes(part: ulong) {
     ]) {
         programs.append(Path("../docs/examples").join(name).join("main.pep"));
     }
-    # The documentation's programs with `static` blocks and attributes.
+    # The documentation's programs with `static` blocks and attributes, and
+    # with copies.
     for (var name in [
         "build-options.pep",
         "debugging-static.pep",
         "reflection-attributes.pep",
         "reflection-functions.pep",
         "structs-static.pep",
-        "reflection-module/main.pep"
+        "reflection-module/main.pep",
+        # Copies (`threads-copy.pep` and the census of a locked value in
+        # `threads-lock-body.pep` have tests of their own).
+        "memory-copy-traits.pep",
+        "memory-copyable.pep"
     ]) {
         programs.append(Path("../docs/examples").join(name));
     }
@@ -201,17 +233,17 @@ write_and_compare(compiler: Path, folder: TempFolder, programs: String[]): ulong
 
 # Whether the two compilers' passes agree on the program rooted at `root`
 # after the ported steps, and if not, reports the first step where they
-# part.
+# part. The specialization loop runs as many steps as the program needs, so
+# the Rust passes are compared after as many as these ran.
 same_passes(compiler: Path, root: Path, arguments: String[], runtime: bool): bool {
-    var steps = sema.PORTED_STEPS;
-    var first = compare_step(compiler, root, arguments, runtime, steps);
+    var (first, steps) = compare_step(compiler, root, arguments, runtime, ALL_STEPS);
     if (!first.is_value()) {
         return true;
     }
     # Find the first step that differs.
     ulong step = 1;
     while (step < steps) {
-        var differs = compare_step(compiler, root, arguments, runtime, step);
+        var (differs, _) = compare_step(compiler, root, arguments, runtime, step);
         if (differs.is_value()) {
             print($"{root}: step {step}: {differs.value()}");
             return false;
@@ -222,9 +254,30 @@ same_passes(compiler: Path, root: Path, arguments: String[], runtime: bool): boo
     return false;
 }
 
+# More steps than any program runs: all those ported.
+const ALL_STEPS: ulong = 1000000;
+
 # How the two compilers' models of the program rooted at `root` differ
-# after `steps` steps, or none when they match.
-compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, steps: ulong): String? {
+# after `limit` steps of these passes (as many as ran, when fewer), or none
+# when they match; and how many steps that was.
+compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, limit: ulong): (String?, ulong) {
+    var none = Optional<String>.Empty;
+    var setup = link.Setup();
+    setup.runtime = runtime;
+    var program = link.load_program(root, setup);
+    var built = program.is_ok() ?
+        Optional<Result<sema.Module, String>>.Value(sema.merge(program.value())) :
+        Optional<Result<sema.Module, String>>.Empty;
+    var ran = Optional<Result<ulong, Diagnostic>>.Empty;
+    if (built.is_value() and built.value().is_ok()) {
+        ran = Optional<Result<ulong, Diagnostic>>.Value(
+            sema.run_steps(built.value().value(), program.value().target, limit, program.value().sources())
+        );
+    }
+    var steps = limit;
+    if (ran.is_value() and ran.value().is_ok()) {
+        steps = ran.value().value();
+    }
     var command = process
         .Command(compiler.to_string())
         .argument("--emit-model")
@@ -235,51 +288,52 @@ compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, ste
     }
     var output = command.argument(root.to_string()).stdout(process.Stream.Pipe).stderr(process.Stream.Pipe).run();
     if (output.is_err()) {
-        return Optional<String>.Empty;
+        return (none, steps);
     }
-    var setup = link.Setup();
-    setup.runtime = runtime;
     # A program the Rust compiler builds must load here too; one it
     # rejects before the passes is sema_test's to compare.
     var accepted = output.value().status.success();
-    var program = link.load_program(root, setup);
     if (program.is_err()) {
-        return accepted ?
-            Optional<String>.Value("the Rust compiler loads it, but not this one") :
-            Optional<String>.Empty;
+        return (accepted ? Optional<String>.Value("the Rust compiler loads it, but not this one") : none, steps);
     }
-    var built = sema.merge(program.value());
-    if (built.is_err()) {
-        return accepted ?
-            Optional<String>.Value("the Rust compiler merges it, but not this one") :
-            Optional<String>.Empty;
+    if (built.value().is_err()) {
+        return (accepted ? Optional<String>.Value("the Rust compiler merges it, but not this one") : none, steps);
     }
-    var module = built.value();
-    var ran = sema.run_steps(module, program.value().target, steps, program.value().sources());
-    if (!output.value().status.success()) {
+    var module = built.value().value();
+    var result = ran.value();
+    if (!accepted) {
         var expected = trimmed(output.value().stderr);
-        if (!ran.is_err()) {
-            return Optional<String>.Value($"the Rust passes reject it, but not these: {expected}");
+        if (!result.is_err()) {
+            return (Optional<String>.Value($"the Rust passes reject it, but not these: {expected}"), steps);
         }
-        var actual = render_all([ran.error()], program.value().sources());
+        var actual = render_all([result.error()], program.value().sources());
         if (actual != expected) {
-            return Optional<String>.Value($"the error differs from the Rust passes':\n{actual}\nnot\n{expected}");
+            return (
+                Optional<String>.Value($"the error differs from the Rust passes':\n{actual}\nnot\n{expected}"), steps
+            );
         }
-        return Optional<String>.Empty;
+        return (none, steps);
     }
-    if (ran.is_err()) {
-        return Optional<String>.Value(
-            $"the Rust passes accept it, but: {render_all([ran.error()], program.value().sources())}"
+    if (result.is_err()) {
+        return (
+            Optional<String>.Value(
+                $"the Rust passes accept it, but: {render_all([result.error()], program.value().sources())}"
+            ),
+            steps
         );
     }
     var expected = trimmed(output.value().stdout);
     var actual = sema.model_json(module);
     if (actual != expected) {
-        return Optional<String>.Value(
-            $"the model differs from the Rust passes' at byte {first_difference(actual, expected)} of its JSON: {excerpt(actual, first_difference(actual, expected))} not {excerpt(expected, first_difference(actual, expected))}"
+        var at = first_difference(actual, expected);
+        return (
+            Optional<String>.Value(
+                $"the model differs from the Rust passes' at byte {at} of its JSON: {excerpt(actual, at)} not {excerpt(expected, at)}"
+            ),
+            steps
         );
     }
-    return Optional<String>.Empty;
+    return (none, steps);
 }
 
 trimmed(text: String): String {
@@ -480,7 +534,25 @@ error_programs(): String[] {
         "_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = \"a\"..>\"z\";\n    return 0;\n}\n",
         # A generic method's constraints, at its specialization.
         "trait Named {\n    name(): int;\n}\nstruct Box {\n    get<T: Named>(x: T): int { return 0; }\n}\nmain(): int {\n    var b = Box();\n    return b.get<int>(1);\n}\n",
-        "struct Box {\n    get<T>(x: T): T { return x; }\n}\nmain(): int {\n    var b = Box();\n    var f = b.get<int>;\n    return b.get<int>(1) + f(2) + b.missing<int>(3);\n}\n"
+        "struct Box {\n    get<T>(x: T): T { return x; }\n}\nmain(): int {\n    var b = Box();\n    var f = b.get<int>;\n    return b.get<int>(1) + f(2) + b.missing<int>(3);\n}\n",
+        # A specialization's `static` block emits a lowered string.
+        "pick<T>(x: T): T {\n    var s = x;\n    static (s) {\n        var t = \"ab\";\n        s = t;\n    }\n    return s;\n}\nmain(): int {\n    var p = pick<int>(1);\n    return 0;\n}\n",
+        # Intrinsics: function pointers, `__ptr<T>`, typed intrinsics and SIMD arity.
+        "f(): int { return 1; }\nmain(): int {\n    var p = __function_pointer(f);\n    var q = __function_pointer(g);\n    return 0;\n}\n",
+        "main(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    var v = __simd_add<int>(1);\n    return 0;\n}\n",
+        "struct S {\n    static h(): int { return 2; }\n    m(): int {\n        var p = __function_pointer(h);\n        var q = __function_pointer(1, 2);\n        return 0;\n    }\n}\nmain(): int { return 0; }\n",
+        "main(): int {\n    var x: __ptr<int> = null;\n    var y = __address<int>(x);\n    var b = __is_pod<__ptr<char>>();\n    return 0;\n}\n",
+        # Bare names in methods: an undeclared one, in a concrete struct, a
+        # specialization and a trait's default method.
+        "struct S {\n    var n: int;\n    get(): int { return zork; }\n}\nmain(): int { return 0; }\n",
+        "struct B<T> {\n    var v: T;\n    get(): int { return zork + 1; }\n}\nmain(): int { var b = B<int>(); return 0; }\n",
+        "trait Counted {\n    count(): int { return n; }\n}\nstruct S {\n    var n: int;\n}\nextend S with Counted;\nmain(): int { return 0; }\n",
+        # Copies that cannot be made: a destructor (through a field), a raw
+        # pointer field, `[NotCopyable]` and a plain function value.
+        "struct R {\n    var n: int;\n    destruct { n = 0; }\n}\nstruct H {\n    var r: R;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var h = H();\n    var c = copy(h);\n    return 0;\n}\n",
+        "struct P {\n    var p: __ptr<char>;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(P());\n    return 0;\n}\n",
+        "[Attribute]\nstruct NotCopyable {\n    var reason: String;\n}\nstruct String {\n    var data: __ptr<char>;\n    construct(raw: __ptr<char>, size: long, length: long) {}\n}\n[NotCopyable(\"it owns a handle\")]\nstruct F {\n    var n: int;\n}\nstruct W {\n    var f: F;\n    var g: (int) => int;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(W());\n    return 0;\n}\n",
+        "struct W {\n    var g: (int) => int;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(W());\n    return 0;\n}\n"
     ];
 }
 
@@ -543,6 +615,9 @@ rewritten_programs(): String[] {
         "struct String {\n    var data: __ptr<char>;\n    construct(raw: __ptr<char>, size: long, length: long) {}\n}\nvar greeting = \"héllo\";\nf(name: String = \"wörld\", raw: __ptr<char> = \"c\"): String { return \"a\" + \"\"; }\ntrait Named {\n    name(): String { return \"named\"; }\n}\nstruct Box<T> {\n    var v: T;\n    add<U>(u: U): String { return \"add\"; }\n    construct(label: String = \"box\") {}\n}\nextend int {\n    text(): String { return \"int\"; }\n}\nmain(): int {\n    var s = \"日本\";\n    return 0;\n}\n",
         # Generic uses: fields, methods, locals in nested blocks, an
         # extension of the base, globals, calls and a function value.
-        "struct Box<T> {\n    var v: T;\n    var others: Box<Box<T>>;\n    var ints: Box<int>;\n    get(b: Box<long>): Box<short> { var local: Box<bool>; return Box<short>(); }\n    construct() { var c: Box<char>; }\n}\nstruct Pair<A, B> { var a: A; var b: B; }\nextend Box<T> {\n    wrap(): Box<T> { return Box<T>(); }\n    twice(): Box<double> { return Box<double>(); }\n}\nlarger<T>(a: T, b: T): T { return a; }\nmake<U>(u: U): Box<U> { var p: Pair<U, int>; return Box<U>(); }\nvar global: Pair<int, bool> = Pair<int, bool>();\nvar picked = larger<long>(1, 2);\nmain(): int {\n    var x = larger<int>(1, 2);\n    var f = larger<double>;\n    if (x > 0) {\n        Pair<String, int> p;\n    } else {\n        while (x < 0) {\n            Box<uint> q;\n        }\n    }\n    var m = make<byte>(1);\n    return x;\n}\n"
+        "struct Box<T> {\n    var v: T;\n    var others: Box<Box<T>>;\n    var ints: Box<int>;\n    get(b: Box<long>): Box<short> { var local: Box<bool>; return Box<short>(); }\n    construct() { var c: Box<char>; }\n}\nstruct Pair<A, B> { var a: A; var b: B; }\nextend Box<T> {\n    wrap(): Box<T> { return Box<T>(); }\n    twice(): Box<double> { return Box<double>(); }\n}\nlarger<T>(a: T, b: T): T { return a; }\nmake<U>(u: U): Box<U> { var p: Pair<U, int>; return Box<U>(); }\nvar global: Pair<int, bool> = Pair<int, bool>();\nvar picked = larger<long>(1, 2);\nmain(): int {\n    var x = larger<int>(1, 2);\n    var f = larger<double>;\n    if (x > 0) {\n        Pair<String, int> p;\n    } else {\n        while (x < 0) {\n            Box<uint> q;\n        }\n    }\n    var m = make<byte>(1);\n    return x;\n}\n",
+        # Operators on structs and enums: overloads, indexes, unary operators
+        # and truth tests.
+        "struct V {\n    var x: int;\n    construct(x: int) { this.x = x; }\n    +(other: V): V { return V(x + other.x); }\n    +(other: int): V { return V(x + other); }\n    ==(other: V): bool { return x == other.x; }\n    -(): V { return V(0 - x); }\n    !!(): bool { return x != 0; }\n    +=(other: int) { x = x + other; }\n}\nstruct Grid {\n    var cells: __ptr<int>;\n    var values: V;\n    __index_get(i: int): int { return cells[i]; }\n    __index_set(i: int, value: int) { cells[i] = value; }\n    total(): int { return this[0] + values.x; }\n}\nenum Level {\n    Low,\n    High,\n    <(other: Level): bool { return false; }\n    __index_get(i: int): int { return i; }\n}\nvar origin = V(1) + V(2);\nmain(): int {\n    var a = V(1);\n    var b = a + V(2) + 3;\n    var c = -a;\n    a += 4;\n    if (a) { b = c; }\n    var t = !a;\n    var u = a and b;\n    var ne = a != b;\n    var g = Grid();\n    g[1] = 2;\n    g[1] += 3;\n    g[2] *= g[1];\n    var p: __ptr<int> = null;\n    var q = p[3];\n    var l = Level.Low < Level.High;\n    var w = Level.Low[2];\n    return g[0];\n}\n"
     ];
 }

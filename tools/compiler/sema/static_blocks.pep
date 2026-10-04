@@ -13,6 +13,7 @@ import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
 import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
 import [error_at, location_of] from "common";
+import [convert_string_literal] from "literals";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -116,13 +117,15 @@ _is_generic_base(st: StructDef): bool {
 
 ## Expands every `static` block in concrete code: free functions that are
 ## not generic, and the methods, constructors and destructors of structs
-## that are not, as `static_blocks::expand(module, false)` does. Errors go
-## to `state`.
+## that are not, as `static_blocks::expand` does. Errors go to `state`.
+## `lowered` says the bodies have been through the passes that lower string
+## literals, so a string a block emits is lowered too.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
+## @param lowered whether string literals are lowered by now
 ## @returns whether any block was expanded
-export expand(module: Module, state: PassState): bool {
+export expand(module: Module, state: PassState, lowered: bool = false): bool {
     var sites = Array<FunctionDef>();
     for (var function in module.functions) {
         if (!function.is_generic_func and _body_has_static(function)) {
@@ -153,6 +156,7 @@ export expand(module: Module, state: PassState): bool {
     for (var function in sites) {
         var body = function.body.value();
         var expander = _Expander(module, state, _ExpansionContext.of(function, body));
+        expander.lowered = lowered;
         expander.expand_in(body);
         state.notes.append_all(expander.notes);
     }
@@ -795,6 +799,8 @@ struct _Expander {
     # A compile-time `break` or `continue` that ran and has not yet reached
     # its loop: the statements after it are skipped.
     var jump: LoopBreakKind? = Optional<LoopBreakKind>.Empty;
+    # Whether a string the block emits is lowered, as the bodies' are.
+    var lowered: bool = false;
 
     construct(module: Module, state: PassState, context: _ExpansionContext) {
         this.module = module;
@@ -1296,9 +1302,11 @@ struct _Expander {
                 return Result<Expression, Diagnostic>.Ok(Expression.BoolLiteral(v));
             }
             Text(v) => {
-                return Result<Expression, Diagnostic>.Ok(
-                    Expression.StringLiteral(StringLiteralExpression(v, false, loc))
-                );
+                var literal = Expression.StringLiteral(StringLiteralExpression(v, false, loc));
+                if (lowered) {
+                    literal = convert_string_literal(literal);
+                }
+                return Result<Expression, Diagnostic>.Ok(literal);
             }
             Case(c) => {
                 if (c.is_value) {
@@ -3362,6 +3370,32 @@ _slots(module: Module, st: StructDef): Result<_Slot[], Diagnostic> {
         out.append(_Slot(name, field, _default_constant(module, parameter.default)));
     }
     return Result<_Slot[], Diagnostic>.Ok(out);
+}
+
+## The string field `field` of `attribute` (written in `file`), an
+## `[Attribute]` struct's value, read as `reflect.attribute<A>()` would:
+## `static_blocks::attribute_string`.
+##
+## @param module the model
+## @param attribute the attribute
+## @param file the file it is written in
+## @param field the field's name
+## @returns the field's text, or none
+export attribute_string(module: Module, attribute: ast.Attribute, file: uint, field: String): String? {
+    var value = _attribute_value(module, attribute, file);
+    if (value.is_err()) {
+        return Optional<String>.Empty;
+    }
+    if (value.value() is Attribute(made)) {
+        for (var (name, field_value) in made.fields) {
+            if (name == field) {
+                if (field_value is Text(text)) {
+                    return Optional<String>.Value(text);
+                }
+            }
+        }
+    }
+    return Optional<String>.Empty;
 }
 
 ## The value of `attribute` (written in `file`), an `[Attribute]` struct:

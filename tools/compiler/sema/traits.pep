@@ -145,9 +145,35 @@ struct _TraitTypes {
     var traits: TraitDef[];
     var types: Array<TypeName> = Array<TypeName>();
     var seen: HashSet<String> = HashSet<String>();
+    ## The types already looked through, as written: one adds nothing more.
+    var visited: HashSet<String> = HashSet<String>();
+
+    ## The traits' names.
+    var names: HashSet<String> = HashSet<String>();
 
     construct(traits: TraitDef[]) {
         this.traits = traits;
+        for (var t in traits) {
+            names.insert(t.name);
+        }
+    }
+
+    ## Whether `ty` could name a trait: most types are spelled without one.
+    _mentions_trait(ty: TypeName): bool {
+        var name = ty.name;
+        while (name.ends_with("*")) {
+            name = name.substr_bytes(0, name.size - 1);
+        }
+        # A type carried as a flat name is looked through as written.
+        if (names.contains(name) or name.contains("<")) {
+            return true;
+        }
+        for (var sub in ty.sub_types) {
+            if (_mentions_trait(sub)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     add_function(function: FunctionDef) {
@@ -187,8 +213,15 @@ struct _TraitTypes {
 
     ## Records each fully applied trait type in `ty`.
     add(ty: TypeName) {
+        if (!_mentions_trait(ty)) {
+            return;
+        }
         # Pointers carry their stars in the name (`Shape*`).
         var text = ty.to_string();
+        if (visited.contains(text)) {
+            return;
+        }
+        visited.insert(text);
         while (text.ends_with("*")) {
             text = text.substr_bytes(0, text.size - 1);
         }

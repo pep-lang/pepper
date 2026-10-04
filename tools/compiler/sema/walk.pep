@@ -112,15 +112,11 @@ _rewrite_static_items(items: StaticItem[], rewriter: Rewriter) {
 ## @param rewriter what to do at each expression
 ## @returns the expression, replaced or with its sub-expressions replaced
 export rewrite_expression(e: Expression, rewriter: Rewriter): Expression {
-    var out = rewriter.rewrite(e);
-    if (out is ClosureLiteral(closure)) {
-        rewrite_block(closure.body, rewriter);
-        return out;
-    }
-    return rewrite_children(out, _Walk(rewriter));
+    return _Walk(rewriter).rewrite(e);
 }
 
-## Walks each child with its rewriter, for `rewrite_expression`.
+## Walks each child with its rewriter, for `rewrite_expression`. One walk
+## serves a whole tree.
 struct _Walk {
     var rewriter: Rewriter;
 
@@ -129,7 +125,12 @@ struct _Walk {
     }
 
     rewrite(e: Expression): Expression {
-        return rewrite_expression(e, rewriter);
+        var out = rewriter.rewrite(e);
+        if (out is ClosureLiteral(closure)) {
+            rewrite_block(closure.body, rewriter);
+            return out;
+        }
+        return rewrite_children(out, this);
     }
 }
 

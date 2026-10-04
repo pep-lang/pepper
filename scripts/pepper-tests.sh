@@ -77,7 +77,11 @@ fi
 
 cd "$root/tools"
 if grep -rlq --include='*.pep' '^\[Test\]' .; then
-  run -I . "$@"
+  # At -O1: the compiler's passes tests run the Pepper passes in-process
+  # over the test programs, which is slow unoptimized (near the 60 s
+  # timeout at -O0), and -O1 builds them quickly enough to save time
+  # overall.
+  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "$@"
 fi
 
 exit $failed

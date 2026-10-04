@@ -2775,14 +2775,38 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   (`specialize_structs.pep`, with `constraints.pep`'s `withhold`), and the
   function specializations (`specialize_functions.pep`), then range bounds
   (`ranges.pep`), and the generic methods calls name
-  (`generic_methods.pep`). What the Rust passes keep in thread-locals
+  (`generic_methods.pep`), then the specializations' `static` blocks, whose
+  emitted strings are lowered (`static_blocks.pep`'s `expand(..., true)`),
+  the function types they use (`function_types.pep`), and the intrinsics
+  (`convert_intrinsics.pep`: `__ptr<T>` as `T*`, intrinsic calls as their
+  nodes, `__function_pointer`), then what remains of extension targets
+  and extensions, bare names in methods (`convert_member_refs.pep`: a
+  field is `this.f`, a method call is one on `this` or the struct),
+  implicit types again, and operators on structs
+  (`resolve_operators.pep`: indexes as `__index_get`/`__index_set` or
+  raw array indexing, `x[i] op= y` through a temporary, binary operator
+  overloads and enum operators, with `unary_operators.pep`'s unary
+  operators and truth tests). Then the specialization loop
+  (`passes.pep`'s `_specialization_loop`): gathering, checking and
+  cloning the specializations, range bounds, the new specializations'
+  `static` blocks, implicit types again when anything new needs them,
+  specialized generic methods, and copies (`copies.pep`: `[Copyable]`
+  and `Copy` structs' `__copy` methods, `copy()` calls lowered field by
+  field, and a lock's census of the values it shares, with
+  `shared_types.pep` telling which types are thread-safe), repeated
+  until a round asks for nothing new. An error inside a specialization
+  notes the uses that requested it (`instantiation.pep`). The loop's
+  steps are counted as `checked::run_steps` counts them, so
+  `pepc --emit-model --emit-model-step N` compares with `pep-build` at
+  any step. What the Rust passes keep in thread-locals
   between steps (the first error reported, closure numbers, enum
   representations and methods, reference enums, value structs,
   `reflect.print`'s notes and deprecation warnings, the next
   `WithSubject` id) is a `PassState`
   (`state.pep`). `compiler/passes_test.pep` requires the
-  model JSON, or the rendered error, to match after `PORTED_STEPS` steps
-  on the corpus, the documentation's programs of several modules and
+  model JSON, or the rendered error, to match after every step ported so
+  far (the Rust side runs as many steps as the Pepper side ran) on the
+  corpus, the documentation's programs of several modules and
   with `static` blocks, and programs that exercise each pass and its
   errors; on a mismatch it reports the first step where the two differ.
 - `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,

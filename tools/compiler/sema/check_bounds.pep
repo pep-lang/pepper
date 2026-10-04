@@ -262,7 +262,8 @@ export check_bounds(module: Module, state: PassState) {
             }
             extended.append((locs, params));
         }
-        var methods = st.method_members.copy();
+        var methods = Array<FunctionDef>();
+        methods.append_all(st.method_members);
         methods.append_all(st.constructors);
         methods.append(st.destructor);
         for (var method in methods) {

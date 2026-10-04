@@ -16,6 +16,19 @@ import [static_type_of, StructTable] from "static_type";
 import [parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
+## Whether any struct has generic methods: `has_generic_methods`.
+##
+## @param module the model
+## @returns true when one has
+export has_generic_methods(module: Module): bool {
+    for (var st in module.structs) {
+        if (st.generic_methods.count > 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 ## Adds the method specializations that calls name, as
 ## `generic_methods::specialize_methods` does.
 ##
@@ -29,7 +42,8 @@ export specialize_methods(module: Module, state: PassState): bool {
             continue;
         }
         finder.current = Optional<TypeName>.Value(st.ty);
-        var methods = st.method_members.copy();
+        var methods = Array<FunctionDef>();
+        methods.append_all(st.method_members);
         methods.append_all(st.constructors);
         methods.append(st.destructor);
         for (var m in methods) {

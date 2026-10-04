@@ -240,6 +240,8 @@ enum _Step {
 ## @returns the text
 export canonical_json(value: JsonValue): String {
     var out = Array<String>();
+    # Keys repeat in every object of a kind: each is quoted once.
+    var quoted_keys = HashMap<String, String>();
     var steps = Array<_Step>();
     steps.append(_Step.Value(value));
     while (steps.count > 0) {
@@ -274,7 +276,12 @@ export canonical_json(value: JsonValue): String {
                         while (i > 0) {
                             i -= 1;
                             steps.append(_Step.Value(members.get(keys[i])));
-                            steps.append(_Step.Text($"{JsonValue.String(keys[i]).to_string()}:"));
+                            var quoted = quoted_keys.try_get(keys[i]);
+                            if (!quoted.is_value()) {
+                                quoted = Optional<String>.Value($"{_quoted(keys[i])}:");
+                                quoted_keys[keys[i]] = quoted.value();
+                            }
+                            steps.append(_Step.Text(quoted.value()));
                             if (i > 0) {
                                 steps.append(_Step.Text(","));
                             }
@@ -287,8 +294,11 @@ export canonical_json(value: JsonValue): String {
                         if (text.starts_with(UNSIGNED_MARK)) {
                             out.append(text.substr_bytes(UNSIGNED_MARK.size, text.size - UNSIGNED_MARK.size));
                         } else {
-                            out.append(v.to_string());
+                            out.append(_quoted(text));
                         }
+                    }
+                    Integer(number) => {
+                        out.append($"{number}");
                     }
                     else => {
                         out.append(v.to_string());
@@ -298,6 +308,19 @@ export canonical_json(value: JsonValue): String {
         }
     }
     return "".join(out);
+}
+
+## `text` as a JSON string. Most need no escape, and skip the writer.
+_quoted(text: String): String {
+    ulong i = 0;
+    while (i < text.size) {
+        var b = text.byte_at(i);
+        if (b < 32 or b == '"' or b == '\\') {
+            return JsonValue.String(text).to_string();
+        }
+        i += 1;
+    }
+    return $"\"{text}\"";
 }
 
 ## Returns `value` as Rust's `ryu` writes a `f64`: the shortest digits that
