@@ -397,6 +397,27 @@ fn skipping_the_cached_units_bodies_changes_no_other_unit() {
 }
 
 #[test]
+fn a_units_methods_keep_name_order_whatever_the_program_asks_first() {
+    // lib asks for `Box.get<Zed>` and then `Box.get<Apple>`; the second
+    // program asks for `get<Apple>` before lib does, so specialization adds
+    // the two in the other order. lib's unit must declare them the same way
+    // either time, or its verified hit differs from its record.
+    let dir = scratch("method_order");
+    let (cache, project) = (dir.join("cache"), dir.join("project"));
+    std::fs::create_dir_all(&project).unwrap();
+    let lib = "export struct Apple {\n    var v: int;\n}\n\nexport struct Zed {\n    var v: int;\n}\n\n\
+               export struct Box {\n    get<T>(x: T): T {\n        return x;\n    }\n}\n\n\
+               export use_both(): int {\n    var b = Box();\n    return b.get<Zed>(Zed()).v + b.get<Apple>(Apple()).v;\n}\n";
+    write(&project, &[("lib.pep", lib), ("main.pep", "import \"lib\";\nmain(): int {\n    return use_both();\n}\n")]);
+    let entry = project.join("main.pep");
+    compile_entry(&entry, &cache, &dir.join("a"), true);
+    write(&project, &[("main.pep", "import \"lib\";\nmain(): int {\n    return Box().get<Apple>(Apple()).v + use_both();\n}\n")]);
+    let (_, objects) = compile_entry(&entry, &cache, &dir.join("b"), true);
+    assert_eq!(outcome(&objects, "lib"), Some(Outcome::Hit), "{:?}", outcomes(&objects));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn a_skipped_body_keeps_its_recorded_link_summary() {
     // `make` returns a new Tracker, so its result may go to the `[Sending]`
     // parameter of `ThreadLocal.set`. With lib's bodies skipped, sema knows

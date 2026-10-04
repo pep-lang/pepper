@@ -1724,7 +1724,7 @@ parsed.
   them only for the types it copies, so owning them would make a unit's
   object depend on the program), and code with no location have no owner.
 - **Per-unit codegen.** With `CodeGenerator::unit` set (`UnitFilter`),
-  `generate` declares everything in name order (so a unit's module does not
+  `generate` declares everything in name order, each struct's methods included, (so a unit's module does not
   depend on load order), declares only the externs its input files declare
   (externs are first-wins by C name, so another file's declaration must not
   change the unit's calls), defines only globals and initializers of the

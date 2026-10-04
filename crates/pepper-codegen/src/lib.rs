@@ -1101,7 +1101,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         let mut method_returns: HashMap<String, String> = HashMap::new();
         let mut method_params: HashMap<String, Vec<String>> = HashMap::new();
         let mut static_names: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for method in &st.method_members {
+        // A unit declares a struct's methods in name order too: the order
+        // specialization added them (`_Copies.register<T>` for each copied
+        // `T`) depends on which units' bodies sema skipped.
+        let mut members: Vec<&FunctionDef> = st.method_members.iter().collect();
+        if self.unit.is_some() {
+            members.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+        for method in members {
             // Mangle `<Struct>.<name>`, inject `this` first for non-static.
             let mut param_types: Vec<BasicTypeEnum<'ctx>> = vec![];
             if !method.is_static {
