@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-213bd048.js";
+            window.path_to_searchindex_js = "searchindex-339485df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -239,7 +239,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access (see <a href="#files-and-directories">files</a>), text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server, URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server (streamed bodies, redirects, connection reuse), URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
 <code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
@@ -15399,7 +15399,8 @@ that a body from <code>set_reader</code> cannot be sent twice, so that redirect 
 returned. Leaving the origin drops <code>Authorization</code>,
 <code>Proxy-Authorization</code> and <code>Cookie</code>. <code>Client(0)</code> returns every redirect
 as it is.</li>
-<li>Every request uses a new connection.</li>
+<li>Every request from a <code>Client</code> uses a new connection; a <code>Session</code> keeps
+them open (see <a href="#reusing-connections">Reusing connections</a>).</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -15481,11 +15482,57 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="reusing-connections"><a class="header" href="#reusing-connections">Reusing connections</a></h2>
+<p><code>client.session()</code> returns a <code>Session</code>, which sends requests with the
+client’s settings and keeps each connection open after its response
+(HTTP/1.1 keep-alive). The next request to the same scheme, host and port
+uses it again, saving the TCP and TLS handshakes:</p>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+
+main(): int {
+    async.run(
+        () =&gt; {
+            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = server.local_address().value().port();
+            async.spawn&lt;void&gt;(() =&gt; {
+                server.serve((request) =&gt; {
+                    return http.Response(200).set_text("page " + request.query());
+                });
+            });
+            var base = "http://127.0.0.1:" + to_string(port);
+
+            var session = http.Client().session();
+            for (var page in 1..&gt;3) {
+                var response = session.get(base + "/items?" + to_string(page)).value();
+                assert(response.text() == "page " + to_string(page), "each page");
+            }
+            # One connection carried all three requests, and waits for more.
+            assert(session.idle_count == 1, "kept open");
+            session.close();
+        }
+    );
+    return 0;
+}
+</code></pre>
+<ul>
+<li>A connection goes back to the session when its response body has been
+read to its end (<code>send</code> reads it; for <code>open</code>, read the <code>BodyReader</code> to
+its end), unless the server said <code>Connection: close</code>.</li>
+<li><code>max_idle_per_host</code> (4) connections wait for each scheme, host and port;
+one idle longer than <code>idle_timeout</code> (90 seconds) is closed instead of
+used. <code>idle_count</code> says how many wait, and <code>close()</code> closes them.</li>
+<li>A request that finds its reused connection closed by the server goes
+again on a new one, unless its body came from <code>set_reader</code>.</li>
+<li>A <code>Session</code> is not <code>[Shared]</code>: use one per thread or task. A <code>Client</code> is
+shared, and connections, which belong to one thread, cannot be.</li>
+</ul>
 <h2 id="current-status-3"><a class="header" href="#current-status-3">Current status</a></h2>
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2 and connection reuse in the client are not supported yet.</li>
+<li>HTTP/2 is not supported yet.</li>
 </ul>
 <p>The reference pages for <a href="#requests-and-responses">messages</a>, the
 <a href="#client-1">client</a>, the
@@ -47189,7 +47236,7 @@ request with a handler function. Bodies are read into memory, or
 streamed through an <code>io.Reader</code> (<code>Client.open</code>, <code>set_reader</code>).</p>
 <ul>
 <li><a href="#requests-and-responses">Messages</a>: <code>Headers</code>, <code>Request</code>, and <code>Response</code></li>
-<li><a href="#client-1">Client</a>: <code>Client</code> and <code>BodyReader</code></li>
+<li><a href="#client-1">Client</a>: <code>Client</code>, <code>Session</code> and <code>BodyReader</code></li>
 <li><a href="#server-1">Server</a>: <code>Server</code> and <code>reason_phrase</code></li>
 </ul>
 <p><strong>Example</strong></p>
@@ -47630,7 +47677,9 @@ returns the <code>Response</code>.</p>
 <p>Each request opens a new connection (plain TCP for <code>http://</code>, TLS for
 <code>https://</code>), sends the request with <code>Connection: close</code>, and reads the
 response: <code>send</code> reads the whole body into memory, and <code>open</code> returns
-once the header fields arrive, with the body to read as a stream.</p>
+once the header fields arrive, with the body to read as a stream. To
+send requests on connections kept open between them, use a <code>Session</code>
+(<code>client.session()</code>).</p>
 <p>Redirects (301, 302, 303, 307 and 308 with a <code>Location</code>) are followed,
 up to <code>max_redirects</code> of them, as RFC 9110 describes: 303, and 301 or
 302 after a <code>POST</code>, become a <code>GET</code> without the body; 307 and 308 repeat
@@ -47749,6 +47798,136 @@ for (var chunk in archive.chunks(65536)) {
     file.write_all(chunk.value());
 }
 </code></pre>
+<h4 id="session"><a class="header" href="#session">session</a></h4>
+<pre><code class="language-pepper">session(): Session
+</code></pre>
+<p>Returns a new <code>Session</code> that sends requests with this client’s
+settings and keeps their connections open for the requests after
+them.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the session, with no connections yet</li>
+</ul>
+<h2 id="session-1"><a class="header" href="#session-1">Session</a></h2>
+<pre><code class="language-pepper">struct Session
+</code></pre>
+<p>A run of requests that share connections: each connection stays open
+after its response (HTTP/1.1 keep-alive) and the next request to the same
+scheme, host and port uses it again, saving the TCP and TLS handshakes.
+Make one with <code>client.session()</code>; it sends requests and follows redirects
+with that client’s settings.</p>
+<p>A connection goes back to the session once its response body has been
+read to its end (which <code>send</code> does), unless the server asked to close it.
+Up to <code>max_idle_per_host</code> connections wait for each scheme, host and
+port; one idle for longer than <code>idle_timeout</code> is closed instead of used.
+A request that finds its reused connection closed by the server is sent
+again on a new one, unless its body came from <code>Request.set_reader</code>.</p>
+<p>A session is not <code>[Shared]</code>: use it from one thread or task. Its
+connections close when the last reference to it (and to the
+<code>BodyReader</code>s it returned) goes, or at <code>close()</code>.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var session = http.Client().session();
+for (var page in 1..&gt;3) {
+    var response = session.get($"https://example.com/items?page={page}").value();
+    print(response.text());
+}
+# One connection carried all three requests.
+</code></pre>
+<h3 id="fields-1-10"><a class="header" href="#fields-1-10">Fields</a></h3>
+<h4 id="client-4"><a class="header" href="#client-4">client</a></h4>
+<pre><code class="language-pepper">var client: Client
+</code></pre>
+<p>The client whose settings the session uses: its TLS connector and
+<code>max_redirects</code>.</p>
+<h3 id="properties-19"><a class="header" href="#properties-19">Properties</a></h3>
+<h4 id="idle_timeout"><a class="header" href="#idle_timeout">idle_timeout</a></h4>
+<pre><code class="language-pepper">var idle_timeout: os.Duration { get; set; }
+</code></pre>
+<p>How long a connection may wait unused before the session closes it
+rather than send on it: 90 seconds unless changed. Servers close idle
+connections too, often sooner.</p>
+<h4 id="max_idle_per_host"><a class="header" href="#max_idle_per_host">max_idle_per_host</a></h4>
+<pre><code class="language-pepper">var max_idle_per_host: ulong { get; set; }
+</code></pre>
+<p>The most idle connections kept for one scheme, host and port: 4
+unless changed. 0 keeps none, so every request uses a new connection.</p>
+<h4 id="idle_count"><a class="header" href="#idle_count">idle_count</a></h4>
+<pre><code class="language-pepper">var idle_count: ulong { get; }
+</code></pre>
+<p>The number of idle connections the session holds, for every host.</p>
+<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
+<h4 id="session-2"><a class="header" href="#session-2">Session()</a></h4>
+<pre><code class="language-pepper">construct(client: Client)
+</code></pre>
+<p>Creates a session with no connections yet; <code>client.session()</code> does
+the same.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>client</code> — the client whose settings the session uses</li>
+</ul>
+<h3 id="methods-1-36"><a class="header" href="#methods-1-36">Methods</a></h3>
+<h4 id="get-1-1"><a class="header" href="#get-1-1">get</a></h4>
+<pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
+</code></pre>
+<p>Sends a <code>GET</code> request for <code>url</code>, as <code>Client.get</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>url</code> — an absolute <code>http://</code> or <code>https://</code> URL</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the response; the errors of <code>Client.send</code></li>
+</ul>
+<h4 id="post-1"><a class="header" href="#post-1">post</a></h4>
+<pre><code class="language-pepper">post(url: String, content_type: String, body: String): io.IoResult&lt;Response&gt;
+</code></pre>
+<p>Sends a <code>POST</code> request for <code>url</code> with <code>body</code> as a <code>Content-Type</code> of
+<code>content_type</code>, as <code>Client.post</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>url</code> — an absolute <code>http://</code> or <code>https://</code> URL</li>
+<li><code>content_type</code> — the body’s media type, such as <code>application/json</code></li>
+<li><code>body</code> — the body</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the response; the errors of <code>Client.send</code></li>
+</ul>
+<h4 id="send-1-1"><a class="header" href="#send-1-1">send</a></h4>
+<pre><code class="language-pepper">send(request: Request): io.IoResult&lt;Response&gt;
+</code></pre>
+<p>Sends <code>request</code> on an idle connection to its host if there is one,
+and reads the response, body and all, as <code>Client.send</code> does. The
+request keeps the connection open, so the client sends no
+<code>Connection: close</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>request</code> — the request; its <code>url</code> must be absolute</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the response; the errors of <code>Client.send</code></li>
+</ul>
+<h4 id="open-1-1"><a class="header" href="#open-1-1">open</a></h4>
+<pre><code class="language-pepper">open(request: Request): io.IoResult&lt;Response&gt;
+</code></pre>
+<p>Sends <code>request</code> as <code>send</code> does and returns at the response’s header
+fields, as <code>Client.open</code> does. The connection goes back to the
+session when the body has been read to its end; closing the
+<code>BodyReader</code> early closes the connection.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>request</code> — the request; its <code>url</code> must be absolute</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the response with its body unread; the errors of <code>Client.open</code></li>
+</ul>
+<h4 id="close-5"><a class="header" href="#close-5">close</a></h4>
+<pre><code class="language-pepper">close()
+</code></pre>
+<p>Closes every idle connection. The session stays usable: later
+requests open new connections.</p>
 <h2 id="bodyreader"><a class="header" href="#bodyreader">BodyReader</a></h2>
 <pre><code class="language-pepper">struct BodyReader
 </code></pre>
@@ -47757,15 +47936,15 @@ arrives. It is an <code>io.Reader</code>: read it with <code>read</code>, <code>
 or hand it to anything that takes a stream. It undoes the framing (a
 <code>Content-Length</code>, chunks, or the rest of the connection) and ends where
 the body ends, then closes the connection.</p>
-<h3 id="properties-19"><a class="header" href="#properties-19">Properties</a></h3>
+<h3 id="properties-1-9"><a class="header" href="#properties-1-9">Properties</a></h3>
 <h4 id="is_done-1"><a class="header" href="#is_done-1">is_done</a></h4>
 <pre><code class="language-pepper">var is_done: bool { get; }
 </code></pre>
 <p>Reports whether the body has been read to its end, or the reader
 closed.</p>
-<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
+<h3 id="constructor-1-30"><a class="header" href="#constructor-1-30">Constructor</a></h3>
 <h4 id="bodyreader-1"><a class="header" href="#bodyreader-1">BodyReader()</a></h4>
-<pre><code class="language-pepper">construct(reader: _HttpReader, mode: int, length: ulong)
+<pre><code class="language-pepper">construct(reader: _HttpReader, mode: int, length: ulong, reusable: bool)
 </code></pre>
 <p>Makes a reader of a body framed by <code>mode</code> on <code>reader</code>’s connection.
 <code>Client.open</code> makes it; there is no other use.</p>
@@ -47774,8 +47953,9 @@ closed.</p>
 <li><code>reader</code> — the connection’s reader, positioned at the body</li>
 <li><code>mode</code> — how the body is framed</li>
 <li><code>length</code> — the body’s length, for a <code>Content-Length</code> body</li>
+<li><code>reusable</code> — whether the server keeps the connection open after the body</li>
 </ul>
-<h3 id="methods-1-36"><a class="header" href="#methods-1-36">Methods</a></h3>
+<h3 id="methods-2-21"><a class="header" href="#methods-2-21">Methods</a></h3>
 <h4 id="read-8"><a class="header" href="#read-8">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -47790,7 +47970,7 @@ bytes of it to <code>buffer</code>.</p>
 <ul>
 <li>the number of bytes appended, 0 at the end of the body; an error when the connection fails, closes before the body ends, or the chunked framing is not valid</li>
 </ul>
-<h4 id="close-5"><a class="header" href="#close-5">close</a></h4>
+<h4 id="close-1-3"><a class="header" href="#close-1-3">close</a></h4>
 <pre><code class="language-pepper">close()
 </code></pre>
 <p>Stops reading the body and closes the connection. Reading then
@@ -48054,7 +48234,7 @@ while (true) {
     }
 }
 </code></pre>
-<h3 id="constructor-1-30"><a class="header" href="#constructor-1-30">Constructor</a></h3>
+<h3 id="constructor-1-31"><a class="header" href="#constructor-1-31">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -48129,7 +48309,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-21"><a class="header" href="#methods-2-21">Methods</a></h3>
+<h3 id="methods-2-22"><a class="header" href="#methods-2-22">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>

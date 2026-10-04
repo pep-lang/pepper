@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-213bd048.js";
+            window.path_to_searchindex_js = "../searchindex-339485df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -308,7 +308,8 @@ that a body from <code>set_reader</code> cannot be sent twice, so that redirect 
 returned. Leaving the origin drops <code>Authorization</code>,
 <code>Proxy-Authorization</code> and <code>Cookie</code>. <code>Client(0)</code> returns every redirect
 as it is.</li>
-<li>Every request uses a new connection.</li>
+<li>Every request from a <code>Client</code> uses a new connection; a <code>Session</code> keeps
+them open (see <a href="#reusing-connections">Reusing connections</a>).</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -390,11 +391,57 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="reusing-connections"><a class="header" href="#reusing-connections">Reusing connections</a></h2>
+<p><code>client.session()</code> returns a <code>Session</code>, which sends requests with the
+client’s settings and keeps each connection open after its response
+(HTTP/1.1 keep-alive). The next request to the same scheme, host and port
+uses it again, saving the TCP and TLS handshakes:</p>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+
+main(): int {
+    async.run(
+        () =&gt; {
+            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = server.local_address().value().port();
+            async.spawn&lt;void&gt;(() =&gt; {
+                server.serve((request) =&gt; {
+                    return http.Response(200).set_text("page " + request.query());
+                });
+            });
+            var base = "http://127.0.0.1:" + to_string(port);
+
+            var session = http.Client().session();
+            for (var page in 1..&gt;3) {
+                var response = session.get(base + "/items?" + to_string(page)).value();
+                assert(response.text() == "page " + to_string(page), "each page");
+            }
+            # One connection carried all three requests, and waits for more.
+            assert(session.idle_count == 1, "kept open");
+            session.close();
+        }
+    );
+    return 0;
+}
+</code></pre>
+<ul>
+<li>A connection goes back to the session when its response body has been
+read to its end (<code>send</code> reads it; for <code>open</code>, read the <code>BodyReader</code> to
+its end), unless the server said <code>Connection: close</code>.</li>
+<li><code>max_idle_per_host</code> (4) connections wait for each scheme, host and port;
+one idle longer than <code>idle_timeout</code> (90 seconds) is closed instead of
+used. <code>idle_count</code> says how many wait, and <code>close()</code> closes them.</li>
+<li>A request that finds its reused connection closed by the server goes
+again on a new one, unless its body came from <code>set_reader</code>.</li>
+<li>A <code>Session</code> is not <code>[Shared]</code>: use one per thread or task. A <code>Client</code> is
+shared, and connections, which belong to one thread, cannot be.</li>
+</ul>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2 and connection reuse in the client are not supported yet.</li>
+<li>HTTP/2 is not supported yet.</li>
 </ul>
 <p>The reference pages for <a href="../reference/http-message.html">messages</a>, the
 <a href="../reference/http-client.html">client</a>, the
