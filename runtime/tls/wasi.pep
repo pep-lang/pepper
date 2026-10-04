@@ -36,6 +36,16 @@ _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
 }
 
 [Target(OS(Wasi))]
+_tls_sys_set_identity(context: __ptr<void>, chain: io.Path, key: io.Path): io.IoResult<void> {
+    return io.IoResult<void>.err(_tls_wasi_unsupported());
+}
+
+[Target(OS(Wasi))]
+_tls_sys_require_client_certificate(context: __ptr<void>, roots: io.Path): io.IoResult<void> {
+    return io.IoResult<void>.err(_tls_wasi_unsupported());
+}
+
+[Target(OS(Wasi))]
 _tls_sys_context_free(context: __ptr<void>) {}
 
 [Target(OS(Wasi))]

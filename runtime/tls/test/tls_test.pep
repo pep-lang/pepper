@@ -5,7 +5,10 @@
 # certificate.pem and key.pem beside this file are a self-signed certificate
 # (EC P-256, valid until 2126) for `localhost` and `127.0.0.1`, and its key.
 # They are for these tests only: the key is public. The http tests use them
-# too. Each test first loads OpenSSL, which stays loaded for the program.
+# too. client-ca.pem is a certificate authority (its key was thrown away)
+# that issued client-certificate.pem (`pepper-test-client`, for client
+# authentication, valid until 2126), whose key is client-key.pem. Each test
+# first loads OpenSSL, which stays loaded for the program.
 
 import async;
 import io;
@@ -130,4 +133,93 @@ tls_reports_bad_certificate_files() {
     var connector = tls.TlsConnector.create().value();
     expect_true(connector.add_root_certificate(io.Path("tls/test/missing.pem")).is_err());
     expect_true(tls.TlsAcceptor.create(key(), key()).is_err());  # a key is not a certificate
+}
+
+# Accepts one connection on `listener` with `acceptor` and echoes one
+# message; whether the handshake and the echo succeeded.
+serve_once(listener: io.TcpListener, acceptor: tls.TlsAcceptor): bool {
+    var (tcp, peer) = listener.accept().value();
+    var accepted = acceptor.accept(tcp);
+    if (accepted.is_err()) {
+        return false;
+    }
+    var stream = accepted.value();
+    var buffer = Array<u8>();
+    if (stream.read_exact(buffer, 4).is_err()) {
+        return false;
+    }
+    return stream.write_all(buffer).is_ok();
+}
+
+# Connects with `connector`, sends "ping" and reads the echo; whether every
+# step succeeded.
+ping(connector: tls.TlsConnector, port: u16): bool {
+    var stream = connector.connect_host("localhost", port);
+    if (stream.is_err()) {
+        return false;
+    }
+    if (stream.value().write_all("ping").is_err()) {
+        return false;
+    }
+    var echo = Array<u8>();
+    return stream.value().read_exact(echo, 4).is_ok();
+}
+
+[Test]
+tls_client_certificates() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var listener = io.TcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+            var port = listener.local_address().value().port();
+            var acceptor = tls.TlsAcceptor.create(certificate(), key()).value();
+            expect_true(acceptor.require_client_certificate(io.Path("tls/test/client-ca.pem")).is_ok());
+
+            # A client with a certificate the server trusts.
+            var connector = tls.TlsConnector.create().value();
+            expect_true(connector.add_root_certificate(certificate()).is_ok());
+            var identity = connector.set_identity(
+                io.Path("tls/test/client-certificate.pem"), io.Path("tls/test/client-key.pem")
+            );
+            expect_true(identity.is_ok());
+            var server = async.Task<bool>.spawn_local(() => {
+                return serve_once(listener, acceptor);
+            });
+            expect_true(ping(connector, port));
+            expect_true(server.join().value());
+
+            # A client with no certificate is turned away.
+            var anonymous = tls.TlsConnector.create().value();
+            anonymous.add_root_certificate(certificate());
+            var refused = async.Task<bool>.spawn_local(() => {
+                return serve_once(listener, acceptor);
+            });
+            expect_false(ping(anonymous, port));
+            expect_false(refused.join().value());
+
+            # So is one whose certificate another authority issued.
+            var stranger = tls.TlsConnector.create().value();
+            stranger.add_root_certificate(certificate());
+            expect_true(stranger.set_identity(certificate(), key()).is_ok());
+            var untrusted = async.Task<bool>.spawn_local(() => {
+                return serve_once(listener, acceptor);
+            });
+            expect_false(ping(stranger, port));
+            expect_false(untrusted.join().value());
+        }
+    );
+}
+
+[Test]
+tls_reports_bad_identity_files() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    var connector = tls.TlsConnector.create().value();
+    expect_true(connector.set_identity(io.Path("tls/test/missing.pem"), key()).is_err());
+    expect_true(connector.set_identity(io.Path("tls/test/client-certificate.pem"), key()).is_err());  # not its key
+    var acceptor = tls.TlsAcceptor.create(certificate(), key()).value();
+    expect_true(acceptor.require_client_certificate(io.Path("tls/test/missing.pem")).is_err());
 }

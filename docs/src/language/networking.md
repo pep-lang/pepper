@@ -189,6 +189,13 @@ produce a `TlsStream`, which reads and writes like a `TcpStream`:
 - `TlsAcceptor.create(certificate_chain, private_key)` reads PEM files, and
   `acceptor.accept(tcp)` runs the handshake over a connection a
   `TcpListener` accepted.
+- Mutual TLS: `acceptor.require_client_certificate(roots)` asks every
+  client for a certificate and accepts only one issued by a certificate in
+  the PEM file `roots`; `connector.set_identity(certificate_chain,
+  private_key)` gives the client a certificate to present. A client with no
+  certificate, or an untrusted one, fails the server's `accept`. With TLS
+  1.3 the client's `connect` can succeed first, and its next read then
+  fails or returns 0.
 - `read`, `read_exact`, `write` and `write_all` work on the
   decrypted bytes. `shutdown()` sends the TLS close_notify, and `read`
   returns 0 once the peer has sent one or closed the connection.
@@ -199,8 +206,9 @@ On Linux and macOS the module uses OpenSSL 3, loaded when the first
 connector or acceptor is made: install it with the system's package
 manager, or `brew install openssl@3` on macOS. If it is missing,
 `create()` returns an error. On Windows it uses the system's SChannel,
-which needs nothing installed; a server's private key must be PKCS #8
-(`BEGIN PRIVATE KEY`), and TLS 1.3 needs Windows 11 or Server 2022.
+which needs nothing installed; a private key (a server's or a client's)
+must be PKCS #8 (`BEGIN PRIVATE KEY`), and TLS 1.3 needs Windows 11 or
+Server 2022.
 
 ## Errors
 
@@ -239,7 +247,6 @@ program take over the port.
 - Outside a task every call blocks its thread, with no timeout. In a task
   a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
   limits how long it may wait.
-- TLS clients cannot present certificates.
 
 The reference pages for [addresses](../reference/io-address.md),
 [sockets](../reference/io-socket.md) and

@@ -7,6 +7,12 @@
 # socket layer (`_io_sys_socket_receive` / `_send`), which parks a task when
 # the socket would block. TLS 1.2 is the minimum.
 #
+# A client identity (mutual TLS) is a certificate and key loaded as a
+# server's are (below), passed in the client's credential; the server asks
+# for it with ASC_REQ_MUTUAL_AUTH and, after the handshake, checks the
+# client's chain against only the roots given (a chain engine with
+# hExclusiveRoot) with CERT_CHAIN_POLICY_SSL for a client.
+#
 # The client checks the server's certificate itself
 # (SCH_CRED_MANUAL_CRED_VALIDATION) after the handshake: the chain is built
 # against the system's roots and, when that fails and roots were added, again
@@ -14,10 +20,10 @@
 # CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_SSL) checks the chain
 # and the host name.
 #
-# The server's private key (PEM, PKCS #8) is imported into the current
-# user's Software Key Storage Provider under a name unique to the process,
-# because SChannel reaches a server key by name; freeing the context deletes
-# it.
+# A private key (PEM, PKCS #8), a server's or a client's, is imported into
+# the current user's Software Key Storage Provider under a name unique to
+# the process, because SChannel reaches a key by name; freeing the context
+# deletes it.
 #
 # Layouts (x64): SecBuffer { u32 cbBuffer; u32 BufferType; void* pvBuffer }
 # is 16 bytes; SecBufferDesc { u32 ulVersion; u32 cBuffers; SecBuffer* } is
@@ -29,8 +35,10 @@
 #
 # A context is a malloc'd block (`_TLS_CONTEXT_SIZE`): the credential handle
 # at 0, then (8-byte words) whether it is a server's at 16, the store of
-# added roots (client) or of the chain (server) at 24, the server's
-# certificate at 32, and the server key's name (UTF-16) at 40.
+# added roots (client) or of the chain (server) at 24, the certificate it
+# presents at 32 and its key's name (UTF-16) at 40 (null for a client with
+# no identity), and a server's store of roots for client certificates at 48
+# (null when clients are not asked for one).
 #
 # A session is a malloc'd block (`_TLS_SESSION_SIZE`): the security context
 # handle at 0, then the socket at 16, its context at 24, the received but not
@@ -179,7 +187,7 @@ extern uint GetCurrentProcessId();
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-const _TLS_CONTEXT_SIZE: ulong = 48;
+const _TLS_CONTEXT_SIZE: ulong = 56;
 const _TLS_SESSION_SIZE: ulong = 104;
 # The receive and plaintext buffers: room for any TLS record and most
 # handshake flights.
@@ -207,11 +215,14 @@ const _TLS_CLIENT_REQUEST: uint = 573724;
 # ASC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY | ALLOCATE_MEMORY
 # | EXTENDED_ERROR | STREAM.
 const _TLS_SERVER_REQUEST: uint = 98588;
+# ASC_REQ_MUTUAL_AUTH: ask the client for a certificate.
+const _TLS_SERVER_MUTUAL: uint = 2;
 
 # SCH_CRED_MANUAL_CRED_VALIDATION | SCH_CRED_NO_DEFAULT_CREDS |
-# SCH_USE_STRONG_CRYPTO, and SCH_USE_STRONG_CRYPTO.
+# SCH_USE_STRONG_CRYPTO, and SCH_CRED_NO_SYSTEM_MAPPER (a client
+# certificate is not mapped to a Windows account) | SCH_USE_STRONG_CRYPTO.
 const _TLS_CLIENT_CREDENTIAL_FLAGS: uint = 4194328;
-const _TLS_SERVER_CREDENTIAL_FLAGS: uint = 4194304;
+const _TLS_SERVER_CREDENTIAL_FLAGS: uint = 4194306;
 # SSL 2 and 3, TLS 1.0 and 1.1, client and server.
 const _TLS_DISABLED_PROTOCOLS: uint = 1020;
 
@@ -383,8 +394,9 @@ _tls_memory_store(): __ptr<void> {
 
 # ── Credentials ──────────────────────────────────────────────────────────────
 
-# Acquires the credential handle at the start of `context` with SChannel's
-# SCH_CREDENTIALS; `certificate` is the server's (null for a client).
+# Acquires a credential handle into the 16 bytes at `context` with
+# SChannel's SCH_CREDENTIALS; `certificate` is the one to present (null for
+# a client with no identity).
 [Target(OS(Windows))]
 _tls_acquire(context: __ptr<u8>, server: bool, certificate: __ptr<void>): int {
     __ptr<u8> credentials = _pep_malloc(72);
@@ -395,11 +407,13 @@ _tls_acquire(context: __ptr<u8>, server: bool, certificate: __ptr<void>): int {
     _tls_set_u32(parameters, 16, _TLS_DISABLED_PROTOCOLS);
     _tls_set_u32(credentials, 56, 1);
     _tls_set_pointer(credentials, 64, parameters);
+    if (certificate != __null) {
+        _tls_set_u32(credentials, 8, 1);
+        _tls_set_pointer(credentials, 16, unsafe_cast<__ptr<u8>>(certificates));
+    }
     uint use = 2;  # SECPKG_CRED_OUTBOUND
     if (server) {
         use = 1;  # SECPKG_CRED_INBOUND
-        _tls_set_u32(credentials, 8, 1);
-        _tls_set_pointer(credentials, 16, unsafe_cast<__ptr<u8>>(certificates));
         _tls_set_u32(credentials, 52, _TLS_SERVER_CREDENTIAL_FLAGS);
     } else {
         _tls_set_u32(credentials, 52, _TLS_CLIENT_CREDENTIAL_FLAGS);
@@ -498,26 +512,28 @@ _tls_delete_key(name: __ptr<u16>) {
     NCryptFreeObject(provider);
 }
 
-# A server context presenting the PEM certificate chain and private key.
+# The certificate chain and private key in PEM files, loaded for SChannel:
+# a store holding the chain, the first certificate's context, with its key
+# imported under the returned name and linked to it.
 [Target(OS(Windows))]
-_tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
+_tls_load_identity(chain: io.Path, key: io.Path): io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)> {
     var chain_text = _tls_read_text(chain, "the certificate chain");
     if (chain_text.is_err()) {
-        return io.IoResult<__ptr<void>>.err(chain_text.error());
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(chain_text.error());
     }
     var certificates = _tls_pem_blocks(chain_text.value(), "CERTIFICATE");
     if (certificates.count == 0) {
-        return io.IoResult<__ptr<void>>.err(
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(
             _tls_error($"cannot load the certificate chain '{chain}': no certificate in it")
         );
     }
     var key_text = _tls_read_text(key, "the private key");
     if (key_text.is_err()) {
-        return io.IoResult<__ptr<void>>.err(key_text.error());
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(key_text.error());
     }
     var keys = _tls_pem_blocks(key_text.value(), "PRIVATE KEY");
     if (keys.count == 0) {
-        return io.IoResult<__ptr<void>>.err(
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(
             _tls_error($"cannot load the private key '{key}': no PKCS #8 PRIVATE KEY block in it")
         );
     }
@@ -537,13 +553,15 @@ _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> 
             CertFreeCertificateContext(certificate);
         }
         CertCloseStore(store, 0);
-        return io.IoResult<__ptr<void>>.err(_tls_error($"cannot load the certificate chain '{chain}'"));
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(
+            _tls_error($"cannot load the certificate chain '{chain}'")
+        );
     }
     var imported = _tls_import_key(keys[0]);
     if (imported.is_err()) {
         CertFreeCertificateContext(certificate);
         CertCloseStore(store, 0);
-        return io.IoResult<__ptr<void>>.err(imported.error());
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(imported.error());
     }
     var name = imported.value();
     # CRYPT_KEY_PROV_INFO { container, provider, type, flags, cProvParam,
@@ -555,15 +573,34 @@ _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> 
     CertSetCertificateContextProperty(certificate, 2, 0, info);  # CERT_KEY_PROV_INFO_PROP_ID
     _pep_free(provider_name);
     _pep_free(info);
+    return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.ok((store, certificate, name));
+}
 
+# Frees what `_tls_load_identity` returned: deletes the key, frees the
+# certificate and closes the store (null when already closed).
+[Target(OS(Windows))]
+_tls_free_identity(store: __ptr<void>, certificate: __ptr<void>, name: __ptr<u16>) {
+    _tls_delete_key(name);
+    _pep_free(name);
+    CertFreeCertificateContext(certificate);
+    if (store != __null) {
+        CertCloseStore(store, 0);
+    }
+}
+
+# A server context presenting the PEM certificate chain and private key.
+[Target(OS(Windows))]
+_tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
+    var loaded = _tls_load_identity(chain, key);
+    if (loaded.is_err()) {
+        return io.IoResult<__ptr<void>>.err(loaded.error());
+    }
+    var (store, certificate, name) = loaded.value();
     __ptr<u8> context = _pep_malloc(_TLS_CONTEXT_SIZE);
     var status = _tls_acquire(context, true, certificate);
     if (status != _TLS_SEC_E_OK) {
         _pep_free(context);
-        _tls_delete_key(name);
-        _pep_free(name);
-        CertFreeCertificateContext(certificate);
-        CertCloseStore(store, 0);
+        _tls_free_identity(store, certificate, name);
         return io.IoResult<__ptr<void>>.err(_tls_status_error("cannot use the certificate and key", status));
     }
     _tls_set_word(context, 16, 1);
@@ -573,9 +610,42 @@ _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> 
     return io.IoResult<__ptr<void>>.ok(context);
 }
 
-# Also trusts the PEM certificates in `path`.
+# Makes a client context present the PEM certificate chain and private key
+# to servers that ask for one: acquires a new credential with the
+# certificate and frees the old one, and any identity it had.
 [Target(OS(Windows))]
-_tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
+_tls_sys_set_identity(context: __ptr<void>, chain: io.Path, key: io.Path): io.IoResult<void> {
+    var loaded = _tls_load_identity(chain, key);
+    if (loaded.is_err()) {
+        return io.IoResult<void>.err(loaded.error());
+    }
+    var (store, certificate, name) = loaded.value();
+    __ptr<u8> credential = _pep_malloc(16);
+    var status = _tls_acquire(credential, false, certificate);
+    if (status != _TLS_SEC_E_OK) {
+        _pep_free(credential);
+        _tls_free_identity(store, certificate, name);
+        return io.IoResult<void>.err(_tls_status_error("cannot use the certificate and key", status));
+    }
+    # The certificate keeps its store, with the intermediates SChannel
+    # sends, until it is freed.
+    CertCloseStore(store, 0);
+    __ptr<u8> block = context;
+    FreeCredentialsHandle(block);
+    _tls_copy(block, credential, 16);
+    _pep_free(credential);
+    var old_certificate = _tls_pointer(block, 32);
+    if (old_certificate != __null) {
+        _tls_free_identity(__null, old_certificate as __ptr<void>, unsafe_cast<__ptr<u16>>(_tls_pointer(block, 40)));
+    }
+    _tls_set_pointer(block, 32, certificate as __ptr<u8>);
+    _tls_set_pointer(block, 40, unsafe_cast<__ptr<u8>>(name));
+    return io.IoResult<void>.ok();
+}
+
+# The certificates in the PEM file at `path`, added to `store`.
+[Target(OS(Windows))]
+_tls_add_certificates(store: __ptr<void>, path: io.Path): io.IoResult<void> {
     var text = _tls_read_text(path, "the certificates");
     if (text.is_err()) {
         return io.IoResult<void>.err(text.error());
@@ -584,7 +654,6 @@ _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
     if (certificates.count == 0) {
         return io.IoResult<void>.err(_tls_error($"cannot load the certificates in '{path}': none found"));
     }
-    var store = _tls_pointer(context as __ptr<u8>, 24) as __ptr<void>;
     for (var der in certificates) {
         if (!_tls_add_certificate(store, der, __null)) {
             return io.IoResult<void>.err(_tls_error($"cannot load the certificates in '{path}'"));
@@ -593,19 +662,48 @@ _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
     return io.IoResult<void>.ok();
 }
 
+# Makes a server context ask every client for a certificate issued by one in
+# the PEM file `roots`, and fail the handshake without one.
+[Target(OS(Windows))]
+_tls_sys_require_client_certificate(context: __ptr<void>, roots: io.Path): io.IoResult<void> {
+    __ptr<u8> block = context;
+    var store = _tls_pointer(block, 48) as __ptr<void>;
+    var created = store == __null;
+    if (created) {
+        store = _tls_memory_store();
+    }
+    var added = _tls_add_certificates(store, roots);
+    if (added.is_err()) {
+        if (created) {
+            CertCloseStore(store, 0);
+        }
+        return added;
+    }
+    _tls_set_pointer(block, 48, store as __ptr<u8>);
+    return io.IoResult<void>.ok();
+}
+
+# Also trusts the PEM certificates in `path`.
+[Target(OS(Windows))]
+_tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
+    return _tls_add_certificates(_tls_pointer(context as __ptr<u8>, 24) as __ptr<void>, path);
+}
+
 [Target(OS(Windows))]
 _tls_sys_context_free(context: __ptr<void>) {
     __ptr<u8> block = context;
     FreeCredentialsHandle(block);
     var store = _tls_pointer(block, 24);
-    if (_tls_word(block, 16) == 1) {
-        CertFreeCertificateContext(_tls_pointer(block, 32));
-        var name = unsafe_cast<__ptr<u16>>(_tls_pointer(block, 40));
-        _tls_delete_key(name);
-        _pep_free(name);
+    var certificate = _tls_pointer(block, 32);
+    if (certificate != __null) {
+        _tls_free_identity(__null, certificate as __ptr<void>, unsafe_cast<__ptr<u16>>(_tls_pointer(block, 40)));
     }
     if (store != __null) {
         CertCloseStore(store, 0);
+    }
+    var client_roots = _tls_pointer(block, 48);
+    if (client_roots != __null) {
+        CertCloseStore(client_roots, 0);
     }
     _pep_free(block);
 }
@@ -722,9 +820,11 @@ _tls_step(session: __ptr<u8>): io.IoResult<int> {
     }
     int status = 0;
     if (server) {
-        status = AcceptSecurityContext(
-            context, existing, offered, _TLS_SERVER_REQUEST, 0, session, output, attributes, expiry
-        );
+        var request = _TLS_SERVER_REQUEST;
+        if (_tls_pointer(context, 48) != __null) {
+            request = request | _TLS_SERVER_MUTUAL;
+        }
+        status = AcceptSecurityContext(context, existing, offered, request, 0, session, output, attributes, expiry);
     } else {
         status = InitializeSecurityContextW(
             context,
@@ -812,9 +912,10 @@ _tls_query_sizes(session: __ptr<u8>): io.IoResult<void> {
 }
 
 # Builds `certificate`'s chain with `engine` (null for the system's) and
-# checks it for `host`; the policy error, 0 when it passes.
+# checks it as a server's for `host` or, when `host` is null and `client`,
+# as a client's; the policy error, 0 when it passes.
 [Target(OS(Windows))]
-_tls_check_chain(engine: __ptr<void>, certificate: __ptr<u8>, host: __ptr<u8>): uint {
+_tls_check_chain(engine: __ptr<void>, certificate: __ptr<u8>, host: __ptr<u8>, client: bool): uint {
     __ptr<u8> parameters = _pep_malloc(24);  # CERT_CHAIN_PARA
     _tls_set_u32(parameters, 0, 24);
     __ptr<__ptr<void>> chain = _pep_malloc(8);
@@ -824,7 +925,11 @@ _tls_check_chain(engine: __ptr<void>, certificate: __ptr<u8>, host: __ptr<u8>): 
     if (CertGetCertificateChain(engine, certificate, __null, additional, parameters, 0, __null, chain) != 0) {
         __ptr<u8> ssl = _pep_malloc(24);  # SSL_EXTRA_CERT_CHAIN_POLICY_PARA
         _tls_set_u32(ssl, 0, 24);
-        _tls_set_u32(ssl, 4, 2);  # AUTHTYPE_SERVER
+        uint authentication = 2;  # AUTHTYPE_SERVER
+        if (client) {
+            authentication = 1;  # AUTHTYPE_CLIENT
+        }
+        _tls_set_u32(ssl, 4, authentication);
         _tls_set_pointer(ssl, 16, host);
         __ptr<u8> policy = _pep_malloc(16);  # CERT_CHAIN_POLICY_PARA
         _tls_set_u32(policy, 0, 16);
@@ -859,7 +964,7 @@ _tls_verify(session: __ptr<u8>): io.IoResult<void> {
         );
     }
     var host = _tls_pointer(session, 96);
-    var error = _tls_check_chain(__null, certificate, host);
+    var error = _tls_check_chain(__null, certificate, host, false);
     var roots = _tls_pointer(_tls_pointer(session, 24), 24);
     if (error != 0 && roots != __null) {
         # CERT_CHAIN_ENGINE_CONFIG (Windows 8 and later): 88 bytes,
@@ -870,7 +975,7 @@ _tls_verify(session: __ptr<u8>): io.IoResult<void> {
         __ptr<__ptr<void>> engine = _pep_malloc(8);
         engine[0] = __null;
         if (CertCreateCertificateChainEngine(config, engine) != 0) {
-            var added_error = _tls_check_chain(engine[0], certificate, host);
+            var added_error = _tls_check_chain(engine[0], certificate, host, false);
             # A name mismatch found with the added roots says more than the
             # system's "untrusted root".
             if (added_error == 0 || error == 2148204809) {
@@ -916,11 +1021,49 @@ _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoR
     return io.IoResult<__ptr<void>>.ok(session);
 }
 
-# Runs the server handshake on socket `h`.
+# Checks the client's certificate against only the context's roots for
+# client certificates.
+[Target(OS(Windows))]
+_tls_verify_client(session: __ptr<u8>): io.IoResult<void> {
+    var roots = _tls_pointer(_tls_pointer(session, 24), 48);
+    __ptr<__ptr<u8>> remote = _pep_malloc(8);
+    remote[0] = __null;
+    var status = QueryContextAttributesW(session, 83, remote);  # SECPKG_ATTR_REMOTE_CERT_CONTEXT
+    var certificate = remote[0];
+    _pep_free(remote);
+    if (status != _TLS_SEC_E_OK || certificate == __null) {
+        return io.IoResult<void>.err(_tls_error("TLS handshake failed: the client sent no certificate"));
+    }
+    uint error = 2148204810;  # CERT_E_CHAINING
+    # CERT_CHAIN_ENGINE_CONFIG (Windows 8 and later): 88 bytes,
+    # hExclusiveRoot at 64.
+    __ptr<u8> config = _pep_malloc(88);
+    _tls_set_u32(config, 0, 88);
+    _tls_set_pointer(config, 64, roots);
+    __ptr<__ptr<void>> engine = _pep_malloc(8);
+    engine[0] = __null;
+    if (CertCreateCertificateChainEngine(config, engine) != 0) {
+        error = _tls_check_chain(engine[0], certificate, __null, true);
+        CertFreeCertificateChainEngine(engine[0]);
+    }
+    _pep_free(engine);
+    _pep_free(config);
+    CertFreeCertificateContext(certificate);
+    if (error != 0) {
+        return io.IoResult<void>.err(_tls_error($"certificate verify failed: {_tls_certificate_reason(error)}"));
+    }
+    return io.IoResult<void>.ok();
+}
+
+# Runs the server handshake on socket `h`, checking the client's certificate
+# when the context asks for one.
 [Target(OS(Windows))]
 _tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__ptr<void>> {
     var session = _tls_session_new(context, h, "");
     var done = _tls_handshake(session);
+    if (done.is_ok() && _tls_pointer(context as __ptr<u8>, 48) != __null) {
+        done = _tls_verify_client(session);
+    }
     if (done.is_ok()) {
         done = _tls_query_sizes(session);
     }

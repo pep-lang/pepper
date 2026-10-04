@@ -22,8 +22,12 @@ the TLS handshake over a connected `TcpStream` and checks that the
 server's certificate is valid and issued for the host name given. Only
 TLS 1.2 and 1.3 are offered.
 
+A server that asks for a client certificate (mutual TLS) gets the one
+set with `set_identity`; without one, the connector presents none.
+
 A connector is `[Shared]`: make one and use it from every thread and
-task. Configure it (`add_root_certificate`) before the first `connect`.
+task. Configure it (`add_root_certificate`, `set_identity`) before the
+first `connect`.
 
 **See also**
 - `TlsStream`
@@ -81,6 +85,31 @@ test certificate authority.
 **Returns**
 - an Ok result; an error when the file cannot be read or holds no certificate
 
+#### set_identity
+
+```pepper
+set_identity(certificate_chain: io.Path, private_key: io.Path): io.IoResult<void>
+```
+
+Presents the certificate chain in `certificate_chain`, with the
+private key in `private_key`, to servers that ask for a client
+certificate (mutual TLS, as a `TlsAcceptor` does after
+`require_client_certificate`). A later call replaces the identity.
+
+**Parameters**
+- `certificate_chain` — a PEM file: the client's certificate first, then any intermediate certificates
+- `private_key` — a PEM file with the certificate's private key (on Windows, PKCS #8: `BEGIN PRIVATE KEY`)
+
+**Returns**
+- an Ok result; an error when a file cannot be read or the key does not match the certificate
+
+**Example**
+```pepper
+var connector = tls.TlsConnector.create().value();
+connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value();
+var stream = connector.connect_host("internal.example.com", 443).value();
+```
+
 #### connect
 
 ```pepper
@@ -123,7 +152,8 @@ Accepts TLS server connections with one certificate.
 
 An acceptor presents a certificate chain and its private key, read from
 PEM files. Each `accept` runs the TLS handshake over a `TcpStream` that a
-`TcpListener` accepted. Clients are not asked for certificates.
+`TcpListener` accepted. Clients are not asked for certificates unless
+`require_client_certificate` is called (mutual TLS).
 
 An acceptor is `[Shared]`, so the accept loops of every worker can share
 one.
@@ -180,6 +210,31 @@ Creates an acceptor that presents the certificate chain in
 
 ### Methods
 
+#### require_client_certificate
+
+```pepper
+require_client_certificate(roots: io.Path): io.IoResult<void>
+```
+
+Asks every client for a certificate and accepts only clients whose
+certificate is issued by one of the certificates in the PEM file at
+`roots` (directly or through intermediates the client sends) and is
+valid for client authentication. A handshake with a client that sends
+no certificate, or an untrusted one, fails. Call it before the first
+`accept`.
+
+**Parameters**
+- `roots` — a file of one or more PEM certificates: the authorities that issue client certificates
+
+**Returns**
+- an Ok result; an error when the file cannot be read or holds no certificate
+
+**Example**
+```pepper
+var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+acceptor.require_client_certificate(io.Path("clients-ca.pem")).value();
+```
+
 #### accept
 
 ```pepper
@@ -192,7 +247,7 @@ Runs the TLS handshake as the server over `stream`.
 - `stream` — a connection a `TcpListener` accepted; the `TlsStream` keeps it, and nothing else should read or write it afterwards
 
 **Returns**
-- the encrypted stream; an error when the handshake fails, or an io error from the socket
+- the encrypted stream; an error when the handshake fails (including, after `require_client_certificate`, a client with no trusted certificate), or an io error from the socket
 
 ## TlsStream
 

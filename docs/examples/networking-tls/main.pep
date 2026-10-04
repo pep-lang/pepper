@@ -20,6 +20,9 @@ main(): int {
     async.run(
         () => {
             var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            # Mutual TLS: only clients with a certificate the test
+            # certificate issued (here, the test certificate itself) get in.
+            assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");
             var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
             var port = listener.local_address().value().port();
             var server = async.Task<void>.spawn_local(() => {
@@ -34,6 +37,7 @@ main(): int {
             # The client trusts the test certificate as well as the system's.
             var client = connector.value();
             assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
+            assert(client.set_identity(certificate, key).is_ok(), "present a client certificate");
             var stream = client.connect_host("localhost", port).value();
             stream.write_all("ping");
             var reply = Array<u8>();

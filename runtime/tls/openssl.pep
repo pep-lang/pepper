@@ -62,6 +62,9 @@ struct _OpenSsl {
     const _context_use_chain: extern (__ptr<void>, __ptr<void>) => int;
     const _context_use_key: extern (__ptr<void>, __ptr<void>, int) => int;
     const _context_check_key: extern (__ptr<void>) => int;
+    const _context_set_client_names: extern (__ptr<void>, __ptr<void>) => void;
+    const _context_set_session_id: extern (__ptr<void>, __ptr<void>, uint) => int;
+    const _load_client_names: extern (__ptr<void>) => __ptr<void>;
     const _ssl_new: extern (__ptr<void>) => __ptr<void>;
     const _ssl_free: extern (__ptr<void>) => void;
     const _ssl_ctrl: extern (__ptr<void>, int, long, __ptr<void>) => long;
@@ -127,6 +130,13 @@ struct _OpenSsl {
                 handle, "SSL_CTX_use_PrivateKey_file"
             ) as extern (__ptr<void>, __ptr<void>, int) => int;
             _context_check_key = _tls_symbol(handle, "SSL_CTX_check_private_key") as extern (__ptr<void>) => int;
+            _context_set_client_names = _tls_symbol(
+                handle, "SSL_CTX_set_client_CA_list"
+            ) as extern (__ptr<void>, __ptr<void>) => void;
+            _context_set_session_id = _tls_symbol(
+                handle, "SSL_CTX_set_session_id_context"
+            ) as extern (__ptr<void>, __ptr<void>, uint) => int;
+            _load_client_names = _tls_symbol(handle, "SSL_load_client_CA_file") as extern (__ptr<void>) => __ptr<void>;
             _ssl_new = _tls_symbol(handle, "SSL_new") as extern (__ptr<void>) => __ptr<void>;
             _ssl_free = _tls_symbol(handle, "SSL_free") as extern (__ptr<void>) => void;
             _ssl_ctrl = _tls_symbol(handle, "SSL_ctrl") as extern (__ptr<void>, int, long, __ptr<void>) => long;
@@ -369,6 +379,18 @@ _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> 
     if (context == __null) {
         return io.IoResult<__ptr<void>>.err(_tls_openssl_error("cannot create a TLS context"));
     }
+    var used = _tls_use_identity(ssl, context, chain, key);
+    if (used.is_err()) {
+        var context_free = ssl._context_free;
+        context_free(context);
+        return io.IoResult<__ptr<void>>.err(used.error());
+    }
+    return io.IoResult<__ptr<void>>.ok(context);
+}
+
+# Makes `context` present the PEM certificate chain and private key.
+[Target(OS(Linux) || OS(Mac))]
+_tls_use_identity(ssl: _OpenSsl, context: __ptr<void>, chain: io.Path, key: io.Path): io.IoResult<void> {
     var use_chain = ssl._context_use_chain;
     var use_key = ssl._context_use_key;
     var check_key = ssl._context_check_key;
@@ -383,12 +405,42 @@ _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> 
         failure = "the private key does not match the certificate";
     }
     if (failure.size > 0) {
-        var e = _tls_openssl_error(failure);
-        var context_free = ssl._context_free;
-        context_free(context);
-        return io.IoResult<__ptr<void>>.err(e);
+        return io.IoResult<void>.err(_tls_openssl_error(failure));
     }
-    return io.IoResult<__ptr<void>>.ok(context);
+    return io.IoResult<void>.ok();
+}
+
+# Makes a client context present the PEM certificate chain and private key
+# to servers that ask for one.
+[Target(OS(Linux) || OS(Mac))]
+_tls_sys_set_identity(context: __ptr<void>, chain: io.Path, key: io.Path): io.IoResult<void> {
+    return _tls_use_identity(_tls_openssl.get(), context, chain, key);
+}
+
+# Makes a server context ask every client for a certificate issued by one in
+# the PEM file `roots`, and fail the handshake without one.
+[Target(OS(Linux) || OS(Mac))]
+_tls_sys_require_client_certificate(context: __ptr<void>, roots: io.Path): io.IoResult<void> {
+    var ssl = _tls_openssl.get();
+    var load = ssl._context_load_roots;
+    var text = roots.to_string();
+    if (load(context, text.c_str(), __null) != 1) {
+        return io.IoResult<void>.err(_tls_openssl_error($"cannot load the certificates in '{text}'"));
+    }
+    # The certificate request names the accepted issuers.
+    var load_names = ssl._load_client_names;
+    var names = load_names(text.c_str());
+    if (names != __null) {
+        var set_names = ssl._context_set_client_names;
+        set_names(context, names);  # takes ownership
+    }
+    # A server that checks clients must name its sessions for resumption.
+    var name = "pepper";
+    var set_session_id = ssl._context_set_session_id;
+    set_session_id(context, name.c_str(), name.size as uint);
+    var set_verify = ssl._context_set_verify;
+    set_verify(context, 3, __null);  # SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT
+    return io.IoResult<void>.ok();
 }
 
 # Also trusts the PEM certificates in `path`.
