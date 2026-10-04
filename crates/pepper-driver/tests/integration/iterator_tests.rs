@@ -3,11 +3,10 @@
 //! the source itself through `next()` / `current()`. Each JIT case also
 //! checks the allocation census, since the lowering relies on ordinary
 //! scope-exit releases for the hidden iterator and the loop variable.
+//! The runtime's iterators (String, Range, the modification guards) are
+//! tested in `runtime/test/iterator_test.pep` and `range_test.pep`.
 
-use clap::Parser;
 use pepper_codegen::CodeGenerator;
-use std::process::Command;
-use crate::support::repo_root;
 
 /// Compile + JIT `test()`; return (result, net live-allocation delta), or the
 /// compile error.
@@ -35,26 +34,6 @@ fn assert_runs_clean(source: &str) {
     let (result, leaked) = compile_jit_census(source);
     assert_eq!(result, 0, "test() returned {result}");
     assert_eq!(leaked, 0, "allocations leaked or double-released");
-}
-
-/// Compile and link to a real executable, run it, and return (success,
-/// stdout then stderr).
-fn run_binary(name: &str, source: &str) -> (bool, String) {
-    std::env::set_current_dir(repo_root()).unwrap();
-    let dir = std::env::temp_dir().join(format!("pepper_iterator_{name}_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let src_path = dir.join(format!("{name}.pep"));
-    let out_path = dir.join(if cfg!(windows) { format!("{name}.exe") } else { name.to_string() });
-    std::fs::write(&src_path, source).unwrap();
-    let options = pepper_driver::Options::parse_from(vec![
-        "pepper".to_string(),
-        src_path.to_string_lossy().into_owned(),
-        "-o".to_string(),
-        out_path.to_string_lossy().into_owned(),
-    ]);
-    pepper_driver::run(options).expect("compile + link");
-    let output = Command::new(&out_path).output().expect("spawn linked binary");
-    (output.status.success(), crate::support::output_text(&output))
 }
 
 const ITEM: &str = r#"
@@ -355,33 +334,6 @@ test(): int {
 }
 
 #[test]
-fn string_yields_code_points() {
-    assert_runs_clean(
-        r#"
-test(): int {
-    var s = "héllo, wörld ✓";
-    var count = 0;
-    var copy = "";
-    for (var c in s) {
-        if (c.length != 1) {
-            return 100;
-        }
-        copy.append(c);
-        count = count + 1;
-    }
-    if (!(copy == s)) {
-        return 101;
-    }
-    for (var c in "") {
-        return 102;
-    }
-    return count - 14;
-}
-"#,
-    );
-}
-
-#[test]
 fn not_iterable_is_a_compile_error() {
     for (source, ty) in [
         ("struct Foo { int x; }\ntest(): int { var f = Foo(); for (var x in f) { } return 0; }", "Foo"),
@@ -398,171 +350,4 @@ fn not_iterable_is_a_compile_error() {
             "unexpected error: {err}"
         );
     }
-}
-
-#[test]
-fn modifying_an_array_during_iteration_panics() {
-    for (name, mutation) in [
-        ("iter_mut_append", "nums.append(4);"),
-        ("iter_mut_store", "nums[0] = 7;"),
-        ("iter_mut_remove", "nums.remove_at(0);"),
-    ] {
-        let (ok, stdout) = run_binary(
-            name,
-            &format!(
-                r#"
-main(): int {{
-    var nums = Array<int>();
-    nums.append(1);
-    nums.append(2);
-    for (var x in nums) {{
-        {mutation}
-    }}
-    return 0;
-}}"#
-            ),
-        );
-        assert!(!ok, "{name}: expected a panic");
-        assert!(stdout.contains("Array modified during iteration"), "{name}: stdout: {stdout:?}");
-    }
-}
-
-#[test]
-fn modifying_an_array_during_sort_panics() {
-    // sort permutes raw slots in place, so a compare that changes the Array
-    // would see (and could free) a half-permuted buffer.
-    let (ok, stdout) = run_binary(
-        "sort_mut_append",
-        r#"
-main(): int {
-    var nums = Array<int>();
-    nums.append(2);
-    nums.append(1);
-    nums.sort((a, b) => {
-        nums.append(3);
-        return a - b;
-    });
-    return 0;
-}"#,
-    );
-    assert!(!ok, "expected a panic");
-    assert!(stdout.contains("Array modified during sort"), "stdout: {stdout:?}");
-}
-
-#[test]
-fn modifying_a_string_during_iteration_panics() {
-    let (ok, stdout) = run_binary(
-        "iter_mut_string",
-        r#"
-main(): int {
-    var s = "ab";
-    for (var c in s) {
-        s.append("!");
-    }
-    return 0;
-}"#,
-    );
-    assert!(!ok, "expected a panic");
-    assert!(stdout.contains("String modified during iteration"), "stdout: {stdout:?}");
-}
-
-#[test]
-fn mutating_after_the_loop_is_fine() {
-    assert_runs_clean(
-        r#"
-test(): int {
-    var nums = Array<int>();
-    nums.append(1);
-    for (var x in nums) {
-    }
-    nums.append(2);
-    for (var x in nums) {
-    }
-    return nums.count - 2;
-}
-"#,
-    );
-}
-
-#[test]
-fn half_open_and_closed_ranges() {
-    assert_runs_clean(
-        r#"
-test(): int {
-    var total = 0;
-    for (var i in 0..5) {
-        total += i;            # 0 + 1 + 2 + 3 + 4
-    }
-    for (var i in 1..>3) {
-        total += i * 100;      # 100 + 200 + 300
-    }
-    for (var i in 5..5) {
-        return 1;
-    }
-    for (var i in 5..>4) {
-        return 2;
-    }
-    return total - 610;
-}"#,
-    );
-}
-
-#[test]
-fn range_type_follows_its_bounds() {
-    assert_runs_clean(
-        r#"
-test(): int {
-    var nums = [10, 20, 30];
-    var total = 0;
-    for (var i in 0..nums.count) {   # Range<ulong>
-        total += nums[i];
-    }
-    ulong last = 0;
-    for (var i in 0..nums.count) {
-        last = i;
-    }
-    byte count = 0;
-    byte top = 255;
-    for (var b in 250..>top) {          # stops at 255 without overflowing
-        count += 1;
-    }
-    return total - 60 + (last as int) - 2 + (count as int) - 6;
-}"#,
-    );
-}
-
-#[test]
-fn range_is_a_value_with_contains_and_adapters() {
-    assert_runs_clean(
-        r#"
-test(): int {
-    var r = 2..5;
-    if (!r.contains(2) || !r.contains(4) || r.contains(5) || r.contains(1)) {
-        return 1;
-    }
-    if (!(2..>5).contains(5) || r.is_empty || !(3..3).is_empty) {
-        return 2;
-    }
-    r.next();                  # the loop below resumes where this left off
-    var rest = 0;
-    for (var i in r) {
-        rest += i;             # 3 + 4
-    }
-    var squares = 0;
-    for (var s in (1..>3).map((x) => x * x)) {
-        squares += s;          # 1 + 4 + 9
-    }
-    return rest - 7 + squares - 14;
-}"#,
-    );
-}
-
-#[test]
-fn range_current_out_of_turn_panics() {
-    let (ok, stdout) = run_binary(
-        "range_current",
-        "main(): int {\n    var r = 0..1;\n    return r.current();\n}\n",
-    );
-    assert!(!ok, "expected a panic");
-    assert!(stdout.contains("Range.current() before next()"), "stdout: {stdout:?}");
 }

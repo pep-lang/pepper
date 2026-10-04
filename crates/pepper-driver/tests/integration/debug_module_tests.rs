@@ -2,7 +2,8 @@
 //! with `-g`, source lines, expanding inlined calls into frames of their
 //! own (#529); a panic prints a backtrace at `-O0`, none with `-O`, and
 //! `PEPPER_BACKTRACE` overrides the build; `output`,
-//! `is_debugger_attached` and `breakpoint` reach the platform.
+//! `is_debugger_attached` and `breakpoint` reach the platform. Capturing
+//! without debug info is tested in `runtime/debug/test/capture_test.pep`.
 
 use crate::support::{output_text, parallel_map, run_linked_with, stdout_of};
 
@@ -111,15 +112,6 @@ fn a_panic_through_an_operator_starts_at_the_caller() {
             assert!(!stderr.contains("__index_get"), "{name}: {stderr}");
         }
     }
-}
-
-#[test]
-fn capture_names_functions_without_debug_info() {
-    let output = run_linked_with("debug_capture_names", CAPTURE, &[], |_| {});
-    let text = stdout_of(&output);
-    assert!(output.status.success(), "{}", output_text(&output));
-    let names: Vec<&str> = text.lines().map(|l| l.split('|').next().unwrap()).collect();
-    assert_eq!(names, ["Point.trace", "helper<int>", "main"], "{text}");
 }
 
 /// Each case: name, compiler arguments, `PEPPER_BACKTRACE`, and whether the

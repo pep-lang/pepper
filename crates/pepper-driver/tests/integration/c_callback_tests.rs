@@ -1,7 +1,7 @@
 //! C function pointer types (`extern (P...) => R`): named functions, static
 //! methods and closures that capture nothing passed to C as callbacks,
 //! stored, returned and called through, with the leak census. Threads
-//! sharing one are in `async_tests.rs`.
+//! sharing one are in `runtime/async/test/thread_test.pep`.
 
 use crate::support::jit_census as run;
 
