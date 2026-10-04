@@ -2695,10 +2695,41 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   structs, running the module-scope blocks into their constants, and
   expanding the blocks of concrete code (those of generic code expand
   once specialized). Writing expansions back as source (`--emit-static`)
-  is not ported. What the Rust passes keep in thread-locals between
-  steps (the first error reported, closure numbers, enum
-  representations, value structs, `reflect.print`'s notes) is a
-  `PassState` (`state.pep`). `compiler/passes_test.pep` requires the
+  is not ported. Then enum cases and value types' methods (`enums.pep`,
+  `value_types.pep`), `main(args)` (`entry_point.pep`), names declared
+  twice and const bindings assigned (`bindings.pep`), and the `[Alias]`,
+  `[Rename]` and `[Link]` checks and the binding of named arguments to
+  free functions, constructors and bare method calls
+  (`named_arguments.pep`), the structs of function, tuple and weak
+  reference types (`function_types.pep`), negated and string literals
+  (`literals.pep`), overload sets named `name$1`, `name$2`, with
+  concrete overrides (`overloads.pep`), the generic uses recorded as
+  specs (`generics.pep`), and implicit types (`resolve_implicit_types.pep`):
+  `auto` locals, unresolved names and inferred return types, calls to
+  overload sets (`overload_select.pep`, with generic constraints from
+  `constraints.pep`) and inferred generic calls (`type_arguments.pep`),
+  property accesses (`properties.pep`), function and closure values
+  (`closure_sites.pep`, `generic_values.pep`) and named arguments of
+  method calls, repeated while anything changes; then the `?` checks
+  (`check_tries.pep`), extension targets (`resolve_resolvables.pep`)
+  and extensions applied to their structs, with each declared trait's
+  members checked or defaulted (`apply_extensions.pep`), parameter names
+  against the traits' and the values interpolated or printed
+  (`interpolation.pep`), and generic constraints (`constraints.pep`:
+  each names a trait, defaults and written uses conform, and so do the
+  specializations gathered so far), then constrained generic code
+  (`check_bounds.pep`: a value of a constrained parameter's type uses only
+  what its constraints declare), then the templates are frozen and the
+  requested struct specializations cloned from them
+  (`specialize_structs.pep`, with `constraints.pep`'s `withhold`), and the
+  function specializations (`specialize_functions.pep`), then range bounds
+  (`ranges.pep`), and the generic methods calls name
+  (`generic_methods.pep`). What the Rust passes keep in thread-locals
+  between steps (the first error reported, closure numbers, enum
+  representations and methods, reference enums, value structs,
+  `reflect.print`'s notes and deprecation warnings, the next
+  `WithSubject` id) is a `PassState`
+  (`state.pep`). `compiler/passes_test.pep` requires the
   model JSON, or the rendered error, to match after `PORTED_STEPS` steps
   on the corpus, the documentation's programs of several modules and
   with `static` blocks, and programs that exercise each pass and its

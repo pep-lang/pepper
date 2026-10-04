@@ -277,9 +277,10 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 while (i < size and is_hex_digit(data[i])) {
                     i += 1;
                 }
-            } else if (start > 0 and data[start - 1] == '.') {
+            } else if (start > 0 and data[start - 1] == '.' and !(start > 1 and data[start - 2] == '.')) {
                 # A tuple element after `.` is digits only: `t.0.1` is two
-                # accesses, as the compiler reads it.
+                # accesses, as the compiler reads it. After a range's `..`
+                # (`1.5..3.0`) the number is a whole one.
                 while (i < size and is_digit(data[i])) {
                     i += 1;
                 }

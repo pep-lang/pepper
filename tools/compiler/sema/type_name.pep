@@ -75,6 +75,106 @@ export extend TypeName {
         return TypeName(name = VOID);
     }
 
+    ## Returns `bool`.
+    ##
+    ## @returns the type
+    static boolean(): TypeName {
+        return TypeName(name = BOOL);
+    }
+
+    ## Returns `void*`.
+    ##
+    ## @returns the type
+    static void_pointer(): TypeName {
+        return TypeName(name = VOID_PTR);
+    }
+
+    ## Returns whether this is a plain (scalar) type rather than a pointer
+    ## to one.
+    ##
+    ## @returns true for a scalar
+    is_scalar(): bool {
+        return flags == TypeFlags.Scalar;
+    }
+
+    ## Returns whether this is the empty type: no name, no arguments.
+    ##
+    ## @returns true for a type never spelled
+    is_empty(): bool {
+        return name.size == 0 and sub_types.count == 0;
+    }
+
+    ## Returns whether a value of this type can be called: a function type
+    ## or a C function pointer type.
+    ##
+    ## @returns true for a callable type
+    is_callable(): bool {
+        return is_function_type() or is_extern_function_type();
+    }
+
+    ## Returns whether this type, or a type nested in it, is `name` (or a
+    ## pointer to it).
+    ##
+    ## @param name the type name
+    ## @returns true when it appears
+    mentions(name: String): bool {
+        if (this.name == name) {
+            return true;
+        }
+        var bare = this.name;
+        while (bare.ends_with("*")) {
+            bare = bare.substr_bytes(0, bare.size - 1);
+        }
+        if (bare == name) {
+            return true;
+        }
+        for (var t in sub_types) {
+            if (t.mentions(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## Returns the position of tuple element `name`: its digits (`0`), or
+    ## its label (`line`).
+    ##
+    ## @param name the element
+    ## @returns the position, or none when the tuple has no such element
+    tuple_index(name: String): ulong? {
+        if (!is_tuple()) {
+            return Optional<ulong>.Empty;
+        }
+        ulong index = 0;
+        var parsed = ulong.parse(name);
+        if (parsed.is_value()) {
+            index = parsed.value();
+        } else {
+            bool found = false;
+            while (index < labels.count) {
+                if (labels[index] == name) {
+                    found = true;
+                    break;
+                }
+                index += 1;
+            }
+            if (!found) {
+                return Optional<ulong>.Empty;
+            }
+        }
+        return index < sub_types.count ? Optional<ulong>.Value(index) : Optional<ulong>.Empty;
+    }
+
+    ## Returns the type of element `name` (`0`, `1`, ... or a label) of a
+    ## tuple type.
+    ##
+    ## @param name the element
+    ## @returns its type, or none
+    tuple_element(name: String): TypeName? {
+        var index = tuple_index(name);
+        return index.is_value() ? Optional<TypeName>.Value(sub_types[index.value()]) : Optional<TypeName>.Empty;
+    }
+
     ## Returns whether this is a function type, plain or thread-safe.
     ##
     ## @returns true for `(P...) => R` and `shared (P...) => R`
@@ -101,6 +201,60 @@ export extend TypeName {
     ## @returns true for `(A, B, ...)`
     is_tuple(): bool {
         return name == TUPLE and sub_types.count >= 2;
+    }
+
+    ## Returns the return type of a function type.
+    ##
+    ## @returns the return type, or none for any other type
+    function_return(): TypeName? {
+        if ((is_function_type() or is_extern_function_type()) and sub_types.count > 0) {
+            return Optional<TypeName>.Value(sub_types[0]);
+        }
+        return Optional<TypeName>.Empty;
+    }
+
+    ## Returns the parameter types of a function type.
+    ##
+    ## @returns the parameter types; none for any other type
+    function_params(): TypeName[] {
+        var out = Array<TypeName>();
+        if (is_function_type() or is_extern_function_type()) {
+            ulong i = 1;
+            while (i < sub_types.count) {
+                out.append(sub_types[i]);
+                i += 1;
+            }
+        }
+        return out;
+    }
+
+    ## Returns whether this is a weak reference type.
+    ##
+    ## @returns true for `__weak<T>`
+    is_weak(): bool {
+        return name == WEAK and sub_types.count == 1;
+    }
+
+    ## Returns whether `auto` appears anywhere in this type.
+    ##
+    ## @returns true for `auto`, `Array<auto>`, ...
+    contains_auto(): bool {
+        if (name == AUTO) {
+            return true;
+        }
+        for (var t in sub_types) {
+            if (t.contains_auto()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## Returns whether this is a plain pointer type.
+    ##
+    ## @returns true for `int*`, `void*`, ...
+    is_pointer(): bool {
+        return flags == TypeFlags.Scalar and name.ends_with("*");
     }
 
     ## Returns whether this type has type arguments.

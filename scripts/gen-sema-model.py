@@ -204,6 +204,7 @@ def to_json(expr, tp, depth=0):
     if n=='String': return [], f'JsonValue.String({expr})'
     if n=='bool': return [], f'JsonValue.Bool({expr})'
     if n=='f64': return [], f'JsonValue.Number({expr})'
+    if n in ('usize','u64'): return [], f'unsigned_json({expr})'
     if n in PRIM: return [], f'JsonValue.Integer({expr} as long)'
     return [], f'{expr}.to_json()'
 
@@ -419,6 +420,22 @@ import [Loc] from "loc";
 
 '''
 footer='''
+## What `unsigned_json` writes before the digits of a value too large for
+## `JsonValue.Integer`; `canonical_json` writes those digits bare.
+export const UNSIGNED_MARK = "\\u{1}unsigned:";
+
+## Returns `value` as JSON: an integer, or for one past `long`'s range (a
+## `WithSubject` id), its digits behind `UNSIGNED_MARK`.
+##
+## @param value the value
+## @returns the JSON
+export unsigned_json(value: ulong): JsonValue {
+    if (value <= 9223372036854775807) {
+        return JsonValue.Integer(value as long);
+    }
+    return JsonValue.String($"{UNSIGNED_MARK}{value}");
+}
+
 _tagged(name: String, value: JsonValue): JsonValue {
     var out = JsonValue.object();
     out[name] = value;

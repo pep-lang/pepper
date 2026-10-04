@@ -8,7 +8,7 @@ import [JsonValue] from json;
 import compiler.link;
 import [Program] from compiler.link;
 import [build_file] from "builder";
-import [ExtensionScopes, Module, VariableDef] from "model";
+import [ExtensionScopes, Module, UNSIGNED_MARK, VariableDef] from "model";
 
 ## Checks `program`, then builds the model of each of its files and joins
 ## them: one module, its globals ordered so a file's come after those of
@@ -233,7 +233,8 @@ enum _Step {
 
 ## Returns `value` as compact JSON, as serde_json writes it: object keys
 ## sorted by their bytes, and numbers as Rust's `ryu` lays them out (`1.0`,
-## `1e+20`, `1.5e-7`; `null` for one that is not finite).
+## `1e+20`, `1.5e-7`; `null` for one that is not finite), and an
+## `unsigned_json` value past `long`'s range as its digits.
 ##
 ## @param value the value
 ## @returns the text
@@ -281,6 +282,13 @@ export canonical_json(value: JsonValue): String {
                     }
                     Number(number) => {
                         out.append(ryu_text(number));
+                    }
+                    String(text) => {
+                        if (text.starts_with(UNSIGNED_MARK)) {
+                            out.append(text.substr_bytes(UNSIGNED_MARK.size, text.size - UNSIGNED_MARK.size));
+                        } else {
+                            out.append(v.to_string());
+                        }
                     }
                     else => {
                         out.append(v.to_string());

@@ -3,9 +3,10 @@
 ## install for the later ones, as the Rust passes keep them in
 ## thread-locals.
 
-import [Diagnostic] from compiler.diagnostic;
+import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
-import [EnumDef] from "model";
+import [Loc] from "loc";
+import [EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -27,6 +28,35 @@ export struct PassState {
     ## The notes the passes report besides errors (`reflect.print`), in
     ## order: the Rust module's `warnings`.
     var notes: Diagnostic[] = Array<Diagnostic>();
+    ## Each value type's methods (`Color::name`, `i32::doubled`): whether
+    ## each is static, keyed by `method_key`, as `enums::install_methods`
+    ## records them.
+    var enum_methods: HashMap<String, bool> = HashMap<String, bool>();
+    ## The reference enums by name (without type arguments), as
+    ## `enums::install_reference_enums` records them.
+    var reference_enums: HashMap<String, ReferenceEnum> = HashMap<String, ReferenceEnum>();
+    ## The next `WithSubject` id no `match` uses, as
+    ## `named_arguments::next_subject` numbers them.
+    var next_subject: ulong = 9223372036854775807;
+    ## `Module::settle_overloads_by_arity`: no argument type is still to
+    ## come, so overload resolution may settle a call by arity alone.
+    var settle_overloads_by_arity: bool = false;
+    ## The traits each struct declares, by its spelled type and, for a
+    ## generic base, by its name with its parameters, as
+    ## `type_arguments::record_conformances` sets them.
+    var conformances: HashMap<String, (String[], TypeName[])> = HashMap<String, (String[], TypeName[])>();
+    ## Every trait's name, for a `match` on a trait value, as
+    ## `enums::install_traits` records them.
+    var trait_names: HashSet<String> = HashSet<String>();
+    ## Each concrete struct: its type, its canonical spelling and the
+    ## canonical spellings of the traits it declares.
+    var trait_structs: Array<(TypeName, String, String[])> = Array<(TypeName, String, String[])>();
+    ## Which extension (by index) was applied to which struct (by name), as
+    ## `apply_extensions` records them: `"{index}\n{name}"`.
+    var applied_extensions: HashSet<String> = HashSet<String>();
+    ## The program's files' text, by file index, for fixes that edit near
+    ## a declaration (`Module::sources`).
+    var sources: SourceText[] = Array<SourceText>();
 
     ## Creates the state for compiling for `target`.
     ##
@@ -99,6 +129,36 @@ export struct PassState {
     is_integral(name: String): bool {
         return is_integral_name(name) or enum_representations.contains(name);
     }
+}
+
+## What the passes know of a reference enum: its cases, where its name is,
+## its type parameters, and the declared types of each case's values.
+export struct ReferenceEnum {
+    ## The cases, in order.
+    var cases: EnumCaseDef[];
+    ## Where the enum's name is.
+    var loc: Loc;
+    ## The enum's type parameters.
+    var generic_params: GenericParam[];
+    ## Each case's values' declared types, in `cases` order.
+    var payload_types: Array<TypeName[]>;
+
+    construct(cases: EnumCaseDef[], loc: Loc, generic_params: GenericParam[], payload_types: Array<TypeName[]>) {
+        this.cases = cases;
+        this.loc = loc;
+        this.generic_params = generic_params;
+        this.payload_types = payload_types;
+    }
+}
+
+## The key `PassState.enum_methods` files method `method` of value type
+## `owner` under.
+##
+## @param owner the value type's key
+## @param method the method, as spelled in its function's name
+## @returns the key
+export method_key(owner: String, method: String): String {
+    return $"{owner}\n{method}";
 }
 
 ## The value of a slot nothing was stored in yet: the case whose value is

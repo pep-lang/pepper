@@ -215,7 +215,7 @@ compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, ste
             Optional<String>.Empty;
     }
     var module = built.value();
-    var ran = sema.run_steps(module, program.value().target, steps);
+    var ran = sema.run_steps(module, program.value().target, steps, program.value().sources());
     if (!output.value().status.success()) {
         var expected = trimmed(output.value().stderr);
         if (!ran.is_err()) {
@@ -334,7 +334,113 @@ error_programs(): String[] {
         "main(): int {\n    var n = 1;\n    static {\n        reflect.print(n);\n    }\n    return 0;\n}\n",
         "enum S { C(r: int) }\nmain(): int {\n    var s = S.C(1);\n    static (s) {\n        for (var k in reflect.cases<S>()) {\n            for (var v in k.values) {\n                v.set(s, 2);\n            }\n        }\n    }\n    return 0;\n}\n",
         "main(): int {\n    static {\n        reflect.print(reflect.properties<int>);\n    }\n    return 0;\n}\n",
-        "main(): int {\n    static {\n        while (true) {\n        }\n    }\n    return 0;\n}\n"
+        "main(): int {\n    static {\n        while (true) {\n        }\n    }\n    return 0;\n}\n",
+        # Enum cases and value types' methods; `main`'s parameters; names
+        # declared twice and const bindings assigned; `[Alias]` and
+        # `[Rename]`; `[Link]`.
+        "struct S {\n    [Alias(\"a\", \"b\")]\n    m(x: int) {}\n}\nmain(): int { return 0; }\n",
+        "[Alias(\"a\", \"y\")]\nf(x: int) {}\nmain(): int { return 0; }\n",
+        "[Alias(\"a\")]\nf(x: int) {}\nmain(): int { return 0; }\n",
+        "[Alias(\"x\", \"x\")]\nf(x: int) {}\nmain(): int { return 0; }\n",
+        "struct S {\n    const x: int = 1;\n    set() {\n        this.x = 2;\n    }\n}\nmain(): int { return 0; }\n",
+        "struct S {\n    const x: int = 1;\n    set() {\n        x = 2;\n    }\n}\nmain(): int { return 0; }\n",
+        "const G = 1;\nmain(): int {\n    G += 2;\n    return G;\n}\n",
+        "main(): int {\n    const x = 1;\n    x++;\n    return x;\n}\n",
+        "main(): int {\n    const x = 1;\n    x = 2;\n    return x;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = 1 as Color;\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.from_value;\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Blue;\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.nope();\n    return 0;\n}\n",
+        "enum Color {\n    Red,\n    Green,\n    twice(): int { return 2; }\n}\nmain(): int {\n    return Color.twice();\n}\n",
+        "enum Color { Red, Green }\nextend Color {\n    f(): int { return 1; }\n}\nmain(): int { return 0; }\n",
+        "[Link(path = \"\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link(nope = \"n\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link(\"m\", lib = \"n\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "[LinkName(\"g\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link(\"m\", \"n\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link(lib = 1)]\nextern int f();\nmain(): int { return 0; }\n",
+        "[Link(name = \"a\")]\n[Link(name = \"b\")]\nextern int f();\nmain(): int { return 0; }\n",
+        "main(args: String[]): int { return 0; }\n",
+        "main(a: int): int { return 0; }\n",
+        "main(a: String[], b: int): int { return 0; }\n",
+        "extend int {\n    *(other: double): int { return 1; }\n}\nmain(): int { return 0; }\n",
+        "extend int {\n    +(a: int, b: int): int { return a; }\n}\nmain(): int { return 0; }\n",
+        "main(): int {\n    var x = 1;\n    var x = 2;\n    return x;\n}\n",
+        "enum Doc {\n    Line,\n    Text(text: int),\n}\nmain(): int {\n    var d = Doc();\n    return 0;\n}\n",
+        "enum Doc {\n    Line,\n    Text(text: int, more: int),\n}\nmain(): int {\n    var d = Doc.Text;\n    return 0;\n}\n",
+        "enum Doc {\n    Line,\n    Text(text: int),\n}\nmain(): int {\n    var d = Doc.Nope;\n    return 0;\n}\n",
+        "[Rename(\"old\", \"x\")]\n[Alias(\"old\", \"x\")]\nf(x: int) {}\nmain(): int { return 0; }\n",
+        "trait Twice {\n    twice(): int;\n}\nextend int with Twice {\n}\nmain(): int { return 0; }\n",
+        "main(): int { return 0; }\nmain(): int { return 1; }\n",
+        # A misnamed argument, with and without a likely meaning.
+        "f(alpha: int, beta: int = 2) {}\nmain(): int {\n    f(1, betta = 3);\n    return 0;\n}\n",
+        "f(alpha: int, beta: int = 2) {}\nmain(): int {\n    f(1, zzz = 3);\n    return 0;\n}\n",
+        # Too many arguments, one given twice, and one missing.
+        "f(a: int, b: int = 2) {}\nmain(): int {\n    f(1, 2, 3, b = 4);\n    return 0;\n}\n",
+        "f(a: int, b: int = 2) {}\nmain(): int {\n    f(1, a = 2);\n    return 0;\n}\n",
+        "f(a: int, b: int = 2) {}\nmain(): int {\n    f(b = 1);\n    return 0;\n}\n",
+        # Overloads none of which fit, and ones that bind differently.
+        "f(a: int) {}\nf(b: String) {}\nmain(): int {\n    f(c = 1);\n    return 0;\n}\n",
+        "f(a: int, b: int) {}\nf(b: double, a: double) {}\nmain(): int {\n    f(b = 1, a = 2);\n    return 0;\n}\n",
+        # A named argument to an extern, and to a method called bare.
+        "extern int e(int x);\nmain(): int {\n    return e(x = 1);\n}\n",
+        "struct S {\n    m(first: int) {}\n    run() { m(frist = 1); }\n}\nmain(): int { return 0; }\n",
+        "struct Box<T> {\n    var v: T;\n    construct(value: T) { v = value; }\n}\nmain(): int {\n    var b = Box<int>(valu = 1);\n    return 0;\n}\n",
+        "f(a: int) {}\nvar g = f(b = 1);\nmain(): int { return 0; }\n",
+        # Overloads that clash: free functions, externs, constructors,
+        # methods, a trait's methods, and concrete overrides.
+        "f(x: int) {}\nf(y: i32) {}\nmain(): int { return 0; }\n",
+        "f(x: int): int { return 0; }\nf(x: int): bool { return true; }\nmain(): int { return 0; }\n",
+        "f<T>(x: T) {}\nf<U>(y: U) {}\nmain(): int { return 0; }\n",
+        "extern int puts(__ptr<char> s);\nputs(x: int): int { return x; }\nmain(): int { return 0; }\n",
+        "puts(x: int): int { return x; }\nextern int puts(__ptr<char> s);\nmain(): int { return 0; }\n",
+        "extern int puts(__ptr<char> s);\nextern long puts(__ptr<char> s);\nmain(): int { return 0; }\n",
+        "struct P {\n    var x: int;\n    construct(a: int) {}\n    construct(b: i32) {}\n}\nmain(): int { return 0; }\n",
+        "struct P {\n    get(): int { return 0; }\n    static get(i: int): int { return i; }\n}\nmain(): int { return 0; }\n",
+        "struct P {\n    get(i: int): int { return 0; }\n    get(j: int): int { return j; }\n}\nmain(): int { return 0; }\n",
+        "trait R {\n    read(): int;\n    read(): long;\n}\nmain(): int { return 0; }\n",
+        "hash<T>(value: T): ulong { return 0; }\nhash<T>(value: T, seed: ulong): ulong { return seed; }\nhash<int>(value: int, a: int, b: int): ulong { return 1; }\nmain(): int { return 0; }\n",
+        "f<T>(a: T, b: int) {}\nf<T>(a: int, b: T) {}\nf<int>(a: int, b: int) {}\nmain(): int { return 0; }\n",
+        # `?` on what is neither a Result nor an Optional, and in a function
+        # returning another kind.
+        "f(): int { return 1; }\ng(): int {\n    var x = f()?;\n    return x;\n}\nmain(): int { return g(); }\n",
+        "struct Optional<T> {}\nf(): Optional<int> { return Optional<int>(); }\ng(): int {\n    var x = f()?;\n    return 0;\n}\nmain(): int { return g(); }\n",
+        # A trait member an extension leaves out, and one it declares with
+        # another type.
+        "trait Shape {\n    area(): int;\n}\nstruct Box {}\nextend Box with Shape;\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n}\nstruct Box {}\nextend Box with Shape {\n    area(): long { return 1; }\n}\nmain(): int { return 0; }\n",
+        "trait Sized {\n    var size: int { get; }\n}\nstruct Box {\n    var other: int;\n}\nextend Box with Sized;\nmain(): int { return 0; }\n",
+        # A value `print` cannot convert.
+        "print<T>(value: T) {}\nstruct S {}\nmain(): int {\n    print(S());\n    return 0;\n}\n",
+        # Constraints that name no trait, a trait named `Shared`, and type
+        # arguments that do not conform (a number, a type parameter, a
+        # struct).
+        "struct S {}\nf<T: S>(x: T) {}\nmain(): int { return 0; }\n",
+        "trait Shared {}\nmain(): int { return 0; }\n",
+        "trait Named {\n    name(): int;\n}\nstruct Box<T: Named> {}\nmain(): int {\n    var b = Box<int>();\n    return 0;\n}\n",
+        "trait Named {\n    name(): int;\n}\nstruct Box<T: Named> {}\nf<U>(b: Box<U>) {}\nmain(): int { return 0; }\n",
+        "trait Named {\n    name(): int;\n}\nstruct S {}\nstruct Box<T: Named> {}\nmain(): int {\n    var b = Box<S>();\n    return 0;\n}\n",
+        # Constrained generic code uses only what its constraints offer.
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.perimeter(); }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.radius; }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nmake<T: Shape>(item: T): T { return T(); }\nmain(): int { return 0; }\n",
+        "trait Named {\n    name(): String;\n}\ntrait Titled {\n    name(): String;\n}\nlabel<T: Named & Titled>(item: T): String { return item.name(); }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.scale(1, 2); }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\ntotal<T: Shape>(item: T): int { return item.scale(\"twice\"); }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Circle {\n}\nkeep<T: Shape>(item: T): int {\n    var shape: Shape = item;\n    var circle: Circle = item;\n    return 0;\n}\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nsmaller<T: Shape>(a: T, b: T): bool { return a < b; }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Gallery<T: Shape> {\n    var items = Array<T>();\n    first(): int { return items[0].depth(); }\n}\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nmake<T: Shape>(): T { return T.unit(); }\nmain(): int { return 0; }\n",
+        "trait Addable {\n    +(other: this): this;\n}\ngrow<T: Addable>(a: T, b: T): T {\n    var total = a;\n    total += b;\n    return total;\n}\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n}\nflip<T: Shape>(a: T): T { return -a; }\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n}\npick<T: Shape>(a: T): int { return a[0]; }\nmain(): int { return 0; }\n",
+        # Range bounds must be integers.
+        "_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = 1.5..3.0;\n    return 0;\n}\n",
+        "_range<T>(a: T, b: T, inclusive: bool): int { return 0; }\nmain(): int {\n    var r = \"a\"..>\"z\";\n    return 0;\n}\n",
+        # A generic method's constraints, at its specialization.
+        "trait Named {\n    name(): int;\n}\nstruct Box {\n    get<T: Named>(x: T): int { return 0; }\n}\nmain(): int {\n    var b = Box();\n    return b.get<int>(1);\n}\n",
+        "struct Box {\n    get<T>(x: T): T { return x; }\n}\nmain(): int {\n    var b = Box();\n    var f = b.get<int>;\n    return b.get<int>(1) + f(2) + b.missing<int>(3);\n}\n"
     ];
 }
 
@@ -373,6 +479,30 @@ rewritten_programs(): String[] {
         "struct P {\n    var x: int;\n    var y: int;\n\n    sum(): int {\n        var total = 0;\n        static (total) {\n            for (var f in reflect.properties<P>()) {\n                total += f.get(this);\n            }\n        }\n        return total;\n    }\n\n    construct() {\n        static {\n            reflect.print(\"ctor\");\n        }\n    }\n}\n\nmain(): int {\n    return P().sum();\n}\n",
         "enum Level { Low, High }\n\nstatic {\n    var n = 0;\n    for (var c in reflect.cases<Level>()) {\n        n += c.value + 1;\n    }\n    const COUNT = n;\n    const NAME = \"lvl\" + $\"{n}\";\n    const RATE = 2.5;\n    const ON = n > 1;\n    const TOP = Level.High;\n}\n\nmain(): int {\n    return COUNT;\n}\n",
         "struct Point {\n    var x: int;\n    var y: double;\n    const name: String = \"p\";\n    var _hidden: int;\n    var label: String { get { return name; } }\n}\n\nmain(): int {\n    var p = Point();\n    var total = 0;\n    static (p, total) {\n        for (var field in reflect.properties<Point>()) {\n            reflect.print($\"{field.name} {field.index} {field.is_last} {field.type_name} {field.is_const} {field.is_property}\");\n            if (reflect.is_same<field.Type, int>()) {\n                total += field.get(p);\n                field.set(p, 3);\n            }\n        }\n    }\n    return total;\n}\n",
-        "enum Shape {\n    Circle(radius: double),\n    Rect(w: int, h: int),\n    Empty,\n}\n\nmain(): int {\n    var s = Shape.Circle(1.5);\n    var n = 0;\n    static (s, n) {\n        for (var k in reflect.cases<Shape>()) {\n            if (k.matches(s)) {\n                n += 1;\n            }\n            for (var v in k.values) {\n                reflect.print($\"{v.name} {v.type_name}\");\n            }\n        }\n    }\n    return n;\n}\n"
+        "enum Shape {\n    Circle(radius: double),\n    Rect(w: int, h: int),\n    Empty,\n}\n\nmain(): int {\n    var s = Shape.Circle(1.5);\n    var n = 0;\n    static (s, n) {\n        for (var k in reflect.cases<Shape>()) {\n            if (k.matches(s)) {\n                n += 1;\n            }\n            for (var v in k.values) {\n                reflect.print($\"{v.name} {v.type_name}\");\n            }\n        }\n    }\n    return n;\n}\n",
+        # Enum cases, built-in and static methods, value type extensions
+        # and their trait defaults; `main(args)`; shadowing and const
+        # fields set in a constructor; `[Alias]`, `[Rename]` and `[Link]`.
+        "[Alias(\"w\", \"width\")]\n[Rename(\"old\", \"height\")]\nf(width: int, height: int) {}\nstruct S {\n    var x: int;\n    [Alias(\"ex\", \"x\")]\n    construct(this.x = 0) {}\n}\nmain(): int { return 0; }\n",
+        "const G = 1;\nstruct S {\n    const x: int;\n    construct() { x = 1; this.x = 2; }\n}\nmain(): int {\n    var x = 1;\n    {\n        var x = 2;\n    }\n    var y = x;\n    y += 1;\n    return y;\n}\n",
+        "enum Color: u8 { Red = 2, Green, Blue = 0 }\nenum Doc {\n    Line,\n    Text(text: int),\n    static make(): Doc { return Doc.Line; }\n}\nextend int {\n    doubled(): int { return this * 2; }\n    static zero(): int { return 0; }\n}\ntrait Twice {\n    twice(): int;\n    thrice(): int { return twice() + 1; }\n}\nextend int with Twice {\n    twice(): int { return this * 2; }\n}\nenum Level {\n    Low,\n    High,\n    up(): Level { return next(); }\n    next(): Level { return Level.High; }\n    static first(): Level { return Level.Low; }\n}\nvar g: Color;\nstruct S {\n    var c: Color = Color.Green;\n    f(c: Color = Color.Blue): Color { return c; }\n}\nf(c: Color = Color.Red): Color { return c; }\nmain(): int {\n    Color c;\n    var d = Doc.Line;\n    var l = Level.first();\n    var v = Color.from_value(1);\n    var z = int.zero();\n    if (c == Color.Red) {\n        Level k;\n    }\n    return 0;\n}\n",
+        "[Link(\"m\", path = \"/usr/lib\")]\n[Link(name = \"cos\")]\nextern double my_cos(double x);\nmain(): int { return 0; }\n",
+        "_pep_arguments(): String[] { return Array<String>(); }\nmain(args: String[]): int { return args.count as int; }\n",
+        "_pep_arguments(): String[] { return Array<String>(); }\nmain(args: String[]) {}\n",
+        # Named arguments: skipped defaults, reordering that evaluates first, constructors, a bare method, a former name, overloads, generics and a global.
+        "f(a: int, b: int = 2, c: int = 3): int { return a + b + c; }\ng(): int { return 1; }\nstruct P {\n    var x: int;\n    var y: int;\n    construct(x: int = 0, y: int = 0) { this.x = x; this.y = y; }\n    m(first: int, second: int = 1): int { return first + second; }\n    call(): int { return m(second = 2, first = 1); }\n    other(): P { return this; }\n}\n[Rename(\"old\", \"b\")]\nh(a: int, b: int) {}\nk(a: int, b: int) {}\nk(a: double, b: double) {}\nid<T>(value: T, times: int = 1, scale: T = value): T { return value; }\nvar global = f(c = 1, a = 2);\nmain(): int {\n    var n = f(1, c = 4);\n    n += f(c = g(), a = n);\n    n += f(c = -1, a = 5);\n    var p = P(y = 2);\n    var q = P(y = g(), x = -1);\n    var r = p.other().m(second = 1, first = n);\n    h(1, old = 2);\n    k(b = 1, a = 2);\n    var i = id(scale = 2, value = 3);\n    var j = id<long>(value = 1);\n    return n + p.call() + i;\n}\n",
+        "struct Box<T> {\n    var v: T;\n    construct(value: T, extra: int = 0) { v = value; }\n}\nmain(): int {\n    var f = (a: int) => a;\n    var x = f(1);\n    var b = Box<int>(extra = 2, value = x);\n    return 0;\n}\n",
+        # Function, tuple and weak reference types; negated literals;
+        # overload sets of functions, methods and constructors, and
+        # concrete overrides.
+        "struct Node {\n    var next: __weak<Node>;\n}\n[Shared]\nstruct Hub { var n: int; }\ntrait Shape {\n    area(): int;\n}\nstruct Box<T> { var w: __weak<T>; }\nf(t: (int, bool), g: shared (int) => int, h: (int) => (int) => bool): (bool, double) {\n    var w: __weak<Hub>;\n    var s: __weak<Shape>;\n    var p: __ptr<__tuple<int, long>>;\n    var k = (a: int) => a + 1;\n    return (true, 1.0);\n}\nvar global: ((int, int)) => void;\nmain(): int { return 0; }\n",
+        "var g = -5;\nf(x: int = -1): double { return -2.5 + -x; }\nstruct S {\n    var v: int;\n    construct() { v = -3; }\n    get(): long { return -9223372036854775807 - 1; }\n    destruct { var d = -0.0; }\n}\nmain(): int { return -(-1); }\n",
+        "scale(x: int): int { return x * 2; }\nscale(x: double): double { return x * 2.0; }\nscale<T>(x: T, times: int): T { return x; }\nhash<T>(value: T): ulong { return 0; }\nhash<T>(value: T, seed: ulong): ulong { return seed; }\nhash<int>(value: int): ulong { return 1; }\ndescribe<T>(value: T): int { return 0; }\ndescribe<String>(value: String): int { return 1; }\nstruct P {\n    var x: int;\n    construct() {}\n    construct(x: int) { this.x = x; }\n    get(): int { return x; }\n    get(i: int): int { return i; }\n    static make(): P { return P(); }\n}\ntrait Reader {\n    read(): int;\n    read(count: int): int;\n}\nextern int puts(__ptr<char> s);\nextern int puts(__ptr<char> s);\nmain(): int { return scale(1); }\n",
+        # String literals in bodies, globals, `String` defaults, trait
+        # defaults, generic methods and extensions.
+        "struct String {\n    var data: __ptr<char>;\n    construct(raw: __ptr<char>, size: long, length: long) {}\n}\nvar greeting = \"héllo\";\nf(name: String = \"wörld\", raw: __ptr<char> = \"c\"): String { return \"a\" + \"\"; }\ntrait Named {\n    name(): String { return \"named\"; }\n}\nstruct Box<T> {\n    var v: T;\n    add<U>(u: U): String { return \"add\"; }\n    construct(label: String = \"box\") {}\n}\nextend int {\n    text(): String { return \"int\"; }\n}\nmain(): int {\n    var s = \"日本\";\n    return 0;\n}\n",
+        # Generic uses: fields, methods, locals in nested blocks, an
+        # extension of the base, globals, calls and a function value.
+        "struct Box<T> {\n    var v: T;\n    var others: Box<Box<T>>;\n    var ints: Box<int>;\n    get(b: Box<long>): Box<short> { var local: Box<bool>; return Box<short>(); }\n    construct() { var c: Box<char>; }\n}\nstruct Pair<A, B> { var a: A; var b: B; }\nextend Box<T> {\n    wrap(): Box<T> { return Box<T>(); }\n    twice(): Box<double> { return Box<double>(); }\n}\nlarger<T>(a: T, b: T): T { return a; }\nmake<U>(u: U): Box<U> { var p: Pair<U, int>; return Box<U>(); }\nvar global: Pair<int, bool> = Pair<int, bool>();\nvar picked = larger<long>(1, 2);\nmain(): int {\n    var x = larger<int>(1, 2);\n    var f = larger<double>;\n    if (x > 0) {\n        Pair<String, int> p;\n    } else {\n        while (x < 0) {\n            Box<uint> q;\n        }\n    }\n    var m = make<byte>(1);\n    return x;\n}\n"
     ];
 }
