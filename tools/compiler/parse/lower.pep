@@ -41,6 +41,7 @@ import [
 import syntax;
 import [Node, NodeKind, Token, TokenKind] from syntax;
 import [Utf8] from text;
+import "checks" as checks;
 
 ## An error the parser reports: what is wrong and where.
 export struct ParseError {
@@ -73,6 +74,11 @@ export parse(source: String): Result<ast.Module, ParseError> {
     var module = lowerer.module(tree.value());
     if (lowerer.error.is_value()) {
         return Result<ast.Module, ParseError>.err(lowerer.error.value());
+    }
+    var broken = checks.check_module(module);
+    if (broken.is_value()) {
+        var offset = broken.value().offset;
+        return Result<ast.Module, ParseError>.err(ParseError(broken.value().message, Span(offset, offset)));
     }
     return Result<ast.Module, ParseError>.ok(module);
 }
@@ -223,7 +229,7 @@ struct Lowerer {
                         var constant = VariableDecl(variable.name);
                         constant.attributes = block.attributes;
                         constant.name_span = variable.name_span;
-                        constant.type_name = variable.type_name;
+                        constant.type_name = variable.type_name.copy();
                         constant.default_value = Optional<Expression>.Value(
                             Expression.SymbolRef(variable.name, variable.name_span)
                         );
@@ -795,7 +801,7 @@ struct Lowerer {
             var arguments = node.child(3);
             var generic = TypeName(name, name_span);
             type_arguments(arguments, generic.generic_types);
-            name = type_text(generic);
+            name = generic.to_string();
             member_end = end(arguments);
         }
         return Expression.MemberAccess(lhs, name, name_span, Span(lhs.span().start, member_end));
@@ -1633,12 +1639,12 @@ struct Lowerer {
             function.attributes = attributes;
             if (is_get) {
                 function.name_span = out.name_span;
-                function.return_type = out.type_name;
+                function.return_type = out.type_name.copy();
             } else {
                 function.name_span = span;
                 var value = VariableDecl("value");
                 value.name_span = span;
-                value.type_name = out.type_name;
+                value.type_name = out.type_name.copy();
                 value.span = span;
                 function.parameters.append(value);
                 function.return_type = TypeName("void", span);
@@ -2591,44 +2597,4 @@ mentions_build_option(e: Expression): bool {
         else => {}
     }
     return false;
-}
-
-# A type as the Rust compiler's `Display` writes it.
-type_text(t: TypeName): String {
-    bool function = t.name == ast.FUNCTION_TYPE
-        or t.name == ast.SHARED_FUNCTION_TYPE
-        or t.name == ast.EXTERN_FUNCTION_TYPE;
-    if (function and t.generic_types.count > 0) {
-        var prefix = t.name == ast.SHARED_FUNCTION_TYPE ?
-            "shared " :
-            (t.name == ast.EXTERN_FUNCTION_TYPE ? "extern " : "");
-        var parameters = Array<String>();
-        ulong i = 1;
-        while (i < t.generic_types.count) {
-            parameters.append(type_text(t.generic_types[i]));
-            i += 1;
-        }
-        return $"{prefix}({", ".join(parameters)}) => {type_text(t.generic_types[0])}";
-    }
-    if (t.name == ast.TUPLE_TYPE and t.generic_types.count > 0) {
-        var elements = Array<String>();
-        ulong i = 0;
-        while (i < t.generic_types.count) {
-            var element = type_text(t.generic_types[i]);
-            if (i < t.labels.count and !t.labels[i].is_empty) {
-                element = t.labels[i] + ": " + element;
-            }
-            elements.append(element);
-            i += 1;
-        }
-        return $"({", ".join(elements)})";
-    }
-    if (t.generic_types.count == 0) {
-        return t.name;
-    }
-    var arguments = Array<String>();
-    for (var argument in t.generic_types) {
-        arguments.append(type_text(argument));
-    }
-    return $"{t.name}<{", ".join(arguments)}>";
 }

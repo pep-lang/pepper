@@ -88,6 +88,10 @@ fn run_for_target(options: Options) -> Result<i32, String> {
         return run_emit_ast(&options);
     }
 
+    if options.emit_linked {
+        return run_emit_linked(&options);
+    }
+
     if let Some(warning) = options.runtime_checks_warning() {
         report_warnings(&warning);
     }
@@ -635,6 +639,58 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
     Ok(0)
 }
 
+
+/// Load and link the program, then print it as JSON: each file in load
+/// order with its syntax tree after linking, then the linking errors, then
+/// the overload sets that span files. Keys keep the order written here,
+/// and the syntax trees serde's field order, so the Pepper compiler's
+/// output can be compared byte for byte.
+fn run_emit_linked(options: &Options) -> Result<i32, String> {
+    let entry_source = options.source_files.first().ok_or_else(|| "no source files".to_string())?;
+    let program = compiler::load_uncached(options, entry_source)?;
+    macro_rules! json {
+        ($value:expr) => {
+            serde_json::to_string($value).map_err(|e| format!("cannot write the program as JSON: {}", e))?
+        };
+    }
+    let span = |s: &pepper_parser::ast::Span| format!("{{\"start\":{},\"end\":{}}}", s.start, s.end);
+    let mut files = vec![];
+    for f in &program.files {
+        files.push(format!(
+            "{{\"name\":{},\"namespace\":{},\"module_root\":{},\"prelude\":{},\"prelude_part\":{},\"imports\":{},\"folder_imports\":{},\"module\":{}}}",
+            json!(&f.name),
+            json!(&f.namespace),
+            json!(&f.module_root.as_ref().map(|p| p.to_string_lossy().into_owned())),
+            f.prelude,
+            f.prelude_part,
+            json!(&f.imports),
+            json!(&f.folder_imports),
+            json!(&f.module),
+        ));
+    }
+    let mut errors = vec![];
+    for e in &program.errors {
+        let note = match &e.note {
+            Some((s, m)) => format!("[{},{}]", span(s), json!(m)),
+            None => "null".to_string(),
+        };
+        errors.push(format!(
+            "{{\"file\":{},\"span\":{},\"message\":{},\"unresolved\":{},\"note\":{}}}",
+            e.file,
+            span(&e.span),
+            json!(&e.message),
+            e.unresolved,
+            note
+        ));
+    }
+    println!(
+        "{{\"files\":[{}],\"errors\":[{}],\"overload_unions\":{}}}",
+        files.join(","),
+        errors.join(","),
+        json!(&program.overload_unions)
+    );
+    Ok(0)
+}
 
 /// Machine for object emission: the target, with clang's default CPU.
 ///

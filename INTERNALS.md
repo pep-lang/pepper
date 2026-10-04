@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser and linker. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/toml` | A copy of the [toml package](https://github.com/justinboswell/pepper-toml) (TOML parse, write, edit in place), which `pep-package` uses. Update it when that repository changes. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each with `pep-build --test`, lists its tests (`--list`) and runs each in a child process (`--run NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
@@ -2586,8 +2586,31 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   requires `compiler.parse`'s JSON to match byte for byte, so a parser
   change that `tools/compiler` does not follow fails there.
   `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
-- `compiler/main.pep` builds `pepc`; for now `pepc --emit-ast=json file`
-  prints the JSON, to diff a single file by hand.
+- `compiler.parse` also enforces what `parsers.rs` checks on the finished
+  tree (`parse/checks.pep`): `T*` only in `extern` declarations, and imports
+  before every declaration.
+- `compiler.link` (`link/`) is `pepper_sema::program` and
+  `pepper_sema::modules` in Pepper: `program.pep` loads a program
+  (`load_program`: runtime discovery, search paths, forced imports, then
+  the import walk in the same order); `files.pep` is `pepper_files::imports`
+  and `runtime` (module folders, namespaces, `resolve_local` and
+  `resolve_module`); `platform.pep` is `passes::platform::keep`;
+  `walk.pep` is `scope_walk.rs`, a `ScopeWalk` trait whose default methods
+  return each expression and statement rebuilt, since an enum's payload
+  cannot change in place; `link.pep` is `modules::link` (overrides, own
+  names, unions, the re-export fixpoint, bindings, members and the
+  rewriter). It does not read `pep.toml` projects yet: a program in one is
+  an error.
+- `pep-build --emit-linked` prints the linked program as JSON (see
+  `docs/src/tools/pep-build.md`), and `compiler/link_test.pep` requires
+  `compiler.link`'s JSON to match byte for byte on every program of the
+  `tests/` corpus, the documentation's programs of several modules, and
+  programs with linking errors. The JSON keeps the Rust structures' field
+  order, so where Rust iterates in a defined order the port does the same
+  (paths compare component by component, as `PathBuf` does).
+- `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file` and
+  `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`
+  print the same JSON as `pep-build`, to diff a program by hand.
 
 ---
 

@@ -133,6 +133,62 @@ export struct TypeName {
         return TypeName(AUTO_TYPE);
     }
 
+    ## Returns a deep copy, so linking can rename one without the other.
+    ##
+    ## @returns the copy
+    copy(): TypeName {
+        var out = TypeName(name, span);
+        for (var argument in generic_types) {
+            out.generic_types.append(argument.copy());
+        }
+        out.labels = labels.copy();
+        return out;
+    }
+
+    ## Returns the type as source writes it: `Box<int>`, `(int) => bool`,
+    ## `(x: int, y: int)`.
+    ##
+    ## @returns the text
+    to_string(): String {
+        bool function = name == FUNCTION_TYPE or name == SHARED_FUNCTION_TYPE or name == EXTERN_FUNCTION_TYPE;
+        if (function and generic_types.count > 0) {
+            var prefix = "";
+            if (name == SHARED_FUNCTION_TYPE) {
+                prefix = "shared ";
+            } else if (name == EXTERN_FUNCTION_TYPE) {
+                prefix = "extern ";
+            }
+            var parameters = Array<String>();
+            ulong i = 1;
+            while (i < generic_types.count) {
+                parameters.append(generic_types[i].to_string());
+                i += 1;
+            }
+            return $"{prefix}({", ".join(parameters)}) => {generic_types[0].to_string()}";
+        }
+        if (name == TUPLE_TYPE and generic_types.count > 0) {
+            var elements = Array<String>();
+            ulong i = 0;
+            while (i < generic_types.count) {
+                var element = generic_types[i].to_string();
+                if (i < labels.count and !labels[i].is_empty) {
+                    element = labels[i] + ": " + element;
+                }
+                elements.append(element);
+                i += 1;
+            }
+            return $"({", ".join(elements)})";
+        }
+        if (generic_types.count == 0) {
+            return name;
+        }
+        var arguments = Array<String>();
+        for (var argument in generic_types) {
+            arguments.append(argument.to_string());
+        }
+        return $"{name}<{", ".join(arguments)}>";
+    }
+
     ## Returns the type name as JSON.
     ##
     ## @returns the JSON object
@@ -144,6 +200,37 @@ export struct TypeName {
         out["labels"] = strings_json(labels);
         return out;
     }
+}
+
+## The attribute that declares a compiler built-in in the runtime
+## (`[__BuiltIn]`): the compiler ignores the declaration.
+export const BUILT_IN_ATTRIBUTE = "__BuiltIn";
+
+## Returns whether `attributes` mark a declaration `[__BuiltIn]`.
+##
+## @param attributes the declaration's attributes
+## @returns true when one of them is `[__BuiltIn]`
+export is_built_in(attributes: Attribute[]): bool {
+    for (var attribute in attributes) {
+        if (attribute.name() == BUILT_IN_ATTRIBUTE) {
+            return true;
+        }
+    }
+    return false;
+}
+
+## Returns whether `attributes` include one named `name`, bare or called.
+##
+## @param attributes the attributes
+## @param name the attribute's name
+## @returns true when one of them is named `name`
+export has_attribute(attributes: Attribute[], name: String): bool {
+    for (var attribute in attributes) {
+        if (attribute.name() == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ## One attribute, `[body]`.
@@ -1099,6 +1186,183 @@ export enum Declaration {
     ## @param block the block
     Static(block: StaticBlock),
 
+    ## Returns the attributes written before the declaration.
+    ##
+    ## @returns the attributes
+    attributes(): Attribute[] {
+        match (this) {
+            Variable(decl) => {
+                return decl.attributes;
+            }
+            Function(decl) => {
+                return decl.attributes;
+            }
+            Struct(decl) => {
+                return decl.attributes;
+            }
+            Trait(decl) => {
+                return decl.attributes;
+            }
+            Extend(decl) => {
+                return decl.attributes;
+            }
+            TypeAlias(decl) => {
+                return decl.attributes;
+            }
+            Static(block) => {
+                return block.attributes;
+            }
+        }
+        return Array<Attribute>();
+    }
+
+    ## Returns whether the declaration is marked `export`.
+    ##
+    ## @returns true when importers can use it
+    is_exported(): bool {
+        match (this) {
+            Variable(decl) => {
+                return decl.is_exported;
+            }
+            Function(decl) => {
+                return decl.is_exported;
+            }
+            Struct(decl) => {
+                return decl.is_exported;
+            }
+            Trait(decl) => {
+                return decl.is_exported;
+            }
+            Extend(decl) => {
+                return decl.is_exported;
+            }
+            TypeAlias(decl) => {
+                return decl.is_exported;
+            }
+            Static(block) => {
+                return block.is_exported;
+            }
+        }
+        return false;
+    }
+
+    ## Returns the declared name: an extension's target's name, and empty
+    ## for a `static` block.
+    ##
+    ## @returns the name
+    declared_name(): String {
+        match (this) {
+            Variable(decl) => {
+                return decl.name;
+            }
+            Function(decl) => {
+                return decl.name;
+            }
+            Struct(decl) => {
+                return decl.name;
+            }
+            Trait(decl) => {
+                return decl.name;
+            }
+            Extend(decl) => {
+                return decl.target.name;
+            }
+            TypeAlias(decl) => {
+                return decl.name;
+            }
+            Static(_) => {
+                return "";
+            }
+        }
+        return "";
+    }
+
+    ## Gives the declaration the name `name`; an extension or a `static`
+    ## block keeps what it has.
+    ##
+    ## @param name the new name
+    rename(name: String) {
+        match (this) {
+            Variable(decl) => {
+                decl.name = name;
+            }
+            Function(decl) => {
+                decl.name = name;
+            }
+            Struct(decl) => {
+                decl.name = name;
+            }
+            Trait(decl) => {
+                decl.name = name;
+            }
+            TypeAlias(decl) => {
+                decl.name = name;
+            }
+            else => {}
+        }
+    }
+
+    ## Returns the whole declaration's span.
+    ##
+    ## @returns the span
+    span(): Span {
+        match (this) {
+            Variable(decl) => {
+                return decl.span;
+            }
+            Function(decl) => {
+                return decl.span;
+            }
+            Struct(decl) => {
+                return decl.span;
+            }
+            Trait(decl) => {
+                return decl.span;
+            }
+            Extend(decl) => {
+                return decl.span;
+            }
+            TypeAlias(decl) => {
+                return decl.span;
+            }
+            Static(block) => {
+                return block.span;
+            }
+        }
+        return Span();
+    }
+
+    ## Returns where the declared name is written: an extension's target
+    ## type, a `static` block's keyword.
+    ##
+    ## @returns the span
+    name_span(): Span {
+        match (this) {
+            Variable(decl) => {
+                return decl.name_span;
+            }
+            Function(decl) => {
+                return decl.name_span;
+            }
+            Struct(decl) => {
+                return decl.name_span;
+            }
+            Trait(decl) => {
+                return decl.name_span;
+            }
+            Extend(decl) => {
+                return decl.target.span;
+            }
+            TypeAlias(decl) => {
+                return decl.name_span;
+            }
+            Static(block) => {
+                return block.keyword_span;
+            }
+        }
+        return Span();
+    }
+
     ## Returns the declaration as JSON, externally tagged like serde.
     ##
     ## @returns the JSON value
@@ -1283,6 +1547,45 @@ export struct Pattern {
 
     ## Creates a pattern.
     construct() {}
+
+    ## Returns whether this is a bare name: no literal, elements, enum,
+    ## values or constant.
+    ##
+    ## @returns true for a bare name
+    is_bare_name(): bool {
+        return literal.is_empty()
+            and elements.is_empty()
+            and qualifier.is_empty()
+            and bindings.is_empty()
+            and constant.is_empty();
+    }
+
+    ## Returns the names the pattern may bind, `_` left out: each bare name
+    ## inside a tuple pattern or a case's parentheses.
+    ##
+    ## @returns the names with where each is written
+    bound_names(): Label[] {
+        var out = Array<Label>();
+        _collect_names(false, out);
+        return out;
+    }
+
+    _collect_names(in_tuple: bool, out: Label[]) {
+        if (elements.is_value()) {
+            for (var element in elements.value()) {
+                element._collect_names(true, out);
+            }
+            return;
+        }
+        if (in_tuple and is_bare_name() and case_name != "_") {
+            out.append(Label(case_name, case_span));
+        }
+        if (bindings.is_value()) {
+            for (var binding in bindings.value()) {
+                binding._collect_names(true, out);
+            }
+        }
+    }
 
     ## Returns the pattern as JSON.
     ##
@@ -1508,6 +1811,13 @@ export struct ImportedSymbol {
     ## Creates an entry.
     construct() {}
 
+    ## Returns the name the symbol is bound to in the importing file.
+    ##
+    ## @returns the alias, else the name
+    local_name(): String {
+        return alias.is_value() ? alias.value() : name;
+    }
+
     ## Returns the entry as JSON.
     ##
     ## @returns the JSON object
@@ -1542,6 +1852,55 @@ export struct Import {
 
     ## Creates an import.
     construct() {}
+
+    ## Returns the name without a trailing `.pep`.
+    ##
+    ## @returns the stem
+    stem(): String {
+        return name.ends_with(".pep") ? name.substr_bytes(0, name.size - 4) : name;
+    }
+
+    ## Returns how diagnostics name the import's source: `"util.pep"`, or
+    ## `module 'm'`.
+    ##
+    ## @returns the description
+    describe(): String {
+        if (is_local) {
+            return $"\"{stem()}.pep\"";
+        }
+        return $"module '{name}'";
+    }
+
+    ## Returns how diagnostics name the source of a local import that
+    ## resolved to a module folder: `the module folder "vec"`.
+    ##
+    ## @param folder the import resolved to a module folder
+    ## @returns the description
+    describe_as(folder: bool): String {
+        if (is_local and folder) {
+            return $"the module folder \"{stem()}\"";
+        }
+        return describe();
+    }
+
+    ## Returns the qualifier the import binds (`m` in `m.sqrt`): the alias,
+    ## or a module import's last name part.
+    ##
+    ## @returns the qualifier, or none for an import list, a re-export or an
+    ##   unaliased local import
+    qualifier(): String? {
+        if (symbols.is_value() or reexport) {
+            return Optional<String>.Empty;
+        }
+        if (alias.is_value()) {
+            return alias;
+        }
+        if (is_local) {
+            return Optional<String>.Empty;
+        }
+        var parts = name.split(".");
+        return Optional<String>.Value(parts[parts.count - 1]);
+    }
 
     ## Returns the import as JSON.
     ##
@@ -1583,6 +1942,18 @@ export struct ExportAlias {
 
     ## Creates a re-export.
     construct() {}
+
+    ## Returns the name importers see: the alias, else the symbol's last
+    ## part.
+    ##
+    ## @returns the exported name
+    exported_name(): String {
+        if (alias.is_value()) {
+            return alias.value();
+        }
+        var parts = symbol.split(".");
+        return parts[parts.count - 1];
+    }
 
     ## Returns the re-export as JSON.
     ##

@@ -30,6 +30,7 @@ short, and `pepper help build` runs it.
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
 | `--emit-ast[=text\|json]` | Print the syntax tree instead of compiling | off |
+| `--emit-linked` | Print every file's syntax tree after linking, as JSON, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
@@ -238,6 +239,35 @@ name as its one key, and each span `{"start": ..., "end": ...}` in bytes.
 The compiler's parser written in Pepper (`tools/compiler`) prints the same
 JSON, and its test compares the two over every source file in the
 repository.
+
+### `--emit-linked`
+
+Loads the program as a build does (the entry file, every file its imports
+reach, and the runtime), links it, and prints it to standard output as one
+line of JSON instead of compiling. Nothing after linking is checked, so a
+program with type errors prints too; a file that cannot be read or parsed
+stops it, as it stops a build.
+
+The JSON is an object with three keys:
+
+- `files`: every file in load order (the entry file first), each with its
+  `name` as the program reached it, its `namespace`, its `module_root`
+  folder (or `null`), whether it is part of the `prelude` (the runtime and
+  `--import` files) or a `prelude_part` (another file of a forced module),
+  the index of the file each of its `imports` names (or `null` when one did
+  not resolve), which of them are `folder_imports` (a local import of a
+  module folder), and its `module`, the syntax tree as `--emit-ast=json`
+  prints it after linking renamed what the file imports and gave its
+  private declarations their program-wide names (`helper@io/file`).
+- `errors`: the linking errors, by file and position, each with its `file`
+  index, `span`, `message`, whether it is an `unresolved` import, and its
+  `note` (`[span, message]`, or `null`).
+- `overload_unions`: each overload set that spans files, by name, with its
+  functions grouped by module.
+
+`-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
+The compiler's linker written in Pepper (`tools/compiler`) prints the same
+JSON, and its test compares the two.
 
 ## Optimization and code generation
 

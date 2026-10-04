@@ -147,6 +147,11 @@ pub struct Options {
     #[arg(long = "emit-ast", value_name = "FORMAT", num_args = 0..=1, require_equals = true, default_missing_value = "text", value_parser = ["text", "json"])]
     pub emit_ast: Option<String>,
 
+    /// Load and link the program instead of compiling it, and print every
+    /// file's syntax tree after linking, with the linking errors, as JSON.
+    #[arg(long = "emit-linked")]
+    pub emit_linked: bool,
+
     /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
     /// each compile stage took; `passes` prints how long each sema pass
     /// took, summed over its runs; `cache` prints whether each unit's object

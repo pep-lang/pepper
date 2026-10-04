@@ -20,6 +20,17 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
     merge(&program).inspect_err(|_| crate::report_warnings(&program.render_warnings()))
 }
 
+/// [`load`] without the build cache's syntax trees: every file is parsed.
+pub(crate) fn load_uncached(options: &Options, entry_source: &Path) -> Result<Program, String> {
+    let forced_imports = options.effective_forced_imports();
+    let setup = Setup { import_dirs: &options.import_paths, forced_imports: &forced_imports, runtime: !options.no_runtime, ..Setup::default() };
+    let mut root = Root::from_file(entry_source)?;
+    if options.test {
+        crate::test_main::add_test_main(&mut root);
+    }
+    program::load_program(root, &setup)
+}
+
 /// Load and link the program rooted at `entry_source` with the options'
 /// search paths, forced imports and runtime.
 fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
