@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
+            window.path_to_searchindex_js = "../searchindex-213bd048.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -255,7 +255,9 @@ following RFC 3986: an absolute URI with any scheme (<code>https:</code>, <code>
 <code>file:</code>) or a relative reference such as a request target. It splits the
 text into <code>scheme</code>, <code>user_info</code>, <code>host</code>, <code>port</code>, <code>path</code>, <code>query</code> and
 <code>fragment</code>; the parts that can be missing are optionals. Components keep
-their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
+their percent-escapes, and <code>Uri.decode</code> turns one into text.
+<code>base.resolve(reference)</code> resolves a relative reference against a base URI,
+as a browser resolves a link (RFC 3986 section 5.2).</p>
 <pre><code class="language-pepper">main(): int {
     # Any scheme parses; the scheme is lowercased and nothing else changes.
     var uri = Uri.parse("HTTPS://user@example.com:8443/caf%C3%A9?page=2#top").value();
@@ -272,6 +274,11 @@ their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
     # A relative reference has no scheme, like a request target on a server.
     var target = Uri.parse("/items?page=2").value();
     assert(!target.is_absolute() &amp;&amp; target.path == "/items", "relative");
+
+    # resolve() turns a relative reference, such as a redirect's Location,
+    # into the URI it names.
+    var page = Uri.parse("https://example.com/docs/guide/intro").value();
+    assert(page.resolve(Uri.parse("../api?v=2").value()).to_string() == "https://example.com/docs/api?v=2", "resolved");
 
     assert(Uri.parse("http://example.com/a b").is_err(), "a space must be percent-encoded");
     return 0;
@@ -293,8 +300,15 @@ fields and leaves the body to read as a stream (see
 was no response: the URL is not <code>http://</code> or <code>https://</code>
 (<code>is_invalid_input()</code>), the connection or TLS handshake failed, or the
 response was not valid HTTP.</li>
-<li>Redirects are returned, not followed, and every request uses a new
-connection.</li>
+<li>Redirects (301, 302, 303, 307, 308) are followed, up to
+<code>max_redirects</code> (10) per request, and <code>response.url</code> is where the
+response came from. A 303, and a 301 or 302 after a <code>POST</code>, becomes a
+<code>GET</code> without the body; a 307 or 308 repeats the method and body, except
+that a body from <code>set_reader</code> cannot be sent twice, so that redirect is
+returned. Leaving the origin drops <code>Authorization</code>,
+<code>Proxy-Authorization</code> and <code>Cookie</code>. <code>Client(0)</code> returns every redirect
+as it is.</li>
+<li>Every request uses a new connection.</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -380,8 +394,7 @@ main(): int {
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2, connection reuse in the client, and following redirects are not
-supported yet.</li>
+<li>HTTP/2 and connection reuse in the client are not supported yet.</li>
 </ul>
 <p>The reference pages for <a href="../reference/http-message.html">messages</a>, the
 <a href="../reference/http-client.html">client</a>, the

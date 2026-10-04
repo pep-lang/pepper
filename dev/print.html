@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-4ac7e22c.js";
+            window.path_to_searchindex_js = "searchindex-213bd048.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -15346,7 +15346,9 @@ following RFC 3986: an absolute URI with any scheme (<code>https:</code>, <code>
 <code>file:</code>) or a relative reference such as a request target. It splits the
 text into <code>scheme</code>, <code>user_info</code>, <code>host</code>, <code>port</code>, <code>path</code>, <code>query</code> and
 <code>fragment</code>; the parts that can be missing are optionals. Components keep
-their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
+their percent-escapes, and <code>Uri.decode</code> turns one into text.
+<code>base.resolve(reference)</code> resolves a relative reference against a base URI,
+as a browser resolves a link (RFC 3986 section 5.2).</p>
 <pre><code class="language-pepper">main(): int {
     # Any scheme parses; the scheme is lowercased and nothing else changes.
     var uri = Uri.parse("HTTPS://user@example.com:8443/caf%C3%A9?page=2#top").value();
@@ -15363,6 +15365,11 @@ their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
     # A relative reference has no scheme, like a request target on a server.
     var target = Uri.parse("/items?page=2").value();
     assert(!target.is_absolute() &amp;&amp; target.path == "/items", "relative");
+
+    # resolve() turns a relative reference, such as a redirect's Location,
+    # into the URI it names.
+    var page = Uri.parse("https://example.com/docs/guide/intro").value();
+    assert(page.resolve(Uri.parse("../api?v=2").value()).to_string() == "https://example.com/docs/api?v=2", "resolved");
 
     assert(Uri.parse("http://example.com/a b").is_err(), "a space must be percent-encoded");
     return 0;
@@ -15384,8 +15391,15 @@ fields and leaves the body to read as a stream (see
 was no response: the URL is not <code>http://</code> or <code>https://</code>
 (<code>is_invalid_input()</code>), the connection or TLS handshake failed, or the
 response was not valid HTTP.</li>
-<li>Redirects are returned, not followed, and every request uses a new
-connection.</li>
+<li>Redirects (301, 302, 303, 307, 308) are followed, up to
+<code>max_redirects</code> (10) per request, and <code>response.url</code> is where the
+response came from. A 303, and a 301 or 302 after a <code>POST</code>, becomes a
+<code>GET</code> without the body; a 307 or 308 repeats the method and body, except
+that a body from <code>set_reader</code> cannot be sent twice, so that redirect is
+returned. Leaving the origin drops <code>Authorization</code>,
+<code>Proxy-Authorization</code> and <code>Cookie</code>. <code>Client(0)</code> returns every redirect
+as it is.</li>
+<li>Every request uses a new connection.</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -15471,8 +15485,7 @@ main(): int {
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2, connection reuse in the client, and following redirects are not
-supported yet.</li>
+<li>HTTP/2 and connection reuse in the client are not supported yet.</li>
 </ul>
 <p>The reference pages for <a href="#requests-and-responses">messages</a>, the
 <a href="#client-1">client</a>, the
@@ -32050,6 +32063,30 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
+<h4 id="resolve"><a class="header" href="#resolve">resolve</a></h4>
+<pre><code class="language-pepper">resolve(reference: Uri): Uri
+</code></pre>
+<p>Resolves <code>reference</code> against this URI, its base, as RFC 3986
+(section 5.2) describes and as a browser resolves a link on a page:
+an absolute <code>reference</code> stands as it is, <code>//host/path</code> keeps only the
+base’s scheme, <code>/path</code> keeps its authority too, and a relative path
+replaces the base’s last segment. <code>.</code> and <code>..</code> segments are removed.
+The fragment is always the reference’s.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>reference</code> — the reference to resolve, such as an HTTP <code>Location</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the resolved URI</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var base = Uri.parse("https://example.com/docs/guide/intro?x=1").value();
+assert(base.resolve(Uri.parse("next").value()).to_string() == "https://example.com/docs/guide/next", "a sibling");
+assert(base.resolve(Uri.parse("../api").value()).to_string() == "https://example.com/docs/api", "up one");
+assert(base.resolve(Uri.parse("/").value()).to_string() == "https://example.com/", "the root");
+assert(base.resolve(Uri.parse("?y=2").value()).to_string() == "https://example.com/docs/guide/intro?y=2", "a new query");
+</code></pre>
 <h4 id="to_string-23"><a class="header" href="#to_string-23">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -35419,7 +35456,7 @@ same port.</p>
 <ul>
 <li>true when the address or the port differs</li>
 </ul>
-<h2 id="resolve"><a class="header" href="#resolve">resolve</a></h2>
+<h2 id="resolve-1"><a class="header" href="#resolve-1">resolve</a></h2>
 <pre><code class="language-pepper">resolve(host: String, port: u16): IoResult&lt;SocketAddress[]&gt;
 </code></pre>
 <p>Looks up the socket addresses of a host, with <code>port</code> attached to each.</p>
@@ -47467,6 +47504,11 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
+<h4 id="url-1"><a class="header" href="#url-1">url</a></h4>
+<pre><code class="language-pepper">var url: String
+</code></pre>
+<p>For a response a <code>Client</code> returns, the URL it came from: the
+request’s, or after redirects the last one’s. Empty otherwise.</p>
 <h3 id="constructor-2-16"><a class="header" href="#constructor-2-16">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
@@ -47588,8 +47630,15 @@ returns the <code>Response</code>.</p>
 <p>Each request opens a new connection (plain TCP for <code>http://</code>, TLS for
 <code>https://</code>), sends the request with <code>Connection: close</code>, and reads the
 response: <code>send</code> reads the whole body into memory, and <code>open</code> returns
-once the header fields arrive, with the body to read as a stream.
-Redirects are returned as they are, not followed.</p>
+once the header fields arrive, with the body to read as a stream.</p>
+<p>Redirects (301, 302, 303, 307 and 308 with a <code>Location</code>) are followed,
+up to <code>max_redirects</code> of them, as RFC 9110 describes: 303, and 301 or
+302 after a <code>POST</code>, become a <code>GET</code> without the body; 307 and 308 repeat
+the method and body. A request whose body comes from
+<code>Request.set_reader</code> cannot be repeated, so its 307 or 308 is returned
+as it is. When a redirect leaves the origin (scheme, host and port),
+<code>Authorization</code>, <code>Proxy-Authorization</code> and <code>Cookie</code> are dropped. Make a
+client with <code>max_redirects</code> 0 to get every redirect back as it is.</p>
 <p>A client is <code>[Shared]</code>: make one and use it from every thread and task.
 In a task, a request parks only the task while it waits.</p>
 <p><strong>Example</strong></p>
@@ -47603,21 +47652,31 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h3 id="fields-30"><a class="header" href="#fields-30">Fields</a></h3>
+<h4 id="max_redirects"><a class="header" href="#max_redirects">max_redirects</a></h4>
+<pre><code class="language-pepper">const max_redirects: int
+</code></pre>
+<p>The most redirects one request follows; 0 follows none.</p>
 <h3 id="constructors-8"><a class="header" href="#constructors-8">Constructors</a></h3>
 <h4 id="client-2"><a class="header" href="#client-2">Client()</a></h4>
-<pre><code class="language-pepper">construct()
+<pre><code class="language-pepper">construct(max_redirects: int = 10)
 </code></pre>
 <p>Creates a client that trusts the system’s root certificates for
 <code>https://</code> URLs. Where TLS is not available (Linux or macOS without
 OpenSSL 3), <code>http://</code> URLs still work and <code>https://</code> ones fail.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
+</ul>
 <h4 id="client-3"><a class="header" href="#client-3">Client()</a></h4>
-<pre><code class="language-pepper">construct(connector: tls.TlsConnector)
+<pre><code class="language-pepper">construct(connector: tls.TlsConnector, max_redirects: int = 10)
 </code></pre>
 <p>Creates a client whose <code>https://</code> connections use <code>connector</code>, for
 instance one that trusts a private certificate authority.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
+<li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
 </ul>
 <h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
 <h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
@@ -47661,7 +47720,7 @@ replacing any the request has.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the response, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x or its body is larger than <code>MAX_RESPONSE_BODY</code></li>
+<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
 </ul>
 <h4 id="open-3"><a class="header" href="#open-3">open</a></h4>
 <pre><code class="language-pepper">open(request: Request): io.IoResult&lt;Response&gt;
@@ -47673,7 +47732,7 @@ with no limit on its size. Use it for a large download, writing each
 chunk to a file or through a <code>compress.DecompressReader</code>.</p>
 <p>The connection closes when the body has been read to its end, when
 the <code>BodyReader</code> is closed, or when the last reference to it goes.
-The request goes out as for <code>send</code>.</p>
+The request goes out, and redirects are followed, as for <code>send</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>request</code> — the request; its <code>url</code> must be absolute</li>
@@ -48324,7 +48383,7 @@ writes_a_file() {
     expect_equal(io.File.read_to_string(path).value(), "hello");
 }
 </code></pre>
-<h3 id="fields-30"><a class="header" href="#fields-30">Fields</a></h3>
+<h3 id="fields-31"><a class="header" href="#fields-31">Fields</a></h3>
 <h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
 <pre><code class="language-pepper">const path: io.Path
 </code></pre>

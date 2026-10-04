@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
+            window.path_to_searchindex_js = "../searchindex-213bd048.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -197,8 +197,15 @@ returns the <code>Response</code>.</p>
 <p>Each request opens a new connection (plain TCP for <code>http://</code>, TLS for
 <code>https://</code>), sends the request with <code>Connection: close</code>, and reads the
 response: <code>send</code> reads the whole body into memory, and <code>open</code> returns
-once the header fields arrive, with the body to read as a stream.
-Redirects are returned as they are, not followed.</p>
+once the header fields arrive, with the body to read as a stream.</p>
+<p>Redirects (301, 302, 303, 307 and 308 with a <code>Location</code>) are followed,
+up to <code>max_redirects</code> of them, as RFC 9110 describes: 303, and 301 or
+302 after a <code>POST</code>, become a <code>GET</code> without the body; 307 and 308 repeat
+the method and body. A request whose body comes from
+<code>Request.set_reader</code> cannot be repeated, so its 307 or 308 is returned
+as it is. When a redirect leaves the origin (scheme, host and port),
+<code>Authorization</code>, <code>Proxy-Authorization</code> and <code>Cookie</code> are dropped. Make a
+client with <code>max_redirects</code> 0 to get every redirect back as it is.</p>
 <p>A client is <code>[Shared]</code>: make one and use it from every thread and task.
 In a task, a request parks only the task while it waits.</p>
 <p><strong>Example</strong></p>
@@ -212,21 +219,31 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="max_redirects"><a class="header" href="#max_redirects">max_redirects</a></h4>
+<pre><code class="language-pepper">const max_redirects: int
+</code></pre>
+<p>The most redirects one request follows; 0 follows none.</p>
 <h3 id="constructors"><a class="header" href="#constructors">Constructors</a></h3>
 <h4 id="client-2"><a class="header" href="#client-2">Client()</a></h4>
-<pre><code class="language-pepper">construct()
+<pre><code class="language-pepper">construct(max_redirects: int = 10)
 </code></pre>
 <p>Creates a client that trusts the system’s root certificates for
 <code>https://</code> URLs. Where TLS is not available (Linux or macOS without
 OpenSSL 3), <code>http://</code> URLs still work and <code>https://</code> ones fail.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
+</ul>
 <h4 id="client-3"><a class="header" href="#client-3">Client()</a></h4>
-<pre><code class="language-pepper">construct(connector: tls.TlsConnector)
+<pre><code class="language-pepper">construct(connector: tls.TlsConnector, max_redirects: int = 10)
 </code></pre>
 <p>Creates a client whose <code>https://</code> connections use <code>connector</code>, for
 instance one that trusts a private certificate authority.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
+<li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
@@ -270,7 +287,7 @@ replacing any the request has.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the response, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x or its body is larger than <code>MAX_RESPONSE_BODY</code></li>
+<li>the response after any redirects, whatever its status; an error with <code>is_invalid_input()</code> for a URL that is not <code>http://</code> or <code>https://</code>, the errors of <code>io.TcpStream.connect_host</code> and <code>tls.TlsConnector.connect</code>, or an error when the response is not valid HTTP/1.x, its body is larger than <code>MAX_RESPONSE_BODY</code>, or there are more than <code>max_redirects</code> redirects</li>
 </ul>
 <h4 id="open"><a class="header" href="#open">open</a></h4>
 <pre><code class="language-pepper">open(request: Request): io.IoResult&lt;Response&gt;
@@ -282,7 +299,7 @@ with no limit on its size. Use it for a large download, writing each
 chunk to a file or through a <code>compress.DecompressReader</code>.</p>
 <p>The connection closes when the body has been read to its end, when
 the <code>BodyReader</code> is closed, or when the last reference to it goes.
-The request goes out as for <code>send</code>.</p>
+The request goes out, and redirects are followed, as for <code>send</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>request</code> — the request; its <code>url</code> must be absolute</li>

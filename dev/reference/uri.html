@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
+            window.path_to_searchindex_js = "../searchindex-213bd048.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -315,6 +315,30 @@ one. The fragment is left out.</p>
 <ul>
 <li>the path and query, such as <code>/items?page=2</code></li>
 </ul>
+<h4 id="resolve"><a class="header" href="#resolve">resolve</a></h4>
+<pre><code class="language-pepper">resolve(reference: Uri): Uri
+</code></pre>
+<p>Resolves <code>reference</code> against this URI, its base, as RFC 3986
+(section 5.2) describes and as a browser resolves a link on a page:
+an absolute <code>reference</code> stands as it is, <code>//host/path</code> keeps only the
+base’s scheme, <code>/path</code> keeps its authority too, and a relative path
+replaces the base’s last segment. <code>.</code> and <code>..</code> segments are removed.
+The fragment is always the reference’s.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>reference</code> — the reference to resolve, such as an HTTP <code>Location</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the resolved URI</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var base = Uri.parse("https://example.com/docs/guide/intro?x=1").value();
+assert(base.resolve(Uri.parse("next").value()).to_string() == "https://example.com/docs/guide/next", "a sibling");
+assert(base.resolve(Uri.parse("../api").value()).to_string() == "https://example.com/docs/api", "up one");
+assert(base.resolve(Uri.parse("/").value()).to_string() == "https://example.com/", "the root");
+assert(base.resolve(Uri.parse("?y=2").value()).to_string() == "https://example.com/docs/guide/intro?y=2", "a new query");
+</code></pre>
 <h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>

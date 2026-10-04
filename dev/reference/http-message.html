@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
+            window.path_to_searchindex_js = "../searchindex-213bd048.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -472,6 +472,11 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
+<h4 id="url-1"><a class="header" href="#url-1">url</a></h4>
+<pre><code class="language-pepper">var url: String
+</code></pre>
+<p>For a response a <code>Client</code> returns, the URL it came from: the
+request’s, or after redirects the last one’s. Empty otherwise.</p>
 <h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
