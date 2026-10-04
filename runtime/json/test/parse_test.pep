@@ -182,8 +182,10 @@ nests_deeply_without_recursion() {
     expect_equal(json.parse(pretty).value().to_string(), text);
     var deeper = json.parse("[".repeat(depth + 1) + "]".repeat(depth + 1));
     expect_equal(deeper.error().to_string(), "1:1001: error: arrays and objects nest more than 1000 deep");
-    var objects = "{\"a\":".repeat(3000) + "1" + "}".repeat(3000);
-    expect_equal(json.parse(objects, max_depth = 3000).value().to_string(), objects);
+    # Releasing a value still recurses through its nested values, so a depth
+    # past the default stays modest: Windows gives the main thread 1 MB.
+    var objects = "{\"a\":".repeat(1200) + "1" + "}".repeat(1200);
+    expect_equal(json.parse(objects, max_depth = 1200).value().to_string(), objects);
     # An unclosed run far past the limit stops at the limit.
     expect_false(json.parse("[".repeat(100000)).is_ok());
 }

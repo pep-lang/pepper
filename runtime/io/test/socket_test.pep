@@ -299,7 +299,10 @@ tcp_between_threads() {
 
 [Test]
 unix_socket_listener_and_stream() {
-    var folder = TempFolder("unix_socket_listener_and_stream");
+    # A short folder name: a socket path must fit sockaddr_un (104 bytes on
+    # macOS, 108 elsewhere), and the temporary folder's own path is long on
+    # macOS and Windows.
+    var folder = TempFolder("unix");
     var path = folder.path.join("s.sock");
     var listener = io.UnixListener.bind(path).value();
     expect_equal(listener.path().to_string(), path.to_string());

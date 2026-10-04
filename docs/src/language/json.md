@@ -86,7 +86,9 @@ RFC 8259:
 
 The parser keeps its own stack rather than recursing, so deep nesting in the
 text cannot overflow the call stack. `max_depth` still bounds it, because
-releasing a value releases its nested values recursively.
+releasing a value releases its nested values recursively. Raise it with
+care: Windows gives a program's main thread a 1 MB stack, which a few
+thousand levels of nested objects can use up when the value is released.
 
 ### Errors
 
