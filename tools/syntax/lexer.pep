@@ -213,7 +213,15 @@ interpolation_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
 ##   start a token
 export lex(source: String): Result<Token[], SyntaxError> {
     var tokens = Array<Token>();
-    var table = punctuation_table();
+    # The punctuation by first byte, longest first, so each token tries
+    # only the entries that can match.
+    var by_first = Array<String[]>();
+    while (by_first.count < 128) {
+        by_first.append(Array<String>());
+    }
+    for (var p in punctuation_table()) {
+        by_first[p.byte_at(0) as ulong].append(p);
+    }
     var data = source.c_str();
     ulong size = source.size;
     ulong i = 0;
@@ -352,11 +360,13 @@ export lex(source: String): Result<Token[], SyntaxError> {
             }
         } else {
             bool found = false;
-            for (var p in table) {
-                if (matches_at(data, size, i, p)) {
-                    i += p.size;
-                    found = true;
-                    break;
+            if (c >= 0 and c < 128) {
+                for (var p in by_first[c as ulong]) {
+                    if (matches_at(data, size, i, p)) {
+                        i += p.size;
+                        found = true;
+                        break;
+                    }
                 }
             }
             if (!found) {

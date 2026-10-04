@@ -113,10 +113,10 @@ struct Lowerer {
     # Added to every token offset: the offset in the file of the text being
     # lowered, which is not 0 inside an interpolated string's braces.
     var base: ulong;
-    # The offset of the token after each token, by token offset: where a
+    # Every token's offset, in order: the token after a token is where a
     # declaration that the Rust parser ends after the whitespace following
     # it ends.
-    var next_offset: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
+    var token_offsets: ulong[] = Array<ulong>();
     var error: ParseError?;
     var build_option_tests: Attribute[] = Array<Attribute>();
     var warnings: SyntaxWarning[] = Array<SyntaxWarning>();
@@ -163,9 +163,20 @@ struct Lowerer {
     # the Rust parser takes after skipping the whitespace that follows.
     after(node: Node): ulong {
         var last = node.last_token();
-        var found = next_offset.try_get(base + last.offset);
-        if (found.is_value()) {
-            return found.value();
+        var offset = base + last.offset;
+        # A binary search for the token at `offset`.
+        ulong low = 0;
+        ulong high = token_offsets.count;
+        while (low < high) {
+            var middle = low + (high - low) / 2;
+            if (token_offsets[middle] < offset) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        if (low + 1 < token_offsets.count and token_offsets[low] == offset) {
+            return token_offsets[low + 1];
         }
         return end(node);
     }
@@ -173,10 +184,9 @@ struct Lowerer {
     record_tokens(root: Node) {
         var tokens = Array<Token>();
         collect_tokens(root, tokens);
-        ulong i = 0;
-        while (i + 1 < tokens.count) {
-            next_offset[tokens[i].offset] = tokens[i + 1].offset;
-            i += 1;
+        token_offsets = Array<ulong>(tokens.count);
+        for (var token in tokens) {
+            token_offsets.append(token.offset);
         }
     }
 
@@ -2107,11 +2117,11 @@ struct Lowerer {
             if (parsed.is_ok()) {
                 var outer_base = base;
                 base = at + open + 1;
-                var saved = next_offset;
-                next_offset = HashMap<ulong, ulong>();
+                var saved = token_offsets;
+                token_offsets = Array<ulong>();
                 var value = expression(parsed.value());
                 base = outer_base;
-                next_offset = saved;
+                token_offsets = saved;
                 if (cut == inner.size) {
                     return interpolation_call(value, braces, Optional<FormatSpec>.Empty);
                 }

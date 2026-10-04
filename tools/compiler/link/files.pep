@@ -32,6 +32,25 @@ export dir_of(path: Path): Path {
     return parent.value();
 }
 
+## Returns `path` resolved as Rust's `std::fs::canonicalize` resolves it,
+## so file names match the Rust compiler's byte for byte: on Windows the
+## result keeps the verbatim prefix (`\\?\C:\x`, `\\?\UNC\server\share`)
+## that `Path.canonicalize` removes.
+##
+## @param path the path
+## @returns the canonical path, or why it cannot be resolved
+export canonical_path(path: Path): io.IoResult<Path> {
+    var resolved = path.canonicalize();
+    if (resolved.is_err() or os.system_os() != os.OperatingSystem.Windows) {
+        return resolved;
+    }
+    var text = resolved.value().to_string();
+    if (text.starts_with("\\\\")) {
+        return io.IoResult<Path>.ok(Path("\\\\?\\UNC\\" + text.substr_bytes(2, text.size - 2)));
+    }
+    return io.IoResult<Path>.ok(Path("\\\\?\\" + text));
+}
+
 ## Returns `path` made canonical. A file not on disk is normalized through
 ## its folder, so it compares equal to the canonical paths of real files
 ## next to it.
@@ -39,11 +58,11 @@ export dir_of(path: Path): Path {
 ## @param path the path
 ## @returns the normalized path
 export normalized(path: Path): Path {
-    var canonical = path.canonicalize();
-    if (canonical.is_ok()) {
-        return canonical.value();
+    var resolved = canonical_path(path);
+    if (resolved.is_ok()) {
+        return resolved.value();
     }
-    var dir = dir_of(path).canonicalize();
+    var dir = canonical_path(dir_of(path));
     var name = path.file_name();
     if (dir.is_ok() and name.is_value()) {
         return dir.value().join(name.value());
@@ -249,8 +268,8 @@ export struct Runtime {
         var out = Runtime();
         var seen = HashSet<String>();
         for (var candidate in candidates) {
-            var canonical = candidate.canonicalize();
-            var dir = canonical.is_ok() ? canonical.value() : candidate;
+            var resolved = canonical_path(candidate);
+            var dir = resolved.is_ok() ? resolved.value() : candidate;
             if (!dir.is_directory()) {
                 continue;
             }
@@ -309,8 +328,8 @@ export struct ModuleRoots {
     ## @param project the project directory, if any
     construct(project: Path?) {
         if (project.is_value()) {
-            var canonical = project.value().canonicalize();
-            _project = Optional<Path>.Value(canonical.is_ok() ? canonical.value() : project.value());
+            var resolved = canonical_path(project.value());
+            _project = Optional<Path>.Value(resolved.is_ok() ? resolved.value() : project.value());
         }
     }
 
