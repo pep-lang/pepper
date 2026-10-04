@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1f5486a7.js";
+            window.path_to_searchindex_js = "searchindex-93811922.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -8119,9 +8119,11 @@ reference is gone.</li>
 </ul>
 <p>In C++ terms, a struct value is a <code>std::shared_ptr&lt;T&gt;</code> and <code>Weak&lt;T&gt;</code> wraps
 the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>: <code>Weak&lt;T&gt;(object)</code> is
-<code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. A weak reference
-made while an object is still inside its constructor cannot be upgraded until
-the constructor returns, as with <code>weak_from_this()</code> in C++.</p>
+<code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. Inside a
+constructor, <code>this</code> already holds the object’s first reference, like the
+<code>shared_ptr</code> that <code>make_shared</code> fills in: a constructor may pass <code>this</code> to a
+function or store it, and a weak reference made from it upgrades, without
+the object being destroyed when those copies are dropped.</p>
 <h2 id="references-and-threads"><a class="header" href="#references-and-threads">References and threads</a></h2>
 <p>Reference counts are plain, fast increments, so a struct’s objects must stay
 on one thread. A struct declared <code>[Shared]</code> has atomic counts instead, and
