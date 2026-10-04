@@ -194,7 +194,7 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
             reader._connection._write_all(go_on);
         }
     }
-    var body = _http_read_body(reader, request.headers, request._body, false, MAX_REQUEST_BODY);
+    var body = _http_read_body(reader, request.headers, request._body, MAX_REQUEST_BODY);
     if (body.is_err()) {
         if (body.error().code == _http_code_too_large()) {
             _http_refuse(reader, 413);
@@ -204,8 +204,8 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         return false;
     }
     var response = handler(request);
-    _http_send_response(reader._connection, response, method == "HEAD", keep);
-    return keep;
+    var sent = _http_send_response(reader._connection, response, method == "HEAD", keep, version == "HTTP/1.1");
+    return keep && sent;
 }
 
 # The position of the last space in `line`, or -1.
@@ -223,10 +223,13 @@ _http_last_space(line: String): long {
 
 # Answers a request the server will not serve, and closes.
 _http_refuse(reader: _HttpReader, status: int) {
-    _http_send_response(reader._connection, Response(status), false, false);
+    _http_send_response(reader._connection, Response(status), false, false, true);
 }
 
-_http_send_response(connection: _HttpConnection, response: Response, head: bool, keep: bool) {
+# Writes `response`; whether the connection can serve another request. A
+# streamed body of unknown length goes chunked when `chunked` (HTTP/1.1),
+# and otherwise unframed, ending the connection.
+_http_send_response(connection: _HttpConnection, response: Response, head: bool, keep: bool, chunked: bool): bool {
     var headers = Headers();
     for (var name in response.headers.names()) {
         match (name) {
@@ -240,7 +243,16 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
     }
     var status = response.status;
     var bodiless = status < 200 || status == 204 || status == 304;
-    if (!bodiless) {
+    var streamed = response._streamed && !bodiless;
+    if (streamed) {
+        if (response._length >= 0) {
+            headers.add("Content-Length", to_string(response._length));
+        } else if (chunked) {
+            headers.add("Transfer-Encoding", "chunked");
+        } else {
+            keep = false;  # the end of the connection ends the body
+        }
+    } else if (!bodiless) {
         headers.add("Content-Length", to_string(response._body.count));
     }
     if (!keep) {
@@ -252,10 +264,18 @@ _http_send_response(connection: _HttpConnection, response: Response, head: bool,
     }
     var out = Array<u8>();
     _http_write_head(out, $"HTTP/1.1 {status} {reason}", headers);
-    if (!head && !bodiless) {
+    if (!head && !bodiless && !streamed) {
         out.append_all(response._body);
     }
-    connection._write_all(out);
+    if (connection._write_all(out).is_err()) {
+        return false;
+    }
+    if (streamed && !head) {
+        if (_http_write_stream(connection, response._source, response._length, chunked).is_err()) {
+            return false;
+        }
+    }
+    return keep;
 }
 
 ## Returns the standard reason phrase for an HTTP status code.

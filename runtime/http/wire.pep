@@ -1,6 +1,6 @@
 # HTTP/1.1 on the wire, shared by the client and the server: a connection
 # that reads and writes a TcpStream or a TlsStream, a buffered reader over it, header and
-# body parsing (Content-Length, chunked, to the end), and writing a message
+# body parsing (Content-Length, chunked), and writing a message
 # head.
 
 import io;
@@ -190,26 +190,23 @@ struct _HttpReader {
         return io.IoResult<void>.ok();
     }
 
-    # Appends everything until the stream ends, up to `limit` bytes.
-    _to_end(into: u8[], limit: ulong): io.IoResult<void> {
-        while (true) {
-            var take = this._available();
-            if (take > 0) {
-                if (into.count + take > limit) {
-                    return io.IoResult<void>.err(_http_too_large("the body is too large"));
-                }
-                into._append_raw(this._buffer._data + this._start, take);
-                this._start = this._start + take;
+    # Appends up to `max` bytes to `into`: what is buffered, or else what
+    # one read of the connection gives. 0 at the end of the stream.
+    _some(into: u8[], max: ulong): io.IoResult<ulong> {
+        var take = this._available();
+        if (take == 0) {
+            if (this._start > 0) {
+                this._buffer.clear();
+                this._start = 0;
             }
-            var got = this._fill();
-            if (got.is_err()) {
-                return io.IoResult<void>.err(got.error());
-            }
-            if (got.value() == 0) {
-                return io.IoResult<void>.ok();
-            }
+            return this._connection._read(into, max);
         }
-        return io.IoResult<void>.ok();
+        if (take > max) {
+            take = max;
+        }
+        into._append_raw(this._buffer._data + this._start, take);
+        this._start = this._start + take;
+        return io.IoResult<ulong>.ok(take);
     }
 }
 
@@ -240,9 +237,9 @@ _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<void> {
     return io.IoResult<void>.ok();
 }
 
-# Reads a body framed by `headers` into `into`: chunked, Content-Length, or
-# (when `to_end`) everything until the connection closes; nothing otherwise.
-_http_read_body(reader: _HttpReader, headers: Headers, into: u8[], to_end: bool, limit: ulong): io.IoResult<void> {
+# Reads a request body framed by `headers` into `into`: chunked or
+# Content-Length; nothing otherwise.
+_http_read_body(reader: _HttpReader, headers: Headers, into: u8[], limit: ulong): io.IoResult<void> {
     var encoding = headers.get("Transfer-Encoding");
     if (encoding.is_value()) {
         if (_http_contains_token(encoding.value(), "chunked")) {
@@ -259,9 +256,6 @@ _http_read_body(reader: _HttpReader, headers: Headers, into: u8[], to_end: bool,
             return io.IoResult<void>.err(_http_too_large("the body is too large"));
         }
         return reader._bytes(into, n as ulong);
-    }
-    if (to_end) {
-        return reader._to_end(into, limit);
     }
     return io.IoResult<void>.ok();
 }
@@ -297,6 +291,59 @@ _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoResult<v
         if (end.is_err()) {
             return io.IoResult<void>.err(end.error());
         }
+    }
+    return io.IoResult<void>.ok();
+}
+
+# Writes the body `source` gives to `connection`: exactly `length` bytes, or
+# when `length` is -1 everything to its end, as chunks when `chunked` and
+# unframed otherwise.
+_http_write_stream(connection: _HttpConnection, source: io.Reader, length: long, chunked: bool): io.IoResult<void> {
+    ulong left = 0;
+    if (length >= 0) {
+        left = length as ulong;
+    }
+    var data = Array<u8>(65536);
+    while (length < 0 || left > 0) {
+        data.clear();
+        var want: ulong = 65536;
+        if (length >= 0 && left < want) {
+            want = left;
+        }
+        var read = source.read(data, want);
+        if (read.is_err()) {
+            return io.IoResult<void>.err(read.error());
+        }
+        var got = read.value();
+        if (got == 0) {
+            if (length >= 0) {
+                return io.IoResult<void>.err(_http_error("the body ended before its Content-Length"));
+            }
+            break;
+        }
+        if (length >= 0) {
+            left = left - got;
+        }
+        if (length < 0 && chunked) {
+            var framed = Array<u8>(got + 16);
+            _http_append(framed, $"{got:x}\r\n");
+            framed.append_all(data);
+            _http_append(framed, "\r\n");
+            var sent = connection._write_all(framed);
+            if (sent.is_err()) {
+                return sent;
+            }
+        } else {
+            var sent = connection._write_all(data);
+            if (sent.is_err()) {
+                return sent;
+            }
+        }
+    }
+    if (length < 0 && chunked) {
+        var end = Array<u8>();
+        _http_append(end, "0\r\n\r\n");
+        return connection._write_all(end);
     }
     return io.IoResult<void>.ok();
 }

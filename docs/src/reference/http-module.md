@@ -7,10 +7,11 @@ HTTP/1.1 clients and servers, over TCP or TLS.
 Bring it in with `import http`. A `Client` sends a `Request` to an
 `http://` or `https://` URL and returns the `Response`; a `Server`
 accepts connections on every worker of `async.run` and answers each
-request with a handler function. Bodies are read into memory in full.
+request with a handler function. Bodies are read into memory, or
+streamed through an `io.Reader` (`Client.open`, `set_reader`).
 
 - [Messages](http-message.md): `Headers`, `Request`, and `Response`
-- [Client](http-client.md): `Client`
+- [Client](http-client.md): `Client` and `BodyReader`
 - [Server](http-server.md): `Server` and `reason_phrase`
 
 **Example**

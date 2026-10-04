@@ -212,8 +212,8 @@ server handler, the request target (`/path?query`).
 var headers: Headers
 ```
 
-The header fields. A client adds `Host`, `Content-Length` and
-`Connection` itself.
+The header fields. A client adds `Host`, `Content-Length` (or
+`Transfer-Encoding`) and `Connection` itself.
 
 ### Constructor
 
@@ -259,6 +259,34 @@ Sets the body to `data`, which may be any bytes (see `body`).
 **Returns**
 - this request
 
+#### set_reader
+
+```pepper
+set_reader(source: io.Reader, length: long = -1): Request
+```
+
+Sets the body to the bytes `source` gives, read as the request is sent
+rather than held in memory: a large file, or the output of a
+`compress.CompressReader`. With a `length` the client sends
+`Content-Length`; without one it sends the body chunked
+(`Transfer-Encoding: chunked`), which every HTTP/1.1 server accepts.
+
+The source is read once, so a client cannot send the request again
+(to follow a redirect, for instance).
+
+**Parameters**
+- `source` — the stream the body is read from, to its end
+- `length` — the number of bytes `source` gives, or -1 when it is not known
+
+**Returns**
+- this request
+
+**Example**
+```pepper
+var file = io.File.open(io.Path("upload.bin")).value();
+var request = http.Request("PUT", "http://localhost:8080/files/upload.bin").set_reader(file);
+```
+
 #### uri
 
 ```pepper
@@ -303,7 +331,8 @@ body(): u8[]
 ```
 
 Returns the body's bytes, as they were sent or received: use it for a
-binary body. The array is the body itself, not a copy.
+binary body. The array is the body itself, not a copy. It is empty
+when the body comes from `set_reader`.
 
 **Returns**
 - the body; empty for none
@@ -329,9 +358,12 @@ struct Response
 
 An HTTP response.
 
-A `Client` returns one with the body read in full. A `Server` handler
-returns one: build it with a status, then add headers and a body. The
-server adds `Content-Length` itself.
+`Client.send` returns one with the body read in full; `Client.open`
+returns one whose body is read as it arrives, through `reader()`. A
+`Server` handler returns one: build it with a status, then add headers
+and a body, in memory (`set_text`, `set_body`) or streamed
+(`set_reader`). The server adds `Content-Length` (or
+`Transfer-Encoding: chunked`) itself.
 
 **Example**
 ```pepper
@@ -412,6 +444,33 @@ Sets the body to `data`, which may be any bytes (see `body`).
 **Returns**
 - this response
 
+#### set_reader
+
+```pepper
+set_reader(source: io.Reader, length: long = -1): Response
+```
+
+Sets the body to the bytes `source` gives, which the server reads and
+sends as it goes rather than holding them in memory. With a `length`
+the server sends `Content-Length`; without one it sends the body
+chunked to an HTTP/1.1 client, and to an HTTP/1.0 client sends it
+unframed and closes the connection after it.
+
+**Parameters**
+- `source` — the stream the body is read from, to its end
+- `length` — the number of bytes `source` gives, or -1 when it is not known
+
+**Returns**
+- this response
+
+**Example**
+```pepper
+download(request: http.Request): http.Response {
+    var file = io.File.open(io.Path("large.bin")).value();
+    return http.Response(200).set_reader(file);
+}
+```
+
 #### body
 
 ```pepper
@@ -419,10 +478,36 @@ body(): u8[]
 ```
 
 Returns the body's bytes, as they were sent or received: use it for a
-binary body. The array is the body itself, not a copy.
+binary body. The array is the body itself, not a copy. It is empty for
+a response from `Client.open`, whose body is read through `reader()`,
+and for one whose body comes from `set_reader`.
 
 **Returns**
 - the body; empty for none
+
+#### reader
+
+```pepper
+reader(): io.Reader
+```
+
+Returns the body as a stream. For a response from `Client.open` it is
+the connection's `BodyReader`, which reads the body as it arrives and
+ends where the body ends; read it once. For a response whose body
+comes from `set_reader` it is that source, and otherwise an
+`io.ByteReader` over `body()`.
+
+**Returns**
+- the stream of the body's bytes
+
+**Example**
+```pepper
+var response = http.Client().open(http.Request("GET", url)).value();
+var file = io.File.create(io.Path("download.bin")).value();
+for (var chunk in response.reader().chunks(65536)) {
+    file.write_all(chunk.value());
+}
+```
 
 #### text
 

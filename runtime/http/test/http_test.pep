@@ -27,6 +27,17 @@ handle(request: http.Request): http.Response {
     if (path == "/headers") {
         return http.Response(200).set_text(request.headers["x-test"]);
     }
+    if (path == "/stream") {
+        # A body of unknown length from a stream: sent chunked.
+        return http.Response(200).set_reader(io.ByteReader(pattern(1000000)));
+    }
+    if (path == "/stream-length") {
+        return http.Response(200).set_reader(io.ByteReader(pattern(100000)), 100000);
+    }
+    if (path == "/framing") {
+        var framing = request.headers["transfer-encoding"] + "|" + request.headers["content-length"];
+        return http.Response(200).set_text(framing + "|" + to_string(request.body().count));
+    }
     return http.Response(404).set_text("no page at " + path);
 }
 
@@ -64,6 +75,18 @@ raw_bytes(port: u16, request: u8[]): String {
         }
     }
     return String._from_bytes(reply);
+}
+
+# `count` bytes counting up from 0, wrapping at 251 so the pattern does
+# not line up with any power-of-two chunk size.
+pattern(count: ulong): u8[] {
+    var bytes = Array<u8>(count);
+    ulong i = 0;
+    while (i < count) {
+        bytes.append((i % 251) as u8);
+        i = i + 1;
+    }
+    return bytes;
 }
 
 # Counts the occurrences of `needle` in `text`.
@@ -260,6 +283,112 @@ https_over_loopback() {
             var untrusted = http.Client().get("https://localhost:" + to_string(port) + "/");
             expect_true(untrusted.is_err());  # HTTPS checks the certificate
             expect_true(untrusted.error().message.contains("certificate verify failed"));
+        }
+    );
+}
+
+[Test]
+streamed_bodies_both_ways() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var base = start_server();
+            var client = http.Client();
+
+            # A chunked response read as it arrives, in small reads.
+            var opened = client.open(http.Request("GET", base + "/stream")).value();
+            expect_equal(opened.status, 200);
+            expect_equal(opened.headers["transfer-encoding"], "chunked");
+            expect_false(opened.headers.has("content-length"));
+            expect_equal(opened.body().count, 0);  # not read yet
+            var source = opened.reader();
+            var got = Array<u8>();
+            while (true) {
+                var read = source.read(got, 7777);
+                expect_true(read.is_ok());
+                if (read.value() == 0) {
+                    break;
+                }
+            }
+            expect_true(got == pattern(1000000));
+
+            # A streamed response of known length gets Content-Length.
+            var sized = client.open(http.Request("GET", base + "/stream-length")).value();
+            expect_equal(sized.headers["content-length"], "100000");
+            var total: ulong = 0;
+            for (var chunk in sized.reader().chunks(4096)) {
+                total = total + chunk.value().count;
+            }
+            expect_equal(total, 100000 as ulong);
+
+            # send() still reads a streamed response in full.
+            var whole = client.get(base + "/stream").value();
+            expect_true(whole.body() == pattern(1000000));
+            # reader() over an in-memory body.
+            var again = Array<u8>();
+            whole.reader().read(again, 10);
+            expect_equal(again.count, 10 as ulong);
+
+            # A request body from a stream: chunked without a length.
+            var upload = client.send(
+                http.Request("PUT", base + "/echo").set_reader(io.ByteReader(pattern(300000)))
+            ).value();
+            expect_true(upload.body() == pattern(300000));
+            var chunked = client.send(
+                http.Request("POST", base + "/framing").set_reader(io.ByteReader(pattern(10)))
+            ).value();
+            expect_equal(chunked.text(), "chunked||10");
+            var sized_upload = http.Request("POST", base + "/framing").set_reader(io.ByteReader(pattern(10)), 10);
+            expect_equal(client.send(sized_upload).value().text(), "|10|10");
+            # A source shorter than its length fails the request.
+            var short = http.Request("POST", base + "/framing").set_reader(io.ByteReader(pattern(5)), 10);
+            expect_true(client.send(short).is_err());
+        }
+    );
+}
+
+[Test]
+closing_a_streamed_body_early() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var base = start_server();
+            var client = http.Client();
+            var opened = client.open(http.Request("GET", base + "/stream")).value();
+            var body = (opened.reader() as? http.BodyReader).value();
+            var some = Array<u8>();
+            expect_true(body.read(some, 100).value() > 0);
+            expect_false(body.is_done);
+            body.close();
+            expect_true(body.is_done);
+            expect_equal(body.read(some, 100).value(), 0 as ulong);  # reads as the end
+            # The server is still serving.
+            expect_equal(client.get(base + "/hello?after").value().text(), "hello after");
+            # A body read to its end is done.
+            var head = client.open(http.Request("HEAD", base + "/hello")).value();
+            var empty = Array<u8>();
+            expect_equal(head.reader().read(empty, 10).value(), 0 as ulong);
+        }
+    );
+}
+
+[Test]
+streamed_responses_to_http_1_0() {
+    async.run(
+        () => {
+            var port = port_of(start_server());
+            # HTTP/1.0 has no chunks: the body goes unframed and the server closes.
+            var reply = raw(port, "GET /stream HTTP/1.0\r\n\r\n");
+            expect_true(reply.starts_with("HTTP/1.1 200 OK"));
+            expect_false(reply.lower().contains("transfer-encoding"));
+            expect_true(reply.lower().contains("connection: close"));
+            var keep = raw(port, "GET /stream HTTP/1.1\r\nConnection: close\r\n\r\n");
+            expect_true(keep.lower().contains("transfer-encoding: chunked"));
+            expect_true(keep.ends_with("\r\n0\r\n\r\n"));
         }
     );
 }

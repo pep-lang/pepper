@@ -27,6 +27,9 @@ HTTP needs tasks and sockets, so it is not available on WebAssembly
 - `set_text` and `set_body` fill a request or response and return it, so
   they chain. `body()` returns the bytes, for any body including binary
   ones; `text()` decodes them as UTF-8, replacing invalid bytes with U+FFFD.
+- `set_reader(source)` gives a request or response a body streamed from any
+  `io.Reader` (a file, a `compress.CompressReader`) instead of one held in
+  memory; see [Streaming bodies](#streaming-bodies).
 
 ## URLs
 
@@ -47,8 +50,12 @@ their percent-escapes, and `Uri.decode` turns one into text.
   `Client(connector)` uses a `tls.TlsConnector` of your own, for instance
   one that trusts a private certificate authority.
 - `get(url)`, `post(url, content_type, body)` and `send(request)` open a
-  connection, send the request and read the whole response. The client adds
-  `Host`, `Content-Length` and `Connection: close`.
+  connection, send the request and read the whole response, up to
+  `MAX_RESPONSE_BODY` (64 MiB). `open(request)` returns at the header
+  fields and leaves the body to read as a stream (see
+  [Streaming bodies](#streaming-bodies)). The client adds `Host`,
+  `Content-Length` (or `Transfer-Encoding: chunked`) and
+  `Connection: close`.
 - Any status is a successful result: check `status`. An error means there
   was no response: the URL is not `http://` or `https://`
   (`is_invalid_input()`), the connection or TLS handshake failed, or the
@@ -67,15 +74,40 @@ their percent-escapes, and `Uri.decode` turns one into text.
 - Connections stay open between requests unless the client asks to close
   or speaks HTTP/1.0. Chunked request bodies and `Expect: 100-continue` are
   understood.
-- The server adds `Content-Length` to each response, and the standard
-  reason phrase when `reason` is empty (`reason_phrase(status)` returns it).
+- The server adds `Content-Length` to each response (or, for a body from
+  `set_reader` of unknown length, `Transfer-Encoding: chunked`), and the
+  standard reason phrase when `reason` is empty (`reason_phrase(status)`
+  returns it).
 - A request it cannot parse gets `400 Bad Request`, header fields over
   64 KiB get `431`, and a body over `MAX_REQUEST_BODY` (16 MiB) gets `413`.
 
+## Streaming bodies
+
+A body need not fit in memory. Both directions stream through `io.Reader`,
+the trait of files, sockets and the `compress` readers:
+
+- **Responses to a client:** `client.open(request)` returns the `Response`
+  as soon as its header fields arrive. `response.reader()` is then a
+  `BodyReader` that reads the body from the connection as it arrives, with
+  no size limit, undoing chunked framing, and ends where the body ends.
+  Read it with `read`, `chunks` or `lines`, or wrap it in a
+  `compress.DecompressReader`. The connection closes at the end of the
+  body, at `close()`, or when the last reference to the reader goes.
+- **Requests from a client:** `request.set_reader(source)` sends the body
+  chunked; `set_reader(source, length)` sends it with `Content-Length`.
+- **Responses from a server:** a handler returns
+  `Response(200).set_reader(source)`, sent chunked to an HTTP/1.1 client
+  (or with `Content-Length` when a length is given). An HTTP/1.0 client
+  gets the body unframed, and the connection closes after it.
+
+```pepper
+{{#include ../../examples/http-streaming.pep}}
+```
+
 ## Current status
 
-- Bodies are read into memory in full, up to 16 MiB for a request and
-  `MAX_RESPONSE_BODY` (64 MiB) for a response; there is no streaming yet.
+- A server handler gets the request body read into memory in full, up to
+  `MAX_REQUEST_BODY` (16 MiB).
 - HTTP/2, connection reuse in the client, and following redirects are not
   supported yet.
 

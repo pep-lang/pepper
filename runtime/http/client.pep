@@ -13,7 +13,9 @@ export const MAX_RESPONSE_BODY: ulong = 67108864;
 ##
 ## Each request opens a new connection (plain TCP for `http://`, TLS for
 ## `https://`), sends the request with `Connection: close`, and reads the
-## whole response. Redirects are returned as they are, not followed.
+## response: `send` reads the whole body into memory, and `open` returns
+## once the header fields arrive, with the body to read as a stream.
+## Redirects are returned as they are, not followed.
 ##
 ## A client is `[Shared]`: make one and use it from every thread and task.
 ## In a task, a request parks only the task while it waits.
@@ -78,11 +80,12 @@ export struct Client {
         return send(request);
     }
 
-    ## Sends `request` and reads the response.
+    ## Sends `request` and reads the response, body and all.
     ##
     ## The client adds `Host`, `Content-Length` (when there is a body, or
-    ## for `POST`, `PUT` and `PATCH`) and `Connection: close`, replacing any
-    ## the request has.
+    ## for `POST`, `PUT` and `PATCH`; `Transfer-Encoding: chunked` for a body
+    ## from `Request.set_reader` of unknown length) and `Connection: close`,
+    ## replacing any the request has.
     ##
     ## @param request the request; its `url` must be absolute
     ## @returns the response, whatever its status; an error with
@@ -91,6 +94,51 @@ export struct Client {
     ##   `tls.TlsConnector.connect`, or an error when the response is not
     ##   valid HTTP/1.x or its body is larger than `MAX_RESPONSE_BODY`
     send(request: Request): io.IoResult<Response> {
+        var opened = open(request);
+        if (opened.is_err()) {
+            return opened;
+        }
+        var response = opened.value();
+        var source = response._source;
+        var body = Array<u8>();
+        while (true) {
+            var read = source.read(body, 65536);
+            if (read.is_err()) {
+                return io.IoResult<Response>.err(read.error());
+            }
+            if (read.value() == 0) {
+                break;
+            }
+            if (body.count > MAX_RESPONSE_BODY) {
+                return io.IoResult<Response>.err(_http_too_large("the body is too large"));
+            }
+        }
+        response.set_body(body);
+        return io.IoResult<Response>.ok(response);
+    }
+
+    ## Sends `request` and returns the response as soon as its header fields
+    ## arrive, with the body still to read: `response.reader()` returns it
+    ## as a `BodyReader`, which reads it from the connection as it arrives,
+    ## with no limit on its size. Use it for a large download, writing each
+    ## chunk to a file or through a `compress.DecompressReader`.
+    ##
+    ## The connection closes when the body has been read to its end, when
+    ## the `BodyReader` is closed, or when the last reference to it goes.
+    ## The request goes out as for `send`.
+    ##
+    ## @param request the request; its `url` must be absolute
+    ## @returns the response with its body unread; the errors of `send`,
+    ##   except that the body may be any size. Errors reading the body come
+    ##   from the `BodyReader`.
+    ## @example
+    ##     var response = client.open(http.Request("GET", "https://example.com/large.tar.gz")).value();
+    ##     var archive = compress.DecompressReader(response.reader(), compress.Format.Gzip);
+    ##     var file = io.File.create(io.Path("large.tar")).value();
+    ##     for (var chunk in archive.chunks(65536)) {
+    ##         file.write_all(chunk.value());
+    ##     }
+    open(request: Request): io.IoResult<Response> {
         var parsed = _http_parse_url(request.url);
         if (parsed.is_err()) {
             return io.IoResult<Response>.err(parsed.error());
@@ -113,18 +161,161 @@ export struct Client {
             connection._use_tls(stream.value());
         }
         var result = _http_exchange(connection, request, url);
-        connection._close();
+        if (result.is_err()) {
+            connection._close();
+        }
         return result;
     }
 }
 
-# Writes `request` to `connection` and reads the response.
+## The body of a response from `Client.open`, read from the connection as it
+## arrives. It is an `io.Reader`: read it with `read`, `chunks` or `lines`,
+## or hand it to anything that takes a stream. It undoes the framing (a
+## `Content-Length`, chunks, or the rest of the connection) and ends where
+## the body ends, then closes the connection.
+export struct BodyReader {
+    # The connection's reader, positioned at the body.
+    var _reader: _HttpReader;
+    # How the body is framed: `_BODY_LENGTH` with `_left` bytes to go,
+    # `_BODY_CHUNKED` with `_left` bytes to go in the current chunk (and
+    # `_chunks` read so far), `_BODY_TO_END`, or `_BODY_DONE`.
+    var _mode: int;
+    var _left: ulong;
+    var _chunks: ulong;
+
+    ## Makes a reader of a body framed by `mode` on `reader`'s connection.
+    ## `Client.open` makes it; there is no other use.
+    ##
+    ## @param reader the connection's reader, positioned at the body
+    ## @param mode how the body is framed
+    ## @param length the body's length, for a `Content-Length` body
+    construct(reader: _HttpReader, mode: int, length: ulong) {
+        _reader = reader;
+        _mode = mode;
+        _left = length;
+        _chunks = 0;
+        if (_mode == _BODY_LENGTH && _left == 0) {
+            close();
+        }
+    }
+
+    ## Reports whether the body has been read to its end, or the reader
+    ## closed.
+    var is_done: bool {
+        get {
+            return _mode == _BODY_DONE;
+        }
+    }
+
+    ## Waits until some of the body has arrived, then appends up to `max`
+    ## bytes of it to `buffer`.
+    ##
+    ## @param buffer the array the bytes are appended to
+    ## @param max the most bytes to read
+    ## @returns the number of bytes appended, 0 at the end of the body; an
+    ##   error when the connection fails, closes before the body ends, or
+    ##   the chunked framing is not valid
+    read(buffer: u8[], max: ulong): io.IoResult<ulong> {
+        if (max == 0 || _mode == _BODY_DONE) {
+            return io.IoResult<ulong>.ok(0);
+        }
+        if (_mode == _BODY_CHUNKED && _left == 0) {
+            var next = _next_chunk();
+            if (next.is_err()) {
+                return io.IoResult<ulong>.err(next.error());
+            }
+            if (_mode == _BODY_DONE) {
+                return io.IoResult<ulong>.ok(0);
+            }
+        }
+        var want = max;
+        if (_mode != _BODY_TO_END && _left < want) {
+            want = _left;
+        }
+        var read = _reader._some(buffer, want);
+        if (read.is_err()) {
+            return read;
+        }
+        var got = read.value();
+        if (got == 0) {
+            if (_mode == _BODY_TO_END) {
+                close();
+                return read;
+            }
+            return io.IoResult<ulong>.err(_http_error("the connection closed before the whole body arrived"));
+        }
+        if (_mode != _BODY_TO_END) {
+            _left = _left - got;
+            if (_mode == _BODY_LENGTH && _left == 0) {
+                close();
+            }
+        }
+        return read;
+    }
+
+    ## Stops reading the body and closes the connection. Reading then
+    ## returns 0, as at the end of the body. Closing a reader already done
+    ## does nothing.
+    close() {
+        if (_mode != _BODY_DONE) {
+            _mode = _BODY_DONE;
+            _reader._connection._close();
+        }
+    }
+
+    # Reads the CRLF that ends the previous chunk and the next size line;
+    # at the last chunk, the trailer fields too, and the body is done.
+    _next_chunk(): io.IoResult<void> {
+        if (_chunks > 0) {
+            var end = _reader._required_line(2);
+            if (end.is_err()) {
+                return io.IoResult<void>.err(end.error());
+            }
+        }
+        var read = _reader._required_line(_HTTP_MAX_LINE);
+        if (read.is_err()) {
+            return io.IoResult<void>.err(read.error());
+        }
+        var line = read.value();
+        var semicolon = line.find(";");
+        if (semicolon >= 0) {
+            line = line.substr_bytes(0, semicolon as ulong);
+        }
+        var size = _http_parse_hex(line.trim());
+        if (size < 0) {
+            return io.IoResult<void>.err(_http_error($"invalid chunk size: '{line}'"));
+        }
+        _chunks = _chunks + 1;
+        if (size == 0) {
+            # The trailer fields, which are dropped.
+            var trailer = _http_read_headers(_reader, Headers());
+            if (trailer.is_err()) {
+                return trailer;
+            }
+            close();
+            return io.IoResult<void>.ok();
+        }
+        _left = size as ulong;
+        return io.IoResult<void>.ok();
+    }
+}
+
+extend BodyReader with io.Reader;
+
+# The framings of a `BodyReader`.
+const _BODY_LENGTH: int = 0;
+const _BODY_CHUNKED: int = 1;
+const _BODY_TO_END: int = 2;
+const _BODY_DONE: int = 3;
+
+# Writes `request` to `connection` and reads the response's head, leaving
+# its body to a `BodyReader`.
 _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io.IoResult<Response> {
     var headers = Headers();
     headers.add("Host", url._authority);
     for (var name in request.headers.names()) {
         match (name) {
-            "host", "content-length", "connection" => {}
+            "host", "content-length", "transfer-encoding", "connection" => {}
             else => {
                 for (var value in request.headers.values(name)) {
                     headers.add(name, value);
@@ -133,12 +324,20 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
         }
     }
     var method = request.method;
-    var sends_body = match (method) {
-        "POST", "PUT", "PATCH" => true,
-        else => request._body.count > 0,
-    };
-    if (sends_body) {
-        headers.add("Content-Length", to_string(request._body.count));
+    if (request._streamed) {
+        if (request._length >= 0) {
+            headers.add("Content-Length", to_string(request._length));
+        } else {
+            headers.add("Transfer-Encoding", "chunked");
+        }
+    } else {
+        var sends_body = match (method) {
+            "POST", "PUT", "PATCH" => true,
+            else => request._body.count > 0,
+        };
+        if (sends_body) {
+            headers.add("Content-Length", to_string(request._body.count));
+        }
     }
     headers.add("Connection", "close");
     var out = Array<u8>();
@@ -147,7 +346,12 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
     if (sent.is_err()) {
         return io.IoResult<Response>.err(sent.error());
     }
-    if (request._body.count > 0) {
+    if (request._streamed) {
+        var body = _http_write_stream(connection, request._source, request._length, true);
+        if (body.is_err()) {
+            return io.IoResult<Response>.err(body.error());
+        }
+    } else if (request._body.count > 0) {
         var body = connection._write_all(request._body);
         if (body.is_err()) {
             return io.IoResult<Response>.err(body.error());
@@ -169,7 +373,8 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
     return io.IoResult<Response>.err(_http_error("no response"));
 }
 
-# Reads a status line, the fields and the body.
+# Reads a status line and the fields, and gives the response a
+# `BodyReader` for the body that follows.
 _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
     var status_line = reader._required_line(_HTTP_MAX_LINE);
     if (status_line.is_err()) {
@@ -192,13 +397,28 @@ _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
     if (fields.is_err()) {
         return io.IoResult<Response>.err(fields.error());
     }
-    var empty = head || response.status < 200 || response.status == 204 || response.status == 304;
-    if (!empty) {
-        var body = _http_read_body(reader, response.headers, response._body, true, MAX_RESPONSE_BODY);
-        if (body.is_err()) {
-            return io.IoResult<Response>.err(body.error());
-        }
+    if (response.status < 200) {
+        return io.IoResult<Response>.ok(response);  # interim: no body
     }
+    var mode = _BODY_TO_END;
+    ulong length = 0;
+    var empty = head || response.status == 204 || response.status == 304;
+    var encoding = response.headers.get("Transfer-Encoding");
+    var content_length = response.headers.get("Content-Length");
+    if (empty) {
+        mode = _BODY_LENGTH;
+    } else if (encoding.is_value() && _http_contains_token(encoding.value(), "chunked")) {
+        mode = _BODY_CHUNKED;
+    } else if (content_length.is_value()) {
+        var n = _http_parse_decimal(content_length.value());
+        if (n < 0) {
+            return io.IoResult<Response>.err(_http_error($"invalid Content-Length: '{content_length.value()}'"));
+        }
+        mode = _BODY_LENGTH;
+        length = n as ulong;
+    }
+    response._streamed = true;
+    response._source = BodyReader(reader, mode, length);
     return io.IoResult<Response>.ok(response);
 }
 
