@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
+            window.path_to_searchindex_js = "../searchindex-800aa8f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -224,22 +224,28 @@ finds it and it finds the compiler:</p>
 </tbody>
 </table>
 </div>
-<p>The exit status is 0 when every file builds and every test passes, 1 when
-a test fails or a file does not build, and 2 for a usage error.</p>
+<p>The exit status is 0 when every test program builds and every test
+passes, 1 when a test fails or a program does not build, and 2 for a usage
+error.</p>
 <h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
 <ol>
 <li><strong>Finds the files.</strong> A file named on the command line is tested as it
 is. In a folder, and the folders below it (except those whose names
 start with <code>.</code>), it takes each <code>.pep</code> file with a line that starts with
 <code>[Test]</code>.</li>
-<li><strong>Builds a test program for each,</strong> with <code>pep-build --test</code> (found next
-to <code>pep-test</code>, else on the <code>PATH</code>), in parallel. A file that does not
-build is reported with the compiler’s errors, and the other files’
-tests still run.</li>
+<li><strong>Builds one test program per folder,</strong> of that folder’s test files,
+with <code>pep-build --test</code> (found next to <code>pep-test</code>, else on the <code>PATH</code>),
+in parallel. Each file keeps the scope it has in any program, so test
+files in a module’s folder see each other’s names, and a helper two of
+them declare must be <code>private</code> (see
+<a href="../language/testing.html#where-tests-live">Unit tests</a>). A program that
+does not build is reported with the compiler’s errors, and the other
+folders’ tests still run.</li>
 <li><strong>Lists each program’s tests</strong> with <code>--list</code> and keeps those that match
 <code>--filter</code>. With <code>--list</code> it prints them and stops: the test’s name, or
 <code>file::name</code> when the tests come from more than one file.</li>
-<li><strong>Runs each test</strong> as <code>program --run NAME --timeout SECONDS</code>, up to
+<li><strong>Runs each test</strong> as <code>program --run FILE::NAME --timeout SECONDS</code>,
+each in its own process, up to
 <code>--jobs</code> at once, and prints <code>test NAME ... ok (TIME)</code> or
 <code>... FAILED (TIME)</code> as each ends (in order with <code>--jobs 1</code>). TIME is
 how long the test’s process ran: whole milliseconds (<code>12 ms</code>), or
@@ -249,20 +255,21 @@ process panics with a message that contains the attribute’s text.</li>
 <li><strong>Reports the failures,</strong> each with what the test printed (the panic’s
 message and location) and why it failed, then a summary:
 <code>2 passed, 1 failed</code>, with the number of tests <code>--filter</code> left out and of
-files that did not build when there are any.</li>
+test programs that did not build when there are any.</li>
 </ol>
 <p>The test programs are built in a temporary folder that is removed at the
 end. A test runs in the current folder, with <code>PEPPER_BACKTRACE=0</code> unless
 <code>PEPPER_BACKTRACE</code> is set, so a panic prints its message without a
 backtrace.</p>
 <h2 id="the-test-program"><a class="header" href="#the-test-program">The test program</a></h2>
-<p><code>pep-build --test</code> builds a file’s test program (see <a href="pep-build.html#--test">pep-build</a>),
+<p><code>pep-build --test</code> builds a folder’s test program (see <a href="pep-build.html#--test">pep-build</a>),
 which <code>pep-test</code> runs with one of two requests:</p>
 <ul>
 <li><code>--list</code> prints a line per test, its fields separated by tabs: the name,
 <code>file:line</code>, <code>returns</code> or <code>panics</code> (a <code>[ShouldPanic]</code> test), and the text
 the panic must contain.</li>
-<li><code>--run NAME [--timeout SECONDS]</code> runs one test and exits with 0 when it
+<li><code>--run NAME [--timeout SECONDS]</code> runs one test (<code>NAME</code>, or
+<code>FILE::NAME</code> with the file as <code>--list</code> gives it) and exits with 0 when it
 returns having released everything it allocated; a test that leaves an
 allocation behind (or releases one too many) exits with 1 and says so on
 standard error. A panic aborts the program; a test that runs past the timeout

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
+            window.path_to_searchindex_js = "../searchindex-800aa8f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -312,9 +312,17 @@ import path:</p>
 <pre><code class="language-bash">pepper test -I . geometry/tests
 </code></pre>
 <p><code>pep-test</code> looks at each <code>.pep</code> file under the folders it is given and
-builds those with a line that starts with <code>[Test]</code>: each such file is the
-entry file of one test program, and its own <code>[Test]</code> functions are the
-program’s tests. Folders whose names start with <code>.</code> are skipped.</p>
+builds those with a line that starts with <code>[Test]</code>. The test files of one
+folder build into one test program, whose tests are their <code>[Test]</code>
+functions. Folders whose names start with <code>.</code> are skipped.</p>
+<p>Each file keeps the scope it has in any program. A folder inside a module
+(a <code>test/</code> folder below its <code>module.pep</code>, say) holds files of that module,
+which see each other’s names: two of them that declare the same helper,
+or the same test name, collide (<code>redefinition of 'helper'</code>). Mark such a
+declaration
+<a href="visibility.html#keeping-a-declaration-to-its-file"><code>private</code></a> in each file,
+or rename it. Test files outside a module see only each other’s exports,
+so their names never collide.</p>
 <h2 id="test-builds"><a class="header" href="#test-builds">Test builds</a></h2>
 <p>A normal build leaves <code>[Test]</code> functions out, so they cost nothing, and a
 file of tests can keep a <code>main</code> of its own. <code>pep-build --test</code>, which
@@ -326,7 +334,9 @@ file of tests can keep a <code>main</code> of its own. <code>pep-build --test</c
 <code>[BuildOption("TEST")]</code>;</li>
 <li>it replaces the entry file’s <code>main</code> with one that answers <code>--list</code> (each
 test, one per line) and <code>--run NAME</code> (run one test), which is how
-<code>pep-test</code> drives it.</li>
+<code>pep-test</code> drives it. Given several files of one folder, it builds the
+tests of them all into one program, and <code>--run FILE::NAME</code> tells apart
+two tests of one name.</li>
 </ul>
 <p>A <code>[Test]</code> function that takes parameters, returns a value or is generic is
 an error, as are <code>[Test]</code> on a method and <code>[ShouldPanic]</code> without <code>[Test]</code>:</p>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
+            window.path_to_searchindex_js = "../searchindex-800aa8f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -183,8 +183,8 @@
                     <main>
                         <!-- Generated from runtime/testing/runner.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="testrunner"><a class="header" href="#testrunner">TestRunner</a></h1>
-<p>The <code>main</code> of a test program: <code>TestRunner</code> holds the entry file’s tests
-and answers <code>pep-test</code>’s <code>--list</code> and <code>--run NAME</code>.</p>
+<p>The <code>main</code> of a test program: <code>TestRunner</code> holds the tests of the files
+it was built from and answers <code>pep-test</code>’s <code>--list</code> and <code>--run NAME</code>.</p>
 <p>Source: <code>runtime/testing/runner.pep</code></p>
 <h2 id="keep_for_the_program"><a class="header" href="#keep_for_the_program">keep_for_the_program</a></h2>
 <pre><code class="language-pepper">keep_for_the_program(body: () =&gt; void)
@@ -226,7 +226,8 @@ then runs with the program’s arguments.</p>
 <li><code>--list</code> prints one line per test, its fields separated by tabs: the
 name, <code>file:line</code>, <code>returns</code> or <code>panics</code> (for <code>[ShouldPanic]</code>), and the
 text the panic must contain (empty for any panic or none).</li>
-<li><code>--run NAME [--timeout SECONDS]</code> runs the test <code>NAME</code> and exits with 0
+<li><code>--run NAME [--timeout SECONDS]</code> runs the test <code>NAME</code> (or <code>file::NAME</code>,
+which tells apart tests of one name in two files) and exits with 0
 when it returns, or with 1 when it left an allocation behind (or
 released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
@@ -239,9 +240,17 @@ status 124 and a message on standard error.</li>
 <p>Creates a runner for the tests of <code>file</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it</li>
+<li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it, or the folder of the files of a test program built from several</li>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="from_file"><a class="header" href="#from_file">from_file</a></h4>
+<pre><code class="language-pepper">from_file(file: String)
+</code></pre>
+<p>Makes <code>file</code> the file of the tests registered after this call.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>file</code> — the path of the file that declares them, as <code>pep-build</code> was given it</li>
+</ul>
 <h4 id="add"><a class="header" href="#add">add</a></h4>
 <pre><code class="language-pepper">add(name: String, body: () =&gt; void, line: int)
 </code></pre>

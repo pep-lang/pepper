@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
+            window.path_to_searchindex_js = "../searchindex-800aa8f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -204,7 +204,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
-<tr><td><code>--test</code></td><td>Build the entry file’s <code>[Test]</code> functions into a test program</td><td>off</td></tr>
+<tr><td><code>--test</code></td><td>Build the <code>[Test]</code> functions of the entry file (or of several files of one folder) into a test program</td><td>off</td></tr>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
@@ -326,8 +326,14 @@ line per test: name, <code>file:line</code>, <code>returns</code> or <code>panic
 <code>--run NAME [--timeout SECONDS]</code> (run that test; a test still running
 after the timeout ends the program with exit status 124).</li>
 </ul>
-<p>Only the entry file’s <code>[Test]</code> functions become tests. It cannot be
-combined with <code>--lib</code>. See <a href="../language/testing.html">Unit tests</a>.</p>
+<p>Only the entry file’s <code>[Test]</code> functions become tests. Given several files
+of one folder (<code>pep-build --test a_test.pep b_test.pep</code>), it builds the
+tests of them all into one program: a generated entry file in that folder
+(<code>_pep_test_main.pep</code>, never written to disk) imports each file and
+registers its tests, and each file keeps the scope it has in any program.
+<code>--list</code> then gives each test’s own file, and <code>--run</code> also takes
+<code>FILE::NAME</code>, as <code>--list</code> spells the file, to tell apart tests of one name
+in two files. It cannot be combined with <code>--lib</code>. See <a href="../language/testing.html">Unit tests</a>.</p>
 <h3 id="--build-dir"><a class="header" href="#--build-dir"><code>--build &lt;dir&gt;</code></a></h3>
 <p>The folder for intermediate files: the program’s objects and, with
 <code>--emit-llvm</code>, its IR. The default is <code>.pep/build</code> in the current folder, or

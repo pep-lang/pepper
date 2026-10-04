@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
+            window.path_to_searchindex_js = "../searchindex-800aa8f9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -210,8 +210,12 @@ test that checks what the compiler emits or reports stays in Rust.</p>
 </tbody>
 </table>
 </div>
-<p>A <code>test/</code> folder holds no <code>module.pep</code>, so it is never part of the module:
-no program that imports the module sees it. Prefer it to tests inside a
+<p>A <code>test/</code> folder holds no <code>module.pep</code>, so no program that imports the
+module loads it. Its files are still files of the module, though: they see
+the module’s unexported names and each other’s. <code>pep-test</code> builds each
+folder’s tests into one program, so a helper (or test name) that two test
+files of one folder declare collides; mark it <code>private</code> in each (as
+<code>runtime/async/test/</code> does). Prefer it to tests inside a
 source file, which only a test of private internals needs. The reference
 generator and the doc-comment check skip <code>test/</code> folders, so a test file
 needs no <code>##</code> comments.</p>
