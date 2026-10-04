@@ -142,7 +142,7 @@ fn pep_test_runs_every_test_in_a_folder() {
         format!("test {math}::spins ... FAILED"),
         format!("test {text_test}::repeats ... ok"),
     ] {
-        assert!(text.contains(&format!("{line}\n")), "missing '{line}' in:\n{text}");
+        assert!(text.contains(&format!("{line} (")), "missing '{line}' in:\n{text}");
     }
     assert!(text.contains(&format!("---- {math}::doubles_wrongly ({math}:15) ----\n{math}:16:5: panic: expect_equal failed\n")), "{}", text);
     assert!(text.contains("note: the test returned, but should have panicked\n"), "{}", text);
@@ -159,7 +159,7 @@ fn pep_test_runs_every_test_in_a_folder() {
     let filtered = pep_test(&dir, &["math_test.pep", "--filter", "reads", "-f", "doubles"]);
     let text = output_text(&filtered);
     assert_eq!(filtered.status.code(), Some(1), "{}", text);
-    assert!(text.contains("test doubles ... ok\n"), "one file: names alone\n{}", text);
+    assert!(text.contains("test doubles ... ok ("), "one file: names alone\n{}", text);
     assert!(text.ends_with("2 passed, 1 failed, 2 filtered out\n"), "{}", text);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -175,7 +175,7 @@ fn pep_test_reports_a_file_that_does_not_build() {
     assert!(text.contains("error: cannot build the tests of 'bad_test.pep':\n"), "{}", text);
     assert!(text.contains("bad_test.pep:3:5: error: call to undeclared function 'nope'"), "{}", text);
     let summary = stdout_of(&output);
-    assert!(summary.contains("test good_test.pep::passes ... ok\n"), "{}", summary);
+    assert!(summary.contains("test good_test.pep::passes ... ok ("), "{}", summary);
     assert!(summary.ends_with("1 passed, 0 failed; 1 file did not build\n"), "{}", summary);
     let _ = std::fs::remove_dir_all(&dir);
 }

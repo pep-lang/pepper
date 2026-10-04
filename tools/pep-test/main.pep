@@ -217,9 +217,11 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
         outcomes.append(Outcome());
     }
     in_parallel(selected.count, options.jobs, (i: ulong) => {
+        var start = os.Instant.now();
         var outcome = run_test(selected[i], options.timeout);
+        var took = format_duration(start.elapsed());
         outcomes[i] = outcome;
-        print($"test {display_name(selected[i], qualify)} ... {outcome.passed ? "ok" : "FAILED"}");
+        print($"test {display_name(selected[i], qualify)} ... {outcome.passed ? "ok" : "FAILED"} ({took})");
     });
 
     ulong passed = 0;
@@ -472,6 +474,17 @@ matches(name: String, filters: Array<String>): bool {
 # The test's name, after its file's when tests from several files run.
 display_name(test: Test, qualify: bool): String {
     return qualify ? $"{test.file}::{test.name}" : test.name;
+}
+
+# A test's run time: whole milliseconds under a second, else seconds with
+# two decimals.
+format_duration(duration: os.Duration): String {
+    var milliseconds = duration.milliseconds();
+    if (milliseconds < 1000) {
+        return $"{milliseconds} ms";
+    }
+    var hundredths = (milliseconds % 1000) / 10;
+    return $"{milliseconds / 1000}.{hundredths < 10 ? "0" : ""}{hundredths} s";
 }
 
 plural(count: ulong, one: String, many: String): String {

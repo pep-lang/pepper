@@ -14,9 +14,9 @@ pepper test -I . geometry/tests      # tests that import the module geometry
 
 ```text
 running 3 tests
-test counts_the_words ... ok
-test an_empty_string_has_no_words ... ok
-test reading_past_the_last_word_panics ... ok
+test counts_the_words ... ok (4 ms)
+test an_empty_string_has_no_words ... ok (3 ms)
+test reading_past_the_last_word_panics ... ok (5 ms)
 3 passed, 0 failed
 ```
 
@@ -64,10 +64,12 @@ a test fails or a file does not build, and 2 for a usage error.
    `--filter`. With `--list` it prints them and stops: the test's name, or
    `file::name` when the tests come from more than one file.
 4. **Runs each test** as `program --run NAME --timeout SECONDS`, up to
-   `--jobs` at once, and prints `test NAME ... ok` or `... FAILED` as each
-   ends (in order with `--jobs 1`). A test passes when its process exits
-   with 0; a `[ShouldPanic]` test passes when its process panics with a
-   message that contains the attribute's text.
+   `--jobs` at once, and prints `test NAME ... ok (TIME)` or
+   `... FAILED (TIME)` as each ends (in order with `--jobs 1`). TIME is
+   how long the test's process ran: whole milliseconds (`12 ms`), or
+   seconds with two decimals from one second up (`1.25 s`). A test passes
+   when its process exits with 0; a `[ShouldPanic]` test passes when its
+   process panics with a message that contains the attribute's text.
 5. **Reports the failures,** each with what the test printed (the panic's
    message and location) and why it failed, then a summary:
    `2 passed, 1 failed`, with the number of tests `--filter` left out and of

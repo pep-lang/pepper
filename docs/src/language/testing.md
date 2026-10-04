@@ -15,9 +15,9 @@ tests and runs them:
 ```text
 $ pepper test words_test.pep
 running 3 tests
-test counts_the_words ... ok
-test an_empty_string_has_no_words ... ok
-test reading_past_the_last_word_panics ... ok
+test counts_the_words ... ok (4 ms)
+test an_empty_string_has_no_words ... ok (3 ms)
+test reading_past_the_last_word_panics ... ok (5 ms)
 3 passed, 0 failed
 ```
 
