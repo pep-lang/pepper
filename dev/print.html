@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fec5740c.js";
+            window.path_to_searchindex_js = "searchindex-0a5ec0f5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -19258,7 +19258,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--build &lt;dir&gt;</code></td><td>Folder for intermediate files</td><td><code>.pep/build</code> (in a project’s folder when building it)</td></tr>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
-<tr><td><code>--emit-ast</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-ast[=text|json]</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
@@ -19422,6 +19422,13 @@ a block emits are found when the copy is built, at the copy’s line.</li>
 <h3 id="--emit-ast"><a class="header" href="#--emit-ast"><code>--emit-ast</code></a></h3>
 <p>Parses the entry file only and prints its syntax tree to standard output,
 instead of compiling. Imports are not followed and nothing is checked.</p>
+<p><code>--emit-ast</code> and <code>--emit-ast=text</code> print the tree as source-like text.
+<code>--emit-ast=json</code> prints it as one line of JSON: each node an object with
+its fields in declaration order, each enum case an object with the case’s
+name as its one key, and each span <code>{"start": ..., "end": ...}</code> in bytes.
+The compiler’s parser written in Pepper (<code>tools/compiler</code>) prints the same
+JSON, and its test compares the two over every source file in the
+repository.</p>
 <h2 id="optimization-and-code-generation"><a class="header" href="#optimization-and-code-generation">Optimization and code generation</a></h2>
 <h3 id="-o--olevel"><a class="header" href="#-o--olevel"><code>-O</code>, <code>-O&lt;level&gt;</code></a></h3>
 <p>The optimization level: <code>-O0</code> (no optimization, the default), <code>-O1</code>, <code>-O2</code>
