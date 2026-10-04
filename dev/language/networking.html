@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-339485df.js";
+            window.path_to_searchindex_js = "../searchindex-5536423f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -210,6 +210,11 @@ main(): int {
     assert(service.is_v6() &amp;&amp; service.port() == 8080, "IPv6 with a port");
     assert(service.to_string() == "[::1]:8080", "brackets around IPv6");
 
+    # A link-local IPv6 address names its interface after `%`: a number, or
+    # a name such as `eth0` that is looked up on this machine.
+    var link = io.SocketAddress.parse("[fe80::1%4000000000]:8080").value();
+    assert(link.address().scope_id() == 4000000000, "the scope id");
+
     # A host name goes to the system resolver; an IP address is used as is.
     var local = io.resolve("localhost", 80).value();
     assert(local.count &gt;= 1 &amp;&amp; local[0].address().is_loopback(), "localhost is loopback");
@@ -225,6 +230,13 @@ from its bytes or its eight 16-bit groups. <code>loopback_v4()</code>,
 IPv6, and <code>to_string()</code> prints the RFC 5952 form: lowercase,
 zeros compressed, <code>::ffff:1.2.3.4</code> for an IPv4-mapped address. Parsing and
 printing are the same on every platform.</li>
+<li>An IPv6 address may carry a scope id, the network interface a link-local
+address belongs to: <code>fe80::1%eth0</code> or <code>fe80::1%2</code> (RFC 4007).
+<code>scope_id()</code> reads it (0 for none) and <code>with_scope_id(id)</code> sets it. A
+name is looked up on this machine, and <code>to_string()</code> prints the
+interface’s name when it has one, else the number. Sockets pass it to the
+system as <code>sin6_scope_id</code>. In a URI the <code>%</code> is escaped,
+<code>http://[fe80::1%25eth0]/</code> (RFC 6874); the HTTP client decodes it.</li>
 <li><code>SocketAddress(address, port)</code> or <code>SocketAddress.parse("1.2.3.4:80")</code>
 make a socket address. IPv6 takes brackets: <code>[::1]:80</code>.</li>
 <li><code>resolve(host, port)</code> looks a host name up with the system resolver (the
@@ -549,7 +561,6 @@ a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeou
 limits how long it may wait.</li>
 <li>TLS clients cannot present certificates.</li>
 <li>Unix datagram sockets are not supported.</li>
-<li>IPv6 scope ids (<code>fe80::1%eth0</code>) are not supported.</li>
 </ul>
 <p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
 <a href="../reference/io-socket.html">sockets</a> and

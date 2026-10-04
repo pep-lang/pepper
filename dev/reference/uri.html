@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-339485df.js";
+            window.path_to_searchindex_js = "../searchindex-5536423f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -222,7 +222,10 @@ assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "que
 <pre><code class="language-pepper">var host: String?
 </code></pre>
 <p>The host, without the brackets of an IPv6 address; Empty when the URI
-has no authority (no <code>//</code>), and empty for one such as <code>file:///tmp</code>.</p>
+has no authority (no <code>//</code>), and empty for one such as <code>file:///tmp</code>.
+An IPv6 scope keeps its escaped <code>%</code> (RFC 6874): the host of
+<code>http://[fe80::1%25eth0]/</code> is <code>fe80::1%25eth0</code>, which <code>Uri.decode</code>
+turns into the <code>fe80::1%eth0</code> that <code>io.IpAddress.parse</code> reads.</p>
 <h4 id="port"><a class="header" href="#port">port</a></h4>
 <pre><code class="language-pepper">var port: u16?
 </code></pre>
