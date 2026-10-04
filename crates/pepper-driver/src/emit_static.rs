@@ -333,6 +333,9 @@ fn specializations(source: &str, name: &str, function: &ast::FunctionDecl, end: 
         if function.is_exported {
             text.push_str("export ");
         }
+        if function.is_private {
+            text.push_str("private ");
+        }
         text.push_str(&source[function.name_span.start..list_start]);
         text.push_str(&format!("<{}>", spelled.join(", ")));
         let mut at = list_end;

@@ -736,6 +736,7 @@ fn run_emit_model(options: &Options) -> Result<i32, String> {
         }
     }
     sort(value.get_mut("private_functions"));
+    sort(value.get_mut("file_private_functions"));
     if let Some(scopes) = value.get_mut("extension_scopes") {
         sort(scopes.get_mut("prelude"));
         if let Some(serde_json::Value::Array(visible)) = scopes.get_mut("visible") {

@@ -1562,6 +1562,9 @@ pub struct ExtensionDef {
     pub loc: Loc,
     /// Marked `export`: files that import its file may use its methods.
     pub is_exported: bool,
+    /// Marked `private`: only its own file may use its methods, not the
+    /// other files of its module.
+    pub is_private: bool,
 }
 
 /// Per file, the other files whose exported extensions it may use (from
@@ -1583,8 +1586,12 @@ impl ExtensionScopes {
     /// Whether code in file `from` may use the methods of an extension
     /// declared in file `file`: its own file's or its module's, or an
     /// exported one it can see.
-    pub fn sees(&self, from: FileId, file: FileId, exported: bool) -> bool {
+    /// A `private` one only in its own file.
+    pub fn sees(&self, from: FileId, file: FileId, exported: bool, private: bool) -> bool {
         let Some(visible) = self.visible.get(from.0 as usize) else { return true };
+        if private {
+            return from == file;
+        }
         self.same_module(from, file) || (exported && (self.prelude.contains(&file.0) || visible.contains(&file.0)))
     }
 
@@ -1819,6 +1826,9 @@ pub struct Module {
     /// member of an overload set that also has exported members is a
     /// candidate only for calls in its own file (see `overloads`).
     pub private_functions: std::collections::HashSet<Loc>,
+    /// The free functions declared `private`, by location: candidates only
+    /// for calls in their own file, not the rest of their module.
+    pub file_private_functions: std::collections::HashSet<Loc>,
     /// Each call or function value that named an overload set: its callee's
     /// location and the member it resolved to, for the language server.
     pub call_targets: Vec<(Loc, String)>,
@@ -2027,6 +2037,7 @@ impl Module {
         self.extensions.extend(other.extensions);
         self.functions.extend(other.functions);
         self.private_functions.extend(other.private_functions);
+        self.file_private_functions.extend(other.file_private_functions);
         self.externs.extend(other.externs);
         self.globals.extend(other.globals);
         self.static_blocks.extend(other.static_blocks);

@@ -1918,6 +1918,7 @@ fn extension_def(e: &ast::ExtendDecl) -> Result<ExtensionDef, Diagnostic> {
         attributes: e.attributes.clone(),
         loc: loc(e.target.span),
         is_exported: e.is_exported,
+        is_private: e.is_private,
     })
 }
 
@@ -1956,6 +1957,7 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
     let accessor = |method: String, parameters: Vec<ast::VariableDecl>, return_type: ast::TypeName, body: &Option<ast::Block>, span: ast::Span| {
         let decl = ast::FunctionDecl {
             is_exported: false,
+            is_private: false,
             name: method,
             name_span: span,
             generic_params: vec![],
@@ -1981,6 +1983,7 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
         is_const: false,
         span: property.name_span,
         is_exported: false,
+        is_private: false,
     };
     let void = ast::TypeName { name: "void".to_string(), generic_types: vec![], span: property.name_span, labels: vec![] };
     let mut setter = match &property.set {
@@ -2083,6 +2086,7 @@ fn property_members(property: &ast::PropertyDecl, owner: PropertyOwner) -> Resul
                 is_const: shared,
                 span: property.span,
                 is_exported: false,
+                is_private: false,
             };
             variable_def(&field, Kind::Field)
         })
@@ -2775,6 +2779,9 @@ fn declare(decl: &ast::Declaration, out: &mut Module) -> Result<(), Diagnostic> 
                 } else {
                     if !f.is_exported {
                         out.private_functions.insert(loc(f.name_span));
+                    }
+                    if f.is_private {
+                        out.file_private_functions.insert(loc(f.name_span));
                     }
                     out.functions.push(function_def(f, None)?);
                 }

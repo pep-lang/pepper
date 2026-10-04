@@ -36,6 +36,7 @@ reserved_words(): HashSet<String> {
         "extend",
         "type",
         "export",
+        "private",
         "with",
         "enum",
         "match"
@@ -2457,10 +2458,23 @@ struct Parser {
         if (_failed) {
             return Node(NodeKind.Function);
         }
-        if (_at_word("export")) {
+        bool exported = false;
+        bool file_private = false;
+        while (_at_word("export") or _at_word("private")) {
+            bool is_export = _at_word("export");
+            if ((is_export and exported) or (!is_export and file_private)) {
+                _fail(is_export ? "duplicate 'export' modifier" : "duplicate 'private' modifier");
+                return Node(NodeKind.Function);
+            }
+            if (exported or file_private) {
+                _fail("a declaration cannot be both 'export' and 'private'");
+                return Node(NodeKind.Function);
+            }
+            exported = is_export;
+            file_private = !is_export;
             prefix.append(Node.of_token(_advance()));
             if (_at("[")) {
-                _fail("'export' goes after the attributes");
+                _fail(is_export ? "'export' goes after the attributes" : "'private' goes after the attributes");
                 return Node(NodeKind.Function);
             }
         }

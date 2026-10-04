@@ -239,6 +239,7 @@ struct Lowerer {
                         constant.is_const = true;
                         constant.span = variable.span;
                         constant.is_exported = block.is_exported;
+                        constant.is_private = block.is_private;
                         out.append(Declaration.Variable(constant));
                     }
                 }
@@ -260,13 +261,18 @@ struct Lowerer {
         return index < node.count and node.child(index).is_token("export");
     }
 
+    is_private(node: Node, index: ulong): bool {
+        return index < node.count and node.child(index).is_token("private");
+    }
+
     declaration(node: Node): Declaration? {
         var attributes = Array<Attribute>();
         ulong index = prefix(node, attributes);
         bool exported = is_exported(node, index);
+        bool file_private = is_private(node, index);
         ulong decl_start = start(node);
         in_members = false;
-        if (exported) {
+        if (exported or file_private) {
             index += 1;
         }
         Declaration? result;
@@ -274,41 +280,49 @@ struct Lowerer {
             Function => {
                 var function = function_declaration(node, index, attributes);
                 function.is_exported = exported;
+                function.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Function(function));
             }
             ExternFunction => {
                 var function = extern_function(node, index, attributes);
                 function.is_exported = exported;
+                function.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Function(function));
             }
             Variable => {
                 var variable = variable_declaration(node, index, attributes);
                 variable.is_exported = exported;
+                variable.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Variable(variable));
             }
             Struct => {
                 var declaration = struct_declaration(node, index, attributes);
                 declaration.is_exported = exported;
+                declaration.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Struct(declaration));
             }
             Enum => {
                 var declaration = enum_declaration(node, index, attributes);
                 declaration.is_exported = exported;
+                declaration.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Struct(declaration));
             }
             Trait => {
                 var declaration = trait_declaration(node, index, attributes);
                 declaration.is_exported = exported;
+                declaration.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Trait(declaration));
             }
             Extend => {
                 var declaration = extend_declaration(node, index, attributes);
                 declaration.is_exported = exported;
+                declaration.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Extend(declaration));
             }
             TypeAlias => {
                 var declaration = type_alias(node, index, attributes);
                 declaration.is_exported = exported;
+                declaration.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.TypeAlias(declaration));
             }
             Static => {
@@ -318,6 +332,7 @@ struct Lowerer {
                     block.span = Span(attributes[0].span.start, block.span.end);
                 }
                 block.is_exported = exported;
+                block.is_private = file_private;
                 result = Optional<Declaration>.Value(Declaration.Static(block));
             }
             else => {
@@ -325,13 +340,14 @@ struct Lowerer {
                 return Optional<Declaration>.Empty;
             }
         }
-        if (exported) {
+        if (exported or file_private) {
             widen_start(result.value(), decl_start);
         }
         return result;
     }
 
-    # An exported declaration's span starts at its attributes or `export`.
+    # An exported or private declaration's span starts at its attributes or
+    # its modifier.
     widen_start(declaration: Declaration, at: ulong) {
         match (declaration) {
             Variable(decl) => {

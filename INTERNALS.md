@@ -281,6 +281,17 @@ with no extension (with `--lib`, the library's file name for the stem,
   `ExtensionScopes::same_module`, also used by `Overloads::set` for a
   set's private members). `load` queues a module file's `module.pep`,
   so a file of a module never loads without the files its module imports.
+  A **`private` declaration** (#592, `Declaration::is_private`) stays out
+  of all of that: `module_bindings` binds it for no other file (and a file
+  whose only declarations of a name are private joins no union of it),
+  `Overrides::of` leaves it out of what the module's other files see, the
+  extension checks (`Rewriter::is_member`, `Checker::sees_extension`,
+  `ExtensionScopes::sees`) see a private extension only in its file,
+  `Overloads::set` offers a private function only to its own file
+  (`Module::file_private_functions`), and the visibility check skips it
+  when comparing a module's names and reports a reference to one from
+  another file of its module as `FilePrivate`. The Pepper linker in
+  `tools/compiler/link` mirrors each of these.
   Files outside any module, and the runtime's top-level prelude files, keep
   per-file visibility. Where an import or re-export would bind
   one name to functions of two files (of one module or of several), or a

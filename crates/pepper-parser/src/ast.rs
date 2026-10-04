@@ -478,6 +478,9 @@ pub struct VariableDecl {
     /// `export` modifier (module-scope variables only): visible outside the
     /// declaring file.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 /// A property: a member read and written like a field whose `get` and `set`
@@ -567,6 +570,9 @@ pub struct FunctionDecl {
     /// `export` modifier: visible outside the declaring file. Top-level
     /// functions (and externs) are private to their file without it.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 /// A generic type parameter, optionally with constraints and a default
@@ -612,6 +618,9 @@ pub struct StructDecl {
     pub attributes: Vec<Attribute>,
     /// `export` modifier: visible outside the declaring file.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
     /// `Some` when this was declared with `enum` rather than `struct`. An
     /// enum shares the struct's name, generics, methods and visibility, so
     /// linking, visibility and the language server treat it as one; the
@@ -658,6 +667,9 @@ pub struct TraitDecl {
     pub span: Span,
     /// `export` modifier: visible outside the declaring file.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 /// A type alias: `type Name<P1, P2=Default> = TargetType;`. The target may be
@@ -675,6 +687,9 @@ pub struct TypeAliasDecl {
     pub span: Span,
     /// `export` modifier: visible outside the declaring file.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -697,6 +712,9 @@ pub struct ExtendDecl {
     /// `export` modifier: the extension's methods are usable outside the
     /// declaring file.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -736,6 +754,19 @@ impl Declaration {
             Declaration::Extend(e) => e.is_exported,
             Declaration::TypeAlias(t) => t.is_exported,
             Declaration::Static(s) => s.is_exported,
+        }
+    }
+
+    /// Marked `private`: visible only inside its own file.
+    pub fn is_private(&self) -> bool {
+        match self {
+            Declaration::Variable(v) => v.is_private,
+            Declaration::Function(f) => f.is_private,
+            Declaration::Struct(s) => s.is_private,
+            Declaration::Trait(t) => t.is_private,
+            Declaration::Extend(e) => e.is_private,
+            Declaration::TypeAlias(t) => t.is_private,
+            Declaration::Static(s) => s.is_private,
         }
     }
 
@@ -935,6 +966,9 @@ pub struct StaticBlock {
     /// At module scope: written `export static`, so the constants it
     /// declares are exported.
     pub is_exported: bool,
+    /// `private` modifier: visible only inside the declaring file, not to
+    /// the other files of its module.
+    pub is_private: bool,
 }
 
 impl Display for StaticBlock {
@@ -1376,6 +1410,9 @@ impl Display for VariableDecl {
         if self.is_exported {
             write!(f, "export ")?;
         }
+        if self.is_private {
+            write!(f, "private ")?;
+        }
         write!(f, "{}{}: {}", spec, self.name, self.type_name)?;
         if let Some(v) = &self.default_value {
             write!(f, " = {}", v)?;
@@ -1402,6 +1439,9 @@ impl Display for FunctionDecl {
         write_attributes(f, &self.attributes)?;
         if self.is_exported {
             write!(f, "export ")?;
+        }
+        if self.is_private {
+            write!(f, "private ")?;
         }
         if self.external {
             write!(f, "extern {} {}({}", self.return_type, self.name, join(&self.parameters, ", "))?;
@@ -1442,6 +1482,9 @@ impl Display for StructDecl {
         write_attributes(f, &self.attributes)?;
         if self.is_exported {
             write!(f, "export ")?;
+        }
+        if self.is_private {
+            write!(f, "private ")?;
         }
         let keyword = if self.enumeration.is_some() { "enum" } else { "struct" };
         write!(f, "{} {}", keyword, self.name)?;
@@ -1505,6 +1548,9 @@ impl Display for TraitDecl {
         if self.is_exported {
             write!(f, "export ")?;
         }
+        if self.is_private {
+            write!(f, "private ")?;
+        }
         write!(f, "trait {}", self.name)?;
         if !self.generic_params.is_empty() {
             write!(f, "<{}>", join(&self.generic_params, ", "))?;
@@ -1549,6 +1595,9 @@ impl Display for ExtendDecl {
         if self.is_exported {
             write!(f, "export ")?;
         }
+        if self.is_private {
+            write!(f, "private ")?;
+        }
         if self.target_bounds.iter().all(|b| b.is_empty()) {
             write!(f, "extend {}", self.target)?;
         } else {
@@ -1586,6 +1635,9 @@ impl Display for TypeAliasDecl {
         write_attributes(f, &self.attributes)?;
         if self.is_exported {
             write!(f, "export ")?;
+        }
+        if self.is_private {
+            write!(f, "private ")?;
         }
         write!(f, "type {}", self.name)?;
         if !self.generic_params.is_empty() {

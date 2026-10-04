@@ -1230,6 +1230,7 @@ _copy_variable(v: ast.VariableDecl): ast.VariableDecl {
     out.is_const = v.is_const;
     out.span = v.span;
     out.is_exported = v.is_exported;
+    out.is_private = v.is_private;
     return out;
 }
 
@@ -3334,7 +3335,8 @@ struct _Builder {
                 methods = methods,
                 attributes = e.attributes,
                 loc = loc(e.target.span),
-                is_exported = e.is_exported
+                is_exported = e.is_exported,
+                is_private = e.is_private
             )
         );
     }
@@ -4019,6 +4021,9 @@ struct _Builder {
                     if (!f.is_exported) {
                         out.private_functions.insert(loc(f.name_span));
                     }
+                    if (f.is_private) {
+                        out.file_private_functions.insert(loc(f.name_span));
+                    }
                     var built = function_def(f, Optional<String>.Empty)?;
                     out.functions.append(built);
                 }
@@ -4660,6 +4665,7 @@ _copy_struct(decl: ast.StructDecl): ast.StructDecl {
     out.span = decl.span;
     out.attributes = decl.attributes;
     out.is_exported = decl.is_exported;
+    out.is_private = decl.is_private;
     out.enumeration = decl.enumeration;
     return out;
 }

@@ -138,6 +138,18 @@ reports_linking_errors_as_the_rust_compiler_does() {
             "import [pick, Shape] from lib;\npick<Shape>(s: Shape): int { return 1; }\npick<Unknown>(u: Unknown): int { return 2; }\nsame<T>(t: T): int { return 0; }\nsame<U>(u: U): int { return 1; }\nmain(): int { return 0; }\n",
             "deps/lib/module.pep",
             "export pick<T>(value: T): int { return 0; }\nexport trait Shape { area(): int; }\n"
+        ],
+        # `private` names of one module: the same names in two files, and
+        # uses from another file of the module and from outside it.
+        [
+            "main.pep",
+            "import [use] from shop;\nmain(): int { return use() + helper(); }\n",
+            "deps/shop/module.pep",
+            "export * from \"a\";\nexport * from \"b\";\n",
+            "deps/shop/a.pep",
+            "private helper(): int { return 1; }\nprivate struct Shelf {}\nprivate extend Shelf { shelf_area(): int { return 0; } }\n",
+            "deps/shop/b.pep",
+            "private struct Shelf {}\nexport use(): int { var s = Shelf(); return helper() + s.shelf_area(); }\n"
         ]
     ];
     expect_equal(write_and_compare(compiler.value(), folder, trees), 0 as ulong);

@@ -5374,3 +5374,35 @@ fn two_module_files_declaring_one_type() {
         )
     );
 }
+
+#[test]
+fn private_name_used_from_another_file_of_its_module() {
+    let others = [
+        ("geo/module.pep", "import \"rules\";\nexport * from \"shapes\";\n"),
+        ("geo/rules.pep", "private scale(x: int): int { return x * 2; }\n"),
+        ("geo/shapes.pep", "export area(w: int): int {\n    return scale(w);\n}\n"),
+    ];
+    let error = error_of_files("private_in_module", "import \"geo\";\nmain(): int { return area(1); }\n", &others);
+    let (rules, shapes) = (format!("geo{}rules.pep", std::path::MAIN_SEPARATOR), format!("geo{}shapes.pep", std::path::MAIN_SEPARATOR));
+    assert_eq!(
+        error,
+        format!(
+            "{shapes}:2:12: error: 'scale' is private to {rules}; remove 'private' to use it from the other files of its module\n\
+             \x20   2 |     return scale(w);\n\
+             \x20     |            ^~~~~\n\
+             {rules}:1:9: note: declared here\n\
+             \x20   1 | private scale(x: int): int {{ return x * 2; }}\n\
+             \x20     |         ^~~~~"
+        )
+    );
+}
+
+#[test]
+fn export_and_private_on_one_declaration() {
+    assert_eq!(
+        error_of("export_private", "export private f(): int { return 0; }\nmain(): int { return 0; }\n"),
+        "main.pep:1:8: error: a declaration cannot be both 'export' and 'private'\n\
+         \x20   1 | export private f(): int { return 0; }\n\
+         \x20     |        ^~~~~~~"
+    );
+}

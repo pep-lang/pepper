@@ -956,6 +956,8 @@ export struct VariableDecl {
     var span: Span;
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
 
     ## Creates a declaration.
     ##
@@ -975,6 +977,7 @@ export struct VariableDecl {
         out["is_const"] = JsonValue.Bool(is_const);
         out["span"] = span.to_json();
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }
@@ -1074,6 +1077,8 @@ export struct FunctionDecl {
     var attributes: Attribute[] = Array<Attribute>();
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
 
     ## Creates a function.
     ##
@@ -1102,6 +1107,7 @@ export struct FunctionDecl {
         out["span"] = span.to_json();
         out["attributes"] = attributes_json(attributes);
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }
@@ -1168,6 +1174,8 @@ export struct StructDecl {
     var attributes: Attribute[] = Array<Attribute>();
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
     ## The cases, for an `enum`.
     var enumeration: EnumBody?;
 
@@ -1191,6 +1199,7 @@ export struct StructDecl {
         out["span"] = span.to_json();
         out["attributes"] = attributes_json(attributes);
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         out["enumeration"] = enumeration.is_value() ? enumeration.value().to_json() : JsonValue.Null;
         return out;
     }
@@ -1272,6 +1281,8 @@ export struct TraitDecl {
     var span: Span;
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
 
     ## Creates a trait declaration.
     construct() {}
@@ -1289,6 +1300,7 @@ export struct TraitDecl {
         out["properties"] = properties_json(properties);
         out["span"] = span.to_json();
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }
@@ -1309,6 +1321,8 @@ export struct TypeAliasDecl {
     var span: Span;
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
 
     ## Creates a type alias.
     construct() {}
@@ -1325,6 +1339,7 @@ export struct TypeAliasDecl {
         out["target"] = target.to_json();
         out["span"] = span.to_json();
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }
@@ -1347,6 +1362,8 @@ export struct ExtendDecl {
     var span: Span;
     ## Declared `export`.
     var is_exported: bool;
+    ## Declared `private`: visible only in its own file.
+    var is_private: bool;
 
     ## Creates an extension.
     construct() {}
@@ -1368,6 +1385,7 @@ export struct ExtendDecl {
         out["properties"] = properties_json(properties);
         out["span"] = span.to_json();
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }
@@ -1458,6 +1476,36 @@ export enum Declaration {
             }
             Static(block) => {
                 return block.is_exported;
+            }
+        }
+        return false;
+    }
+
+    ## Returns whether the declaration is marked `private`.
+    ##
+    ## @returns true when only its own file can use it
+    is_private(): bool {
+        match (this) {
+            Variable(decl) => {
+                return decl.is_private;
+            }
+            Function(decl) => {
+                return decl.is_private;
+            }
+            Struct(decl) => {
+                return decl.is_private;
+            }
+            Trait(decl) => {
+                return decl.is_private;
+            }
+            Extend(decl) => {
+                return decl.is_private;
+            }
+            TypeAlias(decl) => {
+                return decl.is_private;
+            }
+            Static(block) => {
+                return block.is_private;
             }
         }
         return false;
@@ -1900,6 +1948,8 @@ export struct StaticBlock {
     var attributes: Attribute[] = Array<Attribute>();
     ## At module scope: written `export static`.
     var is_exported: bool;
+    ## At module scope: written `private static`.
+    var is_private: bool;
 
     ## Creates a static block.
     construct() {}
@@ -1919,6 +1969,7 @@ export struct StaticBlock {
         out["span"] = span.to_json();
         out["attributes"] = attributes_json(attributes);
         out["is_exported"] = JsonValue.Bool(is_exported);
+        out["is_private"] = JsonValue.Bool(is_private);
         return out;
     }
 }

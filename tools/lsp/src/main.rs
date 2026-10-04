@@ -36,7 +36,7 @@ use tower_lsp::{async_trait, Client, LanguageServer, LspService, Server};
 const KEYWORDS: &[&str] = &[
     "import", "from", "struct", "var", "const", "if", "else", "while", "for", "in", "return", "extern",
     "and", "or", "construct", "destruct", "static", "sizeof", "true", "false", "trait",
-    "extend", "export", "shared", "enum", "match", "is",
+    "extend", "export", "private", "shared", "enum", "match", "is",
 ];
 
 // ── Position conversion ───────────────────────────────────────────────────────
@@ -2858,7 +2858,7 @@ Returns a fresh value: it shares nothing with the arguments.");
 
 /// The top-level declarations of the other files of the module of
 /// `program.files[0]`, which it sees with no import, spelled as written
-/// (the linked program mangles them).
+/// (the linked program mangles them). A `private` one stays in its file.
 fn module_globals(program: &Program) -> Vec<Symbol> {
     let Some(root) = program.files.first().and_then(|f| f.module_root.as_ref()) else { return vec![] };
     program
@@ -2866,7 +2866,11 @@ fn module_globals(program: &Program) -> Vec<Symbol> {
         .iter()
         .skip(1)
         .filter(|f| f.module_root.as_ref() == Some(root))
-        .flat_map(|f| collect_globals(&f.module))
+        .flat_map(|f| {
+            let private: std::collections::HashSet<usize> =
+                f.module.declarations.iter().filter(|d| d.is_private()).map(|d| d.name_span().start).collect();
+            collect_globals(&f.module).into_iter().filter(move |s| !private.contains(&s.name_span.start))
+        })
         .map(|mut s| {
             s.name = pepper_parser::namespace::demangle_name(&s.name).to_string();
             s

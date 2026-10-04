@@ -43,6 +43,21 @@ places_braces_attributes_and_declarations() {
 }
 
 [Test]
+places_private_after_the_attributes() {
+    expect_formats(
+        "[Inline] private int twice(int x) { return x*2; }\nprivate   const LIMIT = 3;\nprivate struct Shelf { var count: int; }\n",
+        "[Inline]\n"
+            + "private twice(x: int): int { return x * 2; }\n"
+            + "\n"
+            + "private const LIMIT = 3;\n"
+            + "\n"
+            + "private struct Shelf {\n"
+            + "    var count: int;\n"
+            + "}\n"
+    );
+}
+
+[Test]
 writes_an_empty_extension_body_as_a_semicolon() {
     # After a `with` clause an empty body becomes `;`, and one-line
     # extensions sit together; a body with a comment, or with no `with`

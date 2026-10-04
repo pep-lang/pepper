@@ -296,7 +296,7 @@ const RESERVED: &[&str] = &[
     "if", "else", "while", "for", "return", "extern",
     "and", "or", "new", "construct", "destruct", "static",
     "sizeof", "true", "false",
-    "trait", "extend", "type", "export", "with",
+    "trait", "extend", "type", "export", "private", "with",
     "enum", "match",
 ];
 
@@ -1838,7 +1838,7 @@ fn closure_literal(input: &mut &str) -> Result<Expression> {
             default_value: None,
             is_const: false,
             span: Span { start: name_start, end: pos(input) },
-            is_exported: false,
+            is_exported: false, is_private: false,
         });
         if input.starts_with(',') {
             *input = &input[1..];
@@ -2616,7 +2616,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             ws(input)?;
             dv = Some(expression(input)?);
         }
-        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) }, is_exported: false });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: true, span: Span { start, end: pos(input) }, is_exported: false, is_private: false });
     }
     if input.starts_with("var") && !input[3..].starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_') {
         *input = &input[3..];
@@ -2636,7 +2636,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
             ws(input)?;
             dv = Some(expression(input)?);
         }
-        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
+        return Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false, is_private: false });
     }
 
     // Case 2: type-name syntax — `TypeName name [= expr]`
@@ -2669,7 +2669,7 @@ fn variable_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         dv = Some(expression(input)?);
     }
 
-    Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
+    Ok(VariableDecl { attributes, name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false, is_private: false })
 }
 
 fn block(input: &mut &str, attributes: Vec<Attribute>) -> Result<Block> {
@@ -2745,7 +2745,7 @@ fn static_block(input: &mut &str) -> Result<StaticBlock> {
     STATIC_DEPTH.with(|d| d.set(d.get() - 1));
     QUALIFIERS.with(|q| *q.borrow_mut() = qualifiers);
     let block = block?;
-    Ok(StaticBlock { captures, span: Span { start, end: block.span.end }, block, keyword_span, attributes: vec![], is_exported: false })
+    Ok(StaticBlock { captures, span: Span { start, end: block.span.end }, block, keyword_span, attributes: vec![], is_exported: false, is_private: false })
 }
 
 fn branch(input: &mut &str) -> Result<Branch> {
@@ -2840,7 +2840,7 @@ fn for_loop(input: &mut &str) -> Result<For> {
             default_value: None,
             is_const: false,
             span,
-            is_exported: false,
+            is_exported: false, is_private: false,
         }
     } else {
         // Past `for`, a malformed header is an error, not a different statement.
@@ -3507,7 +3507,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
             ws(input)?;
             dv = Some(expression(input)?);
         }
-        return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false });
+        return Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false, is_private: false });
     }
     // C style: `Type name`.
     *input = before;
@@ -3523,7 +3523,7 @@ fn typed_parameter(input: &mut &str) -> Result<VariableDecl> {
         ws(input)?;
         dv = Some(expression(input)?);
     }
-    Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false })
+    Ok(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: dv, is_const: false, span: Span { start, end: pos(input) }, is_exported: false, is_private: false })
 }
 
 /// Optional constraints after a generic parameter: `: Shape & Named` (a
@@ -3686,7 +3686,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         ws(input)?;
 
         return Ok(FunctionDecl {
-            is_exported: false,
+            is_exported: false, is_private: false,
             name: first,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params,
@@ -3743,7 +3743,7 @@ fn function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> Result<
         ws(input)?;
 
         return Ok(FunctionDecl {
-            is_exported: false,
+            is_exported: false, is_private: false,
             name,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params: vec![],
@@ -3806,7 +3806,7 @@ fn extern_parameters(input: &mut &str) -> Result<(Vec<VariableDecl>, bool)> {
         let name_span_end = pos(input);
         ws(input)?;
         let span_start = ty.span.start;
-        params.push(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) }, is_exported: false });
+        params.push(VariableDecl { attributes: vec![], name, name_span: Span { start: name_span_start, end: name_span_end }, type_name: ty, default_value: None, is_const: false, span: Span { start: span_start, end: pos(input) }, is_exported: false, is_private: false });
         if input.starts_with(',') {
             *input = &input[1..];
             continue;
@@ -3846,7 +3846,7 @@ fn extern_function_declaration(input: &mut &str, attributes: Vec<Attribute>) -> 
     // The caller takes the `;` (see `semicolon`).
 
     Ok(FunctionDecl {
-        is_exported: false,
+        is_exported: false, is_private: false,
         name,
         name_span: Span { start: name_span_start, end: name_span_end },
         generic_params: vec![],
@@ -3888,7 +3888,7 @@ fn constructor_parameter(input: &mut &str) -> Result<VariableDecl> {
             is_const: false,
             attributes: vec![],
             span: Span { start, end: pos(input) },
-            is_exported: false,
+            is_exported: false, is_private: false,
         });
     }
     // `var x: T` / `const x = v`, else a parameter written either way:
@@ -3929,7 +3929,7 @@ fn named_function(input: &mut &str, name: String, name_span: Span, start: usize,
     let body = body_or_semicolon(input, written)?;
     ws(input)?;
     Ok(FunctionDecl {
-        is_exported: false,
+        is_exported: false, is_private: false,
         name,
         name_span,
         generic_params,
@@ -4012,7 +4012,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
                 ws(&mut after)?;
                 *input = after;
                 return Ok(FunctionDecl {
-                    is_exported: false,
+                    is_exported: false, is_private: false,
                     name: indexer_name(&parameters).into(),
                     name_span: ty.span,
                     generic_params: vec![],
@@ -4080,7 +4080,7 @@ fn struct_method(input: &mut &str, attributes: &[Attribute]) -> Result<FunctionD
             ws(&mut after)?;
             *input = after;
             return Ok(FunctionDecl {
-                is_exported: false,
+                is_exported: false, is_private: false,
                 name: mname,
                 name_span: Span { start: mname_span_start, end: mname_span_end },
                 generic_params: vec![],
@@ -4177,7 +4177,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         }
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
-            is_exported: false,
+            is_exported: false, is_private: false,
             name: first,
             name_span: Span { start: name_span_start, end: name_span_end },
             generic_params,
@@ -4212,7 +4212,7 @@ fn trait_method(input: &mut &str, attributes: Vec<Attribute>) -> Result<Function
         ws(input)?;
         let body = optional_body(input)?;
         return Ok(FunctionDecl {
-            is_exported: false,
+            is_exported: false, is_private: false,
             name,
             name_span: Span { start: name_span2_start, end: name_span2_end },
             generic_params: vec![],
@@ -4280,7 +4280,7 @@ fn trait_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<TraitDec
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+    Ok(TraitDecl { attributes: attrs, name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false, is_private: false })
 }
 
 /// `extend TypeName[<...>] [with Trait, ...] { methods }`, or
@@ -4318,7 +4318,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     // the same as an empty `{}` body.
     if !traits.is_empty() && input.starts_with(';') {
         *input = &input[1..];
-        return Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods: vec![], properties: vec![], span: Span { start: decl_start, end: pos(input) }, is_exported: false });
+        return Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods: vec![], properties: vec![], span: Span { start: decl_start, end: pos(input) }, is_exported: false, is_private: false });
     }
     if !input.starts_with('{') {
         if traits.is_empty() { return Err(cut_expecting(input, "'{'")); }
@@ -4353,7 +4353,7 @@ fn extend_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<ExtendD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false })
+    Ok(ExtendDecl { attributes: attrs, target, target_bounds, traits, methods, properties, span: Span { start: decl_start, end: pos(input) }, is_exported: false, is_private: false })
 }
 
 /// A property in a trait or an extension, where fields cannot appear: `var`
@@ -4429,14 +4429,14 @@ fn property_declaration(input: &mut &str, field: VariableDecl, start: &str) -> R
                 default_value: None,
                 is_const: false,
                 span,
-                is_exported: false,
+                is_exported: false, is_private: false,
             };
             let void = TypeName { name: "void".to_string(), generic_types: vec![], span, labels: vec![] };
             (property_setter_name(&field.name), vec![value], void)
         };
         let end = body.as_ref().map_or(span.end, |_| pos(input));
         let function = FunctionDecl {
-            is_exported: false,
+            is_exported: false, is_private: false,
             name,
             name_span: if is_get { name_span } else { span },
             generic_params: vec![],
@@ -4557,7 +4557,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
             let body = block(input, vec![])?;
             ws(input)?;
             constructors.push(FunctionDecl {
-                is_exported: false,
+                is_exported: false, is_private: false,
                 name: "construct".into(),
                 name_span: Span { start: construct_span_start, end: construct_span_end },
                 generic_params: vec![],
@@ -4631,7 +4631,7 @@ fn struct_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructD
     if !input.starts_with('}') { expected_with_note(input, "'}'", Some((open, "to match this '{'"))); return Err(cut(input)); }
     *input = &input[1..];
 
-    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, properties, methods, constructors, destructor, destruct_span, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, enumeration: None })
+    Ok(StructDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, fields, properties, methods, constructors, destructor, destruct_span, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, is_private: false, enumeration: None })
 }
 
 /// `enum Name[<T, ...>] [: IntegerType] { Case, Case = value, Case(x: T), ... methods }`.
@@ -4777,7 +4777,7 @@ fn enum_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<StructDec
         destruct_span: None,
         span: Span { start: decl_start, end: pos(input) },
         attributes: attrs,
-        is_exported: false,
+        is_exported: false, is_private: false,
         enumeration: Some(EnumBody { representation, cases }),
     })
 }
@@ -4808,7 +4808,7 @@ fn type_alias_declaration(input: &mut &str, attrs: Vec<Attribute>) -> Result<Typ
     ws(input)?;
     let target = type_name(input)?;
 
-    Ok(TypeAliasDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, target, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false })
+    Ok(TypeAliasDecl { name, name_span: Span { start: name_span_start, end: name_span_end }, generic_params, target, span: Span { start: decl_start, end: pos(input) }, attributes: attrs, is_exported: false, is_private: false })
 }
 
 /// Consume keyword `kw` if it is next (followed by a non-identifier char).
@@ -4821,33 +4821,58 @@ fn keyword(input: &mut &str, kw: &str) -> bool {
     }
 }
 
-/// A top-level declaration, with an optional `export` modifier after its
-/// attributes (`[A] export f()`; `export [A] f()` is an error). Every
-/// top-level declaration is private to its file without `export`.
+/// A top-level declaration, with an optional `export` or `private` modifier
+/// after its attributes (`[A] export f()`; `export [A] f()` is an error).
+/// Without one, a declaration is visible to the files of its module (or,
+/// outside any module, its own file); `private` limits it to its file.
 fn declaration(input: &mut &str) -> Result<Declaration> {
     ws(input)?;
     let start = pos(input);
     // Attributes may precede any top-level declaration.
     let leading = attributes(input)?;
     ws(input)?;
-    let is_exported = keyword(input, "export");
-    if is_exported {
+    let mut is_exported = false;
+    let mut is_private = false;
+    loop {
+        let modifier_start = pos(input);
+        let (word, flag, other) = if keyword(input, "export") {
+            ("export", &mut is_exported, is_private)
+        } else if keyword(input, "private") {
+            ("private", &mut is_private, is_exported)
+        } else {
+            break;
+        };
+        let span = Span { start: modifier_start, end: pos(input) };
+        if *flag {
+            return Err(error_at(span, format!("duplicate '{}' modifier", word)));
+        }
+        if other {
+            return Err(error_at(span, "a declaration cannot be both 'export' and 'private'".to_string()));
+        }
+        *flag = true;
         ws(input)?;
-        // `export` goes after the attributes, never before them.
+        // A modifier goes after the attributes, never before them.
         if input.starts_with('[') {
             return Err(cut(input));
         }
     }
     let mut decl = declaration_body(input, leading)?;
-    if is_exported {
+    if is_exported || is_private {
+        macro_rules! modify {
+            ($d:expr) => {{
+                $d.is_exported = is_exported;
+                $d.is_private = is_private;
+                $d.span.start = $d.span.start.min(start);
+            }};
+        }
         match &mut decl {
-            Declaration::Function(f) => { f.is_exported = true; f.span.start = f.span.start.min(start); }
-            Declaration::Struct(s) => { s.is_exported = true; s.span.start = s.span.start.min(start); }
-            Declaration::TypeAlias(t) => { t.is_exported = true; t.span.start = t.span.start.min(start); }
-            Declaration::Trait(t) => { t.is_exported = true; t.span.start = t.span.start.min(start); }
-            Declaration::Extend(e) => { e.is_exported = true; e.span.start = e.span.start.min(start); }
-            Declaration::Variable(v) => { v.is_exported = true; v.span.start = v.span.start.min(start); }
-            Declaration::Static(s) => { s.is_exported = true; s.span.start = s.span.start.min(start); }
+            Declaration::Function(f) => modify!(f),
+            Declaration::Struct(s) => modify!(s),
+            Declaration::TypeAlias(t) => modify!(t),
+            Declaration::Trait(t) => modify!(t),
+            Declaration::Extend(e) => modify!(e),
+            Declaration::Variable(v) => modify!(v),
+            Declaration::Static(s) => modify!(s),
         }
     }
     Ok(decl)
@@ -5099,6 +5124,7 @@ fn static_constants(block: &StaticBlock) -> Vec<Declaration> {
                     attributes: block.attributes.clone(),
                     default_value: Some(Expression::SymbolRef { id: v.name.clone(), span: v.name_span }),
                     is_exported: block.is_exported,
+                    is_private: block.is_private,
                     ..v.clone()
                 }))
             }

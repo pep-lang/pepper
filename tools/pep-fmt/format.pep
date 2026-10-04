@@ -546,8 +546,9 @@ export struct Formatter {
         return _expression(item);
     }
 
-    # The attributes (one per line) and `export` at the start of a
-    # declaration, added to `result`. Returns the index of the next child.
+    # The attributes (one per line) and `export` or `private` at the start
+    # of a declaration, added to `result`. Returns the index of the next
+    # child.
     _prefix(item: syntax.Node, result: Doc): ulong {
         ulong i = 0;
         while (i < item.count and item.child(i).kind == syntax.NodeKind.Attribute) {
@@ -555,7 +556,7 @@ export struct Formatter {
             result.add(hardline());
             i += 1;
         }
-        if (i < item.count and item.child(i).is_token("export")) {
+        if (i < item.count and (item.child(i).is_token("export") or item.child(i).is_token("private"))) {
             result.add(_leaf(item.child(i)));
             result.add(text(" "));
             i += 1;

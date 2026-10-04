@@ -97,7 +97,8 @@ fn sweep_file(path: &std::path::Path, report: &mut Report) {
         // definition to go to but itself; skip the definition check there.
         let before = text[..offset].trim_end();
         before.ends_with("var") || before.ends_with("const") || before.ends_with("struct") || before.ends_with("trait")
-            || before.ends_with("enum") || before.ends_with("export") || before.ends_with("static")
+            || before.ends_with("enum") || before.ends_with("export") || before.ends_with("private")
+            || before.ends_with("static")
             || before.ends_with("import") || before.ends_with('\n') || before.ends_with('{') || before.ends_with(';')
             || before.ends_with('}')
     };

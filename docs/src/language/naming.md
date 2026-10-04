@@ -59,8 +59,9 @@ struct.
 
 ## Private members
 
-Pepper has no member-level `private` keyword; any code that can reach an
-object can name all of its members. A leading `_` marks a data member or
+Pepper's `private` keyword applies only to top-level declarations (see
+[Visibility](visibility.md)); any code that can reach an object can name all
+of its members. A leading `_` marks a data member or
 method as private to its struct instead: code outside the struct, and its
 extensions, should not use it. The rest of the name is `snake_case`, as for a
 public member (`_readings`, `_is_empty`).
@@ -71,7 +72,8 @@ on members without the prefix.
 
 A top-level declaration does not need the prefix to be private: it is
 internal to its module (or, outside any module, private to its file) unless
-it is exported (see [Visibility](visibility.md)). The runtime also uses the
+it is exported, and `private` keeps it to its file (see
+[Visibility](visibility.md)). The runtime also uses the
 prefix on top-level helpers it exports but that are not part of its public
 API, such as `_pep_malloc`, which the compiler calls by name, or a helper
 one runtime module shares with another: the reference leaves them out too.

@@ -3996,6 +3996,7 @@ export struct ExtensionDef {
     var attributes: Array<ast.Attribute>;
     var loc: Loc;
     var is_exported: bool;
+    var is_private: bool;
 
     construct(
         target: TypeName = TypeName(),
@@ -4005,7 +4006,8 @@ export struct ExtensionDef {
         methods: Array<FunctionDef> = Array<FunctionDef>(),
         attributes: Array<ast.Attribute> = Array<ast.Attribute>(),
         loc: Loc = Loc(),
-        is_exported: bool = false
+        is_exported: bool = false,
+        is_private: bool = false
     ) {
         this.target = target;
         this.resolved = resolved;
@@ -4015,6 +4017,7 @@ export struct ExtensionDef {
         this.attributes = attributes;
         this.loc = loc;
         this.is_exported = is_exported;
+        this.is_private = is_private;
     }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
@@ -4040,7 +4043,8 @@ export struct ExtensionDef {
             methods = _c471,
             attributes = this.attributes.copy(),
             loc = this.loc,
-            is_exported = this.is_exported
+            is_exported = this.is_exported,
+            is_private = this.is_private
         );
     }
 
@@ -4075,6 +4079,7 @@ export struct ExtensionDef {
         out["attributes"] = _v473;
         out["loc"] = this.loc.to_json();
         out["is_exported"] = JsonValue.Bool(this.is_exported);
+        out["is_private"] = JsonValue.Bool(this.is_private);
         return out;
     }
 }
@@ -4337,6 +4342,7 @@ export struct Module {
     var method_overload_sets: Map<String, Map<String, Array<String>>>;
     var extension_scopes: ExtensionScopes;
     var private_functions: HashSet<Loc>;
+    var file_private_functions: HashSet<Loc>;
     var call_targets: Array<(Loc, String)>;
     var argument_names: Array<(Loc, String)>;
     var namespaces: Array<String>;
@@ -4377,6 +4383,7 @@ export struct Module {
         method_overload_sets: Map<String, Map<String, Array<String>>> = Map<String, Map<String, Array<String>>>(),
         extension_scopes: ExtensionScopes = ExtensionScopes(),
         private_functions: HashSet<Loc> = HashSet<Loc>(),
+        file_private_functions: HashSet<Loc> = HashSet<Loc>(),
         call_targets: Array<(Loc, String)> = Array<(Loc, String)>(),
         argument_names: Array<(Loc, String)> = Array<(Loc, String)>(),
         namespaces: Array<String> = Array<String>(),
@@ -4416,6 +4423,7 @@ export struct Module {
         this.method_overload_sets = method_overload_sets;
         this.extension_scopes = extension_scopes;
         this.private_functions = private_functions;
+        this.file_private_functions = file_private_functions;
         this.call_targets = call_targets;
         this.argument_names = argument_names;
         this.namespaces = namespaces;
@@ -4583,6 +4591,7 @@ export struct Module {
             method_overload_sets = _c557,
             extension_scopes = this.extension_scopes.copy(),
             private_functions = this.private_functions.copy(),
+            file_private_functions = this.file_private_functions.copy(),
             call_targets = _c564,
             argument_names = _c568,
             namespaces = this.namespaces.copy(),
@@ -4748,6 +4757,11 @@ export struct Module {
             _v562.append(_item562.to_json());
         }
         out["private_functions"] = _v562;
+        var _v563 = JsonValue.array();
+        for (var _item563 in this.file_private_functions) {
+            _v563.append(_item563.to_json());
+        }
+        out["file_private_functions"] = _v563;
         var _v564 = JsonValue.array();
         for (var _item564 in this.call_targets) {
             var _v565 = JsonValue.array();

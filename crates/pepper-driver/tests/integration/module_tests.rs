@@ -2455,3 +2455,95 @@ fn a_module_file_loads_its_module() {
     let mut generator = CodeGenerator::new(&ctx, "test");
     assert_eq!(generator.jit_execute(&mut module, "test").expect("jit"), 5);
 }
+
+/// A module whose files each declare `private` helpers of the same names:
+/// a function, a struct, a constant, an extension's method, and a function
+/// that would otherwise join the other file's overload set.
+const PRIVATE: &[(&str, &str)] = &[
+    ("shop/module.pep", "export * from \"a\";\nexport * from \"b\";\n"),
+    (
+        "shop/a.pep",
+        r#"
+private const LEVEL = 1;
+private struct Shelf { var count: int; }
+private extend Shelf { missing(): int { return LEVEL - count; } }
+private helper(x: int): int { return x + LEVEL; }
+export from_a(): int { var s = Shelf(); s.count = 0; return helper(10) + s.missing(); }
+"#,
+    ),
+    (
+        "shop/b.pep",
+        r#"
+private const LEVEL = 100;
+private struct Shelf { var count: int; }
+private extend Shelf { missing(): int { return LEVEL - count; } }
+private helper(x: int): int { return x * LEVEL; }
+export from_b(): int { var s = Shelf(); s.count = 0; return helper(2) + s.missing(); }
+"#,
+    ),
+];
+
+#[test]
+fn private_declarations_of_one_name_in_two_files_of_a_module() {
+    let mut files = PRIVATE.to_vec();
+    files.push(("main.pep", "import shop;\ntest(): int { return shop.from_a() + shop.from_b(); }"));
+    assert_eq!(run("private_same_names", &files), (11 + 1) + (200 + 100));
+}
+
+#[test]
+fn a_private_declaration_is_hidden_from_the_other_files_of_its_module() {
+    for (test, c, name) in [
+        ("private_function", "export c(): int { return helper(1); }", "helper"),
+        ("private_struct", "export c(): int { var s = Shelf(); return 0; }", "Shelf"),
+        ("private_constant", "export c(): int { return LEVEL; }", "LEVEL"),
+    ] {
+        let files = [
+            ("shop/module.pep", "export * from \"a\";\nexport * from \"c\";\n"),
+            ("shop/a.pep", PRIVATE[1].1),
+            ("shop/c.pep", c),
+            ("main.pep", "import shop;\ntest(): int { return shop.c(); }"),
+        ];
+        let err = error(test, &files);
+        let expected = format!("'{}' is private to ", name);
+        assert!(err.contains(&expected), "{}: {}", test, err);
+        assert!(err.contains("remove 'private' to use it from the other files of its module"), "{}: {}", test, err);
+    }
+}
+
+#[test]
+fn a_private_extension_is_hidden_from_the_other_files_of_its_module() {
+    let files = [
+        ("shop/module.pep", "export * from \"a\";\nexport * from \"c\";\n"),
+        ("shop/a.pep", "export struct Shelf { var count: int; }\nprivate extend Shelf { doubled(): int { return count * 2; } }\n"),
+        ("shop/c.pep", "export c(): int { var s = Shelf(); return s.doubled(); }\n"),
+        ("main.pep", "import shop;\ntest(): int { return shop.c(); }"),
+    ];
+    let err = error("private_extension_in_module", &files);
+    assert!(err.contains("'doubled' is declared in a private extension in "), "{}", err);
+    assert!(err.contains("remove 'private' to use it from the other files of its module"), "{}", err);
+}
+
+#[test]
+fn a_private_function_joins_no_overload_set_of_its_module() {
+    // `a.pep`'s private `pick(String)` stays out of the set `b.pep` and
+    // `c.pep` form, and `a.pep` sees only its own.
+    let files = [
+        ("shop/module.pep", "export * from \"a\";\nexport * from \"b\";\nimport \"c\";\n"),
+        ("shop/a.pep", "private pick(x: int): int { return 1; }\nexport from_a(): int { return pick(0); }\n"),
+        ("shop/b.pep", "pick(x: int): int { return 10; }\nexport from_b(): int { return pick(0) + pick(true); }\n"),
+        ("shop/c.pep", "pick(x: bool): int { return 100; }\n"),
+        ("main.pep", "import shop;\ntest(): int { return shop.from_a() + shop.from_b(); }"),
+    ];
+    assert_eq!(run("private_overloads", &files), 1 + 10 + 100);
+}
+
+#[test]
+fn private_is_optional_where_names_do_not_collide() {
+    // The same module without `private`: names that differ need none.
+    let files = [
+        ("shop/module.pep", "export * from \"a\";\n"),
+        ("shop/a.pep", "helper(): int { return 4; }\nprivate other(): int { return 3; }\nexport f(): int { return helper() + other(); }\n"),
+        ("main.pep", "import shop;\ntest(): int { return shop.f(); }"),
+    ];
+    assert_eq!(run("private_optional", &files), 7);
+}

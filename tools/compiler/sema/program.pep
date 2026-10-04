@@ -164,6 +164,9 @@ _join(module: Module, other: Module) {
     for (var at in other.private_functions) {
         module.private_functions.insert(at);
     }
+    for (var at in other.file_private_functions) {
+        module.file_private_functions.insert(at);
+    }
     module.externs.append_all(other.externs);
     module.globals.append_all(other.globals);
     module.static_blocks.append_all(other.static_blocks);
@@ -183,8 +186,8 @@ _join(module: Module, other: Module) {
 }
 
 ## Returns `module` as `pep-build --emit-model` prints it: compact JSON with
-## every object's keys sorted, and the sets (`private_functions` and the
-## extension scopes) sorted, numbers by value and the rest by their text.
+## every object's keys sorted, and the sets (`private_functions`,
+## `file_private_functions` and the extension scopes) sorted, numbers by value and the rest by their text.
 ##
 ## @param module the model
 ## @returns the text
@@ -192,6 +195,7 @@ export model_json(module: Module): String {
     var value = module.to_json();
     var object = value.as_object().value();
     _sort_set(object["private_functions"]);
+    _sort_set(object["file_private_functions"]);
     var scopes = object["extension_scopes"].as_object().value();
     _sort_set(scopes["prelude"]);
     match (scopes["visible"]) {

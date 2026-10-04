@@ -79,6 +79,9 @@ pub enum VisibilityErrorKind {
     /// A reference to a private top-level declaration of another file: one
     /// outside any module, or internal to another module.
     Private,
+    /// A reference to a `private` declaration of another file of its
+    /// module.
+    FilePrivate,
     /// A reference to a method of another file's private extension.
     PrivateExtension,
     /// A reference to a method of an exported extension in a file this file
@@ -132,6 +135,20 @@ impl VisibilityError {
                 ),
                 None => format!("'{}' is private to {}; declare it with 'export' to use it from another file", self.name, other),
             },
+            VisibilityErrorKind::FilePrivate => format!(
+                "'{}' is private to {}; remove 'private' to use it from the other files of its module",
+                self.name, other
+            ),
+            // Within one module only a `private` extension is out of reach.
+            VisibilityErrorKind::PrivateExtension
+                if files[self.declared_in].module_root.is_some()
+                    && files[self.declared_in].module_root == files[self.file].module_root =>
+            {
+                format!(
+                    "'{}' is declared in a private extension in {}; remove 'private' to use it from the other files of its module",
+                    self.name, other
+                )
+            }
             VisibilityErrorKind::PrivateExtension => match module_name(files[self.declared_in].module_root) {
                 Some(module) => format!(
                     "'{}' is declared in an extension internal to module '{}'; export the extension to use it here",
@@ -233,6 +250,8 @@ fn declaration_span(module: &Module, name: &str, kind: VisibilityErrorKind) -> O
 struct Decl<'a> {
     file: usize,
     exported: bool,
+    /// Marked `private`: visible only in its own file.
+    private: bool,
     /// An `extern` function: every declaration of it names one C symbol.
     external: bool,
     /// The declared name's span.
@@ -272,8 +291,8 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     // An extension may name its target or its traits through an alias
     // (`extend C` after `type C = S`).
     let mut aliases: HashMap<&str, &str> = HashMap::new();
-    // trait -> (declaring file, exported, methods).
-    let mut traits: HashMap<&str, (usize, bool, Vec<&str>)> = HashMap::new();
+    // trait -> (declaring file, exported, private, methods).
+    let mut traits: HashMap<&str, (usize, bool, bool, Vec<&str>)> = HashMap::new();
     for file in files {
         for d in file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             if let Declaration::TypeAlias(t) = d {
@@ -282,7 +301,16 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
         }
     }
     for (i, file) in files.iter().enumerate() {
-        let decl = |exported, span| Decl { file: i, exported, external: false, span, generics: vec![], is_override: false, is_function: false };
+        let decl = |d: &Declaration, span| Decl {
+            file: i,
+            exported: d.is_exported(),
+            private: d.is_private(),
+            external: false,
+            span,
+            generics: vec![],
+            is_override: false,
+            is_function: false,
+        };
         for d in &file.module.declarations {
             // A malformed attribute is reported by platform filtering itself.
             if !keep(d.attributes()).unwrap_or(true) {
@@ -294,7 +322,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     generics: f.generic_params.iter().map(|g| g.name.as_str()).collect(),
                     is_override: is_function_override(f),
                     is_function: true,
-                    ..decl(f.is_exported, f.name_span)
+                    ..decl(d, f.name_span)
                 }),
                 Declaration::Struct(s) => {
                     let params: HashSet<&str> = s.generic_params.iter().map(|p| p.name.as_str()).collect();
@@ -302,17 +330,17 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     members.generic_fields.insert(&s.name, fields.map(|f| f.name.as_str()).collect());
                     types.insert(&s.name);
                     types.insert(demangle_name(&s.name));
-                    decls.entry(&s.name).or_default().push(decl(s.is_exported, s.name_span));
+                    decls.entry(&s.name).or_default().push(decl(d, s.name_span));
                     members.of_struct.entry(&s.name).or_default().extend(struct_member_names(s));
                     members.struct_params.insert(&s.name, s.generic_params.iter().map(|g| g.name.as_str()).collect());
                     for m in struct_member_names(s) {
-                        members.in_struct_bodies.entry(m).or_default().push((i, s.is_exported));
+                        members.in_struct_bodies.entry(m).or_default().push((i, s.is_exported, s.is_private));
                     }
                 }
                 Declaration::TypeAlias(t) => {
                     types.insert(&t.name);
                     types.insert(demangle_name(&t.name));
-                    decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
+                    decls.entry(&t.name).or_default().push(decl(d, t.name_span))
                 }
                 Declaration::Trait(t) => {
                     let methods = t
@@ -321,12 +349,12 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                         .filter(|m| keep(&m.attributes).unwrap_or(true))
                         .map(|m| m.name.as_str())
                         .chain(t.properties.iter().map(|p| p.name.as_str()));
-                    traits.insert(&t.name, (i, t.is_exported, methods.collect::<Vec<_>>()));
+                    traits.insert(&t.name, (i, t.is_exported, t.is_private, methods.collect::<Vec<_>>()));
                     types.insert(&t.name);
                     types.insert(demangle_name(&t.name));
-                    decls.entry(&t.name).or_default().push(decl(t.is_exported, t.name_span))
+                    decls.entry(&t.name).or_default().push(decl(d, t.name_span))
                 }
-                Declaration::Variable(v) => decls.entry(&v.name).or_default().push(decl(v.is_exported, v.name_span)),
+                Declaration::Variable(v) => decls.entry(&v.name).or_default().push(decl(d, v.name_span)),
                 Declaration::Extend(e) => {
                     for t in &e.traits {
                         let (target, t) = (resolve_alias(&aliases, &e.target.name), resolve_alias(&aliases, &t.name));
@@ -335,13 +363,13 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     // A method platform selection drops is never compiled.
                     for m in e.methods.iter().filter(|m| keep(&m.attributes).unwrap_or(true)) {
                         let target = resolve_alias(&aliases, &e.target.name);
-                        members.of_extensions.entry(target).or_default().push((&m.name, i, e.is_exported));
-                        members.in_extensions.entry(&m.name).or_default().push((i, e.is_exported));
+                        members.of_extensions.entry(target).or_default().push((&m.name, i, e.is_exported, e.is_private));
+                        members.in_extensions.entry(&m.name).or_default().push((i, e.is_exported, e.is_private));
                     }
                     for p in &e.properties {
                         let target = resolve_alias(&aliases, &e.target.name);
-                        members.of_extensions.entry(target).or_default().push((&p.name, i, e.is_exported));
-                        members.in_extensions.entry(&p.name).or_default().push((i, e.is_exported));
+                        members.of_extensions.entry(target).or_default().push((&p.name, i, e.is_exported, e.is_private));
+                        members.in_extensions.entry(&p.name).or_default().push((i, e.is_exported, e.is_private));
                     }
                 }
                 // Its constants are declared beside it, as variables.
@@ -353,9 +381,9 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     members.aliases = aliases;
     // Every trait's methods, by the trait declaring them: a call through a
     // trait value needs no conformance to be visible.
-    for (&t, (file, exported, methods)) in &traits {
+    for (&t, (file, exported, private, methods)) in &traits {
         for &m in methods {
-            members.in_traits.entry(m).or_default().push((*file, *exported, t));
+            members.in_traits.entry(m).or_default().push((*file, *exported, *private, t));
         }
     }
     for (name, entries) in &decls {
@@ -425,15 +453,16 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     }
     // Files of one module see each other's declarations: two of them may
     // declare a function of one name (an overload set) or an extern, but
-    // nothing else. Mangling keeps their names apart, so they are compared
-    // by the names the user wrote, in path order (the first is the one kept).
+    // nothing else, unless one is `private` to its file. Mangling keeps
+    // their names apart, so they are compared by the names the user wrote,
+    // in path order (the first is the one kept).
     let mut in_module: HashMap<(&std::path::Path, &str), (usize, Span, bool)> = HashMap::new();
     let mut by_path: Vec<usize> = (0..files.len()).filter(|&i| files[i].module_root.is_some()).collect();
     by_path.sort_by_key(|&i| files[i].name);
     for i in by_path {
         let file = &files[i];
         let Some(root) = file.module_root else { continue };
-        for d in file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
+        for d in file.module.declarations.iter().filter(|d| !d.is_private() && keep(d.attributes()).unwrap_or(true)) {
             let function = match d {
                 Declaration::Extend(_) | Declaration::Static(_) => continue,
                 Declaration::Function(f) if is_function_override(f) => continue,
@@ -536,7 +565,8 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
 }
 
 /// Member names across the program, for bare member refs in method bodies
-/// and for `x.m` accesses. Each entry is (declaring file, exported).
+/// and for `x.m` accesses. Each entry is (declaring file, exported,
+/// `private`).
 #[derive(Default)]
 struct Members<'a> {
     /// Struct name -> its generic parameter names.
@@ -544,18 +574,19 @@ struct Members<'a> {
     /// struct name -> names declared in its body (fields + methods).
     of_struct: HashMap<&'a str, HashSet<&'a str>>,
     /// member name -> the structs whose bodies declare it (fields + methods).
-    in_struct_bodies: HashMap<&'a str, Vec<(usize, bool)>>,
-    /// struct name -> (method, declaring file, exported) from extensions.
-    of_extensions: HashMap<&'a str, Vec<(&'a str, usize, bool)>>,
+    in_struct_bodies: HashMap<&'a str, Vec<(usize, bool, bool)>>,
+    /// struct name -> (method, declaring file, exported, private) from
+    /// extensions.
+    of_extensions: HashMap<&'a str, Vec<(&'a str, usize, bool, bool)>>,
     /// method name -> the extensions that declare it.
-    in_extensions: HashMap<&'a str, Vec<(usize, bool)>>,
+    in_extensions: HashMap<&'a str, Vec<(usize, bool, bool)>>,
     /// trait name -> the structs extensions make conform to it.
     adopters: HashMap<&'a str, Vec<&'a str>>,
     /// struct name -> its fields typed by one of its type parameters.
     generic_fields: HashMap<&'a str, HashSet<&'a str>>,
     /// method name -> the traits declaring it (declaring file, exported,
-    /// trait name).
-    in_traits: HashMap<&'a str, Vec<(usize, bool, &'a str)>>,
+    /// private, trait name).
+    in_traits: HashMap<&'a str, Vec<(usize, bool, bool, &'a str)>>,
     /// type alias -> the type it names (its base name, for a generic one).
     aliases: HashMap<&'a str, &'a str>,
 }
@@ -668,9 +699,22 @@ impl Checker<'_, '_> {
     }
 
     /// An extension in `file` is visible here: it is this file's own or its
-    /// module's, or exported by a prelude file or a file this one imports.
-    fn sees_extension(&self, file: usize, exported: bool) -> bool {
-        self.same_module(file) || (exported && (self.prelude[file] || self.extensions.contains(&file)))
+    /// module's (unless `private`), or exported by a prelude file or a file
+    /// this one imports.
+    fn sees_extension(&self, file: usize, exported: bool, private: bool) -> bool {
+        file == self.file
+            || (!private && self.same_module(file))
+            || (exported && (self.prelude[file] || self.extensions.contains(&file)))
+    }
+
+    /// What a reference to another file's unexported `d` is: a `private`
+    /// declaration of another file of this module, or one internal to its
+    /// file or module.
+    fn private_kind(&self, d: &Decl) -> VisibilityErrorKind {
+        match d.private && self.roots[d.file].is_some() && self.same_module(d.file) {
+            true => VisibilityErrorKind::FilePrivate,
+            false => VisibilityErrorKind::Private,
+        }
     }
 
     fn module(&mut self, module: &Module) {
@@ -693,7 +737,10 @@ impl Checker<'_, '_> {
             // this one does not import.
             let candidates = self.private.get(name).into_iter().flatten().filter(|d| d.file != self.file);
             if let Some(d) = candidates.clone().find(|d| d.exported).or_else(|| candidates.clone().next()) {
-                let kind = if d.exported { VisibilityErrorKind::NotImported } else { VisibilityErrorKind::Private };
+                let kind = match d.exported {
+                    true => VisibilityErrorKind::NotImported,
+                    false => self.private_kind(d),
+                };
                 self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in: d.file, declared_at: None, kind });
                 return;
             }
@@ -724,7 +771,7 @@ impl Checker<'_, '_> {
         let elsewhere = entries.iter().find(|d| d.file != self.file).unwrap_or(&entries[0]);
         let (declared_in, kind) = match entries.iter().find(|d| d.exported && d.file != self.file) {
             Some(d) => (d.file, VisibilityErrorKind::NotImported),
-            None => (elsewhere.file, VisibilityErrorKind::Private),
+            None => (elsewhere.file, self.private_kind(elsewhere)),
         };
         self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, declared_at: None, kind });
     }
@@ -749,7 +796,7 @@ impl ScopeWalk for Checker<'_, '_> {
                 .members
                 .of_extensions
                 .get(target)
-                .is_some_and(|ext| ext.iter().any(|&(m, file, exported)| m == name && self.sees_extension(file, exported)))
+                .is_some_and(|ext| ext.iter().any(|&(m, file, exported, private)| m == name && self.sees_extension(file, exported, private)))
     }
 
     /// `extend Foo<T>` introduces T as a generic parameter. A name the
@@ -791,11 +838,11 @@ impl ScopeWalk for Checker<'_, '_> {
         };
         for st in structs {
             let Some(ext) = self.members.of_extensions.get(st) else { continue };
-            let methods = || ext.iter().filter(|(m, _, _)| *m == id);
-            if methods().any(|&(_, file, exported)| self.sees_extension(file, exported)) {
+            let methods = || ext.iter().filter(|(m, _, _, _)| *m == id);
+            if methods().any(|&(_, file, exported, private)| self.sees_extension(file, exported, private)) {
                 continue;
             }
-            if let Some(&(_, file, exported)) = methods().min_by_key(|&&(_, _, exported)| !exported) {
+            if let Some(&(_, file, exported, _)) = methods().min_by_key(|&&(_, _, exported, _)| !exported) {
                 let kind =
                     if exported { VisibilityErrorKind::ExtensionNotImported } else { VisibilityErrorKind::PrivateExtension };
                 self.errors.push(VisibilityError { file: self.file, span: *span, name: id.clone(), declared_in: file, declared_at: None, kind });
@@ -855,23 +902,24 @@ impl ScopeWalk for Checker<'_, '_> {
         if self.unknown_receivers.contains(&span.start) {
             return;
         }
-        let visible_body = |&(file, exported): &(usize, bool)| exported || self.same_module(file);
+        let visible_body =
+            |&(file, exported, private): &(usize, bool, bool)| exported || file == self.file || (!private && self.same_module(file));
         // A trait this file can see may declare it: the call may go through
         // a value of that trait, which needs no conformance in view.
         let through_trait = self.members.in_traits.get(name).is_some_and(|t| {
-            t.iter().any(|&(file, exported, trait_name)| {
-                self.sees_extension(file, exported) || (exported && self.bound.contains(trait_name))
+            t.iter().any(|&(file, exported, private, trait_name)| {
+                self.sees_extension(file, exported, private) || (exported && self.bound.contains(trait_name))
             })
         });
-        if entries.iter().any(|&(file, exported)| self.sees_extension(file, exported))
+        if entries.iter().any(|&(file, exported, private)| self.sees_extension(file, exported, private))
             || self.members.in_struct_bodies.get(name).is_some_and(|s| s.iter().any(visible_body))
             || through_trait
         {
             return;
         }
         // An exported extension this file does not import, else a private one.
-        let (declared_in, kind) = match entries.iter().find(|&&(_, exported)| exported) {
-            Some(&(file, _)) => (file, VisibilityErrorKind::ExtensionNotImported),
+        let (declared_in, kind) = match entries.iter().find(|&&(_, exported, _)| exported) {
+            Some(&(file, _, _)) => (file, VisibilityErrorKind::ExtensionNotImported),
             None => (entries[0].0, VisibilityErrorKind::PrivateExtension),
         };
         self.errors.push(VisibilityError { file: self.file, span, name: name.to_string(), declared_in, declared_at: None, kind });

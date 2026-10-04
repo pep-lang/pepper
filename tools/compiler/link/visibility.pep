@@ -41,6 +41,9 @@ import [Scopes, ScopeWalk] from "walk";
 export enum VisibilityErrorKind {
     ## A reference to a private top-level declaration of another file.
     Private,
+    ## A reference to a `private` declaration of another file of its
+    ## module.
+    FilePrivate,
     ## A reference to a method of another file's private extension.
     PrivateExtension,
     ## A reference to a method of an exported extension in a file this file
@@ -110,7 +113,17 @@ export struct VisibilityError {
                 }
                 return $"'{name}' is private to {other}; declare it with 'export' to use it from another file";
             }
+            FilePrivate => {
+                return $"'{name}' is private to {other}; remove 'private' to use it from the other files of its module";
+            }
             PrivateExtension => {
+                # Within one module only a `private` extension is out of
+                # reach.
+                var root = files[declared_in].module_root;
+                var own = files[file].module_root;
+                if (root.is_value() and own.is_value() and root.value().to_string() == own.value().to_string()) {
+                    return $"'{name}' is declared in a private extension in {other}; remove 'private' to use it from the other files of its module";
+                }
                 var module = _module_name(files[declared_in]);
                 if (module.is_value()) {
                     return $"'{name}' is declared in an extension internal to module '{module.value()}'; export the extension to use it here";
@@ -212,6 +225,8 @@ _declaration_span(module: Module, name: String, kind: VisibilityErrorKind): Span
 struct _Decl {
     var file: ulong;
     var exported: bool;
+    # Declared `private`: visible only in its own file.
+    var file_private: bool;
     # An `extern` function: every declaration of it names one C symbol.
     var external: bool;
     # The declared name.
@@ -223,9 +238,10 @@ struct _Decl {
     # A function, which may share its name with another file's.
     var is_function: bool;
 
-    construct(file: ulong, exported: bool, span: Span) {
+    construct(file: ulong, exported: bool, file_private: bool, span: Span) {
         this.file = file;
         this.exported = exported;
+        this.file_private = file_private;
         this.span = span;
     }
 
@@ -262,14 +278,17 @@ _is_function_override(f: FunctionDecl): bool {
     return names.is_override(params) or any_argument;
 }
 
-# Where a member name is declared, and whether that is exported.
+# Where a member name is declared, and whether that is exported or
+# `private`.
 struct _Owner {
     var file: ulong;
     var exported: bool;
+    var file_private: bool;
 
-    construct(file: ulong, exported: bool) {
+    construct(file: ulong, exported: bool, file_private: bool) {
         this.file = file;
         this.exported = exported;
+        this.file_private = file_private;
     }
 }
 
@@ -280,11 +299,13 @@ struct _Owner {
 struct _TraitMethod {
     var file: ulong;
     var exported: bool;
+    var file_private: bool;
     var trait_name: String;
 
-    construct(file: ulong, exported: bool, trait_name: String) {
+    construct(file: ulong, exported: bool, file_private: bool, trait_name: String) {
         this.file = file;
         this.exported = exported;
+        this.file_private = file_private;
         this.trait_name = trait_name;
     }
 }
@@ -467,7 +488,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
             }
             match (d) {
                 Function(f) => {
-                    var decl = _Decl(i, f.is_exported, f.name_span);
+                    var decl = _Decl(i, f.is_exported, f.is_private, f.name_span);
                     decl.external = f.external;
                     for (var g in f.generic_params) {
                         decl.generics.append(g.name);
@@ -492,21 +513,21 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
                     members.generic_fields[s.name] = fields;
                     types.insert(s.name);
                     types.insert(names.demangle_name(s.name));
-                    _add_name(decls, decl_names, s.name, _Decl(i, s.is_exported, s.name_span));
+                    _add_name(decls, decl_names, s.name, _Decl(i, s.is_exported, s.is_private, s.name_span));
                     if (!members.of_struct.contains(s.name)) {
                         members.of_struct[s.name] = HashSet<String>();
                     }
                     var body = members.of_struct[s.name];
                     for (var m in _struct_member_names(s)) {
                         body.insert(m);
-                        _add_owner(members.in_struct_bodies, m, _Owner(i, s.is_exported));
+                        _add_owner(members.in_struct_bodies, m, _Owner(i, s.is_exported, s.is_private));
                     }
                     members.struct_params[s.name] = param_list;
                 }
                 TypeAlias(t) => {
                     types.insert(t.name);
                     types.insert(names.demangle_name(t.name));
-                    _add_name(decls, decl_names, t.name, _Decl(i, t.is_exported, t.name_span));
+                    _add_name(decls, decl_names, t.name, _Decl(i, t.is_exported, t.is_private, t.name_span));
                 }
                 Trait(t) => {
                     var methods = Array<String>();
@@ -518,14 +539,14 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
                     for (var p in t.properties) {
                         methods.append(p.name);
                     }
-                    traits[t.name] = _TraitMethod(i, t.is_exported, t.name);
+                    traits[t.name] = _TraitMethod(i, t.is_exported, t.is_private, t.name);
                     trait_methods[t.name] = methods;
                     types.insert(t.name);
                     types.insert(names.demangle_name(t.name));
-                    _add_name(decls, decl_names, t.name, _Decl(i, t.is_exported, t.name_span));
+                    _add_name(decls, decl_names, t.name, _Decl(i, t.is_exported, t.is_private, t.name_span));
                 }
                 Variable(v) => {
-                    _add_name(decls, decl_names, v.name, _Decl(i, v.is_exported, v.name_span));
+                    _add_name(decls, decl_names, v.name, _Decl(i, v.is_exported, v.is_private, v.name_span));
                 }
                 Extend(e) => {
                     var extended = members.resolve(e.target.name);
@@ -540,16 +561,18 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
                     for (var m in e.methods) {
                         if (target.keeps(m.attributes)) {
                             _add_extension_member(
-                                members.of_extensions, extended, _ExtensionMember(m.name, i, e.is_exported)
+                                members.of_extensions,
+                                extended,
+                                _ExtensionMember(m.name, i, e.is_exported, e.is_private)
                             );
-                            _add_owner(members.in_extensions, m.name, _Owner(i, e.is_exported));
+                            _add_owner(members.in_extensions, m.name, _Owner(i, e.is_exported, e.is_private));
                         }
                     }
                     for (var p in e.properties) {
                         _add_extension_member(
-                            members.of_extensions, extended, _ExtensionMember(p.name, i, e.is_exported)
+                            members.of_extensions, extended, _ExtensionMember(p.name, i, e.is_exported, e.is_private)
                         );
-                        _add_owner(members.in_extensions, p.name, _Owner(i, e.is_exported));
+                        _add_owner(members.in_extensions, p.name, _Owner(i, e.is_exported, e.is_private));
                     }
                 }
                 # Its constants are declared beside it, as variables.
@@ -569,14 +592,14 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
         }
     }
     # Mangled private declarations, by the name the user wrote.
-    var private = HashMap<String, _Decl[]>();
+    var mangled_private = HashMap<String, _Decl[]>();
     for (var name in decl_names) {
         if (name.contains(names.NAMESPACE_SEPARATOR)) {
             var written = names.demangle_name(name);
-            if (!private.contains(written)) {
-                private[written] = Array<_Decl>();
+            if (!mangled_private.contains(written)) {
+                mangled_private[written] = Array<_Decl>();
             }
-            private[written].append_all(decls[name]);
+            mangled_private[written].append_all(decls[name]);
         }
     }
 
@@ -651,7 +674,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
     }
     # Files of one module see each other's declarations: two of them may
     # declare a function of one name (an overload set) or an extern, but
-    # nothing else. Mangling keeps their names apart, so they are compared
+    # nothing else, unless one is `private` to its file. Mangling keeps their names apart, so they are compared
     # by the names the user wrote, in path order (the first is the one
     # kept).
     var in_module = HashMap<String, _ModuleFirst>();
@@ -667,7 +690,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
     for (var f in by_path) {
         var root = files[f].module_root.value().to_string();
         for (var d in files[f].module.declarations) {
-            if (!target.keeps(d.attributes())) {
+            if (d.is_private() or !target.keeps(d.attributes())) {
                 continue;
             }
             bool skip = false;
@@ -741,7 +764,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
                     bases.append(e);
                 }
             }
-            var mangled = private.try_get(name);
+            var mangled = mangled_private.try_get(name);
             if (mangled.is_value()) {
                 for (var e in mangled.value()) {
                     if (!e.exported) {
@@ -800,7 +823,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
                 own.insert(d.declared_name());
             }
         }
-        var checker = _Checker(i, own, scopes[i], types, prelude, decls, private, members, target, errors);
+        var checker = _Checker(i, own, scopes[i], types, prelude, decls, mangled_private, members, target, errors);
         checker.roots = roots;
         for (var d in files[i].module.declarations) {
             if (target.keeps(d.attributes())) {
@@ -862,7 +885,7 @@ struct _Checker {
     var roots: Array<String?> = Array<String?>();
     var decls: HashMap<String, _Decl[]>;
     # Other files' private declarations, by the name the user wrote.
-    var private: HashMap<String, _Decl[]>;
+    var mangled_private: HashMap<String, _Decl[]>;
     var members: _VisibilityMembers;
     var target: Target;
     var errors: VisibilityError[];
@@ -880,7 +903,7 @@ struct _Checker {
         types: HashSet<String>,
         prelude: bool[],
         decls: HashMap<String, _Decl[]>,
-        private: HashMap<String, _Decl[]>,
+        mangled_private: HashMap<String, _Decl[]>,
         members: _VisibilityMembers,
         target: Target,
         errors: VisibilityError[]
@@ -891,7 +914,7 @@ struct _Checker {
         this.types = types;
         this.prelude = prelude;
         this.decls = decls;
-        this.private = private;
+        this.mangled_private = mangled_private;
         this.members = members;
         this.target = target;
         this.errors = errors;
@@ -944,10 +967,22 @@ struct _Checker {
     }
 
     # An extension in `in_file` is visible here: it is this file's own or
-    # its module's, or exported by a prelude file or a file this one
-    # imports.
-    _sees_extension(in_file: ulong, exported: bool): bool {
-        return _same_module(in_file) or (exported and (prelude[in_file] or scope.extensions.contains(in_file)));
+    # its module's (unless `private`), or exported by a prelude file or a
+    # file this one imports.
+    _sees_extension(in_file: ulong, exported: bool, file_private: bool): bool {
+        return in_file == file
+            or (!file_private and _same_module(in_file))
+            or (exported and (prelude[in_file] or scope.extensions.contains(in_file)));
+    }
+
+    # What a reference to another file's unexported `d` is: a `private`
+    # declaration of another file of this module, or one internal to its
+    # file or module.
+    _private_kind(d: _Decl): VisibilityErrorKind {
+        if (d.file_private and roots[d.file].is_value() and _same_module(d.file)) {
+            return VisibilityErrorKind.FilePrivate;
+        }
+        return VisibilityErrorKind.Private;
     }
 
     # Checks a reference not bound locally: used as a value, or as a type.
@@ -960,7 +995,7 @@ struct _Checker {
             # Linking leaves a reference to another file's mangled
             # declaration unrenamed: a private one, or an export of a file
             # this one does not import.
-            var candidates = private.try_get(name);
+            var candidates = mangled_private.try_get(name);
             if (candidates.is_value()) {
                 _Decl? pick;
                 for (var d in candidates.value()) {
@@ -979,9 +1014,7 @@ struct _Checker {
                 }
                 if (pick.is_value()) {
                     var d = pick.value();
-                    _report(
-                        span, name, d.file, d.exported ? VisibilityErrorKind.NotImported : VisibilityErrorKind.Private
-                    );
+                    _report(span, name, d.file, d.exported ? VisibilityErrorKind.NotImported : _private_kind(d));
                     return;
                 }
             }
@@ -1025,7 +1058,7 @@ struct _Checker {
                 return;
             }
         }
-        _report(span, name, elsewhere.file, VisibilityErrorKind.Private);
+        _report(span, name, elsewhere.file, _private_kind(elsewhere));
     }
 }
 
@@ -1050,7 +1083,7 @@ extend _Checker with ScopeWalk {
         var extension = members.of_extensions.try_get(resolved);
         if (extension.is_value()) {
             for (var m in extension.value()) {
-                if (m.name == name and _sees_extension(m.file, m.exported)) {
+                if (m.name == name and _sees_extension(m.file, m.exported, m.file_private)) {
                     return true;
                 }
             }
@@ -1116,7 +1149,7 @@ extend _Checker with ScopeWalk {
                         if (m.name != id) {
                             continue;
                         }
-                        if (_sees_extension(m.file, m.exported)) {
+                        if (_sees_extension(m.file, m.exported, m.file_private)) {
                             seen = true;
                         }
                         if (!first.is_value()) {
@@ -1208,14 +1241,14 @@ extend _Checker with ScopeWalk {
             return;
         }
         for (var e in entries.value()) {
-            if (_sees_extension(e.file, e.exported)) {
+            if (_sees_extension(e.file, e.exported, e.file_private)) {
                 return;
             }
         }
         var bodies = members.in_struct_bodies.try_get(name);
         if (bodies.is_value()) {
             for (var b in bodies.value()) {
-                if (b.exported or _same_module(b.file)) {
+                if (b.exported or b.file == file or (!b.file_private and _same_module(b.file))) {
                     return;
                 }
             }
@@ -1226,7 +1259,8 @@ extend _Checker with ScopeWalk {
         var in_traits = members.in_traits.try_get(name);
         if (in_traits.is_value()) {
             for (var t in in_traits.value()) {
-                if (_sees_extension(t.file, t.exported) or (t.exported and scope.bound.contains(t.trait_name))) {
+                if (_sees_extension(t.file, t.exported, t.file_private)
+                    or (t.exported and scope.bound.contains(t.trait_name))) {
                     return;
                 }
             }

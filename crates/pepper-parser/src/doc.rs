@@ -210,7 +210,7 @@ pub fn doc_comment_before(source: &str, offset: usize) -> Option<DocComment> {
         if before[line_start..].trim_start().starts_with('#') {
             break;
         }
-        if let Some(rest) = ["export", "static"].iter().find_map(|kw| before.strip_suffix(kw)) {
+        if let Some(rest) = ["export", "private", "static"].iter().find_map(|kw| before.strip_suffix(kw)) {
             if rest.is_empty() || !is_word_byte(*rest.as_bytes().last().unwrap()) {
                 end = rest.len();
                 continue;

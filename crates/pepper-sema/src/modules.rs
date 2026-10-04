@@ -398,14 +398,15 @@ fn visible_names(files: &[ProgramFile], own: &[Names], exported: &[Names], shado
 impl Overrides {
     /// The rule over the files of a program, before linking.
     fn of(files: &[ProgramFile]) -> Overrides {
-        // A file sees the declarations of its module's other files as its own.
+        // A file sees the declarations of its module's other files as its
+        // own, except their `private` ones (`shared`, per file).
         let mates = module_mates(files);
-        let with_mates = |own: &[Names]| -> Vec<Names> {
+        let with_mates = |own: &[Names], shared: &[Names]| -> Vec<Names> {
             (0..files.len())
                 .map(|i| {
                     let mut names = own[i].clone();
                     for &j in &mates[i] {
-                        for (k, v) in &own[j] {
+                        for (k, v) in &shared[j] {
                             add_names(&mut names, k, v);
                         }
                     }
@@ -415,14 +416,17 @@ impl Overrides {
         };
         // Per file, the visible names of the declarations `kind` accepts.
         let visible = |kind: fn(&Declaration) -> bool| -> Vec<HashSet<String>> {
-            let names_of = |f: &ProgramFile, exported_only: bool| -> Names {
+            let names_of = |f: &ProgramFile, exported_only: bool, shared_only: bool| -> Names {
                 named_decls(&f.module)
-                    .filter(|d| kind(d) && (!exported_only || d.is_exported()))
+                    .filter(|d| kind(d) && (!exported_only || d.is_exported()) && (!shared_only || !d.is_private()))
                     .map(|d| (d.name().to_string(), HashSet::new()))
                     .collect()
             };
-            let own: Vec<Names> = with_mates(&files.iter().map(|f| names_of(f, false)).collect::<Vec<_>>());
-            let exported: Vec<Names> = files.iter().map(|f| names_of(f, true)).collect();
+            let own: Vec<Names> = with_mates(
+                &files.iter().map(|f| names_of(f, false, false)).collect::<Vec<_>>(),
+                &files.iter().map(|f| names_of(f, false, true)).collect::<Vec<_>>(),
+            );
+            let exported: Vec<Names> = files.iter().map(|f| names_of(f, true, false)).collect();
             // Imports come before the module's other files.
             let own_names: Vec<HashSet<String>> =
                 files.iter().map(|f| named_decls(&f.module).filter(|d| kind(d)).map(|d| d.name().to_string()).collect()).collect();
@@ -435,11 +439,12 @@ impl Overrides {
         // types).
         let types = visible(|d| matches!(d, Declaration::Struct(_) | Declaration::TypeAlias(_) | Declaration::Trait(_)));
         let value_types = visible(|d| matches!(d, Declaration::Struct(_) | Declaration::TypeAlias(_)));
-        let bases_of = |i: usize, exported_only: bool| -> Names {
+        let bases_of = |i: usize, exported_only: bool, shared_only: bool| -> Names {
             let mut out = Names::new();
             for d in named_decls(&files[i].module) {
                 if let Declaration::Function(f) = d
                     && (!exported_only || f.is_exported)
+                    && (!shared_only || !f.is_private)
                     && f.generic_params.iter().any(|p| !p.bounds.is_empty() || !names_type(&value_types[i], &p.name))
                 {
                     out.entry(f.name.clone()).or_default().insert(f.generic_params.len());
@@ -447,9 +452,10 @@ impl Overrides {
             }
             out
         };
-        let own_file: Vec<Names> = (0..files.len()).map(|i| bases_of(i, false)).collect();
-        let own = with_mates(&own_file);
-        let exported: Vec<Names> = (0..files.len()).map(|i| bases_of(i, true)).collect();
+        let own_file: Vec<Names> = (0..files.len()).map(|i| bases_of(i, false, false)).collect();
+        let shared: Vec<Names> = (0..files.len()).map(|i| bases_of(i, false, true)).collect();
+        let own = with_mates(&own_file, &shared);
+        let exported: Vec<Names> = (0..files.len()).map(|i| bases_of(i, true, false)).collect();
         // A file's own declaration of a name hides what its imports bind
         // under that name, as linking resolves it: a plain function, or a
         // generic base (but not an override, which names the import).
@@ -536,6 +542,7 @@ fn module_mates(files: &[ProgramFile]) -> Vec<Vec<usize>> {
 /// overload set, a union (see [`Unions`]), which the declaring files see
 /// too. Externs keep their names. Any other name declared by two files of
 /// one module is the first one's; the visibility check reports the second.
+/// A `private` declaration is bound for no other file.
 fn module_bindings(files: &[ProgramFile], own: &[Own], mates: &[Vec<usize>], unions: &mut Unions) -> Vec<HashMap<String, String>> {
     let mut out: Vec<HashMap<String, String>> = vec![HashMap::new(); files.len()];
     let mut done = vec![false; files.len()];
@@ -551,7 +558,8 @@ fn module_bindings(files: &[ProgramFile], own: &[Own], mates: &[Vec<usize>], uni
         for &j in &group {
             done[j] = true;
             let mut seen = HashSet::new();
-            for d in named_decls(&files[j].module) {
+            // A `private` declaration is its file's alone.
+            for d in named_decls(&files[j].module).filter(|d| !d.is_private()) {
                 let Some(c) = own[j].get(d.name()) else { continue };
                 if !seen.insert(d.name()) {
                     continue;
@@ -577,7 +585,10 @@ fn module_bindings(files: &[ProgramFile], own: &[Own], mates: &[Vec<usize>], uni
             };
             let union = declared.len() > 1 && declared.iter().all(|(_, _, function)| *function);
             for &j in &group {
-                if union || !own[j].contains_key(name) {
+                // A file whose only declarations of the name are `private`
+                // keeps them to itself and joins no union.
+                let only_private = own[j].contains_key(name) && declared.iter().all(|(file, _, _)| *file != j);
+                if (union && !only_private) || !own[j].contains_key(name) {
                     out[j].insert(name.to_string(), canonical.clone());
                 }
             }
@@ -903,8 +914,8 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
                             e.methods
                                 .iter()
                                 .filter(kept_method)
-                                .map(|m| (m.name.clone(), i, e.is_exported))
-                                .chain(e.properties.iter().map(|p| (p.name.clone(), i, e.is_exported))),
+                                .map(|m| (m.name.clone(), i, e.is_exported, e.is_private))
+                                .chain(e.properties.iter().map(|p| (p.name.clone(), i, e.is_exported, e.is_private))),
                         )
                 }
                 _ => {}
@@ -1415,8 +1426,8 @@ fn bind_imports(
 struct Members {
     /// struct -> names declared in its body (fields and methods).
     of_body: HashMap<String, HashSet<String>>,
-    /// struct -> (method, declaring file, exported) from extensions.
-    of_extensions: HashMap<String, Vec<(String, usize, bool)>>,
+    /// struct -> (method, declaring file, exported, private) from extensions.
+    of_extensions: HashMap<String, Vec<(String, usize, bool, bool)>>,
     /// trait -> the structs extensions make conform to it.
     adopters: HashMap<String, Vec<String>>,
     /// type alias -> the type it names (its base name, for a generic one).
@@ -1461,7 +1472,7 @@ struct Rewriter<'a, 'e> {
     /// Other files whose exported extensions this file may use.
     extensions: &'a HashSet<usize>,
     /// The other files of this file's module, whose extensions it sees
-    /// whether or not they are exported.
+    /// whether or not they are exported, unless they are `private`.
     mates: &'a [usize],
     scopes: Scopes,
     imported: HashMap<usize, String>,
@@ -1618,7 +1629,7 @@ impl Rewriter<'_, '_> {
         };
         structs
             .into_iter()
-            .any(|st| self.members.of_extensions.get(st).is_some_and(|ext| ext.iter().any(|(m, _, _)| m == name)))
+            .any(|st| self.members.of_extensions.get(st).is_some_and(|ext| ext.iter().any(|(m, _, _, _)| m == name)))
     }
 }
 
@@ -1635,9 +1646,11 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
         let struct_name = self.members.resolve(struct_name);
         self.members.of_body.get(struct_name).is_some_and(|m| m.contains(name))
             || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
-                ext.iter().any(|(m, file, exported)| {
+                ext.iter().any(|(m, file, exported, private)| {
                     m == name
-                        && (*file == self.file || self.mates.contains(file) || (*exported && self.extensions.contains(file)))
+                        && (*file == self.file
+                            || (!private && self.mates.contains(file))
+                            || (*exported && self.extensions.contains(file)))
                 })
             })
     }

@@ -561,12 +561,14 @@ pub struct Overloads {
     conforms: HashMap<String, Vec<TypeName>>,
     traits: HashSet<String>,
     /// Each extension method, by its location: whether its extension is
-    /// exported.
-    extension_methods: HashMap<Loc, bool>,
+    /// exported, and whether it is `private`.
+    extension_methods: HashMap<Loc, (bool, bool)>,
     scopes: ExtensionScopes,
     /// The private members of free-function sets that also have exported
     /// members, by location: candidates only for calls in their own file.
     hidden: HashSet<Loc>,
+    /// The `private` members of every set, seen only in their own file.
+    file_private: HashSet<Loc>,
     /// Present when some generic parameter is constrained: a generic
     /// member whose arguments do not meet its constraints is not viable.
     conformance: Option<crate::passes::constraints::Conformance>,
@@ -710,7 +712,7 @@ impl Overloads {
         }
         let traits = module.traits.iter().map(|t| t.name.clone()).collect();
         let extension_methods =
-            module.extensions.iter().flat_map(|ext| ext.methods.iter().map(|m| (m.loc, ext.is_exported))).collect();
+            module.extensions.iter().flat_map(|ext| ext.methods.iter().map(|m| (m.loc, (ext.is_exported, ext.is_private)))).collect();
         let scopes = module.extension_scopes.clone();
         let conformance =
             crate::passes::constraints::has_constraints(module).then(|| crate::passes::constraints::Conformance::of(module));
@@ -726,6 +728,7 @@ impl Overloads {
             extension_methods,
             scopes,
             hidden,
+            file_private: module.file_private_functions.clone(),
             conformance,
             settle_by_arity: module.settle_overloads_by_arity,
         }
@@ -761,7 +764,8 @@ impl Overloads {
 
     /// The members of `set` that code at `at` can see: all of them, except
     /// that the private members of a set with exported ones are seen only
-    /// in their own file and module, and a file's own member hides an imported member
+    /// in their own file and module, `private` members only in their own
+    /// file, and a file's own member hides an imported member
     /// with the same parameters. A synthesized location (`Loc::NONE`) sees
     /// all.
     fn set(&self, set: &str, at: Loc) -> Option<impl Iterator<Item = &Member>> {
@@ -773,7 +777,9 @@ impl Overloads {
         let visible = move |m: &&Member| {
             at == Loc::NONE
                 || m.loc.file == at.file
-                || ((!self.hidden.contains(&m.loc) || self.scopes.same_module(m.loc.file, at.file)) && !own.contains(&&m.key))
+                || ((!self.hidden.contains(&m.loc) || self.scopes.same_module(m.loc.file, at.file))
+                    && !self.file_private.contains(&m.loc)
+                    && !own.contains(&&m.key))
         };
         Some(members.iter().filter(visible))
     }
@@ -913,7 +919,7 @@ impl Overloads {
     fn method_set(&self, receiver: &TypeName, set: &str, at: Loc) -> Option<Vec<Member>> {
         let members = self.methods.get(&canonical(receiver).to_string())?.get(set)?;
         let visible = |m: &&Member| match self.extension_methods.get(&m.loc) {
-            Some(&exported) => self.scopes.sees(at.file, m.loc.file, exported),
+            Some(&(exported, private)) => self.scopes.sees(at.file, m.loc.file, exported, private),
             None => true,
         };
         Some(members.iter().filter(visible).cloned().collect())

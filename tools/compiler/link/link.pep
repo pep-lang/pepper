@@ -244,10 +244,13 @@ struct _ModuleDeclaration {
     var name: String;
     # A free function (not an extern).
     var function: bool;
+    # The declaring file.
+    var file: ulong;
 
-    construct(name: String, function: bool) {
+    construct(name: String, function: bool, file: ulong) {
         this.name = name;
         this.function = function;
+        this.file = file;
     }
 }
 
@@ -411,11 +414,14 @@ struct _ExtensionMember {
     var name: String = "";
     var file: ulong;
     var exported: bool;
+    # Declared in a `private` extension: visible only in its own file.
+    var file_private: bool;
 
-    construct(name: String, file: ulong, exported: bool) {
+    construct(name: String, file: ulong, exported: bool, file_private: bool) {
         this.name = name;
         this.file = file;
         this.exported = exported;
+        this.file_private = file_private;
     }
 }
 
@@ -731,10 +737,12 @@ struct _Linker {
     # structs, aliases and traits, 1 for structs and aliases.
     _visible_types(value_only: bool): HashSet<String>[] {
         var own_names = Array<_Names>();
+        var shared_names = Array<_Names>();
         var exported = Array<_Names>();
         var shadow = Array<HashSet<String>>();
         for (var f in files) {
             var all = _Names();
+            var shared = _Names();
             var out = _Names();
             var keys = HashSet<String>();
             for (var d in named_decls(f.module)) {
@@ -755,18 +763,22 @@ struct _Linker {
                     continue;
                 }
                 all[d.declared_name()] = HashSet<ulong>();
+                if (!d.is_private()) {
+                    shared[d.declared_name()] = HashSet<ulong>();
+                }
                 keys.insert(d.declared_name());
                 if (d.is_exported()) {
                     out[d.declared_name()] = HashSet<ulong>();
                 }
             }
             own_names.append(all);
+            shared_names.append(shared);
             exported.append(out);
             shadow.append(keys);
         }
         # Imports come before the module's other files.
         var out = Array<HashSet<String>>();
-        for (var v in visible_names(_with_mates(own_names), exported, shadow)) {
+        for (var v in visible_names(_with_mates(own_names, shared_names), exported, shadow)) {
             var keys = HashSet<String>();
             for (var (k, _) in v) {
                 keys.insert(k);
@@ -776,12 +788,12 @@ struct _Linker {
         return out;
     }
 
-    _bases_of(i: ulong, exported_only: bool): _Names {
+    _bases_of(i: ulong, exported_only: bool, shared_only: bool): _Names {
         var out = _Names();
         for (var d in named_decls(files[i].module)) {
             match (d) {
                 Function(f) => {
-                    if (exported_only and !f.is_exported) {
+                    if ((exported_only and !f.is_exported) or (shared_only and f.is_private)) {
                         continue;
                     }
                     bool base = false;
@@ -836,14 +848,15 @@ struct _Linker {
     }
 
     # Per file, `own` with the names of its module's other files added: a
-    # file sees them as its own.
-    _with_mates(own_names: _Names[]): _Names[] {
+    # file sees them as its own, except their `private` ones (`shared`, per
+    # file).
+    _with_mates(own_names: _Names[], shared: _Names[]): _Names[] {
         var out = Array<_Names>();
         ulong i = 0;
         while (i < files.count) {
             var names_here = _copy_names(own_names[i]);
             for (var j in mates[i]) {
-                for (var (k, v) in own_names[j]) {
+                for (var (k, v) in shared[j]) {
                     _add_names(names_here, k, v);
                 }
             }
@@ -857,7 +870,8 @@ struct _Linker {
     # several files of a module declare under one name form one overload
     # set, a union, which the declaring files see too. Externs keep their
     # names. Any other name declared by two files of one module is the
-    # first one's; the visibility check reports the second.
+    # first one's; the visibility check reports the second. A `private`
+    # declaration is bound for no other file.
     compute_module_names() {
         ulong i = 0;
         while (i < files.count) {
@@ -882,6 +896,10 @@ struct _Linker {
                 done.insert(j);
                 var seen = HashSet<String>();
                 for (var d in named_decls(files[j].module)) {
+                    # A `private` declaration is its file's alone.
+                    if (d.is_private()) {
+                        continue;
+                    }
                     var name = d.declared_name();
                     var c = own[j].try_get(name);
                     if (!c.is_value() or !seen.insert(name)) {
@@ -897,7 +915,7 @@ struct _Linker {
                     if (!by_name.contains(name)) {
                         by_name[name] = Array<_ModuleDeclaration>();
                     }
-                    by_name[name].append(_ModuleDeclaration(c.value(), function));
+                    by_name[name].append(_ModuleDeclaration(c.value(), function, j));
                 }
             }
             for (var (name, declared) in by_name) {
@@ -922,7 +940,15 @@ struct _Linker {
                     canonical = merged.value();
                 }
                 for (var j in group) {
-                    if (union or !own[j].contains(name)) {
+                    # A file whose only declarations of the name are
+                    # `private` keeps them to itself and joins no union.
+                    bool only_private = own[j].contains(name);
+                    for (var d in declared) {
+                        if (d.file == j) {
+                            only_private = false;
+                        }
+                    }
+                    if ((union and !only_private) or !own[j].contains(name)) {
                         module_names[j][name] = canonical;
                     }
                 }
@@ -939,11 +965,13 @@ struct _Linker {
         types_of = _visible_types(false);
         value_types_of = _visible_types(true);
         var own_bases = Array<_Names>();
+        var shared_bases = Array<_Names>();
         var exported_bases = Array<_Names>();
         ulong i = 0;
         while (i < files.count) {
-            own_bases.append(_bases_of(i, false));
-            exported_bases.append(_bases_of(i, true));
+            own_bases.append(_bases_of(i, false, false));
+            shared_bases.append(_bases_of(i, false, true));
+            exported_bases.append(_bases_of(i, true, false));
             i += 1;
         }
         # A file's own declaration of a name hides what its imports bind
@@ -973,7 +1001,7 @@ struct _Linker {
             shadow.append(hidden);
             i += 1;
         }
-        bases = visible_names(_with_mates(own_bases), exported_bases, shadow);
+        bases = visible_names(_with_mates(own_bases, shared_bases), exported_bases, shadow);
         var none = Array<_Names>();
         i = 0;
         while (i < files.count) {
@@ -1583,11 +1611,11 @@ struct _Linker {
                         var list = members.of_extensions[extended];
                         for (var method in e.methods) {
                             if (target.keeps(method.attributes)) {
-                                list.append(_ExtensionMember(method.name, i, e.is_exported));
+                                list.append(_ExtensionMember(method.name, i, e.is_exported, e.is_private));
                             }
                         }
                         for (var property in e.properties) {
-                            list.append(_ExtensionMember(property.name, i, e.is_exported));
+                            list.append(_ExtensionMember(property.name, i, e.is_exported, e.is_private));
                         }
                     }
                     else => {}
@@ -2185,7 +2213,7 @@ extend _Rewriter with ScopeWalk {
             for (var member in extension.value()) {
                 if (member.name == name
                     and (member.file == file
-                        or linker.mates[file].contains(member.file)
+                        or (!member.file_private and linker.mates[file].contains(member.file))
                         or (member.exported and extensions.contains(member.file)))) {
                     return true;
                 }
