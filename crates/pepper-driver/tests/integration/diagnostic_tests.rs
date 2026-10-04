@@ -373,6 +373,30 @@ fn subscript_of_an_element_that_is_not_indexable() {
 }
 
 #[test]
+fn assignment_through_an_indexer_without_a_setter() {
+    // Used to fail in codegen as "unsupported lvalue" (#623), chained or not.
+    let source = "struct G {\n    construct() {}\n    [](i: int): int { return i; }\n}\nmain(): int {\n    var a = Array<G>();\n    a.append(G());\n    a[0][1] = 3;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("index_without_setter", source),
+        "main.pep:8:5: error: cannot assign through '[]': 'G' declares a '[]' getter but no setter\n\
+         \x20   8 |     a[0][1] = 3;\n\
+         \x20     |     ^~~~~~~\n\
+         note: declare '[](index, value)' to allow assignment"
+    );
+}
+
+#[test]
+fn assignment_to_a_call() {
+    let source = "get(): int { return 1; }\nmain(): int {\n    get() = 3;\n    return 0;\n}\n";
+    assert_eq!(
+        error_of("assign_to_call", source),
+        "main.pep:3:5: error: expression is not assignable\n\
+         \x20   3 |     get() = 3;\n\
+         \x20     |     ^~~"
+    );
+}
+
+#[test]
 fn with_void_binding() {
     let source = "struct Lock {\n    construct() {}\n    enter() {}\n    exit() {}\n}\nmain(): int {\n    with (var l = Lock()) {\n    }\n    return 0;\n}\n";
     assert_eq!(

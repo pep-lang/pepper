@@ -385,3 +385,15 @@ A struct can have both. With both, compound assignment through an index
 (`counts[i] += 1`) reads with the first and writes with the second.
 [`Array`](../reference/array.md) and [`String`](../reference/string.md) are
 indexed this way.
+
+Assignment through a chain of indexes, `library["fiction"][0] = "Dune"`, reads
+with every index but the last and writes with the last, as if the value read
+were held in a variable first (`var fiction = library["fiction"];
+fiction[0] = "Dune";`). Since a struct is held by reference, the write changes
+the object the outer struct holds. Assigning through an index whose type has
+only the reading indexer is an error (`cannot assign through '[]': 'Shelf'
+declares a '[]' getter but no setter`).
+
+```pepper
+{{#include ../../examples/structs-indexers.pep}}
+```

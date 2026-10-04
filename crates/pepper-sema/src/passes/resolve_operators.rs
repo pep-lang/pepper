@@ -7,6 +7,7 @@
 use crate::model::*;
 use crate::static_type::{self, StructInfo, StructTable};
 use crate::type_name::TypeName;
+use pepper_parser::diagnostic::Diagnostic;
 
 pub fn resolve_operators(module: &mut Module) {
     // Struct table for overload gating. Built before any mutation so the
@@ -106,8 +107,12 @@ fn resolve_body(
                 }
             }
         }
+        // An assignment whose target's receiver is now typed (`a[x][y] = v`
+        // once `a[x]` is) calls its setter; other indexes call the getter.
         let mut lowered = false;
-        crate::passes::walk_block(body, &mut |expr: &mut Expression| lowered |= lower_index(expr, table, current));
+        crate::passes::walk_block(body, &mut |expr: &mut Expression| {
+            lowered |= lower_index_assign(expr, table, current) || lower_index(expr, table, current)
+        });
         if !lowered {
             break;
         }
@@ -162,6 +167,33 @@ fn lower_index(expr: &mut Expression, table: &StructTable, current: Option<&Type
     !matches!(expr, Expression::Index { .. })
 }
 
+/// `x[y] = z` → `x.__index_set(y, z)`, when the container is a struct
+/// declaring the setter. Plain assign only: compound assigns through an
+/// index expand in the pre-pass (statement level) or use codegen's
+/// load-op-store path, and a bare set would drop the read-modify-write.
+/// Returns whether it rewrote `expr`.
+fn lower_index_assign(expr: &mut Expression, table: &StructTable, current: Option<&TypeName>) -> bool {
+    let Expression::Binary { op: BinaryOp::Assign, lhs, rhs, loc } = expr else {
+        return false;
+    };
+    let Expression::Index { lhs: container, rhs: index, .. } = &**lhs else {
+        return false;
+    };
+    if !lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
+        || is_raw_buffer_field(container, table, current)
+        || is_buffer_element(container, table, current)
+    {
+        return false;
+    }
+    *expr = Expression::MethodCall {
+        this: container.clone(),
+        method: "__index_set".to_string(),
+        args: vec![(**index).clone(), (**rhs).clone()],
+        loc: *loc,
+    };
+    true
+}
+
 fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&TypeName>) {
     // Compound assign through an index (`x[y] += z`) expands to the C++
     // reference's tmp/get/set sequence before the walk: a bare `__index_set`
@@ -173,31 +205,13 @@ fn dispatch_operators(body: &mut Block, table: &StructTable, current: Option<&Ty
     crate::passes::unary_operators::dispatch(body, table, current);
     // Single traversal: walk_block visits every expression node once.
     crate::passes::walk_block(body, &mut |expr: &mut Expression| match expr {
-        Expression::Binary { op, lhs, rhs, loc } if op.is_assignment() => {
-            // `x[y] = z` → `x.__index_set(y, z)`, when the container is a
-            // struct declaring the setter. Plain assign only — compound
-            // assigns through an index expand in the pre-pass (statement
-            // level) or use codegen's load-op-store path; a bare set here
-            // would drop the read-modify-write.
-            if *op == BinaryOp::Assign {
-                if let Expression::Index { lhs: container, rhs: index, .. } = &**lhs {
-                    if lhs_struct(container, table, current).is_some_and(|info| info.methods.contains("__index_set"))
-                        && !is_raw_buffer_field(container, table, current)
-                        && !is_buffer_element(container, table, current)
-                    {
-                        let container = (**container).clone();
-                        let index = (**index).clone();
-                        let rhs_value = (**rhs).clone();
-                        *expr = Expression::MethodCall {
-                            this: Box::new(container),
-                            method: "__index_set".to_string(),
-                            args: vec![index, rhs_value],
-                            loc: *loc,
-                        };
-                        return;
-                    }
-                }
+        Expression::Binary { op, .. } if op.is_assignment() => {
+            if lower_index_assign(expr, table, current) {
+                return;
             }
+            let Expression::Binary { op, lhs, rhs, loc } = expr else {
+                return;
+            };
             // Compound assigns with an overload method (`str += x` →
             // `str.+=(x)`): only when the lhs's struct declares it.
             let op_name = op.op_name();
@@ -457,4 +471,62 @@ fn next_index_temporary(block: &Block) -> usize {
 /// Restart temporary numbering (see `crate::reset_program_counters`).
 pub(crate) fn reset_counter() {
     INDEX_TEMPORARIES.with(|c| c.set(0));
+}
+
+/// Assignments whose target is a call, once the last operator resolution
+/// has run: `get() = v`, or `x[i] = v` where `x`'s type has a `[]` getter
+/// but no setter (the index became an `__index_get` call). Codegen has no
+/// place to store into, so each is reported at the target.
+pub fn check_assignment_targets(module: &mut Module) {
+    let table = StructTable::build(module);
+    let mut errors = vec![];
+    let mut check = |body: &mut Block, current: Option<&TypeName>| {
+        crate::passes::walk_block(body, &mut |expr: &mut Expression| {
+            if let Expression::Binary { op, lhs, .. } = expr
+                && op.is_assignment()
+                && let Some(error) = unassignable(lhs, &table, current)
+            {
+                errors.push(error);
+            }
+        });
+    };
+    for st in module.structs.iter_mut() {
+        if st.ty.is_generic() && st.name == st.ty.name {
+            continue;
+        }
+        let current = st.ty.clone();
+        for body in st.constructors.iter_mut().filter_map(|c| c.body.as_mut()) {
+            check(body, Some(&current));
+        }
+        for body in st.method_members.iter_mut().filter_map(|m| m.body.as_mut()) {
+            check(body, Some(&current));
+        }
+    }
+    for body in module.functions.iter_mut().filter_map(|f| f.body.as_mut()) {
+        check(body, None);
+    }
+    for error in errors {
+        crate::errors::report(error);
+    }
+}
+
+/// The error for assigning to `target`, when it is a call.
+fn unassignable(target: &Expression, table: &StructTable, current: Option<&TypeName>) -> Option<Diagnostic> {
+    let (receiver, name, loc) = match target {
+        Expression::MethodCall { this, method, loc, .. } => (static_type::of(this, table, current), method.as_str(), *loc),
+        Expression::FunctionCall { function, args, loc } => match crate::enums::method_of(function) {
+            Some((_, method)) => (args.first().and_then(|a| static_type::of(a, table, current)), method, *loc),
+            None => (None, function.as_str(), *loc),
+        },
+        _ => return None,
+    };
+    if crate::passes::overloads::set_name(name) == "__index_get" {
+        let shown = receiver.map(|t| format!(": '{t}' declares a '[]' getter but no setter")).unwrap_or_default();
+        return Some(
+            Diagnostic::error(format!("cannot assign through '[]'{shown}"))
+                .at(loc)
+                .with_note("declare '[](index, value)' to allow assignment", None),
+        );
+    }
+    Some(Diagnostic::error("expression is not assignable").at(loc))
 }

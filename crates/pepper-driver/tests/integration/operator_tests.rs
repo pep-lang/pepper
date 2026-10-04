@@ -123,3 +123,36 @@ test(): int {
         0
     );
 }
+
+#[test]
+fn a_chained_assignment_through_overloaded_indexers_calls_the_inner_setter() {
+    // `t["a"]["b"] = v` is `t.__index_get("a").__index_set("b", v)`. `J`'s
+    // `[]` is overloaded, so `t["a"]` is typed only once its overload is
+    // picked; the outer index then became a getter call, and the
+    // assignment reached codegen as "unsupported lvalue" (#623).
+    assert_eq!(
+        compile_jit_with_runtime(
+            r#"struct J {
+    var value: int;
+    var members: Map<String, J>;
+    construct(value: int) { this.value = value; this.members = Map<String, J>(); }
+    [](key: String): J { return members[key]; }
+    [](index: ulong): J { return members[$"{index}"]; }
+    [](key: String, member: J): J { members[key] = member; return member; }
+    [](index: ulong, member: J): J { members[$"{index}"] = member; return member; }
+}
+test(): int {
+    var root = J(0);
+    root["a"] = J(1);
+    root["a"]["b"] = J(2);
+    root["a"][3] = J(3);
+    root["a"]["b"]["c"] = J(4);
+    if (root["a"]["b"].value != 2) { return 1; }
+    if (root["a"][3].value != 3) { return 2; }
+    if (root["a"]["b"]["c"].value != 4) { return 3; }
+    return 0;
+}"#
+        ),
+        0
+    );
+}

@@ -57,6 +57,19 @@ edits_arrays_and_objects() {
 }
 
 [Test]
+assigns_through_chained_indexers() {
+    # `root["a"]["b"] = v` sets a member of the object `root["a"]` holds,
+    # as `var a = root["a"]; a["b"] = v;` does (#623).
+    var root = json.parse("{\"a\": {}, \"list\": [[1], [2]]}").value();
+    root["a"]["b"] = json.JsonValue.Integer(1);
+    root["a"]["b"] = json.JsonValue.Integer(2);
+    root["list"][1][0] = json.JsonValue.String("two");
+    root["a"]["c"] = json.JsonValue.object();
+    root["a"]["c"]["d"] = json.JsonValue.Bool(true);
+    expect_equal(root.to_string(), "{\"a\":{\"b\":2,\"c\":{\"d\":true}},\"list\":[[1],[\"two\"]]}");
+}
+
+[Test]
 keeps_the_comments_of_a_document() {
     var text = "// top\n{\n  // The editor.\n  \"tab_size\": 4, // spaces\n  \"list\": [\n    1, /* one */\n    2 // two\n  ],\n  \"empty\": {\n    // nothing\n  },\n  \"wrap\": true // last\n  // end of root\n} // after\n// tail";
     var parsed = json.parse_document(text);

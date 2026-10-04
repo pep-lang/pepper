@@ -271,6 +271,9 @@ pub fn transform_steps(module: &mut Module, limit: Option<usize>) -> Result<Vec<
     step!(type_arguments::check_type_arguments(module));
     step!(overloads::check_overloads(module));
     step!(resolve_operators(module)); // once implicit types are resolved, operator overloading may exist
+    // A call left as an assignment's target (`get() = v`, or `x[i] = v`
+    // with a `[]` getter but no setter), which codegen cannot store into.
+    step!(resolve_operators::check_assignment_targets(module));
     step!(unary_operators::check_conditions(module));
     step!(resolve_resolvables(module, true));
     // Destructurings, once the tuples they read are typed.
