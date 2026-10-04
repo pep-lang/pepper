@@ -185,9 +185,9 @@ name each imports it by.
 
 ## Building it
 
-`pep-package` is written in Pepper (`tools/pep-package`) and depends on the
-[toml package](https://github.com/justinboswell/pepper-toml) through a
-`path` dependency on its copy in `tools/toml`, so building it needs no
+`pep-package` is written in Pepper (`tools/pep-package`) and reads and
+edits `pep.toml` and `pep.lock` with the runtime's
+[toml module](../reference/toml-module.md), so building it needs no
 network:
 
 ```bash

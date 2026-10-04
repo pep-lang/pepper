@@ -1,7 +1,3 @@
-# pep-package is itself a project. It uses the toml package from
-# tools/toml, a copy of https://github.com/justinboswell/pepper-toml: that
-# repository is private, so CI and fresh clones could not fetch it. Update
-# the copy when the package changes.
 [package]
 name = "pep_package"
 version = "0.3.0"
@@ -12,6 +8,3 @@ repository = "https://github.com/justinboswell/pepper"
 [build]
 entry = "main.pep"
 output = "pep-package"
-
-[dependencies]
-toml = { path = "../toml" }

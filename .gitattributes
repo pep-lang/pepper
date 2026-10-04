@@ -62,3 +62,6 @@
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
 *.gz binary
+
+# The toml-test corpus checks exact bytes (CRLF, bare CR, invalid UTF-8).
+runtime/toml/test/toml-test/** -text
