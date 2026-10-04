@@ -613,3 +613,30 @@ fn a_module_file_is_rebuilt_when_another_file_of_its_module_changes() {
     assert_ne!(outcome(&second, "shop/stock"), Some(Outcome::Hit), "{:?}", outcomes(&second));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A static method a generic struct uses as a function value becomes a
+/// closure made in the code of each instantiation. Like the instantiation, it
+/// is defined by the units that use it, so a new instantiation links against
+/// a generic's unit cached before it existed (#629).
+#[test]
+fn a_new_instantiation_links_its_function_values_against_a_cached_generic() {
+    let dir = scratch("instantiation_closure");
+    let cache = dir.join("cache");
+    let holder = "export struct Holder<T> {\n    shared (int) => int f;\n    (int) => int g;\n\n    construct() {\n        f = _twice;\n        g = _twice;\n    }\n\n    static _twice(x: int): int {\n        return x * 2;\n    }\n}\n";
+    write(
+        &dir,
+        &[
+            ("holder.pep", holder),
+            ("first.pep", "import \"holder\";\nmain(): int {\n    var h = Holder<int>();\n    return h.f(2) + h.g(2) - 8;\n}\n"),
+            ("second.pep", "import \"holder\";\nstruct Token {\n    int n;\n}\nmain(): int {\n    var h = Holder<Token>();\n    return h.f(3) + h.g(3) - 12;\n}\n"),
+        ],
+    );
+    std::env::set_current_dir(repo_root()).unwrap();
+    for name in ["first", "second"] {
+        let exe = dir.join(if cfg!(windows) { format!("{}.exe", name) } else { name.to_string() });
+        let cache = cache.to_string_lossy().into_owned();
+        crate::support::build_executable_with(&dir.join(format!("{}.pep", name)), &[], &["--cache", &cache], &exe, &dir.join(format!("{}.build", name)));
+        assert_eq!(std::process::Command::new(&exe).status().unwrap().code(), Some(0), "{}", name);
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

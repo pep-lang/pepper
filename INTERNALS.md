@@ -1798,7 +1798,10 @@ parsed.
   name with `<`), the `__copy`/`_pep_fix_weak`/`_pep_copy_trait` methods `copy`
   synthesizes on demand (`copies::is_synthesized_method`: a program has
   them only for the types it copies, so owning them would make a unit's
-  object depend on the program), and code with no location have no owner.
+  object depend on the program), the closures `owned_closure_name` makes
+  in an instantiation's code (`closures::is_instantiation_closure`: the
+  generic's unit may come from the cache, built before the instantiation
+  existed), and code with no location have no owner.
 - **Per-unit codegen.** With `CodeGenerator::unit` set (`UnitFilter`),
   `generate` declares everything in name order, each struct's methods included, (so a unit's module does not
   depend on load order), declares only the externs its input files declare

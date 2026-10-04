@@ -513,6 +513,36 @@ pub(crate) fn owned_closure_name(owner: &str, index: usize, loc: Loc) -> (String
     (base.clone(), TypeName::new(&base))
 }
 
+/// Whether `name` (a closure struct or one of its members) is a closure
+/// [`owned_closure_name`] made in the code of an instantiation
+/// (`Holder<Token>.construct`, `identity<int>`). Like the instantiation, it
+/// belongs to no file: each unit that uses it defines a copy, since the
+/// generic's own unit may come from the cache, built before this
+/// instantiation existed.
+pub fn is_instantiation_closure(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix(CLOSURE_PREFIX) else { return false };
+    // The escaped owner, then `_<index>`, before the namespace or member.
+    let rest = &rest[..rest.find(['@', '.']).unwrap_or(rest.len())];
+    let (mut chars, mut owner) = (rest.chars().peekable(), String::new());
+    while let Some(c) = chars.next() {
+        if c != '_' {
+            owner.push(c);
+            continue;
+        }
+        let hex: String = std::iter::from_fn(|| chars.next_if(|c| *c != '_')).collect();
+        if chars.next().is_none() {
+            // The trailing `_<index>`: a whole owner was read.
+            return !owner.is_empty() && owner.contains('<');
+        }
+        match u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
+            Some(c) => owner.push(c),
+            None => return false,
+        }
+    }
+    // A literal's `__closure_N`, which has no owner.
+    false
+}
+
 /// The struct a closure becomes (see the module docs): the function-type
 /// head, one field per captured value (`captures`, initialized by the
 /// constructor in order), and `__call` running `body`.

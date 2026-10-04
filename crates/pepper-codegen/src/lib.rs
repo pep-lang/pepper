@@ -340,9 +340,10 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// Record that the file of `loc` owns the symbol `name` (see
     /// [`CodeGenerator::owners`]). Instantiations (a name with type
-    /// arguments) and synthesized code without a location have no owner.
+    /// arguments), the closures made in their code, and synthesized code
+    /// without a location have no owner.
     fn own(&mut self, name: &str, loc: Loc) {
-        if !loc.is_none() && !name.contains('<') {
+        if !loc.is_none() && !name.contains('<') && !pepper_sema::passes::closures::is_instantiation_closure(name) {
             self.owners.insert(name.to_string(), loc.file.0);
         }
     }
