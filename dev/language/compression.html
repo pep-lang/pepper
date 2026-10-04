@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6a4f6fbf.js";
+            window.path_to_searchindex_js = "../searchindex-3693afab.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -255,7 +255,8 @@ data is checked against its CRC-32 or Adler-32 checksum.</li>
 they decompress to their contents joined. Bytes after the last member are
 an error. A gzip header’s file name and comment are skipped, and a
 written header has neither.</li>
-<li>A zlib stream that needs a preset dictionary is not supported.</li>
+<li>A zlib stream made with a preset dictionary needs it to decompress;
+see <a href="#preset-dictionaries">Preset dictionaries</a>.</li>
 <li><code>decompress</code> puts everything in memory. Use a <code>DecompressReader</code> for
 input from outside the program, so a small file that expands hugely
 cannot exhaust memory.</li>
@@ -273,6 +274,47 @@ compresses what is written and writes the result to <code>sink</code>. Call
 the writer does not finish it, and <code>finish()</code> does not close the sink.</p>
 <p><code>io.ByteReader(bytes)</code> and <code>io.ByteWriter()</code> stand in for a stream when
 the data is in memory.</p>
+<h2 id="preset-dictionaries"><a class="header" href="#preset-dictionaries">Preset dictionaries</a></h2>
+<p>A short message compresses poorly, since the stream has no earlier bytes to
+refer back to. A <em>preset dictionary</em> gives it some: bytes that both sides
+agree on beforehand, such as the keys and common values of a JSON protocol,
+which the compressed data can then copy from as if they came just before
+it.</p>
+<pre><code class="language-pepper"># Compress small messages against a preset dictionary of what they share.
+import compress;
+
+main(): int {
+    # Short messages with the same keys compress poorly on their own: the
+    # stream has no earlier bytes to refer back to.
+    var dictionary = "{\"user\": \"\", \"action\": \"login\", \"status\": \"ok\"}".bytes();
+    var message = "{\"user\": \"ada\", \"action\": \"login\", \"status\": \"ok\"}".bytes();
+
+    var plain = compress.Zlib.compress(message);
+    var primed = compress.Zlib.compress(message, dictionary);
+    assert(primed.count &lt; plain.count, "the dictionary supplies the repeated text");
+
+    # Decompressing needs the same dictionary; the stream names it by its
+    # Adler-32, so a missing or different one is an error.
+    assert(compress.Zlib.decompress(primed, dictionary).value() == message, "round trip");
+    assert(compress.Zlib.decompress(primed).is_err(), "no dictionary given");
+    print($"{plain.count} bytes alone, {primed.count} with the dictionary");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Zlib.compress(data, dictionary, level = 6)</code> and
+<code>Zlib.decompress(data, dictionary)</code> take one. The zlib header names the
+dictionary by its Adler-32, so <code>decompress</code> without one, or with a
+different one, is an <code>is_invalid_input()</code> error. A stream made without a
+dictionary decompresses as usual when one is given.</li>
+<li><code>CompressWriter(sink, format, dictionary, level = 6)</code> and
+<code>DecompressReader(source, format, dictionary)</code> take one for
+<code>Format.Zlib</code> or <code>Format.Raw</code>. Raw DEFLATE data carries no sign of it, so
+both sides must know to use it. Gzip has no dictionary, and asking for
+one panics.</li>
+<li>Only the last 32 KiB of a dictionary can be referred to, since that is
+how far back DEFLATE reaches; put the most common text at its end.</li>
+</ul>
 <h2 id="using-zlib"><a class="header" href="#using-zlib">Using zlib</a></h2>
 <p>Building with <code>-D USE_ZLIB</code> (see <a href="build-options.html">Build options</a>) makes
 <code>compress</code> use zlib, the reference DEFLATE library, for compressing,
