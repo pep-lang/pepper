@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -288,7 +288,10 @@ the compiler keeping each locked value apart from the rest of the program
 (see
 <a href="language/threads.html#what-a-lock-body-may-do">threads</a>). An <code>RwLock</code>
 lets many threads read a thread-safe value at once, and <code>Semaphore</code>,
-<code>Barrier</code> and <code>Latch</code> coordinate groups of threads.</li>
+<code>Barrier</code> and <code>Latch</code> coordinate groups of threads. A <code>[ThreadLocal]</code>
+module-scope <code>var</code> gives every thread its own copy, compiled to the
+platform’s native thread-local storage (see
+<a href="language/threads.html#thread-local-variables">thread-local variables</a>).</li>
 <li>Integer arithmetic that overflows panics instead of wrapping, at every
 optimization level; <code>wrapping_add</code> and its siblings wrap on purpose (see
 <a href="language/types-and-variables.html#integer-overflow">integer overflow</a>).

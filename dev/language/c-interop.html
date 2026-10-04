@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -667,8 +667,8 @@ it, <code>(x) =&gt; f(x)</code>, to use it as one.</p>
 <p><code>__function_pointer(name)</code> also gives a function’s address, as an untyped
 <code>__ptr&lt;void&gt;</code>. It takes a free function, or a static method of the struct
 whose method uses it. Inside a generic struct the static method is the one
-for the current type arguments, which is how <code>ThreadLocal&lt;T&gt;</code> gives the
-operating system a destructor for its <code>T</code>. Prefer a C function pointer type
+for the current type arguments, which is how <code>Thread.spawn</code> gives the
+operating system its thread entry point. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.</p>
 <h3 id="callbacks-that-need-state"><a class="header" href="#callbacks-that-need-state">Callbacks that need state</a></h3>
 <p>Since a C function pointer holds no captured values, a callback that needs
@@ -677,23 +677,23 @@ state gets it another way:</p>
 <li><strong>The C function’s context argument.</strong> Most C APIs that take a callback
 also take a <code>void*</code> context argument that they hand back to it; pass a
 pointer to the data the callback needs through that.</li>
-<li><strong>A thread-local or module-scope value.</strong> Set an
+<li><strong>A thread-local or module-scope value.</strong> Set a
+<a href="threads.html#thread-local-variables"><code>[ThreadLocal]</code> variable</a>, an
 <a href="threads.html#per-thread-values-with-threadlocal"><code>async.ThreadLocal&lt;T&gt;</code></a>
-(or an <code>Atomic&lt;T&gt;</code>) before calling C, and read it in the callback, which
+or an <code>Atomic&lt;T&gt;</code> before calling C, and read it in the callback, which
 is a named function:</li>
 </ul>
 <pre><code class="language-pepper"># A C function pointer holds no captured values, so a callback that needs
 # state reads it from somewhere C does not have to carry: here, a
 # thread-local the caller sets before handing the callback to C.
-import async;
-
 extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) =&gt; int compare);
 
 # The value to sort around, for the calling thread.
-const pivot = async.ThreadLocal&lt;int&gt;();
+[ThreadLocal]
+var pivot: int = 0;
 
 distance(x: int): int {
-    var d = x - pivot.get();
+    var d = x - pivot;
     return d &lt; 0 ? -d : d;
 }
 
@@ -710,7 +710,7 @@ main(): int {
     numbers[2] = 22;
     numbers[3] = 31;
 
-    pivot.set(30);
+    pivot = 30;
     qsort(numbers, 4, sizeof&lt;int&gt;(), closest_first);
     assert(numbers[0] == 31 &amp;&amp; numbers[3] == 10, "closest to 30 first");
 

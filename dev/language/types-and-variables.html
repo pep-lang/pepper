@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -731,9 +731,12 @@ file (or module) unless you mark it <code>export</code> (see <a href="visibility
 must therefore be declared <code>const</code> and have a thread-safe type, such as a
 number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or a <code>[Shared]</code> struct (see
 <a href="threads.html#module-scope-variables">Module-scope variables</a>). A global that
-changes is an <code>Atomic&lt;T&gt;</code>:</p>
+changes is an <code>Atomic&lt;T&gt;</code>, or a <code>[ThreadLocal]</code> <code>var</code>, which every thread has
+its own copy of (see <a href="threads.html#thread-local-variables">Thread-local variables</a>):</p>
 <pre><code class="language-pepper">const MAX_RETRIES = 3;
 const requests = async.Atomic&lt;long&gt;(0);   # changed with requests.fetch_add(1)
+[ThreadLocal]
+var depth: int = 0;                       # one per thread
 </code></pre>
 <h2 id="casting-with-as"><a class="header" href="#casting-with-as">Casting with <code>as</code></a></h2>
 <p><code>value as Type</code> converts a value to another type explicitly, like <code>static_cast</code>

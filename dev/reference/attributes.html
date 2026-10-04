@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -327,6 +327,25 @@ out.</p>
 </code></pre>
 <p>Makes a struct safe to share between threads: its counts step atomically
 and its fields must be <code>const</code> and thread-safe.</p>
+<h2 id="threadlocal"><a class="header" href="#threadlocal">ThreadLocal</a></h2>
+<pre><code class="language-pepper">[Attribute] struct ThreadLocal
+</code></pre>
+<p>Gives a module-scope <code>var</code> a separate value on every thread, like C++
+<code>thread_local</code>: each thread starts from the initializer, which must be a
+constant, and reads and writes only its own copy, with no locks or atomics.</p>
+<p>The variable’s type must be thread-safe (a number, a raw pointer, a
+<code>[Shared]</code> struct, a <code>shared</code> function type); for any other type, use
+<code>async.ThreadLocal&lt;T&gt;</code>. A struct value is released when a thread started
+with <code>async.Thread.spawn</code> exits; the main thread’s, like every other
+module-scope variable, is never released.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">[ThreadLocal]
+var calls: int = 0;
+
+count_call() {
+    calls += 1;
+}
+</code></pre>
 <h2 id="isolated"><a class="header" href="#isolated">Isolated</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Isolated
 </code></pre>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -280,8 +280,86 @@ the kernel’s CPU topology, on macOS <code>hw.physicalcpu</code>, and on Window
 cores the hypervisor presents, because the guest cannot see the host’s
 hardware.</li>
 </ul>
+<h2 id="thread-local-variables"><a class="header" href="#thread-local-variables">Thread-local variables</a></h2>
+<p>A module-scope <code>var</code> marked <code>[ThreadLocal]</code> has a separate copy on every
+thread, like C++ <code>thread_local</code> or a Rust <code>#[thread_local]</code> static:</p>
+<pre><code class="language-pepper">import async;
+
+import [Thread] from async;
+
+# A separate `depth` on every thread, each starting at 0.
+[ThreadLocal]
+var depth: int = 0;
+
+const deepest = async.Atomic&lt;int&gt;(0);
+
+descend(levels: int) {
+    depth += 1;
+    if (depth &gt; deepest.load()) {
+        deepest.store(depth);
+    }
+    if (levels &gt; 1) {
+        descend(levels - 1);
+    }
+    depth -= 1;
+}
+
+work() {
+    descend(5);
+}
+
+main(): int {
+    depth = 100;   # changes only the main thread's copy
+    var a = Thread.spawn(work);
+    var b = Thread.spawn(work);
+    a.join();
+    b.join();
+    assert(deepest.load() == 5, "each thread counted from its own 0");
+    assert(depth == 100, "the main thread's copy is its own");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Every thread’s copy starts from the initializer, which must be a
+constant: a number, <code>bool</code> or <code>char</code> literal (negated, or cast), an enum
+case, or nothing, for the type’s default (zero, or null for a struct).
+To start from anything else, leave the initializer out and set the value
+on the thread’s first use.</li>
+<li>Reading or assigning one touches only the calling thread’s copy, so it is
+a plain <code>var</code>: it need not be <code>const</code> like other module-scope variables,
+and needs no atomics or locks. A read is a single load from the thread’s
+storage (a <code>%fs</code>-relative load on x86-64 Linux), not a call.</li>
+<li>Its type must be thread-safe (see <a href="#what-threads-can-share">What threads can share</a>):
+a number, a raw pointer, a <code>[Shared]</code> struct, a <code>shared</code> function type, or
+a tuple or <code>[Value]</code> struct of them. A value of any other type, such as a
+<code>String</code>, goes in a <a href="#per-thread-values-with-threadlocal"><code>ThreadLocal&lt;T&gt;</code></a>.</li>
+<li>When a thread started with <code>Thread.spawn</code> exits (the <code>async</code> runtime’s
+workers and blocking threads included), each of its thread-locals is set to
+its default and the struct it held is released, last declared first. The
+main thread’s are never released, like every other module-scope variable,
+and a thread started by C code does not release its own.</li>
+<li>A task sees the thread-locals of the worker thread it runs on, as with a
+<code>ThreadLocal&lt;T&gt;</code>.</li>
+</ul>
+<p><code>[ThreadLocal]</code> applies only to a module-scope variable. A variable whose
+type is not thread-safe, or whose initializer is not a constant, is
+reported at the type or the initializer:</p>
+<pre><code class="language-text">main.pep:3:14: error: thread-local variable 'scratch' has type 'Plain', which is not thread-safe
+    3 | var scratch: Plain;
+      |              ^~~~~
+note: a per-thread value of any type is an 'async.ThreadLocal&lt;T&gt;' (after 'import async')
+main.pep:1:8: note: 'Plain' is not declared [Shared]
+    1 | struct Plain { var x: int; }
+      |        ^~~~~
+</code></pre>
+<pre><code class="language-text">main.pep:3:18: error: thread-local variable 'depth' must start from a constant
+    3 | var depth: int = start();
+      |                  ^~~~~
+note: every thread starts from this value; leave it out and assign the value on the thread's first use instead
+</code></pre>
 <h2 id="per-thread-values-with-threadlocal"><a class="header" href="#per-thread-values-with-threadlocal">Per-thread values with ThreadLocal</a></h2>
-<p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread:</p>
+<p><code>ThreadLocal&lt;T&gt;</code> is a variable with a separate value on every thread, of
+any type:</p>
 <pre><code class="language-pepper">import async;
 
 import [Thread, ThreadLocal] from async;
@@ -317,7 +395,14 @@ main(): int {
 null for a struct) until that thread calls <code>set</code>.</li>
 <li><code>set(value)</code> replaces only the calling thread’s value.</li>
 <li><code>is_set()</code> and <code>clear()</code> test for and remove the calling thread’s value.</li>
-<li>When a thread exits, its value is released.</li>
+<li>When a thread started with <code>Thread.spawn</code> exits, its value is released,
+even if the <code>ThreadLocal</code> itself was destroyed first. As with
+<code>[ThreadLocal]</code> variables, the main thread’s value is released only by
+<code>clear()</code>, and a thread started by C code leaks the values it did not
+clear.</li>
+<li>Each thread keeps its values in a table of its own, held in
+<code>[ThreadLocal]</code> variables, so <code>get()</code> costs a few loads and no call, and a
+program can have any number of <code>ThreadLocal</code>s.</li>
 </ul>
 <p>A <code>ThreadLocal</code> is usually a module-scope variable. Its <code>T</code> does not need to
 be thread-safe, because each value stays on the thread that stored it. For a
@@ -468,7 +553,9 @@ function can use it, and any function can run on any thread. So it follows
 the same two rules as a field of a <code>[Shared]</code> struct:</p>
 <ul>
 <li><strong>It must be <code>const</code>.</strong> To change the value, give it a thread-safe type such
-as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a value per thread.</li>
+as <code>Atomic&lt;T&gt;</code>, or a <code>ThreadLocal&lt;T&gt;</code> for a value per thread. The one
+exception is a <a href="#thread-local-variables"><code>[ThreadLocal]</code> variable</a>, which
+every thread has its own copy of.</li>
 <li><strong>It must have a thread-safe type</strong> from the list above. A <code>String</code>, an
 <code>Array</code>, a struct that is not <code>[Shared]</code>, a trait value, or a plain function
 value cannot be a module-scope variable; keep it in a local, or in a
@@ -479,12 +566,14 @@ const jobs_done = async.Atomic&lt;long&gt;(0);  # changed with fetch_add
 const settings = Settings(8080, 3);     # a [Shared] struct
 const scratch = ThreadLocal&lt;String&gt;();  # a String per thread
 const double: shared (int) =&gt; int = (x: int) =&gt; x * 2;  # a shared function
+[ThreadLocal]
+var depth: int = 0;                     # a copy per thread
 </code></pre>
 <p>A variable that breaks a rule is reported at its name or type:</p>
 <pre><code class="language-text">main.pep:1:5: error: module-scope variable 'hits' must be 'const'
     1 | var hits = 0;
       |     ^~~~
-note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic&lt;T&gt;' or 'async.ThreadLocal&lt;T&gt;' (after 'import async')
+note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic&lt;T&gt;' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy
 </code></pre>
 <pre><code class="language-text">main.pep:2:15: error: module-scope variable 'origin' has type 'Plain', which is not thread-safe
     2 | const origin: Plain = Plain();

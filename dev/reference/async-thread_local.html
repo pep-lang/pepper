@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b0d0678e.js";
+            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -203,9 +203,12 @@ from the rest of the program, as for a <code>Mutex</code>.</p>
 <p>A <code>ThreadLocal</code> is <code>[Shared]</code>, so one object can be used from every
 thread; it is usually a module-scope variable. <code>T</code> does not have to be
 thread-safe, because each value stays on the thread that stored it.</p>
-<p>Destroying a <code>ThreadLocal</code> releases the calling thread’s value only. Values
-that other threads still hold are released on Windows and leak elsewhere,
-so destroy one only after the threads that used it have exited.</p>
+<p>Destroying a <code>ThreadLocal</code> releases the calling thread’s value; values
+that other threads still hold are released when those threads exit.</p>
+<p>A thread’s values are released when it exits if <code>Thread.spawn</code> started
+it (the <code>async</code> runtime’s workers too). The main thread’s are released
+only by <code>clear()</code>, and a thread started by C code leaks the values it did
+not clear.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the per-thread value</li>
@@ -231,10 +234,6 @@ main(): int {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a thread-local variable. No thread has a value yet.</p>
-<p><strong>Panics</strong></p>
-<ul>
-<li>if the operating system has no thread-local keys left</li>
-</ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="get"><a class="header" href="#get">get</a></h4>
 <pre><code class="language-pepper">get(): T
