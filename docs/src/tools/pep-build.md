@@ -505,6 +505,8 @@ comma-separated list, from an optimized build:
 
 Removing `bounds` or `null` gives up memory safety. At `-O0` the option has
 no effect and prints `warning: '--no-runtime-checks' has no effect at -O0`.
+To remove checks from one function at every level, mark it
+`[Unsafe("overflow,bounds")]` instead.
 See [Integer overflow](../language/types-and-variables.md#integer-overflow).
 
 ```bash

@@ -1350,7 +1350,18 @@ How the language lowers:
   addition", "file:line:col")` (`llvm.trap` without the runtime). Two constant operands
   are checked at compile time instead, an error at the operator.
   `CodeGenerator::runtime_checks` turns kinds off: overflow then wraps, a
-  shift count is masked, a division is plain `sdiv`/`udiv`. Narrow types
+  shift count is masked, a division is plain `sdiv`/`udiv`. The struct,
+  `RuntimeChecks`, lives in `sema/src/runtime_checks.rs` (re-exported by
+  `checks.rs`), which also reads and checks `[Unsafe("overflow,bounds")]`
+  (`check_unsafe`, run by `apply_platform_filters`; `function_checks`).
+  `codegen_function` narrows `runtime_checks` to the function's own for its
+  body, and `passes/closures.rs` copies `[Unsafe]` onto the closures lifted
+  out of it. A per-function `bounds` reaches into the runtime's indexers
+  through the caller location: in such a function a `__caller_location()`
+  default argument starts with `UNCHECKED_BOUNDS_MARK` (byte 1), and
+  `_pep_check_bounds` passes such a location (`_pep_panic` prints it
+  without the mark); with the location a constant, the inlined check folds
+  away. Narrow types
   compute at `int` (C promotion), so only `int` and wider overflow.
   The arithmetic intrinsics `__wrapping_add/sub/mul(a, b)` and
   `__add/sub/mul_overflows(a, b)` are `BinaryOp` variants that the builder

@@ -533,6 +533,21 @@ on and the compiler warns
 up, `-g` included. The setting is part of the build cache's key, like the
 optimization level.
 
+To remove checks from one function instead of a whole build, mark it
+`[Unsafe("...")]` with the same names, comma-separated in one string:
+`[Unsafe("overflow")]`, `[Unsafe("overflow,bounds")]` or `[Unsafe("all")]`.
+It removes them from that function's body only, at every optimization level
+(`-O0` included), so the function behaves the same in every build. Closures
+written in it lose the same checks. Functions it calls keep theirs, with one
+exception: `bounds` also removes the index checks that `Array` and `String`
+make for it, since those run inside their indexers. `[Unsafe]` goes on a free
+function, a method or a constructor. An unknown name is an error at the
+string.
+
+```pepper
+{{#include ../../examples/types-unsafe-checks.pep}}
+```
+
 ## Bit operations and math functions
 
 Each integer type has methods that compile to a single instruction on most

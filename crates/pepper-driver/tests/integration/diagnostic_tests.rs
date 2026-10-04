@@ -5229,6 +5229,26 @@ fn should_panic_without_test() {
 }
 
 #[test]
+fn unsafe_naming_an_unknown_check() {
+    assert_eq!(
+        error_of("unsafe_unknown", "[Unsafe(\"overflow,speed\")]\nf(): int {\n    return 1;\n}\n\nmain(): int {\n    return f();\n}\n"),
+        "main.pep:1:9: error: unknown runtime check 'speed' in 'Unsafe': expected 'overflow', 'divide', 'shift', 'bounds', 'null' or 'all'\n\
+         \x20   1 | [Unsafe(\"overflow,speed\")]\n\
+         \x20     |         ^~~~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn unsafe_on_a_struct() {
+    assert_eq!(
+        error_of("unsafe_struct", "[Unsafe(\"all\")]\nstruct S {}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:2: error: 'Unsafe' applies only to a function, method or constructor\n\
+         \x20   1 | [Unsafe(\"all\")]\n\
+         \x20     |  ^~~~~~"
+    );
+}
+
+#[test]
 fn test_on_a_method() {
     assert_eq!(
         error_of("test_method", "struct S {\n    [Test]\n    checks() {}\n}\n\nmain(): int {\n    return 0;\n}\n"),

@@ -310,6 +310,31 @@ as `move` does.
 Marks a function-typed parameter that is called while a lock is held, so
 it may use the locked value.
 
+## Unsafe
+
+```pepper
+[Attribute] struct Unsafe
+```
+
+Removes runtime checks from one function's body, as
+`--no-runtime-checks` removes them from a whole build:
+`[Unsafe("overflow")]`, `[Unsafe("overflow,bounds")]` or
+`[Unsafe("all")]`. It applies at every optimization level. Calls the
+function makes keep their own checks, except the index check that an
+`Array` or `String` method makes for its caller, which `bounds` removes
+too. Removing `bounds` or `null` gives up memory safety in that function.
+
+### Fields
+
+#### checks
+
+```pepper
+const checks: String
+```
+
+The checks to remove, comma-separated: `overflow`, `divide`, `shift`,
+`bounds`, `null`, or `all`.
+
 ## Test
 
 ```pepper

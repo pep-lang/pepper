@@ -64,9 +64,11 @@ export _pep_assert(condition: bool, message: __ptr<char>, location: __ptr<char> 
 
 # The index check of `Array` and `String` indexing: `_pep_assert`, except
 # that the compiler drops each call, condition and all, from a build with
-# `--no-runtime-checks=bounds`.
+# `--no-runtime-checks=bounds`, and that it passes when `location` starts
+# with byte 1: the mark of a location passed from a function marked
+# `[Unsafe("bounds")]` (`UNCHECKED_BOUNDS_MARK` in the compiler).
 export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<char> = __caller_location()) {
-    if (!condition) {
+    if (!condition && (location == __null || location[0] != 1)) {
         _pep_panic(message, location);
     }
 }
@@ -248,7 +250,8 @@ export _pep_panic(message: __ptr<char>, location: __ptr<char>) {
     # what the program printed before the panic.
     fflush(__null);
     if (location != __null) {
-        _pep_write_error(location);
+        # Without the mark of an `[Unsafe("bounds")]` caller.
+        _pep_write_error(location[0] == 1 ? location + 1 : location);
         _pep_write_error(": ");
     }
     _pep_write_error("panic: ");

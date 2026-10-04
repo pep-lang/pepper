@@ -90,6 +90,64 @@ fn removed_bounds_check_skips_the_index_check() {
     assert!(!success && stderr.contains("Array index read out of bounds"), "{}", stderr);
 }
 
+/// A program whose `[Unsafe("...")]` functions overflow and index out of
+/// range, and whose last call overflows in a function that keeps its
+/// checks.
+const UNSAFE_PROGRAM: &str = r#"import process;
+
+[Unsafe("overflow")]
+wrap(x: int): int {
+    return x + 1;
+}
+
+[Unsafe("bounds")]
+peek(a: Array<int>, index: ulong): int {
+    var read = (): int => a[index];
+    return read() + a[index];
+}
+
+struct Counter {
+    var value: int = 2147483647;
+
+    [Unsafe("overflow")]
+    step() {
+        value += 1;
+    }
+}
+
+checked(x: int): int {
+    return x + 1;
+}
+
+main(): int {
+    var n = process.arguments().count > 1 ? 2 : 1;
+    assert(wrap(2147483646 + n) == -2147483648, "wrapped");
+    var counter = Counter();
+    counter.step();
+    assert(counter.value == -2147483648, "the method wrapped");
+    var a = Array<int>();
+    a.append(1);
+    a.append(2);
+    a.pop();
+    # One past the end: the zeroed spare slot, or the popped value.
+    var x = peek(a, n as ulong);
+    assert(x == 4 || x == 0, "read the spare slot");
+    print("unchecked");
+    return checked(2147483646 + n);
+}
+"#;
+
+#[test]
+fn unsafe_removes_checks_from_its_function_only() {
+    let runs: &[(&str, &[&str])] = &[("unsafe_o0", &[]), ("unsafe_o2", &["-O2"])];
+    for (name, args) in parallel_map(runs, |&(name, args)| (name, run_linked_with(name, UNSAFE_PROGRAM, args, |_| {}))) {
+        let output = format!("{}{}", String::from_utf8_lossy(&args.stdout), String::from_utf8_lossy(&args.stderr));
+        assert!(!args.status.success(), "{}: expected the checked function to panic:\n{}", name, output);
+        assert!(output.contains("unchecked"), "{}: the unsafe functions panicked:\n{}", name, output);
+        assert!(output.contains(&format!("{}.pep:24:14: panic: integer overflow in 'int' addition", name)), "{}:\n{}", name, output);
+    }
+}
+
 #[test]
 fn removing_checks_at_o0_is_ignored_with_a_warning() {
     use clap::Parser;

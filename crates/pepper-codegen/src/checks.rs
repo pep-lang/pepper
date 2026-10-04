@@ -20,7 +20,8 @@
 //! overflow is a compile error at the operator.
 //!
 //! [`RuntimeChecks`] says which kinds of check a build keeps
-//! (`--no-runtime-checks`). Without the overflow check, arithmetic wraps
+//! (`--no-runtime-checks`), and `[Unsafe("...")]` turns kinds off in one
+//! function's body (`CodeGenerator::codegen_function`). Without the overflow check, arithmetic wraps
 //! (never undefined); without the shift check, the count is masked to the
 //! type's width.
 
@@ -28,70 +29,15 @@ use crate::CodeGenerator;
 use inkwell::values::{BasicValueEnum, IntValue};
 use pepper_sema::model::{BinaryOp, Loc};
 
-/// Which runtime checks the generated code performs. Every check is on by
-/// default; `--no-runtime-checks` turns kinds off from `-O1` up.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RuntimeChecks {
-    /// `+`, `-`, `*`, `**`, unary `-`, `++`, `--` and compound assignment
-    /// overflowing their type.
-    pub overflow: bool,
-    /// Division or remainder by zero, and `MIN / -1` of a signed type.
-    pub divide: bool,
-    /// A shift count of at least the type's width.
-    pub shift: bool,
-    /// Array and string indexing out of range (`_pep_check_bounds`).
-    pub bounds: bool,
-    /// Calling through, or matching on, a null reference.
-    pub null: bool,
-}
+pub use pepper_sema::runtime_checks::RuntimeChecks;
 
-impl Default for RuntimeChecks {
-    fn default() -> Self {
-        RuntimeChecks::ALL
-    }
-}
-
-impl RuntimeChecks {
-    /// Every check on.
-    pub const ALL: RuntimeChecks = RuntimeChecks { overflow: true, divide: true, shift: true, bounds: true, null: true };
-
-    /// The names `--no-runtime-checks` accepts, besides `all`.
-    pub const NAMES: [&'static str; 5] = ["overflow", "divide", "shift", "bounds", "null"];
-
-    /// Every check on except those named in `list`, a comma-separated list
-    /// of [`Self::NAMES`] or `all` (`--no-runtime-checks=overflow,shift`).
-    pub fn without(list: &str) -> Result<RuntimeChecks, String> {
-        let mut checks = RuntimeChecks::ALL;
-        for name in list.split(',').map(str::trim) {
-            match name {
-                "overflow" => checks.overflow = false,
-                "divide" => checks.divide = false,
-                "shift" => checks.shift = false,
-                "bounds" => checks.bounds = false,
-                "null" => checks.null = false,
-                "all" => checks = RuntimeChecks::NONE,
-                _ => {
-                    return Err(format!(
-                        "unknown runtime check '{}' in '--no-runtime-checks': expected {} or 'all'",
-                        name,
-                        Self::NAMES.map(|n| format!("'{}'", n)).join(", ")
-                    ));
-                }
-            }
-        }
-        Ok(checks)
-    }
-
-    /// Every check off.
-    pub const NONE: RuntimeChecks = RuntimeChecks { overflow: false, divide: false, shift: false, bounds: false, null: false };
-
-    /// The names of the checks that are off, in [`Self::NAMES`] order: empty
-    /// with every check on. Part of the build cache's key.
-    pub fn removed(&self) -> Vec<&'static str> {
-        let on = [self.overflow, self.divide, self.shift, self.bounds, self.null];
-        Self::NAMES.iter().zip(on).filter(|&(_, on)| !on).map(|(name, _)| *name).collect()
-    }
-}
+/// The first byte of a location that a call in an `[Unsafe("bounds")]`
+/// function passes as `__caller_location()`. The index check a runtime
+/// method makes for its caller (`_pep_check_bounds(condition, message,
+/// location)`) passes when its location starts with it, so `a[i]` in such
+/// a function is unchecked although `Array`'s indexer is compiled once for
+/// every caller. With the location a constant, an inlined check folds away.
+pub const UNCHECKED_BOUNDS_MARK: char = '\u{1}';
 
 /// The Pepper name of the integer type `width` bits wide (`int`, `ulong`).
 fn type_name(width: u32, unsigned: bool) -> &'static str {
@@ -159,6 +105,15 @@ impl<'ctx> CodeGenerator<'ctx> {
             Some(text) => self.check_message(&text),
             None => Ok(self.context.ptr_type(inkwell::AddressSpace::default()).const_null()),
         }
+    }
+
+    /// [`Self::location_text`] marked with [`UNCHECKED_BOUNDS_MARK`]: the
+    /// `__caller_location()` a call in an `[Unsafe("bounds")]` function
+    /// passes, so the index check of an `Array` or `String` method it calls
+    /// passes too. `_pep_panic` leaves the mark out when it prints.
+    pub(crate) fn unchecked_location_text(&mut self, loc: Loc) -> Result<inkwell::values::PointerValue<'ctx>, String> {
+        let text = self.location_string(loc).unwrap_or_default();
+        self.check_message(&format!("{}{}", UNCHECKED_BOUNDS_MARK, text))
     }
 
     /// The null check `_pep_assert(condition, message, location)`, located

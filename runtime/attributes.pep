@@ -140,6 +140,20 @@ export struct MoveSource {}
 [Attribute]
 export struct Locked {}
 
+## Removes runtime checks from one function's body, as
+## `--no-runtime-checks` removes them from a whole build:
+## `[Unsafe("overflow")]`, `[Unsafe("overflow,bounds")]` or
+## `[Unsafe("all")]`. It applies at every optimization level. Calls the
+## function makes keep their own checks, except the index check that an
+## `Array` or `String` method makes for its caller, which `bounds` removes
+## too. Removing `bounds` or `null` gives up memory safety in that function.
+[Attribute]
+export struct Unsafe {
+    ## The checks to remove, comma-separated: `overflow`, `divide`, `shift`,
+    ## `bounds`, `null`, or `all`.
+    const checks: String;
+}
+
 ## Marks a function as a unit test: `pep-test` (`pepper test`) builds it
 ## into a test program and runs it in a child process of its own. The
 ## function takes no parameters and returns nothing; it passes when it

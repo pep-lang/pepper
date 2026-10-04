@@ -2472,7 +2472,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         // unstamped, as clang leaves it (`DebugInfo::finish` puts its calls on
         // line 0): a debugger ends the prologue at the first instruction with
         // a line, the first statement's, after the parameters are stored.
+        // `[Unsafe("...")]` turns checks off in this body only.
+        let build_checks = self.runtime_checks;
+        self.runtime_checks = build_checks.and(pepper_sema::runtime_checks::function_checks(&function.attributes));
         let result = self.codegen_function_unlocated(function);
+        self.runtime_checks = build_checks;
         if let Some(debug) = self.debug.as_mut() {
             debug.end_function();
         }
@@ -4290,6 +4294,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             && function == CALLER_LOCATION
         {
             let at = if self.in_default_argument { self.call_loc } else { *loc };
+            // In a function whose `[Unsafe("bounds")]` the build does not
+            // share, the location tells the callee's index check to pass
+            // (see `UNCHECKED_BOUNDS_MARK`).
+            if self.in_default_argument && !self.runtime_checks.bounds {
+                return Ok(self.unchecked_location_text(at)?.into());
+            }
             return Ok(self.location_text(at)?.into());
         }
         let saved = self.enter_location(expr.loc());
