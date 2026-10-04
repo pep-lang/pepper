@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-eeff6da0.js";
+            window.path_to_searchindex_js = "searchindex-a2f3ab23.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -19261,6 +19261,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--emit-llvm</code></td><td>Write LLVM IR instead of an executable</td><td>off</td></tr>
 <tr><td><code>--emit-static</code>, <code>--emit-static=keep</code></td><td>Write the source with each <code>static</code> block expanded, instead of compiling</td><td>off</td></tr>
 <tr><td><code>--emit-ast[=text|json]</code></td><td>Print the syntax tree instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-linked</code></td><td>Print every file’s syntax tree after linking, as JSON, instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
@@ -19431,6 +19432,32 @@ name as its one key, and each span <code>{"start": ..., "end": ...}</code> in by
 The compiler’s parser written in Pepper (<code>tools/compiler</code>) prints the same
 JSON, and its test compares the two over every source file in the
 repository.</p>
+<h3 id="--emit-linked"><a class="header" href="#--emit-linked"><code>--emit-linked</code></a></h3>
+<p>Loads the program as a build does (the entry file, every file its imports
+reach, and the runtime), links it, and prints it to standard output as one
+line of JSON instead of compiling. Nothing after linking is checked, so a
+program with type errors prints too; a file that cannot be read or parsed
+stops it, as it stops a build.</p>
+<p>The JSON is an object with three keys:</p>
+<ul>
+<li><code>files</code>: every file in load order (the entry file first), each with its
+<code>name</code> as the program reached it, its <code>namespace</code>, its <code>module_root</code>
+folder (or <code>null</code>), whether it is part of the <code>prelude</code> (the runtime and
+<code>--import</code> files) or a <code>prelude_part</code> (another file of a forced module),
+the index of the file each of its <code>imports</code> names (or <code>null</code> when one did
+not resolve), which of them are <code>folder_imports</code> (a local import of a
+module folder), and its <code>module</code>, the syntax tree as <code>--emit-ast=json</code>
+prints it after linking renamed what the file imports and gave its
+private declarations their program-wide names (<code>helper@io/file</code>).</li>
+<li><code>errors</code>: the linking errors, by file and position, each with its <code>file</code>
+index, <code>span</code>, <code>message</code>, whether it is an <code>unresolved</code> import, and its
+<code>note</code> (<code>[span, message]</code>, or <code>null</code>).</li>
+<li><code>overload_unions</code>: each overload set that spans files, by name, with its
+functions grouped by module.</li>
+</ul>
+<p><code>-I</code>, <code>--import</code>, <code>--no-runtime</code>, <code>-D</code> and <code>--test</code> apply as for a build.
+The compiler’s linker written in Pepper (<code>tools/compiler</code>) prints the same
+JSON, and its test compares the two.</p>
 <h2 id="optimization-and-code-generation"><a class="header" href="#optimization-and-code-generation">Optimization and code generation</a></h2>
 <h3 id="-o--olevel"><a class="header" href="#-o--olevel"><code>-O</code>, <code>-O&lt;level&gt;</code></a></h3>
 <p>The optimization level: <code>-O0</code> (no optimization, the default), <code>-O1</code>, <code>-O2</code>
