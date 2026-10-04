@@ -64,6 +64,21 @@ export struct Target {
         return Result<bool, String>.ok(true);
     }
 
+    ## Returns why `attribute` cannot be evaluated, and where, if it
+    ## cannot: a malformed `Target(...)` or `BuildOption(...)`. Every other
+    ## attribute evaluates.
+    ##
+    ## @param attribute the attribute
+    ## @returns the error and the span it points at, or none
+    check(attribute: Attribute): (String, Span)? {
+        var evaluator = _Evaluator(this, attribute);
+        evaluator.evaluate(attribute.body);
+        if (evaluator.error.is_value()) {
+            return Optional<(String, Span)>.Value((evaluator.error.value(), evaluator.error_span));
+        }
+        return Optional<(String, Span)>.Empty;
+    }
+
     ## Returns whether `attributes` keep their declaration, keeping it when
     ## one cannot be evaluated (that is reported elsewhere).
     ##
@@ -130,36 +145,45 @@ struct _Evaluator {
     var target: Target;
     var attribute: Attribute;
     var error: String?;
+    # Where `error` points: the whole attribute unless a part of it is to
+    # blame.
+    var error_span: Span = Span();
 
     construct(target: Target, attribute: Attribute) {
         this.target = target;
         this.attribute = attribute;
     }
 
-    # Records the first error, and returns false.
+    # Records the first error, at the whole attribute, and returns false.
     _fail(message: String): bool {
+        return _fail_at(message, attribute.span);
+    }
+
+    # Records the first error, at `span`, and returns false.
+    _fail_at(message: String, span: Span): bool {
         if (!error.is_value()) {
             error = Optional<String>.Value(message);
+            error_span = span;
         }
         return false;
     }
 
     evaluate(body: Expression): bool {
         match (body) {
-            SymbolRef(id, _) => {
+            SymbolRef(id, span) => {
                 if (_is_build_option(id)) {
-                    return _fail($"'{id}' needs the name of a build option, such as '[{id}(\"USE_ZLIB\")]'");
+                    return _fail_at($"'{id}' needs the name of a build option, such as '[{id}(\"USE_ZLIB\")]'", span);
                 }
                 if (_is_target(id)) {
                     return _fail($"platform predicate `{id}` used without a value in {attribute_text(attribute)}");
                 }
                 return true;
             }
-            FunctionCall(function, arguments, _) => {
+            FunctionCall(function, arguments, call_span) => {
                 match (function) {
                     SymbolRef(id, _) => {
                         if (_is_build_option(id)) {
-                            var name = _build_option_name(id, arguments);
+                            var name = _build_option_name(id, arguments, call_span);
                             return name.is_value() and target.build_options.contains(name.value());
                         }
                         if (_is_target(id)) {
@@ -196,7 +220,7 @@ struct _Evaluator {
 
     _predicate(e: Expression): bool {
         match (e) {
-            FunctionCall(function, arguments, _) => {
+            FunctionCall(function, arguments, call_span) => {
                 match (function) {
                     SymbolRef(id, _) => {
                         var lower = id.lower();
@@ -207,7 +231,7 @@ struct _Evaluator {
                             return _arch_matches(arguments);
                         }
                         if (_is_build_option(id)) {
-                            var name = _build_option_name(id, arguments);
+                            var name = _build_option_name(id, arguments, call_span);
                             return name.is_value() and target.build_options.contains(name.value());
                         }
                         if (_is_target(id)) {
@@ -261,13 +285,14 @@ struct _Evaluator {
 
     # The name a `BuildOption(...)` call (spelled `id`) tests: one argument,
     # a name or a string holding one.
-    _build_option_name(id: String, arguments: Expression[]): String? {
+    _build_option_name(id: String, arguments: Expression[], span: Span): String? {
         if (arguments.count != 1) {
-            _fail($"'{id}' takes the name of one build option, such as '{id}(USE_ZLIB)'");
+            _fail_at($"'{id}' takes the name of one build option, such as '{id}(USE_ZLIB)'", span);
             return Optional<String>.Empty;
         }
+        var argument = arguments[0];
         var name = "";
-        match (arguments[0]) {
+        match (argument) {
             SymbolRef(symbol, _) => {
                 name = symbol;
             }
@@ -277,18 +302,21 @@ struct _Evaluator {
                         name = text;
                     }
                     else => {
-                        _fail($"'{id}' takes the name of a build option, such as '{id}(USE_ZLIB)'");
+                        _fail_at($"'{id}' takes the name of a build option, such as '{id}(USE_ZLIB)'", argument.span());
                         return Optional<String>.Empty;
                     }
                 }
             }
             else => {
-                _fail($"'{id}' takes the name of a build option, such as '{id}(USE_ZLIB)'");
+                _fail_at($"'{id}' takes the name of a build option, such as '{id}(USE_ZLIB)'", argument.span());
                 return Optional<String>.Empty;
             }
         }
         if (!is_build_option_name(name)) {
-            _fail($"invalid build option name '{name}'; a name is a letter or '_' followed by letters, digits and '_'");
+            _fail_at(
+                $"invalid build option name '{name}'; a name is a letter or '_' followed by letters, digits and '_'",
+                argument.span()
+            );
             return Optional<String>.Empty;
         }
         return Optional<String>.Value(name);
@@ -300,10 +328,12 @@ struct _Evaluator {
         bool left = _is_build_option_call(lhs);
         bool right = _is_build_option_call(rhs);
         if (left and right) {
-            return _fail($"'{op}' cannot compare two build options; compare a 'BuildOption(...)' with a literal");
+            return _fail_at(
+                $"'{op}' cannot compare two build options; compare a 'BuildOption(...)' with a literal", span
+            );
         }
         if (!left and !right) {
-            return _fail($"'{op}' in a 'Target' must compare a 'BuildOption(...)' with a literal");
+            return _fail_at($"'{op}' in a 'Target' must compare a 'BuildOption(...)' with a literal", span);
         }
         var option = left ? lhs : rhs;
         var literal = left ? rhs : lhs;
@@ -328,8 +358,9 @@ struct _Evaluator {
         }
         var id = "";
         var arguments = Array<Expression>();
+        var call_span = Span();
         match (option) {
-            FunctionCall(function, call_arguments, _) => {
+            FunctionCall(function, call_arguments, option_span) => {
                 match (function) {
                     SymbolRef(name, _) => {
                         id = name;
@@ -337,10 +368,11 @@ struct _Evaluator {
                     else => {}
                 }
                 arguments = call_arguments;
+                call_span = option_span;
             }
             else => {}
         }
-        var name = _build_option_name(id, arguments);
+        var name = _build_option_name(id, arguments, call_span);
         if (!name.is_value()) {
             return false;
         }
@@ -358,8 +390,9 @@ struct _Evaluator {
             }
         }
         if (!usable) {
-            return _fail(
-                $"build option '{name.value()}' can only be compared with a literal: a number, 'true' or 'false', or a string"
+            return _fail_at(
+                $"build option '{name.value()}' can only be compared with a literal: a number, 'true' or 'false', or a string",
+                literal.span()
             );
         }
         bool is_bool = false;
@@ -370,7 +403,9 @@ struct _Evaluator {
             else => {}
         }
         if (is_bool and compared != "==" and compared != "!=") {
-            return _fail($"'{compared}' cannot compare build option '{name.value()}' with a bool; use '==' or '!='");
+            return _fail_at(
+                $"'{compared}' cannot compare build option '{name.value()}' with a bool; use '==' or '!='", span
+            );
         }
         var defined = target.build_options.try_get(name.value());
         if (!defined.is_value()) {
@@ -382,14 +417,14 @@ struct _Evaluator {
             Integer(n) => {
                 var parsed = _parse_integer(text);
                 if (!parsed.is_value()) {
-                    return _fail($"build option '{name.value()}' is '{text}', which is not an integer");
+                    return _fail_at($"build option '{name.value()}' is '{text}', which is not an integer", span);
                 }
                 ordering = parsed.value() < n ? -1 : (parsed.value() > n ? 1 : 0);
             }
             Float(f) => {
                 var parsed = double.parse(text.trim());
                 if (!parsed.is_value()) {
-                    return _fail($"build option '{name.value()}' is '{text}', which is not a number");
+                    return _fail_at($"build option '{name.value()}' is '{text}', which is not a number", span);
                 }
                 var d = parsed.value();
                 if (d != d or f != f) {
@@ -400,7 +435,7 @@ struct _Evaluator {
             Bool(b) => {
                 var parsed = _parse_bool(text);
                 if (!parsed.is_value()) {
-                    return _fail($"build option '{name.value()}' is '{text}', which is not 'true' or 'false'");
+                    return _fail_at($"build option '{name.value()}' is '{text}', which is not 'true' or 'false'", span);
                 }
                 int l = parsed.value() ? 1 : 0;
                 int r = b ? 1 : 0;
@@ -575,7 +610,7 @@ _undefined_options(evaluator: _Evaluator, e: Expression, out: UndefinedOption[])
                     FunctionCall(function, arguments, span) => {
                         match (function) {
                             SymbolRef(id, _) => {
-                                var name = evaluator._build_option_name(id, arguments);
+                                var name = evaluator._build_option_name(id, arguments, span);
                                 if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
                                     out.append(UndefinedOption(name.value(), span));
                                 }

@@ -3,6 +3,7 @@
 ## the builder and the passes ask of one.
 
 import [TypeFlags, TypeName] from "model";
+import [set_name] from "names";
 
 ## The type sema infers: `auto`.
 export const AUTO = "__auto";
@@ -200,4 +201,95 @@ export extend TypeName {
         }
         return true;
     }
+
+    ## Makes this type `other`: its name, arguments, flags and labels.
+    ##
+    ## @param other the type to become
+    assign(other: TypeName) {
+        name = other.name;
+        sub_types = other.sub_types;
+        flags = other.flags;
+        labels = other.labels;
+    }
+
+    ## Replaces generic parameter `param_name` with `type_arg` throughout
+    ## this type, a pointer to it (`T*`) included.
+    ##
+    ## @param param_name the parameter's name
+    ## @param type_arg the type it stands for
+    replace(param_name: String, type_arg: TypeName) {
+        if (name == param_name) {
+            # Done: the argument may itself name a parameter spelled the
+            # same (`Twin<T>` with `T` = `Box<T>`), which is not this one.
+            assign(type_arg.copy());
+            return;
+        } else if (name.ends_with("*") and name.substr_bytes(0, name.size - 1) == param_name) {
+            name = $"{type_arg.to_string()}*";
+        }
+        for (var arg in sub_types) {
+            arg.replace(param_name, type_arg);
+        }
+    }
+}
+
+## Replaces each generic parameter of `type_map` in `ty` with its type, in
+## order.
+##
+## @param ty the type, changed in place
+## @param type_map the parameters and their types
+export replace_map(ty: TypeName, type_map: Array<(String, TypeName)>) {
+    for (var (param, arg) in type_map) {
+        ty.replace(param, arg);
+    }
+}
+
+## Returns the type a call's function string spells (`Result<int>.ok`'s
+## receiver `Result<int>`, `g<I>`), its arguments parsed; a pointer type or
+## an operator's name is one name.
+##
+## @param text the string
+## @returns the type
+export parse_type_string(text: String): TypeName {
+    var s = text;
+    var set = set_name(text);
+    if (set.ends_with(">")) {
+        s = set;
+    }
+    if (s.ends_with("*")) {
+        return TypeName.named(s);
+    }
+    var open = s.find("<");
+    if (open <= 0 or !s.ends_with(">") or s.size <= open as ulong + 1) {
+        return TypeName.named(s);
+    }
+    var name = s.substr_bytes(0, open as ulong);
+    var inner = s.substr_bytes(open as ulong + 1, s.size - open as ulong - 2);
+    var args = Array<TypeName>();
+    if (!inner.trim().is_empty) {
+        # Split on top-level commas only.
+        var parts = Array<String>();
+        ulong depth = 0;
+        ulong start = 0;
+        ulong i = 0;
+        while (i < inner.size) {
+            var b = inner.byte_at(i);
+            if (b == '<') {
+                depth += 1;
+            } else if (b == '>') {
+                depth -= 1;
+            } else if (b == ',' and depth == 0) {
+                parts.append(inner.substr_bytes(start, i - start).trim());
+                start = i + 1;
+            }
+            i += 1;
+        }
+        var last = inner.substr_bytes(start, inner.size - start).trim();
+        if (!last.is_empty) {
+            parts.append(last);
+        }
+        for (var part in parts) {
+            args.append(parse_type_string(part));
+        }
+    }
+    return TypeName.with_args(name, args);
 }

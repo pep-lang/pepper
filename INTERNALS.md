@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker and the checks after linking. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder and the first sema passes. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/toml` | A copy of the [toml package](https://github.com/justinboswell/pepper-toml) (TOML parse, write, edit in place), which `pep-package` uses. Update it when that repository changes. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
@@ -2682,6 +2682,22 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   match byte for byte on the corpus, the documentation's programs of
   several modules, and programs that exercise each lowering, and the
   rendered error to match on programs the builder rejects.
+- `sema/passes.pep` runs the sema passes in the order
+  `checked::run_steps` does, one step per pass run, so each can be
+  compared with `pep-build --emit-model --emit-model-step N` (the Rust
+  model after its first N steps; `--emit-steps` names them).
+  `PORTED_STEPS` says how many it runs so far: the platform filters
+  (`platform.pep`), then `struct_body::apply`'s steps: `[Equatable]`
+  (`equatable.pep`), closure lifting (`closures.pep`), body stripping
+  (`strip_bodies.pep`), type aliases (`type_aliases.pep`) and struct
+  synthesis (`synthesize.pep`). What the Rust passes keep in
+  thread-locals between steps (the first error reported, closure numbers,
+  enum representations, value structs) is a `PassState` (`state.pep`).
+  `compiler/passes_test.pep` requires the model JSON, or the rendered
+  error, to match after `PORTED_STEPS` steps on the corpus, the
+  documentation's programs of several modules, and programs that exercise
+  each pass and its errors; on a mismatch it reports the first step where
+  the two differ.
 - `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,
   `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`,
   `pepc --emit-checked ...` and `pepc --emit-model ...` print the same

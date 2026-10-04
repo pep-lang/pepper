@@ -165,6 +165,16 @@ pub struct Options {
     #[arg(long = "emit-model")]
     pub emit_model: bool,
 
+    /// With `--emit-model`: run the first N sema steps (one pass each, in
+    /// the order the compiler runs them) and print the model after them.
+    #[arg(long = "emit-model-step", value_name = "N")]
+    pub emit_model_step: Option<usize>,
+
+    /// Load, link, check and build the program, run the sema passes, and
+    /// print the name of each step run, one per line, instead of compiling.
+    #[arg(long = "emit-steps")]
+    pub emit_steps: bool,
+
     /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
     /// each compile stage took; `passes` prints how long each sema pass
     /// took, summed over its runs; `cache` prints whether each unit's object

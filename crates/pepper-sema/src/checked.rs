@@ -184,9 +184,24 @@ pub fn in_runtime(program: &Program) -> Vec<bool> {
 
 /// The sema passes, as the driver runs them on a merged module.
 pub fn run_passes(module: &mut Module) -> Result<(), Diagnostic> {
-    crate::apply_platform_filters(module)?;
-    crate::struct_body::apply(module)?;
-    crate::transform_pass(module)
+    run_steps(module, None).map(|_| ())
+}
+
+/// [`run_passes`], stopping after the first `limit` steps when given (see
+/// `passes::transform_steps`); returns the steps run, by name.
+pub fn run_steps(module: &mut Module, limit: Option<usize>) -> Result<Vec<&'static str>, Diagnostic> {
+    let mut steps = vec![];
+    let platform: (&'static str, fn(&mut Module) -> Result<(), Diagnostic>) = ("apply_platform_filters(module)", crate::apply_platform_filters);
+    for (name, step) in std::iter::once(platform).chain(crate::struct_body::STEPS) {
+        if limit == Some(steps.len()) {
+            return Ok(steps);
+        }
+        step(module)?;
+        steps.push(name);
+    }
+    let rest = crate::passes::transform_steps(module, limit.map(|limit| limit - steps.len()))?;
+    steps.extend(rest);
+    Ok(steps)
 }
 
 /// An empty module for `program`: its files' sources and namespaces, and

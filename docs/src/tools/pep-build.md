@@ -33,6 +33,8 @@ short, and `pepper help build` runs it.
 | `--emit-linked` | Print every file's syntax tree after linking, as JSON, instead of compiling | off |
 | `--emit-checked` | Print what the checks after linking report, instead of compiling | off |
 | `--emit-model` | Print the program's sema model before any sema pass, as JSON, instead of compiling | off |
+| `--emit-model-step <N>` | With `--emit-model`, print the model after the first N sema steps | 0 |
+| `--emit-steps` | Print the names of the sema steps, one per line, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
@@ -307,6 +309,21 @@ fails.
 `-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
 The compiler written in Pepper (`tools/compiler`) prints the same JSON, and
 its test compares the two.
+
+### `--emit-model-step <N>`
+
+With `--emit-model`, runs the first N steps of the sema passes before
+printing the model. A step is one pass run, in the order the compiler runs
+them (platform filters first, then `[Equatable]`, closure lifting and the
+rest); `--emit-steps` lists them. When a step rejects the program, it prints
+the rendered error and fails. The compiler written in Pepper runs the same
+steps, and its test compares the model after each.
+
+### `--emit-steps`
+
+Loads, links, checks and builds the program as `--emit-model` does, runs
+every sema pass, and prints the name of each step run, one per line,
+instead of compiling: the numbering `--emit-model-step` uses.
 
 ## Optimization and code generation
 

@@ -96,7 +96,7 @@ fn run_for_target(options: Options) -> Result<i32, String> {
         return run_emit_checked(&options);
     }
 
-    if options.emit_model {
+    if options.emit_model || options.emit_steps {
         return run_emit_model(&options);
     }
 
@@ -719,12 +719,24 @@ fn run_emit_checked(options: &Options) -> Result<i32, String> {
 }
 
 /// Load, link and check the program, build its sema model, and print the
-/// model as JSON before any pass runs, so the Pepper compiler's builder can
-/// be compared byte for byte. Object keys and sets are printed sorted.
+/// model as JSON before any pass runs (or after the first
+/// `--emit-model-step` steps), so the Pepper compiler's builder and passes
+/// can be compared byte for byte. Object keys and sets are printed sorted.
+/// With `--emit-steps`, print the name of each step run instead.
 fn run_emit_model(options: &Options) -> Result<i32, String> {
     let entry_source = options.source_files.first().ok_or_else(|| "no source files".to_string())?;
     let program = compiler::load_uncached(options, entry_source)?;
-    let module = pepper_sema::program::merge(&program)?;
+    let mut module = pepper_sema::program::merge(&program)?;
+    if options.emit_steps || options.emit_model_step.is_some() {
+        for file in &program.files {
+            module.sources.add(&file.name, &file.source);
+        }
+        let steps = pepper_sema::checked::run_steps(&mut module, options.emit_model_step).map_err(|error| module.sources.render(&error))?;
+        if options.emit_steps {
+            println!("{}", steps.join("\n"));
+            return Ok(0);
+        }
+    }
     let mut value = serde_json::to_value(&module).map_err(|e| format!("cannot write the model as JSON: {}", e))?;
     // Sets serialize in hash order; keys print sorted.
     fn sort(set: Option<&mut serde_json::Value>) {

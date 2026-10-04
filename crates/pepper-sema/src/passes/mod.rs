@@ -102,6 +102,15 @@ use lower_with_blocks::lower_with_blocks;
 /// Run every pass in order (repeats included),
 /// stopping at the first pass that reports an error.
 pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
+    transform_steps(module, None).map(|_| ())
+}
+
+/// Run the passes as [`transform_pass`] does, stopping after the first
+/// `limit` steps when given, and return the steps run, by name. `pep-build
+/// --emit-model-step` prints the model where it stops, so the Pepper
+/// compiler's passes can be compared with these one step at a time.
+pub fn transform_steps(module: &mut Module, limit: Option<usize>) -> Result<Vec<&'static str>, Diagnostic> {
+    let mut steps: Vec<&'static str> = vec![];
     // A pass that reports an error leaves the model partly unresolved, so
     // later passes would only trip over it.
     macro_rules! step {
@@ -109,10 +118,17 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
             let started = std::time::Instant::now();
             $pass;
             crate::pass_timer::record(stringify!($pass), started);
+            steps.push(stringify!($pass));
             if let Some(error) = crate::errors::take() {
                 return Err(gather_generics::with_instantiation(module, error));
             }
+            if limit == Some(steps.len()) {
+                return Ok(steps);
+            }
         }};
+    }
+    if limit == Some(0) {
+        return Ok(steps);
     }
     crate::errors::take(); // each run starts fresh
     apply_extensions::reset_applied(); // each run starts fresh (set is process-global)
@@ -248,11 +264,7 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     step!(release_field_refs(module));
     // Every type that will be known is: a call whose argument stayed
     // unknown settles on arity, so the argument's own error is reported.
-    step!({
-        module.settle_overloads_by_arity = true;
-        resolve_implicit_types(module);
-        module.settle_overloads_by_arity = false;
-    });
+    step!(resolve_implicit_types_settling(module));
     step!(check_tries::check_tries(module));
     step!(named_arguments::check_unbound(module));
     named_arguments::record_argument_names(module);
@@ -299,7 +311,14 @@ pub fn transform_pass(module: &mut Module) -> Result<(), Diagnostic> {
     // Last, over every body (a checked runtime's are back): which literals
     // can be shared reads the callees' bodies.
     step!(static_strings::share_string_literals(module));
-    Ok(())
+    Ok(steps)
+}
+
+/// `resolve_implicit_types` with overloads settled by arity.
+fn resolve_implicit_types_settling(module: &mut Module) {
+    module.settle_overloads_by_arity = true;
+    resolve_implicit_types(module);
+    module.settle_overloads_by_arity = false;
 }
 
 /// How many arguments the methods of one name take: the name (an overload

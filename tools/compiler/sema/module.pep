@@ -6,3 +6,4 @@ export * from "type_name";
 export * from "walk";
 export * from "builder";
 export * from "program";
+export * from "passes";

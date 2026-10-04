@@ -371,26 +371,52 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
 /// struct in the module. Type aliases expand first so synthesis sees only
 /// real types (a field of alias type must lower like a field of its target).
 pub fn apply(module: &mut Module) -> Result<(), Diagnostic> {
+    for (_, step) in STEPS {
+        step(module)?;
+    }
+    Ok(())
+}
+
+/// The steps of [`apply`], in order, by name (see `checked::run_steps`).
+pub const STEPS: [(&str, fn(&mut Module) -> Result<(), Diagnostic>); 5] = [
+    ("struct_body::derive_equatable(module)", derive_equatable),
+    ("struct_body::lift_closures(module)", lift_closures),
+    ("struct_body::strip_bodies(module)", strip_bodies),
+    ("struct_body::resolve_type_aliases(module)", resolve_type_aliases),
+    ("struct_body::synthesize(module)", synthesize),
+];
+
+/// `[Equatable]` structs get their `==` and `__hash` first, so every later
+/// step treats them as declared.
+fn derive_equatable(module: &mut Module) -> Result<(), Diagnostic> {
     crate::errors::take(); // each run starts fresh
-    // `[Equatable]` structs get their `==` and `__hash` first, so every
-    // later step treats them as declared.
-    crate::equatable::derive(module)?;
+    crate::equatable::derive(module)
+}
+
+/// Closure literals become structs first, so they get bodies below.
+fn lift_closures(module: &mut Module) -> Result<(), Diagnostic> {
     // Checked declarations' bodies stay out of the passes.
     crate::checked::stash_bodies(module);
     // Enum names are integer types from here on (closure lifting asks).
     crate::enums::install(&module.enums);
-    // Closure literals become structs first, so they get bodies below.
     crate::passes::closures::lift_closures(module);
-    if let Some(error) = crate::errors::take() {
-        return Err(error);
-    }
-    // Names synthesized from a file are numbered by now, so dropping the
-    // cached units' bodies cannot renumber anything the others see.
+    crate::errors::take().map_or(Ok(()), Err)
+}
+
+/// Names synthesized from a file are numbered by now, so dropping the
+/// cached units' bodies cannot renumber anything the others see.
+fn strip_bodies(module: &mut Module) -> Result<(), Diagnostic> {
     crate::passes::strip_bodies::strip_bodies(module);
+    Ok(())
+}
+
+fn resolve_type_aliases(module: &mut Module) -> Result<(), Diagnostic> {
     crate::passes::resolve_type_aliases::resolve_type_aliases(module);
-    if let Some(error) = crate::errors::take() {
-        return Err(error);
-    }
+    crate::errors::take().map_or(Ok(()), Err)
+}
+
+/// Each struct's synthesized members and constructor bodies.
+fn synthesize(module: &mut Module) -> Result<(), Diagnostic> {
     crate::value_structs::install(module);
     for st in module.structs.iter_mut().filter(|st| !module.checked.has_struct(&st.name)) {
         apply_synthesized(st);
