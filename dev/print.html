@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6cec6064.js";
+            window.path_to_searchindex_js = "searchindex-73783866.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5dbede3d.js"></script>
+        <script src="toc-35e92f97.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -284,7 +284,8 @@ copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <c
 waits on several channels at once, and a <code>Mutex</code> holds any struct, with
 the compiler keeping each locked value apart from the rest of the program
 (see
-<a href="#what-a-lock-body-may-do">threads</a>). <code>Semaphore</code>,
+<a href="#what-a-lock-body-may-do">threads</a>). An <code>RwLock</code>
+lets many threads read a thread-safe value at once, and <code>Semaphore</code>,
 <code>Barrier</code> and <code>Latch</code> coordinate groups of threads.</li>
 <li>Integer arithmetic that overflows panics instead of wrapping, at every
 optimization level; <code>wrapping_add</code> and its siblings wrap on purpose (see
@@ -13594,6 +13595,90 @@ PEP_CHECK_SYNC: an object in the value locked by a 'Mutex&lt;Box&gt;' is still r
 costs time and memory in proportion to the value’s size at each unlock; it
 is off unless the variable is set. It checks a <code>Mutex&lt;T&gt;</code> whose <code>T</code> is not
 thread-safe and can be <a href="#copying-a-value-with-copy">copied</a>.</p>
+<h2 id="readerwriter-locks"><a class="header" href="#readerwriter-locks">Reader/writer locks</a></h2>
+<p>An <code>RwLock&lt;T&gt;</code> lets many threads read a value at once, or one thread
+write it:</p>
+<pre><code class="language-pepper">import async;
+
+# A price list that many threads read and one thread now and then updates.
+# A writer changes both prices together, so a reader never sees one updated
+# and the other not.
+[Shared]
+struct Prices {
+    const coffee: async.Atomic&lt;long&gt;;
+    const tea: async.Atomic&lt;long&gt;;
+    construct() {
+        coffee = async.Atomic&lt;long&gt;(300);
+        tea = async.Atomic&lt;long&gt;(250);
+    }
+}
+
+const prices = async.RwLock&lt;Prices&gt;(Prices());
+const mismatches = async.Atomic&lt;long&gt;(0);
+
+check_prices() {
+    var i = 0;
+    while (i &lt; 1000) {
+        with (var p = prices.read()) {   # many readers at once
+            if (p.coffee.load() - p.tea.load() != 50) {
+                mismatches.fetch_add(1);
+            }
+        }
+        i = i + 1;
+    }
+}
+
+raise_prices() {
+    var i = 0;
+    while (i &lt; 100) {
+        with (var p = prices.write()) {   # no reader sees the middle
+            p.coffee.fetch_add(10);
+            p.tea.fetch_add(10);
+        }
+        i = i + 1;
+    }
+}
+
+main(): int {
+    var threads = Array&lt;async.Thread&gt;();
+    var i = 0;
+    while (i &lt; 3) {
+        threads.append(async.Thread.spawn(check_prices));
+        i = i + 1;
+    }
+    threads.append(async.Thread.spawn(raise_prices));
+    for (var thread in threads) {
+        thread.join();
+    }
+    assert(mismatches.load() == 0, "no reader saw a half-done update");
+    with (var p = prices.read()) {
+        assert(p.coffee.load() == 1300, "every raise landed");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>with (var v = lock.read()) { ... }</code> waits until no writer holds or waits
+for the lock; any number of threads may read at the same time.</li>
+<li><code>with (var v = lock.write()) { ... }</code> waits until no other thread holds
+the lock at all.</li>
+<li><code>try_read()</code> and <code>try_write()</code> do not wait: the <code>else</code> block runs when the
+lock is not free.</li>
+<li><code>replace(value)</code> swaps the whole value under the write lock and returns
+the old one.</li>
+<li>Writers come first: while a writer waits, new readers wait behind it, so
+readers cannot keep it out forever. A thread that reads must therefore not
+ask to read again before its block ends, and asking to write while holding
+the lock panics instead of deadlocking.</li>
+</ul>
+<p><code>T</code> must be thread-safe, as for <code>Atomic&lt;T&gt;</code>: typically a <code>[Shared]</code> struct
+whose <code>Atomic</code> fields a writer changes together. Readers that hold the
+value at once each copy a reference to it, so a value that is not
+thread-safe, such as an <code>Array&lt;String&gt;</code>, would have its reference counts
+changed by several threads at a time; it is a compile error at the type
+argument. Put such a value in a <code>Mutex&lt;T&gt;</code>. When readers only need the
+latest value and writers replace it whole, an <code>Atomic&lt;T&gt;</code> holding a
+<code>[Shared]</code> struct does the same job without a lock.</p>
 <h2 id="semaphores-barriers-and-latches"><a class="header" href="#semaphores-barriers-and-latches">Semaphores, barriers and latches</a></h2>
 <p>Three types coordinate threads by counting. Each is <code>[Shared]</code>, so keep it
 in a module-scope variable or pass it to threads:</p>
@@ -13917,8 +14002,8 @@ waiting keeps every other task waiting, so a long loop should call
 <h2 id="mutexes-channels-and-conditions"><a class="header" href="#mutexes-channels-and-conditions">Mutexes, channels and conditions</a></h2>
 <p>The <a href="#threads-and-shared-data">synchronization types</a> work in tasks too. When a task
 has to wait for a <code>Mutex</code>, for a value from a <code>Channel</code> or for room in a
-bounded one, in <code>Condition.wait</code>, or in <code>Semaphore.acquire</code>, <code>Barrier.wait</code>
-or <code>Latch.wait</code>, it parks and its worker runs other
+bounded one, in <code>Condition.wait</code>, for an <code>RwLock</code>, or in <code>Semaphore.acquire</code>,
+<code>Barrier.wait</code> or <code>Latch.wait</code>, it parks and its worker runs other
 tasks, just as it does for a socket. The task that holds the lock or will
 send the value can be on the same worker, on another worker, or a plain
 thread:</p>
@@ -37359,6 +37444,255 @@ the last one.</p>
 <ul>
 <li>true once <code>count_down()</code> has been called <code>count</code> times</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/rwlock.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="rwlock"><a class="header" href="#rwlock">RwLock</a></h1>
+<p>Reader/writer locking: <code>RwLock&lt;T&gt;</code> owns a thread-safe value that many
+threads may read at once or one thread may write, with
+<code>RwLockReadGuard&lt;T&gt;</code> and <code>RwLockWriteGuard&lt;T&gt;</code> as the locks a <code>with</code>
+block holds.</p>
+<p>Source: <code>runtime/async/rwlock.pep</code></p>
+<h2 id="rwlock-1"><a class="header" href="#rwlock-1">RwLock</a></h2>
+<pre><code class="language-pepper">[Shared] struct RwLock&lt;T: Shared&gt;
+</code></pre>
+<p>A thread-safe value that many threads may read at once or one thread may
+write, like Rust’s <code>RwLock&lt;T&gt;</code> or C++ <code>std::shared_mutex</code>.</p>
+<p><code>with (var v = lock.read()) { ... }</code> waits until no writer holds or is
+waiting for the lock, then binds the value; any number of threads may be
+reading at once. <code>with (var v = lock.write()) { ... }</code> waits until no
+other thread holds the lock at all. Both unlock when the block ends by
+any path, and everything a writer did is visible to the threads that lock
+after it.</p>
+<p><code>T</code> must be thread-safe, as for <code>Atomic&lt;T&gt;</code>: typically a <code>[Shared]</code> struct
+whose <code>Atomic</code> fields a writer changes together, so readers never see
+them half changed. A value that is not thread-safe, such as an
+<code>Array&lt;String&gt;</code>, is a compile error: readers holding it at once would
+race on its reference counts. Use a <code>Mutex&lt;T&gt;</code> for such a value.</p>
+<p>Writers come first: while a writer waits, new readers wait too, so
+readers cannot keep a writer out forever. A thread that already reads
+must not ask to read again, since a writer may be waiting between the two.
+Asking to write while holding the lock in either mode panics instead of
+deadlocking.</p>
+<p>In a task (see <code>run</code>), waiting for the lock parks the task, not its worker
+thread.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the protected value’s type, which must be thread-safe (<code>T: Shared</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Range {
+    const low: Atomic&lt;long&gt;;
+    const high: Atomic&lt;long&gt;;
+    construct() {
+        low = Atomic&lt;long&gt;(0);
+        high = Atomic&lt;long&gt;(0);
+    }
+}
+
+const range = async.RwLock&lt;Range&gt;(Range());
+
+widen(by: long) {
+    with (var r = range.write()) {
+        r.low.fetch_sub(by);
+        r.high.fetch_add(by);
+    }
+}
+
+width(): long {
+    with (var r = range.read()) {
+        return r.high.load() - r.low.load();   # never half widened
+    }
+    return 0;
+}
+</code></pre>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h4 id="rwlock-2"><a class="header" href="#rwlock-2">RwLock()</a></h4>
+<pre><code class="language-pepper">construct(value: T)
+</code></pre>
+<p>Creates an unlocked RwLock holding <code>value</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to protect</li>
+</ul>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
+<pre><code class="language-pepper">read(): RwLockReadGuard&lt;T&gt;
+</code></pre>
+<p>Waits until no writer holds or waits for the lock, takes it for
+reading, and returns the guard that a <code>with</code> block enters to reach the
+value. Other threads may read at the same time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, and destroying it unlocks</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread holds the lock for writing</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var config = settings.read()) {
+    print($"{config.port.load()}\n");
+}
+</code></pre>
+<h4 id="try_read"><a class="header" href="#try_read">try_read</a></h4>
+<pre><code class="language-pepper">try_read(): RwLockReadGuard&lt;T&gt;
+</code></pre>
+<p>Takes the lock for reading only if that needs no wait: no writer holds
+it or waits for it.</p>
+<p>In <code>with (var v = lock.try_read()) { ... } else { ... }</code>, the body runs
+when the lock was taken and the <code>else</code> block runs when it was not.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, or null when the lock was not free for reading</li>
+</ul>
+<h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
+<pre><code class="language-pepper">write(): RwLockWriteGuard&lt;T&gt;
+</code></pre>
+<p>Waits until no other thread holds the lock, takes it for writing, and
+returns the guard that a <code>with</code> block enters to reach the value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, and destroying it unlocks</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread already holds the lock for writing</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var config = settings.write()) {
+    config.port.store(8080);
+}
+</code></pre>
+<h4 id="try_write"><a class="header" href="#try_write">try_write</a></h4>
+<pre><code class="language-pepper">try_write(): RwLockWriteGuard&lt;T&gt;
+</code></pre>
+<p>Takes the lock for writing only if no thread holds it right now,
+without waiting.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, or null when the lock was busy</li>
+</ul>
+<h4 id="replace-3"><a class="header" href="#replace-3">replace</a></h4>
+<pre><code class="language-pepper">replace(value: T): T
+</code></pre>
+<p>Replaces the whole value under the write lock and returns the one the
+RwLock held.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value the RwLock held</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread already holds the lock for writing</li>
+</ul>
+<h2 id="rwlockreadguard"><a class="header" href="#rwlockreadguard">RwLockReadGuard</a></h2>
+<pre><code class="language-pepper">struct RwLockReadGuard&lt;T: Shared&gt;
+</code></pre>
+<p>The read lock on an <code>RwLock&lt;T&gt;</code> that a <code>with</code> block holds: <code>enter()</code>
+returns the value, and destroying the guard unlocks. Get one from
+<code>RwLock.read()</code> or <code>RwLock.try_read()</code> in a <code>with</code> header.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the protected value’s type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var stats = counters.read()) {
+    total = stats.hits.load() + stats.misses.load();
+}   # unlocked here
+</code></pre>
+<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h4 id="locked-2"><a class="header" href="#locked-2">locked</a></h4>
+<pre><code class="language-pepper">bool locked
+</code></pre>
+<p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
+a <code>try_read()</code> that could not take it.</p>
+<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h4 id="rwlockreadguard-1"><a class="header" href="#rwlockreadguard-1">RwLockReadGuard()</a></h4>
+<pre><code class="language-pepper">construct(source: RwLock&lt;T&gt;, wait: bool = true)
+</code></pre>
+<p>Takes <code>source</code> for reading and creates the guard that holds it; the
+same as <code>source.read()</code> (or <code>source.try_read()</code> when <code>wait</code> is false).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the RwLock to lock</li>
+<li><code>wait</code> — true to wait for the lock; false to take it only if that needs no wait</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>wait</code> is true and the calling thread holds the lock for writing</li>
+</ul>
+<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h4 id="enter-5"><a class="header" href="#enter-5">enter</a></h4>
+<pre><code class="language-pepper">enter(): T
+</code></pre>
+<p>Returns the RwLock’s value, for the <code>with</code> header to bind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
+</ul>
+<h4 id="exit-6"><a class="header" href="#exit-6">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Unlocks if the guard holds the lock. The destructor calls it; calling
+it again does nothing.</p>
+<h2 id="rwlockwriteguard"><a class="header" href="#rwlockwriteguard">RwLockWriteGuard</a></h2>
+<pre><code class="language-pepper">struct RwLockWriteGuard&lt;T: Shared&gt;
+</code></pre>
+<p>The write lock on an <code>RwLock&lt;T&gt;</code> that a <code>with</code> block holds: <code>enter()</code>
+returns the value, and destroying the guard unlocks. Get one from
+<code>RwLock.write()</code> or <code>RwLock.try_write()</code> in a <code>with</code> header.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the protected value’s type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var stats = counters.write()) {
+    stats.hits.store(0);
+    stats.misses.store(0);
+}   # unlocked here
+</code></pre>
+<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h4 id="locked-1-1"><a class="header" href="#locked-1-1">locked</a></h4>
+<pre><code class="language-pepper">bool locked
+</code></pre>
+<p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
+a <code>try_write()</code> that found the lock busy.</p>
+<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h4 id="rwlockwriteguard-1"><a class="header" href="#rwlockwriteguard-1">RwLockWriteGuard()</a></h4>
+<pre><code class="language-pepper">construct(source: RwLock&lt;T&gt;, wait: bool = true)
+</code></pre>
+<p>Takes <code>source</code> for writing and creates the guard that holds it; the
+same as <code>source.write()</code> (or <code>source.try_write()</code> when <code>wait</code> is
+false).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the RwLock to lock</li>
+<li><code>wait</code> — true to wait for the lock; false to take it only if it is free right now</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>wait</code> is true and the calling thread already holds the lock for writing</li>
+</ul>
+<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
+<pre><code class="language-pepper">enter(): T
+</code></pre>
+<p>Returns the RwLock’s value, for the <code>with</code> header to bind.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
+</ul>
+<h4 id="exit-1-1"><a class="header" href="#exit-1-1">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Unlocks if the guard holds the lock. The destructor calls it; calling
+it again does nothing.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/once.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="once-and-lazy-1"><a class="header" href="#once-and-lazy-1">Once and Lazy</a></h1>
 <p>One-time initialization: <code>Once</code> runs a function exactly once however many
@@ -37388,12 +37722,12 @@ work() {
     setup.call(initialize);   # only the first caller runs it
 }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Once whose body has not run.</p>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="call-1"><a class="header" href="#call-1">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -37455,7 +37789,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-1-14"><a class="header" href="#constructor-1-14">Constructor</a></h3>
+<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
 <h4 id="lazy-1"><a class="header" href="#lazy-1">Lazy()</a></h4>
 <pre><code class="language-pepper">construct(initializer: shared () =&gt; T)
 </code></pre>
@@ -37465,7 +37799,7 @@ Nothing runs yet.</p>
 <ul>
 <li><code>initializer</code> — builds the value; runs at most once, on the thread that first calls <code>get()</code></li>
 </ul>
-<h3 id="methods-1-19"><a class="header" href="#methods-1-19">Methods</a></h3>
+<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
 <h4 id="get-6"><a class="header" href="#get-6">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -37545,7 +37879,7 @@ main(): int {
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="channel-2"><a class="header" href="#channel-2">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -37558,7 +37892,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">var bounded = async.Channel&lt;long&gt;(16);
 var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -37680,7 +38014,7 @@ while (values.next()) {
     total = total + values.current();
 }
 </code></pre>
-<h3 id="constructor-1-15"><a class="header" href="#constructor-1-15">Constructor</a></h3>
+<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
 <h4 id="channeliterator-1"><a class="header" href="#channeliterator-1">ChannelIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Channel&lt;T&gt;)
 </code></pre>
@@ -37690,7 +38024,7 @@ does the same.</p>
 <ul>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
-<h3 id="methods-1-20"><a class="header" href="#methods-1-20">Methods</a></h3>
+<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
 <h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -37763,12 +38097,12 @@ while (running) {
     }
 }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="select-2"><a class="header" href="#select-2">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -37887,12 +38221,12 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
 <h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -37901,7 +38235,7 @@ function called in a task can wait without being marked in any way.</p>
 <ul>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
@@ -37923,14 +38257,14 @@ finished. The task itself carries on.</p>
 <pre><code class="language-pepper">struct RuntimeOptions
 </code></pre>
 <p>Settings for <code>run_with</code>, built by chaining: <code>RuntimeOptions().stack_size(65536)</code>.</p>
-<h3 id="constructor-1-16"><a class="header" href="#constructor-1-16">Constructor</a></h3>
+<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
 <h4 id="runtimeoptions-1"><a class="header" href="#runtimeoptions-1">RuntimeOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates the default options: one worker per logical CPU, 256 KiB of
 stack per task, the system’s best I/O backend, and up to 64 threads
 for <code>run_blocking</code>.</p>
-<h3 id="methods-1-21"><a class="header" href="#methods-1-21">Methods</a></h3>
+<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
 <h4 id="workers"><a class="header" href="#workers">workers</a></h4>
 <pre><code class="language-pepper">workers(count: ulong): RuntimeOptions
 </code></pre>
@@ -38027,7 +38361,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-2-10"><a class="header" href="#constructor-2-10">Constructor</a></h3>
+<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
 <h4 id="task-1"><a class="header" href="#task-1">Task()</a></h4>
 <pre><code class="language-pepper">construct(core: _TaskCore)
 </code></pre>
@@ -38056,7 +38390,7 @@ task can, since it stays on this thread.</p>
 <ul>
 <li>outside <code>run</code></li>
 </ul>
-<h3 id="methods-2-13"><a class="header" href="#methods-2-13">Methods</a></h3>
+<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
 <h4 id="join-4"><a class="header" href="#join-4">join</a></h4>
 <pre><code class="language-pepper">join(): Result&lt;T, TaskError&gt;
 </code></pre>
@@ -38330,7 +38664,7 @@ Timeouts nest: an inner one cannot extend an outer one.</p>
 <li><code>milliseconds</code> — how long from now the limit passes</li>
 </ul>
 <h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
-<h4 id="enter-5"><a class="header" href="#enter-5">enter</a></h4>
+<h4 id="enter-6"><a class="header" href="#enter-6">enter</a></h4>
 <pre><code class="language-pepper">enter(): Deadline
 </code></pre>
 <p>Starts applying the limit to the running task; a <code>with</code> block calls
@@ -38343,7 +38677,7 @@ it.</p>
 <ul>
 <li>outside a task</li>
 </ul>
-<h4 id="exit-6"><a class="header" href="#exit-6">exit</a></h4>
+<h4 id="exit-7"><a class="header" href="#exit-7">exit</a></h4>
 <pre><code class="language-pepper">exit()
 </code></pre>
 <p>Stops applying the limit; the end of the <code>with</code> block calls it.</p>
@@ -38457,7 +38791,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="tasklocal-2"><a class="header" href="#tasklocal-2">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -38466,7 +38800,7 @@ main(): int {
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="get-7"><a class="header" href="#get-7">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -38490,7 +38824,7 @@ checks.</p>
 <ul>
 <li><code>value</code> — the new value for this task</li>
 </ul>
-<h4 id="enter-6"><a class="header" href="#enter-6">enter</a></h4>
+<h4 id="enter-7"><a class="header" href="#enter-7">enter</a></h4>
 <pre><code class="language-pepper">enter(): TaskLocalGuard&lt;T&gt;
 </code></pre>
 <p>Returns the guard that a <code>with</code> block enters to reach the calling
@@ -38538,7 +38872,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>T</code> — the type of the per-task value</li>
 </ul>
-<h3 id="constructor-1-17"><a class="header" href="#constructor-1-17">Constructor</a></h3>
+<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
 <h4 id="tasklocalguard-1"><a class="header" href="#tasklocalguard-1">TaskLocalGuard()</a></h4>
 <pre><code class="language-pepper">construct(local: TaskLocal&lt;T&gt;)
 </code></pre>
@@ -38548,8 +38882,8 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li><code>local</code> — the task-local variable</li>
 </ul>
-<h3 id="methods-1-22"><a class="header" href="#methods-1-22">Methods</a></h3>
-<h4 id="enter-1-2"><a class="header" href="#enter-1-2">enter</a></h4>
+<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
+<h4 id="enter-1-3"><a class="header" href="#enter-1-3">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
 <p>Returns the calling task’s value, for the <code>with</code> header to bind.</p>
@@ -38557,7 +38891,7 @@ the compiler checks the block with the confinement rule (see <code>Mutex</code>)
 <ul>
 <li>this task’s value, or the default of <code>T</code> (null for a struct) when it has none</li>
 </ul>
-<h4 id="exit-7"><a class="header" href="#exit-7">exit</a></h4>
+<h4 id="exit-8"><a class="header" href="#exit-8">exit</a></h4>
 <pre><code class="language-pepper">exit()
 </code></pre>
 <p>Does nothing: the value stays with the task.</p>
@@ -38667,7 +39001,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -38683,7 +39017,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -38724,12 +39058,12 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-1-4"><a class="header" href="#fields-1-4">Fields</a></h3>
+<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
 <h4 id="program"><a class="header" href="#program">program</a></h4>
 <pre><code class="language-pepper">var program: String
 </code></pre>
 <p>The program to start, as given to the constructor.</p>
-<h3 id="constructor-1-18"><a class="header" href="#constructor-1-18">Constructor</a></h3>
+<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
 <h4 id="command-2"><a class="header" href="#command-2">Command()</a></h4>
 <pre><code class="language-pepper">construct(program: String)
 </code></pre>
@@ -38739,7 +39073,7 @@ parent’s environment and current directory, and inherited streams.</p>
 <ul>
 <li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
 </ul>
-<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="argument"><a class="header" href="#argument">argument</a></h4>
 <pre><code class="language-pepper">argument(value: String): Command
 </code></pre>
@@ -38948,7 +39282,7 @@ signal.</p>
 assert(!status.success(), "false fails");
 assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -38958,7 +39292,7 @@ assert(status.code().value() == 1, "with code 1");
 <li><code>code</code> — the exit code, when the process exited</li>
 <li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
 </ul>
-<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="success"><a class="header" href="#success">success</a></h4>
 <pre><code class="language-pepper">success(): bool
 </code></pre>
@@ -39016,14 +39350,14 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-1-19"><a class="header" href="#constructor-1-19">Constructor</a></h3>
+<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
 <h4 id="child-2"><a class="header" href="#child-2">Child()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Child that stands for no process: <code>id()</code> is 0, its streams
 are closed, and <code>wait()</code>, <code>try_wait()</code> and <code>kill()</code> fail. Use
 <code>Command.spawn()</code> to start one.</p>
-<h3 id="methods-1-23"><a class="header" href="#methods-1-23">Methods</a></h3>
+<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
 <h4 id="id-1"><a class="header" href="#id-1">id</a></h4>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>
@@ -39343,7 +39677,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -39409,7 +39743,7 @@ main(): int {
 <ul>
 <li>if the duration does not fit in a <code>ulong</code> of nanoseconds (about 584 years)</li>
 </ul>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="nanoseconds"><a class="header" href="#nanoseconds">nanoseconds</a></h4>
 <pre><code class="language-pepper">nanoseconds(): ulong
 </code></pre>
@@ -39608,7 +39942,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-1-20"><a class="header" href="#constructor-1-20">Constructor</a></h3>
+<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
 <h4 id="instant-1"><a class="header" href="#instant-1">Instant()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -39623,7 +39957,7 @@ clock.</p>
 <ul>
 <li>the current moment</li>
 </ul>
-<h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
+<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
 <h4 id="elapsed"><a class="header" href="#elapsed">elapsed</a></h4>
 <pre><code class="language-pepper">elapsed(): Duration
 </code></pre>
@@ -39746,7 +40080,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-2-11"><a class="header" href="#constructor-2-11">Constructor</a></h3>
+<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
 <h4 id="systemtime-1"><a class="header" href="#systemtime-1">SystemTime()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -39789,7 +40123,7 @@ systems and most protocols record it.</p>
 <ul>
 <li>if the time is outside the years 1677 to 2262</li>
 </ul>
-<h3 id="methods-2-14"><a class="header" href="#methods-2-14">Methods</a></h3>
+<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
 <h4 id="unix_nanoseconds"><a class="header" href="#unix_nanoseconds">unix_nanoseconds</a></h4>
 <pre><code class="language-pepper">unix_nanoseconds(): long
 </code></pre>
@@ -40277,7 +40611,7 @@ name.</p>
 <pre><code class="language-pepper">Sunday
 </code></pre>
 <p>The seventh and last day of the ISO week.</p>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -40318,7 +40652,7 @@ main(): int {
 <pre><code class="language-pepper">var day: int { get; }
 </code></pre>
 <p>The day of the month, 1 to 31.</p>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="date-1"><a class="header" href="#date-1">Date()</a></h4>
 <pre><code class="language-pepper">construct(year: int = 1970, month: int = 1, day: int = 1)
 </code></pre>
@@ -40380,7 +40714,7 @@ digits (<code>+10000-01-01</code>, <code>-0001-12-31</code>).</p>
 <ul>
 <li>the date, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-1-25"><a class="header" href="#methods-1-25">Methods</a></h3>
+<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
 <h4 id="days"><a class="header" href="#days">days</a></h4>
 <pre><code class="language-pepper">days(): long
 </code></pre>
@@ -40609,7 +40943,7 @@ main(): int {
 <pre><code class="language-pepper">var nanosecond: int { get; }
 </code></pre>
 <p>The nanosecond within the second, 0 to 999999999.</p>
-<h3 id="constructor-1-21"><a class="header" href="#constructor-1-21">Constructor</a></h3>
+<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
 <h4 id="time-1-1"><a class="header" href="#time-1-1">Time()</a></h4>
 <pre><code class="language-pepper">construct(hour: int = 0, minute: int = 0, second: int = 0, nanosecond: int = 0)
 </code></pre>
@@ -40673,7 +41007,7 @@ a time. The seconds may be left out (<code>08:30</code>), as TOML 1.1 allows.</p
 <ul>
 <li>the time, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-2-15"><a class="header" href="#methods-2-15">Methods</a></h3>
+<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
 <h4 id="nanoseconds-1"><a class="header" href="#nanoseconds-1">nanoseconds</a></h4>
 <pre><code class="language-pepper">nanoseconds(): long
 </code></pre>
@@ -40822,7 +41156,7 @@ main(): int {
 <pre><code class="language-pepper">var nanosecond: int { get; }
 </code></pre>
 <p>The nanosecond within the second, as <code>time.nanosecond</code>.</p>
-<h3 id="constructor-2-12"><a class="header" href="#constructor-2-12">Constructor</a></h3>
+<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
 <h4 id="datetime-1"><a class="header" href="#datetime-1">DateTime()</a></h4>
 <pre><code class="language-pepper">construct( year: int = 1970, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0, nanosecond: int = 0 )
 </code></pre>
@@ -41082,7 +41416,7 @@ main(): int {
 <pre><code class="language-pepper">var seconds: int { get; }
 </code></pre>
 <p>The offset in seconds, east of UTC positive.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="offset-1-1"><a class="header" href="#offset-1-1">Offset()</a></h4>
 <pre><code class="language-pepper">construct(seconds: int = 0)
 </code></pre>
@@ -41137,7 +41471,7 @@ or an error when <code>text</code> is not one.</p>
 <ul>
 <li>the offset, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="is_utc"><a class="header" href="#is_utc">is_utc</a></h4>
 <pre><code class="language-pepper">is_utc(): bool
 </code></pre>
@@ -41193,7 +41527,7 @@ main(): int {
 <pre><code class="language-pepper">var time: Time { get; }
 </code></pre>
 <p>The local time of day, as <code>date_time.time</code>.</p>
-<h3 id="constructor-1-22"><a class="header" href="#constructor-1-22">Constructor</a></h3>
+<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
 <h4 id="offsetdatetime-1"><a class="header" href="#offsetdatetime-1">OffsetDateTime()</a></h4>
 <pre><code class="language-pepper">construct(date_time: DateTime = DateTime(), offset: Offset = Offset())
 </code></pre>
@@ -41251,7 +41585,7 @@ weekday must match the date.</p>
 <ul>
 <li>the date and time in UTC, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-1-26"><a class="header" href="#methods-1-26">Methods</a></h3>
+<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
 <h4 id="unix_seconds-2"><a class="header" href="#unix_seconds-2">unix_seconds</a></h4>
 <pre><code class="language-pepper">unix_seconds(): long
 </code></pre>
@@ -41453,7 +41787,7 @@ main(): int {
 </code></pre>
 <p>The zone’s name: <code>UTC</code>, <code>Local</code>, the offset of a fixed zone
 (<code>+05:30</code>), or the database name of a named one (<code>Europe/Paris</code>).</p>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="timezone-1"><a class="header" href="#timezone-1">TimeZone()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -41504,7 +41838,7 @@ when the system does not know it. <code>UTC</code> is always known.</p>
 <ul>
 <li>the zone, or an error saying it was not found</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="offset_at"><a class="header" href="#offset_at">offset_at</a></h4>
 <pre><code class="language-pepper">offset_at(time: os.SystemTime): Offset
 </code></pre>
@@ -41802,7 +42136,7 @@ vector’s size (<code>N</code> times the size of <code>T</code>).</p>
 <ul>
 <li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
 </ul>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="store-1"><a class="header" href="#store-1">store</a></h4>
 <pre><code class="language-pepper">store(pointer: __ptr&lt;T&gt;)
 </code></pre>
@@ -42277,7 +42611,7 @@ operators, shifts and rotates.</p>
 <li><code>T</code> — the integer lane type</li>
 <li><code>N</code> — the lane count</li>
 </ul>
-<h3 id="methods-1-27"><a class="header" href="#methods-1-27">Methods</a></h3>
+<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
 <h4 id="operator--8-3"><a class="header" href="#operator--8-3">operator /</a></h4>
 <pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
@@ -42494,7 +42828,7 @@ rounding.</p>
 <li><code>T</code> — the floating-point lane type</li>
 <li><code>N</code> — the lane count</li>
 </ul>
-<h3 id="methods-2-16"><a class="header" href="#methods-2-16">Methods</a></h3>
+<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
 <h4 id="operator--21-1"><a class="header" href="#operator--21-1">operator /</a></h4>
 <pre><code class="language-pepper">/(other: Vector&lt;T, N&gt;): Vector&lt;T, N&gt;
 </code></pre>
@@ -42778,7 +43112,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
 <h4 id="address-1"><a class="header" href="#address-1">address</a></h4>
 <pre><code class="language-pepper">var address: ulong
 </code></pre>
@@ -42806,7 +43140,7 @@ info.</p>
 </code></pre>
 <p>Whether the optimizer inlined this call into its caller, the next
 frame: the function has no frame of its own on the stack.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="stackframe-1"><a class="header" href="#stackframe-1">StackFrame()</a></h4>
 <pre><code class="language-pepper">construct(address: ulong = 0)
 </code></pre>
@@ -42816,7 +43150,7 @@ position yet.</p>
 <ul>
 <li><code>address</code> — the return address</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
 <h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -42843,18 +43177,18 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-1-5"><a class="header" href="#fields-1-5">Fields</a></h3>
+<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
 <h4 id="addresses-1"><a class="header" href="#addresses-1">addresses</a></h4>
 <pre><code class="language-pepper">var addresses: Array&lt;ulong&gt;
 </code></pre>
 <p>The return address of each call, innermost first, as captured: it
 includes the frames of <code>capture</code> itself, which <code>frames()</code> leaves out.</p>
-<h3 id="constructor-1-23"><a class="header" href="#constructor-1-23">Constructor</a></h3>
+<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
 <h4 id="backtrace-1"><a class="header" href="#backtrace-1">Backtrace()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty Backtrace. Use <code>capture()</code> to record the stack.</p>
-<h3 id="methods-1-28"><a class="header" href="#methods-1-28">Methods</a></h3>
+<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
 <h4 id="frames"><a class="header" href="#frames">frames</a></h4>
 <pre><code class="language-pepper">frames(full: bool = false): Array&lt;StackFrame&gt;
 </code></pre>
@@ -43482,7 +43816,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
 assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -43574,7 +43908,7 @@ for (var number in regex.Regex("\\d+").find_all("1 22 333")) {
     total += number.text().size;   # 1, then 2, then 3
 }
 </code></pre>
-<h4 id="replace-3"><a class="header" href="#replace-3">replace</a></h4>
+<h4 id="replace-4"><a class="header" href="#replace-4">replace</a></h4>
 <pre><code class="language-pepper">replace(text: String, replacement: String): String
 </code></pre>
 <p>Returns <code>text</code> with the first match replaced by <code>replacement</code>, or a
@@ -43662,7 +43996,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -43674,7 +44008,7 @@ included.</p>
 <li><code>slots</code> — a start and end byte offset for the match and each group, -1 for a group that did not take part</li>
 <li><code>program</code> — the compiled pattern, for its group names</li>
 </ul>
-<h3 id="methods-1-29"><a class="header" href="#methods-1-29">Methods</a></h3>
+<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
 <h4 id="text-2"><a class="header" href="#text-2">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
@@ -43771,7 +44105,7 @@ when it did not take part.</p>
 </code></pre>
 <p>An iterator over the matches of a <code>Regex</code> in a text, from
 <code>Regex.find_all</code>: left to right, without overlaps.</p>
-<h3 id="constructor-1-24"><a class="header" href="#constructor-1-24">Constructor</a></h3>
+<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
 <h4 id="matches-1-1"><a class="header" href="#matches-1-1">Matches()</a></h4>
 <pre><code class="language-pepper">construct(program: _RegexProgram, text: String)
 </code></pre>
@@ -43782,7 +44116,7 @@ when it did not take part.</p>
 <li><code>program</code> — the compiled pattern</li>
 <li><code>text</code> — the text to search</li>
 </ul>
-<h3 id="methods-2-17"><a class="header" href="#methods-2-17">Methods</a></h3>
+<h3 id="methods-2-18"><a class="header" href="#methods-2-18">Methods</a></h3>
 <h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -43960,7 +44294,7 @@ var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
 list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
-<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="operator--40"><a class="header" href="#operator--40">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
@@ -44193,7 +44527,7 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="message-5"><a class="header" href="#message-5">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
@@ -44223,7 +44557,7 @@ when <code>line</code> is.</p>
 <p>Where in the document the value an error is about is, as a path from
 the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
 syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -44236,7 +44570,7 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
+<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
 <h4 id="to_string-33"><a class="header" href="#to_string-33">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -44313,12 +44647,12 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
 <p>The document’s value.</p>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="jsondocument-1"><a class="header" href="#jsondocument-1">JsonDocument()</a></h4>
 <pre><code class="language-pepper">construct(root: JsonValue = JsonValue.Null)
 </code></pre>
@@ -44327,7 +44661,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <ul>
 <li><code>root</code> — the document’s value</li>
 </ul>
-<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
+<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
 <h4 id="comments-1"><a class="header" href="#comments-1">comments</a></h4>
 <pre><code class="language-pepper">comments(path: String): Array&lt;String&gt;
 </code></pre>
@@ -44618,7 +44952,7 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
+<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
 <h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
@@ -44653,7 +44987,7 @@ enum Shape {
     Point,
 }
 </code></pre>
-<h3 id="fields-1-6"><a class="header" href="#fields-1-6">Fields</a></h3>
+<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
 <h4 id="key"><a class="header" href="#key">key</a></h4>
 <pre><code class="language-pepper">const key: String
 </code></pre>
@@ -44960,8 +45294,8 @@ starts from it.</p>
 <ul>
 <li>if <code>format</code> is <code>Format.Gzip</code> (“gzip data has no preset dictionary”)</li>
 </ul>
-<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
-<h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
+<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Decompresses up to <code>max</code> more bytes and appends them to <code>buffer</code>.</p>
@@ -45033,8 +45367,8 @@ by its Adler-32; raw DEFLATE data carries no sign of it.</p>
 <ul>
 <li>if <code>level</code> is not 0 through 9 (“compression level must be 0 through 9”), or if <code>format</code> is <code>Format.Gzip</code> (“gzip data has no preset dictionary”)</li>
 </ul>
-<h3 id="methods-1-30"><a class="header" href="#methods-1-30">Methods</a></h3>
-<h4 id="write-5"><a class="header" href="#write-5">write</a></h4>
+<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
+<h4 id="write-6"><a class="header" href="#write-6">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Compresses all of <code>data</code>.</p>
@@ -45099,7 +45433,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -45117,7 +45451,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
 <h4 id="update"><a class="header" href="#update">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -45145,7 +45479,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-1-25"><a class="header" href="#constructor-1-25">Constructor</a></h3>
+<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
 <h4 id="adler32-1"><a class="header" href="#adler32-1">Adler32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -45163,7 +45497,7 @@ assert(compress.Adler32.of("Wikipedia".bytes()) == 0x11E60398, "the example");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-1-31"><a class="header" href="#methods-1-31">Methods</a></h3>
+<h3 id="methods-1-32"><a class="header" href="#methods-1-32">Methods</a></h3>
 <h4 id="update-1"><a class="header" href="#update-1">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -45248,7 +45582,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
+<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -45274,7 +45608,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var link_target: String
 </code></pre>
 <p>The target of a symlink or hard link; empty otherwise.</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
 <pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
 </code></pre>
@@ -45311,7 +45645,7 @@ while (true) {
     print(entry.value().path);
 }
 </code></pre>
-<h3 id="constructor-1-26"><a class="header" href="#constructor-1-26">Constructor</a></h3>
+<h3 id="constructor-1-27"><a class="header" href="#constructor-1-27">Constructor</a></h3>
 <h4 id="tarreader-1"><a class="header" href="#tarreader-1">TarReader()</a></h4>
 <pre><code class="language-pepper">construct(source: io.Reader)
 </code></pre>
@@ -45320,7 +45654,7 @@ while (true) {
 <ul>
 <li><code>source</code> — the stream of the archive</li>
 </ul>
-<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
+<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
 <h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
 <pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
 </code></pre>
@@ -45332,7 +45666,7 @@ the stream between entries.</p>
 <ul>
 <li>the next entry, or none at the end of the archive; an <code>is_invalid_input()</code> error for a damaged or truncated archive, or the source’s error</li>
 </ul>
-<h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
+<h4 id="read-7"><a class="header" href="#read-7">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Reads up to <code>max</code> more bytes of the current entry’s contents and
@@ -45419,7 +45753,7 @@ tar.append_file("docs/readme.txt", "hello\n".bytes());
 tar.finish();
 assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 </code></pre>
-<h3 id="constructor-2-13"><a class="header" href="#constructor-2-13">Constructor</a></h3>
+<h3 id="constructor-2-14"><a class="header" href="#constructor-2-14">Constructor</a></h3>
 <h4 id="tarwriter-1"><a class="header" href="#tarwriter-1">TarWriter()</a></h4>
 <pre><code class="language-pepper">construct(sink: io.Writer)
 </code></pre>
@@ -45428,7 +45762,7 @@ assert(out.bytes.count == 4 * 512 + 2 * 512, "headers, contents, end marker");
 <ul>
 <li><code>sink</code> — the stream the archive is written to</li>
 </ul>
-<h3 id="methods-1-32"><a class="header" href="#methods-1-32">Methods</a></h3>
+<h3 id="methods-1-33"><a class="header" href="#methods-1-33">Methods</a></h3>
 <h4 id="append_file"><a class="header" href="#append_file">append_file</a></h4>
 <pre><code class="language-pepper">append_file(path: String, data: u8[], mode: uint = 420): io.IoResult&lt;void&gt;
 </code></pre>
@@ -45617,12 +45951,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
+<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
 <h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -45724,12 +46058,12 @@ hasher.update("blob 0");
 hasher.update(nul);
 assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
+<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
 <h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -45822,12 +46156,12 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
+<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
+<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -45996,7 +46330,7 @@ main(args: String[]): int {
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
+<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -46007,7 +46341,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
+<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
 </code></pre>
@@ -46268,7 +46602,7 @@ var best = cli.closest("buidl", names);   # some("build")
 <pre><code class="language-pepper">var occurrences: int { get; }
 </code></pre>
 <p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
-<h3 id="constructor-1-27"><a class="header" href="#constructor-1-27">Constructor</a></h3>
+<h3 id="constructor-1-28"><a class="header" href="#constructor-1-28">Constructor</a></h3>
 <h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -46289,7 +46623,7 @@ for the runtime.</p>
 </code></pre>
 <p>Whether a value was given on the command line; false when the
 argument was left out, even when it has a default.</p>
-<h3 id="constructor-2-14"><a class="header" href="#constructor-2-14">Constructor</a></h3>
+<h3 id="constructor-2-15"><a class="header" href="#constructor-2-15">Constructor</a></h3>
 <h4 id="argument-1-1"><a class="header" href="#argument-1-1">Argument()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -46299,7 +46633,7 @@ arguments; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-1-33"><a class="header" href="#methods-1-33">Methods</a></h3>
+<h3 id="methods-1-34"><a class="header" href="#methods-1-34">Methods</a></h3>
 <h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
 <pre><code class="language-pepper">value(): String
 </code></pre>
@@ -46345,7 +46679,7 @@ argument lists; this constructor is for the runtime.</p>
 <ul>
 <li><code>argument</code> — the declaration</li>
 </ul>
-<h3 id="methods-2-18"><a class="header" href="#methods-2-18">Methods</a></h3>
+<h3 id="methods-2-19"><a class="header" href="#methods-2-19">Methods</a></h3>
 <h4 id="values-2"><a class="header" href="#values-2">values</a></h4>
 <pre><code class="language-pepper">values(): Array&lt;String&gt;
 </code></pre>
@@ -46375,7 +46709,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
+<h3 id="fields-28"><a class="header" href="#fields-28">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -46412,7 +46746,7 @@ struct Options {
     var source: String;
 }
 </code></pre>
-<h3 id="fields-1-7"><a class="header" href="#fields-1-7">Fields</a></h3>
+<h3 id="fields-1-8"><a class="header" href="#fields-1-8">Fields</a></h3>
 <h4 id="help-1-1"><a class="header" href="#help-1-1">help</a></h4>
 <pre><code class="language-pepper">const help: String = ""
 </code></pre>
@@ -46482,12 +46816,12 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
+<h3 id="constructor-49"><a class="header" href="#constructor-49">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
+<h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -46598,7 +46932,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-28"><a class="header" href="#fields-28">Fields</a></h3>
+<h3 id="fields-29"><a class="header" href="#fields-29">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -46613,7 +46947,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 </code></pre>
 <p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
 <code>Connection</code> itself.</p>
-<h3 id="constructor-1-28"><a class="header" href="#constructor-1-28">Constructor</a></h3>
+<h3 id="constructor-1-29"><a class="header" href="#constructor-1-29">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
 </code></pre>
@@ -46623,7 +46957,7 @@ server handler, the request target (<code>/path?query</code>).</p>
 <li><code>method</code> — the method, such as <code>GET</code></li>
 <li><code>url</code> — the absolute URL to send it to</li>
 </ul>
-<h3 id="methods-1-34"><a class="header" href="#methods-1-34">Methods</a></h3>
+<h3 id="methods-1-35"><a class="header" href="#methods-1-35">Methods</a></h3>
 <h4 id="set_text"><a class="header" href="#set_text">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Request
 </code></pre>
@@ -46709,7 +47043,7 @@ server adds <code>Content-Length</code> itself.</p>
     return response;
 }
 </code></pre>
-<h3 id="fields-1-8"><a class="header" href="#fields-1-8">Fields</a></h3>
+<h3 id="fields-1-9"><a class="header" href="#fields-1-9">Fields</a></h3>
 <h4 id="status-1"><a class="header" href="#status-1">status</a></h4>
 <pre><code class="language-pepper">var status: int
 </code></pre>
@@ -46723,7 +47057,7 @@ for the status when this is empty.</p>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
 <p>The header fields.</p>
-<h3 id="constructor-2-15"><a class="header" href="#constructor-2-15">Constructor</a></h3>
+<h3 id="constructor-2-16"><a class="header" href="#constructor-2-16">Constructor</a></h3>
 <h4 id="response-1"><a class="header" href="#response-1">Response()</a></h4>
 <pre><code class="language-pepper">construct(status: int = 200)
 </code></pre>
@@ -46732,7 +47066,7 @@ for the status when this is empty.</p>
 <ul>
 <li><code>status</code> — the status code</li>
 </ul>
-<h3 id="methods-2-19"><a class="header" href="#methods-2-19">Methods</a></h3>
+<h3 id="methods-2-20"><a class="header" href="#methods-2-20">Methods</a></h3>
 <h4 id="set_text-1"><a class="header" href="#set_text-1">set_text</a></h4>
 <pre><code class="language-pepper">set_text(text: String): Response
 </code></pre>
@@ -46829,7 +47163,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 </ul>
-<h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
+<h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
 <h4 id="get-9"><a class="header" href="#get-9">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -46913,7 +47247,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-49"><a class="header" href="#constructor-49">Constructor</a></h3>
+<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -46951,7 +47285,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
+<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -47042,7 +47376,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
+<h3 id="constructor-51"><a class="header" href="#constructor-51">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -47060,7 +47394,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
+<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -47130,7 +47464,7 @@ while (true) {
     }
 }
 </code></pre>
-<h3 id="constructor-1-29"><a class="header" href="#constructor-1-29">Constructor</a></h3>
+<h3 id="constructor-1-30"><a class="header" href="#constructor-1-30">Constructor</a></h3>
 <h4 id="tlsacceptor-1"><a class="header" href="#tlsacceptor-1">TlsAcceptor()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -47154,7 +47488,7 @@ while (true) {
 <ul>
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
-<h3 id="methods-1-35"><a class="header" href="#methods-1-35">Methods</a></h3>
+<h3 id="methods-1-36"><a class="header" href="#methods-1-36">Methods</a></h3>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -47194,7 +47528,7 @@ var reply = Array&lt;u8&gt;();
 while (stream.read(reply, 4096).value() &gt; 0) {
 }
 </code></pre>
-<h3 id="constructor-2-16"><a class="header" href="#constructor-2-16">Constructor</a></h3>
+<h3 id="constructor-2-17"><a class="header" href="#constructor-2-17">Constructor</a></h3>
 <h4 id="tlsstream-1"><a class="header" href="#tlsstream-1">TlsStream()</a></h4>
 <pre><code class="language-pepper">construct(tcp: io.TcpStream, session: __ptr&lt;void&gt;)
 </code></pre>
@@ -47205,7 +47539,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <li><code>tcp</code> — the TCP connection</li>
 <li><code>session</code> — the platform’s session, or null for a closed stream</li>
 </ul>
-<h3 id="methods-2-20"><a class="header" href="#methods-2-20">Methods</a></h3>
+<h3 id="methods-2-21"><a class="header" href="#methods-2-21">Methods</a></h3>
 <h4 id="is_open-4"><a class="header" href="#is_open-4">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -47214,7 +47548,7 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <ul>
 <li>false after <code>close()</code></li>
 </ul>
-<h4 id="read-7"><a class="header" href="#read-7">read</a></h4>
+<h4 id="read-8"><a class="header" href="#read-8">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Waits until data arrives, then appends up to <code>max</code> decrypted bytes of
@@ -47241,7 +47575,7 @@ it to <code>buffer</code>.</p>
 <ul>
 <li>an Ok result once <code>count</code> bytes are appended; an error when the connection ends first, or an error as for <code>read</code>. The bytes read before an error stay in <code>buffer</code>.</li>
 </ul>
-<h4 id="write-6"><a class="header" href="#write-6">write</a></h4>
+<h4 id="write-7"><a class="header" href="#write-7">write</a></h4>
 <pre><code class="language-pepper">write(data: u8[]): io.IoResult&lt;ulong&gt;
 </code></pre>
 <p>Encrypts and sends bytes from <code>data</code>. The send may be partial; use
@@ -47383,7 +47717,7 @@ released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
 status 124 and a message on standard error.</li>
 </ul>
-<h3 id="constructor-51"><a class="header" href="#constructor-51">Constructor</a></h3>
+<h3 id="constructor-52"><a class="header" href="#constructor-52">Constructor</a></h3>
 <h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>
 <pre><code class="language-pepper">construct(file: String)
 </code></pre>
@@ -47392,7 +47726,7 @@ status 124 and a message on standard error.</li>
 <ul>
 <li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it</li>
 </ul>
-<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
+<h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
 <h4 id="add-1"><a class="header" href="#add-1">add</a></h4>
 <pre><code class="language-pepper">add(name: String, body: () =&gt; void, line: int)
 </code></pre>
@@ -47450,12 +47784,12 @@ writes_a_file() {
     expect_equal(io.File.read_to_string(path).value(), "hello");
 }
 </code></pre>
-<h3 id="fields-29"><a class="header" href="#fields-29">Fields</a></h3>
+<h3 id="fields-30"><a class="header" href="#fields-30">Fields</a></h3>
 <h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
 <pre><code class="language-pepper">const path: io.Path
 </code></pre>
 <p>The folder’s path.</p>
-<h3 id="constructor-52"><a class="header" href="#constructor-52">Constructor</a></h3>
+<h3 id="constructor-53"><a class="header" href="#constructor-53">Constructor</a></h3>
 <h4 id="tempfolder-2"><a class="header" href="#tempfolder-2">TempFolder()</a></h4>
 <pre><code class="language-pepper">construct(name: String)
 </code></pre>
