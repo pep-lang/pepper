@@ -23,6 +23,7 @@ test that checks what the compiler emits or reports stays in Rust.
 | A module, `runtime/<module>/` | `runtime/<module>/test/<topic>_test.pep`, which imports the module |
 | A prelude file, `runtime/<name>.pep` | `runtime/test/<topic>_test.pep` |
 | A file's private functions | `[Test]` functions in that file itself |
+| A Pepper tool, `tools/<tool>/` | `tools/<tool>/<topic>_test.pep`, which imports the tool's files (`import "format";`) |
 
 A `test/` folder holds no `module.pep`, so it is never part of the module:
 no program that imports the module sees it. Prefer it to tests inside a

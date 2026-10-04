@@ -2553,6 +2553,8 @@ dogfooding of the language.
 - `pep_fmt_tests.rs` compiles pep-fmt and runs it on every `.pep` file in
   the repository: each must format, be idempotent, and give the same AST
   (the compiler's `Display` of `Module`, imports sorted) before and after.
+  Its formatting cases (input and expected output) are Pepper tests in
+  `tools/pep-fmt/format_test.pep`, run by `scripts/pepper-tests.sh` (`pepper test -I .` in `tools/`).
   So a grammar change to `parsers.rs` that `tools/syntax` does not mirror
   fails there. The tool's own sources and `runtime/` must be pep-fmt formatted.
 
