@@ -26,6 +26,14 @@
 //! so a generic shared struct is checked per specialization
 //! (`Atomic<String>` is an error, `Atomic<int>` is not) and the error points
 //! at the code that named the specialization.
+//!
+//! A `[ThreadLocal]` module-scope variable is the one exception to the
+//! `const` rule: every thread has its own copy, so no two threads ever touch
+//! the same one and assigning it cannot race. It keeps the type rule (a
+//! non-thread-safe value could be parked there from under a lock, which
+//! `check_confinement` does not follow; `async.ThreadLocal<T>` is the way to
+//! hold one), and its initializer must be a constant ([`thread_local_constant`]),
+//! the image every thread starts from.
 
 use crate::model::*;
 use crate::passes::gather_generics::parse_type_string;
@@ -222,17 +230,62 @@ pub fn check_shared_types(module: &mut Module) {
     check_globals(module, &safe);
 }
 
+/// The value of a thread-local's initializer, which every thread starts
+/// from: a number, `bool` or `char` literal (negated, or cast to another
+/// number or an enum, as an enum case is), or null.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ThreadLocalConstant {
+    Int(i64),
+    Float(f64),
+    Null,
+}
+
+/// The constant `expr` stands for, if it is one a thread-local may start
+/// from (see [`ThreadLocalConstant`]).
+pub fn thread_local_constant(expr: &Expression) -> Option<ThreadLocalConstant> {
+    match expr {
+        Expression::IntLiteral(v) => Some(ThreadLocalConstant::Int(*v)),
+        Expression::BoolLiteral(v) => Some(ThreadLocalConstant::Int(*v as i64)),
+        Expression::FloatLiteral(v) => Some(ThreadLocalConstant::Float(*v)),
+        Expression::PointerLiteral => Some(ThreadLocalConstant::Null),
+        Expression::Unary { op: UnaryOp::Neg, operand, .. } => match thread_local_constant(operand)? {
+            ThreadLocalConstant::Int(v) => Some(ThreadLocalConstant::Int(v.wrapping_neg())),
+            ThreadLocalConstant::Float(v) => Some(ThreadLocalConstant::Float(-v)),
+            ThreadLocalConstant::Null => None,
+        },
+        Expression::Unary { op: UnaryOp::Pos, operand, .. } => thread_local_constant(operand),
+        Expression::Cast { expr, ty, .. } if ty.is_integral() && !ty.is_pointer() => match thread_local_constant(expr)? {
+            ThreadLocalConstant::Int(v) if is_floating(ty) => Some(ThreadLocalConstant::Float(v as f64)),
+            ThreadLocalConstant::Float(v) if !is_floating(ty) => Some(ThreadLocalConstant::Int(v as i64)),
+            ThreadLocalConstant::Null => None,
+            constant => Some(constant),
+        },
+        _ => None,
+    }
+}
+
+fn is_floating(ty: &TypeName) -> bool {
+    matches!(ty.name.as_str(), "float" | "double" | "f32" | "f64")
+}
+
 /// Module-scope variables must be `const` and thread-safe, like the fields
-/// of a `[Shared]` struct.
+/// of a `[Shared]` struct; a `[ThreadLocal]` one need not be `const`, but
+/// starts from a constant.
 fn check_globals(module: &Module, safe: &ThreadSafeStructs) {
     // A checked runtime's were checked with it.
     for global in module.globals.iter().filter(|g| !module.checked.globals.contains(&g.name)) {
+        if global.is_thread_local() {
+            if !check_thread_local(module, global, safe) {
+                return;
+            }
+            continue;
+        }
         if !global.is_const {
             crate::errors::report(
                 Diagnostic::error(format!("module-scope variable '{}' must be 'const'", global.name))
                     .at(global.loc)
                     .with_note(
-                        "every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')",
+                        "every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy",
                         None,
                     ),
             );
@@ -249,6 +302,36 @@ fn check_globals(module: &Module, safe: &ThreadSafeStructs) {
         crate::errors::report(not_shared_note(diagnostic, &offender, module));
         return;
     }
+}
+
+/// A `[ThreadLocal]` variable must be thread-safe and start from a
+/// constant. Returns whether it does.
+fn check_thread_local(module: &Module, global: &VariableDef, safe: &ThreadSafeStructs) -> bool {
+    let name = pepper_parser::namespace::demangle_name(&global.name);
+    if let Some(offender) = unsafe_part_in(&global.ty, safe) {
+        let loc = [global.type_loc, global.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+        let diagnostic = Diagnostic::error(format!(
+            "thread-local variable '{}' has type '{}', which is not thread-safe",
+            name,
+            global.ty.display()
+        ))
+        .at(loc)
+        .with_note("a per-thread value of any type is an 'async.ThreadLocal<T>' (after 'import async')", None);
+        crate::errors::report(not_shared_note(diagnostic, &offender, module));
+        return false;
+    }
+    if let Some(default) = &global.default
+        && thread_local_constant(default).is_none()
+    {
+        let at = [default.loc(), global.loc].into_iter().find(|l| !l.is_none()).unwrap_or(Loc::NONE);
+        crate::errors::report(
+            Diagnostic::error(format!("thread-local variable '{}' must start from a constant", name))
+                .at(at)
+                .with_note("every thread starts from this value; leave it out and assign the value on the thread's first use instead", None),
+        );
+        return false;
+    }
+    true
 }
 
 /// Every `[Shared]` struct's fields must be `const` and thread-safe. Returns

@@ -18,6 +18,7 @@ pub mod partition;
 pub mod types;
 pub mod target;
 mod static_debug;
+pub mod thread_locals;
 
 use address::{Address, Frame};
 use inkwell::context::Context;
@@ -176,6 +177,13 @@ pub struct CodeGenerator<'ctx> {
     guarded_temps: Vec<BasicValueEnum<'ctx>>,
     /// File-scope globals: name → Address (frame locals miss falls back here).
     global_addrs: HashMap<String, Address<'ctx>>,
+    /// The `[ThreadLocal]` globals reached through the JIT's per-thread
+    /// blocks instead of LLVM's TLS (see [`thread_locals`]); their
+    /// `global_addrs` entry points at the image each block starts from.
+    emulated_thread_locals: HashSet<String>,
+    /// The number [`thread_locals::jit_thread_local`] tells this module's
+    /// emulated thread-locals apart by, taken on first use.
+    jit_module_id: Option<u64>,
     frame: Frame<'ctx>,
     /// Struct-reference slots alive in the current scopes, innermost last:
     /// `(name, sema type name, slot pointer)`. Each scope exit releases its
@@ -229,6 +237,14 @@ pub struct CodeGenerator<'ctx> {
     pub opt_level: target::OptLevel,
     /// Emit debug info (`-g`; see [`debug`]).
     pub debug_info: bool,
+    /// Lower `[ThreadLocal]` globals to calls into the JIT host's per-thread
+    /// blocks rather than LLVM `thread_local` globals: set by the JIT
+    /// entry points from [`Self::jit_emulates_thread_locals`].
+    emulate_thread_locals: bool,
+    /// Whether the JIT emulates thread-locals (see [`thread_locals`]): by
+    /// default where MCJIT cannot relocate TLS (everywhere but x86-64
+    /// Linux); tests set it to run the emulation on any host.
+    pub jit_emulates_thread_locals: bool,
     debug: Option<debug::DebugInfo<'ctx>>,
     /// The location instructions are stamped with now, when debug info is
     /// on (see [`Self::enter_location`]).
@@ -294,6 +310,10 @@ impl<'ctx> CodeGenerator<'ctx> {
             copied_params: std::collections::HashSet::new(),
             guarded_temps: vec![],
             global_addrs: HashMap::new(),
+            emulated_thread_locals: HashSet::new(),
+            jit_module_id: None,
+            emulate_thread_locals: false,
+            jit_emulates_thread_locals: thread_locals::JIT_EMULATES_BY_DEFAULT,
             frame: Frame::empty(),
             scopes: Vec::new(),
             deferred_temps: Vec::new(),
@@ -751,7 +771,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 BasicTypeEnum::VectorType(vt) => global.set_initializer(&vt.const_zero()),
                 _ => {}
             }
-            if let Some(default) = &var.default {
+            if var.is_thread_local() {
+                self.declare_thread_local(var, global, llvm_ty)?;
+            } else if let Some(default) = &var.default {
                 match (default, llvm_ty) {
                     // Create the literal at the global's own width (inkwell's
                     // const casts are unavailable on LLVM ≥18).
@@ -804,6 +826,9 @@ impl<'ctx> CodeGenerator<'ctx> {
             // Another unit's global is only declared here.
             if self.owners.get(&var.name).is_some_and(|&file| !self.owns(file)) {
                 unsafe { inkwell::llvm_sys::core::LLVMSetInitializer(global.as_value_ref(), std::ptr::null_mut()) };
+            } else if var.is_thread_local() {
+                // A debugger would read a thread-local's image, not the
+                // thread's copy (DWARF needs a TLS location expression).
             } else if let Some(ty) = self.debug_type(&ty_string) {
                 let name = pepper_parser::namespace::demangle_name(&var.name);
                 if let Some(debug) = self.debug.as_mut() {
@@ -811,6 +836,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 }
             }
         }
+
+        self.emit_thread_locals_release(module)?;
 
         // Non-constant initializers: `g = <expr>;` in one function per file,
         // `__pep_init@<namespace>`, owned by that file; `__pep_global_init`,
@@ -933,6 +960,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         module: &mut SemaModule,
         map_global: impl Fn(&str) -> Option<usize>,
     ) -> Result<inkwell::execution_engine::ExecutionEngine<'ctx>, String> {
+        self.emulate_thread_locals = self.jit_emulates_thread_locals;
         self.generate(module).map_err(|d| module.sources.render(&d))?;
         let ee = self.create_jit_engine()?;
         for f in self.module.get_functions() {
@@ -940,7 +968,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 continue;
             }
             let name = f.get_name().to_string_lossy();
-            if let Some(addr) = map_global(name.as_ref()) {
+            if name == thread_locals::JIT_ADDRESS_FUNCTION {
+                ee.add_global_mapping(&f, thread_locals::jit_thread_local as *const () as usize);
+            } else if let Some(addr) = map_global(name.as_ref()) {
                 ee.add_global_mapping(&f, addr);
             } else if !Self::resolves_in_process(name.as_ref()) {
                 // MCJIT crashes while finalizing a module that declares a
@@ -4358,11 +4388,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .const_null(),
             )),
             Expression::SymbolRef { id, .. } => {
-                let addr = self
-                    .frame
-                    .find_local(id)
-                    .or_else(|| self.global_addrs.get(id))
-                    .ok_or_else(|| format!("use of undeclared identifier '{}'", id))?;
+                let addr = match self.frame.find_local(id) {
+                    Some(local) => local.clone(),
+                    None => self.global_address(id)?.ok_or_else(|| format!("use of undeclared identifier '{}'", id))?,
+                };
                 addr.load(&self.builder)
                     .ok_or_else(|| format!("load failed {}", id))
             }
@@ -6868,12 +6897,10 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     fn codegen_lvalue_unlocated(&mut self, expr: &Expression) -> Result<Address<'ctx>, String> {
         match expr {
-            Expression::SymbolRef { id, .. } => self
-                .frame
-                .find_local(id)
-                .or_else(|| self.global_addrs.get(id))
-                .cloned()
-                .ok_or_else(|| format!("unknown lvalue {}", id)),
+            Expression::SymbolRef { id, .. } => match self.frame.find_local(id) {
+                Some(local) => Ok(local.clone()),
+                None => self.global_address(id)?.ok_or_else(|| format!("unknown lvalue {}", id)),
+            },
             Expression::ThisRef => match self.value_this()? {
                 Some(storage) => Ok(storage),
                 None => self.frame.find_local("this").cloned().ok_or_else(|| "no this".to_string()),

@@ -1,4 +1,5 @@
-# Threads: spawning and joining, thread names and ids, ThreadLocal values,
+# Threads: spawning and joining, thread names and ids, `[ThreadLocal]`
+# variables and ThreadLocal values,
 # processor counts, closures and `shared` functions as thread bodies, and
 # `[Shared]` objects and exported globals used from many threads at once.
 
@@ -118,6 +119,112 @@ thread_local_values() {
     expect_equal(released.load(), 6);
     expect_false(tracker.is_set());
     counter.clear();
+}
+
+[Shared]
+struct Badge {
+    const number: int;
+
+    construct(number: int) {
+        this.number = number;
+    }
+
+    destruct {
+        badges_released.fetch_add(1);
+    }
+}
+
+private const badges_released = async.Atomic<long>(0);
+private const depth_sum = async.Atomic<long>(0);
+
+[ThreadLocal]
+private var depth: int = 10;
+[ThreadLocal]
+private var badge: Badge;
+
+private descend() {
+    var i = 0;
+    while (i < 100) {
+        depth += 1;
+        i = i + 1;
+    }
+    depth_sum.fetch_add(depth);
+    badge = Badge(depth);
+}
+
+[Test]
+thread_local_variables() {
+    depth = -1;
+    var workers = Array<async.Thread>();
+    var i = 0;
+    while (i < 3) {
+        workers.append(async.Thread.spawn(descend));
+        i = i + 1;
+    }
+    for (var worker in workers) {
+        worker.join();
+    }
+    # Each thread started from the initializer and counted on its own copy,
+    # and its badge was released as it exited.
+    expect_equal(depth_sum.load(), 330);
+    expect_equal(depth, -1);
+    expect_equal(badges_released.load(), 3);
+    expect_true(badge === __null);
+    depth = 10;
+}
+
+private const outlived = async.Atomic<long>(0);
+# Hands a ThreadLocal to `hold_value`, which takes it out again, so the test
+# holds the only reference.
+private const handoff = async.Atomic<async.ThreadLocal<Tracker>>();
+private const value_set = async.Atomic<int>(0);
+private const variable_gone = async.Atomic<int>(0);
+
+private hold_value() {
+    var local = handoff.exchange(__default<async.ThreadLocal<Tracker>>());
+    local.set(Tracker(7));
+    local = __default<async.ThreadLocal<Tracker>>();
+    value_set.store(1);
+    while (variable_gone.load() == 0) {
+        async.Thread.sleep(1);
+    }
+    outlived.store(released.load());
+}
+
+[Test]
+thread_local_values_outlive_their_variable() {
+    var before = released.load();
+    var local = async.ThreadLocal<Tracker>();
+    handoff.store(local);
+    var holder = async.Thread.spawn(hold_value);
+    while (value_set.load() == 0) {
+        async.Thread.sleep(1);
+    }
+    # Destroying the variable leaves the other thread's value alone...
+    local = __default<async.ThreadLocal<Tracker>>();
+    variable_gone.store(1);
+    holder.join();
+    expect_equal(outlived.load(), before);
+    # ...and the thread releases it when it exits.
+    expect_equal(released.load(), before + 1);
+}
+
+[Test]
+many_thread_locals() {
+    # More than the operating system's thread-local keys (1024 on Linux).
+    var locals = Array<async.ThreadLocal<int>>();
+    var i = 0;
+    while (i < 2000) {
+        var local = async.ThreadLocal<int>();
+        local.set(i);
+        locals.append(local);
+        i = i + 1;
+    }
+    expect_equal(locals[1999].get(), 1999);
+    expect_equal(locals[3].get(), 3);
+    for (var local in locals) {
+        local.clear();
+    }
 }
 
 [Test]

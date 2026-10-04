@@ -655,6 +655,11 @@ fn variable_def(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Dia
 fn variable_in_context(decl: &ast::VariableDecl, kind: Kind) -> Result<VariableDef, Diagnostic> {
     check_deprecation(&decl.attributes)?;
     reject_implicit(&decl.attributes)?;
+    match kind {
+        Kind::Field => reject_thread_local(&decl.attributes, "a field")?,
+        Kind::Param => reject_thread_local(&decl.attributes, "a parameter")?,
+        Kind::Variable => {}
+    }
     let mut ty = type_name_from(&decl.type_name);
     // `const X = "text";` is a `StringConstant`: it never changes, so it
     // keeps the literal's constant bytes and allocates nothing.
@@ -1724,6 +1729,17 @@ fn trait_method_def(decl: &ast::FunctionDecl, parent: Option<String>) -> Result<
 fn reject_implicit(attributes: &[ast::Attribute]) -> Result<(), Diagnostic> {
     match implicit_attribute(attributes) {
         Some(attr) => Err(Diagnostic::error(format!("'{}' applies only to constructors", IMPLICIT_ATTRIBUTE))
+            .at(loc(attr.span))),
+        None => Ok(()),
+    }
+}
+
+/// `[ThreadLocal]` gives a module-scope variable one value per thread: on
+/// `what` (a field, a parameter) it is an error, at the attribute. (A local
+/// takes no attributes at all.)
+fn reject_thread_local(attributes: &[ast::Attribute], what: &str) -> Result<(), Diagnostic> {
+    match attributes.iter().find(|a| matches!(&a.body, ast::Expression::SymbolRef { id, .. } if id == THREAD_LOCAL_ATTRIBUTE)) {
+        Some(attr) => Err(Diagnostic::error(format!("'{}' applies only to a module-scope variable, not {}", THREAD_LOCAL_ATTRIBUTE, what))
             .at(loc(attr.span))),
         None => Ok(()),
     }

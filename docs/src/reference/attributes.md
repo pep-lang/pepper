@@ -265,6 +265,32 @@ Whether the field is left out of `==` and the hash.
 Makes a struct safe to share between threads: its counts step atomically
 and its fields must be `const` and thread-safe.
 
+## ThreadLocal
+
+```pepper
+[Attribute] struct ThreadLocal
+```
+
+Gives a module-scope `var` a separate value on every thread, like C++
+`thread_local`: each thread starts from the initializer, which must be a
+constant, and reads and writes only its own copy, with no locks or atomics.
+
+The variable's type must be thread-safe (a number, a raw pointer, a
+`[Shared]` struct, a `shared` function type); for any other type, use
+`async.ThreadLocal<T>`. A struct value is released when a thread started
+with `async.Thread.spawn` exits; the main thread's, like every other
+module-scope variable, is never released.
+
+**Example**
+```pepper
+[ThreadLocal]
+var calls: int = 0;
+
+count_call() {
+    calls += 1;
+}
+```
+
 ## Isolated
 
 ```pepper

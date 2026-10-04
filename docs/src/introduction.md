@@ -112,7 +112,10 @@ Some things you will meet quickly:
   (see
   [threads](language/threads.md#what-a-lock-body-may-do)). An `RwLock`
   lets many threads read a thread-safe value at once, and `Semaphore`,
-  `Barrier` and `Latch` coordinate groups of threads.
+  `Barrier` and `Latch` coordinate groups of threads. A `[ThreadLocal]`
+  module-scope `var` gives every thread its own copy, compiled to the
+  platform's native thread-local storage (see
+  [thread-local variables](language/threads.md#thread-local-variables)).
 - Integer arithmetic that overflows panics instead of wrapping, at every
   optimization level; `wrapping_add` and its siblings wrap on purpose (see
   [integer overflow](language/types-and-variables.md#integer-overflow)).

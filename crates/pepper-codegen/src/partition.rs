@@ -65,6 +65,15 @@ pub fn finish(module: &Module<'_>, owners: &HashMap<String, u32>, exported: &Has
         if symbol.starts_with("llvm.") || exported.contains(&symbol) {
             continue;
         }
+        // Defined by the program module under the C name the runtime's
+        // `extern` declares (`thread_locals`): external, never respelled.
+        if symbol == crate::thread_locals::RELEASE_FUNCTION {
+            if !value.is_declaration() {
+                value.set_linkage(Linkage::External);
+                value.set_visibility(GlobalVisibility::Hidden);
+            }
+            continue;
+        }
         let definition = !value.is_declaration();
         if definition {
             defined.insert(symbol.clone());

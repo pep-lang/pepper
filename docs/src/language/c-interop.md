@@ -292,8 +292,8 @@ and pass a named function, or a closure that captures nothing:
 `__function_pointer(name)` also gives a function's address, as an untyped
 `__ptr<void>`. It takes a free function, or a static method of the struct
 whose method uses it. Inside a generic struct the static method is the one
-for the current type arguments, which is how `ThreadLocal<T>` gives the
-operating system a destructor for its `T`. Prefer a C function pointer type
+for the current type arguments, which is how `Thread.spawn` gives the
+operating system its thread entry point. Prefer a C function pointer type
 where the signature is known, since the compiler then checks it.
 
 ### Callbacks that need state
@@ -304,9 +304,10 @@ state gets it another way:
 - **The C function's context argument.** Most C APIs that take a callback
   also take a `void*` context argument that they hand back to it; pass a
   pointer to the data the callback needs through that.
-- **A thread-local or module-scope value.** Set an
+- **A thread-local or module-scope value.** Set a
+  [`[ThreadLocal]` variable](threads.md#thread-local-variables), an
   [`async.ThreadLocal<T>`](threads.md#per-thread-values-with-threadlocal)
-  (or an `Atomic<T>`) before calling C, and read it in the callback, which
+  or an `Atomic<T>` before calling C, and read it in the callback, which
   is a named function:
 
 ```pepper

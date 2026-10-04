@@ -31,9 +31,13 @@ A `ThreadLocal` is `[Shared]`, so one object can be used from every
 thread; it is usually a module-scope variable. `T` does not have to be
 thread-safe, because each value stays on the thread that stored it.
 
-Destroying a `ThreadLocal` releases the calling thread's value only. Values
-that other threads still hold are released on Windows and leak elsewhere,
-so destroy one only after the threads that used it have exited.
+Destroying a `ThreadLocal` releases the calling thread's value; values
+that other threads still hold are released when those threads exit.
+
+A thread's values are released when it exits if `Thread.spawn` started
+it (the `async` runtime's workers too). The main thread's are released
+only by `clear()`, and a thread started by C code leaks the values it did
+not clear.
 
 **Type parameters**
 - `T` — the type of the per-thread value
@@ -65,9 +69,6 @@ construct()
 ```
 
 Creates a thread-local variable. No thread has a value yet.
-
-**Panics**
-- if the operating system has no thread-local keys left
 
 ### Methods
 

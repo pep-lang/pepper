@@ -625,7 +625,7 @@ fn module_scope_variable_not_const() {
         "main.pep:1:5: error: module-scope variable 'hits' must be 'const'\n\
          \x20   1 | var hits = 0;\n\
          \x20     |     ^~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy"
     );
 }
 
@@ -636,7 +636,7 @@ fn c_style_module_scope_variable_not_const() {
         "main.pep:1:6: error: module-scope variable 'total' must be 'const'\n\
          \x20   1 | long total = 0;\n\
          \x20     |      ^~~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy"
     );
 }
 
@@ -647,7 +647,7 @@ fn exported_variable_not_const() {
         "main.pep:1:12: error: module-scope variable 'hits' must be 'const'\n\
          \x20   1 | export var hits = 0;\n\
          \x20     |            ^~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy"
     );
 }
 
@@ -724,7 +724,7 @@ fn reexported_variable_not_const() {
         "lib.pep:1:5: error: module-scope variable 'count' must be 'const'\n\
          \x20   1 | var count = 0;\n\
          \x20     |     ^~~~~\n\
-         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' or 'async.ThreadLocal<T>' (after 'import async')"
+         note: every thread can reach a module-scope variable; change its state through a thread-safe type such as 'async.Atomic<T>' (after 'import async'), or declare it '[ThreadLocal]' to give each thread its own copy"
     );
 }
 
@@ -5448,5 +5448,40 @@ fn export_and_private_on_one_declaration() {
         "main.pep:1:8: error: a declaration cannot be both 'export' and 'private'\n\
          \x20   1 | export private f(): int { return 0; }\n\
          \x20     |        ^~~~~~~"
+    );
+}
+
+#[test]
+fn thread_local_not_thread_safe() {
+    assert_eq!(
+        error_of("thread_local_not_thread_safe", "struct Plain { var x: int; }\n[ThreadLocal]\nvar scratch: Plain;\nmain(): int { return 0; }\n"),
+        "main.pep:3:14: error: thread-local variable 'scratch' has type 'Plain', which is not thread-safe\n\
+         \x20   3 | var scratch: Plain;\n\
+         \x20     |              ^~~~~\n\
+         note: a per-thread value of any type is an 'async.ThreadLocal<T>' (after 'import async')\n\
+         main.pep:1:8: note: 'Plain' is not declared [Shared]\n\
+         \x20   1 | struct Plain { var x: int; }\n\
+         \x20     |        ^~~~~"
+    );
+}
+
+#[test]
+fn thread_local_not_constant() {
+    assert_eq!(
+        error_of("thread_local_not_constant", "start(): int { return 4; }\n[ThreadLocal]\nvar depth: int = start();\nmain(): int { return depth; }\n"),
+        "main.pep:3:18: error: thread-local variable 'depth' must start from a constant\n\
+         \x20   3 | var depth: int = start();\n\
+         \x20     |                  ^~~~~\n\
+         note: every thread starts from this value; leave it out and assign the value on the thread's first use instead"
+    );
+}
+
+#[test]
+fn thread_local_on_a_field() {
+    assert_eq!(
+        error_of("thread_local_field", "struct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n"),
+        "main.pep:2:5: error: 'ThreadLocal' applies only to a module-scope variable, not a field\n\
+         \x20   2 |     [ThreadLocal]\n\
+         \x20     |     ^~~~~~~~~~~~~"
     );
 }

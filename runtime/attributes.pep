@@ -115,6 +115,26 @@ export struct Equatable {
 [Attribute]
 export struct Shared {}
 
+## Gives a module-scope `var` a separate value on every thread, like C++
+## `thread_local`: each thread starts from the initializer, which must be a
+## constant, and reads and writes only its own copy, with no locks or atomics.
+##
+## The variable's type must be thread-safe (a number, a raw pointer, a
+## `[Shared]` struct, a `shared` function type); for any other type, use
+## `async.ThreadLocal<T>`. A struct value is released when a thread started
+## with `async.Thread.spawn` exits; the main thread's, like every other
+## module-scope variable, is never released.
+##
+## @example
+##     [ThreadLocal]
+##     var calls: int = 0;
+##
+##     count_call() {
+##         calls += 1;
+##     }
+[Attribute]
+export struct ThreadLocal {}
+
 ## Makes a struct a guard that can only be the scope of a `with` block and
 ## never escapes it.
 [Attribute]

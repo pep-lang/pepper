@@ -1245,6 +1245,14 @@ pub struct VariableDef {
     pub is_const: bool,
 }
 
+impl VariableDef {
+    /// Declared `[ThreadLocal]` (module-scope variables only): every thread
+    /// has its own copy, starting from the constant initializer.
+    pub fn is_thread_local(&self) -> bool {
+        has_attribute(&self.attributes, THREAD_LOCAL_ATTRIBUTE)
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 /// A generic type parameter, optionally with constraints and a default
 /// (`TError=Error` in `Result<TValue, TError=Error>`, `T: Shape = Square`).
@@ -1472,6 +1480,11 @@ pub struct Conversion {
 /// a value of its parameter's type flowing into a slot of the struct's type
 /// becomes a call to it (`passes::convert_to_traits`).
 pub const IMPLICIT_ATTRIBUTE: &str = "Implicit";
+
+/// The attribute that gives a module-scope variable a separate value on
+/// every thread: codegen emits it as an LLVM `thread_local` global, and
+/// `check_shared_types` lets it be a `var` (see [`VariableDef::is_thread_local`]).
+pub const THREAD_LOCAL_ATTRIBUTE: &str = "ThreadLocal";
 
 /// Whether `attributes` include a bare `[name]`.
 pub fn has_attribute(attributes: &[ast::Attribute], name: &str) -> bool {

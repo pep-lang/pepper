@@ -21,6 +21,10 @@ import "thread_local";
 
 extern void memcpy(void* dest, void* src, ulong n);
 
+# Releases the calling thread's `[ThreadLocal]` variables that hold
+# references. The compiler defines it in every program.
+extern void _pep_release_thread_locals();
+
 ## Identifies a thread for as long as the program runs: every thread,
 ## whether started with `Thread.spawn` or not, gets a distinct id the first
 ## time it is asked for one, and ids are never reused.
@@ -283,15 +287,18 @@ _async_thread_run(start: __ptr<void>) {
 }
 
 # The C entry point of a spawned thread: `void* (*)(void*)` for pthreads, and
-# `DWORD (WINAPI *)(void*)` on Windows.
+# `DWORD (WINAPI *)(void*)` on Windows. After the body, and the references
+# `_async_thread_run` held, it releases the thread's thread-locals.
 [Target(!OS(Windows))]
 _async_thread_main(start: __ptr<void>): __ptr<void> {
     _async_thread_run(start);
+    _pep_release_thread_locals();
     return __null;
 }
 
 [Target(OS(Windows))]
 _async_thread_main(start: __ptr<void>): uint {
     _async_thread_run(start);
+    _pep_release_thread_locals();
     return 0;
 }

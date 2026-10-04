@@ -49,6 +49,7 @@ pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
     "Sending",
     "Shared",
     "Target",
+    "ThreadLocal",
     "Value",
     "__BuiltIn",
 ];

@@ -106,7 +106,7 @@ export struct TaskLocal<T> {
         if (_async_in_task()) {
             return _async_task_local_slot(_id);
         }
-        return _async_sys_key_get(_outside._key);
+        return _outside._slot();
     }
 
     ## Returns the calling task's value.
@@ -136,15 +136,15 @@ export struct TaskLocal<T> {
     set([Move] value: T) {
         __ptr<T> slot = this._slot();
         if (slot == __null) {
-            # One stored T: see ThreadLocal.set.
-            slot = _pep_malloc(sizeof<T>());
-            __ptr<void> raw = slot;
             if (_async_in_task()) {
+                # One stored T: see ThreadLocal.set.
+                slot = _pep_malloc(sizeof<T>());
+                __ptr<void> raw = slot;
                 _async_task_local_add(_id, raw, () => {
                     TaskLocal<T>._release_slot(raw);
                 });
             } else {
-                _async_sys_key_set(_outside._key, raw);
+                slot = _outside._add_slot();
             }
         }
         slot[0] = value;

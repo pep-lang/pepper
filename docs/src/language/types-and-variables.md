@@ -340,11 +340,14 @@ Any function can run on any thread, so every thread can reach a global. It
 must therefore be declared `const` and have a thread-safe type, such as a
 number, an `Atomic<T>`, a `ThreadLocal<T>`, or a `[Shared]` struct (see
 [Module-scope variables](threads.md#module-scope-variables)). A global that
-changes is an `Atomic<T>`:
+changes is an `Atomic<T>`, or a `[ThreadLocal]` `var`, which every thread has
+its own copy of (see [Thread-local variables](threads.md#thread-local-variables)):
 
 ```pepper
 const MAX_RETRIES = 3;
 const requests = async.Atomic<long>(0);   # changed with requests.fetch_add(1)
+[ThreadLocal]
+var depth: int = 0;                       # one per thread
 ```
 
 ## Casting with `as`

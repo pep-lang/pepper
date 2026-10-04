@@ -81,6 +81,7 @@ mod runtime_docs_tests;
 mod shared_ptr_semantics_tests;
 mod simd_tests;
 mod test_harness_tests;
+mod thread_local_tests;
 mod time_tests;
 mod tool_docs_tests;
 mod static_call_tests;
