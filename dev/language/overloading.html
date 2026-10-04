@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -265,9 +265,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>A file of the module that imports both files (<code>import "square";</code> and
-<code>import "rect";</code>, or an import list naming <code>area</code> from each) sees the
-same set. Members from different files must still differ in their
+<p>Every file of the module sees the same set, with no import, since the
+files of a module share their declarations (see
+<a href="visibility.html#files-of-a-module-share-their-declarations">Visibility</a>).
+That holds for private functions too: functions of one name that several
+files of a module declare, exported or not, are one set there. Members from different files must still differ in their
 parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
 such as two structs <code>Point</code>, and a renaming re-export
 (<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
@@ -321,7 +323,7 @@ hidden by a file’s own or imported functions of the name rather than
 joined.</p>
 <h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
 <p>Exported members are what other files see; a private member is a candidate
-only for calls in its own file. Here <code>shapes.pep</code> exports <code>area(int)</code> and
+only for calls in its own file, or in its module’s files. Here <code>shapes.pep</code> exports <code>area(int)</code> and
 keeps the two-argument form as a helper:</p>
 <pre><code class="language-pepper"># One set: `area(int)` is exported; `area(int, int)` is private to this file.
 export area(side: int): int {

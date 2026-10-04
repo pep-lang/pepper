@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -267,7 +267,11 @@ import geometry;
 <p>A <strong>module</strong> is a folder that contains a <code>module.pep</code> file. The module is named
 after its folder, and its exports are exactly what its <code>module.pep</code> exports.
 The other files in the folder are the module’s own files: <code>module.pep</code> imports
-them and chooses what to pass on to the module’s users.</p>
+them and chooses what to pass on to the module’s users. The files of a module
+see each other’s declarations, exported or not, without importing each other
+(see <a href="visibility.html#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).
+Loading any file of a module loads its <code>module.pep</code>, and with it every file
+the module imports.</p>
 <p>This example has a <code>geometry</code> module next to <code>main.pep</code>:</p>
 <pre><code class="language-text">modules-folders/
     main.pep
@@ -400,8 +404,9 @@ main(): int {
 <ul>
 <li>
 <p><strong>It re-exports; it doesn’t import.</strong> <code>export * from "rect";</code> makes no name
-visible in the file that contains it. A file that also uses those names
-imports them as usual, with <code>import "rect";</code>.</p>
+visible in the file that contains it. Inside a module that does not
+matter, since the module’s files see each other’s declarations anyway; a
+file outside it imports the names as usual (<code>import "rect";</code>).</p>
 </li>
 <li>
 <p><strong>Only exports travel.</strong> Private declarations stay behind, and extensions
@@ -536,10 +541,11 @@ re-exported runtime name: if a module exports the runtime’s <code>print</code>
 <code>say</code>, a local named <code>print</code> where you call <code>say</code> is an error that asks you
 to rename one of them.</li>
 </ul>
-<p>Each file has its own namespace, for its exported declarations as well as
-its private ones, so files and modules may reuse names freely: two modules
-may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay apart. See
-<a href="visibility.html#each-file-has-its-own-namespace">Each file has its own namespace</a>.
+<p>Each module (and each file outside a module) has its own namespace, for its
+exported declarations as well as its private ones, so modules may reuse names
+freely: two modules may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay
+apart. See
+<a href="visibility.html#each-module-has-its-own-namespace">Each module has its own namespace</a>.
 Here <code>metric</code> and <code>imperial</code> each export a <code>Length</code>, a <code>parse</code> and a <code>unit</code>:</p>
 <pre><code class="language-pepper"># Both modules export `Length`, `parse` and `unit`; each keeps its own.
 import "metric" as metric;

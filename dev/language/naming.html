@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -305,10 +305,11 @@ public member (<code>_readings</code>, <code>_is_empty</code>).</p>
 leaves <code>_</code> members out, and <a href="doc-comments.html">doc comments</a> are required only
 on members without the prefix.</p>
 <p>A top-level declaration does not need the prefix to be private: it is
-private to its file unless it is exported (see <a href="visibility.html">Visibility</a>).
-The runtime also uses the prefix on top-level helpers that its own files
-export to each other, such as <code>_pep_malloc</code>: they are not part of its public
-API, and the reference leaves them out too.</p>
+internal to its module (or, outside any module, private to its file) unless
+it is exported (see <a href="visibility.html">Visibility</a>). The runtime also uses the
+prefix on top-level helpers it exports but that are not part of its public
+API, such as <code>_pep_malloc</code>, which the compiler calls by name, or a helper
+one runtime module shares with another: the reference leaves them out too.</p>
 
                     </main>
 

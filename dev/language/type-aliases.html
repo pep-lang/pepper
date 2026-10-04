@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -284,8 +284,8 @@ omitted ones take their defaults. <code>Outcome&lt;int&gt;</code> becomes
 Aliases are especially handy for <a href="function-types.html">function types</a>, which
 are long to write out: <code>Predicate&lt;int&gt;</code> reads better than <code>(int) =&gt; bool</code>.</p>
 <h2 id="aliases-across-files"><a class="header" href="#aliases-across-files">Aliases across files</a></h2>
-<p>Like other top-level declarations, an alias is private to the file that
-declares it. Mark it <code>export</code> to let files that import it use it; see
+<p>Like other top-level declarations, an alias is private to the file (or
+module) that declares it. Mark it <code>export</code> to let files that import it use it; see
 <a href="visibility.html">Visibility</a> and <a href="modules.html">Modules and imports</a>.</p>
 <h2 id="recursive-aliases"><a class="header" href="#recursive-aliases">Recursive aliases</a></h2>
 <p>An alias must not refer to itself, directly or through other aliases. The

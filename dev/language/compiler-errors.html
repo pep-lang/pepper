@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -297,6 +297,7 @@ the code it replaces:</p>
 </thead>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
+<tr><td>A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their declarations)</td><td>one declaration, or two names</td></tr>
 <tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 <tr><td><code>String.clone()</code></td><td><code>String.copy()</code></td></tr>
 <tr><td><code>ThreadLocal&lt;T&gt;.get()</code> for a <code>T</code> that is not thread-safe (now an error)</td><td><code>with (var value = local.enter()) { ... }</code></td></tr>

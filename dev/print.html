@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -898,7 +898,7 @@ No such file or directory
 <ul>
 <li><strong>Imports.</strong> <code>import "counter";</code> makes the declarations that <code>counter.pep</code>
 marks with <code>export</code> available in <code>main.pep</code>. Anything not exported stays
-private to its file. <code>import [File, Directory, Path] from io;</code> brings three
+private to its file (or, in a module, to the module’s files). <code>import [File, Directory, Path] from io;</code> brings three
 names in from the standard library’s <code>io</code> module, which, unlike <code>String</code> or
 <code>Array</code>, must be imported. See <a href="#modules-and-imports">Modules and imports</a>
 and <a href="#visibility">Visibility</a>.</li>
@@ -1471,7 +1471,7 @@ main.pep:1:7: note: 'LIMIT' declared const here
 exists for the whole run of the program and every function in the file can read
 it. Its initializer can be any expression, including a function call, and runs
 before <code>main</code>. Like other top-level declarations, a global is private to its
-file unless you mark it <code>export</code> (see <a href="#visibility">Visibility</a>).</p>
+file (or module) unless you mark it <code>export</code> (see <a href="#visibility">Visibility</a>).</p>
 <p>Any function can run on any thread, so every thread can reach a global. It
 must therefore be declared <code>const</code> and have a thread-safe type, such as a
 number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or a <code>[Shared]</code> struct (see
@@ -5001,9 +5001,11 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>A file of the module that imports both files (<code>import "square";</code> and
-<code>import "rect";</code>, or an import list naming <code>area</code> from each) sees the
-same set. Members from different files must still differ in their
+<p>Every file of the module sees the same set, with no import, since the
+files of a module share their declarations (see
+<a href="#files-of-a-module-share-their-declarations">Visibility</a>).
+That holds for private functions too: functions of one name that several
+files of a module declare, exported or not, are one set there. Members from different files must still differ in their
 parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
 such as two structs <code>Point</code>, and a renaming re-export
 (<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
@@ -5057,7 +5059,7 @@ hidden by a file’s own or imported functions of the name rather than
 joined.</p>
 <h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
 <p>Exported members are what other files see; a private member is a candidate
-only for calls in its own file. Here <code>shapes.pep</code> exports <code>area(int)</code> and
+only for calls in its own file, or in its module’s files. Here <code>shapes.pep</code> exports <code>area(int)</code> and
 keeps the two-argument form as a helper:</p>
 <pre><code class="language-pepper"># One set: `area(int)` is exported; `area(int, int)` is private to this file.
 export area(side: int): int {
@@ -9847,8 +9849,8 @@ omitted ones take their defaults. <code>Outcome&lt;int&gt;</code> becomes
 Aliases are especially handy for <a href="#function-types-and-closures">function types</a>, which
 are long to write out: <code>Predicate&lt;int&gt;</code> reads better than <code>(int) =&gt; bool</code>.</p>
 <h2 id="aliases-across-files"><a class="header" href="#aliases-across-files">Aliases across files</a></h2>
-<p>Like other top-level declarations, an alias is private to the file that
-declares it. Mark it <code>export</code> to let files that import it use it; see
+<p>Like other top-level declarations, an alias is private to the file (or
+module) that declares it. Mark it <code>export</code> to let files that import it use it; see
 <a href="#visibility">Visibility</a> and <a href="#modules-and-imports">Modules and imports</a>.</p>
 <h2 id="recursive-aliases"><a class="header" href="#recursive-aliases">Recursive aliases</a></h2>
 <p>An alias must not refer to itself, directly or through other aliases. The
@@ -11761,9 +11763,14 @@ returns <code>-1</code>, for example.</li>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
 <p>Visibility decides which declarations other files may use. Every top-level
-declaration is <strong>private to the file that declares it</strong> unless you mark it with
-<code>export</code>. This lets a file keep its helpers to itself and offer a small, clear
-surface to the files that import it.</p>
+declaration is <strong>internal to its module</strong> unless you mark it with <code>export</code>:
+the files of one <a href="#modules">module</a> see each other’s declarations,
+and nothing else does. A file outside any module is a module of its own, so
+its declarations are <strong>private to the file</strong>. This lets a module, or a file,
+keep its helpers to itself and offer a small, clear surface to the code that
+imports it.</p>
+<p>There is no smaller visibility than the module: Pepper has no <code>private</code>
+keyword, and no way to hide a declaration from the other files of its module.</p>
 <h2 id="exporting-declarations"><a class="header" href="#exporting-declarations">Exporting declarations</a></h2>
 <p>Put <code>export</code> in front of a declaration to make it usable from other files that
 import this one (see <a href="#modules-and-imports">Modules and imports</a> for how to import).
@@ -11877,6 +11884,89 @@ lib.pep:29:1: note: declared here
 </code></pre>
 <p>The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports <code>'name' is private to file.pep</code>.</p>
+<h2 id="files-of-a-module-share-their-declarations"><a class="header" href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a></h2>
+<p>Inside a module, <code>export</code> is not needed for one file to use another’s
+declarations. Every file of the module sees the top-level declarations of
+the module’s other files, exported or not, with no import, as if they were
+its own. <code>export</code> means visible <strong>outside</strong> the module, through its
+<code>module.pep</code>.</p>
+<p>Here the <code>inventory</code> module keeps its rules in <code>rules.pep</code>, which exports
+nothing, and <code>stock.pep</code> uses them freely:</p>
+<pre><code class="language-pepper"># Module-internal: no `export`, yet every file of `inventory` can use these.
+const RESTOCK_LEVEL = 5;
+
+struct Shelf {
+    var count: int;
+}
+
+needs_restock(shelf: Shelf): bool {
+    return shelf.count &lt; RESTOCK_LEVEL;
+}
+</code></pre>
+<pre><code class="language-pepper"># Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep with no
+# import: files of one module see each other's declarations.
+export struct Stock {
+    var _shelf: Shelf;
+
+    construct(count: int) {
+        _shelf = Shelf();
+        _shelf.count = count;
+    }
+
+    low(): bool {
+        return needs_restock(_shelf);
+    }
+
+    missing(): int {
+        if low() {
+            return RESTOCK_LEVEL - _shelf.count;
+        }
+        return 0;
+    }
+}
+</code></pre>
+<pre><code class="language-pepper"># The module's interface: only what this file exports reaches importers.
+export * from "stock";
+
+# `rules.pep` exports nothing, so importing it only makes it part of the
+# module.
+import "rules";
+</code></pre>
+<pre><code class="language-pepper">import "inventory";
+
+main(): int {
+    var s = Stock(2);
+    assert(s.low(), "two is below the restock level");
+    assert(s.missing() == 3, "three more reach it");
+    # `needs_restock(...)` here would be an error: it is internal to the
+    # module 'inventory'.
+    return 0;
+}
+</code></pre>
+<p>A file’s own declarations come first, then what its imports bring in, then
+the declarations of the module’s other files, then the runtime’s. A module’s
+files are the files of the program in its folder (and in subfolders that are
+not modules themselves): a file joins the program when the module imports
+it, so <code>module.pep</code> imports a file with nothing to export, like <code>rules.pep</code>,
+just to include it. A <code>[Target(...)]</code> on that import (see
+<a href="#platform-specific-imports">Platform-specific imports</a>) includes
+the file only on some platforms.</p>
+<p>Outside the module, its internal declarations stay hidden. Using one is an
+error that names the module:</p>
+<pre><code class="language-text">main.pep:3:13: error: 'Shelf' is internal to module 'inventory'; export it from the module to use it here
+    3 |     var s = Shelf();
+      |             ^~~~~
+inventory/rules.pep:4:8: note: declared here
+    4 | struct Shelf {
+      |        ^~~~~
+</code></pre>
+<p>Because the files of a module share one set of names, two of them may not
+both declare a struct, enum, type alias, trait, or variable of one name:
+the second is a <code>redefinition of 'name'</code>, with a note at the first.
+Functions are different: functions of one name in several files of a module
+are one <a href="#overloading-1">overload set</a>, as they are within a file.
+Extensions are shared the same way: a file sees the methods its module’s
+other files add, exported or not.</p>
 <h2 id="members-of-structs-and-extensions"><a class="header" href="#members-of-structs-and-extensions">Members of structs and extensions</a></h2>
 <p>Fields and methods declared inside a struct’s body are reached through the
 struct, so they share the struct’s visibility: if you can use the struct, you
@@ -11885,8 +11975,9 @@ can use all of its members.</p>
 <a href="#properties">property</a> with only a <code>get</code>: <code>var balance: long { get; }</code>
 can be assigned only by the struct’s own constructors and methods.</p>
 <p>Methods added by an extension share the <strong>extension’s</strong> visibility instead. In
-the example, <code>norm()</code> is added by a private extension, so only <code>lib.pep</code> can
-call it, even though <code>Point</code> itself is exported:</p>
+the example, <code>norm()</code> is added by a private extension, so only <code>lib.pep</code> (or,
+in a module, the module’s files) can call it, even though <code>Point</code> itself is
+exported:</p>
 <pre><code class="language-text">main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
     4 |     return p.norm();
       |              ^~~~
@@ -11986,10 +12077,11 @@ way, and is visible in every file without an import. The runtime’s own helpers
 are private, so calling one, such as <code>_pep_check_sync_enabled</code>, reports
 <code>'_pep_check_sync_enabled' is private to</code> followed by the path of the
 runtime’s <code>internals.pep</code>.</p>
-<h2 id="each-file-has-its-own-namespace"><a class="header" href="#each-file-has-its-own-namespace">Each file has its own namespace</a></h2>
-<p>A private declaration belongs to its file alone, so two files may each
-declare a private name without clashing. Here <code>main.pep</code> and <code>lib.pep</code> each
-have their own <code>Counter</code> and <code>make</code>, and each file’s code reaches its own:</p>
+<h2 id="each-module-has-its-own-namespace"><a class="header" href="#each-module-has-its-own-namespace">Each module has its own namespace</a></h2>
+<p>A private declaration belongs to its file (or its module) alone, so two
+files outside any module, or two modules, may each declare a private name
+without clashing. Here <code>main.pep</code> and <code>lib.pep</code> each have their own
+<code>Counter</code> and <code>make</code>, and each file’s code reaches its own:</p>
 <pre><code class="language-pepper"># lib.pep's private helpers: no other file can see them, and no other
 # file's names can clash with them.
 struct Counter { var n: int; }
@@ -12025,7 +12117,9 @@ main(): int {
 </code></pre>
 <p>This holds across modules too: two modules may each have a <code>util.pep</code> with a
 private <code>helper</code>. Files are told apart by their path inside their module
-(<code>io/file.pep</code>), not by their file name alone.</p>
+(<code>io/file.pep</code>), not by their file name alone. Within one module, the files
+share their names instead (see
+<a href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).</p>
 <p>Exported names work the same way between modules: each module’s exports
 are its own, so two modules may export the same name, and importers tell
 them apart by qualifier (<code>a.parse</code> and <code>b.parse</code>) or by an import list
@@ -12144,7 +12238,11 @@ import geometry;
 <p>A <strong>module</strong> is a folder that contains a <code>module.pep</code> file. The module is named
 after its folder, and its exports are exactly what its <code>module.pep</code> exports.
 The other files in the folder are the module’s own files: <code>module.pep</code> imports
-them and chooses what to pass on to the module’s users.</p>
+them and chooses what to pass on to the module’s users. The files of a module
+see each other’s declarations, exported or not, without importing each other
+(see <a href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).
+Loading any file of a module loads its <code>module.pep</code>, and with it every file
+the module imports.</p>
 <p>This example has a <code>geometry</code> module next to <code>main.pep</code>:</p>
 <pre><code class="language-text">modules-folders/
     main.pep
@@ -12277,8 +12375,9 @@ main(): int {
 <ul>
 <li>
 <p><strong>It re-exports; it doesn’t import.</strong> <code>export * from "rect";</code> makes no name
-visible in the file that contains it. A file that also uses those names
-imports them as usual, with <code>import "rect";</code>.</p>
+visible in the file that contains it. Inside a module that does not
+matter, since the module’s files see each other’s declarations anyway; a
+file outside it imports the names as usual (<code>import "rect";</code>).</p>
 </li>
 <li>
 <p><strong>Only exports travel.</strong> Private declarations stay behind, and extensions
@@ -12413,10 +12512,11 @@ re-exported runtime name: if a module exports the runtime’s <code>print</code>
 <code>say</code>, a local named <code>print</code> where you call <code>say</code> is an error that asks you
 to rename one of them.</li>
 </ul>
-<p>Each file has its own namespace, for its exported declarations as well as
-its private ones, so files and modules may reuse names freely: two modules
-may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay apart. See
-<a href="#each-file-has-its-own-namespace">Each file has its own namespace</a>.
+<p>Each module (and each file outside a module) has its own namespace, for its
+exported declarations as well as its private ones, so modules may reuse names
+freely: two modules may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay
+apart. See
+<a href="#each-module-has-its-own-namespace">Each module has its own namespace</a>.
 Here <code>metric</code> and <code>imperial</code> each export a <code>Length</code>, a <code>parse</code> and a <code>unit</code>:</p>
 <pre><code class="language-pepper"># Both modules export `Length`, `parse` and `unit`; each keeps its own.
 import "metric" as metric;
@@ -16631,7 +16731,7 @@ garbage.</p>
 <li>The prototype uses C syntax only. The <code>name(parameter: type): type</code> form that
 Pepper functions use is a parse error on an extern, and <code>__ptr&lt;T&gt;</code> as a
 parameter type is an error too: write <code>char*</code>, not <code>__ptr&lt;char&gt;</code>.</li>
-<li>An extern is private to its file, like every declaration. Write
+<li>An extern is private to its file (or module), like every declaration. Write
 <code>export extern ...</code> to let files that import this one call it (see
 <a href="#visibility">Visibility</a>).</li>
 <li>Several files may declare the same extern, since every declaration names the
@@ -18364,6 +18464,7 @@ the code it replaces:</p>
 </thead>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
+<tr><td>A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their declarations)</td><td>one declaration, or two names</td></tr>
 <tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 <tr><td><code>String.clone()</code></td><td><code>String.copy()</code></td></tr>
 <tr><td><code>ThreadLocal&lt;T&gt;.get()</code> for a <code>T</code> that is not thread-safe (now an error)</td><td><code>with (var value = local.enter()) { ... }</code></td></tr>
@@ -18976,10 +19077,11 @@ public member (<code>_readings</code>, <code>_is_empty</code>).</p>
 leaves <code>_</code> members out, and <a href="#documentation-comments">doc comments</a> are required only
 on members without the prefix.</p>
 <p>A top-level declaration does not need the prefix to be private: it is
-private to its file unless it is exported (see <a href="#visibility">Visibility</a>).
-The runtime also uses the prefix on top-level helpers that its own files
-export to each other, such as <code>_pep_malloc</code>: they are not part of its public
-API, and the reference leaves them out too.</p>
+internal to its module (or, outside any module, private to its file) unless
+it is exported (see <a href="#visibility">Visibility</a>). The runtime also uses the
+prefix on top-level helpers it exports but that are not part of its public
+API, such as <code>_pep_malloc</code>, which the compiler calls by name, or a helper
+one runtime module shares with another: the reference leaves them out too.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="installing-pepper"><a class="header" href="#installing-pepper">Installing Pepper</a></h1>
 <p>Each release publishes the Pepper toolchain prebuilt for Linux, macOS and

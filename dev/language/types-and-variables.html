@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8bbf734d.js";
+            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -726,7 +726,7 @@ main.pep:1:7: note: 'LIMIT' declared const here
 exists for the whole run of the program and every function in the file can read
 it. Its initializer can be any expression, including a function call, and runs
 before <code>main</code>. Like other top-level declarations, a global is private to its
-file unless you mark it <code>export</code> (see <a href="visibility.html">Visibility</a>).</p>
+file (or module) unless you mark it <code>export</code> (see <a href="visibility.html">Visibility</a>).</p>
 <p>Any function can run on any thread, so every thread can reach a global. It
 must therefore be declared <code>const</code> and have a thread-safe type, such as a
 number, an <code>Atomic&lt;T&gt;</code>, a <code>ThreadLocal&lt;T&gt;</code>, or a <code>[Shared]</code> struct (see
