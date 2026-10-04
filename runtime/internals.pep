@@ -89,15 +89,25 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
 # class, named in the span's first word; pages are committed a span at a
 # time, and spans are never returned to the operating system.
 #
-# Each thread has a cache (a `[ThreadLocal]` pointer) holding, per
-# class, a free list and the unused end of a span, so the common allocation
-# and free take no lock and no atomic read-modify-write. A thread frees into
-# its own cache, whichever thread allocated the block. When a list grows
-# past twice the class's batch, one batch moves to the class's central
-# stack, under a spin lock, and a thread whose list is empty takes a batch
-# from there before it cuts a new span. A thread that `async.Thread.spawn`
-# started returns its lists and the unused ends of its spans to the central
-# stacks when its body ends (`_pep_small_thread_exit`).
+# Each span has one owner, a thread's cache (a `[ThreadLocal]` pointer), and
+# its own free list (#634). A thread allocates a class's blocks from one
+# current span, from its free list and then from its never-used end, so
+# blocks handed out one after another lie close together, and a free on the
+# owner's thread pushes the block onto its span's list: neither takes a lock
+# or an atomic read-modify-write. A block freed on any other thread goes onto
+# the span's second list, an atomic stack, which the owner takes over when
+# the span's own list runs dry. Per class the cache keeps its current span,
+# a stack of spans with free blocks, and a ring of all its full spans. The
+# first block another thread frees into a full span also puts the span on
+# its owner's stack of spans to look at again (as mimalloc's delayed free
+# does), so an owner never searches its full spans. When the current span
+# runs dry the owner tries, in order, the blocks other threads freed into
+# it, a span from the stack, a full span from the stack of spans to look at
+# again, a span an exited thread left, and a new span. Caches are never
+# freed, only handed to a new thread, so another thread can always reach a
+# span's owner. A thread that `async.Thread.spawn` started gives its spans up when
+# its body ends (`_pep_small_thread_exit`): they go to their class's pool,
+# for any thread to adopt.
 #
 # Each cache counts its live blocks for `_pep_live_allocs`; a block freed on
 # another thread makes that thread's count go down, so only the sum means
@@ -112,8 +122,8 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
 
 # Bytes per span.
 const _SMALL_SPAN: ulong = 65536;
-# Bytes at the start of a span before its first block: the class.
-const _SMALL_SPAN_HEADER: ulong = 16;
+# Bytes at the start of a span before its first block: its header.
+const _SMALL_SPAN_HEADER: ulong = 96;
 # Bytes of address space reserved for small blocks (4 GiB). Only spans in
 # use are committed; past the end, small requests fall back to calloc.
 const _SMALL_REGION: ulong = 4294967296;
@@ -122,9 +132,10 @@ const _SMALL_MAX_LIMIT: ulong = 4096;
 const _SMALL_DEFAULT_LIMIT: ulong = 128;
 # Size classes: 8 multiples of 16, then 4 per power of two up to 4096.
 const _SMALL_CLASSES: ulong = 28;
-# A batch carries its length in the top 16 bits of its next-batch word.
-const _SMALL_LENGTH_SHIFT: ulong = 48;
-const _SMALL_ADDRESS_MASK: ulong = 281474976710655;
+# The bit of a span's remote list that asks the next thread that frees into
+# it to put the span on its owner's stack of spans to look at again: set
+# while the span is full. Blocks are 16-byte aligned, so it is free.
+const _SMALL_NOTIFY: ulong = 1;
 
 # The state block, in ulong words.
 # The region's base and size (0 when the allocator is off).
@@ -133,7 +144,9 @@ const _SMALL_SIZE: ulong = 1;
 # The next unused span (atomic).
 const _SMALL_NEXT_SPAN: ulong = 2;
 const _SMALL_LIMIT: ulong = 3;
-# Word 4 is unused.
+# The caches of exited threads, for new threads to take (under the lock of
+# the list of caches).
+const _SMALL_SPARE_CACHES: ulong = 4;
 # The lock of the list of caches, and its head.
 const _SMALL_CACHES_LOCK: ulong = 5;
 const _SMALL_CACHES: ulong = 6;
@@ -141,28 +154,56 @@ const _SMALL_CACHES: ulong = 6;
 const _SMALL_RETIRED: ulong = 7;
 # Each class's block size.
 const _SMALL_CLASS_SIZES: ulong = 8;
-# Each class's batch: how many blocks move to or from the central stack.
-const _SMALL_BATCHES: ulong = 40;
 # A byte table from `(size + 15) >> 4` to the class.
-const _SMALL_CLASS_TABLE: ulong = 72;
-# Per class, a cache line: the lock, the stack of batches, and the stack of
-# unused span ends.
-const _SMALL_CENTRAL: ulong = 112;
+const _SMALL_CLASS_TABLE: ulong = 40;
+# Per class, a cache line: the lock and the pool of spans exited threads
+# left.
+const _SMALL_CENTRAL: ulong = 80;
 const _SMALL_CENTRAL_WORDS: ulong = 8;
-const _SMALL_STATE_WORDS: ulong = 336;
+const _SMALL_STATE_WORDS: ulong = 304;
 
 # A thread's cache, in ulong words: the next cache, the live count, then per
-# class the free list, its length, and the unused range of a span (next
-# block and end).
+# class its current span, its stack of spans with free blocks, and the head
+# and tail of its ring of full spans; on a cache line of its own, the stack
+# of full spans other threads have freed into (atomic).
 const _SMALL_CACHE_NEXT: ulong = 0;
 const _SMALL_CACHE_LIVE: ulong = 1;
 const _SMALL_CACHE_LISTS: ulong = 4;
-const _SMALL_CACHE_WORDS: ulong = 116;
+const _SMALL_CACHE_FREED_INTO: ulong = 120;
+const _SMALL_CACHE_WORDS: ulong = 128;
+const _SMALL_CURRENT: ulong = 0;
+const _SMALL_PARTIAL: ulong = 1;
+const _SMALL_FULL_HEAD: ulong = 2;
+const _SMALL_FULL_TAIL: ulong = 3;
 
-# Hints the processor to load `address`'s cache line (rw 1: for writing;
-# locality 3: keep it close; cache 1: data).
-[Link(name = "llvm.prefetch.p0")]
-extern void _pep_small_prefetch(void* address, int rw, int locality, int cache);
+# A span's header, in ulong words. The words its owner uses come first; the
+# list other threads free into sits on the next cache line.
+const _SMALL_HEADER_CLASS: ulong = 0;
+const _SMALL_HEADER_FREE: ulong = 1;
+# The never-used end of the span: its next block and its end.
+const _SMALL_HEADER_BUMP: ulong = 2;
+const _SMALL_HEADER_END: ulong = 3;
+# The next span in the list or ring it is on, and the previous one in the
+# ring of full spans.
+const _SMALL_HEADER_NEXT: ulong = 4;
+const _SMALL_HEADER_PREVIOUS: ulong = 5;
+const _SMALL_HEADER_STATE: ulong = 6;
+# The owner's cache, or 0 while the span is in its class's pool (atomic).
+const _SMALL_HEADER_OWNER: ulong = 7;
+# The blocks other threads freed (an atomic stack, with `_SMALL_NOTIFY`).
+const _SMALL_HEADER_REMOTE: ulong = 8;
+# The next span on its owner's stack of spans to look at again, and whether
+# the span is on it (atomic), so it is never there twice.
+const _SMALL_HEADER_FREED_INTO: ulong = 9;
+const _SMALL_HEADER_QUEUED: ulong = 10;
+
+# A span's state: its owner's current span, on its stack of spans with free
+# blocks, on its ring of full spans, or in its class's pool.
+const _SMALL_STATE_CURRENT: ulong = 0;
+const _SMALL_STATE_PARTIAL: ulong = 1;
+const _SMALL_STATE_FULL: ulong = 2;
+const _SMALL_STATE_POOLED: ulong = 3;
+
 [Target(!OS(Windows) && !OS(Wasi))]
 extern void* mmap(void* address, ulong length, int protection, int flags, int descriptor, long offset);
 [Target(!OS(Windows) && !OS(Wasi))]
@@ -302,8 +343,8 @@ _pep_small_new_state(): __ptr<ulong> {
     var bytes = _SMALL_STATE_WORDS * 8 + 64;
     __ptr<u8> block = malloc(bytes);
     memset(block, 0, bytes);
-    # Start at a cache line boundary, so each class's central stacks have a
-    # line of their own.
+    # Start at a cache line boundary, so each class's pool has a line of its
+    # own.
     __ptr<ulong> state = block + (64 - unsafe_cast<ulong>(block) % 64) % 64;
     var limit = _pep_small_read_limit();
     if (limit == 0) {
@@ -313,9 +354,6 @@ _pep_small_new_state(): __ptr<ulong> {
     while (index < _SMALL_CLASSES) {
         var size = _pep_small_class_size(index);
         state[_SMALL_CLASS_SIZES + index] = size;
-        # 64 blocks, or 16 KiB of them for the larger classes, but at least 4.
-        var batch = size <= 256 ? 64 : 16384 / size;
-        state[_SMALL_BATCHES + index] = batch < 4 ? 4 : batch;
         index = index + 1;
     }
     # Sizes 0 to 4096 in steps of 16, each mapped to the smallest class that
@@ -346,7 +384,10 @@ _pep_small_new_state(): __ptr<ulong> {
 
 [Unsafe("overflow")]
 _pep_small_lock(lock: __ptr<ulong>) {
-    while (!__atomic_cmpxchg<ulong>(lock, 0, 1)) {
+    # Typed values: literals compare and store only 4 bytes (#639).
+    ulong unlocked = 0;
+    ulong locked = 1;
+    while (!__atomic_cmpxchg<ulong>(lock, unlocked, locked)) {
         ulong spins = 0;
         while (__atomic_load<ulong>(lock) != 0) {
             spins = spins + 1;
@@ -359,7 +400,9 @@ _pep_small_lock(lock: __ptr<ulong>) {
 
 [Unsafe("overflow")]
 _pep_small_unlock(lock: __ptr<ulong>) {
-    __atomic_store<ulong>(lock, 0);
+    # A typed 0: a literal stores only 4 bytes (#639).
+    ulong unlocked = 0;
+    __atomic_store<ulong>(lock, unlocked);
 }
 
 # Adds `delta` to a count only its own thread changes: a plain load and
@@ -370,16 +413,25 @@ _pep_small_count(count: __ptr<ulong>, delta: long) {
     __atomic_store<long>(value, __atomic_load<long>(value) + delta);
 }
 
-# A new, empty cache for the calling thread, on the list of caches; null
-# when the C allocator has no room for it.
+# A new, empty cache for the calling thread, on the list of caches: an exited
+# thread's, or a new one; null when the C allocator has no room for it.
 [Unsafe("overflow")]
 _pep_small_new_cache(): __ptr<ulong> {
-    __ptr<ulong> cache = malloc(_SMALL_CACHE_WORDS * 8);
-    if (cache == __null) {
-        return __null;
-    }
-    memset(cache, 0, _SMALL_CACHE_WORDS * 8);
     _pep_small_lock(_pep_small_state + _SMALL_CACHES_LOCK);
+    __ptr<ulong> cache = unsafe_cast<__ptr<ulong>>(_pep_small_state[_SMALL_SPARE_CACHES]);
+    if (cache != __null) {
+        _pep_small_state[_SMALL_SPARE_CACHES] = cache[_SMALL_CACHE_NEXT];
+        # Its stack of spans to look at again may still gain a span, which
+        # this thread does not own and passes over.
+        memset(cache, 0, _SMALL_CACHE_FREED_INTO * 8);
+    } else {
+        cache = malloc(_SMALL_CACHE_WORDS * 8);
+        if (cache == __null) {
+            _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
+            return __null;
+        }
+        memset(cache, 0, _SMALL_CACHE_WORDS * 8);
+    }
     cache[_SMALL_CACHE_NEXT] = _pep_small_state[_SMALL_CACHES];
     _pep_small_state[_SMALL_CACHES] = unsafe_cast<ulong>(cache);
     _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
@@ -387,45 +439,168 @@ _pep_small_new_cache(): __ptr<ulong> {
     return cache;
 }
 
-# Pushes the list of `length` blocks starting at `head` onto class
-# `class_index`'s central stack as one batch.
+# Takes the blocks other threads freed into `header`'s span as its free
+# list, which must be empty, and clears its `_SMALL_NOTIFY`; false if there
+# are none.
 [Unsafe("overflow")]
-_pep_small_push_batch(class_index: ulong, head: ulong, length: ulong) {
-    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
-    __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
-    _pep_small_lock(central);
-    block[1] = central[1] | (length << _SMALL_LENGTH_SHIFT);
-    central[1] = head;
-    _pep_small_unlock(central);
+_pep_small_take_remote(header: __ptr<ulong>): bool {
+    __ptr<ulong> remote = header + _SMALL_HEADER_REMOTE;
+    while (true) {
+        var head = __atomic_load<ulong>(remote);
+        if ((head & ~_SMALL_NOTIFY) == 0) {
+            return false;
+        }
+        ulong empty = 0;
+        if (__atomic_cmpxchg<ulong>(remote, head, empty)) {
+            header[_SMALL_HEADER_FREE] = head & ~_SMALL_NOTIFY;
+            return true;
+        }
+    }
+    return false;
 }
 
-# Refills the empty list of class `class_index` in `lists` (that class's
-# words of a cache): a batch from the central stack, else the unused end of
-# a span another thread left, else a new span. False when the region is
-# used up or the system will not commit more memory.
+# Sets `header`'s span's `_SMALL_NOTIFY`, as it goes on the ring of full
+# spans; false when other threads have freed into it meanwhile.
 [Unsafe("overflow")]
-_pep_small_refill(lists: __ptr<ulong>, class_index: ulong): bool {
-    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
-    _pep_small_lock(central);
-    var batch = central[1];
-    if (batch != 0) {
-        __ptr<ulong> head = unsafe_cast<__ptr<ulong>>(batch);
-        central[1] = head[1] & _SMALL_ADDRESS_MASK;
-        _pep_small_unlock(central);
-        lists[0] = batch;
-        lists[1] = head[1] >> _SMALL_LENGTH_SHIFT;
+_pep_small_ask_to_notify(header: __ptr<ulong>): bool {
+    __ptr<ulong> remote = header + _SMALL_HEADER_REMOTE;
+    while (true) {
+        var head = __atomic_load<ulong>(remote);
+        if (head == _SMALL_NOTIFY) {
+            return true;
+        }
+        if (head != 0) {
+            return false;
+        }
+        ulong empty = 0;
+        if (__atomic_cmpxchg<ulong>(remote, empty, _SMALL_NOTIFY)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+# Appends `span` to the ring of full spans in `lists`.
+[Unsafe("overflow")]
+_pep_small_push_full(lists: __ptr<ulong>, span: ulong) {
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    header[_SMALL_HEADER_STATE] = _SMALL_STATE_FULL;
+    header[_SMALL_HEADER_NEXT] = 0;
+    var tail = lists[_SMALL_FULL_TAIL];
+    header[_SMALL_HEADER_PREVIOUS] = tail;
+    if (tail == 0) {
+        lists[_SMALL_FULL_HEAD] = span;
+    } else {
+        unsafe_cast<__ptr<ulong>>(tail)[_SMALL_HEADER_NEXT] = span;
+    }
+    lists[_SMALL_FULL_TAIL] = span;
+}
+
+# Takes `span` off the ring of full spans in `lists`.
+[Unsafe("overflow")]
+_pep_small_unlink_full(lists: __ptr<ulong>, span: ulong) {
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    var next = header[_SMALL_HEADER_NEXT];
+    var previous = header[_SMALL_HEADER_PREVIOUS];
+    if (previous == 0) {
+        lists[_SMALL_FULL_HEAD] = next;
+    } else {
+        unsafe_cast<__ptr<ulong>>(previous)[_SMALL_HEADER_NEXT] = next;
+    }
+    if (next == 0) {
+        lists[_SMALL_FULL_TAIL] = previous;
+    } else {
+        unsafe_cast<__ptr<ulong>>(next)[_SMALL_HEADER_PREVIOUS] = previous;
+    }
+}
+
+# Makes `span` the current span of `lists`.
+[Unsafe("overflow")]
+_pep_small_make_current(lists: __ptr<ulong>, span: ulong) {
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    header[_SMALL_HEADER_STATE] = _SMALL_STATE_CURRENT;
+    lists[_SMALL_CURRENT] = span;
+}
+
+# Takes the stack of full spans other threads have freed into: spans this
+# cache still owns and that are still full go back to their stacks of spans
+# with free blocks, and those of class `class_index` become `lists`'s
+# current span (the first) or join its stack. False if none of that class
+# was there.
+[Unsafe("overflow")]
+_pep_small_freed_into(cache: __ptr<ulong>, lists: __ptr<ulong>, class_index: ulong): bool {
+    __ptr<ulong> stack = cache + _SMALL_CACHE_FREED_INTO;
+    if (__atomic_load<ulong>(stack) == 0) {
+        return false;
+    }
+    var span = 0 as ulong;
+    while (true) {
+        span = __atomic_load<ulong>(stack);
+        ulong empty = 0;
+        if (__atomic_cmpxchg<ulong>(stack, span, empty)) {
+            break;
+        }
+    }
+    var found = false;
+    while (span != 0) {
+        __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+        var next = header[_SMALL_HEADER_FREED_INTO];
+        ulong idle = 0;
+        __atomic_store<ulong>(header + _SMALL_HEADER_QUEUED, idle);
+        if (__atomic_load<ulong>(header + _SMALL_HEADER_OWNER) == unsafe_cast<ulong>(cache)
+            && header[_SMALL_HEADER_STATE] == _SMALL_STATE_FULL) {
+            var class_of_span = header[_SMALL_HEADER_CLASS];
+            __ptr<ulong> span_lists = cache + _SMALL_CACHE_LISTS + class_of_span * 4;
+            _pep_small_unlink_full(span_lists, span);
+            if (class_of_span == class_index && !found) {
+                _pep_small_make_current(lists, span);
+                found = true;
+            } else {
+                header[_SMALL_HEADER_STATE] = _SMALL_STATE_PARTIAL;
+                header[_SMALL_HEADER_NEXT] = span_lists[_SMALL_PARTIAL];
+                span_lists[_SMALL_PARTIAL] = span;
+            }
+        }
+        span = next;
+    }
+    return found;
+}
+
+# Finds class `class_index` a new current span for `cache` once the current
+# one (if any) has no block left: a span with free blocks, a full span other
+# threads have freed into, a span an exited thread left, or a new span. The
+# current span, set aside, goes on the ring of full spans. False
+# when the region is used up or the system will not commit more memory.
+[Unsafe("overflow")]
+_pep_small_refill(cache: __ptr<ulong>, lists: __ptr<ulong>, class_index: ulong): bool {
+    var current = lists[_SMALL_CURRENT];
+    if (current != 0) {
+        __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(current);
+        if (!_pep_small_ask_to_notify(header)) {
+            # Blocks came back while it was being set aside.
+            return _pep_small_take_remote(header);
+        }
+        lists[_SMALL_CURRENT] = 0;
+        _pep_small_push_full(lists, current);
+    }
+    var partial = lists[_SMALL_PARTIAL];
+    if (partial != 0) {
+        lists[_SMALL_PARTIAL] = unsafe_cast<__ptr<ulong>>(partial)[_SMALL_HEADER_NEXT];
+        _pep_small_make_current(lists, partial);
         return true;
     }
-    var spare = central[2];
-    if (spare != 0) {
-        # An unused range: its first block holds its end and the next range.
-        __ptr<ulong> range = unsafe_cast<__ptr<ulong>>(spare);
-        central[2] = range[1];
+    if (_pep_small_freed_into(cache, lists, class_index)) {
+        return true;
+    }
+    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
+    _pep_small_lock(central);
+    var pooled = central[1];
+    if (pooled != 0) {
+        __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(pooled);
+        central[1] = header[_SMALL_HEADER_NEXT];
         _pep_small_unlock(central);
-        lists[2] = spare;
-        lists[3] = range[0];
-        range[0] = 0;
-        range[1] = 0;
+        __atomic_store<ulong>(header + _SMALL_HEADER_OWNER, unsafe_cast<ulong>(cache));
+        _pep_small_make_current(lists, pooled);
         return true;
     }
     _pep_small_unlock(central);
@@ -434,55 +609,74 @@ _pep_small_refill(lists: __ptr<ulong>, class_index: ulong): bool {
         return false;
     }
     __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
-    header[0] = class_index;
     var size = _pep_small_state[_SMALL_CLASS_SIZES + class_index];
     var count = (_SMALL_SPAN - _SMALL_SPAN_HEADER) / size;
-    lists[2] = span + _SMALL_SPAN_HEADER;
-    lists[3] = span + _SMALL_SPAN_HEADER + count * size;
+    header[_SMALL_HEADER_CLASS] = class_index;
+    header[_SMALL_HEADER_BUMP] = span + _SMALL_SPAN_HEADER;
+    header[_SMALL_HEADER_END] = span + _SMALL_SPAN_HEADER + count * size;
+    __atomic_store<ulong>(header + _SMALL_HEADER_OWNER, unsafe_cast<ulong>(cache));
+    _pep_small_make_current(lists, span);
     return true;
 }
 
 # A zeroed block of at least `size` bytes, 1 to the limit, or null when no
-# span is left (the caller then uses calloc).
+# span is left (the caller then uses calloc). The fast path pops the current
+# span's free list or bumps into its untouched tail; the rest is out of line.
 [Unsafe("overflow")]
 _pep_small_alloc(size: ulong): __ptr<void> {
+    var cache = _pep_small_cache;
+    if (cache != __null) {
+        __ptr<u8> table = _pep_small_state + _SMALL_CLASS_TABLE;
+        var class_index = table[(size + 15) >> 4] as ulong;
+        __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
+        var span = lists[_SMALL_CURRENT];
+        if (span != 0) {
+            __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+            var head = header[_SMALL_HEADER_FREE];
+            if (head != 0) {
+                __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
+                header[_SMALL_HEADER_FREE] = block[0];
+                _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
+                memset(block, 0, size);
+                return block;
+            }
+            var fresh = header[_SMALL_HEADER_BUMP];
+            if (fresh != header[_SMALL_HEADER_END]) {
+                # Never used, so still zero.
+                header[_SMALL_HEADER_BUMP] = fresh + _pep_small_state[_SMALL_CLASS_SIZES + class_index];
+                _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
+                return unsafe_cast<__ptr<void>>(fresh);
+            }
+        }
+    }
+    return _pep_small_alloc_slow(size);
+}
+
+# `_pep_small_alloc` when the current span has nothing at hand: makes the
+# cache, takes the blocks other threads freed or moves to another span, then
+# tries again.
+[Cold]
+[Unsafe("overflow")]
+_pep_small_alloc_slow(size: ulong): __ptr<void> {
     var cache = _pep_small_cache;
     if (cache == __null) {
         cache = _pep_small_new_cache();
         if (cache == __null) {
             return __null;
         }
+        return _pep_small_alloc(size);
     }
     __ptr<u8> table = _pep_small_state + _SMALL_CLASS_TABLE;
     var class_index = table[(size + 15) >> 4] as ulong;
     __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
-    while (true) {
-        var head = lists[0];
-        if (head != 0) {
-            __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
-            var next = block[0];
-            lists[0] = next;
-            lists[1] = lists[1] - 1;
-            # The list is in free order, which after a structure is freed is
-            # scattered; start loading the next block now, so the next
-            # allocation of this class does not wait for it.
-            _pep_small_prefetch(unsafe_cast<__ptr<void>>(next), 1, 3, 1);
-            _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
-            memset(block, 0, size);
-            return block;
-        }
-        var fresh = lists[2];
-        if (fresh != lists[3]) {
-            # Never used, so still zero.
-            lists[2] = fresh + _pep_small_state[_SMALL_CLASS_SIZES + class_index];
-            _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
-            return unsafe_cast<__ptr<void>>(fresh);
-        }
-        if (!_pep_small_refill(lists, class_index)) {
-            return __null;
-        }
+    var span = lists[_SMALL_CURRENT];
+    if (span != 0 && _pep_small_take_remote(unsafe_cast<__ptr<ulong>>(span))) {
+        return _pep_small_alloc(size);
     }
-    return __null;
+    if (!_pep_small_refill(cache, lists, class_index)) {
+        return __null;
+    }
+    return _pep_small_alloc(size);
 }
 
 # Whether `p` is a small block.
@@ -506,47 +700,100 @@ _pep_small_capacity(p: __ptr<void>): ulong {
     return _pep_small_state[_SMALL_CLASS_SIZES + _pep_small_class(p)];
 }
 
-# Returns small block `p` to the calling thread's cache, moving a batch to
-# the central stack when the list grows long.
+# Returns small block `p` to its span: onto the span's own list on the
+# owner's thread, else onto the list other threads free into.
 [Unsafe("overflow")]
 _pep_small_free(p: __ptr<void>) {
-    var class_index = _pep_small_class(p);
     var address = unsafe_cast<ulong>(p);
-    __ptr<ulong> block = p;
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(address - address % _SMALL_SPAN);
     var cache = _pep_small_cache;
-    if (cache == __null) {
-        # A thread whose cache is gone (its exit has begun) or never made.
-        block[0] = 0;
-        _pep_small_push_batch(class_index, address, 1);
-        __atomic_fetch_sub<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED), 1);
+    if (cache != __null
+        && __atomic_load<ulong>(header + _SMALL_HEADER_OWNER) == unsafe_cast<ulong>(cache)
+        && header[_SMALL_HEADER_STATE] != _SMALL_STATE_FULL) {
+        __ptr<ulong> block = p;
+        block[0] = header[_SMALL_HEADER_FREE];
+        header[_SMALL_HEADER_FREE] = address;
+        _pep_small_count(cache + _SMALL_CACHE_LIVE, -1);
         return;
     }
-    __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
-    block[0] = lists[0];
-    lists[0] = address;
-    lists[1] = lists[1] + 1;
-    _pep_small_count(cache + _SMALL_CACHE_LIVE, -1);
-    var batch = _pep_small_state[_SMALL_BATCHES + class_index];
-    if (lists[1] > batch * 2) {
-        # The newest `batch` blocks stay; the older ones after them go.
-        __ptr<ulong> last = block;
-        ulong kept = 1;
-        while (kept < batch) {
-            last = unsafe_cast<__ptr<ulong>>(last[0]);
-            kept = kept + 1;
+    _pep_small_free_slow(p);
+}
+
+# `_pep_small_free` for a full span of the calling thread's, which goes back
+# among its partial spans, or a span another thread owns or none does.
+[Cold]
+[Unsafe("overflow")]
+_pep_small_free_slow(p: __ptr<void>) {
+    var address = unsafe_cast<ulong>(p);
+    var span = address - address % _SMALL_SPAN;
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    __ptr<ulong> block = p;
+    var cache = _pep_small_cache;
+    if (cache != __null && __atomic_load<ulong>(header + _SMALL_HEADER_OWNER) == unsafe_cast<ulong>(cache)) {
+        block[0] = header[_SMALL_HEADER_FREE];
+        header[_SMALL_HEADER_FREE] = address;
+        _pep_small_count(cache + _SMALL_CACHE_LIVE, -1);
+        # It has room again.
+        __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + header[_SMALL_HEADER_CLASS] * 4;
+        _pep_small_unlink_full(lists, span);
+        header[_SMALL_HEADER_STATE] = _SMALL_STATE_PARTIAL;
+        header[_SMALL_HEADER_NEXT] = lists[_SMALL_PARTIAL];
+        lists[_SMALL_PARTIAL] = span;
+        return;
+    }
+    __ptr<ulong> remote = header + _SMALL_HEADER_REMOTE;
+    while (true) {
+        var head = __atomic_load<ulong>(remote);
+        block[0] = head & ~_SMALL_NOTIFY;
+        if (__atomic_cmpxchg<ulong>(remote, head, address)) {
+            if ((head & _SMALL_NOTIFY) != 0) {
+                # The span was full: tell its owner, if it has one.
+                __ptr<ulong> owner = unsafe_cast<__ptr<ulong>>(__atomic_load<ulong>(header + _SMALL_HEADER_OWNER));
+                ulong idle = 0;
+                ulong queued = 1;
+                if (owner != __null && __atomic_cmpxchg<ulong>(header + _SMALL_HEADER_QUEUED, idle, queued)) {
+                    __ptr<ulong> stack = owner + _SMALL_CACHE_FREED_INTO;
+                    while (true) {
+                        var top = __atomic_load<ulong>(stack);
+                        header[_SMALL_HEADER_FREED_INTO] = top;
+                        if (__atomic_cmpxchg<ulong>(stack, top, span)) {
+                            break;
+                        }
+                    }
+                }
+            }
+            break;
         }
-        var moved = last[0];
-        last[0] = 0;
-        _pep_small_push_batch(class_index, moved, lists[1] - batch);
-        lists[1] = batch;
+    }
+    if (cache == __null) {
+        # A thread whose cache is gone (its exit has begun) or never made.
+        __atomic_fetch_sub<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED), 1);
+    } else {
+        _pep_small_count(cache + _SMALL_CACHE_LIVE, -1);
     }
 }
 
+# Puts `span` in its class's pool, ownerless.
+[Unsafe("overflow")]
+_pep_small_pool(span: ulong) {
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + header[_SMALL_HEADER_CLASS] * _SMALL_CENTRAL_WORDS;
+    header[_SMALL_HEADER_STATE] = _SMALL_STATE_POOLED;
+    # A typed 0: a literal stores only 4 bytes (#639).
+    ulong none = 0;
+    __atomic_store<ulong>(header + _SMALL_HEADER_OWNER, none);
+    _pep_small_lock(central);
+    header[_SMALL_HEADER_NEXT] = central[1];
+    central[1] = span;
+    _pep_small_unlock(central);
+}
+
 # Hands the calling thread's cache back, as its last act (a thread that
-# `async.Thread.spawn` started calls it): returns the cache's lists and
-# unused span ends to the central stacks, folds its live count into the
-# retired count, and frees it. A block the thread frees after this goes
-# straight to the central stack.
+# `async.Thread.spawn` started calls it): puts each of its spans in its
+# class's pool, folds its live count into the retired count, and keeps the
+# cache for the next new thread.
+# A block the thread frees after this goes onto its span's list for other
+# threads.
 [Unsafe("overflow")]
 export _pep_small_thread_exit() {
     if (_pep_small_end == 0) {
@@ -560,17 +807,20 @@ export _pep_small_thread_exit() {
     ulong class_index = 0;
     while (class_index < _SMALL_CLASSES) {
         __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
-        if (lists[0] != 0) {
-            _pep_small_push_batch(class_index, lists[0], lists[1]);
+        if (lists[_SMALL_CURRENT] != 0) {
+            _pep_small_pool(lists[_SMALL_CURRENT]);
         }
-        if (lists[2] != lists[3]) {
-            __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
-            __ptr<ulong> range = unsafe_cast<__ptr<ulong>>(lists[2]);
-            _pep_small_lock(central);
-            range[0] = lists[3];
-            range[1] = central[2];
-            central[2] = lists[2];
-            _pep_small_unlock(central);
+        var span = lists[_SMALL_PARTIAL];
+        while (span != 0) {
+            var next = unsafe_cast<__ptr<ulong>>(span)[_SMALL_HEADER_NEXT];
+            _pep_small_pool(span);
+            span = next;
+        }
+        span = lists[_SMALL_FULL_HEAD];
+        while (span != 0) {
+            var next = unsafe_cast<__ptr<ulong>>(span)[_SMALL_HEADER_NEXT];
+            _pep_small_pool(span);
+            span = next;
         }
         class_index = class_index + 1;
     }
@@ -582,8 +832,9 @@ export _pep_small_thread_exit() {
     link[0] = cache[_SMALL_CACHE_NEXT];
     __ptr<long> live = cache + _SMALL_CACHE_LIVE;
     __atomic_fetch_add<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED), live[0]);
+    cache[_SMALL_CACHE_NEXT] = _pep_small_state[_SMALL_SPARE_CACHES];
+    _pep_small_state[_SMALL_SPARE_CACHES] = unsafe_cast<ulong>(cache);
     _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
-    free(cache);
 }
 
 # Whether `p` came from the small block allocator, and the limit in force:

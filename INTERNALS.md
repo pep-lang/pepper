@@ -2250,15 +2250,30 @@ that file's allocation counter must exist before any `String` is built).
 `PEPPER_SMALL_BLOCK_LIMIT` read at start; 0 turns it off; at most 4096)
 from the small block allocator in `internals.pep` (#600): 28 size classes,
 64 KiB spans cut from one reserved 4 GiB region (so `_pep_free` tells a
-small block by a range check, and a span's first word names its class),
-and a per-thread cache (`_pep_small_cache`, a `[ThreadLocal]` pointer, so
-reaching it is one thread-relative load; it has no exit hook, since a JIT
-engine's code is gone when its test thread exits) of free lists and bump
-ranges. Lists longer than twice a class's batch spill a batch to
-the class's central stack (spin lock); an empty list refills from there,
-then from ranges exiting threads left, then from a new span. A thread that
-`async.Thread.spawn` started calls `_pep_small_thread_exit` when its body
-ends, which returns its lists and ranges and folds its live count into
+small block by a range check, and a span's 96-byte header names its class),
+and per-span free lists (#634): each span has an owner, a thread's cache
+(`_pep_small_cache`, a `[ThreadLocal]` pointer, so reaching it is one
+thread-relative load; it has no exit hook, since a JIT engine's code is gone
+when its test thread exits), its own free list and a never-used end. A
+thread allocates a class's blocks from its current span; a free on the
+owner's thread pushes onto the span's list, and a free on any other thread
+onto the span's atomic remote list, which the owner takes over when the
+span's own list runs dry. `_pep_small_alloc` and `_pep_small_free` keep only
+the common case (pop or bump the current span; push onto an owned span's
+list); everything else is in `[Cold]` `_pep_small_alloc_slow` and
+`_pep_small_free_slow`, so both stay small enough to inline into callers
+such as `__release`. Per class the cache keeps its current span, a
+stack of spans with free blocks (a full span joins it when its owner frees
+into it) and a ring of full spans. A full span's remote list carries
+`_SMALL_NOTIFY`: the first remote free that clears it pushes the span onto
+its owner's atomic stack of spans freed into (mimalloc's delayed free; a
+`QUEUED` word keeps it there once), which the owner takes before a span
+from the class's pool of spans exited threads left (spin lock) or a new
+span. Caches are never freed, only reused by new threads
+(`_SMALL_SPARE_CACHES`), so a remote freer can always reach the owner. A
+thread that `async.Thread.spawn` started calls `_pep_small_thread_exit`
+when its body ends, which puts its spans in their pools, ownerless, and
+folds its live count into
 `_SMALL_RETIRED`; other threads keep their caches. Recycled blocks are zeroed when handed
 out. The allocator runs before any other global exists, so it uses raw
 memory only, and its functions are `[Unsafe("overflow")]`.

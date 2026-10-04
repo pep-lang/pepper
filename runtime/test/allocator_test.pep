@@ -1,7 +1,8 @@
-# The small block allocator behind `_pep_malloc` (#600): zeroed, aligned
-# blocks of every size, realloc across classes and past the limit, blocks
-# freed on another thread than the one that allocated them, threads that
-# exit, and PEPPER_SMALL_BLOCK_LIMIT.
+# The small block allocator behind `_pep_malloc` (#600, #634): zeroed,
+# aligned blocks of every size, realloc across classes and past the limit,
+# blocks freed on another thread than the one that allocated them and handed
+# out again, threads that exit and the spans they leave, and
+# PEPPER_SMALL_BLOCK_LIMIT.
 
 import async;
 import io;
@@ -167,6 +168,86 @@ threads_that_exit_return_their_blocks() {
         wave = wave + 1;
     }
     expect_equal(finished.load(), 16);
+}
+
+extern void* malloc(ulong size);
+
+# Block addresses passed between threads: raw memory, so the test's own
+# allocations do not disturb the allocator's spans.
+const _BLOCKS: ulong = 20000;
+const addresses: __ptr<ulong> = malloc(_BLOCKS * 8);
+
+free_the_blocks() {
+    ulong i = 0;
+    while (i < _BLOCKS) {
+        _pep_free(unsafe_cast<__ptr<void>>(addresses[i]));
+        i = i + 1;
+    }
+}
+
+allocate_the_blocks() {
+    ulong i = 0;
+    while (i < _BLOCKS) {
+        addresses[i] = unsafe_cast<ulong>(_pep_malloc(48));
+        i = i + 1;
+    }
+}
+
+# Whether `_BLOCKS` new blocks of `size` bytes reuse `addresses`, the
+# blocks freed before, apart from at most one span's never-used end; frees
+# the new ones.
+reuses_the_blocks(size: ulong): bool {
+    var freed = HashSet<ulong>();
+    ulong i = 0;
+    while (i < _BLOCKS) {
+        freed.insert(addresses[i]);
+        i = i + 1;
+    }
+    ulong fresh = 0;
+    i = 0;
+    while (i < _BLOCKS) {
+        var block = _pep_malloc(size);
+        if (!freed.contains(unsafe_cast<ulong>(block))) {
+            fresh = fresh + 1;
+        }
+        addresses[i] = unsafe_cast<ulong>(block);
+        i = i + 1;
+    }
+    free_the_blocks();
+    # A span holds 64 KiB of blocks.
+    return fresh <= 65536 / size;
+}
+
+check_the_blocks_are_reused() {
+    expect_true(reuses_the_blocks(48));
+}
+
+[Test]
+blocks_freed_on_another_thread_are_handed_out_again() {
+    if (_pep_small_block_limit() < 48) {
+        return;
+    }
+    ulong i = 0;
+    while (i < _BLOCKS) {
+        addresses[i] = unsafe_cast<ulong>(_pep_malloc(48));
+        i = i + 1;
+    }
+    # The blocks fill several spans, all full now; another thread frees
+    # every one, and this thread, their spans' owner, takes them back.
+    async.Thread.spawn(free_the_blocks).join();
+    expect_true(reuses_the_blocks(48));
+}
+
+[Test]
+spans_of_exited_threads_are_adopted() {
+    if (_pep_small_block_limit() < 48) {
+        return;
+    }
+    # A thread fills spans and exits, leaving them to their class's pool;
+    # this thread frees the blocks, and a new thread adopts the spans.
+    async.Thread.spawn(allocate_the_blocks).join();
+    free_the_blocks();
+    async.Thread.spawn(check_the_blocks_are_reused).join();
 }
 
 [Test]

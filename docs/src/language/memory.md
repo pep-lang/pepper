@@ -299,8 +299,11 @@ Every object, `String` buffer and `Array` buffer comes from the runtime's
 allocator. A block of up to 128 bytes (most objects and short strings)
 comes from a small block allocator: blocks are grouped by size into
 classes (multiples of 16 bytes up to 128, then four classes per power of
-two), and each thread keeps its own free blocks of each class, so most
-allocations and frees take no lock. Larger blocks come from the C
+two). Each class's blocks are cut from 64 KiB spans, and a thread hands
+out a class's blocks from one span at a time, so objects made one after
+another sit close together in memory. Allocating, and freeing on the
+thread that allocated, take no lock; a block freed on another thread goes
+back to its span with one atomic step. Larger blocks come from the C
 library's `calloc` and go back with `free`. A small block's size is
 rounded up to its class, so a 40-byte object takes 48 bytes.
 
