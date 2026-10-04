@@ -560,8 +560,9 @@ different things, and the names say which:
   retain or share; the C code owns it outright and gives it back once with
   `pepper_string_free`.
 - **Why not `free`:** the copy comes from Pepper's allocator, which tracks
-  live allocations and, on Windows, may use a different C runtime's heap
-  than the caller's. `pepper_string_free` returns it to the allocator that
+  live allocations, serves short strings from its own small block pools
+  (see [Where objects live](memory.md#where-objects-live)) and, on Windows,
+  may use a different C runtime's heap than the caller's. `pepper_string_free` returns it to the allocator that
   made it.
 
 A `String` parameter needs neither: Pepper copies the bytes for the call,

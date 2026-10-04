@@ -73,6 +73,617 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
     }
 }
 
+# ── Small block allocator ───────────────────────────────────────────────────
+# The small block allocator behind `_pep_malloc` (#600).
+#
+# A block of up to `_pep_small_limit` bytes comes from a size class instead
+# of from C's calloc. The limit is 128 bytes unless the environment variable
+# PEPPER_SMALL_BLOCK_LIMIT, read once at start, sets it: 0 turns the
+# allocator off, and values above 4096 count as 4096. A block's size is
+# rounded up to its class: multiples of 16 up to 128, then four classes per
+# power of two (160, 192, 224, 256, 320, ... 4096).
+#
+# The blocks live in one reserved stretch of address space (`_SMALL_REGION`
+# bytes), so `_pep_free` tells a small block from a C one with one range
+# check. The region is cut into 64 KiB spans, each holding blocks of one
+# class, named in the span's first word; pages are committed a span at a
+# time, and spans are never returned to the operating system.
+#
+# Each thread has a cache (found through a thread-local key) holding, per
+# class, a free list and the unused end of a span, so the common allocation
+# and free take no lock and no atomic read-modify-write. A thread frees into
+# its own cache, whichever thread allocated the block. When a list grows
+# past twice the class's batch, one batch moves to the class's central
+# stack, under a spin lock, and a thread whose list is empty takes a batch
+# from there before it cuts a new span. A thread that `async.Thread.spawn`
+# started returns its lists and the unused ends of its spans to the central
+# stacks when its body ends (`_pep_small_thread_exit`).
+#
+# Each cache counts its live blocks for `_pep_live_allocs`; a block freed on
+# another thread makes that thread's count go down, so only the sum means
+# anything. A cache's count moves to `_SMALL_RETIRED` when its thread exits.
+#
+# Recycled blocks are zeroed when they are handed out; fresh spans are
+# already zero. WebAssembly has no way to reserve address space, so there
+# the limit is always 0 and every block comes from calloc.
+#
+# This runs before the prelude's other globals exist, so it uses raw memory
+# and C calls only: no `String`, `Array` or struct.
+
+# Bytes per span.
+const _SMALL_SPAN: ulong = 65536;
+# Bytes at the start of a span before its first block: the class.
+const _SMALL_SPAN_HEADER: ulong = 16;
+# Bytes of address space reserved for small blocks (4 GiB). Only spans in
+# use are committed; past the end, small requests fall back to calloc.
+const _SMALL_REGION: ulong = 4294967296;
+# The largest limit, and the default.
+const _SMALL_MAX_LIMIT: ulong = 4096;
+const _SMALL_DEFAULT_LIMIT: ulong = 128;
+# Size classes: 8 multiples of 16, then 4 per power of two up to 4096.
+const _SMALL_CLASSES: ulong = 28;
+# A batch carries its length in the top 16 bits of its next-batch word.
+const _SMALL_LENGTH_SHIFT: ulong = 48;
+const _SMALL_ADDRESS_MASK: ulong = 281474976710655;
+
+# The state block, in ulong words.
+# The region's base and size (0 when the allocator is off).
+const _SMALL_BASE: ulong = 0;
+const _SMALL_SIZE: ulong = 1;
+# The next unused span (atomic).
+const _SMALL_NEXT_SPAN: ulong = 2;
+const _SMALL_LIMIT: ulong = 3;
+# The thread-local key of each thread's cache.
+const _SMALL_KEY: ulong = 4;
+# The lock of the list of caches, and its head.
+const _SMALL_CACHES_LOCK: ulong = 5;
+const _SMALL_CACHES: ulong = 6;
+# The live blocks of the caches of threads that have exited (atomic).
+const _SMALL_RETIRED: ulong = 7;
+# Each class's block size.
+const _SMALL_CLASS_SIZES: ulong = 8;
+# Each class's batch: how many blocks move to or from the central stack.
+const _SMALL_BATCHES: ulong = 40;
+# A byte table from `(size + 15) >> 4` to the class.
+const _SMALL_CLASS_TABLE: ulong = 72;
+# Per class, a cache line: the lock, the stack of batches, and the stack of
+# unused span ends.
+const _SMALL_CENTRAL: ulong = 112;
+const _SMALL_CENTRAL_WORDS: ulong = 8;
+const _SMALL_STATE_WORDS: ulong = 336;
+
+# A thread's cache, in ulong words: the next cache, the live count, then per
+# class the free list, its length, and the unused range of a span (next
+# block and end).
+const _SMALL_CACHE_NEXT: ulong = 0;
+const _SMALL_CACHE_LIVE: ulong = 1;
+const _SMALL_CACHE_LISTS: ulong = 4;
+const _SMALL_CACHE_WORDS: ulong = 116;
+
+# Hints the processor to load `address`'s cache line (rw 1: for writing;
+# locality 3: keep it close; cache 1: data).
+[Link(name = "llvm.prefetch.p0")]
+extern void _pep_small_prefetch(void* address, int rw, int locality, int cache);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern void* mmap(void* address, ulong length, int protection, int flags, int descriptor, long offset);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int mprotect(void* address, ulong length, int protection);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int sched_yield();
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int pthread_key_create(void* key, void* destructor);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern void* pthread_getspecific(ulong key);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int pthread_setspecific(ulong key, void* value);
+[Target(OS(Windows))]
+extern void* VirtualAlloc(void* address, ulong size, uint allocation_type, uint protect);
+[Target(OS(Windows))]
+extern int SwitchToThread();
+[Target(OS(Windows))]
+extern uint TlsAlloc();
+[Target(OS(Windows))]
+extern void* TlsGetValue(uint index);
+[Target(OS(Windows))]
+extern int TlsSetValue(uint index, void* value);
+
+# MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE.
+[Target(OS(Linux))]
+const _SMALL_MAP_FLAGS = 16418;
+# MAP_PRIVATE | MAP_ANON.
+[Target(OS(Mac))]
+const _SMALL_MAP_FLAGS = 4098;
+
+# Reserves `size` bytes of address space with no access, or returns null.
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_reserve(size: ulong): __ptr<u8> {
+    var p = mmap(__null, size, 0, _SMALL_MAP_FLAGS, -1, 0);
+    # MAP_FAILED is -1.
+    if (unsafe_cast<long>(p) == -1) {
+        return __null;
+    }
+    return p;
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_reserve(size: ulong): __ptr<u8> {
+    # MEM_RESERVE, PAGE_NOACCESS.
+    return VirtualAlloc(__null, size, 0x2000, 1);
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_reserve(size: ulong): __ptr<u8> {
+    return __null;
+}
+
+# Makes a reserved span readable and writable; false if the system refuses.
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_commit(span: __ptr<u8>): bool {
+    # PROT_READ | PROT_WRITE.
+    return mprotect(span, _SMALL_SPAN, 3) == 0;
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_commit(span: __ptr<u8>): bool {
+    # MEM_COMMIT, PAGE_READWRITE.
+    return VirtualAlloc(span, _SMALL_SPAN, 0x1000, 4) != __null;
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_commit(span: __ptr<u8>): bool {
+    return false;
+}
+
+# Lets another thread run while a lock is contended.
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_yield() {
+    sched_yield();
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_yield() {
+    SwitchToThread();
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_yield() {}
+
+# Creates the thread-local key of the caches into `key`; false if the
+# system has none left. The key has no destructor: a JIT engine's code is
+# gone by the time the thread that ran it exits, so a thread Pepper spawned
+# hands its cache back itself (`_pep_small_thread_exit`), and any other
+# thread keeps its cache. On Windows it is a thread (not fiber) local, so
+# fibers that run on one thread share its cache.
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_key_create(key: __ptr<ulong>): bool {
+    return pthread_key_create(key, __null) == 0;
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_key_create(key: __ptr<ulong>): bool {
+    var index = TlsAlloc();
+    # TLS_OUT_OF_INDEXES.
+    if (index == 4294967295) {
+        return false;
+    }
+    key[0] = index as ulong;
+    return true;
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_key_create(key: __ptr<ulong>): bool {
+    return false;
+}
+
+# The calling thread's cache, or null if it has none yet.
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_cache(): __ptr<ulong> {
+    return pthread_getspecific(_pep_small_key);
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_cache(): __ptr<ulong> {
+    return TlsGetValue(_pep_small_key as uint);
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_cache(): __ptr<ulong> {
+    return __null;
+}
+
+[Target(!OS(Windows) && !OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_set_cache(cache: __ptr<ulong>) {
+    pthread_setspecific(_pep_small_key, cache);
+}
+
+[Target(OS(Windows))]
+[Unsafe("overflow")]
+_pep_small_set_cache(cache: __ptr<ulong>) {
+    TlsSetValue(_pep_small_key as uint, cache);
+}
+
+[Target(OS(Wasi))]
+[Unsafe("overflow")]
+_pep_small_set_cache(cache: __ptr<ulong>) {}
+
+# The limit PEPPER_SMALL_BLOCK_LIMIT sets: a decimal number of bytes, or the
+# default when it is unset or not a number. No `String` exists yet, so this
+# reads the C string itself.
+[Target(!OS(Wasi))]
+_pep_small_read_limit(): ulong {
+    __ptr<u8> text = getenv("PEPPER_SMALL_BLOCK_LIMIT");
+    if (text == __null || text[0] == 0) {
+        return _SMALL_DEFAULT_LIMIT;
+    }
+    ulong limit = 0;
+    ulong index = 0;
+    while (text[index] != 0) {
+        var digit = text[index];
+        if (digit < 48 || digit > 57) {
+            return _SMALL_DEFAULT_LIMIT;
+        }
+        if (limit < _SMALL_MAX_LIMIT) {
+            limit = limit * 10 + ((digit - 48) as ulong);
+        }
+        index = index + 1;
+    }
+    return limit < _SMALL_MAX_LIMIT ? limit : _SMALL_MAX_LIMIT;
+}
+
+[Target(OS(Wasi))]
+_pep_small_read_limit(): ulong {
+    return 0;
+}
+
+# The bytes a block of class `index` takes.
+_pep_small_class_size(index: ulong): ulong {
+    if (index < 8) {
+        return (index + 1) * 16;
+    }
+    # Class 8 + 4 * group + step is 128 << group, plus (step + 1) quarters
+    # of that.
+    var group = (index - 8) / 4;
+    var step = (index - 8) % 4;
+    var base: ulong = 128 << group;
+    return base + (step + 1) * (base / 4);
+}
+
+# Builds the state block: the limit, the class tables, the thread-local key,
+# and the reserved region. When the limit is 0, or the key or the
+# reservation cannot be had, the region's size stays 0 and every block
+# comes from calloc.
+_pep_small_new_state(): __ptr<ulong> {
+    var bytes = _SMALL_STATE_WORDS * 8 + 64;
+    __ptr<u8> block = malloc(bytes);
+    memset(block, 0, bytes);
+    # Start at a cache line boundary, so each class's central stacks have a
+    # line of their own.
+    __ptr<ulong> state = block + (64 - unsafe_cast<ulong>(block) % 64) % 64;
+    var limit = _pep_small_read_limit();
+    if (limit == 0) {
+        return state;
+    }
+    ulong index = 0;
+    while (index < _SMALL_CLASSES) {
+        var size = _pep_small_class_size(index);
+        state[_SMALL_CLASS_SIZES + index] = size;
+        # 64 blocks, or 16 KiB of them for the larger classes, but at least 4.
+        var batch = size <= 256 ? 64 : 16384 / size;
+        state[_SMALL_BATCHES + index] = batch < 4 ? 4 : batch;
+        index = index + 1;
+    }
+    # Sizes 0 to 4096 in steps of 16, each mapped to the smallest class that
+    # holds it.
+    __ptr<u8> table = state + _SMALL_CLASS_TABLE;
+    ulong class_index = 0;
+    ulong slot = 0;
+    while (slot <= _SMALL_MAX_LIMIT / 16) {
+        while (state[_SMALL_CLASS_SIZES + class_index] < slot * 16) {
+            class_index = class_index + 1;
+        }
+        table[slot] = class_index as u8;
+        slot = slot + 1;
+    }
+    if (!_pep_small_key_create(state + _SMALL_KEY)) {
+        return state;
+    }
+    __ptr<u8> reserved = _pep_small_reserve(_SMALL_REGION + _SMALL_SPAN);
+    if (reserved == __null) {
+        return state;
+    }
+    # Spans are aligned, so a block's span is its address rounded down.
+    var base = unsafe_cast<ulong>(reserved);
+    base = base + (_SMALL_SPAN - base % _SMALL_SPAN) % _SMALL_SPAN;
+    state[_SMALL_BASE] = base;
+    state[_SMALL_NEXT_SPAN] = base;
+    state[_SMALL_SIZE] = _SMALL_REGION;
+    state[_SMALL_LIMIT] = limit;
+    return state;
+}
+
+[Unsafe("overflow")]
+_pep_small_lock(lock: __ptr<ulong>) {
+    while (!__atomic_cmpxchg<ulong>(lock, 0, 1)) {
+        ulong spins = 0;
+        while (__atomic_load<ulong>(lock) != 0) {
+            spins = spins + 1;
+            if (spins % 64 == 0) {
+                _pep_small_yield();
+            }
+        }
+    }
+}
+
+[Unsafe("overflow")]
+_pep_small_unlock(lock: __ptr<ulong>) {
+    __atomic_store<ulong>(lock, 0);
+}
+
+# Adds `delta` to a count only its own thread changes: a plain load and
+# store, atomic only so `_pep_small_live` can read it from another thread.
+[Unsafe("overflow")]
+_pep_small_count(count: __ptr<ulong>, delta: long) {
+    __ptr<long> value = count;
+    __atomic_store<long>(value, __atomic_load<long>(value) + delta);
+}
+
+# A new, empty cache for the calling thread, on the list of caches; null
+# when the thread-local key has no room for it.
+[Unsafe("overflow")]
+_pep_small_new_cache(): __ptr<ulong> {
+    __ptr<ulong> cache = malloc(_SMALL_CACHE_WORDS * 8);
+    if (cache == __null) {
+        return __null;
+    }
+    memset(cache, 0, _SMALL_CACHE_WORDS * 8);
+    _pep_small_lock(_pep_small_state + _SMALL_CACHES_LOCK);
+    cache[_SMALL_CACHE_NEXT] = _pep_small_state[_SMALL_CACHES];
+    _pep_small_state[_SMALL_CACHES] = unsafe_cast<ulong>(cache);
+    _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
+    _pep_small_set_cache(cache);
+    return cache;
+}
+
+# Pushes the list of `length` blocks starting at `head` onto class
+# `class_index`'s central stack as one batch.
+[Unsafe("overflow")]
+_pep_small_push_batch(class_index: ulong, head: ulong, length: ulong) {
+    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
+    __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
+    _pep_small_lock(central);
+    block[1] = central[1] | (length << _SMALL_LENGTH_SHIFT);
+    central[1] = head;
+    _pep_small_unlock(central);
+}
+
+# Refills the empty list of class `class_index` in `lists` (that class's
+# words of a cache): a batch from the central stack, else the unused end of
+# a span another thread left, else a new span. False when the region is
+# used up or the system will not commit more memory.
+[Unsafe("overflow")]
+_pep_small_refill(lists: __ptr<ulong>, class_index: ulong): bool {
+    __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
+    _pep_small_lock(central);
+    var batch = central[1];
+    if (batch != 0) {
+        __ptr<ulong> head = unsafe_cast<__ptr<ulong>>(batch);
+        central[1] = head[1] & _SMALL_ADDRESS_MASK;
+        _pep_small_unlock(central);
+        lists[0] = batch;
+        lists[1] = head[1] >> _SMALL_LENGTH_SHIFT;
+        return true;
+    }
+    var spare = central[2];
+    if (spare != 0) {
+        # An unused range: its first block holds its end and the next range.
+        __ptr<ulong> range = unsafe_cast<__ptr<ulong>>(spare);
+        central[2] = range[1];
+        _pep_small_unlock(central);
+        lists[2] = spare;
+        lists[3] = range[0];
+        range[0] = 0;
+        range[1] = 0;
+        return true;
+    }
+    _pep_small_unlock(central);
+    var span = __atomic_fetch_add<ulong>(_pep_small_state + _SMALL_NEXT_SPAN, _SMALL_SPAN);
+    if (span + _SMALL_SPAN > _pep_small_end || !_pep_small_commit(unsafe_cast<__ptr<u8>>(span))) {
+        return false;
+    }
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
+    header[0] = class_index;
+    var size = _pep_small_state[_SMALL_CLASS_SIZES + class_index];
+    var count = (_SMALL_SPAN - _SMALL_SPAN_HEADER) / size;
+    lists[2] = span + _SMALL_SPAN_HEADER;
+    lists[3] = span + _SMALL_SPAN_HEADER + count * size;
+    return true;
+}
+
+# A zeroed block of at least `size` bytes, 1 to the limit, or null when no
+# span is left (the caller then uses calloc).
+[Unsafe("overflow")]
+_pep_small_alloc(size: ulong): __ptr<void> {
+    var cache = _pep_small_cache();
+    if (cache == __null) {
+        cache = _pep_small_new_cache();
+        if (cache == __null) {
+            return __null;
+        }
+    }
+    __ptr<u8> table = _pep_small_state + _SMALL_CLASS_TABLE;
+    var class_index = table[(size + 15) >> 4] as ulong;
+    __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
+    while (true) {
+        var head = lists[0];
+        if (head != 0) {
+            __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
+            var next = block[0];
+            lists[0] = next;
+            lists[1] = lists[1] - 1;
+            # The list is in free order, which after a structure is freed is
+            # scattered; start loading the next block now, so the next
+            # allocation of this class does not wait for it.
+            _pep_small_prefetch(unsafe_cast<__ptr<void>>(next), 1, 3, 1);
+            _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
+            memset(block, 0, size);
+            return block;
+        }
+        var fresh = lists[2];
+        if (fresh != lists[3]) {
+            # Never used, so still zero.
+            lists[2] = fresh + _pep_small_state[_SMALL_CLASS_SIZES + class_index];
+            _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
+            return unsafe_cast<__ptr<void>>(fresh);
+        }
+        if (!_pep_small_refill(lists, class_index)) {
+            return __null;
+        }
+    }
+    return __null;
+}
+
+# Whether `p` is a small block.
+[Unsafe("overflow")]
+_pep_small_owns(p: __ptr<void>): bool {
+    var address = unsafe_cast<ulong>(p);
+    return address >= _pep_small_base && address < _pep_small_end;
+}
+
+# The class of small block `p`, from its span's first word.
+[Unsafe("overflow")]
+_pep_small_class(p: __ptr<void>): ulong {
+    var address = unsafe_cast<ulong>(p);
+    __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(address - address % _SMALL_SPAN);
+    return header[0];
+}
+
+# The bytes small block `p` can hold.
+[Unsafe("overflow")]
+_pep_small_capacity(p: __ptr<void>): ulong {
+    return _pep_small_state[_SMALL_CLASS_SIZES + _pep_small_class(p)];
+}
+
+# Returns small block `p` to the calling thread's cache, moving a batch to
+# the central stack when the list grows long.
+[Unsafe("overflow")]
+_pep_small_free(p: __ptr<void>) {
+    var class_index = _pep_small_class(p);
+    var address = unsafe_cast<ulong>(p);
+    __ptr<ulong> block = p;
+    var cache = _pep_small_cache();
+    if (cache == __null) {
+        # A thread whose cache is gone (its exit has begun) or never made.
+        block[0] = 0;
+        _pep_small_push_batch(class_index, address, 1);
+        __atomic_fetch_sub<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED), 1);
+        return;
+    }
+    __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
+    block[0] = lists[0];
+    lists[0] = address;
+    lists[1] = lists[1] + 1;
+    _pep_small_count(cache + _SMALL_CACHE_LIVE, -1);
+    var batch = _pep_small_state[_SMALL_BATCHES + class_index];
+    if (lists[1] > batch * 2) {
+        # The newest `batch` blocks stay; the older ones after them go.
+        __ptr<ulong> last = block;
+        ulong kept = 1;
+        while (kept < batch) {
+            last = unsafe_cast<__ptr<ulong>>(last[0]);
+            kept = kept + 1;
+        }
+        var moved = last[0];
+        last[0] = 0;
+        _pep_small_push_batch(class_index, moved, lists[1] - batch);
+        lists[1] = batch;
+    }
+}
+
+# Hands the calling thread's cache back, as its last act (a thread that
+# `async.Thread.spawn` started calls it): returns the cache's lists and
+# unused span ends to the central stacks, folds its live count into the
+# retired count, and frees it. A block the thread frees after this goes
+# straight to the central stack.
+[Unsafe("overflow")]
+export _pep_small_thread_exit() {
+    if (_pep_small_end == 0) {
+        return;
+    }
+    __ptr<ulong> cache = _pep_small_cache();
+    if (cache == __null) {
+        return;
+    }
+    _pep_small_set_cache(__null);
+    ulong class_index = 0;
+    while (class_index < _SMALL_CLASSES) {
+        __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
+        if (lists[0] != 0) {
+            _pep_small_push_batch(class_index, lists[0], lists[1]);
+        }
+        if (lists[2] != lists[3]) {
+            __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + class_index * _SMALL_CENTRAL_WORDS;
+            __ptr<ulong> range = unsafe_cast<__ptr<ulong>>(lists[2]);
+            _pep_small_lock(central);
+            range[0] = lists[3];
+            range[1] = central[2];
+            central[2] = lists[2];
+            _pep_small_unlock(central);
+        }
+        class_index = class_index + 1;
+    }
+    _pep_small_lock(_pep_small_state + _SMALL_CACHES_LOCK);
+    __ptr<ulong> link = _pep_small_state + _SMALL_CACHES;
+    while (link[0] != unsafe_cast<ulong>(cache)) {
+        link = unsafe_cast<__ptr<ulong>>(link[0]) + _SMALL_CACHE_NEXT;
+    }
+    link[0] = cache[_SMALL_CACHE_NEXT];
+    __ptr<long> live = cache + _SMALL_CACHE_LIVE;
+    __atomic_fetch_add<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED), live[0]);
+    _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
+    free(cache);
+}
+
+# Whether `p` came from the small block allocator, and the limit in force:
+# for the runtime's own tests.
+export _pep_is_small_block(p: __ptr<void>): bool {
+    return _pep_small_owns(p);
+}
+
+export _pep_small_block_limit(): ulong {
+    return _pep_small_limit;
+}
+
+# The small blocks live now: every cache's count plus the retired count.
+[Unsafe("overflow")]
+_pep_small_live(): long {
+    _pep_small_lock(_pep_small_state + _SMALL_CACHES_LOCK);
+    var total = __atomic_load<long>(unsafe_cast<__ptr<long>>(_pep_small_state + _SMALL_RETIRED));
+    var cache = _pep_small_state[_SMALL_CACHES];
+    while (cache != 0) {
+        __ptr<long> words = unsafe_cast<__ptr<long>>(cache);
+        total = total + __atomic_load<long>(words + _SMALL_CACHE_LIVE);
+        cache = unsafe_cast<ulong>(words[_SMALL_CACHE_NEXT]);
+    }
+    _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
+    return total;
+}
+
 # ── Live-allocation counter (leak tests) and trace gate ─────────────────────
 # The live-allocation count, updated atomically because threads allocate
 # concurrently. It is split into `_PEP_ALLOC_SHARDS` counters, each on its
@@ -124,6 +735,15 @@ _pep_live_allocs_shard(): __ptr<long> {
     return _pep_live_allocs_slot + index * _PEP_ALLOC_SHARD_STRIDE;
 }
 
+# The small block allocator's state, and copies of the words every
+# allocation and free reads (see the small block allocator above). Like the counter, it
+# must exist before anything allocates.
+const _pep_small_state: __ptr<ulong> = _pep_small_new_state();
+const _pep_small_base: ulong = _pep_small_state[_SMALL_BASE];
+const _pep_small_end: ulong = _pep_small_base + _pep_small_state[_SMALL_SIZE];
+const _pep_small_limit: ulong = _pep_small_state[_SMALL_LIMIT];
+const _pep_small_key: ulong = _pep_small_state[_SMALL_KEY];
+
 # `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
 # Mutex checks at each unlock that nothing outside the locked value refers
 # into it (`_pep_check_sync` in copy.pep). It lives here because module
@@ -136,7 +756,15 @@ _pep_check_sync_enabled(): bool {
 
 export const _PEP_CHECK_SYNC_ON = _pep_check_sync_enabled();
 
+[Unsafe("overflow")]
 export _pep_malloc(size: ulong): __ptr<void> {
+    # A small block, unless the limit is 0. A 0-byte request goes to calloc.
+    if (size <= _pep_small_limit && size != 0) {
+        var block = _pep_small_alloc(size);
+        if (block != __null) {
+            return block;
+        }
+    }
     # Zero the payload: refcount machinery reads old slot values from fresh
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
     # calloc skips the clearing for fresh pages the OS already zeroed.
@@ -145,14 +773,34 @@ export _pep_malloc(size: ulong): __ptr<void> {
     return p;
 }
 
+[Unsafe("overflow")]
 export _pep_free(p: __ptr<void>) {
-    if (p != __null) {
+    if (_pep_small_owns(p)) {
+        _pep_small_free(p);
+    } else if (p != __null) {
         free(p);
         __atomic_fetch_sub<long>(_pep_live_allocs_shard(), 1);
     }
 }
 
+[Unsafe("overflow")]
 export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
+    if (_pep_small_owns(p) || (p == __null && new_size <= _pep_small_limit && new_size != 0)) {
+        if (p != __null && new_size <= _pep_small_capacity(p)) {
+            # It still fits its class.
+            if (new_size > prev_size) {
+                memset(p + prev_size, 0, new_size - prev_size);
+            }
+            return p;
+        }
+        # Move it: to another class, or to calloc past the limit.
+        var moved = _pep_malloc(new_size);
+        if (p != __null) {
+            memcpy(moved, p, prev_size < new_size ? prev_size : new_size);
+            _pep_free(p);
+        }
+        return moved;
+    }
     # C realloc preserves contents up to min(prev,new); net-zero on the
     # counter. The extension region is uninitialized — zero it so fresh
     # Never ask for 0 bytes (an Array of a zero-size type): realloc(p, 0)
@@ -177,7 +825,7 @@ export _pep_live_allocs(): long {
         total = total + __atomic_load<long>(_pep_live_allocs_slot + index * _PEP_ALLOC_SHARD_STRIDE);
         index = index + 1;
     }
-    return total;
+    return total + _pep_small_live();
 }
 
 ## Prints `message` and aborts the program. It never returns.

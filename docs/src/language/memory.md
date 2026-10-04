@@ -293,6 +293,37 @@ parameter of `move` is marked `[MoveSource]`, which is also only allowed in
 the runtime, so a hand-off always shows at the call as `move(x)`; a function
 of your own that takes over its argument uses `[Move]`.
 
+## Where objects live
+
+Every object, `String` buffer and `Array` buffer comes from the runtime's
+allocator. A block of up to 128 bytes (most objects and short strings)
+comes from a small block allocator: blocks are grouped by size into
+classes (multiples of 16 bytes up to 128, then four classes per power of
+two), and each thread keeps its own free blocks of each class, so most
+allocations and frees take no lock. Larger blocks come from the C
+library's `calloc` and go back with `free`. A small block's size is
+rounded up to its class, so a 40-byte object takes 48 bytes.
+
+The environment variable `PEPPER_SMALL_BLOCK_LIMIT`, read when the program
+starts, sets the largest size the small block allocator serves, in bytes,
+up to 4096 (a larger value counts as 4096). `0` turns it off, and then
+every block comes from the C library:
+
+```bash
+PEPPER_SMALL_BLOCK_LIMIT=0 ./main      # every block from calloc
+PEPPER_SMALL_BLOCK_LIMIT=512 ./main    # blocks up to 512 bytes from the classes
+```
+
+With it off, a program can use another C allocator, such as mimalloc, by
+loading it in front of the C library (`LD_PRELOAD=libmimalloc.so` on
+Linux).
+
+Small blocks live in address space the program reserves at start (4 GiB,
+committed 64 KiB at a time as it is used, and never returned to the
+operating system); a program that fills it falls back to `calloc`. On
+WebAssembly, which cannot reserve address space, every block comes from
+`calloc`.
+
 ## Summary
 
 | Code | What happens to references |

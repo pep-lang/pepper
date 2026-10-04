@@ -284,6 +284,8 @@ _async_thread_run(start: __ptr<void>) {
     _async_current.set(thread);
     thread._body();
     thread._finished.store(1);
+    # The thread's free small blocks go back for other threads to use.
+    _pep_small_thread_exit();
 }
 
 # The C entry point of a spawned thread: `void* (*)(void*)` for pthreads, and

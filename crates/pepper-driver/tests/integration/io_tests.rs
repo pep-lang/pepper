@@ -350,11 +350,14 @@ extern "C" fn unresolved_extern() {
 }
 
 /// async's module-scope variables set up thread-local keys and note the main
-/// thread when the program starts, and io imports async, so a Windows path
-/// test program calls these before `main`. On a Unix host they answer 0: a valid
-/// key index and thread id, and a failed (ignored) free.
+/// thread when the program starts, io imports async, and the small block
+/// allocator reserves its address space, so a Windows path test program calls
+/// these before `main`. On a Unix host they answer 0: a valid key index and
+/// thread id, a failed (ignored) free, and a failed reservation, which leaves
+/// the program on the C allocator.
 #[cfg(unix)]
-const WINDOWS_STARTUP_CALLS: [&str; 5] = ["FlsAlloc", "FlsFree", "TlsAlloc", "TlsFree", "GetCurrentThreadId"];
+const WINDOWS_STARTUP_CALLS: [&str; 6] =
+    ["FlsAlloc", "FlsFree", "TlsAlloc", "TlsFree", "GetCurrentThreadId", "VirtualAlloc"];
 
 #[cfg(unix)]
 extern "C" fn startup_call() -> usize {

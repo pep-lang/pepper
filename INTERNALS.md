@@ -2240,10 +2240,26 @@ census adds them to the root's tally. The flag `_PEP_CHECK_SYNC_ON` is read
 once, in `internals.pep` (module constants initialize file by file, and
 that file's allocation counter must exist before any `String` is built).
 
+`_pep_malloc` serves blocks up to `_pep_small_limit` bytes (128, or
+`PEPPER_SMALL_BLOCK_LIMIT` read at start; 0 turns it off; at most 4096)
+from the small block allocator in `internals.pep` (#600): 28 size classes,
+64 KiB spans cut from one reserved 4 GiB region (so `_pep_free` tells a
+small block by a range check, and a span's first word names its class),
+and a per-thread cache (a `pthread_key`/`TlsAlloc` value, with no
+destructor, since a JIT engine's code is gone when its test thread exits)
+of free lists and bump ranges. Lists longer than twice a class's batch spill a batch to
+the class's central stack (spin lock); an empty list refills from there,
+then from ranges exiting threads left, then from a new span. A thread that
+`async.Thread.spawn` started calls `_pep_small_thread_exit` when its body
+ends, which returns its lists and ranges and folds its live count into
+`_SMALL_RETIRED`; other threads keep their caches. Recycled blocks are zeroed when handed
+out. The allocator runs before any other global exists, so it uses raw
+memory only, and its functions are `[Unsafe("overflow")]`.
+
 `_pep_live_allocs()` counts live
 allocations: the sum of 61 atomic counters on separate cache lines, one
 picked per thread by its id, so threads allocating concurrently do not
-contend for one cache line;
+contend for one cache line, plus each small block cache's own count;
 leak-census tests (`crates/pepper-driver/tests/integration/shared_ptr_semantics_tests.rs`)
 read it through the JIT. The counter lives in a runtime global, and every
 JIT engine has its own copy of the runtime, so each test counts only its own
