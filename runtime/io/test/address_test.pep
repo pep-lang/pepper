@@ -1,6 +1,6 @@
 # IP and socket addresses: parsing, the RFC 5952 text form, construction,
-# equality and predicates, and resolving a literal host. Pure Pepper, the
-# same on every platform.
+# equality and predicates, scope ids, and resolving a literal host. Pure
+# Pepper, the same on every platform, except interface names in scopes.
 
 import io;
 
@@ -75,7 +75,36 @@ ipv6_parses_and_formats_in_rfc_5952_form() {
     expect_bad_ip("::1.2.3");
     expect_bad_ip("1:2:3:4:5:6:7:1.2.3.4");
     expect_bad_ip("[::1]");
-    expect_bad_ip("fe80::1%eth0");
+}
+
+[Test]
+ipv6_scope_ids_parse_and_format() {
+    # An index no interface has prints as its number.
+    var numbered = io.IpAddress.parse("fe80::1%4000000000").value();
+    expect_equal(numbered.scope_id(), 4000000000);
+    expect_equal(numbered.to_string(), "fe80::1%4000000000");
+    expect_true(numbered != io.IpAddress.parse("fe80::1").value());
+    expect_true(numbered == io.IpAddress.parse("fe80::1").value().with_scope_id(4000000000));
+    expect_equal(numbered.with_scope_id(0).to_string(), "fe80::1");
+    expect_equal(io.IpAddress.parse("fe80::1").value().scope_id(), 0);
+    # Interface 1 (the loopback interface) prints by name, which parses back.
+    var first = io.IpAddress.parse("fe80::1%1").value();
+    expect_equal(first.scope_id(), 1);
+    var text = first.to_string();
+    expect_true(text.starts_with("fe80::1%"));
+    expect_true(io.IpAddress.parse(text).value() == first);
+    expect_bad_ip("fe80::1%");
+    expect_bad_ip("fe80::1%no-such-interface");
+    expect_bad_ip("fe80::1%4294967296");
+    expect_bad_ip("1.2.3.4%1");
+    expect_bad_ip("%1");
+    expect_true(io.IpAddress.parse("fe80::1%no-such-interface").error().message.contains("no-such-interface"));
+    [Target(OS(Linux))]
+    {
+        var named = io.IpAddress.parse("fe80::1%lo").value();
+        expect_equal(named.scope_id(), 1);
+        expect_equal(named.to_string(), "fe80::1%lo");
+    }
 }
 
 [Test]
@@ -129,6 +158,11 @@ socket_addresses_parse_and_format() {
     expect_true(s != io.SocketAddress(io.IpAddress.loopback_v4(), 8081));
     expect_equal(io.SocketAddress().to_string(), "0.0.0.0:0");
     expect_true(io.SocketAddress.parse("[::1]:1").value().is_v6());
+    var scoped = io.SocketAddress.parse("[fe80::2%4000000000]:53").value();
+    expect_equal(scoped.address().scope_id(), 4000000000);
+    expect_equal(scoped.to_string(), "[fe80::2%4000000000]:53");
+    expect_bad_socket("[fe80::2%]:53");
+    expect_bad_socket("[fe80::2]%1:53");
 }
 
 [Test]
@@ -137,5 +171,6 @@ a_literal_host_resolves_to_itself() {
     expect_equal(literal.count, 1);
     expect_equal(literal[0].to_string(), "192.0.2.7:99");
     expect_equal(io.resolve("::1", 7).value()[0].to_string(), "[::1]:7");
+    expect_equal(io.resolve("fe80::1%4000000000", 7).value()[0].address().scope_id(), 4000000000);
     expect_true(io.resolve("", 80).error().is_invalid_input());
 }

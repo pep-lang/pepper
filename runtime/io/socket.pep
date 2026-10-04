@@ -95,6 +95,7 @@ _io_sockaddr_write(address: SocketAddress): _SockAddr {
         buffer[8 + j] = ip._byte(j) as u8;
         j = j + 1;
     }
+    unsafe_cast<__ptr<uint>>(buffer + 24)[0] = ip._scope_id;
     sockaddr._length = 28;
     return sockaddr;
 }
@@ -114,6 +115,7 @@ _io_sockaddr_read(buffer: __ptr<u8>): SocketAddress {
         ip._is_v6 = true;
         ip._high = _io_big_endian(buffer + 8, 8);
         ip._low = _io_big_endian(buffer + 16, 8);
+        ip._scope_id = unsafe_cast<__ptr<uint>>(buffer + 24)[0];
     }
     return SocketAddress(ip, port as u16);
 }

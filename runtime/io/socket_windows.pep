@@ -16,7 +16,7 @@ import "sys_windows";
 import "types";
 import "wait";
 
-# ── C functions (ws2_32, kernel32) ───────────────────────────────────────────
+# ── C functions (ws2_32, iphlpapi, kernel32) ─────────────────────────────────
 
 [Target(OS(Windows))]
 [Link("ws2_32")]
@@ -83,6 +83,12 @@ extern int getsockopt(ulong s, int level, int name, void* value, int* length);
 extern int WSAPoll(void* descriptors, uint count, int timeout);
 [Target(OS(Windows))]
 extern int SetHandleInformation(ulong h, uint mask, uint flags);  # the SOCKET as a HANDLE
+[Target(OS(Windows))]
+[Link("iphlpapi")]
+extern uint if_nametoindex(char* name);
+[Target(OS(Windows))]
+[Link("iphlpapi")]
+extern char* if_indextoname(uint index, void* name);
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 
@@ -501,4 +507,24 @@ _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     }
     FreeAddrInfoW(list[0]);
     return IoResult<SocketAddress[]>.ok(out);
+}
+
+# ── Network interfaces ───────────────────────────────────────────────────────
+
+# The index of the network interface called `name` (its NDIS name, such as
+# `ethernet_32769`), or 0 when there is none.
+[Target(OS(Windows))]
+_io_sys_interface_index(name: String): uint {
+    return if_nametoindex(name.c_str());
+}
+
+# The name of network interface `index`, or "" when there is none.
+[Target(OS(Windows))]
+_io_sys_interface_name(index: uint): String {
+    var buffer = _IoBuffer(257);  # NDIS_IF_MAX_STRING_SIZE + 1
+    var name = if_indextoname(index, buffer._bytes);
+    if (name == __null) {
+        return "";
+    }
+    return String(name);
 }

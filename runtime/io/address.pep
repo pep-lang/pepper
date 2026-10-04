@@ -25,6 +25,11 @@ import "types";
 ## address prints as `::ffff:1.2.3.4`. An IPv4 address and the IPv6 address
 ## that maps it are different values.
 ##
+## An IPv6 address can carry a scope id, the network interface a link-local
+## address such as `fe80::1` belongs to. Its text form is `fe80::1%eth0`
+## (RFC 4007), and a socket address carries it to the system as
+## `sin6_scope_id`.
+##
 ## @example
 ##     import io;
 ##
@@ -40,6 +45,8 @@ export struct IpAddress {
     ulong _high;
     ## Bytes 8 to 15 of an IPv6 address, or the IPv4 address in the low 32 bits.
     ulong _low;
+    ## The IPv6 scope id (an interface index); 0 for none and for IPv4.
+    uint _scope_id;
 
     ## Creates the IPv4 unspecified address, `0.0.0.0`.
     construct() {}
@@ -113,20 +120,25 @@ export struct IpAddress {
 
     ## Parses an IPv4 address in dotted decimal (`192.168.0.1`) or an IPv6
     ## address in the RFC 4291 text form (`::1`, `fe80::1:2`,
-    ## `::ffff:10.0.0.1`).
+    ## `::ffff:10.0.0.1`), with an optional scope (`fe80::1%eth0`).
     ##
     ## IPv4 needs exactly four decimal parts from 0 to 255 without leading
     ## zeros. IPv6 takes up to eight groups of one to four hex digits (either
     ## case), at most one `::`, and an optional IPv4 address as the last 32
-    ## bits. Zone suffixes (`%eth0`), brackets and surrounding spaces are not
-    ## accepted.
+    ## bits. Brackets and surrounding spaces are not accepted.
+    ##
+    ## An IPv6 address may end in `%` and a scope: a decimal scope id
+    ## (`%3`), or the name of a network interface (`%eth0`), which is looked
+    ## up on this machine (so it fails where there is no such interface).
     ##
     ## @param text the address to parse
     ## @returns the address; an error with `is_invalid_input()` when `text` is
-    ##   not a valid IPv4 or IPv6 address
+    ##   not a valid IPv4 or IPv6 address or names an unknown interface
     ## @example
     ##     var r = IpAddress.parse("10.0.0.300");
     ##     print(r.is_err());   # true: 300 is out of range
+    ##     var scoped = IpAddress.parse("fe80::1%7").value();
+    ##     print(scoped.scope_id());   # 7
     static parse(text: String): IoResult<IpAddress> {
         var p = unsafe_cast<__ptr<u8>>(text.c_str());
         var n = text.size;
@@ -136,16 +148,7 @@ export struct IpAddress {
             address._low = v4.value();
             return IoResult<IpAddress>.ok(address);
         }
-        var v6 = _io_parse_v6(p, n, 0, n);
-        if (v6.is_value()) {
-            var bits: (high: ulong, low: ulong) = v6.value();
-            var address = IpAddress();
-            address._is_v6 = true;
-            address._high = bits.high;
-            address._low = bits.low;
-            return IoResult<IpAddress>.ok(address);
-        }
-        return IoResult<IpAddress>.err(IoError(_io_sys_code_invalid_input(), "invalid IP address syntax"));
+        return _io_parse_v6_scoped(text, 0, n, "invalid IP address syntax");
     }
 
     ## Returns whether this is an IPv4 address.
@@ -161,6 +164,35 @@ export struct IpAddress {
     ## @returns true for IPv6, false for IPv4
     is_v6(): bool {
         return _is_v6;
+    }
+
+    ## Returns the scope id of an IPv6 address: the index of the network
+    ## interface it belongs to (the `3` or `eth0` of `fe80::1%3` or
+    ## `fe80::1%eth0`), or 0 when it has none. Always 0 for IPv4.
+    ##
+    ## @returns the scope id, 0 for none
+    scope_id(): uint {
+        return _scope_id;
+    }
+
+    ## Returns this address with scope id `id`, such as the index of the
+    ## interface a link-local address is reached through; 0 removes the
+    ## scope.
+    ##
+    ## @param id the scope id, 0 for none
+    ## @returns a copy of this address with that scope id
+    ## @panics if this is an IPv4 address and `id` is not 0
+    ## @example
+    ##     var a = IpAddress.parse("fe80::1").value().with_scope_id(2);
+    ##     print(a.to_string());   # fe80::1%eth0 where interface 2 is eth0
+    with_scope_id(id: uint): IpAddress {
+        assert(_is_v6 || id == 0, "an IPv4 address has no scope id");
+        var address = IpAddress();
+        address._is_v6 = _is_v6;
+        address._high = _high;
+        address._low = _low;
+        address._scope_id = id;
+        return address;
     }
 
     ## Returns whether this is a loopback address: `127.0.0.0/8` for IPv4,
@@ -220,13 +252,27 @@ export struct IpAddress {
     ## Returns the address as text: dotted decimal for IPv4, the RFC 5952
     ## form for IPv6 (lowercase hex, leading zeros dropped, the longest run of
     ## two or more zero groups written `::`, `::ffff:a.b.c.d` for an
-    ## IPv4-mapped address).
+    ## IPv4-mapped address). A scope id follows as `%` and the name of its
+    ## interface (`fe80::1%eth0`), or the number when no interface on this
+    ## machine has that index (`fe80::1%9`).
     ##
     ## @returns the text form, which `IpAddress.parse` reads back
     to_string(): String {
         if (!_is_v6) {
             return _io_v4_text(_low);
         }
+        if (_scope_id != 0) {
+            var name = _io_sys_interface_name(_scope_id);
+            if (name.size == 0) {
+                name = $"{_scope_id}";
+            }
+            return _unscoped_text() + "%" + name;
+        }
+        return _unscoped_text();
+    }
+
+    # The IPv6 text form without the scope.
+    _unscoped_text(): String {
         if (_high == 0 && (_low >> 32) == 65535) {
             return "::ffff:" + _io_v4_text(_low & 4294967295);
         }
@@ -269,20 +315,20 @@ export struct IpAddress {
         return out.to_string();
     }
 
-    ## Returns whether two addresses are the same: same family and same
-    ## bytes. An IPv4 address never equals an IPv6 one, not even the IPv6
-    ## address that maps it.
+    ## Returns whether two addresses are the same: same family, same bytes
+    ## and same scope id. An IPv4 address never equals an IPv6 one, not even
+    ## the IPv6 address that maps it.
     ##
     ## @param other the address to compare with
     ## @returns true when both are equal
     ==(other: IpAddress): bool {
-        return _is_v6 == other._is_v6 && _high == other._high && _low == other._low;
+        return _is_v6 == other._is_v6 && _high == other._high && _low == other._low && _scope_id == other._scope_id;
     }
 
     ## Returns whether two addresses differ.
     ##
     ## @param other the address to compare with
-    ## @returns true when the family or any byte differs
+    ## @returns true when the family, any byte or the scope id differs
     !=(other: IpAddress): bool {
         return !(this == other);
     }
@@ -327,7 +373,8 @@ export struct SocketAddress {
     }
 
     ## Parses `a.b.c.d:port` (IPv4) or `[ipv6]:port` (IPv6), with the address
-    ## syntax of `IpAddress.parse` and a decimal port from 0 to 65535.
+    ## syntax of `IpAddress.parse` (a scope goes inside the brackets,
+    ## `[fe80::1%eth0]:80`) and a decimal port from 0 to 65535.
     ##
     ## @param text the socket address to parse
     ## @returns the socket address; an error with `is_invalid_input()` when
@@ -368,14 +415,11 @@ export struct SocketAddress {
         }
         var address = IpAddress();
         if (v6) {
-            var groups = _io_parse_v6(p, n, 1, colon - 1);
-            if (groups.is_empty()) {
-                return bad;
+            var scoped = _io_parse_v6_scoped(text, 1, colon - 1, "invalid socket address syntax");
+            if (scoped.is_err()) {
+                return IoResult<SocketAddress>.err(scoped.error());
             }
-            var bits: (high: ulong, low: ulong) = groups.value();
-            address._is_v6 = true;
-            address._high = bits.high;
-            address._low = bits.low;
+            address = scoped.value();
         } else {
             var value = _io_parse_v4(p, n, 0, colon);
             if (value.is_empty()) {
@@ -496,6 +540,65 @@ export resolve(host: String, port: u16): IoResult<SocketAddress[]> {
 }
 
 # ── Text helpers ─────────────────────────────────────────────────────────────
+
+# The IPv6 address in text[start, end), with an optional `%` and scope (a
+# decimal id or an interface name); `syntax` is the message for malformed
+# text.
+_io_parse_v6_scoped(text: String, start: ulong, end: ulong, syntax: String): IoResult<IpAddress> {
+    var p = unsafe_cast<__ptr<u8>>(text.c_str());
+    var n = text.size;
+    var bad = IoResult<IpAddress>.err(IoError(_io_sys_code_invalid_input(), syntax));
+    var address_end = end;
+    var percent = text.find("%", start);
+    if (percent >= 0 && (percent as ulong) < end) {
+        address_end = percent as ulong;
+    }
+    var v6 = _io_parse_v6(p, n, start, address_end);
+    if (v6.is_empty()) {
+        return bad;
+    }
+    var bits: (high: ulong, low: ulong) = v6.value();
+    var address = IpAddress();
+    address._is_v6 = true;
+    address._high = bits.high;
+    address._low = bits.low;
+    if (address_end == end) {
+        return IoResult<IpAddress>.ok(address);
+    }
+    var zone = text.substr_bytes(address_end + 1, end - address_end - 1);
+    if (zone.size == 0) {
+        return bad;
+    }
+    var id = _io_parse_decimal_u32(zone);
+    if (id.is_value()) {
+        address._scope_id = id.value();
+        return IoResult<IpAddress>.ok(address);
+    }
+    var index = _io_sys_interface_index(zone);
+    if (index == 0) {
+        return IoResult<IpAddress>.err(IoError(_io_sys_code_invalid_input(), $"no network interface named '{zone}'"));
+    }
+    address._scope_id = index;
+    return IoResult<IpAddress>.ok(address);
+}
+
+# `text` as a decimal number from 0 to 4294967295; none when it is not one.
+_io_parse_decimal_u32(text: String): uint? {
+    if (text.size == 0 || text.size > 10) {
+        return Optional<uint>.Empty;
+    }
+    ulong value = 0;
+    for (var c in text.bytes()) {
+        if (!(c as byte).is_digit()) {
+            return Optional<uint>.Empty;
+        }
+        value = value * 10 + (c - '0') as ulong;
+    }
+    if (value > 4294967295) {
+        return Optional<uint>.Empty;
+    }
+    return Optional<uint>.Value(value as uint);
+}
 
 # The dotted-decimal text of the IPv4 address in the low 32 bits of `value`.
 _io_v4_text(value: ulong): String {

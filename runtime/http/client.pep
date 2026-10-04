@@ -905,6 +905,14 @@ _http_url_of(url: String, uri: Uri): io.IoResult<_HttpUrl> {
     if (parsed._host.size == 0) {
         return _http_invalid_url(url, "no host");
     }
+    if (parsed._host.contains(":")) {
+        # An IPv6 address: its scope's `%` is escaped as `%25` (RFC 6874).
+        var host = Uri.decode(parsed._host);
+        if (host.is_err()) {
+            return _http_invalid_url(url, "invalid host");
+        }
+        parsed._host = host.value();
+    }
     if (uri.port.is_value()) {
         if (uri.port.value() == 0) {
             return _http_invalid_url(url, "invalid port");

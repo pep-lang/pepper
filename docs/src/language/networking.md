@@ -29,6 +29,13 @@ address and a port:
   IPv6, and `to_string()` prints the RFC 5952 form: lowercase,
   zeros compressed, `::ffff:1.2.3.4` for an IPv4-mapped address. Parsing and
   printing are the same on every platform.
+- An IPv6 address may carry a scope id, the network interface a link-local
+  address belongs to: `fe80::1%eth0` or `fe80::1%2` (RFC 4007).
+  `scope_id()` reads it (0 for none) and `with_scope_id(id)` sets it. A
+  name is looked up on this machine, and `to_string()` prints the
+  interface's name when it has one, else the number. Sockets pass it to the
+  system as `sin6_scope_id`. In a URI the `%` is escaped,
+  `http://[fe80::1%25eth0]/` (RFC 6874); the HTTP client decodes it.
 - `SocketAddress(address, port)` or `SocketAddress.parse("1.2.3.4:80")`
   make a socket address. IPv6 takes brackets: `[::1]:80`.
 - `resolve(host, port)` looks a host name up with the system resolver (the
@@ -215,7 +222,6 @@ program take over the port.
   limits how long it may wait.
 - TLS clients cannot present certificates.
 - Unix datagram sockets are not supported.
-- IPv6 scope ids (`fe80::1%eth0`) are not supported.
 
 The reference pages for [addresses](../reference/io-address.md),
 [sockets](../reference/io-socket.md) and

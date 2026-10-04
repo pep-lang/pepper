@@ -32,6 +32,9 @@ export struct Uri {
     var user_info: String?;
     ## The host, without the brackets of an IPv6 address; Empty when the URI
     ## has no authority (no `//`), and empty for one such as `file:///tmp`.
+    ## An IPv6 scope keeps its escaped `%` (RFC 6874): the host of
+    ## `http://[fe80::1%25eth0]/` is `fe80::1%25eth0`, which `Uri.decode`
+    ## turns into the `fe80::1%eth0` that `io.IpAddress.parse` reads.
     var host: String?;
     ## The port after the host, if the authority gives one.
     var port: u16?;

@@ -177,3 +177,15 @@ _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
 _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     return IoResult<SocketAddress[]>.err(_io_wasi_no_sockets());
 }
+
+# ── Network interfaces ───────────────────────────────────────────────────────
+
+[Target(OS(Wasi))]
+_io_sys_interface_index(name: String): uint {
+    return 0;
+}
+
+[Target(OS(Wasi))]
+_io_sys_interface_name(index: uint): String {
+    return "";
+}

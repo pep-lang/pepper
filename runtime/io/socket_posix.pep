@@ -58,6 +58,10 @@ extern int accept4(int fd, void* address, uint* length, int flags);
 extern int accept(int fd, void* address, uint* length);
 [Target(OS(Mac))]
 extern int fcntl(int fd, int command, ...);
+[Target(OS(Linux) || OS(Mac))]
+extern uint if_nametoindex(char* name);
+[Target(OS(Linux) || OS(Mac))]
+extern char* if_indextoname(uint index, void* name);
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -595,4 +599,23 @@ _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     }
     freeaddrinfo(list[0]);
     return IoResult<SocketAddress[]>.ok(out);
+}
+
+# ── Network interfaces ───────────────────────────────────────────────────────
+
+# The index of the network interface called `name`, or 0 when there is none.
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_interface_index(name: String): uint {
+    return if_nametoindex(name.c_str());
+}
+
+# The name of network interface `index`, or "" when there is none.
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_interface_name(index: uint): String {
+    var buffer = _IoBuffer(64);  # IF_NAMESIZE is 16
+    var name = if_indextoname(index, buffer._bytes);
+    if (name == __null) {
+        return "";
+    }
+    return String(name);
 }

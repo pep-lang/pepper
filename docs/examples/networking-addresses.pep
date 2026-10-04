@@ -13,6 +13,11 @@ main(): int {
     assert(service.is_v6() && service.port() == 8080, "IPv6 with a port");
     assert(service.to_string() == "[::1]:8080", "brackets around IPv6");
 
+    # A link-local IPv6 address names its interface after `%`: a number, or
+    # a name such as `eth0` that is looked up on this machine.
+    var link = io.SocketAddress.parse("[fe80::1%4000000000]:8080").value();
+    assert(link.address().scope_id() == 4000000000, "the scope id");
+
     # A host name goes to the system resolver; an IP address is used as is.
     var local = io.resolve("localhost", 80).value();
     assert(local.count >= 1 && local[0].address().is_loopback(), "localhost is loopback");

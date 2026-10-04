@@ -32,6 +32,10 @@ parses_components() {
     expect_equal(v6.host.value_or(""), "::1");
     expect_equal(v6.port.value_or(0), 8080);
     expect_equal(v6.authority().value_or(""), "[::1]:8080");
+    var scoped = Uri.parse("http://[fe80::1%25eth0]:8080/").value();
+    expect_equal(scoped.host.value_or(""), "fe80::1%25eth0");
+    expect_equal(Uri.decode(scoped.host.value()).value(), "fe80::1%eth0");
+    expect_equal(scoped.to_string(), "http://[fe80::1%25eth0]:8080/");
     expect_equal(v6.path_and_query(), "/");
 
     var empty = Uri.parse("git+ssh://h/?#").value();
