@@ -145,8 +145,27 @@ in the file system instead of an IP address and port. `UnixListener` and
 - A path holds at most 107 bytes (103 on macOS); a longer or empty one
   fails with `is_invalid_input()`.
 
-Only stream sockets are supported, since Windows (10 version 1803 and later)
-has no Unix datagram sockets.
+### Unix datagram sockets
+
+`UnixDatagram` is the Unix domain counterpart of `UdpSocket`, on Linux and
+macOS only (Windows has no Unix datagram sockets, so it is declared with
+`[Target(OS(Linux) || OS(Mac))]`):
+
+```pepper
+{{#include ../../examples/networking-unix-datagram.pep}}
+```
+
+- `UnixDatagram.bind(path)` creates a socket file to receive on, with the
+  same path rules and errors as `UnixListener.bind`; `unbound()` makes one
+  that can only send, and `pair()` two that are connected to each other.
+- `send_to(data, path)` sends one datagram; it fails with `is_not_found()`
+  when there is no socket file and `is_connection_refused()` when nothing
+  is bound to it any more. A datagram is never dropped: a send waits while
+  the receiver's queue is full.
+- `receive_from(buffer, max)` returns the byte count and the sender's path,
+  which is empty for an unbound sender. As with UDP, a datagram longer than
+  `max` is cut.
+- `connect(path)`, `send` and `receive` work as on a `UdpSocket`.
 
 ## TLS
 
@@ -221,7 +240,6 @@ program take over the port.
   a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
   limits how long it may wait.
 - TLS clients cannot present certificates.
-- Unix datagram sockets are not supported.
 
 The reference pages for [addresses](../reference/io-address.md),
 [sockets](../reference/io-socket.md) and

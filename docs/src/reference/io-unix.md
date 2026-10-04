@@ -3,12 +3,13 @@
 # Unix domain sockets
 
 Unix domain sockets: `UnixListener` accepts connections on a path in the
-file system, `UnixStream` is one connection.
+file system, `UnixStream` is one connection, and `UnixDatagram` sends and
+receives datagrams.
 
-They work like `TcpListener` and `TcpStream`, for processes on the same
-machine: a path names the socket instead of an IP address and a port.
-Linux, macOS and Windows (10 version 1803 and later) all have them; only
-stream sockets are supported.
+They work like `TcpListener`, `TcpStream` and `UdpSocket`, for processes
+on the same machine: a path names the socket instead of an IP address and
+a port. Linux, macOS and Windows (10 version 1803 and later) all have the
+stream sockets; `UnixDatagram` is Linux and macOS only.
 
 Binding creates a socket file at the path, and closing the listener does
 not remove it: remove it with `File.remove` when the server is done, and
@@ -434,6 +435,220 @@ close(): IoResult<void>
 ```
 
 Closes the connection now. Closing a closed stream does nothing.
+
+**Returns**
+- an Ok result on success or when already closed; the platform error when closing fails
+
+## UnixDatagram
+
+```pepper
+[Target(OS(Linux) || OS(Mac))] [NotCopyable("owns an operating-system socket and cannot be copied")] struct UnixDatagram
+```
+
+A Unix domain datagram socket (`SOCK_DGRAM` on `AF_UNIX`): like a
+`UdpSocket` for processes on the same machine, with a path in place of
+an address. Linux and macOS only; Windows has no Unix datagram sockets.
+
+Each `send_to` delivers one whole datagram, in order, and the system
+never drops one silently: a send waits while the receiver's queue is
+full. `UnixDatagram.bind` creates a socket file at a path, which closing
+does not remove (as for `UnixListener`); `UnixDatagram.unbound` makes a
+socket that can send but has no path for replies; `UnixDatagram.pair`
+makes two connected sockets.
+
+Closing: the destructor closes the socket when the last reference goes;
+`close()` closes it earlier and reports errors. Every operation on a
+closed socket fails with an error no `IoError` predicate identifies
+(`EBADF`).
+
+**See also**
+- `UdpSocket`
+- `UnixStream`
+
+**Example**
+```pepper
+import io;
+
+var path = io.Directory.temp().join("events.sock");
+io.File.remove(path);   # left over from an earlier run
+var server = io.UnixDatagram.bind(path).value();
+var client = io.UnixDatagram.unbound().value();
+client.send_to("ping".bytes(), path);
+var buffer = Array<u8>();
+var (n, from) = server.receive_from(buffer, 1024).value();   # 4, an empty path
+```
+
+### Constructor
+
+#### UnixDatagram()
+
+```pepper
+construct()
+```
+
+Creates a closed socket: `is_open()` is false and every operation
+fails. Use `UnixDatagram.bind`, `unbound` or `pair` to get an open
+one.
+
+### Static methods
+
+#### bind
+
+```pepper
+static bind(path: Path): IoResult<UnixDatagram>
+```
+
+Creates a datagram socket at `path`, to receive datagrams sent there.
+
+**Parameters**
+- `path` — where to create the socket file: at most 107 bytes (103 on macOS)
+
+**Returns**
+- the bound socket; an error with `is_address_in_use()` when a file already exists at `path`, `is_invalid_input()` when the path is empty or too long, `is_not_found()` when its directory does not exist, `is_permission_denied()` when the directory cannot be written, or another platform error
+
+#### unbound
+
+```pepper
+static unbound(): IoResult<UnixDatagram>
+```
+
+Creates a datagram socket with no path. It can send, but a receiver
+sees an empty path as the sender and cannot reply.
+
+**Returns**
+- the socket; an error when the system is out of descriptors, or another platform error
+
+#### pair
+
+```pepper
+static pair(): IoResult<(UnixDatagram, UnixDatagram)>
+```
+
+Creates two datagram sockets connected to each other, with no path
+(`socketpair(2)`): what one sends with `send`, the other receives. A
+common way to talk to a child thread or process.
+
+**Returns**
+- the two sockets; an error when the system is out of descriptors, or another platform error
+
+**Example**
+```pepper
+var (a, b) = io.UnixDatagram.pair().value();
+a.send("hi".bytes());
+var buffer = Array<u8>();
+b.receive(buffer, 16);   # buffer holds "hi"
+```
+
+### Methods
+
+#### is_open
+
+```pepper
+is_open(): bool
+```
+
+Returns whether the socket is open.
+
+**Returns**
+- false after `close()` and for a `UnixDatagram()` never opened
+
+#### path
+
+```pepper
+path(): Path
+```
+
+Returns the path the socket was bound to.
+
+**Returns**
+- the path given to `bind`; an empty path for an unbound or paired socket
+
+#### send_to
+
+```pepper
+send_to(data: u8[], path: Path): IoResult<ulong>
+```
+
+Sends `data` as one datagram to the socket bound at `path`.
+
+**Parameters**
+- `data` — the datagram's bytes
+- `path` — the socket file a `UnixDatagram` is bound to
+
+**Returns**
+- the number of bytes sent (all of `data`); an error with `is_not_found()` when no socket file exists at `path`, `is_connection_refused()` when nothing is bound to it any more, `is_invalid_input()` when the path is empty or too long, or another platform error (such as a datagram larger than the system allows)
+
+#### receive_from
+
+```pepper
+receive_from(buffer: u8[], max: ulong): IoResult<(ulong, Path)>
+```
+
+Waits for the next datagram and appends up to `max` of its bytes to
+`buffer`.
+
+**Parameters**
+- `buffer` — the array the bytes are appended to
+- `max` — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.
+
+**Returns**
+- the number of bytes appended and the sender's path (empty when the sender is unbound); an error when the socket is closed, or another platform error
+
+#### connect
+
+```pepper
+connect(path: Path): IoResult<void>
+```
+
+Sets the socket's default peer: `send` goes to the socket at `path`,
+and `receive` and `receive_from` only take datagrams from it. No
+datagram is sent.
+
+**Parameters**
+- `path` — the socket file a `UnixDatagram` is bound to
+
+**Returns**
+- an Ok result on success; an error with `is_not_found()` when no socket file exists at `path`, `is_connection_refused()` when nothing is bound to it, or another platform error
+
+#### send
+
+```pepper
+send(data: u8[]): IoResult<ulong>
+```
+
+Sends `data` as one datagram to the connected peer (see `connect` and
+`pair`).
+
+**Parameters**
+- `data` — the datagram's bytes
+
+**Returns**
+- the number of bytes sent; an error when the socket is not connected or is closed, or another platform error
+
+#### receive
+
+```pepper
+receive(buffer: u8[], max: ulong): IoResult<ulong>
+```
+
+Waits for the next datagram from the connected peer and appends up to
+`max` of its bytes to `buffer`.
+
+**Parameters**
+- `buffer` — the array the bytes are appended to
+- `max` — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.
+
+**Returns**
+- the number of bytes appended; an error when the socket is closed, or another platform error
+
+#### close
+
+```pepper
+close(): IoResult<void>
+```
+
+Closes the socket now. Closing a closed socket does nothing. The
+socket file stays.
 
 **Returns**
 - an Ok result on success or when already closed; the platform error when closing fails

@@ -338,6 +338,68 @@ unix_socket_listener_and_stream() {
     expect_true(io.File.remove(path).is_ok());  # the socket file stays until removed
 }
 
+[Test]
+unix_datagrams_by_path_pair_and_connect() {
+    [Target(OS(Linux) || OS(Mac))]
+    {
+        var folder = TempFolder("udgram");
+        var path = folder.path.join("d.sock");
+        var server = io.UnixDatagram.bind(path).value();
+        expect_equal(server.path().to_string(), path.to_string());
+        expect_true(io.UnixDatagram.bind(path).error().is_address_in_use());
+
+        # From an unbound socket: the sender's path is empty.
+        var anonymous = io.UnixDatagram.unbound().value();
+        expect_equal(anonymous.send_to("ping".bytes(), path).value(), 4);
+        var buffer = Array<u8>();
+        var (n, from) = server.receive_from(buffer, 100).value();
+        expect_equal(n, 4);
+        expect_equal(text_of(buffer), "ping");
+        expect_true(from.is_empty);
+
+        # From a bound socket: the server sees its path and can reply.
+        var client_path = folder.path.join("c.sock");
+        var client = io.UnixDatagram.bind(client_path).value();
+        client.send_to("one".bytes(), path);
+        client.send_to("two!".bytes(), path);
+        var first = Array<u8>();
+        var (n1, sender) = server.receive_from(first, 2).value();  # cut to 2 bytes
+        expect_equal(n1, 2);
+        expect_equal(text_of(first), "on");
+        expect_equal(sender.to_string(), client_path.to_string());
+        var second = Array<u8>();
+        expect_equal(server.receive(second, 100).value(), 4);  # datagrams stay whole
+        expect_equal(text_of(second), "two!");
+        server.send_to("pong".bytes(), sender);
+        var reply = Array<u8>();
+        expect_equal(client.receive(reply, 100).value(), 4);
+        expect_equal(text_of(reply), "pong");
+
+        # connect sets the default peer for send.
+        expect_true(client.connect(path).is_ok());
+        client.send("via connect".bytes());
+        var connected = Array<u8>();
+        server.receive(connected, 100);
+        expect_equal(text_of(connected), "via connect");
+
+        var (a, b) = io.UnixDatagram.pair().value();
+        expect_equal(a.send("hi".bytes()).value(), 2);
+        var paired = Array<u8>();
+        expect_equal(b.receive(paired, 16).value(), 2);
+        expect_equal(text_of(paired), "hi");
+        expect_true(a.path().is_empty);
+
+        expect_true(anonymous.send_to("x".bytes(), folder.path.join("missing.sock")).error().is_not_found());
+        expect_true(anonymous.send_to("x".bytes(), io.Path("")).error().is_invalid_input());
+        expect_true(server.close().is_ok());
+        expect_true(server.close().is_ok());
+        expect_true(server.receive(buffer, 10).is_err());
+        expect_true(anonymous.send_to("x".bytes(), path).error().is_connection_refused());
+        io.File.remove(path);
+        io.File.remove(client_path);
+    }
+}
+
 # The echo server's socket file: a function, since tasks on other threads
 # cannot share a captured String.
 echo_socket(): io.Path {

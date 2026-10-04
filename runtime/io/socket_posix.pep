@@ -37,6 +37,8 @@ extern long sendto(int fd, void* buffer, ulong length, int flags, void* address,
 [Target(OS(Linux) || OS(Mac))]
 extern int shutdown(int fd, int how);
 [Target(OS(Linux) || OS(Mac))]
+extern int socketpair(int domain, int kind, int protocol, int* descriptors);
+[Target(OS(Linux) || OS(Mac))]
 extern int getsockopt(int fd, int level, int name, void* value, uint* length);
 [Target(OS(Linux) || OS(Mac))]
 extern int poll(void* descriptors, ulong count, int timeout);
@@ -292,6 +294,32 @@ _io_sys_socket_open_unix(): IoResult<SocketHandle> {
     return IoResult<SocketHandle>.ok(fd);
 }
 
+# A new non-blocking, close-on-exec Unix domain datagram socket (AF_UNIX 1,
+# SOCK_DGRAM 2).
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_socket_open_unix_datagram(): IoResult<SocketHandle> {
+    var fd = socket(1, 2 | _io_sock_cloexec(), 0);
+    if (fd < 0) {
+        return IoResult<SocketHandle>.err(IoError.last());
+    }
+    _io_posix_socket_setup(fd);
+    return IoResult<SocketHandle>.ok(fd);
+}
+
+# Two connected Unix domain datagram sockets (socketpair(2)), each set up
+# like `_io_sys_socket_open_unix_datagram`'s.
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_socket_pair_unix_datagram(): IoResult<(SocketHandle, SocketHandle)> {
+    var buffer = _IoBuffer(8);
+    var descriptors = unsafe_cast<__ptr<int>>(buffer._bytes);
+    if (socketpair(1, 2 | _io_sock_cloexec(), 0, descriptors) != 0) {
+        return IoResult<(SocketHandle, SocketHandle)>.err(IoError.last());
+    }
+    _io_posix_socket_setup(descriptors[0]);
+    _io_posix_socket_setup(descriptors[1]);
+    return IoResult<(SocketHandle, SocketHandle)>.ok((descriptors[0], descriptors[1]));
+}
+
 # macOS: close-on-exec, non-blocking and SO_NOSIGPIPE, which Linux gets
 # from the type and send flags.
 [Target(OS(Linux))]
@@ -499,6 +527,12 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
 [Target(OS(Linux) || OS(Mac))]
 _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
     var sockaddr = _io_sockaddr_write(address);
+    return _io_sys_socket_send_to_raw(h, source, n, sockaddr);
+}
+
+# Sends to the sockaddr in `sockaddr`, of any family.
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_socket_send_to_raw(h: SocketHandle, source: __ptr<u8>, n: ulong, sockaddr: _SockAddr): IoResult<ulong> {
     while (true) {
         var r = sendto(h, source, _io_posix_max_rw(n), _io_msg_nosignal(), sockaddr._bytes, sockaddr._length as uint);
         if (r >= 0) {
@@ -516,17 +550,31 @@ _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: So
 [Target(OS(Linux) || OS(Mac))]
 _io_sys_socket_receive_from(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<(ulong, SocketAddress)> {
     var from = _SockAddr();
+    var r = _io_sys_socket_receive_from_raw(h, destination, n, from);
+    if (r.is_err()) {
+        return IoResult<(ulong, SocketAddress)>.err(r.error());
+    }
+    return IoResult<(ulong, SocketAddress)>.ok((r.value(), from._read()));
+}
+
+# Receives into `destination` as `_io_sys_socket_receive_from` does, and
+# leaves the sender's sockaddr, of any family, in `from`, with its length
+# in `from._length`.
+[Target(OS(Linux) || OS(Mac))]
+_io_sys_socket_receive_from_raw(h: SocketHandle, destination: __ptr<u8>, n: ulong, from: _SockAddr): IoResult<ulong> {
     while (true) {
-        var r = recvfrom(h, destination, _io_posix_max_rw(n), 0, from._bytes, from._length_slot());
+        var slot = from._length_slot();
+        var r = recvfrom(h, destination, _io_posix_max_rw(n), 0, from._bytes, slot);
         if (r >= 0) {
-            return IoResult<(ulong, SocketAddress)>.ok((r as ulong, from._read()));
+            from._length = slot[0] as int;
+            return IoResult<ulong>.ok(r as ulong);
         }
         var retry = _io_posix_retry(h, _io_sys_last_error(), _IO_READABLE);
         if (retry.is_err()) {
-            return IoResult<(ulong, SocketAddress)>.err(retry.error());
+            return IoResult<ulong>.err(retry.error());
         }
     }
-    return IoResult<(ulong, SocketAddress)>.err(IoError(4, "interrupted"));
+    return IoResult<ulong>.err(IoError(4, "interrupted"));
 }
 
 # how: 0 reading, 1 writing, 2 both (SHUT_RD, SHUT_WR, SHUT_RDWR).

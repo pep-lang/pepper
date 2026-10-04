@@ -12,7 +12,7 @@
 ## - [Directory](io-directory.md): listing, creating, and removing directories
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
-## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, and `UnixStream`
+## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, `UnixStream`, and `UnixDatagram`
 ## - [Streams](io-stream.md): the `Reader` and `Writer` traits, `lines()` and `chunks()`
 ## - [Streams in memory](io-memory.md): `ByteReader` and `ByteWriter`
 ## - [Print](io-print.md): deprecated; use `Writer`
@@ -93,6 +93,8 @@ export UdpSocket;
 export UnixListener;
 export SharedUnixListener;
 export UnixStream;
+[Target(OS(Linux) || OS(Mac))]
+export UnixDatagram;
 
 # For the async module's task runtime only (see wait.pep); not public API.
 export _IoWaiter;
