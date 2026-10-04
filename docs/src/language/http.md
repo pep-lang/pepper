@@ -39,6 +39,8 @@ following RFC 3986: an absolute URI with any scheme (`https:`, `mailto:`,
 text into `scheme`, `user_info`, `host`, `port`, `path`, `query` and
 `fragment`; the parts that can be missing are optionals. Components keep
 their percent-escapes, and `Uri.decode` turns one into text.
+`base.resolve(reference)` resolves a relative reference against a base URI,
+as a browser resolves a link (RFC 3986 section 5.2).
 
 ```pepper
 {{#include ../../examples/http-uri.pep}}
@@ -60,8 +62,15 @@ their percent-escapes, and `Uri.decode` turns one into text.
   was no response: the URL is not `http://` or `https://`
   (`is_invalid_input()`), the connection or TLS handshake failed, or the
   response was not valid HTTP.
-- Redirects are returned, not followed, and every request uses a new
-  connection.
+- Redirects (301, 302, 303, 307, 308) are followed, up to
+  `max_redirects` (10) per request, and `response.url` is where the
+  response came from. A 303, and a 301 or 302 after a `POST`, becomes a
+  `GET` without the body; a 307 or 308 repeats the method and body, except
+  that a body from `set_reader` cannot be sent twice, so that redirect is
+  returned. Leaving the origin drops `Authorization`,
+  `Proxy-Authorization` and `Cookie`. `Client(0)` returns every redirect
+  as it is.
+- Every request uses a new connection.
 
 ## Server
 
@@ -108,8 +117,7 @@ the trait of files, sockets and the `compress` readers:
 
 - A server handler gets the request body read into memory in full, up to
   `MAX_REQUEST_BODY` (16 MiB).
-- HTTP/2, connection reuse in the client, and following redirects are not
-  supported yet.
+- HTTP/2 and connection reuse in the client are not supported yet.
 
 The reference pages for [messages](../reference/http-message.md), the
 [client](../reference/http-client.md), the

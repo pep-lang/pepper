@@ -15,7 +15,15 @@ export const MAX_RESPONSE_BODY: ulong = 67108864;
 ## `https://`), sends the request with `Connection: close`, and reads the
 ## response: `send` reads the whole body into memory, and `open` returns
 ## once the header fields arrive, with the body to read as a stream.
-## Redirects are returned as they are, not followed.
+##
+## Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
+## up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
+## 302 after a `POST`, become a `GET` without the body; 307 and 308 repeat
+## the method and body. A request whose body comes from
+## `Request.set_reader` cannot be repeated, so its 307 or 308 is returned
+## as it is. When a redirect leaves the origin (scheme, host and port),
+## `Authorization`, `Proxy-Authorization` and `Cookie` are dropped. Make a
+## client with `max_redirects` 0 to get every redirect back as it is.
 ##
 ## A client is `[Shared]`: make one and use it from every thread and task.
 ## In a task, a request parks only the task while it waits.
@@ -37,10 +45,17 @@ export struct Client {
     const _secure: bool;
     const _connector: tls.TlsConnector;
 
+    ## The most redirects one request follows; 0 follows none.
+    const max_redirects: int;
+
     ## Creates a client that trusts the system's root certificates for
     ## `https://` URLs. Where TLS is not available (Linux or macOS without
     ## OpenSSL 3), `http://` URLs still work and `https://` ones fail.
-    construct() {
+    ##
+    ## @param max_redirects the most redirects one request follows; 0
+    ##   returns every redirect as it is
+    construct(max_redirects: int = 10) {
+        this.max_redirects = max_redirects;
         var connector = tls.TlsConnector.create();
         _secure = connector.is_ok();
         if (_secure) {
@@ -54,7 +69,10 @@ export struct Client {
     ## instance one that trusts a private certificate authority.
     ##
     ## @param connector the TLS connector to open `https://` connections with
-    construct(connector: tls.TlsConnector) {
+    ## @param max_redirects the most redirects one request follows; 0
+    ##   returns every redirect as it is
+    construct(connector: tls.TlsConnector, max_redirects: int = 10) {
+        this.max_redirects = max_redirects;
         _secure = true;
         _connector = connector;
     }
@@ -88,11 +106,12 @@ export struct Client {
     ## replacing any the request has.
     ##
     ## @param request the request; its `url` must be absolute
-    ## @returns the response, whatever its status; an error with
-    ##   `is_invalid_input()` for a URL that is not `http://` or `https://`,
-    ##   the errors of `io.TcpStream.connect_host` and
+    ## @returns the response after any redirects, whatever its status; an
+    ##   error with `is_invalid_input()` for a URL that is not `http://` or
+    ##   `https://`, the errors of `io.TcpStream.connect_host` and
     ##   `tls.TlsConnector.connect`, or an error when the response is not
-    ##   valid HTTP/1.x or its body is larger than `MAX_RESPONSE_BODY`
+    ##   valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there
+    ##   are more than `max_redirects` redirects
     send(request: Request): io.IoResult<Response> {
         var opened = open(request);
         if (opened.is_err()) {
@@ -125,7 +144,7 @@ export struct Client {
     ##
     ## The connection closes when the body has been read to its end, when
     ## the `BodyReader` is closed, or when the last reference to it goes.
-    ## The request goes out as for `send`.
+    ## The request goes out, and redirects are followed, as for `send`.
     ##
     ## @param request the request; its `url` must be absolute
     ## @returns the response with its body unread; the errors of `send`,
@@ -139,6 +158,30 @@ export struct Client {
     ##         file.write_all(chunk.value());
     ##     }
     open(request: Request): io.IoResult<Response> {
+        var current = request;
+        var redirects = 0;
+        while (true) {
+            var opened = _open_once(current);
+            if (opened.is_err() || max_redirects <= 0) {
+                return opened;
+            }
+            var response = opened.value();
+            var next = _http_redirected(current, response);
+            if (next.is_empty()) {
+                return opened;
+            }
+            _http_close_body(response);
+            if (redirects >= max_redirects) {
+                return io.IoResult<Response>.err(_http_error($"too many redirects: more than {max_redirects}"));
+            }
+            redirects = redirects + 1;
+            current = next.value();
+        }
+        return io.IoResult<Response>.err(_http_error("no response"));
+    }
+
+    # Sends `request` over a new connection and reads the response's head.
+    _open_once(request: Request): io.IoResult<Response> {
         var parsed = _http_parse_url(request.url);
         if (parsed.is_err()) {
             return io.IoResult<Response>.err(parsed.error());
@@ -163,8 +206,76 @@ export struct Client {
         var result = _http_exchange(connection, request, url);
         if (result.is_err()) {
             connection._close();
+            return result;
         }
+        result.value().url = request.url;
         return result;
+    }
+}
+
+# The request that follows `response` to `request`, when it is a redirect
+# the client follows; Empty to return `response` as it is.
+_http_redirected(request: Request, response: Response): Request? {
+    var status = response.status;
+    if (status != 301 && status != 302 && status != 303 && status != 307 && status != 308) {
+        return Optional<Request>.Empty;
+    }
+    var location = response.headers.get("Location");
+    if (location.is_empty()) {
+        return Optional<Request>.Empty;
+    }
+    var base = Uri.parse(request.url);
+    var reference = Uri.parse(location.value().trim());
+    if (base.is_err() || reference.is_err()) {
+        return Optional<Request>.Empty;
+    }
+    var target = base.value().resolve(reference.value());
+    if (reference.value().fragment.is_empty()) {
+        target.fragment = base.value().fragment;  # RFC 9110 10.2.2
+    }
+    var text = target.to_string();
+    var from = _http_parse_url(request.url);
+    var to = _http_url_of(text, target);
+    if (from.is_err() || to.is_err()) {
+        return Optional<Request>.Empty;
+    }
+    var method = request.method;
+    var keeps_body = true;
+    if ((status == 303 && method != "HEAD") || ((status == 301 || status == 302) && method == "POST")) {
+        method = "GET";
+        keeps_body = false;
+    }
+    if (keeps_body && request._streamed) {
+        return Optional<Request>.Empty;  # the body was read once and is gone
+    }
+    var next = Request(method, text);
+    var same_origin = from.value()._secure == to.value()._secure
+        && from.value()._host.lower() == to.value()._host.lower()
+        && from.value()._port == to.value()._port;
+    for (var name in request.headers.names()) {
+        var dropped = match (name) {
+            "authorization", "proxy-authorization", "cookie" => !same_origin,
+            "content-type", "content-encoding", "content-language", "content-location" => !keeps_body,
+            else => false,
+        };
+        if (!dropped) {
+            for (var value in request.headers.values(name)) {
+                next.headers.add(name, value);
+            }
+        }
+    }
+    if (keeps_body) {
+        next.set_body(request._body);
+    }
+    return Optional<Request>.Value(next);
+}
+
+# Closes the connection of a response from `_open_once` whose body is not
+# wanted.
+_http_close_body(response: Response) {
+    var body = response._source as? BodyReader;
+    if (body.is_value()) {
+        body.value().close();
     }
 }
 

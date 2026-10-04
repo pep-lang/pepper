@@ -7,6 +7,7 @@
 import async;
 import http;
 import io;
+import math;
 import tls;
 
 handle(request: http.Request): http.Response {
@@ -33,6 +34,29 @@ handle(request: http.Request): http.Response {
     }
     if (path == "/stream-length") {
         return http.Response(200).set_reader(io.ByteReader(pattern(100000)), 100000);
+    }
+    if (path.starts_with("/redirect/")) {
+        # `/redirect/N` redirects N more times, then arrives.
+        var left = math.parse_int(path.substr_bytes(10, path.size - 10)).value();
+        if (left == 0) {
+            return http.Response(200).set_text("arrived");
+        }
+        return redirect(302, "/redirect/" + to_string(left - 1));
+    }
+    if (path == "/to") {
+        # `/to?STATUS%20LOCATION` redirects to LOCATION with that status.
+        var parts = request.query().split("%20");
+        return redirect(math.parse_int(parts[0]).value() as int, parts[1]);
+    }
+    if (path == "/cross") {
+        # The same server under another host name: another origin.
+        var port = request.headers["host"].substr_bytes(10, request.headers["host"].size - 10);
+        return redirect(302, "http://localhost:" + port + "/auth");
+    }
+    if (path == "/auth") {
+        return http.Response(200).set_text(
+            request.headers["authorization"] + "|" + request.headers["cookie"] + "|" + request.headers["x-test"]
+        );
     }
     if (path == "/framing") {
         var framing = request.headers["transfer-encoding"] + "|" + request.headers["content-length"];
@@ -75,6 +99,12 @@ raw_bytes(port: u16, request: u8[]): String {
         }
     }
     return String._from_bytes(reply);
+}
+
+redirect(status: int, location: String): http.Response {
+    var response = http.Response(status).set_text("moved");
+    response.headers["Location"] = location;
+    return response;
 }
 
 # `count` bytes counting up from 0, wrapping at 251 so the pattern does
@@ -389,6 +419,77 @@ streamed_responses_to_http_1_0() {
             var keep = raw(port, "GET /stream HTTP/1.1\r\nConnection: close\r\n\r\n");
             expect_true(keep.lower().contains("transfer-encoding: chunked"));
             expect_true(keep.ends_with("\r\n0\r\n\r\n"));
+        }
+    );
+}
+
+[Test]
+follows_redirects() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var base = start_server();
+            var client = http.Client();
+
+            var chain = client.get(base + "/redirect/3").value();
+            expect_equal(chain.status, 200);
+            expect_equal(chain.text(), "arrived");
+            expect_equal(chain.url, base + "/redirect/0");  # where it ended up
+            # A relative Location resolves against the request's URL.
+            var relative = client.get(base + "/to?302%20hello?near").value();
+            expect_equal(relative.text(), "hello near");
+
+            # 307 and 308 repeat the method and body.
+            for (var status in [307, 308]) {
+                var request = http.Request("PUT", base + "/to?" + to_string(status) + "%20/echo").set_text("again");
+                var kept = client.send(request).value();
+                expect_equal(kept.headers["x-method"], "PUT");
+                expect_equal(kept.text(), "again");
+            }
+            # 303 becomes a GET without the body, and so do 301 and 302 after a POST.
+            for (var status in [301, 302, 303]) {
+                var posted = client.post(base + "/to?" + to_string(status) + "%20/echo", "text/plain", "gone").value();
+                expect_equal(posted.headers["x-method"], "GET");
+                expect_equal(posted.body().count, 0 as ulong);
+            }
+            # A 302 after a PUT keeps the method.
+            var put = client.send(http.Request("PUT", base + "/to?302%20/echo").set_text("put")).value();
+            expect_equal(put.headers["x-method"], "PUT");
+
+            # A streamed body cannot be sent again: the 307 comes back.
+            var streamed = http.Request("PUT", base + "/to?307%20/echo").set_reader(io.ByteReader("once".bytes()));
+            expect_equal(client.send(streamed).value().status, 307);
+
+            # Credentials go along within the origin, not to another.
+            var same = http.Request("GET", base + "/to?302%20/auth");
+            same.headers["Authorization"] = "Bearer secret";
+            same.headers["Cookie"] = "a=1";
+            same.headers["X-Test"] = "kept";
+            expect_equal(client.send(same).value().text(), "Bearer secret|a=1|kept");
+            var cross = http.Request("GET", base + "/cross");
+            cross.headers["Authorization"] = "Bearer secret";
+            cross.headers["Cookie"] = "a=1";
+            cross.headers["X-Test"] = "kept";
+            var crossed = client.send(cross).value();
+            expect_true(crossed.url.starts_with("http://localhost:"));
+            expect_equal(crossed.text(), "||kept");
+
+            # A limit, and opting out.
+            var looping = client.get(base + "/redirect/11");
+            expect_true(looping.is_err());
+            expect_true(looping.error().message.contains("too many redirects"));
+            expect_equal(http.Client(11).get(base + "/redirect/11").value().text(), "arrived");
+            var unfollowed = http.Client(0).get(base + "/redirect/1").value();
+            expect_equal(unfollowed.status, 302);
+            expect_equal(unfollowed.headers["location"], "/redirect/0");
+            expect_equal(unfollowed.text(), "moved");
+            # open() follows too, and streams the last body.
+            var opened = client.open(http.Request("GET", base + "/redirect/2")).value();
+            var arrived = Array<u8>();
+            opened.reader().read(arrived, 100);
+            expect_equal(String._from_bytes(arrived), "arrived");
         }
     );
 }

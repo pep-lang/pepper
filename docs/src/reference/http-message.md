@@ -401,6 +401,15 @@ var headers: Headers
 
 The header fields.
 
+#### url
+
+```pepper
+var url: String
+```
+
+For a response a `Client` returns, the URL it came from: the
+request's, or after redirects the last one's. Empty otherwise.
+
 ### Constructor
 
 #### Response()

@@ -93,3 +93,101 @@ decodes_percent_escapes() {
     expect_true(Uri.decode("%g0").is_err());
     expect_equal(Uri.decode("").value(), "");
 }
+
+# RFC 3986 section 5.4: each reference resolved against the RFC's base.
+[Test]
+resolves_references_as_rfc_3986_does() {
+    var base = Uri.parse("http://a/b/c/d;p?q").value();
+    var cases = [
+        "g:h",
+        "g:h",
+        "g",
+        "http://a/b/c/g",
+        "./g",
+        "http://a/b/c/g",
+        "g/",
+        "http://a/b/c/g/",
+        "/g",
+        "http://a/g",
+        "//g",
+        "http://g",
+        "?y",
+        "http://a/b/c/d;p?y",
+        "g?y",
+        "http://a/b/c/g?y",
+        "#s",
+        "http://a/b/c/d;p?q#s",
+        "g#s",
+        "http://a/b/c/g#s",
+        "g?y#s",
+        "http://a/b/c/g?y#s",
+        ";x",
+        "http://a/b/c/;x",
+        "g;x",
+        "http://a/b/c/g;x",
+        "",
+        "http://a/b/c/d;p?q",
+        ".",
+        "http://a/b/c/",
+        "./",
+        "http://a/b/c/",
+        "..",
+        "http://a/b/",
+        "../",
+        "http://a/b/",
+        "../g",
+        "http://a/b/g",
+        "../..",
+        "http://a/",
+        "../../",
+        "http://a/",
+        "../../g",
+        "http://a/g",
+        "../../../g",
+        "http://a/g",
+        "../../../../g",
+        "http://a/g",
+        "/./g",
+        "http://a/g",
+        "/../g",
+        "http://a/g",
+        "g.",
+        "http://a/b/c/g.",
+        ".g",
+        "http://a/b/c/.g",
+        "g..",
+        "http://a/b/c/g..",
+        "..g",
+        "http://a/b/c/..g",
+        "./../g",
+        "http://a/b/g",
+        "./g/.",
+        "http://a/b/c/g/",
+        "g/./h",
+        "http://a/b/c/g/h",
+        "g/../h",
+        "http://a/b/c/h",
+        "g;x=1/./y",
+        "http://a/b/c/g;x=1/y",
+        "g;x=1/../y",
+        "http://a/b/c/y",
+        "g?y/./x",
+        "http://a/b/c/g?y/./x",
+        "g?y/../x",
+        "http://a/b/c/g?y/../x",
+        "g#s/./x",
+        "http://a/b/c/g#s/./x",
+        "g#s/../x",
+        "http://a/b/c/g#s/../x",
+        "http:g",
+        "http:g",
+    ];
+    ulong i = 0;
+    while (i < cases.count) {
+        var resolved = base.resolve(Uri.parse(cases[i]).value());
+        expect_equal(resolved.to_string(), cases[i + 1]);
+        i = i + 2;
+    }
+    # A base with an authority and an empty path merges under `/`.
+    expect_equal(Uri.parse("http://h").value().resolve(Uri.parse("g").value()).to_string(), "http://h/g");
+}

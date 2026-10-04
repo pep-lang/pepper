@@ -15,6 +15,11 @@ main(): int {
     var target = Uri.parse("/items?page=2").value();
     assert(!target.is_absolute() && target.path == "/items", "relative");
 
+    # resolve() turns a relative reference, such as a redirect's Location,
+    # into the URI it names.
+    var page = Uri.parse("https://example.com/docs/guide/intro").value();
+    assert(page.resolve(Uri.parse("../api?v=2").value()).to_string() == "https://example.com/docs/api?v=2", "resolved");
+
     assert(Uri.parse("http://example.com/a b").is_err(), "a space must be percent-encoded");
     return 0;
 }

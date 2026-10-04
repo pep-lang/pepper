@@ -223,6 +223,72 @@ export struct Uri {
         return text;
     }
 
+    ## Resolves `reference` against this URI, its base, as RFC 3986
+    ## (section 5.2) describes and as a browser resolves a link on a page:
+    ## an absolute `reference` stands as it is, `//host/path` keeps only the
+    ## base's scheme, `/path` keeps its authority too, and a relative path
+    ## replaces the base's last segment. `.` and `..` segments are removed.
+    ## The fragment is always the reference's.
+    ##
+    ## @param reference the reference to resolve, such as an HTTP `Location`
+    ## @returns the resolved URI
+    ## @example
+    ##     var base = Uri.parse("https://example.com/docs/guide/intro?x=1").value();
+    ##     assert(base.resolve(Uri.parse("next").value()).to_string() == "https://example.com/docs/guide/next", "a sibling");
+    ##     assert(base.resolve(Uri.parse("../api").value()).to_string() == "https://example.com/docs/api", "up one");
+    ##     assert(base.resolve(Uri.parse("/").value()).to_string() == "https://example.com/", "the root");
+    ##     assert(base.resolve(Uri.parse("?y=2").value()).to_string() == "https://example.com/docs/guide/intro?y=2", "a new query");
+    resolve(reference: Uri): Uri {
+        var target = Uri();
+        if (reference.scheme.size > 0) {
+            target.scheme = reference.scheme;
+            target._take_authority(reference);
+            target.path = _uri_remove_dots(reference.path);
+            target.query = reference.query;
+        } else {
+            if (reference.host.is_value()) {
+                target._take_authority(reference);
+                target.path = _uri_remove_dots(reference.path);
+                target.query = reference.query;
+            } else {
+                if (reference.path.size == 0) {
+                    target.path = path;
+                    target.query = reference.query.is_value() ? reference.query : query;
+                } else {
+                    if (reference.path.starts_with("/")) {
+                        target.path = _uri_remove_dots(reference.path);
+                    } else {
+                        target.path = _uri_remove_dots(_merge(reference.path));
+                    }
+                    target.query = reference.query;
+                }
+                target._take_authority(this);
+            }
+            target.scheme = scheme;
+        }
+        target.fragment = reference.fragment;
+        return target;
+    }
+
+    # Copies the user information, host and port of `other`.
+    _take_authority(other: Uri) {
+        user_info = other.user_info;
+        host = other.host;
+        port = other.port;
+    }
+
+    # `relative` in place of this path's last segment (RFC 3986 5.2.3).
+    _merge(relative: String): String {
+        if (host.is_value() && path.size == 0) {
+            return "/" + relative;
+        }
+        var slash = path.rfind("/");
+        if (slash < 0) {
+            return relative;
+        }
+        return path.substr_bytes(0, slash as ulong + 1) + relative;
+    }
+
     ## Returns the URI as text, putting its components back together. For a
     ## parsed URI this is the text it was parsed from, except that the
     ## scheme is lowercased.
@@ -253,6 +319,51 @@ export struct Uri {
 }
 
 extend Uri with ToString;
+
+# `path` without its `.` and `..` segments (RFC 3986 5.2.4).
+_uri_remove_dots(path: String): String {
+    var input = path;
+    var output = "";
+    while (input.size > 0) {
+        if (input.starts_with("../")) {
+            input = input.substr_bytes(3, input.size - 3);
+        } else if (input.starts_with("./")) {
+            input = input.substr_bytes(2, input.size - 2);
+        } else if (input.starts_with("/./")) {
+            input = input.substr_bytes(2, input.size - 2);
+        } else if (input == "/.") {
+            input = "/";
+        } else if (input.starts_with("/../")) {
+            input = input.substr_bytes(3, input.size - 3);
+            output = _uri_drop_last_segment(output);
+        } else if (input == "/..") {
+            input = "/";
+            output = _uri_drop_last_segment(output);
+        } else if (input == "." || input == "..") {
+            input = "";
+        } else {
+            # Move the first segment, with its leading `/`, to the output.
+            var next = input.find("/", 1);
+            if (next < 0) {
+                output = output + input;
+                input = "";
+            } else {
+                output = output + input.substr_bytes(0, next as ulong);
+                input = input.substr_bytes(next as ulong, input.size - next as ulong);
+            }
+        }
+    }
+    return output;
+}
+
+# `output` without its last segment and the `/` before it.
+_uri_drop_last_segment(output: String): String {
+    var slash = output.rfind("/");
+    if (slash < 0) {
+        return "";
+    }
+    return output.substr_bytes(0, slash as ulong);
+}
 
 _uri_invalid(text: String, why: String): Result<Uri> {
     return Result<Uri>.err(Error($"invalid URI '{text}': {why}"));

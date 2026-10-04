@@ -89,6 +89,7 @@ const NOT_ON_WASI: &[&str] = &[
     "function-types-shared",  // a thread
     "generics-shared",        // a thread
     "http-basics",            // tasks
+    "http-streaming",         // tasks
     "platform-declarations",  // asserts a 64-bit target
 ];
 

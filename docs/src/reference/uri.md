@@ -198,6 +198,34 @@ one. The fragment is left out.
 **Returns**
 - the path and query, such as `/items?page=2`
 
+#### resolve
+
+```pepper
+resolve(reference: Uri): Uri
+```
+
+Resolves `reference` against this URI, its base, as RFC 3986
+(section 5.2) describes and as a browser resolves a link on a page:
+an absolute `reference` stands as it is, `//host/path` keeps only the
+base's scheme, `/path` keeps its authority too, and a relative path
+replaces the base's last segment. `.` and `..` segments are removed.
+The fragment is always the reference's.
+
+**Parameters**
+- `reference` — the reference to resolve, such as an HTTP `Location`
+
+**Returns**
+- the resolved URI
+
+**Example**
+```pepper
+var base = Uri.parse("https://example.com/docs/guide/intro?x=1").value();
+assert(base.resolve(Uri.parse("next").value()).to_string() == "https://example.com/docs/guide/next", "a sibling");
+assert(base.resolve(Uri.parse("../api").value()).to_string() == "https://example.com/docs/api", "up one");
+assert(base.resolve(Uri.parse("/").value()).to_string() == "https://example.com/", "the root");
+assert(base.resolve(Uri.parse("?y=2").value()).to_string() == "https://example.com/docs/guide/intro?y=2", "a new query");
+```
+
 #### to_string
 
 ```pepper

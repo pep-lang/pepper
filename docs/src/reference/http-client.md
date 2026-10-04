@@ -27,7 +27,15 @@ Each request opens a new connection (plain TCP for `http://`, TLS for
 `https://`), sends the request with `Connection: close`, and reads the
 response: `send` reads the whole body into memory, and `open` returns
 once the header fields arrive, with the body to read as a stream.
-Redirects are returned as they are, not followed.
+
+Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
+up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
+302 after a `POST`, become a `GET` without the body; 307 and 308 repeat
+the method and body. A request whose body comes from
+`Request.set_reader` cannot be repeated, so its 307 or 308 is returned
+as it is. When a redirect leaves the origin (scheme, host and port),
+`Authorization`, `Proxy-Authorization` and `Cookie` are dropped. Make a
+client with `max_redirects` 0 to get every redirect back as it is.
 
 A client is `[Shared]`: make one and use it from every thread and task.
 In a task, a request parks only the task while it waits.
@@ -45,22 +53,35 @@ main(): int {
 }
 ```
 
+### Fields
+
+#### max_redirects
+
+```pepper
+const max_redirects: int
+```
+
+The most redirects one request follows; 0 follows none.
+
 ### Constructors
 
 #### Client()
 
 ```pepper
-construct()
+construct(max_redirects: int = 10)
 ```
 
 Creates a client that trusts the system's root certificates for
 `https://` URLs. Where TLS is not available (Linux or macOS without
 OpenSSL 3), `http://` URLs still work and `https://` ones fail.
 
+**Parameters**
+- `max_redirects` — the most redirects one request follows; 0 returns every redirect as it is
+
 #### Client()
 
 ```pepper
-construct(connector: tls.TlsConnector)
+construct(connector: tls.TlsConnector, max_redirects: int = 10)
 ```
 
 Creates a client whose `https://` connections use `connector`, for
@@ -68,6 +89,7 @@ instance one that trusts a private certificate authority.
 
 **Parameters**
 - `connector` — the TLS connector to open `https://` connections with
+- `max_redirects` — the most redirects one request follows; 0 returns every redirect as it is
 
 ### Methods
 
@@ -119,7 +141,7 @@ replacing any the request has.
 - `request` — the request; its `url` must be absolute
 
 **Returns**
-- the response, whatever its status; an error with `is_invalid_input()` for a URL that is not `http://` or `https://`, the errors of `io.TcpStream.connect_host` and `tls.TlsConnector.connect`, or an error when the response is not valid HTTP/1.x or its body is larger than `MAX_RESPONSE_BODY`
+- the response after any redirects, whatever its status; an error with `is_invalid_input()` for a URL that is not `http://` or `https://`, the errors of `io.TcpStream.connect_host` and `tls.TlsConnector.connect`, or an error when the response is not valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there are more than `max_redirects` redirects
 
 #### open
 
@@ -135,7 +157,7 @@ chunk to a file or through a `compress.DecompressReader`.
 
 The connection closes when the body has been read to its end, when
 the `BodyReader` is closed, or when the last reference to it goes.
-The request goes out as for `send`.
+The request goes out, and redirects are followed, as for `send`.
 
 **Parameters**
 - `request` — the request; its `url` must be absolute

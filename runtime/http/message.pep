@@ -295,6 +295,9 @@ export struct Response {
     var reason: String;
     ## The header fields.
     var headers: Headers;
+    ## For a response a `Client` returns, the URL it came from: the
+    ## request's, or after redirects the last one's. Empty otherwise.
+    var url: String;
     # The body's bytes; empty for none.
     var _body: u8[];
     # A body streamed from `_source` instead of `_body`: one a handler set
@@ -311,6 +314,7 @@ export struct Response {
         this.status = status;
         this.reason = "";
         this.headers = Headers();
+        this.url = "";
         this._body = Array<u8>();
         this._streamed = false;
         this._source = io.ByteReader(this._body);
