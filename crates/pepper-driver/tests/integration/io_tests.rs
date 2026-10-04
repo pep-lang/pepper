@@ -1,15 +1,16 @@
-//! The `io` runtime module (`runtime/io/`): programs that `import io` (or
-//! import names from it) are compiled, linked and run on the host. Each Pepper
-//! program asserts internally — a failed `assert` prints its message and
-//! aborts — and returns 0 on success; the harness reports the program's
-//! output on failure.
+//! The `io` runtime module (`runtime/io/`). Its behavior is tested in
+//! Pepper by `pep-test`, in `runtime/io/test/`; this file keeps what checks
+//! the compiler: `io` is a module rather than part of the prelude, the
+//! order of `print` and `File.stdout()` output in a whole program, and the
+//! platform layers. `other_platforms_compile` pushes the io test files with
+//! `[Target]` blocks through the platform filter, sema and LLVM codegen
+//! with the host simulated as every other platform, so each platform's
+//! code type-checks and produces valid IR wherever the tests run; and
+//! `path_functions_on_every_platform` runs the (pure) path tests by JIT
+//! under each simulated platform's path rules.
 //!
-//! The programs are platform-aware (`[Target]` blocks) and run on every CI
-//! host. In addition, `other_platforms_compile` pushes all of them through the
-//! platform filter, sema and LLVM codegen with the host simulated as every
-//! other platform, so each platform's code type-checks and produces valid IR
-//! wherever the tests run; and `path_functions_on_every_platform` runs the
-//! (pure) path program by JIT under each simulated platform's path rules.
+//! `build` and `assert_runs` compile, link and run a program on the host
+//! for the other runtime modules' tests.
 
 use clap::Parser;
 use pepper_codegen::CodeGenerator;
@@ -18,7 +19,6 @@ use std::process::Command;
 
 use crate::support;
 use crate::support::repo_root;
-use crate::support::scratch_name;
 
 pub(crate) fn source_dir(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("pepper_io_{}_{}", name, std::process::id()))
@@ -87,737 +87,8 @@ pub(crate) fn assert_runs_each(name: &str, source: &str, runs: &[&[(&str, &str)]
     outputs
 }
 
-const PATH_PROGRAM: &str = r##"
-import io;
-
-s(p: io.Path): String { return p.to_string(); }
-
-# The expected text of a path the implementation builds: `/` written here is
-# the platform separator, `\` on Windows.
-w(text: String): String {
-    var out = text.clone();
-    [Target(OS(Windows))] {
-        out = text.replace("/", "\\");
-    }
-    return out;
-}
-
-main(): int {
-    # join / join_str: an absolute right-hand side replaces; separators are
-    # not doubled; empty sides are neutral. Joining inserts the platform
-    # separator; the rest is the input's text as written.
-    assert(io.Path("a").join(io.Path("b")).to_string() == w("a/b"), "join");
-    assert(io.Path("a/").join(io.Path("b")).to_string() == "a/b", "join after separator");
-    assert(io.Path("a").join(io.Path("/abs")).to_string() == "/abs", "join absolute");
-    assert(io.Path("").join(io.Path("b")).to_string() == "b", "join onto empty");
-    assert(io.Path("a").join(io.Path("")).to_string() == "a", "join empty");
-    assert(io.Path("usr").join("lib").join("x.so").to_string() == w("usr/lib/x.so"), "join a String");
-    assert(io.Path("usr").join_str("lib").to_string() == w("usr/lib"), "deprecated join_str");
-
-    # parent
-    assert(io.Path("/a/b/c.txt").parent().value().to_string() == "/a/b", "parent");
-    assert(io.Path("/a").parent().value().to_string() == "/", "parent of top-level");
-    assert(io.Path("/").parent().is_empty(), "parent of root");
-    assert(io.Path("a").parent().is_empty(), "parent of bare name");
-    assert(io.Path("a/b/").parent().value().to_string() == "a", "parent ignores trailing separator");
-    assert(io.Path("a//b").parent().value().to_string() == "a", "parent collapses separators");
-    assert(io.Path("").parent().is_empty(), "parent of empty");
-
-    # file_name / file_stem / extension
-    assert(io.Path("/a/b/c.txt").file_name().value() == "c.txt", "file_name");
-    assert(io.Path("a/b/").file_name().value() == "b", "file_name trailing separator");
-    assert(io.Path("/").file_name().is_empty(), "file_name of root");
-    assert(io.Path("a/..").file_name().is_empty(), "file_name of ..");
-    assert(io.Path("").file_name().is_empty(), "file_name of empty");
-    assert(io.Path("c.tar.gz").file_stem().value() == "c.tar", "file_stem");
-    assert(io.Path("c.tar.gz").extension().value() == "gz", "extension");
-    assert(io.Path("/x/.bashrc").file_stem().value() == ".bashrc", "dotfile stem");
-    assert(io.Path("/x/.bashrc").extension().is_empty(), "dotfile has no extension");
-    assert(io.Path("foo.").file_stem().value() == "foo", "trailing dot stem");
-    assert(io.Path("foo.").extension().value() == "", "trailing dot: the empty extension");
-    assert(io.Path("a.b/c").extension().is_empty(), "dot in a directory name");
-    assert(io.Path("noext").file_stem().value() == "noext", "no extension stem");
-    assert(io.Path("noext").extension().is_empty(), "no extension");
-    assert(io.Path("/").file_stem().is_empty(), "file_stem of root");
-    assert(io.Path(".").parent().is_empty() && io.Path("..").parent().is_empty(), "parent of . and ..");
-    assert(io.Path.dot_index("c.tar.gz").value() == 5, "dot_index");
-    assert(io.Path.dot_index(".bashrc").is_empty() && io.Path.dot_index("").is_empty(), "dot_index none");
-
-    # with_extension
-    assert(io.Path("a/b.txt").with_extension("md").to_string() == "a/b.md", "replace extension");
-    assert(io.Path("a/b").with_extension("rs").to_string() == "a/b.rs", "add extension");
-    assert(io.Path("a/b.txt").with_extension("").to_string() == "a/b", "remove extension");
-    assert(io.Path(".bashrc").with_extension("x").to_string() == ".bashrc.x", "dotfile extension");
-    assert(io.Path("/").with_extension("x").to_string() == "/", "no file name: unchanged");
-
-    # components
-    var c = io.Path("/usr//lib/./x/").components();
-    assert(c.count == 4, "components count");
-    assert(c[0] == "/" && c[1] == "usr" && c[2] == "lib" && c[3] == "x", "components");
-    var d = io.Path("./a/b").components();
-    assert(d.count == 3 && d[0] == "." && d[1] == "a" && d[2] == "b", "leading . kept");
-    var e = io.Path("a/../b").components();
-    assert(e.count == 3 && e[1] == "..", ".. kept");
-    assert(io.Path("").components().count == 0, "no components");
-
-    # normalize: rebuilt with the platform separator.
-    assert(io.Path("a/./b/../c").normalize().to_string() == w("a/c"), "normalize");
-    assert(io.Path("/../x").normalize().to_string() == w("/x"), ".. stops at the root");
-    assert(io.Path("../a/..").normalize().to_string() == "..", "leading .. kept");
-    assert(io.Path("a/..").normalize().to_string() == ".", "cleans to .");
-    assert(io.Path("a//b/").normalize().to_string() == w("a/b"), "separators collapse");
-    assert(io.Path("./").normalize().to_string() == ".", "./");
-    assert(io.Path("").normalize().to_string() == "", "empty stays empty");
-
-    # relative / empty / equality
-    assert(!io.Path("x").is_absolute() && io.Path("x").is_relative(), "relative");
-    assert(!io.Path("").is_absolute(), "empty is not absolute");
-    assert(io.Path("").is_empty && !io.Path("a").is_empty, "is_empty");
-    assert(io.Path.separator() == w("/"), "separator");
-    assert(io.Path("a/b") == io.Path("a/b"), "==");
-    assert(io.Path("a/b") != io.Path("a/c"), "!=");
-    assert(io.Path("q").to_string() == "q", "to_string");
-    assert(s(io.Path("z")) == "z", "Path as a parameter type");
-
-    [Target(!OS(Windows))] {
-        # POSIX: a root makes a path absolute; `\` is an ordinary byte.
-        assert(io.Path("/x").is_absolute(), "absolute");
-        assert(io.Path("//a//b/").normalize().to_string() == "/a/b", "leading separators collapse");
-        assert(io.Path("a\\b").file_name().value() == "a\\b", "backslash is not a separator");
-    }
-    [Target(OS(Windows))] {
-        # Windows: `\` and `/` both separate; absolute needs a drive and a
-        # root, or a UNC `\\server\share` prefix.
-        assert(!io.Path("/x").is_absolute(), "a root without a drive is relative");
-        assert(!io.Path("C:x").is_absolute(), "a drive without a root is relative");
-        assert(io.Path("C:/x").is_absolute() && io.Path(w("C:/x")).is_absolute(), "drive and root");
-        assert(io.Path(w("//server/share/x")).is_absolute(), "UNC");
-        assert(io.Path(w("a/b/c.txt")).parent().value().to_string() == w("a/b"), "parent with backslashes");
-        assert(io.Path(w("a/b/c.txt")).file_name().value() == "c.txt", "file_name with backslashes");
-        assert(io.Path("C:/a//./b/").normalize().to_string() == w("C:/a/b"), "normalize keeps the drive");
-        assert(io.Path("C:/x").parent().value().to_string() == "C:/", "parent of a top-level name keeps the root");
-        assert(io.Path("C:/").parent().is_empty(), "parent of a drive root");
-        var wc = io.Path(w("C:/a/b")).components();
-        assert(wc.count == 4 && wc[0] == "C:" && wc[1] == w("/") && wc[2] == "a" && wc[3] == "b", "drive components");
-        assert(io.Path("a").join("C:/x").to_string() == "C:/x", "join a drive path replaces");
-        assert(io.Path(w("C:/a")).join("b").to_string() == w("C:/a/b"), "join under a drive");
-    }
-    return 0;
-}
-"##;
-
-/// On Unix, `path_functions_on_every_platform` runs the same program with
-/// the host's own rules among the others.
-#[cfg(windows)]
-#[test]
-fn path_functions() {
-    assert_runs("path", PATH_PROGRAM);
-}
-
-/// Everything that touches the file system, in one program: create, write
-/// and read (bytes and text), OpenOptions, seek, set_len, metadata,
-/// directories, copy/rename/remove, error kinds, and no leaked buffers.
-fn fs_program(scratch: &str) -> String {
-    r##"
-import [File, OpenOptions, Directory, DirEntry, Path, IoError, IoResult, Metadata] from io;
-
-text(f: Path): String {
-    return File.read_to_string(f).value();
-}
-
-bytes_of(s: String): u8[] {
-    var out = Array<u8>();
-    var p = unsafe_cast<__ptr<u8>>(s.c_str());
-    ulong i = 0;
-    while (i < s.size) {
-        out.append(p[i]);
-        i = i + 1;
-    }
-    return out;
-}
-
-has_entry(list: DirEntry[], name: String): bool {
-    ulong i = 0;
-    while (i < list.count) {
-        if (list[i].name == name) {
-            return true;
-        }
-        i = i + 1;
-    }
-    return false;
-}
-
-entry(list: DirEntry[], name: String): DirEntry {
-    ulong i = 0;
-    while (i < list.count) {
-        if (list[i].name == name) {
-            return list[i];
-        }
-        i = i + 1;
-    }
-    return DirEntry();
-}
-
-files_and_text(base: Path) {
-    # Bytes round trip: every byte value.
-    var bin = base.join("bytes.bin");
-    var data = Array<u8>();
-    int i = 0;
-    while (i < 256) {
-        data.append(i as u8);
-        i = i + 1;
-    }
-    assert(File.write_bytes(bin, data).is_ok(), "write_bytes");
-    var back = File.read_bytes(bin);
-    assert(back.is_ok(), "read_bytes");
-    assert(back.value().count == 256, "read_bytes size");
-    assert(back.value() == data, "read_bytes content");
-
-    # Text round trip, including non-ASCII.
-    var t = base.join("text.txt");
-    assert(File.write_text(t, "hello, wörld").is_ok(), "write_text");
-    assert(text(t) == "hello, wörld", "read_to_string");
-    assert(t.metadata().value().size == 13, "text size in bytes");
-
-    # Invalid UTF-8 is an invalid-input error.
-    var bad = Array<u8>();
-    bad.append(255);
-    bad.append(254);
-    var badf = base.join("bad.txt");
-    assert(File.write_bytes(badf, bad).is_ok(), "write invalid utf-8");
-    var r = File.read_to_string(badf);
-    assert(r.is_err(), "invalid utf-8 rejected");
-    assert(r.error().is_invalid_input(), "invalid utf-8 rejected");
-
-    # Append.
-    var a = OpenOptions().append(true).open(t);
-    assert(a.is_ok(), "open for append");
-    assert(a.value().write_all(" again").is_ok(), "append write");
-    assert(a.value().close().is_ok(), "close appended");
-    assert(text(t) == "hello, wörld again", "appended");
-
-    # create_new fails on an existing file, succeeds on a new one.
-    var cn = OpenOptions().write(true).create_new(true).open(t);
-    assert(cn.is_err(), "create_new on existing");
-    assert(cn.error().is_already_exists(), "create_new on existing");
-    assert(cn.error().message.size > 0, "error message");
-    var fresh = base.join("fresh.txt");
-    var cn2 = OpenOptions().write(true).create_new(true).open(fresh);
-    assert(cn2.is_ok(), "create_new on missing");
-    assert(cn2.value().write_all(bytes_of("new")).is_ok(), "write_all");
-    assert(cn2.value().close().is_ok(), "close new");
-    assert(text(fresh) == "new", "create_new content");
-
-    # Open without create fails on a missing file.
-    var missing = base.join("missing.txt");
-    var m = File.open(missing);
-    assert(m.is_err(), "open missing: not found");
-    assert(m.error().is_not_found(), "open missing: not found");
-    assert(!missing.exists(), "missing does not exist");
-    var nw = OpenOptions().write(true).open(missing);
-    assert(nw.error().is_not_found(), "write without create: not found");
-    var nodir = File.create(base.join("no/such/dir.txt"));
-    assert(nodir.error().is_not_found(), "create under missing directory");
-
-    # Option validation.
-    assert(OpenOptions().open(t).error().is_invalid_input(), "no access mode");
-    assert(OpenOptions().read(true).create(true).open(t).error().is_invalid_input(), "create needs write");
-
-    # Truncate.
-    var tr = OpenOptions().write(true).truncate(true).open(t);
-    assert(tr.is_ok(), "open truncate");
-    assert(tr.value().metadata().value().size == 0, "truncated size");
-    tr.value().close();
-    assert(text(t) == "", "truncated content");
-}
-
-seeking(base: Path) {
-    var p = base.join("seek.txt");
-    assert(File.write_text(p, "0123456789").is_ok(), "write seek file");
-    var o = OpenOptions().read(true).write(true).open(p);
-    assert(o.is_ok(), "open read+write");
-    var f = o.value();
-    assert(f.is_open(), "is_open");
-    assert(f.seek_end(0).value() == 10, "seek_end");
-    assert(f.seek_start(3).value() == 3, "seek_start");
-    var buf = Array<u8>();
-    assert(f.read(buf, 2).value() == 2, "read 2");
-    assert(buf.count == 2 && buf[0] == 51 && buf[1] == 52, "read at 3");
-    assert(f.seek_current(2).value() == 7, "seek_current");
-    assert(f.read(buf, 10).value() == 3, "read to end");
-    assert(buf.count == 5 && buf[2] == 55 && buf[4] == 57, "read appends");
-    assert(f.read(buf, 10).value() == 0, "EOF");
-    assert(f.seek_current(-4).value() == 6, "seek back");
-    var before_start = f.seek_current(-100);
-    assert(before_start.is_err(), "seek before the start");
-    assert(before_start.error().is_invalid_input(), "seek before the start is invalid input");
-    assert(f.seek_start(0).is_ok(), "rewind");
-    assert(f.write_all("AB").is_ok(), "overwrite");
-    assert(f.sync().is_ok(), "sync");
-    assert(text(p) == "AB23456789", "overwritten");
-
-    # set_len shrinks and zero-extends, keeping the position.
-    assert(f.set_length(4).is_ok(), "set_length shrink");
-    assert(f.metadata().value().size == 4, "shrunk");
-    assert(f.set_length(8).is_ok(), "set_length grow");
-    assert(f.seek_current(0).value() == 2, "position kept");
-    var all = File.read_bytes(p).value();
-    assert(all.count == 8 && all[3] == 51 && all[4] == 0 && all[7] == 0, "zero-extended");
-
-    # Metadata of an open file.
-    var md = f.metadata().value();
-    assert(md.is_file && !md.is_directory && !md.is_symlink, "file kind");
-    assert(md.modified > 0 && md.accessed > 0, "timestamps");
-    assert(!md.read_only, "writable");
-    [Target(!OS(Windows))] {
-        assert((md.permissions & 256) != 0, "owner can read");   # POSIX mode bits
-    }
-
-    # Close is explicit and idempotent; a closed File refuses I/O.
-    assert(f.close().is_ok(), "close");
-    assert(!f.is_open(), "closed");
-    assert(f.close().is_ok(), "close again");
-    assert(f.read(buf, 1).is_err(), "read after close");
-    assert(f.write_all("x").is_err(), "write after close");
-
-    # A file opened only to append can still be synced.
-    var ap = OpenOptions().append(true).open(p);
-    assert(ap.is_ok(), "open to append");
-    assert(ap.value().write_all("Z").is_ok(), "append");
-    assert(ap.value().sync().is_ok(), "sync in append mode");
-    assert(ap.value().close().is_ok(), "close append");
-    assert(File.read_bytes(p).value().count == 9, "appended");
-
-    # A directory opens read-only but cannot be read.
-    var dr = File.open(base);
-    assert(dr.is_ok(), "open directory");
-    var rd = dr.value().read_all();
-    assert(rd.is_err(), "read directory");
-    assert(rd.error().is_is_a_directory(), "read directory");
-}
-
-directories(base: Path) {
-    var nested = base.join("x").join("y").join("z");
-    assert(Directory.create_all(nested).is_ok(), "create_all");
-    assert(nested.is_dir() && !nested.is_file() && nested.exists(), "nested exists");
-    assert(Directory.create_all(nested).is_ok(), "create_all again");
-    var again = Directory.create(nested);
-    assert(again.is_err(), "create existing");
-    assert(again.error().is_already_exists(), "create existing");
-    var nop = Directory.create(base.join("p/q"));
-    assert(nop.error().is_not_found(), "create without parent");
-
-    var d = base.join("list");
-    assert(Directory.create(d).is_ok(), "create");
-    assert(File.write_text(d.join("a.txt"), "a").is_ok(), "a.txt");
-    assert(File.write_text(d.join("b.txt"), "bb").is_ok(), "b.txt");
-    assert(Directory.create(d.join("sub")).is_ok(), "sub");
-
-    # Listing an empty path fails as on POSIX, rather than listing the
-    # current directory.
-    var blank = Directory();
-    blank.path = Path("");
-    assert(blank.entries().error().is_not_found(), "list an empty path");
-    var empty_dir = base.join("empty");
-    assert(Directory.create(empty_dir).is_ok(), "create empty");
-    assert(Directory.open(empty_dir).value().entries().value().count == 0, "list an empty directory");
-    assert(Directory.remove(empty_dir).is_ok(), "remove empty");
-
-    var opened = Directory.open(d);
-    assert(opened.is_ok(), "Directory.open");
-    var entries = opened.value().entries();
-    assert(entries.is_ok(), "entries");
-    var list = entries.value();
-    assert(list.count == 3, "three entries");
-    assert(has_entry(list, "a.txt") && has_entry(list, "b.txt") && has_entry(list, "sub"), "entry names");
-    var sub = entry(list, "sub");
-    assert(sub.is_directory && !sub.is_file, "sub is a directory");
-    var b = entry(list, "b.txt");
-    assert(b.is_file && !b.is_directory && !b.is_symlink, "b is a file");
-    assert(b.path == d.join("b.txt"), "entry path");
-    assert(b.metadata().value().size == 2, "entry metadata");
-
-    var nd = Directory.open(d.join("a.txt"));
-    assert(nd.is_err(), "open a file as a directory");
-    assert(nd.error().is_not_a_directory(), "open a file as a directory");
-    assert(Directory.open(d.join("nope")).error().is_not_found(), "open missing directory");
-
-    var ne = Directory.remove(d);
-    assert(ne.is_err(), "remove non-empty");
-    assert(ne.error().is_directory_not_empty(), "remove non-empty");
-    assert(Directory.remove(d.join("sub")).is_ok(), "remove empty");
-    assert(!d.join("sub").exists(), "removed");
-
-    # copy / rename / remove
-    var a = d.join("a.txt");
-    var c = d.join("c.txt");
-    assert(File.copy(d.join("b.txt"), c).value() == 2, "copy count");
-    assert(text(c) == "bb", "copied content");
-    # Copying a file onto itself fails instead of truncating it first.
-    assert(File.copy(c, c).error().is_invalid_input(), "copy onto itself");
-    assert(File.copy(c, d.join(".").join("c.txt")).error().is_invalid_input(), "copy onto itself, other spelling");
-    assert(text(c) == "bb", "self-copy kept content");
-    var moved = d.join("moved.txt");
-    assert(File.rename(c, moved).is_ok(), "rename");
-    assert(!c.exists() && moved.exists(), "renamed");
-    assert(File.rename(a, moved).is_ok(), "rename replaces");
-    assert(text(moved) == "a", "replaced content");
-    assert(File.remove(moved).is_ok(), "remove");
-    assert(!moved.exists(), "removed file");
-    var gone = File.remove(moved);
-    assert(gone.is_err(), "remove missing");
-    assert(gone.error().is_not_found(), "remove missing");
-    assert(File.copy(moved, c).error().is_not_found(), "copy missing");
-
-    # current directory and canonicalize
-    var cwd = Directory.current();
-    assert(cwd.is_ok(), "current");
-    assert(cwd.value().is_absolute(), "current");
-    assert(Directory.set_current(d).is_ok(), "set_current");
-    var here = Directory.current().value().canonicalize().value();
-    assert(here == d.canonicalize().value(), "now in d");
-    assert(Path("b.txt").is_file(), "relative to the new current directory");
-    assert(Directory.set_current(cwd.value()).is_ok(), "restore current");
-    var dotted = d.join("..").join("list").join("b.txt");
-    assert(dotted.canonicalize().value() == d.join("b.txt").canonicalize().value(), "canonicalize");
-    assert(d.join("none").canonicalize().error().is_not_found(), "canonicalize missing");
-
-    # remove_all removes a tree.
-    var tree = base.join("tree");
-    assert(Directory.create_all(tree.join("inner").join("deep")).is_ok(), "tree");
-    assert(File.write_text(tree.join("inner").join("f.txt"), "f").is_ok(), "tree file");
-    # A symlink inside it is removed, never what it points to. Not on
-    # Windows, which needs a privilege for symlinks.
-    var keep = base.join("keep");
-    assert(Directory.create(keep).is_ok(), "keep");
-    assert(File.write_text(keep.join("k.txt"), "k").is_ok(), "k.txt");
-    [Target(!OS(Windows))] {
-        var link = tree.join("link");
-        assert(Directory.symlink(keep, link).is_ok(), "symlink");
-        var lm = link.symlink_metadata();
-        assert(lm.is_ok(), "symlink_metadata");
-        assert(lm.value().is_symlink, "symlink_metadata");
-        assert(link.metadata().value().is_directory, "metadata follows the link");
-        var tl = Directory.open(tree).value().entries().value();
-        assert(entry(tl, "link").is_symlink, "entry is a symlink");
-    }
-    assert(Directory.remove_all(tree).is_ok(), "remove_all");
-    assert(!tree.exists(), "tree removed");
-    assert(keep.join("k.txt").is_file(), "link target kept");
-    assert(Directory.remove_all(base.join("absent")).error().is_not_found(), "remove_all missing");
-}
-
-# set_permissions, set_read_only, set_executable, set_modified and
-# set_accessed on Path and File, OpenOptions.mode, Directory.create with a
-# mode, and symlinks made and read back.
-permissions_and_times(base: Path) {
-    var d = base.join("perm");
-    assert(Directory.create(d, mode = 448).is_ok(), "create with mode");
-    var f = d.join("run.sh");
-    var file = OpenOptions().write(true).create_new(true).mode(448).open(f).value();
-    assert(file.write_all("#!/bin/sh\n").is_ok(), "write");
-    [Target(OS(Linux) || OS(Mac))] {
-        assert((d.metadata().value().permissions & 511) == 448, "directory mode");
-        assert(file.metadata().value().permissions == 448, "OpenOptions.mode");
-        assert(file.set_permissions(420).is_ok(), "File.set_permissions");
-        assert(f.metadata().value().permissions == 420, "644");
-        assert(file.set_executable(true).is_ok(), "File.set_executable");
-        assert(f.metadata().value().permissions == 493, "755");
-        assert(f.set_executable(false).is_ok(), "Path.set_executable");
-        assert(f.metadata().value().permissions == 420, "644 again");
-        assert(f.set_permissions(256).is_ok(), "Path.set_permissions");
-        assert(f.set_executable(true).is_ok(), "x only where readable");
-        assert(f.metadata().value().permissions == 320, "500");
-        assert(f.set_read_only(false).is_ok(), "writable by the owner only");
-        assert(f.metadata().value().permissions == 448, "700");
-    }
-    # Times are nanoseconds since the epoch; before 1970 too. Windows keeps
-    # 100 ns.
-    assert(file.set_modified(1000000000123456700).is_ok(), "File.set_modified");
-    assert(file.set_accessed(-1500000000).is_ok(), "File.set_accessed");
-    var m = file.metadata().value();
-    assert(m.modified == 1000000000123456700, "modified set");
-    assert(m.accessed == -1500000000, "accessed set");
-    assert(file.close().is_ok(), "close");
-    assert(f.set_accessed(2000000000).is_ok(), "Path.set_accessed");
-    assert(f.metadata().value().accessed == 2000000000, "accessed");
-    assert(f.metadata().value().modified == 1000000000123456700, "modified left alone");
-    assert(f.set_modified(3000000000).is_ok(), "Path.set_modified");
-    assert(f.metadata().value().modified == 3000000000, "modified");
-    assert(f.metadata().value().accessed == 2000000000, "accessed left alone");
-
-    # Read-only, portably.
-    assert(f.set_read_only(true).is_ok(), "set_read_only");
-    assert(f.metadata().value().read_only, "read-only");
-    assert(_is_root() || OpenOptions().write(true).open(f).error().is_permission_denied(), "no writing");
-    assert(f.set_read_only(false).is_ok(), "set_read_only false");
-    assert(!f.metadata().value().read_only, "writable");
-    assert(File.write_text(f, "again").is_ok(), "write again");
-
-    # A directory's time; set after its contents.
-    assert(d.set_modified(4000000000).is_ok(), "directory time");
-    assert(d.metadata().value().modified == 4000000000, "directory modified");
-
-    var missing = d.join("none");
-    assert(missing.set_permissions(420).error().is_not_found(), "missing set_permissions");
-    assert(missing.set_modified(0).error().is_not_found(), "missing set_modified");
-    assert(missing.set_read_only(true).error().is_not_found(), "missing set_read_only");
-    assert(Path("").set_modified(0).error().is_not_found(), "empty set_modified");
-    assert(File().set_permissions(420).is_err(), "closed set_permissions");
-    assert(File().set_modified(0).is_err(), "closed set_modified");
-    assert(f.read_link().error().is_invalid_input(), "read_link of a file");
-
-    [Target(!OS(Windows))] {
-        var link = d.join("latest");
-        assert(File.symlink(Path("run.sh"), link).is_ok(), "File.symlink");
-        assert(link.read_link().value() == Path("run.sh"), "read_link");
-        assert(link.symlink_metadata().value().is_symlink, "is a symlink");
-        assert(text(link) == "again", "read through the link");
-        assert(File.symlink(Path("x"), link).error().is_already_exists(), "symlink exists");
-        var up = d.join("up");
-        assert(Directory.symlink(Path(".."), up).is_ok(), "Directory.symlink");
-        assert(up.join("perm").is_directory(), "through the directory link");
-        var dangling = d.join("dangling");
-        assert(File.symlink(Path("nowhere"), dangling).is_ok(), "dangling symlink");
-        assert(dangling.read_link().value() == Path("nowhere"), "read a dangling link");
-        assert(d.join("none").read_link().error().is_not_found(), "read_link missing");
-    }
-}
-
-# Root ignores permission bits, so a read-only file still opens for writing.
-[Target(OS(Linux) || OS(Mac))]
-extern uint geteuid();
-
-[Target(OS(Linux) || OS(Mac))]
-_is_root(): bool {
-    return geteuid() == 0;
-}
-
-[Target(!(OS(Linux) || OS(Mac)))]
-_is_root(): bool {
-    return false;
-}
-
-run_all(scratch: String): int {
-    var tmp = Directory.temp();
-    assert(tmp.is_absolute() && tmp.is_dir(), "temp");
-    var base = tmp.join(scratch);
-    Directory.remove_all(base);
-    assert(Directory.create(base).is_ok(), "create base");
-    files_and_text(base);
-    seeking(base);
-    directories(base);
-    permissions_and_times(base);
-    assert(Directory.remove_all(base).is_ok(), "remove base");
-    assert(!base.exists(), "base removed");
-    return 0;
-}
-
-main(): int {
-    var before = _pep_live_allocs();
-    var rc = run_all("SCRATCH");
-    var after = _pep_live_allocs();
-    assert(after == before, "leaked allocations");
-    print("io-fs-ok");
-    return rc;
-}
-"##
-    .replace("SCRATCH", scratch)
-}
-
-#[test]
-fn file_system_round_trips() {
-    let scratch = scratch_name("fs");
-    let out = assert_runs("fs", &fs_program(&scratch));
-    assert!(out.contains("io-fs-ok"), "output: {out}");
-    assert!(!std::env::temp_dir().join(&scratch).exists(), "scratch directory left behind");
-}
-
-/// The enums of the io API: `ErrorKind` from `IoError.kind()`, `SeekFrom`,
-/// `FileType` on `Metadata` and `DirEntry`, `StdStream`, and the optional
-/// `Metadata.created`.
-fn enums_program(scratch: &str) -> String {
-    r##"
-import [File, Directory, DirEntry, Path, IoError, ErrorKind, SeekFrom, FileType, StdStream, Metadata] from io;
-
-# Windows and macOS always report a creation time.
-[Target(!OS(Linux))]
-check_created(m: Metadata) {
-    assert(m.created.is_value(), "created is reported");
-    assert(m.created.value() > 0, "created is after 1970");
-}
-
-# Linux reports one only when the file system records it.
-[Target(OS(Linux))]
-check_created(m: Metadata) {
-    if (m.created) {
-        assert(m.created.value() > 0, "created is after 1970");
-    }
-}
-
-kind_name(e: IoError): String {
-    return match (e.kind()) {
-        NotFound => "not found",
-        AlreadyExists => "exists",
-        else => "other",
-    };
-}
-
-main(): int {
-    var base = Directory.temp().join("SCRATCH");
-    Directory.remove_all(base);
-    assert(Directory.create_all(base).is_ok(), "create scratch");
-
-    # ErrorKind agrees with the predicates.
-    var missing = File.open(base.join("missing.txt"));
-    assert(missing.is_err(), "missing file");
-    assert(missing.error().kind() == ErrorKind.NotFound, "missing is NotFound");
-    assert(missing.error().is_not_found(), "is_not_found");
-    assert(!missing.error().is_permission_denied(), "not permission denied");
-    assert(kind_name(missing.error()) == "not found", "match on the kind");
-    var again = Directory.create(base);
-    assert(again.error().kind() == ErrorKind.AlreadyExists && again.error().is_already_exists(), "AlreadyExists");
-    assert(kind_name(again.error()) == "exists", "match AlreadyExists");
-    assert(IoError().kind() == ErrorKind.Other, "code 0 is Other");
-    assert(ErrorKind.TimedOut.name() == "TimedOut", "case names");
-
-    # SeekFrom.
-    var path = base.join("data.bin");
-    assert(File.write_text(path, "0123456789").is_ok(), "write data");
-    var f = File.open(path).value();
-    assert(f.seek(SeekFrom.End(0)).value() == 10, "End(0) is the length");
-    assert(f.seek(SeekFrom.Start(4)).value() == 4, "Start(4)");
-    assert(f.seek(SeekFrom.Current(-2)).value() == 2, "Current(-2)");
-    assert(f.seek(SeekFrom.End(-3)).value() == 7, "End(-3)");
-    var buf = Array<u8>();
-    assert(f.read(buf, 1).value() == 1 && buf[0] == 55, "read at 7");
-    assert(f.seek(SeekFrom.Current(0)).value() == 8, "position after the read");
-    assert(f.seek(SeekFrom.Start(-1)).is_err(), "before the start");
-    f.close();
-    assert(f.seek(SeekFrom.Start(0)).is_err(), "seek on a closed File");
-
-    # FileType on Metadata and DirEntry.
-    var fm = path.metadata().value();
-    assert(fm.file_type == FileType.File && fm.is_file, "file metadata");
-    check_created(fm);
-    var dm = base.metadata().value();
-    assert(dm.file_type == FileType.Directory && dm.is_directory, "directory metadata");
-    check_created(dm);
-    var opened = File.open(path).value();
-    var om = opened.metadata().value();
-    assert(om.file_type == FileType.File, "fstat file type");
-    assert(om.created.is_value() == fm.created.is_value(), "stat and fstat agree on created");
-    opened.close();
-    assert(Metadata().file_type == FileType.Other && Metadata().created.is_empty(), "default Metadata");
-    assert(DirEntry().file_type == FileType.Other, "default DirEntry");
-
-    assert(Directory.create(base.join("sub")).is_ok(), "create sub");
-    var list = Directory.open(base).value().entries().value();
-    var files = 0;
-    var dirs = 0;
-    for (var e in list) {
-        if (e.name == "data.bin") {
-            assert(e.file_type == FileType.File && e.is_file, "entry is a file");
-            files = files + 1;
-        }
-        if (e.name == "sub") {
-            assert(e.file_type == FileType.Directory && e.is_directory, "entry is a directory");
-            dirs = dirs + 1;
-        }
-    }
-    assert(files == 1 && dirs == 1, "both entries listed");
-
-    # StdStream.
-    var err = File.std_file(StdStream.Error, "<err>");
-    assert(err.is_open() && err.path.to_string() == "<err>", "std_file(StdStream)");
-
-    assert(Directory.remove_all(base).is_ok(), "clean up");
-    print("io-enums-ok");
-    return 0;
-}
-"##
-    .replace("SCRATCH", scratch)
-}
-
-#[test]
-fn io_enums() {
-    let scratch = scratch_name("enums");
-    let out = assert_runs("enums", &enums_program(&scratch));
-    assert!(out.contains("io-enums-ok"), "output: {out}");
-    assert!(!std::env::temp_dir().join(&scratch).exists(), "scratch directory left behind");
-}
-
-/// A File's destructor closes its handle, and a loop of opens never runs out
-/// of handles.
-fn close_program(scratch: &str) -> String {
-    r##"
-import [File, Path, Directory] from io;
-
-[Target(OS(Windows))] extern int GetHandleInformation(void* handle, void* flags);
-
-churn(p: Path) {
-    [Target(!OS(Windows))] {
-        # A dropped File's descriptor is the lowest free one again.
-        var first = -1;
-        {
-            var f = File.open(p).value();
-            first = f._handle;
-        }
-        var again = File.open(p).value();
-        assert(again._handle == first, "descriptor not closed by the destructor");
-    }
-    [Target(OS(Windows))] {
-        # A dropped File's HANDLE is no longer valid. (The temporary File
-        # is released at the end of the declaration.)
-        var h = File.open(p).value()._handle;
-        var flags = _pep_malloc(4);
-        assert(GetHandleInformation(h, flags) == 0, "handle not closed by the destructor");
-        _pep_free(flags);
-    }
-    int i = 0;
-    while (i < 3000) {
-        var f = File.open(p);
-        assert(f.is_ok(), "open (handle leak?)");
-        i = i + 1;
-    }
-}
-
-main(): int {
-    var p = Directory.temp().join("SCRATCH.txt");
-    assert(File.write_text(p, "x").is_ok(), "write");
-    var before = _pep_live_allocs();
-    churn(p);
-    assert(_pep_live_allocs() == before, "leak");
-    assert(File.remove(p).is_ok(), "remove");
-    return 0;
-}
-"##
-    .replace("SCRATCH", scratch)
-}
-
-const STDOUT_PROGRAM: &str = r##"
-import io;
-
-main(): int {
-    var out = io.File.stdout();
-    assert(out.is_open(), "stdout open");
-    assert(out.write_all("io-stdout-ok").is_ok(), "write stdout");
-    # Closing a standard stream only forgets it: fd 1 stays usable.
-    assert(out.close().is_ok(), "close stdout");
-    assert(io.File.stdout().write_all("|still-open").is_ok(), "stdout again");
-    assert(io.File.stderr().is_open() && io.File.stdin().is_open(), "stderr, stdin");
-    return 0;
-}
-"##;
-
 const IMPORT_NAMES_PROGRAM: &str =
     "import [Path as P] from io;\nmain(): int { return P(\"ab\").to_string().size as int - 2; }";
-
-#[test]
-fn stdout_is_a_file() {
-    let out = assert_runs("stdout", STDOUT_PROGRAM);
-    assert_eq!(out, "io-stdout-ok|still-open");
-}
 
 const PRINT_ORDER_PROGRAM: &str = r##"
 import io;
@@ -840,152 +111,6 @@ fn print_and_stdout_keep_order() {
     let out = assert_runs("print_order", PRINT_ORDER_PROGRAM);
     // On Windows, C stdio writes `print`'s newline as "\r\n".
     assert_eq!(out.replace("\r\n", "\n"), "one\ntwo\nthree\nfour\nfive\n");
-}
-
-const PRINT_TRAIT_PROGRAM: &str = r##"
-import io;
-
-# A type of the program's own gets print and print_line from write and
-# write_all.
-struct Collector {
-    var bytes: u8[];
-
-    construct() {
-        bytes = Array<u8>();
-    }
-
-    write(data: u8[]): io.IoResult<ulong> {
-        write_all(data);
-        return io.IoResult<ulong>.ok(data.count);
-    }
-
-    write_all(data: u8[]): io.IoResult<void> {
-        for (var b in data) {
-            bytes.append(b);
-        }
-        return io.IoResult<void>.ok();
-    }
-}
-
-extend Collector with io.Writer {}
-
-# Any Writer works through a constraint.
-greet<T: io.Writer>(out: T) {
-    out.print_line("hello");
-}
-
-main(): int {
-    var collector = Collector();
-    assert(collector.print("n = ").is_ok(), "print");
-    assert(collector.print_line(3).is_ok(), "print_line");
-    collector.print_line((1.5, true));
-    greet(collector);
-    var text = String._from_bytes(collector.bytes);
-    assert(text == "n = 3\n(1.5, true)\nhello\n", "collected text");
-
-    var path = io.Directory.temp().join("print_trait_test.txt");
-    var file = io.File.create(path).value();
-    greet(file);
-    file.print(42);
-    file.close();
-    assert(io.File.read_to_string(path).value() == "hello\n42", "file text");
-    io.File.remove(path);
-    print("print-ok");
-    return 0;
-}
-"##;
-
-/// `io.Writer` gives `print`/`print_line` to File and to any type with
-/// `write` and `write_all(u8[])`, and works as a generic constraint.
-#[test]
-fn print_trait_writes_text() {
-    let out = assert_runs("print_trait", PRINT_TRAIT_PROGRAM);
-    assert_eq!(out.trim_end(), "print-ok");
-}
-
-const READER_TRAIT_PROGRAM: &str = r##"
-import io;
-
-# A type of the program's own gets lines() and chunks() from read: it hands
-# out its text two bytes at a time, so lines and chunks span reads.
-struct Pieces {
-    var data: u8[];
-    var position: ulong;
-
-    construct(text: String) {
-        data = text.bytes();
-    }
-
-    read(buffer: u8[], max: ulong): io.IoResult<ulong> {
-        ulong count = 0;
-        while (count < max && count < 2 && position < data.count) {
-            buffer.append(data[position]);
-            position += 1;
-            count += 1;
-        }
-        return io.IoResult<ulong>.ok(count);
-    }
-}
-
-extend Pieces with io.Reader {}
-
-# Any Reader, as a trait value.
-joined(source: io.Reader): String {
-    var text = "";
-    for (var line in source.lines()) {
-        text = text + line.value() + "|";
-    }
-    return text;
-}
-
-# Any Reader, through a constraint.
-total<R: io.Reader>(source: R, size: ulong): ulong {
-    ulong count = 0;
-    for (var chunk in source.chunks(size)) {
-        assert(chunk.value().count <= size, "a chunk is at most size bytes");
-        count += chunk.value().count;
-    }
-    return count;
-}
-
-exercise() {
-    assert(joined(Pieces("one\r\ntwo\n\nlast")) == "one|two||last|", "lines across reads");
-    assert(total(Pieces("abcdefg"), 3) == 7, "chunks of a type of the program's own");
-
-    var path = io.Directory.temp().join("reader_trait_test.txt");
-    assert(io.File.write_text(path, "alpha\nbeta\n").is_ok(), "write");
-    assert(joined(io.File.open(path).value()) == "alpha|beta|", "a File is a Reader");
-    assert(total(io.File.open(path).value(), 4) == 11, "chunks of a File");
-    var empty = 0;
-    for (var chunk in io.File.open(path).value().chunks(100)) {
-        empty += 1;
-    }
-    assert(empty == 1, "one read takes the whole small file");
-    io.File.remove(path);
-}
-
-main(): int {
-    exercise();
-    var before = _pep_live_allocs();
-    exercise();
-    assert(_pep_live_allocs() == before, "readers leak nothing");
-    print("reader-ok");
-    return 0;
-}
-"##;
-
-/// `io.Reader` gives `lines()` and `chunks()` to File and to any type with
-/// `read(u8[], ulong)`, as a trait value and as a generic constraint.
-#[test]
-fn reader_trait_reads_lines_and_chunks() {
-    let out = assert_runs("reader_trait", READER_TRAIT_PROGRAM);
-    assert_eq!(out.trim_end(), "reader-ok");
-}
-
-#[test]
-fn file_closes_on_last_release() {
-    let scratch = scratch_name("close");
-    assert_runs("close", &close_program(&scratch));
 }
 
 #[test]
@@ -1015,131 +140,37 @@ fn io_is_a_module_not_prelude() {
     assert!(repo_root().join("runtime/io/module.pep").is_file());
 }
 
-/// Every program the host tests build and run, as (name, source): the
-/// simulated-host tests push each one through the same pipeline for every
-/// other platform.
-/// Streaming iteration: `for (var entry in dir)` reads a directory one entry
-/// at a time, and `file.lines()` a file one line at a time, each yielding
-/// `IoResult`s; leaving early closes the listing, and nothing leaks.
-fn streams_program(scratch: &str) -> String {
-    r##"
-import [File, Path, Directory, DirectoryIterator] from io;
-
-count_entries(dir: Directory): int {
-    var n = 0;
-    for (var entry in dir) {
-        assert(entry.is_ok(), "entry");
-        n += 1;
-    }
-    return n;
+/// The text of the runtime file `path` (relative to the repository root).
+fn runtime_file(path: &str) -> String {
+    let file = repo_root().join(path);
+    std::fs::read_to_string(&file).unwrap_or_else(|e| panic!("read {}: {e}", file.display()))
 }
 
-first_name(dir: Directory): String {
-    for (var entry in dir) {
-        return entry.value().name;   # leaves the loop with the listing open
-    }
-    return "";
-}
-
-lines_of(text: String, p: Path): Array<String> {
-    assert(File.write_text(p, text).is_ok(), "write lines");
-    var f = File.open(p).value();
-    var out = Array<String>();
-    for (var line in f.lines()) {
-        out.append(line.value());
-    }
-    return out;
-}
-
-exercise(base: Path) {
-    var dir = Directory.open(base).value();
-
-    # An empty directory yields nothing; then three entries, each once.
-    assert(count_entries(dir) == 0, "empty");
-    assert(File.write_text(base.join("a.txt"), "x").is_ok(), "a");
-    assert(File.write_text(base.join("b.txt"), "y").is_ok(), "b");
-    assert(Directory.create(base.join("sub")).is_ok(), "sub");
-    assert(count_entries(dir) == 3, "three entries");
-    var it = dir.iterate();
-    var seen = 0;
-    while (it.next()) {
-        var entry = it.current().value();
-        assert(entry.path == base.join(entry.name), "entry path");
-        if (entry.name == "sub") {
-            assert(entry.is_directory && !entry.is_file, "sub is a directory");
-            seen += 1;
-        }
-    }
-    assert(seen == 1 && !it.next(), "sub once, then ended");
-    assert(dir.entries().value().count == 3, "entries agrees");
-
-    # Leaving early closes the listing: thousands of early exits do not run
-    # out of handles.
-    int i = 0;
-    while (i < 3000) {
-        assert(first_name(dir).size > 0, "first name");
-        i += 1;
-    }
-
-    # A missing directory yields one error, then ends.
-    var errors = 0;
-    for (var entry in DirectoryIterator(base.join("missing"))) {
-        assert(entry.is_err() && entry.error().is_not_found(), "missing is not found");
-        errors += 1;
-    }
-    assert(errors == 1, "one error");
-
-    # Lines: endings stripped, \r\n too, no empty line after a final ending.
-    var p = base.join("lines.txt");
-    var lines = lines_of("one\r\ntwo\n\nlast", p);
-    assert(lines.count == 4, "four lines");
-    assert(lines[0] == "one" && lines[1] == "two" && lines[2] == "" && lines[3] == "last", "line text");
-    assert(lines_of("a\nb\n", p).count == 2, "final newline");
-    assert(lines_of("", p).count == 0, "empty file");
-    var big = "";
-    while (big.size < 200000) {
-        big += "0123456789abcdef\n";
-    }
-    assert(lines_of(big, p).count == big.size / 17, "lines across chunks");
-    assert(File.write_bytes(p, [104 as u8, 255 as u8, 10 as u8]).is_ok(), "bad utf-8");
-    var f = File.open(p).value();
-    var bad = f.lines().to_array();
-    assert(bad.count == 1 && bad[0].is_err() && bad[0].error().is_invalid_input(), "invalid UTF-8 ends the lines");
-
-}
-
-main(): int {
-    var base = Directory.temp().join("SCRATCH");
-    Directory.remove_all(base);
-    assert(Directory.create(base).is_ok(), "create base");
-    var before = _pep_live_allocs();
-    exercise(base);
-    assert(_pep_live_allocs() == before, "leak");
-    assert(Directory.remove_all(base).is_ok(), "clean up");
-    print("io-streams-ok");
-    return 0;
-}
-"##
-    .replace("SCRATCH", scratch)
-}
-
-#[test]
-fn directory_and_line_streams() {
-    let scratch = scratch_name("streams");
-    let out = assert_runs("streams", &streams_program(&scratch));
-    assert!(out.contains("io-streams-ok"), "output: {out}");
-}
-
-/// The io programs with `[Target]` blocks of their own, which only a
+/// The io test files with `[Target]` blocks of their own, which only a
 /// compile for each OS checks; `runtime_compiles_on_other_platforms`
 /// covers the runtime's own platform layer.
 fn target_programs() -> Vec<(&'static str, String)> {
     vec![
-        ("path", PATH_PROGRAM.to_string()),
-        ("fs", fs_program("x")),
-        ("close", close_program("x")),
-        ("enums", enums_program("x")),
+        ("path", runtime_file("runtime/io/test/path_test.pep")),
+        ("file_system", runtime_file("runtime/io/test/file_system_test.pep")),
     ]
+}
+
+/// `source`, a file of `[Test]` functions, with a `main` that calls each
+/// in turn, for a build with the build option `TEST` but not `--test`
+/// (whose `main` takes the program's arguments, which a JIT call cannot
+/// give it).
+fn with_test_calls(source: &str) -> String {
+    let mut calls = String::new();
+    let mut lines = source.lines();
+    while let Some(line) = lines.next() {
+        if line.trim() == "[Test]" {
+            let declaration = lines.find(|l| !l.trim_start().starts_with('[')).expect("a declaration after [Test]");
+            let name = declaration.split('(').next().unwrap().trim();
+            calls.push_str(&format!("    {name}();\n"));
+        }
+    }
+    format!("{source}\nmain(): int {{\n{calls}    return 0;\n}}\n")
 }
 
 pub(crate) const SIMULATED_HOSTS: [(&str, &str); 6] = [
@@ -1173,7 +204,8 @@ fn simulated_cases<P: Clone>(programs: impl IntoIterator<Item = P>) -> Vec<((&'s
 }
 
 /// Compile `source` with the host simulated as `os`/`arch` — the same
-/// platform filter, sema and LLVM codegen that host runs — and hand the
+/// platform filter, sema and LLVM codegen that host runs, with the extra
+/// command-line `options` (`--test` for a file of tests) — and hand the
 /// generated module to `then`. The result can be neither linked nor run as
 /// a native program here.
 pub(crate) fn with_codegen_as<R>(
@@ -1181,12 +213,15 @@ pub(crate) fn with_codegen_as<R>(
     arch: &str,
     name: &str,
     source: &str,
+    options: &[&str],
     then: impl FnOnce(&mut CodeGenerator, &mut pepper_sema::Module) -> Result<R, String>,
 ) -> Result<R, String> {
     std::env::set_current_dir(repo_root()).unwrap();
     let (src, dir) = write_source(&format!("{name}_{os}_{arch}"), source);
     let result = pepper_sema::with_simulated_host(os, arch, || {
-        let options = pepper_driver::Options::parse_from(vec!["pepper".to_string(), src.to_string_lossy().into_owned()]);
+        let mut arguments = vec!["pepper".to_string(), src.to_string_lossy().into_owned()];
+        arguments.extend(options.iter().map(|option| option.to_string()));
+        let options = pepper_driver::Options::parse_from(arguments);
         let mut module = pepper_driver::compiler::compile(&options, "main")?;
         let ctx = inkwell::context::Context::create();
         let mut generator = CodeGenerator::new(&ctx, "main");
@@ -1199,7 +234,7 @@ pub(crate) fn with_codegen_as<R>(
 /// The platform layer for `os`/`arch` must type-check and produce a valid
 /// module that references that platform's C functions.
 fn codegen_as(os: &str, arch: &str, name: &str, source: &str) -> Result<(), String> {
-    with_codegen_as(os, arch, name, source, |generator, module| {
+    with_codegen_as(os, arch, name, source, &["--test"], |generator, module| {
         generator.generate(module).map_err(|d| module.sources.render(&d))?;
         generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
         let ir = generator.module.to_string();
@@ -1233,14 +268,16 @@ fn other_platforms_compile() {
 /// Every platform layer of the runtime type-checks and generates valid IR
 /// on every simulated host. Codegen emits every non-generic function of
 /// each module a program loads, and the platform code is non-generic, so
-/// one program that loads async, io, os, process, tls and http reaches all
-/// of it: the fiber switch, the I/O driver and its doorbell, threads,
-/// locks, files, sockets, clocks and processes.
+/// one program that loads async, io, os, process, tls and http (the http
+/// tests, built with `--test`) reaches all of it: the fiber switch, the
+/// I/O driver and its doorbell, threads, locks, files, sockets, clocks and
+/// processes.
 #[test]
 fn runtime_compiles_on_other_platforms() {
-    let source = format!("import os;\nimport process;\nimport time;\n{}", crate::http_tests::HTTP_PROGRAM.replace("SECURE", "true"));
+    let http_tests = runtime_file("runtime/http/test/http_test.pep");
+    let source = format!("import os;\nimport process;\nimport time;\n{http_tests}");
     let failures: Vec<String> = support::parallel_map(&SIMULATED_HOSTS, |&(os, arch)| {
-        with_codegen_as(os, arch, "runtime_platform", &source, |generator, module| {
+        with_codegen_as(os, arch, "runtime_platform", &source, &["--test"], |generator, module| {
             generator.generate(module).map_err(|d| module.sources.render(&d))?;
             generator.module.verify().map_err(|e| format!("invalid IR: {}", e.to_string()))?;
             let ir = generator.module.to_string();
@@ -1305,7 +342,7 @@ unsafe extern "C" {
 }
 
 /// Stands in for a C function this host does not have (kernel32 on a
-/// simulated Windows): the path program never calls one.
+/// simulated Windows): the path tests never call one.
 #[cfg(unix)]
 extern "C" fn unresolved_extern() {
     eprintln!("the program called a C function this host does not have");
@@ -1314,7 +351,7 @@ extern "C" fn unresolved_extern() {
 
 /// async's module-scope variables set up thread-local keys and note the main
 /// thread when the program starts, and io imports async, so a Windows path
-/// program calls these before `main`. On a Unix host they answer 0: a valid
+/// test program calls these before `main`. On a Unix host they answer 0: a valid
 /// key index and thread id, and a failed (ignored) free.
 #[cfg(unix)]
 const WINDOWS_STARTUP_CALLS: [&str; 5] = ["FlsAlloc", "FlsFree", "TlsAlloc", "TlsFree", "GetCurrentThreadId"];
@@ -1324,7 +361,8 @@ extern "C" fn startup_call() -> usize {
     0
 }
 
-/// Path syntax is pure Pepper, so the path program runs, in-process by JIT,
+/// Path syntax is pure Pepper, so the path tests (`runtime/io/test/
+/// path_test.pep`) run, in-process by JIT, one after another,
 /// with every simulated host's rules: Windows separators, drives and UNC
 /// prefixes are checked on any Unix host. (A failed assert aborts the test
 /// process after printing its message.) Only this host's architecture is
@@ -1341,8 +379,9 @@ fn path_functions_on_every_platform() {
     let rtld_default = rtld_default as usize;
     let hosts: Vec<(&str, &str)> =
         SIMULATED_HOSTS.iter().copied().filter(|&(_, arch)| arch == std::env::consts::ARCH).collect();
+    let source = with_test_calls(&runtime_file("runtime/io/test/path_test.pep"));
     let codes = support::parallel_map(&hosts, |&(os, arch)| {
-        with_codegen_as(os, arch, "path_jit", PATH_PROGRAM, |generator, module| {
+        with_codegen_as(os, arch, "path_jit", &source, &["-D", "TEST"], |generator, module| {
             let ee = generator.jit_engine_mapped(module, |name| {
                 let c = std::ffi::CString::new(name).ok()?;
                 let found = unsafe { dlsym(rtld_default as *mut std::ffi::c_void, c.as_ptr()) };
@@ -1358,6 +397,6 @@ fn path_functions_on_every_platform() {
         })
     });
     for ((os, arch), code) in hosts.iter().zip(codes) {
-        assert_eq!(code, Ok(0), "path program as {os}/{arch}");
+        assert_eq!(code, Ok(0), "path tests as {os}/{arch}");
     }
 }

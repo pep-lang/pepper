@@ -1,0 +1,396 @@
+# Sockets over loopback only: TCP on one thread (exchanging data, shutdown,
+# closing, the errors, names, IPv6, incoming(), lines()), UDP, TCP between
+# two threads, and Unix domain sockets.
+
+import async;
+import io;
+import process;
+
+loopback(port: u16): io.SocketAddress {
+    return io.SocketAddress(io.IpAddress.loopback_v4(), port);
+}
+
+text_of(bytes: u8[]): String {
+    return String._from_bytes(bytes);
+}
+
+# The kernel completes a connection before `accept`, so a client and a server
+# on one thread can take turns.
+[Test]
+tcp_exchanges_data_over_loopback() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    expect_true(listener.is_open());
+    var local = listener.local_address().value();
+    expect_not_equal(local.port(), 0);  # the system chose a port
+    expect_true(local.address() == io.IpAddress.loopback_v4());
+
+    var client = io.TcpStream.connect(local).value();
+    var (server, peer) = listener.accept().value();
+    expect_true(peer == client.local_address().value());
+    expect_true(client.peer_address().value() == local);
+    expect_true(server.local_address().value() == local);
+    expect_true(client.set_no_delay(true).is_ok());
+
+    # write_all(String) / read_exact, then write / read appending
+    expect_true(client.write_all("hello").is_ok());
+    var buffer = Array<u8>();
+    expect_true(server.read_exact(buffer, 5).is_ok());
+    expect_equal(text_of(buffer), "hello");
+    var reply = Array<u8>();
+    reply.append('o');
+    reply.append('k');
+    expect_equal(server.write(reply).value(), 2);
+    var got = Array<u8>();
+    got.append('>');
+    var n = client.read(got, 100).value();
+    expect_true(n >= 1 && n <= 2);
+    if (n < 2) {
+        client.read_exact(got, 2 - n);
+    }
+    expect_equal(text_of(got), ">ok");
+    expect_equal(client.read(got, 0).value(), 0);
+
+    # A bigger write_all, in chunks on the other side.
+    var big = Array<u8>();
+    ulong i = 0;
+    while (i < 20000) {
+        big.append((i % 251) as u8);
+        i = i + 1;
+    }
+    expect_true(client.write_all(big).is_ok());
+    var received = Array<u8>();
+    expect_true(server.read_exact(received, 20000).is_ok());
+    expect_true(received == big);
+
+    # shutdown_write: the peer reads what was sent, then 0.
+    client.write_all("bye");
+    expect_true(client.shutdown_write().is_ok());
+    var tail = Array<u8>();
+    expect_true(server.read_exact(tail, 3).is_ok());
+    expect_equal(server.read(tail, 10).value(), 0);
+    var short = server.read_exact(tail, 1);
+    expect_true(short.is_err());
+    expect_equal(short.error().message, "connection closed after 0 of 1 bytes");
+    # The client can still read after shutting down its sending side.
+    server.write_all("late");
+    var late = Array<u8>();
+    expect_true(client.read_exact(late, 4).is_ok());
+
+    # Closing
+    expect_true(server.close().is_ok());
+    expect_false(server.is_open());
+    expect_true(server.close().is_ok());
+    expect_true(server.write_all("x").is_err());
+    expect_true(server.read(tail, 1).is_err());
+    expect_true(server.peer_address().is_err());
+    expect_equal(client.read(late, 10).value(), 0);
+    expect_false(io.TcpStream().is_open());
+    expect_true(io.TcpListener().accept().is_err());
+    listener.close();
+    expect_true(listener.local_address().is_err());
+}
+
+[Test]
+tcp_reports_address_in_use_refused_and_not_available() {
+    # The port a closed listener had: nothing listens there now.
+    var probe = io.TcpListener.bind(loopback(0)).value();
+    var port = probe.local_address().value().port();
+    var taken = io.TcpListener.bind(loopback(port));
+    expect_true(taken.is_err());
+    expect_true(taken.error().is_address_in_use());
+    probe.close();
+    var refused = io.TcpStream.connect(loopback(port));
+    expect_true(refused.is_err());
+    expect_true(refused.error().is_connection_refused());
+
+    # 192.0.2.0/24 (TEST-NET-1) is never assigned to this machine.
+    var foreign = io.TcpListener.bind(io.SocketAddress.parse("192.0.2.1:0").value());
+    expect_true(foreign.is_err());
+    expect_true(foreign.error().is_address_not_available());
+}
+
+[Test]
+tcp_connects_by_name() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var port = listener.local_address().value().port();
+    # "localhost" may list ::1 first; connect_host tries every address.
+    var client = io.TcpStream.connect_host("localhost", port);
+    expect_true(client.is_ok());
+    var (server, peer) = listener.accept().value();
+    expect_true(peer.address().is_loopback());
+    var names = io.resolve("localhost", 80).value();
+    expect_true(names.count >= 1);
+    for (var address in names) {
+        expect_equal(address.port(), 80);
+        expect_true(address.address().is_loopback());
+    }
+    var missing = io.resolve("no-such-host.invalid", 80);
+    expect_true(missing.is_err());
+    expect_true(missing.error().is_not_found());
+}
+
+[Test]
+tcp_over_ipv6_loopback() {
+    # Skipped where the system has no IPv6 loopback.
+    var bound = io.TcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v6(), 0));
+    if (bound.is_err()) {
+        return;
+    }
+    var listener = bound.value();
+    var local = listener.local_address().value();
+    expect_true(local.is_v6());
+    expect_true(local.address() == io.IpAddress.loopback_v6());
+    var client = io.TcpStream.connect(local).value();
+    var (server, peer) = listener.accept().value();
+    expect_true(peer.is_v6());
+    client.write_all("six");
+    var buffer = Array<u8>();
+    expect_true(server.read_exact(buffer, 3).is_ok());
+    expect_equal(text_of(buffer), "six");
+}
+
+# A for loop over listener.incoming() takes connections until it breaks,
+# and ends once the listener is closed.
+[Test]
+incoming_takes_connections_until_closed() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var local = listener.local_address().value();
+    var first = io.TcpStream.connect(local).value();
+    var second = io.TcpStream.connect(local).value();
+    expect_true(first.write_all("a").is_ok());
+    expect_true(second.write_all("b").is_ok());
+    var received = Array<u8>();
+    for (var connection in listener.incoming()) {
+        expect_true(connection.is_ok());
+        expect_true(connection.value().read_exact(received, 1).is_ok());
+        if (received.count == 2) {
+            break;
+        }
+    }
+    expect_equal(text_of(received), "ab");  # both connections, in order
+    expect_true(listener.close().is_ok());
+    var steps = 0;
+    for (var connection in listener.incoming()) {
+        steps = steps + 1;
+    }
+    expect_equal(steps, 0);
+}
+
+# A TcpStream is an io.Reader: lines() reads until the peer shuts down.
+[Test]
+tcp_stream_reads_lines() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var client = io.TcpStream.connect(listener.local_address().value()).value();
+    var (server, peer) = listener.accept().value();
+    expect_true(client.write_all("first\r\nsecond\n").is_ok());
+    expect_true(client.shutdown_write().is_ok());
+    var got = Array<String>();
+    for (var line in server.lines()) {
+        got.append(line.value());
+    }
+    expect_equal(got.count, 2);
+    expect_equal(got[0], "first");
+    expect_equal(got[1], "second");
+}
+
+[Test]
+udp_over_loopback() {
+    var a = io.UdpSocket.bind(loopback(0)).value();
+    var b = io.UdpSocket.bind(loopback(0)).value();
+    var a_address = a.local_address().value();
+    var b_address = b.local_address().value();
+    expect_not_equal(a_address.port(), 0);
+    expect_not_equal(a_address.port(), b_address.port());
+
+    var message = Array<u8>();
+    message.append(1);
+    message.append(2);
+    message.append(3);
+    expect_equal(a.send_to(message, b_address).value(), 3);
+    var buffer = Array<u8>();
+    buffer.append(9);
+    var (n, from) = b.receive_from(buffer, 100).value();
+    expect_equal(n, 3);
+    expect_equal(buffer.count, 4);  # receive_from appends
+    expect_equal(buffer[1], 1);
+    expect_equal(buffer[3], 3);
+    expect_true(from == a_address);
+
+    # A longer datagram is cut to max.
+    var long = Array<u8>();
+    ulong i = 0;
+    while (i < 10) {
+        long.append(i as u8);
+        i = i + 1;
+    }
+    a.send_to(long, b_address);
+    var cut = Array<u8>();
+    var (m, _) = b.receive_from(cut, 4).value();
+    expect_equal(m, 4);
+    expect_equal(cut.count, 4);
+    expect_equal(cut[3], 3);
+
+    # connect / send / receive
+    expect_true(a.connect(b_address).is_ok());
+    expect_true(b.connect(a_address).is_ok());
+    expect_true(a.peer_address().value() == b_address);
+    expect_equal(a.send(message).value(), 3);
+    var got = Array<u8>();
+    expect_equal(b.receive(got, 100).value(), 3);
+    expect_true(got == message);
+
+    expect_true(a.set_broadcast(true).is_ok());
+    expect_true(a.close().is_ok());
+    expect_false(a.is_open());
+    expect_true(a.send(message).is_err());
+    expect_true(io.UdpSocket().receive(got, 1).is_err());
+}
+
+# A client on another thread streams 4 MiB to a server on this thread, far
+# more than the socket buffers hold, so both block and resume.
+[Test]
+tcp_between_threads() {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var port = listener.local_address().value().port();
+    var sent = async.Atomic<long>(0);
+    var client = async.Thread.spawn(() => {
+        var stream = io.TcpStream.connect(io.SocketAddress(io.IpAddress.loopback_v4(), port)).value();
+        var chunk = Array<u8>();
+        ulong i = 0;
+        while (i < 65536) {
+            chunk.append((i % 256) as u8);
+            i = i + 1;
+        }
+        var round = 0;
+        while (round < 64) {
+            assert(stream.write_all(chunk).is_ok(), "client write_all");
+            sent.fetch_add(65536);
+            round = round + 1;
+        }
+        stream.shutdown_write();
+        var ack = Array<u8>();
+        assert(stream.read_exact(ack, 2).is_ok(), "client reads the ack");
+    });
+    var (server, peer) = listener.accept().value();
+    ulong total = 0;
+    ulong errors = 0;
+    var buffer = Array<u8>();
+    while (true) {
+        buffer.clear();
+        var n = server.read(buffer, 100000).value();
+        if (n == 0) {
+            break;
+        }
+        ulong i = 0;
+        while (i < n) {
+            if (buffer[i] != ((total + i) % 256) as u8) {
+                errors = errors + 1;
+            }
+            i = i + 1;
+        }
+        total = total + n;
+    }
+    server.write_all("ok");
+    client.join();
+    expect_equal(total, 4194304);
+    expect_equal(sent.load(), 4194304);
+    expect_equal(errors, 0);  # in order
+}
+
+[Test]
+unix_socket_listener_and_stream() {
+    var folder = TempFolder("unix_socket_listener_and_stream");
+    var path = folder.path.join("s.sock");
+    var listener = io.UnixListener.bind(path).value();
+    expect_equal(listener.path().to_string(), path.to_string());
+    var again = io.UnixListener.bind(path);
+    expect_true(again.is_err());
+    expect_true(again.error().is_address_in_use());
+
+    var client = io.UnixStream.connect(path).value();
+    var server = listener.accept().value();
+    expect_true(client.write_all("ping").is_ok());
+    client.shutdown_write();
+    var request = Array<u8>();
+    while (server.read(request, 4096).value() > 0) {}
+    expect_equal(text_of(request), "ping");
+    expect_true(server.write_all("pong").is_ok());
+    var reply = Array<u8>();
+    expect_true(client.read_exact(reply, 4).is_ok());
+    expect_equal(text_of(reply), "pong");
+
+    var too_long = io.UnixStream.connect(io.Path("x".repeat(200)));
+    expect_true(too_long.is_err());
+    expect_true(too_long.error().is_invalid_input());
+    var empty = io.UnixListener.bind(io.Path(""));
+    expect_true(empty.is_err());
+    expect_true(empty.error().is_invalid_input());
+    var missing = io.UnixStream.connect(folder.path.join("missing.sock"));
+    expect_true(missing.is_err());
+    expect_true(missing.error().is_not_found());
+    expect_true(listener.close().is_ok());
+    var refused = io.UnixStream.connect(path);
+    expect_true(refused.is_err());
+    expect_true(refused.error().is_connection_refused());
+    expect_true(io.File.remove(path).is_ok());  # the socket file stays until removed
+}
+
+# The echo server's socket file: a function, since tasks on other threads
+# cannot share a captured String.
+echo_socket(): io.Path {
+    return io.Directory.temp().join($"pepper_test_echo_{process.id()}.sock");
+}
+
+# An echo server accepting on every task worker, and 16 client tasks.
+[Test]
+unix_socket_echo_server_on_every_worker() {
+    io.File.remove(echo_socket());
+    async.run(
+        () => {
+            var shared = io.SharedUnixListener.bind(echo_socket()).value();
+            async.spawn_on_each_worker(
+                () => {
+                    while (true) {
+                        var accepted = shared.accept();
+                        if (accepted.is_err()) {
+                            return;
+                        }
+                        var stream = accepted.value();
+                        var buffer = Array<u8>();
+                        while (true) {
+                            # Cancelled when async.run ends.
+                            var r = stream.read(buffer, 4096);
+                            if (r.is_err() || r.value() == 0) {
+                                break;
+                            }
+                            stream.write_all(buffer);
+                            buffer.clear();
+                        }
+                    }
+                }
+            );
+            var tasks = Array<async.Task<bool>>();
+            var n = 0;
+            while (n < 16) {
+                tasks.append(async.spawn<bool>(() => {
+                    var stream = io.UnixStream.connect(echo_socket()).value();
+                    var round = 0;
+                    while (round < 100) {
+                        stream.write_all("0123456789");
+                        var got = Array<u8>();
+                        if (stream.read_exact(got, 10).is_err()) {
+                            return false;
+                        }
+                        round = round + 1;
+                    }
+                    return true;
+                }));
+                n = n + 1;
+            }
+            for (var task in tasks) {
+                expect_true(task.join().value());  # every client got its echoes
+            }
+        }
+    );
+    expect_true(io.File.remove(echo_socket()).is_ok());
+}
