@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a484e12e.js";
+            window.path_to_searchindex_js = "searchindex-6ee4f3ae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -11762,15 +11762,29 @@ returns <code>-1</code>, for example.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="visibility"><a class="header" href="#visibility">Visibility</a></h1>
-<p>Visibility decides which declarations other files may use. Every top-level
-declaration is <strong>internal to its module</strong> unless you mark it with <code>export</code>:
-the files of one <a href="#modules">module</a> see each other’s declarations,
-and nothing else does. A file outside any module is a module of its own, so
-its declarations are <strong>private to the file</strong>. This lets a module, or a file,
-keep its helpers to itself and offer a small, clear surface to the code that
-imports it.</p>
-<p>There is no smaller visibility than the module: Pepper has no <code>private</code>
-keyword, and no way to hide a declaration from the other files of its module.</p>
+<p>Visibility decides which declarations other files may use. A top-level
+declaration has one of three levels:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Written</th><th>Visible to</th></tr>
+</thead>
+<tbody>
+<tr><td><code>private f()</code></td><td>its own file only</td></tr>
+<tr><td><code>f()</code></td><td>the files of its <a href="#modules">module</a></td></tr>
+<tr><td><code>export f()</code></td><td>any file that imports it</td></tr>
+</tbody>
+</table>
+</div>
+<p>With no modifier, a declaration is <strong>internal to its module</strong>: the files of
+one module see each other’s declarations, and nothing else does. A file
+outside any module is a module of its own, so its declarations are
+<strong>private to the file</strong>. This lets a module, or a file, keep its helpers to
+itself and offer a small, clear surface to the code that imports it.</p>
+<p><code>private</code> is optional. It is recommended for a helper that only its own file
+uses, so it does not leak into the rest of the module, and it is needed only
+where two files of one module would otherwise declare the same name (see
+<a href="#keeping-a-declaration-to-its-file">Keeping a declaration to its file</a>).</p>
 <h2 id="exporting-declarations"><a class="header" href="#exporting-declarations">Exporting declarations</a></h2>
 <p>Put <code>export</code> in front of a declaration to make it usable from other files that
 import this one (see <a href="#modules-and-imports">Modules and imports</a> for how to import).
@@ -11962,11 +11976,96 @@ inventory/rules.pep:4:8: note: declared here
 </code></pre>
 <p>Because the files of a module share one set of names, two of them may not
 both declare a struct, enum, type alias, trait, or variable of one name:
-the second is a <code>redefinition of 'name'</code>, with a note at the first.
-Functions are different: functions of one name in several files of a module
-are one <a href="#overloading-1">overload set</a>, as they are within a file.
-Extensions are shared the same way: a file sees the methods its module’s
-other files add, exported or not.</p>
+the second is a <code>redefinition of 'name'</code>, with a note at the first, unless
+one of them is <code>private</code>. Functions are different: functions of one name in
+several files of a module are one <a href="#overloading-1">overload set</a>, as they
+are within a file. Extensions are shared the same way: a file sees the
+methods its module’s other files add, exported or not, unless the extension
+is <code>private</code>.</p>
+<h2 id="keeping-a-declaration-to-its-file"><a class="header" href="#keeping-a-declaration-to-its-file">Keeping a declaration to its file</a></h2>
+<p>Put <code>private</code> in front of a top-level declaration to keep it to its own
+file: the other files of its module do not see it. You can mark every kind
+of declaration that <code>export</code> applies to. Two files of one module may then
+each declare a <code>private</code> helper of the same name, and each file’s code
+reaches its own. Here <code>summary.pep</code> and <code>detail.pep</code> each have a private
+<code>WIDTH</code> and <code>label</code>, and share the module-internal <code>pad</code>:</p>
+<pre><code class="language-pepper"># `private` keeps these to this file: detail.pep may declare its own
+# `WIDTH` and `label` without a clash.
+private const WIDTH: ulong = 10;
+
+private label(count: int): String {
+    return $"{count} item(s)";
+}
+
+# Module-internal: no modifier, so detail.pep can use it too.
+pad(text: String, width: ulong): String {
+    if (text.size &gt;= width) {
+        return text;
+    }
+    return text + " ".repeat(width - text.size);
+}
+
+export summary_line(count: int): String {
+    return pad(label(count), WIDTH);
+}
+</code></pre>
+<pre><code class="language-pepper"># The same names as summary.pep's private ones, and private here too.
+private const WIDTH: ulong = 12;
+
+private label(name: String): String {
+    return $"- {name}";
+}
+
+export detail_line(name: String): String {
+    return pad(label(name), WIDTH) + "|";
+}
+</code></pre>
+<pre><code class="language-pepper"># The module's interface: one function from each file.
+export * from "summary";
+export * from "detail";
+</code></pre>
+<pre><code class="language-pepper">import "report";
+
+main(): int {
+    assert(summary_line(3) == "3 item(s) ", "summary.pep's own label and width");
+    assert(detail_line("pen") == "- pen       |", "detail.pep's own label and width");
+    # `label(3)` here would be an error: it is private to summary.pep.
+    return 0;
+}
+</code></pre>
+<p>A <code>private</code> declaration stays out of the rest of the module entirely:</p>
+<ul>
+<li>
+<p>Another file of the module that names it, without a declaration of its
+own by that name, gets an error saying to remove <code>private</code>. Were
+<code>detail.pep</code> to have no <code>label</code> of its own, calling <code>label(3)</code> there
+would report:</p>
+<pre><code class="language-text">report/detail.pep:6:16: error: 'label' is private to report/summary.pep; remove 'private' to use it from the other files of its module
+    6 |     return pad(label(3), WIDTH) + "|";
+      |                ^~~~~
+report/summary.pep:5:9: note: declared here
+    5 | private label(count: int): String {
+      |         ^~~~~
+</code></pre>
+</li>
+<li>
+<p>A <code>private</code> function joins no overload set of the module: functions of
+one name in the other files form their set without it, and its own file
+sees only its own.</p>
+</li>
+<li>
+<p>A <code>private</code> extension’s methods are usable only in its file.</p>
+</li>
+</ul>
+<p>Code outside the module never sees a <code>private</code> declaration, as it never
+sees a module-internal one (<code>'label' is internal to module 'report'</code>).</p>
+<p>In a file outside any module, <code>private</code> changes nothing: its declarations
+are already private to it. A declaration cannot be both <code>export</code> and
+<code>private</code>:</p>
+<pre><code class="language-text">main.pep:1:8: error: a declaration cannot be both 'export' and 'private'
+    1 | export private f(): int { return 0; }
+      |        ^~~~~~~
+</code></pre>
 <h2 id="members-of-structs-and-extensions"><a class="header" href="#members-of-structs-and-extensions">Members of structs and extensions</a></h2>
 <p>Fields and methods declared inside a struct’s body are reached through the
 struct, so they share the struct’s visibility: if you can use the struct, you
@@ -12055,11 +12154,14 @@ file importing the file that extends it); such cycles are allowed.</p>
 a call <code>x.m()</code> is accepted if any struct body visible to the file (its own,
 or exported) or any extension visible to it, as above, declares a member
 named <code>m</code>.</p>
-<h2 id="where-export-goes"><a class="header" href="#where-export-goes">Where <code>export</code> goes</a></h2>
-<p><code>export</code> goes directly before the declaration’s keyword or name, <strong>after</strong> any
-attributes:</p>
+<h2 id="where-export-and-private-go"><a class="header" href="#where-export-and-private-go">Where <code>export</code> and <code>private</code> go</a></h2>
+<p><code>export</code> and <code>private</code> go directly before the declaration’s keyword or name,
+<strong>after</strong> any attributes:</p>
 <pre><code class="language-pepper">[Target(OS(Windows))]
 export platform_name(): String { return "Windows"; }
+
+[Inline]
+private twice(x: int): int { return x * 2; }
 </code></pre>
 <p>Writing it before the attributes is a parse error:</p>
 <pre><code class="language-text">main.pep:2:8: error: unexpected '['
@@ -12080,7 +12182,9 @@ runtime’s <code>internals.pep</code>.</p>
 <h2 id="each-module-has-its-own-namespace"><a class="header" href="#each-module-has-its-own-namespace">Each module has its own namespace</a></h2>
 <p>A private declaration belongs to its file (or its module) alone, so two
 files outside any module, or two modules, may each declare a private name
-without clashing. Here <code>main.pep</code> and <code>lib.pep</code> each have their own
+without clashing. Within a module, <code>private</code> does the same for two of its
+files (see
+<a href="#keeping-a-declaration-to-its-file">Keeping a declaration to its file</a>). Here <code>main.pep</code> and <code>lib.pep</code> each have their own
 <code>Counter</code> and <code>make</code>, and each file’s code reaches its own:</p>
 <pre><code class="language-pepper"># lib.pep's private helpers: no other file can see them, and no other
 # file's names can clash with them.
@@ -12118,7 +12222,7 @@ main(): int {
 <p>This holds across modules too: two modules may each have a <code>util.pep</code> with a
 private <code>helper</code>. Files are told apart by their path inside their module
 (<code>io/file.pep</code>), not by their file name alone. Within one module, the files
-share their names instead (see
+share their names instead, except <code>private</code> ones (see
 <a href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).</p>
 <p>Exported names work the same way between modules: each module’s exports
 are its own, so two modules may export the same name, and importers tell
@@ -12239,7 +12343,8 @@ import geometry;
 after its folder, and its exports are exactly what its <code>module.pep</code> exports.
 The other files in the folder are the module’s own files: <code>module.pep</code> imports
 them and chooses what to pass on to the module’s users. The files of a module
-see each other’s declarations, exported or not, without importing each other
+see each other’s declarations, exported or not, without importing each other,
+except those marked <code>private</code>
 (see <a href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).
 Loading any file of a module loads its <code>module.pep</code>, and with it every file
 the module imports.</p>
@@ -19068,8 +19173,9 @@ whatever its style (<code>GetCurrentProcessId</code>), because that name is what
 linker looks up. The same goes for the fields of a struct that mirrors a C
 struct.</p>
 <h2 id="private-members"><a class="header" href="#private-members">Private members</a></h2>
-<p>Pepper has no member-level <code>private</code> keyword; any code that can reach an
-object can name all of its members. A leading <code>_</code> marks a data member or
+<p>Pepper’s <code>private</code> keyword applies only to top-level declarations (see
+<a href="#visibility">Visibility</a>); any code that can reach an object can name all
+of its members. A leading <code>_</code> marks a data member or
 method as private to its struct instead: code outside the struct, and its
 extensions, should not use it. The rest of the name is <code>snake_case</code>, as for a
 public member (<code>_readings</code>, <code>_is_empty</code>).</p>
@@ -19078,7 +19184,8 @@ leaves <code>_</code> members out, and <a href="#documentation-comments">doc com
 on members without the prefix.</p>
 <p>A top-level declaration does not need the prefix to be private: it is
 internal to its module (or, outside any module, private to its file) unless
-it is exported (see <a href="#visibility">Visibility</a>). The runtime also uses the
+it is exported, and <code>private</code> keeps it to its file (see
+<a href="#visibility">Visibility</a>). The runtime also uses the
 prefix on top-level helpers it exports but that are not part of its public
 API, such as <code>_pep_malloc</code>, which the compiler calls by name, or a helper
 one runtime module shares with another: the reference leaves them out too.</p>

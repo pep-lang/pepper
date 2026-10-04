@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a484e12e.js";
+            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -296,8 +296,9 @@ whatever its style (<code>GetCurrentProcessId</code>), because that name is what
 linker looks up. The same goes for the fields of a struct that mirrors a C
 struct.</p>
 <h2 id="private-members"><a class="header" href="#private-members">Private members</a></h2>
-<p>Pepper has no member-level <code>private</code> keyword; any code that can reach an
-object can name all of its members. A leading <code>_</code> marks a data member or
+<p>Pepper’s <code>private</code> keyword applies only to top-level declarations (see
+<a href="visibility.html">Visibility</a>); any code that can reach an object can name all
+of its members. A leading <code>_</code> marks a data member or
 method as private to its struct instead: code outside the struct, and its
 extensions, should not use it. The rest of the name is <code>snake_case</code>, as for a
 public member (<code>_readings</code>, <code>_is_empty</code>).</p>
@@ -306,7 +307,8 @@ leaves <code>_</code> members out, and <a href="doc-comments.html">doc comments<
 on members without the prefix.</p>
 <p>A top-level declaration does not need the prefix to be private: it is
 internal to its module (or, outside any module, private to its file) unless
-it is exported (see <a href="visibility.html">Visibility</a>). The runtime also uses the
+it is exported, and <code>private</code> keeps it to its file (see
+<a href="visibility.html">Visibility</a>). The runtime also uses the
 prefix on top-level helpers it exports but that are not part of its public
 API, such as <code>_pep_malloc</code>, which the compiler calls by name, or a helper
 one runtime module shares with another: the reference leaves them out too.</p>

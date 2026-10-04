@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a484e12e.js";
+            window.path_to_searchindex_js = "../searchindex-6ee4f3ae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -268,7 +268,8 @@ import geometry;
 after its folder, and its exports are exactly what its <code>module.pep</code> exports.
 The other files in the folder are the module’s own files: <code>module.pep</code> imports
 them and chooses what to pass on to the module’s users. The files of a module
-see each other’s declarations, exported or not, without importing each other
+see each other’s declarations, exported or not, without importing each other,
+except those marked <code>private</code>
 (see <a href="visibility.html#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).
 Loading any file of a module loads its <code>module.pep</code>, and with it every file
 the module imports.</p>
