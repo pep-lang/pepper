@@ -13,6 +13,13 @@
 # thread) and parks the task until it is done. The caller pins the array it
 # reads into or writes from (`Array._pins`) for that time.
 #
+# With io_uring, a stream socket's reads and writes in a task go to the
+# runtime whole too (`_IoWaiter._socket_transfer`): the kernel does the
+# receive or send itself when the socket is ready, and the worker submits
+# many of them in one system call, rather than learning readiness and then
+# calling `recv` or `send`. The other backends decline, and the socket
+# waits for readiness as above.
+#
 # `async` imports `io` (its sockets and errors), so `io` cannot import
 # `async`. Instead `async.run` registers its worker as this thread's
 # `_IoWaiter`, and the sockets find it through a thread-local key. These
@@ -20,6 +27,7 @@
 # the public API.
 
 import async;
+import "socket";
 import "socket_posix";
 import "socket_wasi";
 import "socket_windows";
@@ -72,7 +80,25 @@ export trait _IoWaiter {
     # system is using the buffer until it returns. (It takes a struct
     # because a `__ptr` parameter in a trait method does not compile yet.)
     _file_transfer(transfer: _FileTransfer): long;
+
+    # Receives up to `count` bytes on the stream socket `handle` into the
+    # memory at address `buffer`, or sends them from it when `write`,
+    # parking the task until the kernel has done it. Returns the byte count,
+    # -1 minus the error code, or one of the `_IO_TRANSFER_*` results; with
+    # `_IO_TRANSFER_DECLINED` nothing was done, and the caller makes the
+    # call itself. The buffer stays in use until this returns, even when
+    # the task is cancelled. (The address is a ulong: a `__ptr` parameter in
+    # a trait method does not compile yet.)
+    _socket_transfer(handle: SocketHandle, buffer: ulong, count: ulong, write: bool): long;
 }
+
+# What `_IoWaiter._socket_transfer` returns besides a count or an error
+# code: the runtime declined; the task was cancelled, or its timeout
+# expired, before the kernel moved any bytes; or the socket was closed.
+export const _IO_TRANSFER_DECLINED: long = -9223372036854775807;
+export const _IO_TRANSFER_CANCELLED: long = -9223372036854775806;
+export const _IO_TRANSFER_TIMED_OUT: long = -9223372036854775805;
+export const _IO_TRANSFER_CLOSED: long = -9223372036854775804;
 
 # One more than the key whose value is a malloc'd slot holding this
 # thread's waiter (or null), once the first `_io_set_waiter` has made it; 0
@@ -199,6 +225,39 @@ export _io_file_transfer_result(raw: long): IoResult<ulong> {
     }
     var code = (-1 - raw) as ErrorCode;
     return IoResult<ulong>.err(IoError(code, _io_sys_error_message(code)));
+}
+
+# Receives into, or sends from, the `n` bytes at `p` on the stream socket
+# `h` through the task runtime (see `_IoWaiter._socket_transfer`): none
+# when the caller is not in a task or the runtime declines, and the caller
+# then makes the call itself.
+export _io_task_socket_transfer(h: SocketHandle, p: __ptr<u8>, n: ulong, write: bool): IoResult<ulong>? {
+    var slot = _io_waiter_slot();
+    if (slot == __null) {
+        return Optional<IoResult<ulong>>.Empty;
+    }
+    var waiter = slot[0];
+    if (!waiter._in_task()) {
+        return Optional<IoResult<ulong>>.Empty;
+    }
+    var raw = waiter._socket_transfer(h, unsafe_cast<ulong>(p), n, write);
+    if (raw == _IO_TRANSFER_DECLINED) {
+        return Optional<IoResult<ulong>>.Empty;
+    }
+    if (raw == _IO_TRANSFER_CANCELLED) {
+        return Optional<IoResult<ulong>>.Value(
+            IoResult<ulong>.err(IoError(_io_sys_code_cancelled(), "the task was cancelled"))
+        );
+    }
+    if (raw == _IO_TRANSFER_TIMED_OUT) {
+        return Optional<IoResult<ulong>>.Value(
+            IoResult<ulong>.err(IoError(_io_sys_code_timed_out(), "the operation timed out"))
+        );
+    }
+    if (raw == _IO_TRANSFER_CLOSED) {
+        return Optional<IoResult<ulong>>.Value(IoResult<ulong>.err(_io_socket_closed_error()));
+    }
+    return Optional<IoResult<ulong>>.Value(_io_file_transfer_result(raw));
 }
 
 # Whether the calling code runs in a task.

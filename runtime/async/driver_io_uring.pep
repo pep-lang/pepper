@@ -41,8 +41,20 @@
 # completion entry is 16 bytes: user_data at 0, res (i32) at 8, flags at 12.
 #
 # Files: `_start_file` queues an IORING_OP_READ or IORING_OP_WRITE at the
-# file's position (offset -1), mapped in `_files` to the task waiting for
-# it, and the completion's result goes back through `_finished_files`.
+# file's position (offset -1), mapped in `_transfers` to the task waiting
+# for it, and the completion's result goes back through `_finished_files`.
+#
+# Stream sockets in tasks skip readiness: `_start_socket` queues an
+# IORING_OP_RECV or IORING_OP_SEND the same way, which the kernel runs when
+# the socket is ready (arming its own poll), so a receive or send costs no
+# system call of its own: the worker submits every queued request, and
+# reaps every completion, in the one `io_uring_enter` of its next poll. A
+# socket has at most one such request per direction (`_receiving`,
+# `_sending`); a second task reading the same socket at once is declined
+# and waits for readiness instead. `_cancel_transfer` (a task cancelled or
+# timed out) and `_forget` (the socket is closing) queue an
+# IORING_OP_ASYNC_CANCEL for the request, which still completes, with
+# -ECANCELED or the bytes it moved first.
 #
 # The doorbell is an eventfd with its own poll request, whose user data is
 # `_async_doorbell_key()`; the poll that sees it reads it back to 0 and
@@ -95,8 +107,15 @@ const _IO_URING_FEATURES: uint = 257;
 # Opcodes.
 const _IO_URING_OP_POLL_ADD: u8 = 6;
 const _IO_URING_OP_POLL_REMOVE: u8 = 7;
+const _IO_URING_OP_ASYNC_CANCEL: u8 = 14;
 const _IO_URING_OP_READ: u8 = 22;
 const _IO_URING_OP_WRITE: u8 = 23;
+const _IO_URING_OP_SEND: u8 = 26;
+const _IO_URING_OP_RECV: u8 = 27;
+
+# A send's msg_flags: MSG_NOSIGNAL, so a closed peer is an error, not
+# SIGPIPE.
+const _IO_URING_MSG_NOSIGNAL: uint = 16384;
 
 # The most bytes one read or write asks for, as on POSIX.
 const _IO_URING_MAX_TRANSFER: ulong = 2147479552;
@@ -147,9 +166,16 @@ export struct _IoUringDriver {
     # The poll in flight on each armed socket.
     var _armed: HashMap<ulong, ulong>;
     var _next_request: ulong;
-    # Each file transfer in flight: its user data, and the task it is for.
-    var _files: HashMap<ulong, ulong>;
-    # File transfers finished since `_finished_files` last took them.
+    # Each file or socket transfer in flight: its user data, and the task
+    # it is for.
+    var _transfers: HashMap<ulong, ulong>;
+    # Each socket transfer in flight: its user data, and its socket times 2
+    # plus 1 for a send.
+    var _sockets: HashMap<ulong, ulong>;
+    # The receive and the send in flight on each socket, by user data.
+    var _receiving: HashMap<ulong, ulong>;
+    var _sending: HashMap<ulong, ulong>;
+    # Transfers finished since `_finished_files` last took them.
     var _finished: Array<(task: ulong, result: long)>;
     # A struct io_uring_getevents_arg (24 bytes) followed by the
     # __kernel_timespec it points to (16 bytes), for timed waits.
@@ -161,7 +187,10 @@ export struct _IoUringDriver {
         this._requests = HashMap<ulong, ulong>();
         this._armed = HashMap<ulong, ulong>();
         this._next_request = 1;
-        this._files = HashMap<ulong, ulong>();
+        this._transfers = HashMap<ulong, ulong>();
+        this._sockets = HashMap<ulong, ulong>();
+        this._receiving = HashMap<ulong, ulong>();
+        this._sending = HashMap<ulong, ulong>();
         this._finished = Array<(task: ulong, result: long)>();
     }
 
@@ -188,8 +217,9 @@ export struct _IoUringDriver {
 
     # Queues a submission entry, first submitting what is queued when the
     # ring is full. `events` is poll32_events for a poll and the length for a
-    # read or write, whose offset is always the file's position (-1);
-    # `flags` is a poll's len.
+    # read, write, receive or send; a read's or write's offset is always the
+    # file's position (-1). `flags` is a poll's len, and a send's msg_flags.
+    # A cancel's `address` is the user data of the request to cancel.
     _queue(opcode: u8, fd: long, address: ulong, events: uint, flags: uint, data: ulong) {
         if (this._tail - _async_io_uring_load(this._rings, this._sq_head) >= this._sq_entries) {
             this._enter(0, false);
@@ -203,6 +233,9 @@ export struct _IoUringDriver {
         if (opcode == _IO_URING_OP_READ || opcode == _IO_URING_OP_WRITE) {
             unsafe_cast<__ptr<ulong>>(entry + 8)[0] = ~(0 as ulong);
             unsafe_cast<__ptr<uint>>(entry + 24)[0] = events;
+        } else if (opcode == _IO_URING_OP_RECV || opcode == _IO_URING_OP_SEND) {
+            unsafe_cast<__ptr<uint>>(entry + 24)[0] = events;
+            unsafe_cast<__ptr<uint>>(entry + 28)[0] = flags;
         } else {
             unsafe_cast<__ptr<uint>>(entry + 24)[0] = flags;
             unsafe_cast<__ptr<uint>>(entry + 28)[0] = events;
@@ -261,6 +294,16 @@ export struct _IoUringDriver {
         this._queue(_IO_URING_OP_POLL_ADD, key as long, 0, events, _IO_URING_POLL_MULTI, data);
     }
 
+    # Asks the kernel to cancel the socket transfers in flight on `key`.
+    _cancel_sockets(key: ulong) {
+        if (this._receiving.contains(key)) {
+            this._queue(_IO_URING_OP_ASYNC_CANCEL, -1, this._receiving.get(key), 0, 0, 0);
+        }
+        if (this._sending.contains(key)) {
+            this._queue(_IO_URING_OP_ASYNC_CANCEL, -1, this._sending.get(key), 0, 0, 0);
+        }
+    }
+
     # Forgets the request `data` and asks the kernel to remove it.
     _cancel(data: ulong) {
         this._requests.remove(data);
@@ -303,10 +346,19 @@ extend _IoUringDriver with _Driver {
             var result = unsafe_cast<__ptr<int>>(entry + 8)[0];
             var flags = unsafe_cast<__ptr<uint>>(entry + 12)[0];
             head = head + 1;
-            if (this._files.contains(data)) {
-                # A file transfer: the count, or -errno as -1 minus the code.
-                this._finished.append((this._files.get(data), result >= 0 ? result as long : -1 + result as long));
-                this._files.remove(data);
+            if (this._transfers.contains(data)) {
+                # A transfer: the count, or -errno as -1 minus the code.
+                this._finished.append((this._transfers.get(data), result >= 0 ? result as long : -1 + result as long));
+                this._transfers.remove(data);
+                if (this._sockets.contains(data)) {
+                    var socket = this._sockets.get(data);
+                    this._sockets.remove(data);
+                    if (socket % 2 == 1) {
+                        this._sending.remove(socket / 2);
+                    } else {
+                        this._receiving.remove(socket / 2);
+                    }
+                }
             } else if (data == _async_doorbell_key()) {
                 _async_epoll_drain(this._bell);
                 this._arm_bell();
@@ -350,10 +402,19 @@ extend _IoUringDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
-        # The poll holds the socket open until the kernel removes it.
+        # A poll, a receive or a send holds the socket open until the kernel
+        # removes it.
+        var queued = false;
         if (this._armed.contains(key)) {
             this._cancel(this._armed.get(key));
             this._armed.remove(key);
+            queued = true;
+        }
+        if (this._receiving.contains(key) || this._sending.contains(key)) {
+            this._cancel_sockets(key);
+            queued = true;
+        }
+        if (queued) {
             this._enter(0, false);
         }
     }
@@ -365,7 +426,7 @@ extend _IoUringDriver with _Driver {
     _start_file(handle: long, buffer: ulong, count: ulong, write: bool, task: ulong): bool {
         var data = this._next_request;
         this._next_request = data + 1;
-        this._files.insert(data, task);
+        this._transfers.insert(data, task);
         var length = count;
         if (length > _IO_URING_MAX_TRANSFER) {
             length = _IO_URING_MAX_TRANSFER;
@@ -373,6 +434,35 @@ extend _IoUringDriver with _Driver {
         var opcode = write ? _IO_URING_OP_WRITE : _IO_URING_OP_READ;
         this._queue(opcode, handle, buffer, length as uint, 0, data);
         return true;
+    }
+
+    _start_socket(handle: io.SocketHandle, buffer: ulong, count: ulong, write: bool, task: ulong): ulong {
+        var key = handle as ulong;
+        var busy = write ? this._sending : this._receiving;
+        if (busy.contains(key)) {
+            return 0;
+        }
+        var data = this._next_request;
+        this._next_request = data + 1;
+        this._transfers.insert(data, task);
+        this._sockets.insert(data, key * 2 + (write ? 1 : 0) as ulong);
+        busy.insert(key, data);
+        var length = count;
+        if (length > _IO_URING_MAX_TRANSFER) {
+            length = _IO_URING_MAX_TRANSFER;
+        }
+        if (write) {
+            this._queue(_IO_URING_OP_SEND, key as long, buffer, length as uint, _IO_URING_MSG_NOSIGNAL, data);
+        } else {
+            this._queue(_IO_URING_OP_RECV, key as long, buffer, length as uint, 0, data);
+        }
+        return data;
+    }
+
+    _cancel_transfer(request: ulong) {
+        if (this._sockets.contains(request)) {
+            this._queue(_IO_URING_OP_ASYNC_CANCEL, -1, request, 0, 0, 0);
+        }
     }
 
     _finished_files(finished: Array<(task: ulong, result: long)>) {

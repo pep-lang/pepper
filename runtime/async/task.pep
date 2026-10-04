@@ -859,7 +859,55 @@ extend _Worker with io._IoWaiter {
         me._deadline = deadline;
         return result;
     }
+
+    _socket_transfer(handle: io.SocketHandle, buffer: ulong, count: ulong, write: bool): long {
+        var me = this._current;
+        if (me._is_cancelled()) {
+            return io._IO_TRANSFER_CANCELLED;
+        }
+        var deadline = me._deadline;
+        if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
+            return io._IO_TRANSFER_TIMED_OUT;
+        }
+        var request = this._driver._start_socket(handle, buffer, count, write, me._id);
+        if (request == 0) {
+            return io._IO_TRANSFER_DECLINED;
+        }
+        this._file_waits.insert(me._id, me);
+        this._io_waiting = this._io_waiting + 1;
+        # A cancel or a deadline asks the kernel to stop, then waits for
+        # the request to finish: the kernel is using `buffer` until then.
+        long stopped = 0;
+        while (!this._file_results.contains(me._id)) {
+            if (stopped == 0) {
+                if (me._is_cancelled()) {
+                    stopped = io._IO_TRANSFER_CANCELLED;
+                } else if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
+                    stopped = io._IO_TRANSFER_TIMED_OUT;
+                }
+                if (stopped != 0) {
+                    this._driver._cancel_transfer(request);
+                    me._deadline = 0;
+                }
+            }
+            this._park();
+        }
+        this._io_waiting = this._io_waiting - 1;
+        this._file_waits.remove(me._id);
+        var result = this._file_results.get(me._id);
+        this._file_results.remove(me._id);
+        me._deadline = deadline;
+        # Cancelled before it moved any bytes: by the task, or because the
+        # socket is closing (`_forget`).
+        if (result == _ASYNC_CANCELLED_RESULT) {
+            return stopped != 0 ? stopped : io._IO_TRANSFER_CLOSED;
+        }
+        return result;
+    }
 }
+
+# A transfer's result when the kernel cancelled it: -1 minus ECANCELED.
+const _ASYNC_CANCELLED_RESULT: long = -126;
 
 # A file handle as the drivers take it. Only io_uring (Linux) runs file
 # transfers itself.

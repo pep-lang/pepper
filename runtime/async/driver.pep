@@ -81,9 +81,26 @@ export trait _Driver {
         return false;
     }
 
-    # Moves the file transfers finished since the last call to `finished`:
-    # each task's id and its result (a byte count, or -1 minus the error
-    # code, as `io._io_file_transfer_raw` returns).
+    # Starts receiving up to `count` bytes into the memory at address
+    # `buffer` from the stream socket `handle` (or sending them from it,
+    # when `write`) as soon as the socket is ready, for the task `task`.
+    # Returns a request number for `_cancel_transfer`, or 0 if this driver
+    # cannot (the task then waits for readiness and makes the call itself).
+    # `_finished_files` reports it, with the result `-1 - ECANCELED` when it
+    # was cancelled first, and `_forget` and `_release` cancel those in
+    # flight on their socket.
+    _start_socket(handle: io.SocketHandle, buffer: ulong, count: ulong, write: bool, task: ulong): ulong {
+        return 0;
+    }
+
+    # Asks the kernel to cancel the socket transfer `request`, which
+    # still finishes through `_finished_files`: cancelled, or with the bytes
+    # it moved first.
+    _cancel_transfer(request: ulong) {}
+
+    # Moves the file and socket transfers finished since the last call to
+    # `finished`: each task's id and its result (a byte count, or -1 minus
+    # the error code, as `io._io_file_transfer_raw` returns).
     _finished_files(finished: Array<(task: ulong, result: long)>) {}
 
     # The doorbell that ends this driver's waits early, from any thread.

@@ -455,6 +455,11 @@ export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAdd
 
 [Target(OS(Linux) || OS(Mac))]
 export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<ulong> {
+    # In a task on io_uring, the kernel receives when data arrives.
+    var transferred = _io_task_socket_transfer(h, destination, _io_posix_max_rw(n), false);
+    if (transferred.is_value()) {
+        return transferred.value();
+    }
     while (true) {
         var r = recv(h, destination, _io_posix_max_rw(n), 0);
         if (r >= 0) {
@@ -470,6 +475,10 @@ export _io_sys_socket_receive(h: SocketHandle, destination: __ptr<u8>, n: ulong)
 
 [Target(OS(Linux) || OS(Mac))]
 export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResult<ulong> {
+    var transferred = _io_task_socket_transfer(h, source, _io_posix_max_rw(n), true);
+    if (transferred.is_value()) {
+        return transferred.value();
+    }
     while (true) {
         var r = send(h, source, _io_posix_max_rw(n), _io_msg_nosignal());
         if (r >= 0) {

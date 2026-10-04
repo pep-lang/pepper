@@ -771,7 +771,12 @@ export _io_stream_write(h: SocketHandle, data: u8[]): IoResult<ulong> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<ulong>.err(_io_socket_closed_error());
     }
-    return _io_sys_socket_send(h, data._data, data._size);
+    # Pinned: a send in a task may wait, and the kernel may be reading the
+    # bytes meanwhile.
+    data._pins = data._pins + 1;
+    var r = _io_sys_socket_send(h, data._data, data._size);
+    data._pins = data._pins - 1;
+    return r;
 }
 
 # A stream's `write_all`.
@@ -864,7 +869,11 @@ export _io_socket_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulon
         return IoResult<ulong>.ok(0);
     }
     buffer.reserve(buffer._size + max);
+    # Pinned: a receive in a task may wait, and the kernel may be writing
+    # into the array meanwhile.
+    buffer._pins = buffer._pins + 1;
     var r = _io_sys_socket_receive(h, buffer._data + buffer._size, max);
+    buffer._pins = buffer._pins - 1;
     if (r.is_ok()) {
         buffer._size = buffer._size + r.value();
     }

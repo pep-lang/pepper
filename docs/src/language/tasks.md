@@ -235,7 +235,7 @@ How the runtime waits for sockets is its I/O *backend*, an `async.Backend`:
 | Backend | Where | How |
 |---|---|---|
 | `Epoll` | Linux | epoll, edge-triggered |
-| `IoUring` | Linux 5.11 and later | io_uring, with one multishot poll request per waiting socket and deferred completion work (as fast as epoll in our echo benchmark); never picked automatically, since container seccomp profiles and hardened kernels often refuse it |
+| `IoUring` | Linux 5.11 and later | io_uring: the kernel does stream sockets' receives and sends and files' reads and writes itself, submitted in batches, with deferred completion work; never picked automatically, since container seccomp profiles and hardened kernels often refuse it |
 | `Kqueue` | macOS | kqueue, edge-triggered |
 | `Iocp` | Windows | an I/O completion port, fed by AFD poll requests (as tokio and libuv do) |
 | `Poll` | everywhere | `poll()` (`WSAPoll` on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands |
@@ -247,15 +247,23 @@ the system has. `RuntimeOptions().backend(kind)` asks for one (and
 `iocp` or `poll`) overrides the automatic choice without changing the
 program, for testing and benchmarks. `async.current_backend()` says which one is running.
 
-io_uring usually pays off as the amount of multiplexed I/O grows: many
-operations in flight, submitted and completed in batches through the ring
-rather than one system call each. For sockets, Pepper's `IoUring` backend
-does not do that yet: it uses the ring only to learn when a socket is
-ready, then reads and writes with ordinary `recv` and `send` calls, as epoll
-does, so it makes the same number of system calls. (File reads and writes
-do go through the ring; see [Files](#files).) In our echo benchmark it kept level with
-epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
-the socket reads and writes themselves through the ring is future work.
+io_uring pays off as the amount of multiplexed I/O grows: many operations
+in flight, submitted and completed in batches through the ring rather than
+one system call each. With the `IoUring` backend, a stream socket's `read`
+and `write` in a task go to the kernel as a receive or send request, which
+it runs once the socket is ready; the worker submits every request queued
+since its last look, and collects every completion, in one system call. In
+our echo benchmark that makes about an eighth of epoll's system calls,
+runs as fast as epoll from 64 to 1,024 connections (half again as fast as
+io_uring used only for readiness), and stays about 10% behind at 4,096.
+
+A cancel or a `timeout` asks the kernel to stop a request and waits for it
+to finish, since the kernel is writing into or reading from the array
+until then. A receive that got data before the cancel took effect returns
+that data instead of failing, so no bytes are lost. As with files, growing
+the array from another task meanwhile panics. Accepting, connecting, UDP
+sockets, and a second task reading (or writing) a socket that one already
+reads (or writes) still wait for readiness.
 
 ## Timeouts
 

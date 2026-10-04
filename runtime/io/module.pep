@@ -102,6 +102,10 @@ export _IO_READABLE;
 export _IO_WRITABLE;
 export _IoWait;
 export _FileTransfer;
+export _IO_TRANSFER_DECLINED;
+export _IO_TRANSFER_CANCELLED;
+export _IO_TRANSFER_TIMED_OUT;
+export _IO_TRANSFER_CLOSED;
 
 # For the tls and async modules only: UTF-16 names for Windows calls.
 [Target(OS(Windows))]
