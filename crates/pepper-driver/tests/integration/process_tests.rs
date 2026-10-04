@@ -1,6 +1,8 @@
 //! The `process` module (runtime/process/) in linked programs: the running
-//! process's arguments and exit, and child processes. The deprecated prelude
-//! `arguments()` and `exit()` (runtime/process.pep) still work.
+//! process's arguments and exit, and child processes that are copies of the
+//! program. The deprecated prelude `arguments()` and `exit()`
+//! (runtime/process.pep) still work. A program that cannot start is checked
+//! by the `[Test]` functions in `runtime/process/test/command_test.pep`.
 
 use crate::support;
 use crate::support::stdout_of;
@@ -189,9 +191,6 @@ main(args: String[]): int {
     var killed = sleeper.wait().value();
     print($"killed {killed.success()}");
 
-    var missing = process.Command("no-such-program-for-pepper").run();
-    print($"missing {missing.is_err() && missing.error().is_not_found()}");
-
     var silent = process.Command(self).argument("streams").stdout(process.Stream.Null).stderr(process.Stream.Null).run().value();
     print($"null {silent.stdout.size} {silent.stderr.size}");
 
@@ -228,7 +227,6 @@ fn command_starts_children_and_collects_their_output() {
          process_command_directory\n\n\
          true\n\
          killed false\n\
-         missing true\n\
          null 0 0\n\
          task 532480\ntask 532480\ntask 532480\n",
         "stderr: {}",
@@ -270,29 +268,4 @@ main(): int {
     let temporary = std::fs::canonicalize("/tmp").unwrap();
     assert_eq!(&lines[2..], ["set", temporary.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(9));
-}
-
-#[test]
-fn exec_returns_why_the_program_cannot_start() {
-    let output = run_with(
-        "exec_fails",
-        r#"import io;
-import process;
-main(): int {
-    var before = process.working_directory().value();
-    var missing = process.Command("pep-no-such-program").working_directory(io.Path("..")).exec();
-    print(missing.is_not_found() ? "not found" : $"other: {missing.message}");
-    print(process.working_directory().value() == before ? "same directory" : "moved");
-    var piped = process.Command("pep-no-such-program").stdout(process.Stream.Pipe).exec();
-    print(piped.is_invalid_input() ? "invalid input" : $"other: {piped.message}");
-    return 0;
-}
-"#,
-        &[],
-    );
-    assert_eq!(
-        stdout_of(&output),
-        "not found\nsame directory\ninvalid input\n"
-    );
-    assert_eq!(output.status.code(), Some(0));
 }
