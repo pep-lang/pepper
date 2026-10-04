@@ -737,6 +737,7 @@ dependencies = [
  "pepper-parser",
  "pepper-sema",
  "postcard",
+ "serde_json",
 ]
 
 [[package]]

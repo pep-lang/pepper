@@ -580,23 +580,23 @@ _from_toml<T>(value: TomlValue, witness: T, path: String, unknown_keys: UnknownK
                         if (case.values.count == 1) {
                             var a = case.values[0];
                             out = case.get(
-                                _toml_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures)
+                                _toml_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 2) {
                             var a = case.values[0];
                             var b = case.values[1];
                             out = case.get(
-                                _toml_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _toml_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures)
+                                _toml_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _toml_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 3) {
                             var a = case.values[0];
                             var b = case.values[1];
                             var c = case.values[2];
                             out = case.get(
-                                _toml_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _toml_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _toml_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures)
+                                _toml_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _toml_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _toml_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 4) {
                             var a = case.values[0];
@@ -604,10 +604,10 @@ _from_toml<T>(value: TomlValue, witness: T, path: String, unknown_keys: UnknownK
                             var c = case.values[2];
                             var d = case.values[3];
                             out = case.get(
-                                _toml_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _toml_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _toml_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
-                                _toml_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures)
+                                _toml_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _toml_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _toml_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures),
+                                _toml_case_value<d.Type>(payload, d.name, case_path, unknown_keys, failures)
                             );
                         } else {
                             reflect.error(

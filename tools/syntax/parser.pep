@@ -144,6 +144,10 @@ struct Parser {
     # the struct's constraints (`extend Box<T: Shape>`).
     bool _restating;
     HashSet<String> _qualifiers = HashSet<String>();
+    # How many `static` blocks enclose the parser, inside which the names a
+    # `for` or `var` binds qualify types too (`case.Type`), as in the
+    # compiler.
+    int _static_depth;
     HashSet<String> _reserved = reserved_words();
     HashSet<String> _statement_keywords = statement_keywords();
     HashSet<String> _operator_names = operator_method_names();
@@ -1228,6 +1232,7 @@ struct Parser {
             ulong position = _position;
             var variable = _variable_declaration(Array<Node>());
             if (!_failed and _declaration_boundary()) {
+                _bind_qualifier(variable);
                 return variable;
             }
             _restore(position);
@@ -1281,7 +1286,11 @@ struct Parser {
             pattern.add(_binding_pattern());
             node.add(pattern);
         } else {
-            node.add(_variable_declaration(Array<Node>()));
+            var binding = _variable_declaration(Array<Node>());
+            node.add(binding);
+            if (!_failed) {
+                _bind_qualifier(binding);
+            }
         }
         if (_failed) {
             return node;
@@ -1317,8 +1326,23 @@ struct Parser {
                 return node;
             }
         }
+        # The names the block binds qualify types only inside it.
+        var outer = HashSet<String>();
+        for (var name in _qualifiers) {
+            outer.insert(name);
+        }
+        _static_depth += 1;
         node.add(_block(Array<Node>()));
+        _static_depth -= 1;
+        _qualifiers = outer;
         return node;
+    }
+
+    # Inside a `static` block, makes the name `variable` binds a qualifier.
+    _bind_qualifier(variable: Node) {
+        if (_static_depth > 0 and variable.count > 1 and variable.child(1).kind == NodeKind.Token) {
+            _qualifiers.insert(variable.child(1).leaf.text);
+        }
     }
 
     _with_statement(): Node {
@@ -2666,6 +2690,34 @@ export parse(source: String): Result<Node, SyntaxError> {
     }
     var parser = Parser(tokens.value());
     var root = parser.module();
+    if (parser._failed) {
+        return Result<Node, SyntaxError>.err(parser._error.value());
+    }
+    return Result<Node, SyntaxError>.ok(root);
+}
+
+## Parses `source` as a single expression, the whole of it: the text in the
+## braces of an interpolated string, for instance.
+##
+## @param source the text of one Pepper expression
+## @param qualifiers the names that qualify a type where the expression
+##   appears (`geo` in `geo.Box<int>()`): imports, and in a `static` block
+##   the names its `for`s and `var`s bind
+## @returns the expression's tree, or the syntax error furthest into the
+##   source, including text left over after the expression
+export parse_expression(source: String, qualifiers: String[] = Array<String>()): Result<Node, SyntaxError> {
+    var tokens = lex(source);
+    if (tokens.is_err()) {
+        return Result<Node, SyntaxError>.err(tokens.error());
+    }
+    var parser = Parser(tokens.value());
+    for (var name in qualifiers) {
+        parser._qualifiers.insert(name);
+    }
+    var root = parser._expression();
+    if (!parser._failed and !parser._at_end()) {
+        parser._fail("unexpected '" + parser._peek().text + "'");
+    }
     if (parser._failed) {
         return Result<Node, SyntaxError>.err(parser._error.value());
     }

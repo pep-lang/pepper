@@ -318,7 +318,7 @@ other tools' options are in [The pepper command](docs/src/tools/pepper.md),
 From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash
-cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout
+cargo run -- --emit-ast tests/hello.pep     # parse only, dump the AST to stdout (--emit-ast=json for JSON)
 cargo run -- tests/hello.pep --emit-llvm    # write IR to .pep/build/hello.ll instead of linking
 cargo run -- tests/hello.pep --emit-static  # write the source with static blocks expanded to hello.static/
 cargo run -- tests/hello.pep                # compile + link -> ./hello

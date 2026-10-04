@@ -29,7 +29,7 @@ short, and `pepper help build` runs it.
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
-| `--emit-ast` | Print the syntax tree instead of compiling | off |
+| `--emit-ast[=text\|json]` | Print the syntax tree instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
@@ -230,6 +230,14 @@ pepper build expanded/main.pep -o main           # the same program
 
 Parses the entry file only and prints its syntax tree to standard output,
 instead of compiling. Imports are not followed and nothing is checked.
+
+`--emit-ast` and `--emit-ast=text` print the tree as source-like text.
+`--emit-ast=json` prints it as one line of JSON: each node an object with
+its fields in declaration order, each enum case an object with the case's
+name as its one key, and each span `{"start": ..., "end": ...}` in bytes.
+The compiler's parser written in Pepper (`tools/compiler`) prints the same
+JSON, and its test compares the two over every source file in the
+repository.
 
 ## Optimization and code generation
 

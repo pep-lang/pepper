@@ -142,9 +142,10 @@ pub struct Options {
     #[arg(long = "no-runtime")]
     pub no_runtime: bool,
 
-    /// Dump the parsed AST instead of compiling.
-    #[arg(long = "emit-ast")]
-    pub emit_ast: bool,
+    /// Dump the parsed AST instead of compiling: as source-like text
+    /// (`--emit-ast`, `--emit-ast=text`) or as JSON (`--emit-ast=json`).
+    #[arg(long = "emit-ast", value_name = "FORMAT", num_args = 0..=1, require_equals = true, default_missing_value = "text", value_parser = ["text", "json"])]
+    pub emit_ast: Option<String>,
 
     /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
     /// each compile stage took; `passes` prints how long each sema pass

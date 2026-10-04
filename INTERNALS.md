@@ -37,6 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/toml` | A copy of the [toml package](https://github.com/justinboswell/pepper-toml) (TOML parse, write, edit in place), which `pep-package` uses. Update it when that repository changes. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each with `pep-build --test`, lists its tests (`--list`) and runs each in a child process (`--run NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
@@ -61,7 +62,7 @@ and nothing that links LLVM.
 pep-build main.pep [-I dir] [--import name] [-l lib] [-o out] [--build dir]   (pepper build ...)
   │  src/main.rs: Options::parse → pepper_driver::run            (driver/src/lib.rs)
   │
-  ├─ --emit-ast ─→ run_emit_ast: parse_source(entry) → print AST   (entry file only)
+  ├─ --emit-ast[=json] ─→ run_emit_ast: parse_source(entry) → print AST (Display, or serde JSON; entry file only)
   ├─ --emit-static ─→ emit_static::run: compile_program, recording each static
   │                  block's expansion as source → expanded copies  (§2.8)
   ▼
@@ -457,6 +458,8 @@ with no extension (with `--lib`, the library's file name for the stem,
   `Import`, and `ExportAlias`. Every node carries a byte `Span`; named nodes
   also carry `name_span`. Externs are `FunctionDecl { external: true, … }`.
   Every node implements `Display`; `--emit-ast` prints through it.
+  Every node also derives `serde::Serialize`; `--emit-ast=json` prints that,
+  the form `tools/compiler`'s parser is checked against (§8).
   A `GenericParam` carries its `bounds` (`T: Shape & Named`, parsed by
   `constraints`) before its default. An `extend` target may restate its
   struct's constraints (`extend Box<T: Shape>`): `extend_target` tries a
@@ -2558,6 +2561,34 @@ dogfooding of the language.
   So a grammar change to `parsers.rs` that `tools/syntax` does not mirror
   fails there. The tool's own sources and `runtime/` must be pep-fmt formatted.
 
+**`tools/compiler`** is the compiler being rewritten in Pepper (#225). The
+Rust compiler stays the stage-0 compiler until the Pepper one passes the
+same tests; the two share no code, and each stage of the port is checked
+against the Rust stage it replaces. The plan, one PR per stage: the parser
+(done), module loading and linking, the sema builder and passes, codegen
+on the `pepper-llvm` package, then the driver and `pep-doc`.
+
+- `compiler.ast` (`ast/ast.pep`) is `crates/pepper-parser/src/ast.rs` in
+  Pepper: the same nodes, fields and spans, each with a `to_json()` that
+  writes what serde writes for the Rust node.
+- `compiler.parse` (`parse/lower.pep`) does not parse text itself: it
+  lowers the lossless tree `tools/syntax` reads into `compiler.ast`, as
+  `parsers.rs` builds it, span for span. That includes what `parsers.rs`
+  desugars while parsing: interpolated strings (`interpolated_string`, each
+  hole parsed with `syntax.parse_expression`), `print` and `String.format`
+  formats (`format_arguments`), property accessors, a module `static`
+  block's `static_constants`, and `build_option_tests`. Spans that
+  `parsers.rs` ends after the whitespace following a construct (a
+  function, a parameter without a default) end at the next token's offset
+  (`Lowerer.after`).
+- `compiler/parse_test.pep` runs `pep-build --emit-ast=json` on every `.pep`
+  file under `runtime/`, `tools/`, `tests/` and `docs/examples/` and
+  requires `compiler.parse`'s JSON to match byte for byte, so a parser
+  change that `tools/compiler` does not follow fails there.
+  `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
+- `compiler/main.pep` builds `pepc`; for now `pepc --emit-ast=json file`
+  prints the JSON, to diff a single file by hand.
+
 ---
 
 ## 9. Tests
@@ -2650,6 +2681,9 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    `tree.pep`), and print the node in `tools/pep-fmt/format.pep`.
    `pep_fmt_tests.rs` fails until the formatter keeps a file that uses the
    form unchanged in meaning.
+7. Lower the new node in `tools/compiler/parse/lower.pep` (and add it to
+   `tools/compiler/ast/ast.pep`); `compiler/parse_test.pep` fails until its
+   JSON matches `pep-build --emit-ast=json`.
 
 ### Add a sema pass
 

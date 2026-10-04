@@ -84,7 +84,7 @@ pub fn run(options: Options) -> Result<i32, String> {
 fn run_for_target(options: Options) -> Result<i32, String> {
     let module_name = options.module_name()?;
 
-    if options.emit_ast {
+    if options.emit_ast.is_some() {
         return run_emit_ast(&options);
     }
 
@@ -626,7 +626,12 @@ fn run_emit_ast(options: &Options) -> Result<i32, String> {
     let name = entry_source.to_string_lossy();
     let ast = pepper_parser::parser::parse_source(&name, &content)?;
     report_warnings(&ast.warnings.iter().map(|w| w.render_in(&name, &content)).collect::<Vec<_>>().join("\n"));
-    println!("{}", ast);
+    if options.emit_ast.as_deref() == Some("json") {
+        let json = serde_json::to_string(&ast).map_err(|e| format!("cannot write the AST as JSON: {}", e))?;
+        println!("{}", json);
+    } else {
+        println!("{}", ast);
+    }
     Ok(0)
 }
 

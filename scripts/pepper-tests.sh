@@ -43,6 +43,8 @@ for tool in pepper pep-test; do
 done
 pepper="$bin/pepper$exe"
 export PEPPER_RUNTIME="$root/runtime"
+# The compiler's parser test (tools/compiler) runs pep-build itself.
+export PATH="$bin:$PATH"
 
 failed=0
 run() {

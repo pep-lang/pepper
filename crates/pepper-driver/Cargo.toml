@@ -19,6 +19,7 @@ inkwell = { version = "0.10", default-features = false, features = ["target-x86"
 blake3 = { version = "1.8.7", default-features = false }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 ar_archive_writer = "0.5.3"
+serde_json.workspace = true
 
 # See crates/pepper-codegen/Cargo.toml + build.rs for why Windows links the DLL.
 [target.'cfg(windows)'.dependencies]

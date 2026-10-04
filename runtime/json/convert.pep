@@ -645,23 +645,23 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                         if (case.values.count == 1) {
                             var a = case.values[0];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 2) {
                             var a = case.values[0];
                             var b = case.values[1];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 3) {
                             var a = case.values[0];
                             var b = case.values[1];
                             var c = case.values[2];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 4) {
                             var a = case.values[0];
@@ -669,10 +669,10 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                             var c = case.values[2];
                             var d = case.values[3];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
-                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value<d.Type>(payload, d.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 5) {
                             var a = case.values[0];
@@ -681,11 +681,11 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                             var d = case.values[3];
                             var e = case.values[4];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
-                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures),
-                                _json_case_value < e.Type > (payload, e.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value<d.Type>(payload, d.name, case_path, unknown_keys, failures),
+                                _json_case_value<e.Type>(payload, e.name, case_path, unknown_keys, failures)
                             );
                         } else if (case.values.count == 6) {
                             var a = case.values[0];
@@ -695,12 +695,12 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
                             var e = case.values[4];
                             var f = case.values[5];
                             out = case.get(
-                                _json_case_value < a.Type > (payload, a.name, case_path, unknown_keys, failures),
-                                _json_case_value < b.Type > (payload, b.name, case_path, unknown_keys, failures),
-                                _json_case_value < c.Type > (payload, c.name, case_path, unknown_keys, failures),
-                                _json_case_value < d.Type > (payload, d.name, case_path, unknown_keys, failures),
-                                _json_case_value < e.Type > (payload, e.name, case_path, unknown_keys, failures),
-                                _json_case_value < f.Type > (payload, f.name, case_path, unknown_keys, failures)
+                                _json_case_value<a.Type>(payload, a.name, case_path, unknown_keys, failures),
+                                _json_case_value<b.Type>(payload, b.name, case_path, unknown_keys, failures),
+                                _json_case_value<c.Type>(payload, c.name, case_path, unknown_keys, failures),
+                                _json_case_value<d.Type>(payload, d.name, case_path, unknown_keys, failures),
+                                _json_case_value<e.Type>(payload, e.name, case_path, unknown_keys, failures),
+                                _json_case_value<f.Type>(payload, f.name, case_path, unknown_keys, failures)
                             );
                         } else {
                             reflect.error(
