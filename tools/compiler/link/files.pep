@@ -251,7 +251,7 @@ export struct Runtime {
         for (var candidate in candidates) {
             var canonical = candidate.canonicalize();
             var dir = canonical.is_ok() ? canonical.value() : candidate;
-            if (!dir.is_dir()) {
+            if (!dir.is_directory()) {
                 continue;
             }
             if (seen.insert(dir.to_string())) {

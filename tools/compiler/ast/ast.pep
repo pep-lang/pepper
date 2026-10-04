@@ -1970,6 +1970,32 @@ export struct ExportAlias {
 }
 
 ## One parsed source file.
+## Deprecated syntax the parser accepted: how the source spells it, what
+## replaces it, and the text that migrates it.
+export struct SyntaxWarning {
+    ## Where it is.
+    var span: Span;
+    ## How the source spells it, quoted: "`new`".
+    var what: String = "";
+    ## What replaces it.
+    var instead: String = "";
+    ## The text that replaces it.
+    var replacement: String = "";
+
+    ## Creates a warning.
+    ##
+    ## @param span where it is
+    ## @param what how the source spells it
+    ## @param instead what replaces it
+    ## @param replacement the text that replaces it
+    construct(span: Span, what: String, instead: String, replacement: String) {
+        this.span = span;
+        this.what = what;
+        this.instead = instead;
+        this.replacement = replacement;
+    }
+}
+
 export struct Module {
     ## The imports and re-exports of sources.
     var imports: Import[] = Array<Import>();
@@ -1979,6 +2005,8 @@ export struct Module {
     var declarations: Declaration[] = Array<Declaration>();
     ## Every attribute that tests a build option, in source order.
     var build_option_tests: Attribute[] = Array<Attribute>();
+    ## Deprecated syntax, in source order. Not part of the JSON.
+    var warnings: SyntaxWarning[] = Array<SyntaxWarning>();
 
     ## Creates an empty module.
     construct() {}

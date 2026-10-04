@@ -33,6 +33,7 @@ import [
     Statement,
     StaticBlock,
     StructDecl,
+    SyntaxWarning,
     TraitDecl,
     TypeAliasDecl,
     TypeName,
@@ -118,6 +119,7 @@ struct Lowerer {
     var next_offset: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
     var error: ParseError?;
     var build_option_tests: Attribute[] = Array<Attribute>();
+    var warnings: SyntaxWarning[] = Array<SyntaxWarning>();
     var build_option_spans: HashSet<ulong> = HashSet<ulong>();
     # The names that qualify a type in an interpolated string's braces
     # (`geo.Box<int>()`): import qualifiers, and inside a `static` block the
@@ -217,6 +219,7 @@ struct Lowerer {
             }
         }
         out.build_option_tests = build_option_tests;
+        out.warnings = warnings;
         return out;
     }
 
@@ -1594,6 +1597,16 @@ struct Lowerer {
         out.return_type = TypeName.auto();
         var keyword = node.child(index);
         out.name_span = Span(start(keyword), after(keyword));
+        if (keyword.first_token().text == "new") {
+            warnings.append(
+                SyntaxWarning(
+                    span_of(keyword.first_token()),
+                    "`new`",
+                    "constructors are spelled `construct`, matching `destruct`",
+                    "construct"
+                )
+            );
+        }
         out.parameters = parameters(node.child(index + 1));
         out.body = Optional<Block>.Value(block(node.child(index + 2)));
         out.span = Span(attributes.count > 0 ? attributes[0].span.start : start(keyword), after(node));

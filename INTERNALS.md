@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser and linker. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker and the checks after linking. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/toml` | A copy of the [toml package](https://github.com/justinboswell/pepper-toml) (TOML parse, write, edit in place), which `pep-package` uses. Update it when that repository changes. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each with `pep-build --test`, lists its tests (`--list`) and runs each in a child process (`--run NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
@@ -2601,6 +2601,17 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   names, unions, the re-export fixpoint, bindings, members and the
   rewriter). It does not read `pep.toml` projects yet: a program in one is
   an error.
+- `compiler.link` also runs the checks between linking and sema:
+  `Program.check()` is `Program::check` (linking errors, else
+  `built_in_errors`, else `visibility.pep`, which is `visibility.rs`), and
+  `Program.warnings()` is `Program::warnings` (deprecated syntax the parser
+  recorded in `Module.warnings`, `undefined_build_option_comparisons`, and
+  `deprecation.pep`, which is `deprecation::check_uses`). Both checks are
+  `ScopeWalk`s, using the hooks linking does not need (`visit_binding`
+  marks, `visit_callee`, `visit_member`, `enter_declaration` and
+  `exit_declaration`). `compiler.diagnostic` is `pepper_parser::diagnostic`:
+  a `Diagnostic` with notes and fixes, rendered clang-style, names
+  demangled.
 - `pep-build --emit-linked` prints the linked program as JSON (see
   `docs/src/tools/pep-build.md`), and `compiler/link_test.pep` requires
   `compiler.link`'s JSON to match byte for byte on every program of the
@@ -2608,9 +2619,13 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   programs with linking errors. The JSON keeps the Rust structures' field
   order, so where Rust iterates in a defined order the port does the same
   (paths compare component by component, as `PathBuf` does).
-- `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file` and
+  `pep-build --emit-checked` prints the checks' rendered errors and
+  warnings, and the same test requires `Program.check_report()` to match it
+  on those programs and on programs that break each check.
+- `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,
   `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`
-  print the same JSON as `pep-build`, to diff a program by hand.
+  and `pepc --emit-checked ...` print the same output as `pep-build`, to
+  diff a program by hand.
 
 ---
 

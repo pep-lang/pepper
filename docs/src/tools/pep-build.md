@@ -31,6 +31,7 @@ short, and `pepper help build` runs it.
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
 | `--emit-ast[=text\|json]` | Print the syntax tree instead of compiling | off |
 | `--emit-linked` | Print every file's syntax tree after linking, as JSON, instead of compiling | off |
+| `--emit-checked` | Print what the checks after linking report, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
@@ -268,6 +269,22 @@ The JSON is an object with three keys:
 `-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
 The compiler's linker written in Pepper (`tools/compiler`) prints the same
 JSON, and its test compares the two.
+
+### `--emit-checked`
+
+Loads and links the program as `--emit-linked` does, runs the checks that
+come before type checking, and prints what they report instead of
+compiling: the errors, rendered as a build reports them, then the warnings.
+The errors are the linking errors; when there are none, a `[__BuiltIn]`
+declaration outside the runtime; when there is none of those either, every
+use of a declaration another file keeps private or this file does not
+import. The warnings are deprecated syntax, comparisons with a build option
+`-D` does not define, and uses of declarations marked `[Deprecated]`. A
+program with neither prints an empty line.
+
+`-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
+The compiler written in Pepper (`tools/compiler`) prints the same text, and
+its test compares the two.
 
 ## Optimization and code generation
 

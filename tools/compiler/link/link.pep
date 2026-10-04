@@ -22,6 +22,7 @@
 
 import compiler.ast;
 import [Attribute, Declaration, Expression, FunctionDecl, Module, Pattern, Span, TypeName] from compiler.ast;
+import [Diagnostic, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import "names" as names;
@@ -93,6 +94,17 @@ export struct ModuleError {
         this.span = span;
         this.message = message;
         this.unresolved = unresolved;
+    }
+
+    ## Returns the error as a diagnostic, with its note.
+    ##
+    ## @returns the diagnostic
+    to_diagnostic(): Diagnostic {
+        var out = Diagnostic.error(message).at(Location(file, span));
+        if (note_span.is_value()) {
+            out = out.with_note(note, Optional<Location>.Value(Location(file, note_span.value())));
+        }
+        return out;
     }
 
     ## Returns whether `other` says the same thing at the same place.
@@ -2163,16 +2175,8 @@ extend _Rewriter with ScopeWalk {
 
     visit_type_name(type_name: TypeName) {
         var name = type_name.name;
-        ulong base_size = name.size;
-        while (base_size > 0) {
-            var b = name.byte_at(base_size - 1);
-            if (b != '*' and b != '[' and b != ']') {
-                break;
-            }
-            base_size -= 1;
-        }
-        var base = name.substr_bytes(0, base_size);
-        var suffix = name.substr_bytes(base_size, name.size - base_size);
+        var base = names.base_type_name(name);
+        var suffix = name.substr_bytes(base.size, name.size - base.size);
         String? resolved = Optional<String>.Empty;
         var split = base.split_once(".");
         if (split.is_value()) {

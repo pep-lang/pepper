@@ -92,6 +92,10 @@ fn run_for_target(options: Options) -> Result<i32, String> {
         return run_emit_linked(&options);
     }
 
+    if options.emit_checked {
+        return run_emit_checked(&options);
+    }
+
     if let Some(warning) = options.runtime_checks_warning() {
         report_warnings(&warning);
     }
@@ -689,6 +693,24 @@ fn run_emit_linked(options: &Options) -> Result<i32, String> {
         errors.join(","),
         json!(&program.overload_unions)
     );
+    Ok(0)
+}
+
+/// Load, link and check the program, then print the rendered errors of
+/// `Program::check`, if any, then its rendered warnings, so the Pepper
+/// compiler's checks can be compared byte for byte.
+fn run_emit_checked(options: &Options) -> Result<i32, String> {
+    let entry_source = options.source_files.first().ok_or_else(|| "no source files".to_string())?;
+    let program = compiler::load_uncached(options, entry_source)?;
+    let mut out = vec![];
+    if let Err(errors) = program.check() {
+        out.push(errors);
+    }
+    let warnings = program.render_warnings();
+    if !warnings.is_empty() {
+        out.push(warnings);
+    }
+    println!("{}", out.join("\n"));
     Ok(0)
 }
 

@@ -1,7 +1,8 @@
-# The compiler's linker in Pepper loads and links programs as the Rust
-# compiler does: the JSON of every file after linking, with the linking
-# errors, from `compiler.link` here and from `pep-build --emit-linked`,
-# match byte for byte.
+# The compiler's linker in Pepper loads, links and checks programs as the
+# Rust compiler does: the JSON of every file after linking, with the
+# linking errors, from `compiler.link` here and from `pep-build
+# --emit-linked`, match byte for byte, and so do the errors and warnings of
+# the checks after linking and `pep-build --emit-checked`.
 
 import io;
 import [Directory, File, Path] from io;
@@ -139,6 +140,92 @@ reports_linking_errors_as_the_rust_compiler_does() {
             "export pick<T>(value: T): int { return 0; }\nexport trait Shape { area(): int; }\n"
         ]
     ];
+    expect_equal(write_and_compare(compiler.value(), folder, trees), 0 as ulong);
+}
+
+# Programs the checks after linking report on: each error and warning, its
+# place, its notes and its fix match the Rust compiler's.
+[Test]
+reports_check_errors_and_warnings_as_the_rust_compiler_does() {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var folder = TempFolder("check_errors");
+    var trees = [
+        # Deprecated functions, structs, constructors, constants and aliases,
+        # used and declared; no warning inside a deprecated declaration.
+        [
+            "main.pep",
+            "[Deprecated(\"use 'twice' instead\", \"twice\")]\ndup(x: int): int { return x * 2; }\ntwice(x: int): int { return x * 2; }\n[Deprecated(\"use 'Point' instead\")]\nstruct OldPoint { var x: int; }\n[Deprecated(\"\")]\nconst limit = 3;\nstruct Box {\n    var value: int;\n    [Deprecated(\"use 'make_box' instead\")]\n    construct(v: int) { value = v; }\n}\n[Deprecated(\"old\")]\ntype Alias = int;\n[Deprecated(\"old\")]\ntrait Shape { area(): int; }\n[Deprecated(\"old\")]\nhelper(): int { return limit + dup(1); }\nmain(): int {\n    var p: OldPoint = OldPoint();\n    var b = Box(limit);\n    var a: Alias = dup(21);\n    var f = () => dup(2);\n    return p.x + b.value + a + f();\n}\n"
+        ],
+        # A deprecated export used through a qualifier and an import list.
+        [
+            "main.pep",
+            "import \"lib\" as l;\nimport [stale] from \"lib\";\nmain(): int {\n    return l.stale() + stale();\n}\n",
+            "lib.pep",
+            "[Deprecated(\"use 'fresh' instead\", \"fresh\")]\nexport stale(): int { return 1; }\nexport fresh(): int { return 1; }\n"
+        ],
+        # A `new` constructor, and comparisons with undefined build options.
+        [
+            "main.pep",
+            "struct S {\n    var x: int;\n    new(v: int) { x = v; }\n}\n[Target(BuildOption(FAST) == 1)]\nfast(): int { return 1; }\n[Target(BuildOption(FAST) == 1 or BuildOption(\"SLOW\") >= 2)]\nslow(): int { return 2; }\nmain(): int { var s = S(1); return s.x; }\n"
+        ],
+        # `[__BuiltIn]` outside the runtime.
+        [
+            "main.pep",
+            "[__BuiltIn(thing)]\nstruct Thing {}\n[__BuiltIn]\nother(): int { return 0; }\nmain(): int { return 0; }\n"
+        ],
+        # Extension methods out of reach, and types of a module not imported.
+        [
+            "main.pep",
+            "import geo;\nimport \"local\";\nextend Shape { more(): int { return hidden() + shown(); } }\nmain(): int {\n    var s = Shape();\n    var t: Box<int> = Box<int>();\n    return s.shown() + s.hidden() + s.across() + t.get();\n}\n",
+            "deps/geo/module.pep",
+            "export struct Shape { var n: int; }\nextend Shape { hidden(): int { return 1; } }\nexport extend Shape { shown(): int { return 2; } }\nexport struct Box<T> { var v: T; get(): int { return v.size(); } }\n",
+            "deps/other/module.pep",
+            "import geo;\nexport extend geo.Shape { across(): int { return 3; } }\n",
+            "local.pep",
+            "import geo;\nimport other;\nexport probe(): int { return 0; }\n"
+        ],
+        # Types and variables declared twice, and overrides in two files.
+        [
+            "main.pep",
+            "import \"a\";\nimport \"b\";\nstruct P {}\nstruct P {}\nvar q = 1;\nvar q = 2;\nmain(): int { return 0; }\n",
+            "a.pep",
+            "export helper(): int { return 1; }\nexport hash<T>(v: T): ulong { return 0; }\nhash<int>(v: int): ulong { return 1; }\n",
+            "b.pep",
+            "export helper(): int { return 2; }\nhash<int>(v: int): ulong { return 2; }\n"
+        ],
+        # Members of private extensions, through a trait default and generic
+        # receivers, and private functions.
+        [
+            "main.pep",
+            "import \"lib\";\ntrait Named { name(): int; describe(): int { return name() + extra(); } }\nstruct G<T> { var v: T; f(): int { return v.secret() + this.v.secret(); } }\ng<T>(x: T): int { var y = x; return y.secret() + x.secret(); }\nmain(): int { var l = Lib(); return l.secret() + private_fn() + PUBLIC; }\n",
+            "lib.pep",
+            "export struct Lib { var n: int; }\nextend Lib { secret(): int { return 1; } extra(): int { return 2; } }\nextend Lib with Named { name(): int { return 3; } }\nprivate_fn(): int { return 4; }\nexport const PUBLIC = 5;\n"
+        ],
+        # Tabs and characters outside ASCII before the reported name.
+        [
+            "main.pep",
+            "import \"lib\";\nmain(): int {\n\tvar s = \"été\t!\"; return hidden() + s.size;\n}\n",
+            "lib.pep",
+            "hidden(): int { return 1; }\n"
+        ],
+        # Lines that end in CRLF.
+        [
+            "main.pep",
+            "import \"lib\";\nmain(): int {\n\tvar x = Lib();\r\n\treturn hidden(x) + Lib.make().n;\r\n}\r\n",
+            "lib.pep",
+            "export struct Lib { var n: int; static make(): Lib { return Lib(); } }\nhidden(l: Lib): int { return l.n; }\n"
+        ]
+    ];
+    expect_equal(write_and_compare(compiler.value(), folder, trees), 0 as ulong);
+}
+
+# Writes each tree of files (name, text, name, text, ...) to a folder of
+# its own in `folder`, compares the program rooted at its `main.pep`, with
+# its `deps` folder searched for modules, and returns how many differ.
+write_and_compare(compiler: Path, folder: TempFolder, trees: String[][]): ulong {
     ulong mismatches = 0;
     ulong t = 0;
     while (t < trees.count) {
@@ -152,45 +239,70 @@ reports_linking_errors_as_the_rust_compiler_does() {
             i += 2;
         }
         Directory.create_all(root.join("deps"));
-        if (!same_program(compiler.value(), root.join("main.pep"), ["-I", root.join("deps").to_string()])) {
+        if (!same_program(compiler, root.join("main.pep"), ["-I", root.join("deps").to_string()])) {
             mismatches += 1;
         }
         t += 1;
     }
-    expect_equal(mismatches, 0 as ulong);
+    return mismatches;
 }
 
-# Whether the two linkers agree on the program rooted at `root`, reporting
-# where they do not. A program the Rust compiler cannot load is skipped.
+# Whether the two linkers agree on the program rooted at `root`, and the
+# two compilers' checks after linking, reporting where they do not. A
+# program the Rust compiler cannot load is skipped.
 same_program(compiler: Path, root: Path, arguments: String[]): bool {
-    var command = process.Command(compiler.to_string()).argument("--emit-linked");
+    var expected = rust_output(compiler, "--emit-linked", root, arguments);
+    if (!expected.is_value()) {
+        return true;
+    }
     var setup = link.Setup();
     ulong i = 0;
     while (i < arguments.count) {
-        command.argument(arguments[i]);
         if (arguments[i] == "-I") {
             setup.import_dirs.append(Path(arguments[i + 1]));
         }
         i += 1;
     }
-    var output = command.argument(root.to_string()).stdout(process.Stream.Pipe).stderr(process.Stream.Pipe).run();
-    if (output.is_err() or !output.value().status.success()) {
-        return true;
-    }
-    var expected = output.value().stdout.trim_end();
     var program = link.load_program(root, setup);
     if (program.is_err()) {
         print($"{root}: the Rust compiler links it, but: {program.error()}");
         return false;
     }
     var actual = program.value().to_json().to_string();
-    if (actual != expected) {
+    if (actual != expected.value()) {
         print(
-            $"{root}: the linked program differs from the Rust compiler's at byte {first_difference(actual, expected)} of its JSON"
+            $"{root}: the linked program differs from the Rust compiler's at byte {first_difference(actual, expected.value())} of its JSON"
         );
         return false;
     }
+    var checked = rust_output(compiler, "--emit-checked", root, arguments);
+    var report = program.value().check_report();
+    if (checked.is_value() and report != checked.value()) {
+        print(
+            $"{root}: the checks report differs from the Rust compiler's at byte {first_difference(report, checked.value())}"
+        );
+        print(report);
+        return false;
+    }
     return true;
+}
+
+# What `pep-build` prints with `option` for the program rooted at `root`,
+# without the final newline; none when it fails.
+rust_output(compiler: Path, option: String, root: Path, arguments: String[]): String? {
+    var command = process.Command(compiler.to_string()).argument(option);
+    for (var argument in arguments) {
+        command.argument(argument);
+    }
+    var output = command.argument(root.to_string()).stdout(process.Stream.Pipe).stderr(process.Stream.Pipe).run();
+    if (output.is_err() or !output.value().status.success()) {
+        return Optional<String>.Empty;
+    }
+    var text = output.value().stdout;
+    if (text.ends_with("\n")) {
+        text = text.substr_bytes(0, text.size - 1);
+    }
+    return Optional<String>.Value(text);
 }
 
 first_difference(a: String, b: String): ulong {

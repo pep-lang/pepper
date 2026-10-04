@@ -526,6 +526,82 @@ struct _Evaluator {
     }
 }
 
+## A comparison with a build option the target does not define, which is
+## false.
+export struct UndefinedOption {
+    ## The option's name.
+    var name: String;
+    ## The `BuildOption(...)` call.
+    var span: Span;
+
+    ## Creates one.
+    ##
+    ## @param name the option's name
+    ## @param span the call
+    construct(name: String, span: Span) {
+        this.name = name;
+        this.span = span;
+    }
+}
+
+## Returns the well-formed comparisons in `attribute` with a build option
+## `target` does not define, in source order.
+##
+## @param target the target
+## @param attribute an attribute that tests build options
+## @returns each comparison's option and `BuildOption(...)` call
+export undefined_build_option_comparisons(target: Target, attribute: Attribute): UndefinedOption[] {
+    var out = Array<UndefinedOption>();
+    _undefined_options(_Evaluator(target, attribute), attribute.body, out);
+    return out;
+}
+
+_undefined_options(evaluator: _Evaluator, e: Expression, out: UndefinedOption[]) {
+    match (e) {
+        Binary(lhs, op, rhs, _) => {
+            if (op == "==" or op == "!=" or op == "<" or op == "<=" or op == ">" or op == ">=") {
+                # Only a well-formed comparison: a malformed one is an
+                # error.
+                bool left = _is_build_option_call(lhs)
+                    and !_is_build_option_call(rhs)
+                    and comparison_literal(rhs).is_value();
+                bool right = _is_build_option_call(rhs)
+                    and !_is_build_option_call(lhs)
+                    and comparison_literal(lhs).is_value();
+                if (!left and !right) {
+                    return;
+                }
+                match (left ? lhs : rhs) {
+                    FunctionCall(function, arguments, span) => {
+                        match (function) {
+                            SymbolRef(id, _) => {
+                                var name = evaluator._build_option_name(id, arguments);
+                                if (name.is_value() and !evaluator.target.build_options.contains(name.value())) {
+                                    out.append(UndefinedOption(name.value(), span));
+                                }
+                            }
+                            else => {}
+                        }
+                    }
+                    else => {}
+                }
+                return;
+            }
+            _undefined_options(evaluator, lhs, out);
+            _undefined_options(evaluator, rhs, out);
+        }
+        Unary(_, _, operand, _) => {
+            _undefined_options(evaluator, operand, out);
+        }
+        FunctionCall(_, arguments, _) => {
+            for (var a in arguments) {
+                _undefined_options(evaluator, a, out);
+            }
+        }
+        else => {}
+    }
+}
+
 _is_build_option_call(e: Expression): bool {
     match (e) {
         FunctionCall(function, _, _) => {

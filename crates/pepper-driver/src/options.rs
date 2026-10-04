@@ -152,6 +152,12 @@ pub struct Options {
     #[arg(long = "emit-linked")]
     pub emit_linked: bool,
 
+    /// Load, link and check the program instead of compiling it, and print
+    /// what the checks before sema report: the errors (linking, then
+    /// `[__BuiltIn]` misuse, then visibility), then the warnings, rendered.
+    #[arg(long = "emit-checked")]
+    pub emit_checked: bool,
+
     /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
     /// each compile stage took; `passes` prints how long each sema pass
     /// took, summed over its runs; `cache` prints whether each unit's object

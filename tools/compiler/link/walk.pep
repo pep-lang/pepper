@@ -66,6 +66,9 @@ export struct Scope {
     var names: HashSet<String> = HashSet<String>();
     ## The struct or trait, for `Members` and `Trait`.
     var owner: String = "";
+    ## The values bound in it that the walker marked (see
+    ## `ScopeWalk.visit_binding`).
+    var marked: HashSet<String> = HashSet<String>();
 
     ## Creates a level.
     ##
@@ -109,6 +112,23 @@ export struct Scopes {
             if ((level.kind == ScopeKind.Values or level.kind == ScopeKind.Static) and level.names.contains(name)) {
                 return true;
             }
+        }
+        return false;
+    }
+
+    ## Returns whether the value `name` refers to here (its innermost
+    ## binding) was marked when it was bound.
+    ##
+    ## @param name the name
+    ## @returns true when marked
+    is_marked_value(name: String): bool {
+        long i = levels.count as long - 1;
+        while (i >= 0) {
+            var level = levels[i as ulong];
+            if (level.kind == ScopeKind.Values and level.names.contains(name)) {
+                return level.marked.contains(name);
+            }
+            i -= 1;
         }
         return false;
     }
@@ -186,6 +206,23 @@ export struct Scopes {
             last.names.insert(name);
         }
     }
+
+    ## Binds the value `name` in the innermost level, marked or not.
+    ##
+    ## @param name the name
+    ## @param marked whether the walker marked it
+    bind_value(name: String, marked: bool) {
+        bind(name);
+        if (levels.count == 0) {
+            return;
+        }
+        var last = levels[levels.count - 1];
+        if (marked) {
+            last.marked.insert(name);
+        } else {
+            last.marked.remove(name);
+        }
+    }
 }
 
 ## A walk over one file's syntax tree that tracks its local names.
@@ -206,9 +243,9 @@ export trait ScopeWalk {
     ## Returns the names `extend target` introduces as generic parameters:
     ## in `extend Box<T>`, a `T` that names no type.
     ##
-    ## @param target the extension's target
+    ## @param target_type the extension's target
     ## @returns the names
-    extend_params(target: TypeName): HashSet<String>;
+    extend_params(target_type: TypeName): HashSet<String>;
 
     ## Returns whether platform selection keeps what `attributes` mark.
     ##
@@ -239,6 +276,38 @@ export trait ScopeWalk {
     visit_function_generics(function: FunctionDecl): bool {
         return false;
     }
+
+    ## Visits a value as it is bound (a variable, parameter or loop
+    ## variable) with its declared type and the expression it is
+    ## initialized from, if any.
+    ##
+    ## @param type_name its declared type
+    ## @param initializer what it is initialized from
+    ## @returns true to mark it (see `Scopes.is_marked_value`)
+    visit_binding(type_name: TypeName, initializer: Expression?): bool {
+        return false;
+    }
+
+    ## Visits the callee of a call, before it is walked.
+    ##
+    ## @param function the callee
+    visit_callee(function: Expression) {}
+
+    ## Visits the name of a member access (`m` in `x.m`), after its
+    ## receiver is walked.
+    ##
+    ## @param name the member's name
+    ## @param name_span where the name is written
+    visit_member(name: String, name_span: Span) {}
+
+    ## Enters a declaration, a member, a property or an enum case, before it
+    ## is walked. Each is paired with an `exit_declaration`.
+    ##
+    ## @param attributes its attributes
+    enter_declaration(attributes: Attribute[]) {}
+
+    ## Leaves the declaration the matching `enter_declaration` entered.
+    exit_declaration() {}
 
     ## Visits an expression. The default walks it.
     ##
@@ -299,13 +368,14 @@ export trait ScopeWalk {
     ##
     ## @param declaration the declaration
     walk_declaration(declaration: Declaration) {
+        enter_declaration(declaration.attributes());
         match (declaration) {
             Variable(decl) => {
                 visit_type_name(decl.type_name);
                 if (decl.default_value.is_value()) {
                     decl.default_value = Optional<Expression>.Value(visit_expression(decl.default_value.value()));
                 }
-                scopes().bind(decl.name);
+                scopes().bind_value(decl.name, visit_binding(decl.type_name, decl.default_value));
             }
             Function(decl) => {
                 walk_function(decl);
@@ -319,6 +389,7 @@ export trait ScopeWalk {
                         visit_type_name(body.representation.value());
                     }
                     for (var c in body.cases) {
+                        enter_declaration(c.attributes);
                         if (c.payload.is_value()) {
                             for (var p in c.payload.value()) {
                                 visit_type_name(p.type_name);
@@ -327,13 +398,16 @@ export trait ScopeWalk {
                         if (c.value.is_value()) {
                             c.value = Optional<Expression>.Value(visit_expression(c.value.value()));
                         }
+                        exit_declaration();
                     }
                 }
                 for (var field in decl.fields) {
+                    enter_declaration(field.attributes);
                     visit_type_name(field.type_name);
                     if (field.default_value.is_value()) {
                         field.default_value = Optional<Expression>.Value(visit_expression(field.default_value.value()));
                     }
+                    exit_declaration();
                 }
                 for (var property in decl.properties) {
                     walk_property(property);
@@ -408,6 +482,7 @@ export trait ScopeWalk {
                 walk_static_block(block.block);
             }
         }
+        exit_declaration();
     }
 
     ## Walks a `static` block's body, where `reflect` is bound.
@@ -435,6 +510,7 @@ export trait ScopeWalk {
     ##
     ## @param property the property
     walk_property(property: PropertyDecl) {
+        enter_declaration(property.attributes);
         visit_type_name(property.type_name);
         if (property.default_value.is_value()) {
             property.default_value = Optional<Expression>.Value(visit_expression(property.default_value.value()));
@@ -449,6 +525,7 @@ export trait ScopeWalk {
             walk_block(property.setter.value().function.body.value());
         }
         scopes().pop();
+        exit_declaration();
     }
 
     ## Walks a function whatever its attributes: its generic parameters,
@@ -456,6 +533,7 @@ export trait ScopeWalk {
     ##
     ## @param function the function
     walk_function_body(function: FunctionDecl) {
+        enter_declaration(function.attributes);
         if (visit_function_generics(function)) {
             scopes().push(Scope(ScopeKind.Generics));
         } else {
@@ -468,13 +546,14 @@ export trait ScopeWalk {
             if (parameter.default_value.is_value()) {
                 parameter.default_value = Optional<Expression>.Value(visit_expression(parameter.default_value.value()));
             }
-            scopes().bind(parameter.name);
+            scopes().bind_value(parameter.name, visit_binding(parameter.type_name, Optional<Expression>.Empty));
         }
         if (function.body.is_value()) {
             walk_block(function.body.value());
         }
         scopes().pop();
         scopes().pop();
+        exit_declaration();
     }
 
     ## Binds a destructuring pattern's names, nested ones included, in the
@@ -488,8 +567,9 @@ export trait ScopeWalk {
                 continue;
             }
             visit_type_name(binding.type_name);
+            var marked = visit_binding(binding.type_name, Optional<Expression>.Empty);
             if (binding.name != "_") {
-                scopes().bind(binding.name);
+                scopes().bind_value(binding.name, marked);
             }
         }
     }
@@ -558,7 +638,9 @@ export trait ScopeWalk {
                 scopes().push(Scope(ScopeKind.Values));
                 if (pattern.count == 0) {
                     visit_type_name(binding.type_name);
-                    scopes().bind(binding.name);
+                    scopes().bind_value(
+                        binding.name, visit_binding(binding.type_name, Optional<Expression>.Value(walked))
+                    );
                 } else {
                     bind_pattern(pattern);
                 }
@@ -572,7 +654,8 @@ export trait ScopeWalk {
                 scopes().push(Scope(ScopeKind.Values));
                 if (binding.is_value()) {
                     visit_type_name(binding.value().type_name);
-                    scopes().bind(binding.value().name);
+                    var marked = visit_binding(binding.value().type_name, Optional<Expression>.Value(walked));
+                    scopes().bind_value(binding.value().name, marked);
                 }
                 walk_block(block);
                 scopes().pop();
@@ -660,9 +743,12 @@ export trait ScopeWalk {
                 return Expression.Ternary(tested, yes, visit_expression(false_expr), span);
             }
             MemberAccess(lhs, name, name_span, span) => {
-                return Expression.MemberAccess(visit_expression(lhs), name, name_span, span);
+                var walked = visit_expression(lhs);
+                visit_member(name, name_span);
+                return Expression.MemberAccess(walked, name, name_span, span);
             }
             FunctionCall(function, arguments, span) => {
+                visit_callee(function);
                 var callee = visit_expression(function);
                 return Expression.FunctionCall(callee, _visit_all(arguments), span);
             }
@@ -671,7 +757,7 @@ export trait ScopeWalk {
                 scopes().push(Scope(ScopeKind.Values));
                 for (var parameter in closure.parameters) {
                     visit_type_name(parameter.type_name);
-                    scopes().bind(parameter.name);
+                    scopes().bind_value(parameter.name, visit_binding(parameter.type_name, Optional<Expression>.Empty));
                 }
                 visit_type_name(closure.return_type);
                 walk_block(closure.body);

@@ -38,6 +38,23 @@ export demangle_name(name: String): String {
     return name;
 }
 
+## Returns a type's name without the pointer stars and array brackets
+## after it: `Point` for `Point*` and `Point[]`.
+##
+## @param name a type's name
+## @returns the base name
+export base_type_name(name: String): String {
+    ulong size = name.size;
+    while (size > 0) {
+        var b = name.byte_at(size - 1);
+        if (b != '*' and b != '[' and b != ']') {
+            break;
+        }
+        size -= 1;
+    }
+    return name.substr_bytes(0, size);
+}
+
 ## Returns whether `name` names a primitive type (`int`, `bool`, `void*`).
 ##
 ## @param name a type's name

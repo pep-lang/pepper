@@ -3,9 +3,11 @@
 #
 #     pepc --emit-ast=json file.pep
 #     pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#     pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
 # print the file's syntax tree, or the whole program after linking, as the
-# JSON that `pep-build` prints with the same options, so the two can be
+# JSON that `pep-build` prints with the same options, or what the checks
+# after linking report, as `pep-build` prints it, so the two can be
 # compared.
 
 import io;
@@ -16,12 +18,15 @@ import compiler.parse;
 main(args: String[]): int {
     String? path;
     bool linked = false;
+    bool checked = false;
     var setup = link.Setup();
     ulong i = 1;
     while (i < args.count) {
         var arg = args[i];
         if (arg == "--emit-linked") {
             linked = true;
+        } else if (arg == "--emit-checked") {
+            checked = true;
         } else if (arg == "--no-runtime") {
             setup.runtime = false;
         } else if (arg == "-I" or arg == "--import" or arg == "-D" or arg.starts_with("-I") or arg.starts_with("-D")) {
@@ -56,15 +61,20 @@ main(args: String[]): int {
     if (!path.is_value()) {
         print("usage: pepc --emit-ast=json <file.pep>");
         print("       pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
+        print("       pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         return 2;
     }
-    if (linked) {
+    if (linked or checked) {
         var program = link.load_program(Path(path.value()), setup);
         if (program.is_err()) {
             print($"pepc: {program.error()}");
             return 1;
         }
-        print(program.value().to_json().to_string());
+        if (linked) {
+            print(program.value().to_json().to_string());
+        } else {
+            print(program.value().check_report());
+        }
         return 0;
     }
     var source = File.read_to_string(path.value());

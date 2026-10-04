@@ -4,7 +4,8 @@
 ## the prelude.
 
 import compiler.ast;
-import [Span] from compiler.ast;
+import [BUILT_IN_ATTRIBUTE, Expression, Span] from compiler.ast;
+import [Diagnostic, Fix, Location, render_all, SourceText] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
 import json;
@@ -12,11 +13,13 @@ import [JsonValue] from json;
 import os;
 import compiler.parse;
 import process;
+import [check_uses] from "deprecation";
 import "files" as files;
 import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
-import [Target] from "platform";
+import [Target, undefined_build_option_comparisons] from "platform";
+import [check_visibility] from "visibility";
 
 ## Where a program's files come from, beyond its root.
 export struct Setup {
@@ -43,9 +46,145 @@ export struct Program {
     var errors: ModuleError[] = Array<ModuleError>();
     ## The overload sets that span files.
     var overload_unions: Map<String, String[][]> = Map<String, String[][]>();
+    ## The target platform selection evaluated against.
+    var target: Target = Target();
 
     ## Creates an empty program.
     construct() {}
+
+    ## Returns each file's name and text, for rendering diagnostics.
+    ##
+    ## @returns the files, by index
+    sources(): SourceText[] {
+        var out = Array<SourceText>();
+        for (var f in files) {
+            out.append(SourceText(f.name, f.source));
+        }
+        return out;
+    }
+
+    ## Returns what is wrong with the program before type checking,
+    ## rendered: the linking errors; when there are none, any
+    ## `[__BuiltIn]` declaration outside the runtime; when there is none of
+    ## those either, the visibility errors.
+    ##
+    ## @returns the rendered errors, or none when the program is well-formed
+    check(): String? {
+        var errors = Array<Diagnostic>();
+        for (var e in this.errors) {
+            errors.append(e.to_diagnostic());
+        }
+        if (errors.count == 0) {
+            errors = built_in_errors();
+        }
+        if (errors.count == 0) {
+            for (var e in check_visibility(files, scopes, target)) {
+                errors.append(e.to_diagnostic(files));
+            }
+        }
+        if (errors.count == 0) {
+            return Optional<String>.Empty;
+        }
+        return Optional<String>.Value(render_all(errors, sources()));
+    }
+
+    ## Returns every `[__BuiltIn]` declaration outside the runtime: only the
+    ## runtime declares the compiler's built-ins.
+    ##
+    ## @returns an error at each
+    built_in_errors(): Diagnostic[] {
+        var in_runtime = _in_runtime(files);
+        var out = Array<Diagnostic>();
+        ulong i = 0;
+        while (i < files.count) {
+            var f = files[i];
+            if (!in_runtime[i]) {
+                for (var d in f.module.declarations) {
+                    for (var a in d.attributes()) {
+                        if (a.name() != BUILT_IN_ATTRIBUTE) {
+                            continue;
+                        }
+                        var at = a.body.span();
+                        match (a.body) {
+                            FunctionCall(function, _, _) => {
+                                at = function.span();
+                            }
+                            else => {}
+                        }
+                        out.append(
+                            Diagnostic.error(
+                                "'__BuiltIn' declares a compiler built-in and is allowed only in the runtime"
+                            ).at(Location(i, at))
+                        );
+                        break;
+                    }
+                }
+            }
+            i += 1;
+        }
+        return out;
+    }
+
+    ## Returns the warnings before type checking: deprecated syntax, then
+    ## comparisons with build options the target does not define, then uses
+    ## of declarations marked `[Deprecated]`.
+    ##
+    ## @returns the warnings
+    warnings(): Diagnostic[] {
+        var out = Array<Diagnostic>();
+        ulong i = 0;
+        while (i < files.count) {
+            for (var w in files[i].module.warnings) {
+                var at = Location(i, w.span);
+                out.append(
+                    Diagnostic.deprecated(
+                        w.what, w.instead, at, Fix($"Replace {w.what} with `{w.replacement}`", at, w.replacement)
+                    )
+                );
+            }
+            i += 1;
+        }
+        i = 0;
+        while (i < files.count) {
+            for (var attribute in files[i].module.build_option_tests) {
+                for (var undefined in undefined_build_option_comparisons(target, attribute)) {
+                    out.append(
+                        Diagnostic
+                            .warning($"build option '{undefined.name}' is not defined; the comparison is false")
+                            .at(Location(i, undefined.span))
+                            .with_note($"define it with '-D {undefined.name}=<value>'", Optional<Location>.Empty)
+                    );
+                }
+            }
+            i += 1;
+        }
+        out.append_all(check_uses(files, scopes, target));
+        return out;
+    }
+
+    ## Returns what `pep-build --emit-checked` prints: the rendered errors
+    ## of `check()`, if any, then the rendered warnings.
+    ##
+    ## @returns the text
+    check_report(): String {
+        var parts = Array<String>();
+        var errors = check();
+        if (errors.is_value()) {
+            parts.append(errors.value());
+        }
+        var warnings = render_warnings();
+        if (!warnings.is_empty) {
+            parts.append(warnings);
+        }
+        return "\n".join(parts);
+    }
+
+    ## Returns `warnings()`, rendered.
+    ##
+    ## @returns the text, empty when there are none
+    render_warnings(): String {
+        return render_all(warnings(), sources());
+    }
 
     ## Returns the program as `pep-build --emit-linked` prints it: each
     ## file with its syntax tree after linking, the linking errors, and the
@@ -363,7 +502,29 @@ export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): 
     link.sort_errors(program.errors);
     program.scopes = linked.scopes;
     program.overload_unions = linked.overload_unions;
+    program.target = target;
     return Result<Program, String>.ok(program);
+}
+
+# Whether each file is part of the runtime: the prelude, or a file in one
+# of the runtime's folders.
+_in_runtime(program_files: ProgramFile[]): bool[] {
+    var dirs = Array<String>();
+    for (var dir in Runtime.discover().dirs) {
+        dirs.append(files.path_key(dir));
+    }
+    var out = Array<bool>();
+    for (var f in program_files) {
+        bool inside = f.prelude or f.prelude_part;
+        var key = files.path_key(Path(f.name));
+        for (var dir in dirs) {
+            if (key.starts_with(dir)) {
+                inside = true;
+            }
+        }
+        out.append(inside);
+    }
+    return out;
 }
 
 _describe_paths(paths: Path[]): String {
