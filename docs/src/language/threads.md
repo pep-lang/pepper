@@ -540,6 +540,37 @@ costs time and memory in proportion to the value's size at each unlock; it
 is off unless the variable is set. It checks a `Mutex<T>` whose `T` is not
 thread-safe and can be [copied](memory.md#copying-a-value-with-copy).
 
+## Reader/writer locks
+
+An `RwLock<T>` lets many threads read a value at once, or one thread
+write it:
+
+```pepper
+{{#include ../../examples/threads-rwlock.pep}}
+```
+
+- `with (var v = lock.read()) { ... }` waits until no writer holds or waits
+  for the lock; any number of threads may read at the same time.
+- `with (var v = lock.write()) { ... }` waits until no other thread holds
+  the lock at all.
+- `try_read()` and `try_write()` do not wait: the `else` block runs when the
+  lock is not free.
+- `replace(value)` swaps the whole value under the write lock and returns
+  the old one.
+- Writers come first: while a writer waits, new readers wait behind it, so
+  readers cannot keep it out forever. A thread that reads must therefore not
+  ask to read again before its block ends, and asking to write while holding
+  the lock panics instead of deadlocking.
+
+`T` must be thread-safe, as for `Atomic<T>`: typically a `[Shared]` struct
+whose `Atomic` fields a writer changes together. Readers that hold the
+value at once each copy a reference to it, so a value that is not
+thread-safe, such as an `Array<String>`, would have its reference counts
+changed by several threads at a time; it is a compile error at the type
+argument. Put such a value in a `Mutex<T>`. When readers only need the
+latest value and writers replace it whole, an `Atomic<T>` holding a
+`[Shared]` struct does the same job without a lock.
+
 ## Semaphores, barriers and latches
 
 Three types coordinate threads by counting. Each is `[Shared]`, so keep it

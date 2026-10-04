@@ -121,6 +121,7 @@
     - [ThreadLocal](reference/async-thread_local.md)
     - [Mutex and Condition](reference/async-mutex.md)
     - [Semaphore, Barrier and Latch](reference/async-coordination.md)
+    - [RwLock](reference/async-rwlock.md)
     - [Once and Lazy](reference/async-once.md)
     - [Channel](reference/async-channel.md)
     - [Select](reference/async-select.md)

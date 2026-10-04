@@ -722,6 +722,24 @@ fn shared_generic_argument_not_thread_safe() {
 }
 
 #[test]
+fn rwlock_of_a_value_that_is_not_thread_safe() {
+    // `RwLock<T: Shared>`: readers holding the value at once would race on
+    // the counts of a value that is not thread-safe.
+    let error = error_of(
+        "rwlock_not_thread_safe",
+        "import async;\nmain(): int {\n    var a = async.RwLock<Array<String>>(Array<String>());\n    return 0;\n}\n",
+    );
+    assert!(
+        error.starts_with(
+            "main.pep:3:26: error: 'Array<String>' does not conform to 'Shared', required by 'T' in 'RwLock'\n\
+             \x20   3 |     var a = async.RwLock<Array<String>>(Array<String>());\n\
+             \x20     |                          ^~~~~~~~~~~~~\n"
+        ),
+        "{error}"
+    );
+}
+
+#[test]
 fn shared_constraint_on_a_runtime_function() {
     // `spawn<T: Shared>`: the error points at the type argument, with the
     // constraint and why the type is not thread-safe.

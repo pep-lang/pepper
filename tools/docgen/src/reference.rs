@@ -56,6 +56,7 @@ const PAGES: &[(&str, &str)] = &[
     ("async/thread_local.pep", "ThreadLocal"),
     ("async/mutex.pep", "Mutex and Condition"),
     ("async/coordination.pep", "Semaphore, Barrier and Latch"),
+    ("async/rwlock.pep", "RwLock"),
     ("async/once.pep", "Once and Lazy"),
     ("async/channel.pep", "Channel"),
     ("async/select.pep", "Select"),

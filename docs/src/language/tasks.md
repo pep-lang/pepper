@@ -109,8 +109,8 @@ waiting keeps every other task waiting, so a long loop should call
 
 The [synchronization types](threads.md) work in tasks too. When a task
 has to wait for a `Mutex`, for a value from a `Channel` or for room in a
-bounded one, in `Condition.wait`, or in `Semaphore.acquire`, `Barrier.wait`
-or `Latch.wait`, it parks and its worker runs other
+bounded one, in `Condition.wait`, for an `RwLock`, or in `Semaphore.acquire`,
+`Barrier.wait` or `Latch.wait`, it parks and its worker runs other
 tasks, just as it does for a socket. The task that holds the lock or will
 send the value can be on the same worker, on another worker, or a plain
 thread:
