@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-800aa8f9.js";
+            window.path_to_searchindex_js = "searchindex-54a40c5e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -19483,6 +19483,8 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--emit-linked</code></td><td>Print every file’s syntax tree after linking, as JSON, instead of compiling</td><td>off</td></tr>
 <tr><td><code>--emit-checked</code></td><td>Print what the checks after linking report, instead of compiling</td><td>off</td></tr>
 <tr><td><code>--emit-model</code></td><td>Print the program’s sema model before any sema pass, as JSON, instead of compiling</td><td>off</td></tr>
+<tr><td><code>--emit-model-step &lt;N&gt;</code></td><td>With <code>--emit-model</code>, print the model after the first N sema steps</td><td>0</td></tr>
+<tr><td><code>--emit-steps</code></td><td>Print the names of the sema steps, one per line, instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
@@ -19710,6 +19712,17 @@ fails.</p>
 <p><code>-I</code>, <code>--import</code>, <code>--no-runtime</code>, <code>-D</code> and <code>--test</code> apply as for a build.
 The compiler written in Pepper (<code>tools/compiler</code>) prints the same JSON, and
 its test compares the two.</p>
+<h3 id="--emit-model-step-n"><a class="header" href="#--emit-model-step-n"><code>--emit-model-step &lt;N&gt;</code></a></h3>
+<p>With <code>--emit-model</code>, runs the first N steps of the sema passes before
+printing the model. A step is one pass run, in the order the compiler runs
+them (platform filters first, then <code>[Equatable]</code>, closure lifting and the
+rest); <code>--emit-steps</code> lists them. When a step rejects the program, it prints
+the rendered error and fails. The compiler written in Pepper runs the same
+steps, and its test compares the model after each.</p>
+<h3 id="--emit-steps"><a class="header" href="#--emit-steps"><code>--emit-steps</code></a></h3>
+<p>Loads, links, checks and builds the program as <code>--emit-model</code> does, runs
+every sema pass, and prints the name of each step run, one per line,
+instead of compiling: the numbering <code>--emit-model-step</code> uses.</p>
 <h2 id="optimization-and-code-generation"><a class="header" href="#optimization-and-code-generation">Optimization and code generation</a></h2>
 <h3 id="-o--olevel"><a class="header" href="#-o--olevel"><code>-O</code>, <code>-O&lt;level&gt;</code></a></h3>
 <p>The optimization level: <code>-O0</code> (no optimization, the default), <code>-O1</code>, <code>-O2</code>
