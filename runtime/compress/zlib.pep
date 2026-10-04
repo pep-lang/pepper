@@ -42,6 +42,12 @@ extern int inflateReset(void* stream);
 extern int inflateEnd(void* stream);
 [Target(BuildOption(USE_ZLIB) && !OS(Windows))]
 [Link("z")]
+extern int inflateSetDictionary(void* stream, u8* dictionary, uint size);
+[Target(BuildOption(USE_ZLIB) && !OS(Windows))]
+[Link("z")]
+extern int deflateSetDictionary(void* stream, u8* dictionary, uint size);
+[Target(BuildOption(USE_ZLIB) && !OS(Windows))]
+[Link("z")]
 extern _ZlibLong crc32_z(_ZlibLong crc, u8* data, ulong size);
 [Target(BuildOption(USE_ZLIB) && !OS(Windows))]
 [Link("z")]
@@ -70,6 +76,12 @@ extern int inflateReset(void* stream);
 [Target(BuildOption(USE_ZLIB) && OS(Windows))]
 [Link("zlib")]
 extern int inflateEnd(void* stream);
+[Target(BuildOption(USE_ZLIB) && OS(Windows))]
+[Link("zlib")]
+extern int inflateSetDictionary(void* stream, u8* dictionary, uint size);
+[Target(BuildOption(USE_ZLIB) && OS(Windows))]
+[Link("zlib")]
+extern int deflateSetDictionary(void* stream, u8* dictionary, uint size);
 [Target(BuildOption(USE_ZLIB) && OS(Windows))]
 [Link("zlib")]
 extern _ZlibLong crc32_z(_ZlibLong crc, u8* data, ulong size);
@@ -216,6 +228,12 @@ export struct _Deflater {
         assert(status == _ZLIB_OK, "zlib could not start compressing");
     }
 
+    # Gives zlib the preset dictionary, before the first `write`.
+    set_dictionary(dictionary: u8[]) {
+        var status = deflateSetDictionary(_stream.value, dictionary._data, dictionary.count as uint);
+        assert(status == _ZLIB_OK, "zlib could not take the dictionary");
+    }
+
     # Adds `data` to the stream, writing whatever blocks it completes.
     write(data: u8[]) {
         ulong done = 0;
@@ -267,6 +285,9 @@ export struct _Inflater {
     # The decoded bytes; the reader hands them out from `output_position`.
     var output: u8[];
     var output_position: ulong;
+    # The preset dictionary, when one was given (`set_dictionary`).
+    var _dictionary: u8[];
+    var _has_dictionary: bool;
 
     var failed: bool;
     var error: io.IoError;
@@ -287,12 +308,23 @@ export struct _Inflater {
         _source = source;
         _input = Array<u8>();
         output = Array<u8>();
+        _dictionary = Array<u8>();
         error = io.IoError();
         _stream = _zlib_stream(inflateEnd);
         var status = inflateInit2_(
             _stream.value, _zlib_window_bits(format), _ZLIB_VERSION.c_str(), _ZLIB_STREAM_SIZE as int
         );
         assert(status == _ZLIB_OK, "zlib could not start decompressing");
+    }
+
+    # Gives the preset dictionary before decoding starts: raw DEFLATE data
+    # starts with it in the window, and a zlib stream gets it when it asks.
+    set_dictionary(dictionary: u8[]) {
+        _dictionary = dictionary;
+        _has_dictionary = true;
+        if (_format == Format.Raw) {
+            inflateSetDictionary(_stream.value, dictionary._data, dictionary.count as uint);
+        }
     }
 
     var finished: bool {
@@ -377,7 +409,11 @@ export struct _Inflater {
             if (status == _ZLIB_STREAM_END) {
                 _end_member();
             } else if (status == _ZLIB_NEED_DICT) {
-                _fail("zlib data needs a preset dictionary, which is not supported");
+                if (!_has_dictionary) {
+                    _fail("zlib data needs a preset dictionary; pass it to decompress");
+                } else if (inflateSetDictionary(stream, _dictionary._data, _dictionary.count as uint) != _ZLIB_OK) {
+                    _fail("zlib data needs a different preset dictionary");
+                }
             } else if (status != _ZLIB_OK && status != _ZLIB_BUF_ERROR) {
                 _fail(_describe(_zlib_message(stream)));
             }

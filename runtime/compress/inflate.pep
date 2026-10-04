@@ -160,11 +160,32 @@ export struct _Inflater {
     # The bytes decoded in the current gzip member, modulo 2^32.
     var _member_size: uint;
 
+    # The preset dictionary, when one was given (`set_dictionary`).
+    var _dictionary: u8[];
+    var _has_dictionary: bool;
+
     var failed: bool;
     var error: io.IoError;
 
     construct(source: io.Reader, format: Format) {
         _init(source, format);
+    }
+
+    # Gives the preset dictionary (RFC 1950 section 2.2) before decoding
+    # starts: a zlib stream that asks for one gets it, and raw DEFLATE data
+    # always starts with it in the window.
+    set_dictionary(dictionary: u8[]) {
+        _dictionary = dictionary;
+        _has_dictionary = true;
+    }
+
+    # Puts the last 32 KiB of the dictionary in front of the output, already
+    # handed out and checksummed, so back-references can reach it.
+    _prime() {
+        var start = _dictionary.count > 32768 ? _dictionary.count - 32768 : 0;
+        output._append_raw(_dictionary._data + start, _dictionary.count - start);
+        output_position = output.count;
+        _checked = output.count;
     }
 
     # Decodes the array `data` directly, without a stream.
@@ -250,6 +271,7 @@ export struct _Inflater {
             0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13
         ];
         output = Array<u8>();
+        _dictionary = Array<u8>();
         _crc = Crc32();
         _adler = Adler32();
         error = io.IoError();
@@ -483,13 +505,33 @@ export struct _Inflater {
                 return;
             }
             if ((flags & 32) != 0) {
-                _fail("zlib data needs a preset dictionary, which is not supported");
-                return;
+                # The dictionary's Adler-32, most significant byte first.
+                long id = 0;
+                var index = 0;
+                while (index < 4) {
+                    var next = _require_byte();
+                    if (next < 0) {
+                        return;
+                    }
+                    id = (id << 8) | next;
+                    index += 1;
+                }
+                if (!_has_dictionary) {
+                    _fail("zlib data needs a preset dictionary; pass it to decompress");
+                    return;
+                }
+                if ((id as uint) != Adler32.of(_dictionary)) {
+                    _fail("zlib data needs a different preset dictionary");
+                    return;
+                }
+                _prime();
             }
         } else if (_format == Format.Gzip) {
             if (!_gzip_header()) {
                 return;
             }
+        } else if (_has_dictionary) {
+            _prime();
         }
         _state = _INFLATE_BLOCK_HEADER;
     }

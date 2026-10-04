@@ -74,6 +74,9 @@ export struct _Deflater {
     var _bit_count: ulong;
 
     var _started: bool;
+    # The Adler-32 of the preset dictionary, when one was given.
+    var _has_dictionary: bool;
+    var _dictionary_id: uint;
     var _crc: Crc32;
     var _adler: Adler32;
     var _size: uint;
@@ -227,6 +230,20 @@ export struct _Deflater {
         }
     }
 
+    # Starts the window with the last 32 KiB of `dictionary`, so the first
+    # bytes written can refer back into it; a zlib header names it by its
+    # Adler-32. Called before the first `write`.
+    set_dictionary(dictionary: u8[]) {
+        _has_dictionary = true;
+        _dictionary_id = Adler32.of(dictionary);
+        var start = dictionary.count > _DEFLATE_WINDOW ? dictionary.count - _DEFLATE_WINDOW : 0;
+        _buffer._append_raw(dictionary._data + start, dictionary.count - start);
+        # Its positions join the hash chains at the first search
+        # (`_inserted` is still 0), but no token covers them.
+        _done = _buffer.count;
+        _block_start = _done;
+    }
+
     # Adds `data` to the stream, writing whatever blocks it completes.
     write(data: u8[]) {
         _start();
@@ -274,9 +291,18 @@ export struct _Deflater {
                 level_class = 3;
             }
             uint flags = level_class << 6;
+            if (_has_dictionary) {
+                flags = flags | 32;
+            }
             flags += 31 - ((120 * 256 + flags) % 31);
             output.append(120);
             output.append(flags as u8);
+            if (_has_dictionary) {
+                output.append((_dictionary_id >> 24) as u8);
+                output.append(((_dictionary_id >> 16) & 255) as u8);
+                output.append(((_dictionary_id >> 8) & 255) as u8);
+                output.append((_dictionary_id & 255) as u8);
+            }
         } else if (_format == Format.Gzip) {
             # Magic, deflate, no flags, no modification time.
             output.append(31);

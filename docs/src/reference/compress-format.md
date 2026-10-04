@@ -142,6 +142,40 @@ Compresses `data` into a zlib stream.
 **Panics**
 - if `level` is not 0 through 9 ("compression level must be 0 through 9")
 
+#### compress
+
+```pepper
+static compress(data: u8[], dictionary: u8[], level: int = 6): u8[]
+```
+
+Compresses `data` into a zlib stream that starts from a preset
+dictionary: bytes the data is likely to repeat, such as the common
+keys of small JSON messages, which the stream can then refer back to
+without carrying them. The header names the dictionary by its
+Adler-32, and decompressing needs the same dictionary. Only its last
+32 KiB are used.
+
+**Parameters**
+- `data` — the bytes to compress
+- `dictionary` — the preset dictionary
+- `level` — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two
+
+**Returns**
+- the compressed bytes
+
+**Panics**
+- if `level` is not 0 through 9 ("compression level must be 0 through 9")
+
+**Example**
+```pepper
+import compress;
+
+var dictionary = "{\"name\": \"\", \"email\": \"\"}".bytes();
+var data = "{\"name\": \"Ada\", \"email\": \"ada@example.com\"}".bytes();
+var packed = compress.Zlib.compress(data, dictionary);
+assert(compress.Zlib.decompress(packed, dictionary).value() == data, "round trip");
+```
+
 #### decompress
 
 ```pepper
@@ -149,14 +183,31 @@ static decompress(data: u8[]): io.IoResult<u8[]>
 ```
 
 Decompresses a zlib stream and checks its Adler-32 checksum. Bytes
-after the stream are ignored. A stream that needs a preset
-dictionary is not supported.
+after the stream are ignored. A stream made with a preset dictionary
+needs the overload that takes one.
 
 **Parameters**
 - `data` — the compressed bytes
 
 **Returns**
-- the decompressed bytes; an `is_invalid_input()` error when `data` is not a valid zlib stream, ends too soon, or fails its checksum
+- the decompressed bytes; an `is_invalid_input()` error when `data` is not a valid zlib stream, ends too soon, fails its checksum, or needs a preset dictionary
+
+#### decompress
+
+```pepper
+static decompress(data: u8[], dictionary: u8[]): io.IoResult<u8[]>
+```
+
+Decompresses a zlib stream that may need a preset dictionary, and
+checks its Adler-32 checksum. A stream that does not ask for a
+dictionary decompresses as without one.
+
+**Parameters**
+- `data` — the compressed bytes
+- `dictionary` — the preset dictionary the stream was compressed with
+
+**Returns**
+- the decompressed bytes; an `is_invalid_input()` error when `data` is not a valid zlib stream, ends too soon, fails its checksum, or names a dictionary whose Adler-32 is not that of `dictionary`
 
 ## Gzip
 
@@ -240,7 +291,7 @@ for (var line in reader.lines()) {
 }
 ```
 
-### Constructor
+### Constructors
 
 #### DecompressReader()
 
@@ -253,6 +304,25 @@ Makes a reader of the decompressed contents of `source`.
 **Parameters**
 - `source` — the stream of compressed bytes
 - `format` — the framing of the compressed data
+
+#### DecompressReader()
+
+```pepper
+construct(source: io.Reader, format: Format, dictionary: u8[])
+```
+
+Makes a reader of the decompressed contents of `source`, which was
+compressed with a preset dictionary (see `Zlib.compress`). A zlib
+stream uses it when its header asks for it; raw DEFLATE data always
+starts from it.
+
+**Parameters**
+- `source` — the stream of compressed bytes
+- `format` — `Format.Zlib` or `Format.Raw`
+- `dictionary` — the preset dictionary
+
+**Panics**
+- if `format` is `Format.Gzip` ("gzip data has no preset dictionary")
 
 ### Methods
 
@@ -308,7 +378,7 @@ writer.finish();
 file.close();
 ```
 
-### Constructor
+### Constructors
 
 #### CompressWriter()
 
@@ -325,6 +395,25 @@ Makes a writer that compresses into `sink`.
 
 **Panics**
 - if `level` is not 0 through 9 ("compression level must be 0 through 9")
+
+#### CompressWriter()
+
+```pepper
+construct(sink: io.Writer, format: Format, dictionary: u8[], level: int = 6)
+```
+
+Makes a writer that compresses into `sink`, starting from a preset
+dictionary (see `Zlib.compress`). A zlib header names the dictionary
+by its Adler-32; raw DEFLATE data carries no sign of it.
+
+**Parameters**
+- `sink` — the stream the compressed bytes are written to
+- `format` — `Format.Zlib` or `Format.Raw`
+- `dictionary` — the preset dictionary; only its last 32 KiB are used
+- `level` — from 0 (store without compressing) through 9 (smallest output, slowest); 6 balances the two
+
+**Panics**
+- if `level` is not 0 through 9 ("compression level must be 0 through 9"), or if `format` is `Format.Gzip` ("gzip data has no preset dictionary")
 
 ### Methods
 

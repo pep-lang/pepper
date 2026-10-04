@@ -42,13 +42,48 @@ _compress_all(data: u8[], format: Format, level: int): u8[] {
     return deflater.output;
 }
 
+# Compresses all of `data` in `format`, starting from `dictionary`.
+_compress_all(data: u8[], format: Format, dictionary: u8[], level: int): u8[] {
+    _compress_check_level(level);
+    var deflater = _Deflater(format, level);
+    deflater.set_dictionary(dictionary);
+    deflater.write(data);
+    deflater.finish();
+    return deflater.output;
+}
+
 # Decompresses all of `data` in `format`.
 _decompress_all(data: u8[], format: Format): io.IoResult<u8[]> {
     var inflater = _Inflater(data, format);
+    return _decompress_run(inflater);
+}
+
+# Decompresses all of `data` in `format`, with `dictionary` for a stream
+# that needs it.
+_decompress_all(data: u8[], format: Format, dictionary: u8[]): io.IoResult<u8[]> {
+    var inflater = _Inflater(data, format);
+    inflater.set_dictionary(dictionary);
+    return _decompress_run(inflater);
+}
+
+# Runs `inflater` to the end of its data and returns what it decoded.
+_decompress_run(inflater: _Inflater): io.IoResult<u8[]> {
     if (!inflater.fill(0xFFFFFFFFFFFFFFFF)) {
         return io.IoResult<u8[]>.err(inflater.error);
     }
-    return io.IoResult<u8[]>.ok(inflater.output);
+    if (inflater.output_position == 0) {
+        return io.IoResult<u8[]>.ok(inflater.output);
+    }
+    # A preset dictionary sits in front of the output.
+    var count = inflater.output.count - inflater.output_position;
+    var output = Array<u8>(count);
+    output._append_raw(inflater.output._data + inflater.output_position, count);
+    return io.IoResult<u8[]>.ok(output);
+}
+
+# Checks that `format` can carry a preset dictionary.
+_compress_check_dictionary(format: Format) {
+    assert(format != Format.Gzip, "gzip data has no preset dictionary");
 }
 
 ## Raw DEFLATE (RFC 1951) data, compressed or decompressed in one call.
@@ -104,16 +139,55 @@ export struct Zlib {
         return _compress_all(data, Format.Zlib, level);
     }
 
+    ## Compresses `data` into a zlib stream that starts from a preset
+    ## dictionary: bytes the data is likely to repeat, such as the common
+    ## keys of small JSON messages, which the stream can then refer back to
+    ## without carrying them. The header names the dictionary by its
+    ## Adler-32, and decompressing needs the same dictionary. Only its last
+    ## 32 KiB are used.
+    ##
+    ## @param data the bytes to compress
+    ## @param dictionary the preset dictionary
+    ## @param level from 0 (store without compressing) through 9 (smallest
+    ##   output, slowest); 6 balances the two
+    ## @returns the compressed bytes
+    ## @panics if `level` is not 0 through 9 ("compression level must be 0
+    ##   through 9")
+    ## @example
+    ##     import compress;
+    ##
+    ##     var dictionary = "{\"name\": \"\", \"email\": \"\"}".bytes();
+    ##     var data = "{\"name\": \"Ada\", \"email\": \"ada@example.com\"}".bytes();
+    ##     var packed = compress.Zlib.compress(data, dictionary);
+    ##     assert(compress.Zlib.decompress(packed, dictionary).value() == data, "round trip");
+    static compress(data: u8[], dictionary: u8[], level: int = 6): u8[] {
+        return _compress_all(data, Format.Zlib, dictionary, level);
+    }
+
     ## Decompresses a zlib stream and checks its Adler-32 checksum. Bytes
-    ## after the stream are ignored. A stream that needs a preset
-    ## dictionary is not supported.
+    ## after the stream are ignored. A stream made with a preset dictionary
+    ## needs the overload that takes one.
     ##
     ## @param data the compressed bytes
     ## @returns the decompressed bytes; an `is_invalid_input()` error when
-    ##   `data` is not a valid zlib stream, ends too soon, or fails its
-    ##   checksum
+    ##   `data` is not a valid zlib stream, ends too soon, fails its
+    ##   checksum, or needs a preset dictionary
     static decompress(data: u8[]): io.IoResult<u8[]> {
         return _decompress_all(data, Format.Zlib);
+    }
+
+    ## Decompresses a zlib stream that may need a preset dictionary, and
+    ## checks its Adler-32 checksum. A stream that does not ask for a
+    ## dictionary decompresses as without one.
+    ##
+    ## @param data the compressed bytes
+    ## @param dictionary the preset dictionary the stream was compressed with
+    ## @returns the decompressed bytes; an `is_invalid_input()` error when
+    ##   `data` is not a valid zlib stream, ends too soon, fails its
+    ##   checksum, or names a dictionary whose Adler-32 is not that of
+    ##   `dictionary`
+    static decompress(data: u8[], dictionary: u8[]): io.IoResult<u8[]> {
+        return _decompress_all(data, Format.Zlib, dictionary);
     }
 }
 
@@ -181,6 +255,22 @@ export struct DecompressReader {
     ## @param format the framing of the compressed data
     construct(source: io.Reader, format: Format) {
         _inflater = _Inflater(source, format);
+    }
+
+    ## Makes a reader of the decompressed contents of `source`, which was
+    ## compressed with a preset dictionary (see `Zlib.compress`). A zlib
+    ## stream uses it when its header asks for it; raw DEFLATE data always
+    ## starts from it.
+    ##
+    ## @param source the stream of compressed bytes
+    ## @param format `Format.Zlib` or `Format.Raw`
+    ## @param dictionary the preset dictionary
+    ## @panics if `format` is `Format.Gzip` ("gzip data has no preset
+    ##   dictionary")
+    construct(source: io.Reader, format: Format, dictionary: u8[]) {
+        _compress_check_dictionary(format);
+        _inflater = _Inflater(source, format);
+        _inflater.set_dictionary(dictionary);
     }
 
     ## Decompresses up to `max` more bytes and appends them to `buffer`.
@@ -271,6 +361,26 @@ export struct CompressWriter {
         _compress_check_level(level);
         _sink = sink;
         _deflater = _Deflater(format, level);
+    }
+
+    ## Makes a writer that compresses into `sink`, starting from a preset
+    ## dictionary (see `Zlib.compress`). A zlib header names the dictionary
+    ## by its Adler-32; raw DEFLATE data carries no sign of it.
+    ##
+    ## @param sink the stream the compressed bytes are written to
+    ## @param format `Format.Zlib` or `Format.Raw`
+    ## @param dictionary the preset dictionary; only its last 32 KiB are used
+    ## @param level from 0 (store without compressing) through 9 (smallest
+    ##   output, slowest); 6 balances the two
+    ## @panics if `level` is not 0 through 9 ("compression level must be 0
+    ##   through 9"), or if `format` is `Format.Gzip` ("gzip data has no
+    ##   preset dictionary")
+    construct(sink: io.Writer, format: Format, dictionary: u8[], level: int = 6) {
+        _compress_check_level(level);
+        _compress_check_dictionary(format);
+        _sink = sink;
+        _deflater = _Deflater(format, level);
+        _deflater.set_dictionary(dictionary);
     }
 
     ## Compresses all of `data`.

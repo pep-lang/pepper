@@ -31,7 +31,8 @@ unless it is built to use zlib (see [Using zlib](#using-zlib)).
   they decompress to their contents joined. Bytes after the last member are
   an error. A gzip header's file name and comment are skipped, and a
   written header has neither.
-- A zlib stream that needs a preset dictionary is not supported.
+- A zlib stream made with a preset dictionary needs it to decompress;
+  see [Preset dictionaries](#preset-dictionaries).
 - `decompress` puts everything in memory. Use a `DecompressReader` for
   input from outside the program, so a small file that expands hugely
   cannot exhaust memory.
@@ -53,6 +54,31 @@ the writer does not finish it, and `finish()` does not close the sink.
 
 `io.ByteReader(bytes)` and `io.ByteWriter()` stand in for a stream when
 the data is in memory.
+
+## Preset dictionaries
+
+A short message compresses poorly, since the stream has no earlier bytes to
+refer back to. A *preset dictionary* gives it some: bytes that both sides
+agree on beforehand, such as the keys and common values of a JSON protocol,
+which the compressed data can then copy from as if they came just before
+it.
+
+```pepper
+{{#include ../../examples/compression-dictionary.pep}}
+```
+
+- `Zlib.compress(data, dictionary, level = 6)` and
+  `Zlib.decompress(data, dictionary)` take one. The zlib header names the
+  dictionary by its Adler-32, so `decompress` without one, or with a
+  different one, is an `is_invalid_input()` error. A stream made without a
+  dictionary decompresses as usual when one is given.
+- `CompressWriter(sink, format, dictionary, level = 6)` and
+  `DecompressReader(source, format, dictionary)` take one for
+  `Format.Zlib` or `Format.Raw`. Raw DEFLATE data carries no sign of it, so
+  both sides must know to use it. Gzip has no dictionary, and asking for
+  one panics.
+- Only the last 32 KiB of a dictionary can be referred to, since that is
+  how far back DEFLATE reaches; put the most common text at its end.
 
 ## Using zlib
 
