@@ -11,12 +11,13 @@ import [derive_equatable] from "equatable";
 import [Module] from "model";
 import [apply_platform_filters] from "platform";
 import [PassState] from "state";
+import [check_attributes, expand, expand_module_blocks] from "static_blocks";
 import [strip_bodies] from "strip_bodies";
 import [synthesize] from "synthesize";
 import [resolve_type_aliases] from "type_aliases";
 
 ## How many of the Rust compiler's steps the Pepper passes run.
-export const PORTED_STEPS: ulong = 6;
+export const PORTED_STEPS: ulong = 9;
 
 ## Runs the first `limit` steps of the passes over `module` (all those
 ## ported when `limit` is larger), stopping at the first that reports an
@@ -70,6 +71,18 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
         }
         5 => {
             return synthesize(module, state);
+        }
+        6 => {
+            check_attributes(module, state);
+            return state.take_error();
+        }
+        7 => {
+            expand_module_blocks(module, state);
+            return state.take_error();
+        }
+        8 => {
+            expand(module, state);
+            return state.take_error();
         }
         else => {
             return Optional<Diagnostic>.Empty;

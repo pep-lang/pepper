@@ -5,5 +5,5 @@
 export * from "program";
 export [link, sort_errors, FileScope, Linked, ModuleError, ProgramFile] from "link";
 export [deprecation_of, is_deprecation, Deprecation, DeprecationError] from "deprecation";
-export [Target, TEST_BUILD_OPTION] from "platform";
+export [is_build_option_name, Target, TEST_BUILD_OPTION] from "platform";
 export [demangle_name, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from "names";

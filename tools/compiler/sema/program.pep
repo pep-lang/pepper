@@ -300,9 +300,40 @@ export canonical_json(value: JsonValue): String {
 ## @param value the number
 ## @returns the text
 export ryu_text(value: double): String {
+    var shortest = _shortest_digits(value);
+    if (!shortest.is_value()) {
+        return "null";
+    }
+    var (sign, digits, exponent) = shortest.value();
+    if (digits == "0") {
+        return $"{sign}0.0";
+    }
+    var length = digits.size as long;
+    var kk = length + exponent;
+    if (exponent >= 0 and kk <= 16) {
+        return $"{sign}{digits}{"0".repeat(exponent as ulong)}.0";
+    }
+    if (kk > 0 and kk <= 16) {
+        var head = digits.substr_bytes(0, kk as ulong);
+        return $"{sign}{head}.{digits.substr_bytes(kk as ulong, digits.size - kk as ulong)}";
+    }
+    if (kk > -5 and kk <= 0) {
+        return $"{sign}0.{"0".repeat((-kk) as ulong)}{digits}";
+    }
+    var power = kk > 0 ? $"+{kk - 1}" : $"{kk - 1}";
+    if (length == 1) {
+        return $"{sign}{digits}e{power}";
+    }
+    return $"{sign}{digits.substr_bytes(0, 1)}.{digits.substr_bytes(1, digits.size - 1)}e{power}";
+}
+
+## The shortest decimal digits that read back as `value`, without leading
+## or trailing zeros ("0" for zero), with its sign ("-" or "") and the
+## decimal exponent of the last digit; none when `value` is not finite.
+_shortest_digits(value: double): (String, String, long)? {
     var text = _float_text(value, false);
     if (text == "nan" or text == "inf" or text == "-inf") {
-        return "null";
+        return Optional<(String, String, long)>.Empty;
     }
     var sign = "";
     if (text.starts_with("-")) {
@@ -335,26 +366,36 @@ export ryu_text(value: double): String {
         digits = digits.substr_bytes(0, digits.size - 1);
         exponent += 1;
     }
+    return Optional<(String, String, long)>.Value((sign, digits, exponent));
+}
+
+## Returns `value` as Rust's `Display` writes a `f64`: the shortest digits
+## that read back as it, always in plain notation, with no `.0` for a whole
+## number (`1`, `0.5`, `100000000000000000000`); `NaN`, `inf` and `-inf`
+## for the special values.
+##
+## @param value the number
+## @returns the text
+export display_float(value: double): String {
+    if (value != value) {
+        return "NaN";
+    }
+    var shortest = _shortest_digits(value);
+    if (!shortest.is_value()) {
+        return value > 0.0 ? "inf" : "-inf";
+    }
+    var (sign, digits, exponent) = shortest.value();
     if (digits == "0") {
-        return $"{sign}0.0";
+        return $"{sign}0";
     }
-    var length = digits.size as long;
-    var kk = length + exponent;
-    if (exponent >= 0 and kk <= 16) {
-        return $"{sign}{digits}{"0".repeat(exponent as ulong)}.0";
+    var kk = digits.size as long + exponent;
+    if (exponent >= 0) {
+        return $"{sign}{digits}{"0".repeat(exponent as ulong)}";
     }
-    if (kk > 0 and kk <= 16) {
-        var head = digits.substr_bytes(0, kk as ulong);
-        return $"{sign}{head}.{digits.substr_bytes(kk as ulong, digits.size - kk as ulong)}";
+    if (kk > 0) {
+        return $"{sign}{digits.substr_bytes(0, kk as ulong)}.{digits.substr_bytes(kk as ulong, digits.size - kk as ulong)}";
     }
-    if (kk > -5 and kk <= 0) {
-        return $"{sign}0.{"0".repeat((-kk) as ulong)}{digits}";
-    }
-    var power = kk > 0 ? $"+{kk - 1}" : $"{kk - 1}";
-    if (length == 1) {
-        return $"{sign}{digits}e{power}";
-    }
-    return $"{sign}{digits.substr_bytes(0, 1)}.{digits.substr_bytes(1, digits.size - 1)}e{power}";
+    return $"{sign}0.{"0".repeat((-kk) as ulong)}{digits}";
 }
 
 _parse_long(text: String): long {

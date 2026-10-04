@@ -93,6 +93,17 @@ runs_passes(part: ulong) {
     ]) {
         programs.append(Path("../docs/examples").join(name).join("main.pep"));
     }
+    # The documentation's programs with `static` blocks and attributes.
+    for (var name in [
+        "build-options.pep",
+        "debugging-static.pep",
+        "reflection-attributes.pep",
+        "reflection-functions.pep",
+        "structs-static.pep",
+        "reflection-module/main.pep"
+    ]) {
+        programs.append(Path("../docs/examples").join(name));
+    }
     expect_true(programs.count > 40, "the corpus has its programs");
     ulong mismatches = 0;
     ulong i = part;
@@ -286,7 +297,44 @@ error_programs(): String[] {
         "type P<T> = Box<T>;\nstruct Box<T> { var v: T; }\nf(p: P<int, int>) {}\nmain(): int { return 0; }\n",
         "type P<T, U> = Box<T>;\nstruct Box<T> { var v: T; }\nf(p: P<int>) {}\nmain(): int { return 0; }\n",
         # A constructor parameter that names no field.
-        "struct S {\n    var x: int;\n    construct(this.y = 0) {}\n}\nmain(): int { return 0; }\n"
+        "struct S {\n    var x: int;\n    construct(this.y = 0) {}\n}\nmain(): int { return 0; }\n",
+        # Attributes an `[Attribute]` struct cannot take, and one that
+        # cannot be an attribute.
+        "enum K { A }\n[Attribute]\nstruct T { var k: K; }\n[T(K.B)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A {\n    var x: int;\n    construct(x: int) { this.x = x; }\n}\n[A()]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int[]; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\n[A(1, 2)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\n[A(y = 1)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\n[A(f())]\nstruct P { var y: int; }\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\n[A(1, x = 2)]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\n[A(\"s\")]\nstruct P { var y: int; }\nmain(): int { return 0; }\n",
+        "[Attribute]\nstruct A { var x: int; }\nstruct P { var y: int; }\nmain(): int {\n    static {\n        reflect.print(reflect.attribute<P, A>());\n    }\n    return 0;\n}\n",
+        "[Nope]\nstruct P { var x: int; }\nmain(): int { return 0; }\n",
+        # Static blocks: what a block cannot evaluate, `reflect` misused,
+        # `reflect.error` and `reflect.assert`, and a module-scope block.
+        "main(): int {\n    static {\n        reflect.print(reflect.name<int, int>());\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.assert(1 == 2, \"nope\");\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect = 3;\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.print(reflect.build_option(\"NOPE\"));\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.print(reflect.has_build_option(\"1x\"));\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        foo();\n    }\n    return 0;\n}\nfoo() {}\n",
+        "struct P { var x: int; }\nmain(): int {\n    static {\n        reflect.cases<P>();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        if (3) {\n        }\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        var x = 1 / 0;\n    }\n    return 0;\n}\n",
+        "struct P { var y: int; }\nmain(): int {\n    var n = 0;\n    static (n) {\n        n = reflect.properties<P>();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        for (var c in reflect.cases<K>()) {\n            reflect.error($\"bad {c.name}\");\n        }\n    }\n    return 0;\n}\nenum K { A, B }\n",
+        "main(): int {\n    static {\n        reflect.print(reflect.cases<K>()[5]);\n    }\n    return 0;\n}\nenum K { A }\n",
+        "struct P { var x: int; }\nmain(): int {\n    static {\n        for (var f in reflect.properties<P>()) {\n            reflect.print(f.nope);\n        }\n    }\n    return 0;\n}\n",
+        "static {\n    reflect.error(\"module\");\n    const X = 1;\n}\nmain(): int { return 0; }\n",
+        "main(): int {\n    static {\n        for (var x in 3) {\n        }\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.properties<Nope>();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        var x = 9223372036854775807 + 1;\n    }\n    return 0;\n}\n",
+        "enum K { A }\nmain(): int {\n    static {\n        reflect.properties<K>();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.nope<int>();\n    }\n    return 0;\n}\n",
+        "main(): int {\n    var n = 1;\n    static {\n        reflect.print(n);\n    }\n    return 0;\n}\n",
+        "enum S { C(r: int) }\nmain(): int {\n    var s = S.C(1);\n    static (s) {\n        for (var k in reflect.cases<S>()) {\n            for (var v in k.values) {\n                v.set(s, 2);\n            }\n        }\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        reflect.print(reflect.properties<int>);\n    }\n    return 0;\n}\n",
+        "main(): int {\n    static {\n        while (true) {\n        }\n    }\n    return 0;\n}\n"
     ];
 }
 
@@ -310,6 +358,21 @@ rewritten_programs(): String[] {
         "struct Box<T> {\n    var v: T;\n    static make(v: T): Box<T> { var b = Box<T>(); b.v = v; return b; }\n}\ntype Id = int;\ntype B<T = Id> = Box<T>;\ntype BB<T> = B<B<T>>;\nvar g: B = Box<int>();\ng2<T>(x: T): T { return x; }\nf(b: BB<long>, n: Id): B<Id> {\n    var c = B.make(n);\n    var d = g2<B<Id>>(c);\n    var size = sizeof<B<Id>>();\n    return d;\n}\nmain(): int { return 0; }\n",
         # Struct synthesis: counted, shared, value and generic structs,
         # field parameters, enum and float fields, and a reference enum.
-        "enum Color { Red = 1, Green = 2 }\n[Shared]\nstruct Counter { var n: int; }\n[Value]\nstruct V {\n    var x: int;\n    construct(this.x = 0) {}\n}\nstruct Box<T> {\n    var v: T;\n    var w: Box<T>;\n    var p: __ptr<int>;\n}\nstruct S {\n    var c: Color;\n    var f: double;\n    var v: V;\n    var t: (int, bool);\n    var s: S;\n    var k: int = 7;\n    construct(this.k = 1, extra: int = 2) {\n        c = Color.Green;\n    }\n    construct() {}\n    destruct {}\n}\nenum Shape {\n    Dot,\n    Circle(r: double),\n}\nmain(): int { return 0; }\n"
+        "enum Color { Red = 1, Green = 2 }\n[Shared]\nstruct Counter { var n: int; }\n[Value]\nstruct V {\n    var x: int;\n    construct(this.x = 0) {}\n}\nstruct Box<T> {\n    var v: T;\n    var w: Box<T>;\n    var p: __ptr<int>;\n}\nstruct S {\n    var c: Color;\n    var f: double;\n    var v: V;\n    var t: (int, bool);\n    var s: S;\n    var k: int = 7;\n    construct(this.k = 1, extra: int = 2) {\n        c = Color.Green;\n    }\n    construct() {}\n    destruct {}\n}\nenum Shape {\n    Dot,\n    Circle(r: double),\n}\nmain(): int { return 0; }\n",
+        # Static blocks over properties, fields, value and reference enum
+        # cases, attribute values, functions with an attribute, loops and
+        # compile-time arithmetic, emitted branches, methods and
+        # constructors, and module-scope constants.
+        "enum Kind { Flag, Value }\n\n[Attribute]\nstruct Opt {\n    const long_name: String;\n    const short_name: String;\n    const kind: Kind;\n    const count: int = 1;\n    const ratio: double;\n\n    construct(long_name: String, short_name: String = \"\", kind: Kind = Kind.Value) {\n        this.long_name = long_name;\n        this.short_name = short_name;\n        this.kind = kind;\n    }\n}\n\n[Attribute]\nstruct Tag {\n    var text: String;\n    var weight: int;\n}\n\nstruct Args {\n    [Opt(\"verbose\", \"v\", kind = Kind.Flag)]\n    var verbose: bool;\n    [Opt(\"out\" + \"put\")]\n    [Tag(\"t\", -3)]\n    var output: String;\n    var plain: int;\n}\n\nmain(): int {\n    var a = Args();\n    static (a) {\n        for (var f in reflect.properties<Args>()) {\n            if (f.has_attribute<Opt>()) {\n                var o = f.attribute<Opt>();\n                reflect.print(o);\n                reflect.print($\"{o.long_name}/{o.short_name}/{o.kind}/{o.count}/{o.ratio}\");\n            }\n            if (f.has_attribute<Tag>()) {\n                reflect.print(f.attribute<Tag>().weight);\n            }\n        }\n        reflect.print(reflect.has_attribute<Args, Opt>());\n    }\n    return 0;\n}\n",
+        "enum Color { Red, Green = 5, Blue }\n\nmain(): int {\n    var c = Color.Green;\n    static (c) {\n        for (var k in reflect.cases<Color>()) {\n            if (k.matches(c)) {\n                reflect.print($\"{k.name} {k.value} {k.index} {k.is_last}\");\n            }\n            var v = k.get();\n        }\n    }\n    return 0;\n}\n",
+        "[Attribute]\nstruct A {\n    var x: int;\n    construct(x: int) { this.x = x; reflect.print(\"hi\"); }\n}\nmain(): int { return 0; }\n",
+        "struct P { var x: int; var y: int; }\n\nmain(): int {\n    var p = P();\n    var n = 0;\n    static (p, n) {\n        for (var f in reflect.properties<P>()) {\n            if (f.get(p) == 0) {\n                n += 1;\n            } else {\n                n -= 1;\n            }\n        }\n    }\n    return n;\n}\n",
+        "struct Point {\n    var x: int;\n    var _y: int;\n}\n\nmain(): int {\n    var p = Point();\n    static (p) {\n        for (var f in reflect.fields<Point>()) {\n            reflect.print(f.name);\n        }\n    }\n    return 0;\n}\n",
+        "[Attribute]\nstruct Command {\n    var name: String;\n}\n\n[Command(\"b\")]\nrun_b(): int { return 2; }\n\n[Command(\"a\")]\nrun_a(): int { return 1; }\n\nmain(): int {\n    var total = 0;\n    static (total) {\n        for (var f in reflect.functions_with<Command>()) {\n            reflect.print($\"{f.name} {f.attribute<Command>().name}\");\n            total += f.call();\n        }\n    }\n    return total;\n}\n",
+        "main(): int {\n    var out = 0;\n    static (out) {\n        var i = 0;\n        var s = \"\";\n        while (i < 5) {\n            i += 1;\n            if (i == 2) {\n                continue;\n            }\n            if (i == 4) {\n                break;\n            }\n            s = s + $\"{i}\";\n            out += i;\n        }\n        var list = reflect.cases<K>();\n        reflect.print(list.count);\n        reflect.print(list[1]);\n        reflect.print(s.length);\n        reflect.print(1.5 * 2);\n        reflect.print(7 / 2);\n        reflect.print(7 % 3);\n        reflect.print(-7.5 % 2);\n        reflect.print(\"a\" < \"b\");\n        reflect.print(1 < 2.5);\n        reflect.print(10.0 / 4);\n        reflect.print(1e21);\n        reflect.print(0.1 + 0.2);\n        reflect.print(s.starts_with(\"1\"));\n        reflect.print(true and false or !false);\n        reflect.print(i == 4 ? \"four\" : \"other\");\n        reflect.assert(i == 4, \"i is four\");\n        reflect.print(reflect.name<Array<int>>());\n        reflect.print(reflect.is_struct<K>());\n        reflect.print(reflect.is_enum<K>());\n        reflect.print(reflect.is_reference<String>());\n        reflect.print(reflect.is_same<int, i32>());\n        reflect.print(reflect.is_same<__ptr<int>, i32*>());\n        reflect.print(reflect.has_build_option(\"X\"));\n        reflect.print(reflect.build_option(\"X\", \"dflt\"));\n        reflect.print(\"q\\\"uote\\n\");\n    }\n    return out;\n}\n\nenum K { A, B }\n",
+        "struct P {\n    var x: int;\n    var y: int;\n\n    sum(): int {\n        var total = 0;\n        static (total) {\n            for (var f in reflect.properties<P>()) {\n                total += f.get(this);\n            }\n        }\n        return total;\n    }\n\n    construct() {\n        static {\n            reflect.print(\"ctor\");\n        }\n    }\n}\n\nmain(): int {\n    return P().sum();\n}\n",
+        "enum Level { Low, High }\n\nstatic {\n    var n = 0;\n    for (var c in reflect.cases<Level>()) {\n        n += c.value + 1;\n    }\n    const COUNT = n;\n    const NAME = \"lvl\" + $\"{n}\";\n    const RATE = 2.5;\n    const ON = n > 1;\n    const TOP = Level.High;\n}\n\nmain(): int {\n    return COUNT;\n}\n",
+        "struct Point {\n    var x: int;\n    var y: double;\n    const name: String = \"p\";\n    var _hidden: int;\n    var label: String { get { return name; } }\n}\n\nmain(): int {\n    var p = Point();\n    var total = 0;\n    static (p, total) {\n        for (var field in reflect.properties<Point>()) {\n            reflect.print($\"{field.name} {field.index} {field.is_last} {field.type_name} {field.is_const} {field.is_property}\");\n            if (reflect.is_same<field.Type, int>()) {\n                total += field.get(p);\n                field.set(p, 3);\n            }\n        }\n    }\n    return total;\n}\n",
+        "enum Shape {\n    Circle(radius: double),\n    Rect(w: int, h: int),\n    Empty,\n}\n\nmain(): int {\n    var s = Shape.Circle(1.5);\n    var n = 0;\n    static (s, n) {\n        for (var k in reflect.cases<Shape>()) {\n            if (k.matches(s)) {\n                n += 1;\n            }\n            for (var v in k.values) {\n                reflect.print($\"{v.name} {v.type_name}\");\n            }\n        }\n    }\n    return n;\n}\n"
     ];
 }

@@ -2690,14 +2690,19 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   (`platform.pep`), then `struct_body::apply`'s steps: `[Equatable]`
   (`equatable.pep`), closure lifting (`closures.pep`), body stripping
   (`strip_bodies.pep`), type aliases (`type_aliases.pep`) and struct
-  synthesis (`synthesize.pep`). What the Rust passes keep in
-  thread-locals between steps (the first error reported, closure numbers,
-  enum representations, value structs) is a `PassState` (`state.pep`).
-  `compiler/passes_test.pep` requires the model JSON, or the rendered
-  error, to match after `PORTED_STEPS` steps on the corpus, the
-  documentation's programs of several modules, and programs that exercise
-  each pass and its errors; on a mismatch it reports the first step where
-  the two differ.
+  synthesis (`synthesize.pep`); then the `static` blocks
+  (`static_blocks.pep`): checking attributes against their `[Attribute]`
+  structs, running the module-scope blocks into their constants, and
+  expanding the blocks of concrete code (those of generic code expand
+  once specialized). Writing expansions back as source (`--emit-static`)
+  is not ported. What the Rust passes keep in thread-locals between
+  steps (the first error reported, closure numbers, enum
+  representations, value structs, `reflect.print`'s notes) is a
+  `PassState` (`state.pep`). `compiler/passes_test.pep` requires the
+  model JSON, or the rendered error, to match after `PORTED_STEPS` steps
+  on the corpus, the documentation's programs of several modules and
+  with `static` blocks, and programs that exercise each pass and its
+  errors; on a mismatch it reports the first step where the two differ.
 - `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,
   `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`,
   `pepc --emit-checked ...` and `pepc --emit-model ...` print the same

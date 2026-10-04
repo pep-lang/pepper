@@ -24,6 +24,9 @@ export struct PassState {
     ## The value structs' names (`[Value]`), as `value_structs::install`
     ## records them.
     var value_structs: HashSet<String> = HashSet<String>();
+    ## The notes the passes report besides errors (`reflect.print`), in
+    ## order: the Rust module's `warnings`.
+    var notes: Diagnostic[] = Array<Diagnostic>();
 
     ## Creates the state for compiling for `target`.
     ##
