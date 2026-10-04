@@ -540,6 +540,31 @@ costs time and memory in proportion to the value's size at each unlock; it
 is off unless the variable is set. It checks a `Mutex<T>` whose `T` is not
 thread-safe and can be [copied](memory.md#copying-a-value-with-copy).
 
+## Semaphores, barriers and latches
+
+Three types coordinate threads by counting. Each is `[Shared]`, so keep it
+in a module-scope variable or pass it to threads:
+
+- A `Semaphore(permits)` lets at most `permits` threads hold a permit at
+  once. `acquire()` waits for a free permit and takes it, `try_acquire()`
+  takes one only if one is free, and `release()` gives one back.
+  `with (semaphore.permit()) { ... }` holds a permit for the block and gives
+  it back on every path out.
+- A `Barrier(count)` makes groups of `count` threads meet: `wait()` sleeps
+  until `count` threads have called it, then all go on together. It returns
+  `true` on exactly one of them, the leader, and resets for the next round.
+- A `Latch(count)` opens once `count_down()` has been called `count` times.
+  `wait()` sleeps until it is open, and `is_ready()` asks without waiting.
+  It is one-shot: counting down an open latch panics.
+
+```pepper
+{{#include ../../examples/threads-coordination.pep}}
+```
+
+Each is a `Mutex` over its counts with a `Condition` to sleep on, so in a
+[task](tasks.md#mutexes-channels-and-conditions) their waits park the task,
+not its worker.
+
 ## Once and Lazy
 
 `Once` runs a function exactly once, however many threads ask, and `Lazy<T>`

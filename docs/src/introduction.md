@@ -110,7 +110,8 @@ Some things you will meet quickly:
   waits on several channels at once, and a `Mutex` holds any struct, with
   the compiler keeping each locked value apart from the rest of the program
   (see
-  [threads](language/threads.md#what-a-lock-body-may-do)).
+  [threads](language/threads.md#what-a-lock-body-may-do)). `Semaphore`,
+  `Barrier` and `Latch` coordinate groups of threads.
 - Integer arithmetic that overflows panics instead of wrapping, at every
   optimization level; `wrapping_add` and its siblings wrap on purpose (see
   [integer overflow](language/types-and-variables.md#integer-overflow)).

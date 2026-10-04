@@ -57,6 +57,7 @@
 
 import "atomic";
 import "channel";
+import "coordination";
 import "cpus";
 import "driver";
 import "mutex";
@@ -80,6 +81,10 @@ export physical_cpus;
 export Mutex;
 export MutexGuard;
 export Condition;
+export Semaphore;
+export SemaphorePermit;
+export Barrier;
+export Latch;
 export Once;
 export Lazy;
 export Channel;
