@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-73783866.js";
+            window.path_to_searchindex_js = "../searchindex-fec5740c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -206,6 +206,7 @@ test that checks what the compiler emits or reports stays in Rust.</p>
 <tr><td>A module, <code>runtime/&lt;module&gt;/</code></td><td><code>runtime/&lt;module&gt;/test/&lt;topic&gt;_test.pep</code>, which imports the module</td></tr>
 <tr><td>A prelude file, <code>runtime/&lt;name&gt;.pep</code></td><td><code>runtime/test/&lt;topic&gt;_test.pep</code></td></tr>
 <tr><td>A file’s private functions</td><td><code>[Test]</code> functions in that file itself</td></tr>
+<tr><td>A Pepper tool, <code>tools/&lt;tool&gt;/</code></td><td><code>tools/&lt;tool&gt;/&lt;topic&gt;_test.pep</code>, which imports the tool’s files (<code>import "format";</code>)</td></tr>
 </tbody>
 </table>
 </div>
