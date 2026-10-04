@@ -282,8 +282,9 @@ same_program(compiler: Path, root: Path, arguments: String[]): bool {
     }
     var actual = program.value().to_json().to_string();
     if (actual != expected.value()) {
+        var at = first_difference(actual, expected.value());
         print(
-            $"{root}: the linked program differs from the Rust compiler's at byte {first_difference(actual, expected.value())} of its JSON"
+            $"{root}: the linked program differs from the Rust compiler's at byte {at} of its JSON: {excerpt(actual, at)} not {excerpt(expected.value(), at)}"
         );
         return false;
     }
@@ -315,6 +316,13 @@ rust_output(compiler: Path, option: String, root: Path, arguments: String[]): St
         text = text.substr_bytes(0, text.size - 1);
     }
     return Optional<String>.Value(text);
+}
+
+# Up to 200 bytes of `text` around `at`.
+excerpt(text: String, at: ulong): String {
+    var start = at > 100 ? at - 100 : 0;
+    var end = at + 100 < text.size ? at + 100 : text.size;
+    return text.substr_bytes(start, end - start);
 }
 
 first_difference(a: String, b: String): ulong {

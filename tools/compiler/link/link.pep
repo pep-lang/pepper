@@ -380,9 +380,22 @@ _compare_paths(a: String, b: String): int {
     var right = Path(b).components();
     ulong i = 0;
     while (i < left.count and i < right.count) {
-        int rank = _component_rank(left[i]) - _component_rank(right[i]);
+        int rank = _component_rank(left[i], i) - _component_rank(right[i], i);
         if (rank != 0) {
             return rank;
+        }
+        if (i == 0 and _is_prefix(left[i])) {
+            var (left_kind, left_key) = _prefix_order(left[i]);
+            var (right_kind, right_key) = _prefix_order(right[i]);
+            if (left_kind != right_kind) {
+                return left_kind - right_kind;
+            }
+            int order = left_key.compare(right_key);
+            if (order != 0) {
+                return order;
+            }
+            i += 1;
+            continue;
         }
         int c = left[i].compare(right[i]);
         if (c != 0) {
@@ -393,19 +406,59 @@ _compare_paths(a: String, b: String): int {
     return left.count == right.count ? 0 : (left.count < right.count ? -1 : 1);
 }
 
-# Where a component sorts among a path's kinds of component: a root, then
-# `.`, then `..`, then a name.
-_component_rank(component: String): int {
-    if (component == "/" or component == "\\") {
+# Where a component sorts among a path's kinds of component, as Rust's
+# `Component` orders them: a Windows prefix (`C:`, `\\server\share`), a
+# root, `.`, `..`, then a name. Only the first component can be a prefix.
+_component_rank(component: String, index: ulong): int {
+    if (index == 0 and _is_prefix(component)) {
         return 0;
     }
-    if (component == ".") {
+    if (component == "/" or component == "\\") {
         return 1;
     }
-    if (component == "..") {
+    if (component == ".") {
         return 2;
     }
-    return 3;
+    if (component == "..") {
+        return 3;
+    }
+    return 4;
+}
+
+# POSIX paths have no prefix.
+[Target(!OS(Windows))]
+_is_prefix(component: String): bool {
+    return false;
+}
+
+# A drive (`C:`) or a UNC share: what `Path.components` puts first.
+[Target(OS(Windows))]
+_is_prefix(component: String): bool {
+    return component.ends_with(":") or component.starts_with("\\\\") or component.starts_with("//");
+}
+
+# How Rust's `Prefix` orders a prefix: by kind (`\\?\x`, `\\?\UNC\x`,
+# `\\?\C:`, `\\.\x`, `\\server\share`, then `C:`), then by what it names,
+# a drive by its upper-case letter.
+_prefix_order(component: String): (int, String) {
+    var text = component.replace("/", "\\");
+    if (text.starts_with("\\\\?\\")) {
+        var rest = text.substr_bytes(4, text.size - 4);
+        if (rest.starts_with("UNC\\") or rest == "UNC") {
+            return (1, rest);
+        }
+        if (rest.size == 2 and rest.ends_with(":")) {
+            return (2, rest.upper());
+        }
+        return (0, rest);
+    }
+    if (text.starts_with("\\\\.\\")) {
+        return (3, text.substr_bytes(4, text.size - 4));
+    }
+    if (text.starts_with("\\\\")) {
+        return (4, text.substr_bytes(2, text.size - 2));
+    }
+    return (5, text.upper());
 }
 
 # A struct's members from an extension: its name, file and whether the
