@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-73a20536.js";
+            window.path_to_searchindex_js = "../searchindex-7d3dc32c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4d1777b9.js"></script>
@@ -730,7 +730,7 @@ every few dozen tasks, so a busy task cannot starve the network.</p>
 </thead>
 <tbody>
 <tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
-<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring, with one multishot poll request per waiting socket and deferred completion work (as fast as epoll in our echo benchmark); never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
+<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring: the kernel does stream sockets’ receives and sends and files’ reads and writes itself, submitted in batches, with deferred completion work; never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
 <tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
 <tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
 <tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
@@ -743,15 +743,22 @@ the system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and
 <code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>, <code>io_uring</code>, <code>kqueue</code>,
 <code>iocp</code> or <code>poll</code>) overrides the automatic choice without changing the
 program, for testing and benchmarks. <code>async.current_backend()</code> says which one is running.</p>
-<p>io_uring usually pays off as the amount of multiplexed I/O grows: many
-operations in flight, submitted and completed in batches through the ring
-rather than one system call each. For sockets, Pepper’s <code>IoUring</code> backend
-does not do that yet: it uses the ring only to learn when a socket is
-ready, then reads and writes with ordinary <code>recv</code> and <code>send</code> calls, as epoll
-does, so it makes the same number of system calls. (File reads and writes
-do go through the ring; see <a href="#files">Files</a>.) In our echo benchmark it kept level with
-epoll from 16 to 1,024 connections and fell behind at 4,096. Submitting
-the socket reads and writes themselves through the ring is future work.</p>
+<p>io_uring pays off as the amount of multiplexed I/O grows: many operations
+in flight, submitted and completed in batches through the ring rather than
+one system call each. With the <code>IoUring</code> backend, a stream socket’s <code>read</code>
+and <code>write</code> in a task go to the kernel as a receive or send request, which
+it runs once the socket is ready; the worker submits every request queued
+since its last look, and collects every completion, in one system call. In
+our echo benchmark that makes about an eighth of epoll’s system calls,
+runs as fast as epoll from 64 to 1,024 connections (half again as fast as
+io_uring used only for readiness), and stays about 10% behind at 4,096.</p>
+<p>A cancel or a <code>timeout</code> asks the kernel to stop a request and waits for it
+to finish, since the kernel is writing into or reading from the array
+until then. A receive that got data before the cancel took effect returns
+that data instead of failing, so no bytes are lost. As with files, growing
+the array from another task meanwhile panics. Accepting, connecting, UDP
+sockets, and a second task reading (or writing) a socket that one already
+reads (or writes) still wait for readiness.</p>
 <h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
 <p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
 block may take:</p>
