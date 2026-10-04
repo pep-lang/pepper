@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-fede48fe.js";
+            window.path_to_searchindex_js = "searchindex-b0d0678e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -6369,6 +6369,56 @@ report an out-of-range index at the caller’s line (see
 (<code>counts[i] += 1</code>) reads with the first and writes with the second.
 <a href="#array"><code>Array</code></a> and <a href="#string"><code>String</code></a> are
 indexed this way.</p>
+<p>Assignment through a chain of indexes, <code>library["fiction"][0] = "Dune"</code>, reads
+with every index but the last and writes with the last, as if the value read
+were held in a variable first (<code>var fiction = library["fiction"]; fiction[0] = "Dune";</code>). Since a struct is held by reference, the write changes
+the object the outer struct holds. Assigning through an index whose type has
+only the reading indexer is an error (<code>cannot assign through '[]': 'Shelf' declares a '[]' getter but no setter</code>).</p>
+<pre><code class="language-pepper"># A struct declaring `[]` can be indexed: one parameter reads, two write.
+struct Shelf {
+    var titles: Map&lt;String, String&gt;;
+    var sections: Map&lt;String, Shelf&gt;;
+
+    construct() {
+        titles = Map&lt;String, String&gt;();
+        sections = Map&lt;String, Shelf&gt;();
+    }
+
+    # `shelf["name"]` reads a section.
+    [](name: String): Shelf {
+        return sections[name];
+    }
+
+    # `shelf["name"] = section` writes one.
+    [](name: String, section: Shelf): Shelf {
+        sections[name] = section;
+        return section;
+    }
+
+    # `shelf[slot]` and `shelf[slot] = title` overload `[]` by type.
+    [](slot: ulong): String {
+        return titles[$"{slot}"];
+    }
+
+    [](slot: ulong, title: String): String {
+        titles[$"{slot}"] = title;
+        return title;
+    }
+}
+
+main(): int {
+    var library = Shelf();
+    library["fiction"] = Shelf();
+    # A chained assignment writes into the shelf the first index reads,
+    # like `var fiction = library["fiction"]; fiction[0] = ...;`.
+    library["fiction"][0] = "Dune";
+    library["fiction"]["classics"] = Shelf();
+    library["fiction"]["classics"][0] = "Emma";
+    assert(library["fiction"][0] == "Dune", "set through two indexers");
+    assert(library["fiction"]["classics"][0] == "Emma", "and through three");
+    return 0;
+}
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="properties"><a class="header" href="#properties">Properties</a></h1>
 <p>A property is a struct member that is read and written like a field
