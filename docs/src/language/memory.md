@@ -127,9 +127,11 @@ everything that points back up holds a `Weak<T>`, so there is no cycle.
 
 In C++ terms, a struct value is a `std::shared_ptr<T>` and `Weak<T>` wraps
 the built-in `__weak<T>`, a `std::weak_ptr<T>`: `Weak<T>(object)` is
-`weak_ptr(object)`, and entering it with `with` is `lock()`. A weak reference
-made while an object is still inside its constructor cannot be upgraded until
-the constructor returns, as with `weak_from_this()` in C++.
+`weak_ptr(object)`, and entering it with `with` is `lock()`. Inside a
+constructor, `this` already holds the object's first reference, like the
+`shared_ptr` that `make_shared` fills in: a constructor may pass `this` to a
+function or store it, and a weak reference made from it upgrades, without
+the object being destroyed when those copies are dropped.
 
 ## References and threads
 

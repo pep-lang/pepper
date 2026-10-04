@@ -756,3 +756,53 @@ test(): int {
     assert_eq!(result, 0);
     assert_eq!(leaked, 0);
 }
+
+// ── `this` inside a constructor ──────────────────────────────────────────────
+
+/// A constructor's `this` owns the object's first reference, like the local
+/// holding `make_shared`'s result. Passing it to a function copies it into
+/// the parameter, whose release at exit must not destroy the object under
+/// construction (#617: it did, and the next field use crashed). The result
+/// still leaves the constructor with one reference, early `return this`
+/// included.
+#[test]
+fn passing_this_from_a_constructor_keeps_the_object_alive() {
+    let (result, leaked) = crate::support::jit_census(
+        r#"
+struct Holder {
+    var names: HashSet<String>;
+    var keep: Holder;
+    construct(items: String[], early: bool) {
+        names = HashSet<String>();
+        if (!_check(this)) { return this; }
+        _take(this);
+        if (early) { return this; }
+        names.insert("z");
+        for (var item in items) { names.insert(item); }
+    }
+}
+_check(holder: Holder): bool { return holder.names.count == 0; }
+_take(holder: Holder) {
+    var copy = holder;
+    copy.names.insert("y");
+}
+test(): int {
+    var h = Holder(["a"], false);
+    if (h.names.count != 3) { return -1; }
+    if (__refcount<Holder>(h) != 1) { return -2; }
+    var e = Holder(Array<String>(), true);
+    if (e.names.count != 1) { return -3; }
+    if (__refcount<Holder>(e) != 1) { return -4; }
+    # A discarded constructor result is still freed.
+    Holder(["b"], false);
+    # So is one that kept a reference to itself, once the cycle is broken.
+    var c = Holder(Array<String>(), false);
+    c.keep = c;
+    if (__refcount<Holder>(c) != 2) { return -5; }
+    c.keep = __default<Holder>();
+    return 0;
+}"#,
+    );
+    assert_eq!(result, 0);
+    assert_eq!(leaked, 0);
+}

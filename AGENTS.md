@@ -153,9 +153,12 @@ under this model.
 
 The whole model, as a construct mapping:
 
-- `var x = Foo();` ≡ `shared_ptr<T> x = make_shared<T>();` — construction
-  leaves `__refcount == 0`; the slot that first receives the value acquires
-  (the "first owner").
+- `var x = Foo();` ≡ `shared_ptr<T> x = make_shared<T>();` — inside the
+  constructor, `this` is the local holding `make_shared`'s result: it owns
+  the first reference (`__refcount == 1` from the start), so passing `this`
+  on is an ordinary copy. `return this` copies it out and `this`'s scope exit
+  releases, so the result arrives owning one reference, which the receiving
+  slot takes over.
 - Reading a place (`x`, `x.f`, `x[i]`) yields a **reference** to the stored
   value, like C++ `T&`. The read itself does no refcount work. Copying that
   reference into a new shared_ptr — var init, assignment RHS, function

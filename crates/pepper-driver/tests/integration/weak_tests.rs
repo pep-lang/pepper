@@ -167,9 +167,10 @@ test(): int {
 }
 
 #[test]
-fn weak_made_during_construction_does_not_free() {
-    // No strong owner exists until the constructor returns: dropping a weak
-    // reference then must not free the object.
+fn weak_made_during_construction_upgrades_and_does_not_free() {
+    // The constructor's `this` owns the first reference, so a weak reference
+    // made from it upgrades, and dropping the weak and upgraded references
+    // must not free the object (#617).
     let src = r#"
 import async;
 const upgraded = async.Atomic<int>(0);
@@ -187,7 +188,7 @@ test(): int {
         var e = Early();
         if (__refcount<Early>(e) != 1) { return -1; }
     }
-    if (upgraded.load() != 0) { return -2; }
+    if (upgraded.load() != 1) { return -2; }
     return (_pep_live_allocs() - before) as int;
 }
 "#;

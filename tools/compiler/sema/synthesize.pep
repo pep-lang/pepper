@@ -322,7 +322,12 @@ export finish(state: PassState, st: StructDef): String? {
         # Field initializations: a field's default, else its zero.
         for (var field in st.field_members) {
             Expression value = Expression.PointerLiteral;
-            if (field.default.is_value()) {
+            if (field.name == "__refcount") {
+                # `this` owns the object's first reference for the whole
+                # constructor; its scope exit releases it after `return
+                # this` acquires the caller's.
+                value = Expression.IntLiteral(1);
+            } else if (field.default.is_value()) {
                 value = field.default.value().copy();
             } else if (field.ty.sub_types.count == 0 and _names_parameter(st.ty, field.ty.name)) {
                 # A field typed by a bare type parameter has no known zero

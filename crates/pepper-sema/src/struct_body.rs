@@ -121,11 +121,9 @@ pub fn apply_synthesized(st: &mut StructDef) {
         st.release.body = None;
         return;
     }
-    // Head field for the refcount. Default 0 (port of `Struct.cpp:108-109`,
-    // `IntegerLiteral(0)`): a freshly constructed object carries NO refs —
-    // its first reference is taken by the receiver's init/param-entry
-    // acquire (the caller side), exactly as C++'s `RefTypeOps::init` does.
-    // Guarded: specialized instances clone the base's fields (which already
+    // Head field for the refcount. Its default is 0, but `finish` starts it
+    // at 1 in every constructor: the constructor's `this` owns the first
+    // reference. Guarded: specialized instances clone the base's fields (which already
     // carry the head) and re-run apply_synthesized.
     if !st.field_members.iter().any(|f| f.name == "__refcount") {
         st.field_members.insert(
@@ -135,9 +133,9 @@ pub fn apply_synthesized(st: &mut StructDef) {
     }
     // Second head field: weak references (`__weak<T>`, a
     // `std::weak_ptr`), plus one held on behalf of all strong references
-    // together, as in a C++ control block. It starts at 1, so a weak
-    // reference dropped while the object is still being constructed (no
-    // strong owner yet) cannot free it; the last strong release destroys the
+    // together, as in a C++ control block. It starts at 1, so dropping a
+    // weak reference never frees an object that strong references (the
+    // constructor's `this` among them) still hold; the last strong release destroys the
     // object and gives that one up, and whichever count reaches 0 last frees
     // the memory.
     if !st.field_members.iter().any(|f| f.name == "__weakcount") {
@@ -288,6 +286,18 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         // non-zeroing allocator would not silently change semantics).
         for field in &st.field_members {
             let value = match &field.default {
+                // Why 1 and not 0: `this` owns the object's first
+                // reference for the whole constructor, like the local
+                // holding `make_shared`'s result. Starting at 0, a call
+                // like `f(this)` would acquire it into `f`'s parameter
+                // (0 → 1) and release it at `f`'s exit (1 → 0), destroying
+                // the object mid-construction (#617). With `this` owning a
+                // reference, that copy only ever goes 1 → 2 → 1. Codegen
+                // tracks the constructor's `this` like any other local, so
+                // at the end `return this` acquires the caller's reference
+                // (1 → 2) and `this`'s scope exit drops its own (2 → 1):
+                // the result leaves owning exactly one reference.
+                _ if field.name == "__refcount" => Expression::IntLiteral(1),
                 Some(d) => d.clone(),
                 // A field typed by a bare type parameter (`T _value;`) has no
                 // known zero until specialization: `__default<T>` becomes `0`
@@ -322,12 +332,12 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         }
 
         // The object leaves the ctor with `__refcount == 1`: `return this`
-        // acquires at the return site, so the ctor result is an owned rvalue
-        // carrying its creation ref — exactly as `std::make_shared` hands back a
-        // shared_ptr. A variable init (`var x = T()`) moves that ref into the
-        // slot; a pass-by-value param entry acquires on top of it. The ctor's
-        // `this` local is excluded from scope tracking (codegen), so nothing
-        // here releases the object.
+        // acquires at the return site (1 → 2) and `this`'s scope exit
+        // releases the constructor's own reference (2 → 1), so the ctor
+        // result is an owned rvalue carrying one ref — exactly as
+        // `std::make_shared` hands back a shared_ptr. A variable init
+        // (`var x = T()`) moves that ref into the slot; a pass-by-value
+        // param entry acquires on top of it.
 
         // Restore the user's ctor instructions.
         items.extend(user_ctor);

@@ -3097,11 +3097,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         self.frame
             .push_local(&var.name, Address::with_llvm_ty(&var.name, &var.ty.to_string(), ty, alloca));
         // The scope owns the slot until exit (null occupants release to nothing).
-        // The ctor's `this` is excluded: the ctor's `return this` acquires at
-        // the return site, so the result leaves with rc == 1 — releasing `this`
-        // here would destroy a live object. A value struct's ctor `this` is
-        // an ordinary local: `return this` copies it, so it releases at exit.
-        if is_struct_ref && (var.name != "this" || self.values.contains_key(&var.ty.to_string())) {
+        // That includes the ctor's `this`, which holds the object's first
+        // reference (`struct_body::finish` starts `__refcount` at 1):
+        // `return this` acquires the caller's reference first, so this
+        // release leaves the result with rc == 1.
+        if is_struct_ref {
             self.track_scope_local(&var.name, &var.ty.to_string(), alloca);
         }
         Ok(())
