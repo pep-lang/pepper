@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-54a40c5e.js";
+            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -245,6 +245,9 @@ returns them all, and <code>names()</code> lists the fields in no defined order.
 <li><code>set_text</code> and <code>set_body</code> fill a request or response and return it, so
 they chain. <code>body()</code> returns the bytes, for any body including binary
 ones; <code>text()</code> decodes them as UTF-8, replacing invalid bytes with U+FFFD.</li>
+<li><code>set_reader(source)</code> gives a request or response a body streamed from any
+<code>io.Reader</code> (a file, a <code>compress.CompressReader</code>) instead of one held in
+memory; see <a href="#streaming-bodies">Streaming bodies</a>.</li>
 </ul>
 <h2 id="urls"><a class="header" href="#urls">URLs</a></h2>
 <p><code>Uri</code> (in the prelude, so no import is needed) parses any URI reference
@@ -280,8 +283,12 @@ their percent-escapes, and <code>Uri.decode</code> turns one into text.</p>
 <code>Client(connector)</code> uses a <code>tls.TlsConnector</code> of your own, for instance
 one that trusts a private certificate authority.</li>
 <li><code>get(url)</code>, <code>post(url, content_type, body)</code> and <code>send(request)</code> open a
-connection, send the request and read the whole response. The client adds
-<code>Host</code>, <code>Content-Length</code> and <code>Connection: close</code>.</li>
+connection, send the request and read the whole response, up to
+<code>MAX_RESPONSE_BODY</code> (64 MiB). <code>open(request)</code> returns at the header
+fields and leaves the body to read as a stream (see
+<a href="#streaming-bodies">Streaming bodies</a>). The client adds <code>Host</code>,
+<code>Content-Length</code> (or <code>Transfer-Encoding: chunked</code>) and
+<code>Connection: close</code>.</li>
 <li>Any status is a successful result: check <code>status</code>. An error means there
 was no response: the URL is not <code>http://</code> or <code>https://</code>
 (<code>is_invalid_input()</code>), the connection or TLS handshake failed, or the
@@ -299,15 +306,80 @@ the body read in full. It returns when <code>async.run</code> ends. The handler 
 <li>Connections stay open between requests unless the client asks to close
 or speaks HTTP/1.0. Chunked request bodies and <code>Expect: 100-continue</code> are
 understood.</li>
-<li>The server adds <code>Content-Length</code> to each response, and the standard
-reason phrase when <code>reason</code> is empty (<code>reason_phrase(status)</code> returns it).</li>
+<li>The server adds <code>Content-Length</code> to each response (or, for a body from
+<code>set_reader</code> of unknown length, <code>Transfer-Encoding: chunked</code>), and the
+standard reason phrase when <code>reason</code> is empty (<code>reason_phrase(status)</code>
+returns it).</li>
 <li>A request it cannot parse gets <code>400 Bad Request</code>, header fields over
 64 KiB get <code>431</code>, and a body over <code>MAX_REQUEST_BODY</code> (16 MiB) gets <code>413</code>.</li>
 </ul>
+<h2 id="streaming-bodies"><a class="header" href="#streaming-bodies">Streaming bodies</a></h2>
+<p>A body need not fit in memory. Both directions stream through <code>io.Reader</code>,
+the trait of files, sockets and the <code>compress</code> readers:</p>
+<ul>
+<li><strong>Responses to a client:</strong> <code>client.open(request)</code> returns the <code>Response</code>
+as soon as its header fields arrive. <code>response.reader()</code> is then a
+<code>BodyReader</code> that reads the body from the connection as it arrives, with
+no size limit, undoing chunked framing, and ends where the body ends.
+Read it with <code>read</code>, <code>chunks</code> or <code>lines</code>, or wrap it in a
+<code>compress.DecompressReader</code>. The connection closes at the end of the
+body, at <code>close()</code>, or when the last reference to the reader goes.</li>
+<li><strong>Requests from a client:</strong> <code>request.set_reader(source)</code> sends the body
+chunked; <code>set_reader(source, length)</code> sends it with <code>Content-Length</code>.</li>
+<li><strong>Responses from a server:</strong> a handler returns
+<code>Response(200).set_reader(source)</code>, sent chunked to an HTTP/1.1 client
+(or with <code>Content-Length</code> when a length is given). An HTTP/1.0 client
+gets the body unframed, and the connection closes after it.</li>
+</ul>
+<pre><code class="language-pepper">import async;
+import http;
+import io;
+
+# `/download` streams a body of unknown length, which goes out chunked;
+# `/upload` reports how many bytes it received.
+handle(request: http.Request): http.Response {
+    if (request.path() == "/download") {
+        var data = "pepper\n".repeat(100000).bytes();
+        return http.Response(200).set_reader(io.ByteReader(data));
+    }
+    return http.Response(200).set_text(to_string(request.body().count));
+}
+
+main(): int {
+    async.run(
+        () =&gt; {
+            var server = http.Server.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+            var port = server.local_address().value().port();
+            async.spawn&lt;void&gt;(() =&gt; {
+                server.serve(handle);
+            });
+            var base = "http://127.0.0.1:" + to_string(port);
+            var client = http.Client();
+
+            # open() returns at the header fields; the body is read as it
+            # arrives and written to a file a chunk at a time.
+            var response = client.open(http.Request("GET", base + "/download")).value();
+            assert(response.headers["transfer-encoding"] == "chunked", "no length up front");
+            var path = io.Directory.temp().join("pepper-download.txt");
+            var file = io.File.create(path).value();
+            for (var chunk in response.reader().chunks(65536)) {
+                file.write_all(chunk.value());
+            }
+            file.close();
+
+            # Send the file back as a request body read from the file.
+            var upload = http.Request("PUT", base + "/upload").set_reader(io.File.open(path).value());
+            assert(client.send(upload).value().text() == "700000", "every byte arrived");
+            io.File.remove(path);
+        }
+    );
+    return 0;
+}
+</code></pre>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
-<li>Bodies are read into memory in full, up to 16 MiB for a request and
-<code>MAX_RESPONSE_BODY</code> (64 MiB) for a response; there is no streaming yet.</li>
+<li>A server handler gets the request body read into memory in full, up to
+<code>MAX_REQUEST_BODY</code> (16 MiB).</li>
 <li>HTTP/2, connection reuse in the client, and following redirects are not
 supported yet.</li>
 </ul>

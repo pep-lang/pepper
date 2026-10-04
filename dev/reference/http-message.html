@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-54a40c5e.js";
+            window.path_to_searchindex_js = "../searchindex-4ac7e22c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -333,8 +333,8 @@ server handler, the request target (<code>/path?query</code>).</p>
 <h4 id="headers-2"><a class="header" href="#headers-2">headers</a></h4>
 <pre><code class="language-pepper">var headers: Headers
 </code></pre>
-<p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> and
-<code>Connection</code> itself.</p>
+<p>The header fields. A client adds <code>Host</code>, <code>Content-Length</code> (or
+<code>Transfer-Encoding</code>) and <code>Connection</code> itself.</p>
 <h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
 <h4 id="request-1"><a class="header" href="#request-1">Request()</a></h4>
 <pre><code class="language-pepper">construct(method: String = "GET", url: String = "/")
@@ -370,6 +370,29 @@ server handler, the request target (<code>/path?query</code>).</p>
 <ul>
 <li>this request</li>
 </ul>
+<h4 id="set_reader"><a class="header" href="#set_reader">set_reader</a></h4>
+<pre><code class="language-pepper">set_reader(source: io.Reader, length: long = -1): Request
+</code></pre>
+<p>Sets the body to the bytes <code>source</code> gives, read as the request is sent
+rather than held in memory: a large file, or the output of a
+<code>compress.CompressReader</code>. With a <code>length</code> the client sends
+<code>Content-Length</code>; without one it sends the body chunked
+(<code>Transfer-Encoding: chunked</code>), which every HTTP/1.1 server accepts.</p>
+<p>The source is read once, so a client cannot send the request again
+(to follow a redirect, for instance).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream the body is read from, to its end</li>
+<li><code>length</code> — the number of bytes <code>source</code> gives, or -1 when it is not known</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this request</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var file = io.File.open(io.Path("upload.bin")).value();
+var request = http.Request("PUT", "http://localhost:8080/files/upload.bin").set_reader(file);
+</code></pre>
 <h4 id="uri"><a class="header" href="#uri">uri</a></h4>
 <pre><code class="language-pepper">uri(): Result&lt;Uri&gt;
 </code></pre>
@@ -402,7 +425,8 @@ percent-escapes (see <code>Uri.decode</code>).</p>
 <pre><code class="language-pepper">body(): u8[]
 </code></pre>
 <p>Returns the body’s bytes, as they were sent or received: use it for a
-binary body. The array is the body itself, not a copy.</p>
+binary body. The array is the body itself, not a copy. It is empty
+when the body comes from <code>set_reader</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the body; empty for none</li>
@@ -421,9 +445,12 @@ U+FFFD, the replacement character.</p>
 <pre><code class="language-pepper">struct Response
 </code></pre>
 <p>An HTTP response.</p>
-<p>A <code>Client</code> returns one with the body read in full. A <code>Server</code> handler
-returns one: build it with a status, then add headers and a body. The
-server adds <code>Content-Length</code> itself.</p>
+<p><code>Client.send</code> returns one with the body read in full; <code>Client.open</code>
+returns one whose body is read as it arrives, through <code>reader()</code>. A
+<code>Server</code> handler returns one: build it with a status, then add headers
+and a body, in memory (<code>set_text</code>, <code>set_body</code>) or streamed
+(<code>set_reader</code>). The server adds <code>Content-Length</code> (or
+<code>Transfer-Encoding: chunked</code>) itself.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">handle(request: http.Request): http.Response {
     var response = http.Response(200).set_text("hello");
@@ -479,15 +506,59 @@ for the status when this is empty.</p>
 <ul>
 <li>this response</li>
 </ul>
+<h4 id="set_reader-1"><a class="header" href="#set_reader-1">set_reader</a></h4>
+<pre><code class="language-pepper">set_reader(source: io.Reader, length: long = -1): Response
+</code></pre>
+<p>Sets the body to the bytes <code>source</code> gives, which the server reads and
+sends as it goes rather than holding them in memory. With a <code>length</code>
+the server sends <code>Content-Length</code>; without one it sends the body
+chunked to an HTTP/1.1 client, and to an HTTP/1.0 client sends it
+unframed and closes the connection after it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the stream the body is read from, to its end</li>
+<li><code>length</code> — the number of bytes <code>source</code> gives, or -1 when it is not known</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>this response</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">download(request: http.Request): http.Response {
+    var file = io.File.open(io.Path("large.bin")).value();
+    return http.Response(200).set_reader(file);
+}
+</code></pre>
 <h4 id="body-1"><a class="header" href="#body-1">body</a></h4>
 <pre><code class="language-pepper">body(): u8[]
 </code></pre>
 <p>Returns the body’s bytes, as they were sent or received: use it for a
-binary body. The array is the body itself, not a copy.</p>
+binary body. The array is the body itself, not a copy. It is empty for
+a response from <code>Client.open</code>, whose body is read through <code>reader()</code>,
+and for one whose body comes from <code>set_reader</code>.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the body; empty for none</li>
 </ul>
+<h4 id="reader"><a class="header" href="#reader">reader</a></h4>
+<pre><code class="language-pepper">reader(): io.Reader
+</code></pre>
+<p>Returns the body as a stream. For a response from <code>Client.open</code> it is
+the connection’s <code>BodyReader</code>, which reads the body as it arrives and
+ends where the body ends; read it once. For a response whose body
+comes from <code>set_reader</code> it is that source, and otherwise an
+<code>io.ByteReader</code> over <code>body()</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the stream of the body’s bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var response = http.Client().open(http.Request("GET", url)).value();
+var file = io.File.create(io.Path("download.bin")).value();
+for (var chunk in response.reader().chunks(65536)) {
+    file.write_all(chunk.value());
+}
+</code></pre>
 <h4 id="text-1"><a class="header" href="#text-1">text</a></h4>
 <pre><code class="language-pepper">text(): String
 </code></pre>
