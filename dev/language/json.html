@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c840d919.js";
+            window.path_to_searchindex_js = "../searchindex-eeff6da0.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -322,7 +322,9 @@ first.</li>
 </div>
 <p>The parser keeps its own stack rather than recursing, so deep nesting in the
 text cannot overflow the call stack. <code>max_depth</code> still bounds it, because
-releasing a value releases its nested values recursively.</p>
+releasing a value releases its nested values recursively. Raise it with
+care: Windows gives a program’s main thread a 1 MB stack, which a few
+thousand levels of nested objects can use up when the value is released.</p>
 <h3 id="errors"><a class="header" href="#errors">Errors</a></h3>
 <p>A <code>JsonError</code> has the <code>message</code>, the <code>line</code> and <code>column</code> (from 1, counting
 bytes) and the byte <code>offset</code>. <code>to_string()</code> renders it like a compiler
