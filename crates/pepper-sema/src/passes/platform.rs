@@ -827,6 +827,7 @@ fn filter_function(function: &mut FunctionDef, file: FileId) -> Result<(), Diagn
 pub fn apply_platform_filters(module: &mut Module) -> Result<(), Diagnostic> {
     check_tests(module)?;
     crate::runtime_checks::check_unsafe(module)?;
+    crate::cold::check_cold(module)?;
     // Validate every top-level predicate first so a bad attribute in dropped
     // code is still reported. `validate` evaluates each attribute (no
     // short-circuit on a false one) so a malformed later attribute is caught.

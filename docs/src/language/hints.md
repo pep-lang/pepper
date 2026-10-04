@@ -6,6 +6,8 @@ costs speed and nothing else.
 
 - **Which way a branch goes**: write `[Likely]` or `[Unlikely]` above the
   `if` or `match` arm (see [branch hints](control-flow.md#branch-hints-likely-and-unlikely)).
+- **A function rarely called**: `[Cold]` above it (see
+  [cold functions](#cold-functions)).
 - **Memory a loop will soon touch**: the `hint` module's prefetches.
 
 | Function | Tells the optimizer |
@@ -24,6 +26,22 @@ The prefetches are LLVM's `llvm.prefetch` intrinsic (see
 [LLVM intrinsics](c-interop.md#llvm-intrinsics)). They matter only with
 optimization (`-O2` and up, where the runtime's functions inline into the
 caller); at `-O0` they cost a call and do nothing.
+
+## Cold functions
+
+`[Cold]` above a function, method or constructor marks it rarely called:
+the optimizer never inlines it and treats a call to it as the unlikely
+side of a branch. Split the rare work out of a hot function into a `[Cold]`
+one, so the hot function stays small enough to inline into its callers:
+
+```pepper
+{{#include ../../examples/cold-basics.pep}}
+```
+
+`[Cold]` is LLVM's `cold` and `noinline` function attributes. The runtime's
+allocator marks its slow paths this way.
+
+## Deprecated hints
 
 `hint.likely(condition)` and `hint.unlikely(condition)` are deprecated:
 each use warns and suggests the attribute.

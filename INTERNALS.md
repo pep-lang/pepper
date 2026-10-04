@@ -1339,6 +1339,12 @@ How the language lowers:
   are the arms' blocks, so they arrive on `Branch::if_block` or
   `else_block`. `weigh_branch` turns them into `!prof` branch weights
   (`ast::branch_hint`).
+- **Cold functions**: `[Cold]` on a function, method or constructor
+  (#640) is checked by `cold::check_cold` (no arguments, functions only)
+  and gives the LLVM function `cold` and `noinline` (`mark_cold`, from
+  `instantiate_function_unlocated` and the method declarations), as
+  `T.__last_release` already has. The allocator's slow paths use it so
+  `_pep_malloc` and `_pep_free` stay small enough to inline.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `__caller_location()` is handled in
   `codegen_expr` (#354): a constant C string `file:line:col`

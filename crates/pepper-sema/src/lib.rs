@@ -2,6 +2,7 @@ pub mod arithmetic;
 pub mod builder;
 pub mod casts;
 pub mod checked;
+pub mod cold;
 pub mod deprecation;
 pub mod enums;
 pub mod equatable;

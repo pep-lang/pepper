@@ -5273,6 +5273,26 @@ fn unsafe_on_a_struct() {
 }
 
 #[test]
+fn cold_with_an_argument() {
+    assert_eq!(
+        error_of("cold_argument", "[Cold(\"rarely\")]\nf(): int {\n    return 1;\n}\n\nmain(): int {\n    return f();\n}\n"),
+        "main.pep:1:2: error: 'Cold' takes no arguments\n\
+         \x20   1 | [Cold(\"rarely\")]\n\
+         \x20     |  ^~~~~~~~~~~~~~"
+    );
+}
+
+#[test]
+fn cold_on_a_struct() {
+    assert_eq!(
+        error_of("cold_struct", "[Cold]\nstruct S {}\n\nmain(): int {\n    return 0;\n}\n"),
+        "main.pep:1:2: error: 'Cold' applies only to a function, method or constructor\n\
+         \x20   1 | [Cold]\n\
+         \x20     |  ^~~~"
+    );
+}
+
+#[test]
 fn test_on_a_method() {
     assert_eq!(
         error_of("test_method", "struct S {\n    [Test]\n    checks() {}\n}\n\nmain(): int {\n    return 0;\n}\n"),

@@ -10,6 +10,7 @@
 //! Run one module with a filter: `cargo test --test integration io_tests::`.
 
 mod branch_hint_tests;
+mod cold_tests;
 mod support;
 
 mod arithmetic_c_semantics_tests;

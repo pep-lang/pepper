@@ -1187,6 +1187,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 llvm_fn_type(return_type, &param_types, false)
             };
             let fn_value = self.module.add_function(&mangled, fn_type, None);
+            self.mark_cold(fn_value, &method.attributes);
             if self.unit.is_none() {
                 set_private_linkage(fn_value.as_global_value(), &mangled);
             }
@@ -1330,6 +1331,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         result
     }
 
+    /// Gives a `[Cold]` function (#640) LLVM's `cold` and `noinline`, so it
+    /// stays out of line however small or rarely called.
+    fn mark_cold(&self, function: FunctionValue<'ctx>, attributes: &[pepper_parser::ast::Attribute]) {
+        if !pepper_sema::cold::is_cold(attributes) {
+            return;
+        }
+        for attribute in ["cold", "noinline"] {
+            let kind = inkwell::attributes::Attribute::get_named_enum_kind_id(attribute);
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, self.context.create_enum_attribute(kind, 0));
+        }
+    }
+
     fn instantiate_function_unlocated(&mut self, function: &FunctionDef) -> Result<(), String> {
         // Generic function bases are abstract: skip them; specializations
         // were cloned with concrete names by sema. Mirrors `instantiate_struct`.
@@ -1371,6 +1384,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             llvm_fn_type(return_type, &param_types, false)
         };
         let fn_value = self.module.add_function(&function.name, fn_type, None);
+        self.mark_cold(fn_value, &function.attributes);
         if self.unit.is_none() {
             set_private_linkage(fn_value.as_global_value(), &function.name);
         }

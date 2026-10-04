@@ -361,6 +361,16 @@ const checks: String
 The checks to remove, comma-separated: `overflow`, `divide`, `shift`,
 `bounds`, `null`, or `all`.
 
+## Cold
+
+```pepper
+[Attribute] struct Cold
+```
+
+Marks a function rarely called, such as an allocator's slow path or
+error handling, so the optimizer never inlines it and its callers' fast
+paths stay small enough to inline themselves.
+
 ## Test
 
 ```pepper

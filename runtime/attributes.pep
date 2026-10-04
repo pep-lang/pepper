@@ -174,6 +174,12 @@ export struct Unsafe {
     const checks: String;
 }
 
+## Marks a function rarely called, such as an allocator's slow path or
+## error handling, so the optimizer never inlines it and its callers' fast
+## paths stay small enough to inline themselves.
+[Attribute]
+export struct Cold {}
+
 ## Marks a function as a unit test: `pep-test` (`pepper test`) builds it
 ## into a test program and runs it in a child process of its own. The
 ## function takes no parameters and returns nothing; it passes when it
