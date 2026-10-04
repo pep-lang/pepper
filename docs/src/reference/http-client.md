@@ -26,7 +26,9 @@ Sends HTTP/1.1 requests and reads their responses.
 Each request opens a new connection (plain TCP for `http://`, TLS for
 `https://`), sends the request with `Connection: close`, and reads the
 response: `send` reads the whole body into memory, and `open` returns
-once the header fields arrive, with the body to read as a stream.
+once the header fields arrive, with the body to read as a stream. To
+send requests on connections kept open between them, use a `Session`
+(`client.session()`).
 
 Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
 up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
@@ -175,6 +177,182 @@ for (var chunk in archive.chunks(65536)) {
 }
 ```
 
+#### session
+
+```pepper
+session(): Session
+```
+
+Returns a new `Session` that sends requests with this client's
+settings and keeps their connections open for the requests after
+them.
+
+**Returns**
+- the session, with no connections yet
+
+## Session
+
+```pepper
+struct Session
+```
+
+A run of requests that share connections: each connection stays open
+after its response (HTTP/1.1 keep-alive) and the next request to the same
+scheme, host and port uses it again, saving the TCP and TLS handshakes.
+Make one with `client.session()`; it sends requests and follows redirects
+with that client's settings.
+
+A connection goes back to the session once its response body has been
+read to its end (which `send` does), unless the server asked to close it.
+Up to `max_idle_per_host` connections wait for each scheme, host and
+port; one idle for longer than `idle_timeout` is closed instead of used.
+A request that finds its reused connection closed by the server is sent
+again on a new one, unless its body came from `Request.set_reader`.
+
+A session is not `[Shared]`: use it from one thread or task. Its
+connections close when the last reference to it (and to the
+`BodyReader`s it returned) goes, or at `close()`.
+
+**Example**
+```pepper
+var session = http.Client().session();
+for (var page in 1..>3) {
+    var response = session.get($"https://example.com/items?page={page}").value();
+    print(response.text());
+}
+# One connection carried all three requests.
+```
+
+### Fields
+
+#### client
+
+```pepper
+var client: Client
+```
+
+The client whose settings the session uses: its TLS connector and
+`max_redirects`.
+
+### Properties
+
+#### idle_timeout
+
+```pepper
+var idle_timeout: os.Duration { get; set; }
+```
+
+How long a connection may wait unused before the session closes it
+rather than send on it: 90 seconds unless changed. Servers close idle
+connections too, often sooner.
+
+#### max_idle_per_host
+
+```pepper
+var max_idle_per_host: ulong { get; set; }
+```
+
+The most idle connections kept for one scheme, host and port: 4
+unless changed. 0 keeps none, so every request uses a new connection.
+
+#### idle_count
+
+```pepper
+var idle_count: ulong { get; }
+```
+
+The number of idle connections the session holds, for every host.
+
+### Constructor
+
+#### Session()
+
+```pepper
+construct(client: Client)
+```
+
+Creates a session with no connections yet; `client.session()` does
+the same.
+
+**Parameters**
+- `client` — the client whose settings the session uses
+
+### Methods
+
+#### get
+
+```pepper
+get(url: String): io.IoResult<Response>
+```
+
+Sends a `GET` request for `url`, as `Client.get` does.
+
+**Parameters**
+- `url` — an absolute `http://` or `https://` URL
+
+**Returns**
+- the response; the errors of `Client.send`
+
+#### post
+
+```pepper
+post(url: String, content_type: String, body: String): io.IoResult<Response>
+```
+
+Sends a `POST` request for `url` with `body` as a `Content-Type` of
+`content_type`, as `Client.post` does.
+
+**Parameters**
+- `url` — an absolute `http://` or `https://` URL
+- `content_type` — the body's media type, such as `application/json`
+- `body` — the body
+
+**Returns**
+- the response; the errors of `Client.send`
+
+#### send
+
+```pepper
+send(request: Request): io.IoResult<Response>
+```
+
+Sends `request` on an idle connection to its host if there is one,
+and reads the response, body and all, as `Client.send` does. The
+request keeps the connection open, so the client sends no
+`Connection: close`.
+
+**Parameters**
+- `request` — the request; its `url` must be absolute
+
+**Returns**
+- the response; the errors of `Client.send`
+
+#### open
+
+```pepper
+open(request: Request): io.IoResult<Response>
+```
+
+Sends `request` as `send` does and returns at the response's header
+fields, as `Client.open` does. The connection goes back to the
+session when the body has been read to its end; closing the
+`BodyReader` early closes the connection.
+
+**Parameters**
+- `request` — the request; its `url` must be absolute
+
+**Returns**
+- the response with its body unread; the errors of `Client.open`
+
+#### close
+
+```pepper
+close()
+```
+
+Closes every idle connection. The session stays usable: later
+requests open new connections.
+
 ## BodyReader
 
 ```pepper
@@ -203,7 +381,7 @@ closed.
 #### BodyReader()
 
 ```pepper
-construct(reader: _HttpReader, mode: int, length: ulong)
+construct(reader: _HttpReader, mode: int, length: ulong, reusable: bool)
 ```
 
 Makes a reader of a body framed by `mode` on `reader`'s connection.
@@ -213,6 +391,7 @@ Makes a reader of a body framed by `mode` on `reader`'s connection.
 - `reader` — the connection's reader, positioned at the body
 - `mode` — how the body is framed
 - `length` — the body's length, for a `Content-Length` body
+- `reusable` — whether the server keeps the connection open after the body
 
 ### Methods
 

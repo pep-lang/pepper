@@ -11,7 +11,7 @@ request with a handler function. Bodies are read into memory, or
 streamed through an `io.Reader` (`Client.open`, `set_reader`).
 
 - [Messages](http-message.md): `Headers`, `Request`, and `Response`
-- [Client](http-client.md): `Client` and `BodyReader`
+- [Client](http-client.md): `Client`, `Session` and `BodyReader`
 - [Server](http-server.md): `Server` and `reason_phrase`
 
 **Example**

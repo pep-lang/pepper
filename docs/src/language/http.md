@@ -70,7 +70,8 @@ as a browser resolves a link (RFC 3986 section 5.2).
   returned. Leaving the origin drops `Authorization`,
   `Proxy-Authorization` and `Cookie`. `Client(0)` returns every redirect
   as it is.
-- Every request uses a new connection.
+- Every request from a `Client` uses a new connection; a `Session` keeps
+  them open (see [Reusing connections](#reusing-connections)).
 
 ## Server
 
@@ -113,11 +114,33 @@ the trait of files, sockets and the `compress` readers:
 {{#include ../../examples/http-streaming.pep}}
 ```
 
+## Reusing connections
+
+`client.session()` returns a `Session`, which sends requests with the
+client's settings and keeps each connection open after its response
+(HTTP/1.1 keep-alive). The next request to the same scheme, host and port
+uses it again, saving the TCP and TLS handshakes:
+
+```pepper
+{{#include ../../examples/http-session.pep}}
+```
+
+- A connection goes back to the session when its response body has been
+  read to its end (`send` reads it; for `open`, read the `BodyReader` to
+  its end), unless the server said `Connection: close`.
+- `max_idle_per_host` (4) connections wait for each scheme, host and port;
+  one idle longer than `idle_timeout` (90 seconds) is closed instead of
+  used. `idle_count` says how many wait, and `close()` closes them.
+- A request that finds its reused connection closed by the server goes
+  again on a new one, unless its body came from `set_reader`.
+- A `Session` is not `[Shared]`: use one per thread or task. A `Client` is
+  shared, and connections, which belong to one thread, cannot be.
+
 ## Current status
 
 - A server handler gets the request body read into memory in full, up to
   `MAX_REQUEST_BODY` (16 MiB).
-- HTTP/2 and connection reuse in the client are not supported yet.
+- HTTP/2 is not supported yet.
 
 The reference pages for [messages](../reference/http-message.md), the
 [client](../reference/http-client.md), the

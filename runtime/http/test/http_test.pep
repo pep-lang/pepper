@@ -8,6 +8,7 @@ import async;
 import http;
 import io;
 import math;
+import os;
 import tls;
 
 handle(request: http.Request): http.Response {
@@ -490,6 +491,148 @@ follows_redirects() {
             var arrived = Array<u8>();
             opened.reader().read(arrived, 100);
             expect_equal(String._from_bytes(arrived), "arrived");
+        }
+    );
+}
+
+# A raw HTTP server for connection reuse: it counts the connections it
+# accepts and answers every request on them with `ok`. With `close_after`
+# it closes each connection after one response without saying so, as a
+# server that drops idle connections does; with `say_close` it sends
+# `Connection: close` and closes.
+struct CountingServer {
+    var port: u16;
+    var accepted: async.Atomic<int>;
+
+    construct(port: u16, accepted: async.Atomic<int>) {
+        this.port = port;
+        this.accepted = accepted;
+    }
+
+    base(): String {
+        return "http://127.0.0.1:" + to_string(port);
+    }
+}
+
+start_counting_server(close_after: bool, say_close: bool): CountingServer {
+    var listener = io.SharedTcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+    var port = listener.local_address().value().port();
+    var accepted = async.Atomic<int>(0);
+    async.spawn<void>(() => {
+        while (true) {
+            var next = listener.accept();
+            if (next.is_err()) {
+                return;
+            }
+            accepted.fetch_add(1);
+            var (stream, peer) = next.value();
+            async.Task<void>.spawn_local(() => {
+                var pending = "";
+                while (true) {
+                    var data = Array<u8>();
+                    var read = stream.read(data, 4096);
+                    if (read.is_err() || read.value() == 0) {
+                        return;
+                    }
+                    pending = pending + String._from_bytes(data);
+                    while (pending.contains("\r\n\r\n")) {
+                        var end = pending.find("\r\n\r\n") as ulong + 4;
+                        pending = pending.substr_bytes(end, pending.size - end);
+                        var extra = say_close ? "Connection: close\r\n" : "";
+                        stream.write_all(("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n" + extra + "\r\nok").bytes());
+                        if (close_after || say_close) {
+                            stream.close();
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+    });
+    return CountingServer(port, accepted);
+}
+
+[Test]
+sessions_reuse_connections() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var server = start_counting_server(false, false);
+            var session = http.Client().session();
+            for (var i in 0..3) {
+                expect_equal(session.get(server.base() + "/").value().text(), "ok");
+            }
+            expect_equal(server.accepted.load(), 1);  # one connection carried all three
+            expect_equal(session.idle_count, 1 as ulong);
+            # A streamed body gives its connection back once read to its end.
+            var opened = session.open(http.Request("GET", server.base() + "/")).value();
+            expect_equal(session.idle_count, 0 as ulong);  # in use
+            var body = Array<u8>();
+            while (opened.reader().read(body, 1).value() > 0) {}
+            expect_equal(session.idle_count, 1 as ulong);
+            # Closed early, it is not reused.
+            var early = session.open(http.Request("GET", server.base() + "/")).value();
+            (early.reader() as? http.BodyReader).value().close();
+            expect_equal(session.idle_count, 0 as ulong);
+            expect_equal(session.get(server.base() + "/").value().text(), "ok");
+            expect_equal(server.accepted.load(), 2);
+            session.close();
+            expect_equal(session.idle_count, 0 as ulong);
+
+            # A plain Client keeps nothing.
+            var client = http.Client();
+            client.get(server.base() + "/");
+            client.get(server.base() + "/");
+            expect_equal(server.accepted.load(), 4);
+
+            # Requests that redirect within one origin share the connection.
+            var base = start_server();
+            var redirecting = http.Client().session();
+            expect_equal(redirecting.get(base + "/redirect/3").value().text(), "arrived");
+            expect_equal(redirecting.idle_count, 1 as ulong);
+        }
+    );
+}
+
+[Test]
+sessions_drop_connections_the_server_closes() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            # The server says close: nothing is kept.
+            var closing = start_counting_server(false, true);
+            var session = http.Client().session();
+            expect_equal(session.get(closing.base() + "/").value().text(), "ok");
+            expect_equal(session.idle_count, 0 as ulong);
+
+            # The server closes without saying so: the next request finds the
+            # connection closed and is sent again on a new one.
+            var dropping = start_counting_server(true, false);
+            expect_equal(session.get(dropping.base() + "/").value().text(), "ok");
+            expect_equal(session.idle_count, 1 as ulong);
+            async.sleep(os.Duration.from_milliseconds(20));
+            expect_equal(session.get(dropping.base() + "/").value().text(), "ok");
+            expect_equal(dropping.accepted.load(), 2);
+            # A streamed body cannot be sent again, so that request fails.
+            async.sleep(os.Duration.from_milliseconds(20));
+            var streamed = http.Request("PUT", dropping.base() + "/").set_reader(io.ByteReader("once".bytes()));
+            expect_true(session.send(streamed).is_err());
+
+            # An idle timeout and a limit of 0.
+            var server = start_counting_server(false, false);
+            var timed = http.Client().session();
+            timed.idle_timeout = os.Duration.from_nanoseconds(1);
+            timed.get(server.base() + "/");
+            timed.get(server.base() + "/");
+            expect_equal(server.accepted.load(), 2);
+            var none = http.Client().session();
+            none.max_idle_per_host = 0;
+            none.get(server.base() + "/");
+            expect_equal(none.idle_count, 0 as ulong);
         }
     );
 }

@@ -2,6 +2,7 @@
 ## returns the `Response`.
 
 import io;
+import os;
 import tls;
 import "message";
 import "wire";
@@ -14,7 +15,9 @@ export const MAX_RESPONSE_BODY: ulong = 67108864;
 ## Each request opens a new connection (plain TCP for `http://`, TLS for
 ## `https://`), sends the request with `Connection: close`, and reads the
 ## response: `send` reads the whole body into memory, and `open` returns
-## once the header fields arrive, with the body to read as a stream.
+## once the header fields arrive, with the body to read as a stream. To
+## send requests on connections kept open between them, use a `Session`
+## (`client.session()`).
 ##
 ## Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
 ## up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
@@ -113,27 +116,7 @@ export struct Client {
     ##   valid HTTP/1.x, its body is larger than `MAX_RESPONSE_BODY`, or there
     ##   are more than `max_redirects` redirects
     send(request: Request): io.IoResult<Response> {
-        var opened = open(request);
-        if (opened.is_err()) {
-            return opened;
-        }
-        var response = opened.value();
-        var source = response._source;
-        var body = Array<u8>();
-        while (true) {
-            var read = source.read(body, 65536);
-            if (read.is_err()) {
-                return io.IoResult<Response>.err(read.error());
-            }
-            if (read.value() == 0) {
-                break;
-            }
-            if (body.count > MAX_RESPONSE_BODY) {
-                return io.IoResult<Response>.err(_http_too_large("the body is too large"));
-            }
-        }
-        response.set_body(body);
-        return io.IoResult<Response>.ok(response);
+        return _http_send(this, Optional<_HttpPool>.Empty, request);
     }
 
     ## Sends `request` and returns the response as soon as its header fields
@@ -158,58 +141,340 @@ export struct Client {
     ##         file.write_all(chunk.value());
     ##     }
     open(request: Request): io.IoResult<Response> {
-        var current = request;
-        var redirects = 0;
-        while (true) {
-            var opened = _open_once(current);
-            if (opened.is_err() || max_redirects <= 0) {
-                return opened;
-            }
-            var response = opened.value();
-            var next = _http_redirected(current, response);
-            if (next.is_empty()) {
-                return opened;
-            }
-            _http_close_body(response);
-            if (redirects >= max_redirects) {
-                return io.IoResult<Response>.err(_http_error($"too many redirects: more than {max_redirects}"));
-            }
-            redirects = redirects + 1;
-            current = next.value();
-        }
-        return io.IoResult<Response>.err(_http_error("no response"));
+        return _http_open(this, Optional<_HttpPool>.Empty, request);
     }
 
-    # Sends `request` over a new connection and reads the response's head.
-    _open_once(request: Request): io.IoResult<Response> {
-        var parsed = _http_parse_url(request.url);
-        if (parsed.is_err()) {
-            return io.IoResult<Response>.err(parsed.error());
-        }
-        var url = parsed.value();
+    ## Returns a new `Session` that sends requests with this client's
+    ## settings and keeps their connections open for the requests after
+    ## them.
+    ##
+    ## @returns the session, with no connections yet
+    session(): Session {
+        return Session(this);
+    }
+
+    # Opens a connection for `url`: TCP, and TLS over it for https.
+    _connect(url: _HttpUrl): io.IoResult<_HttpConnection> {
         var tcp = io.TcpStream.connect_host(url._host, url._port);
         if (tcp.is_err()) {
-            return io.IoResult<Response>.err(tcp.error());
+            return io.IoResult<_HttpConnection>.err(tcp.error());
         }
         var connection = _HttpConnection(tcp.value());
         if (url._secure) {
             if (!_secure) {
                 var reason = tls.TlsConnector.create();
-                return io.IoResult<Response>.err(reason.error());
+                return io.IoResult<_HttpConnection>.err(reason.error());
             }
             var stream = _connector.connect(connection._tcp, url._host);
             if (stream.is_err()) {
-                return io.IoResult<Response>.err(stream.error());
+                return io.IoResult<_HttpConnection>.err(stream.error());
             }
             connection._use_tls(stream.value());
         }
-        var result = _http_exchange(connection, request, url);
-        if (result.is_err()) {
-            connection._close();
-            return result;
+        return io.IoResult<_HttpConnection>.ok(connection);
+    }
+}
+
+## A run of requests that share connections: each connection stays open
+## after its response (HTTP/1.1 keep-alive) and the next request to the same
+## scheme, host and port uses it again, saving the TCP and TLS handshakes.
+## Make one with `client.session()`; it sends requests and follows redirects
+## with that client's settings.
+##
+## A connection goes back to the session once its response body has been
+## read to its end (which `send` does), unless the server asked to close it.
+## Up to `max_idle_per_host` connections wait for each scheme, host and
+## port; one idle for longer than `idle_timeout` is closed instead of used.
+## A request that finds its reused connection closed by the server is sent
+## again on a new one, unless its body came from `Request.set_reader`.
+##
+## A session is not `[Shared]`: use it from one thread or task. Its
+## connections close when the last reference to it (and to the
+## `BodyReader`s it returned) goes, or at `close()`.
+##
+## @example
+##     var session = http.Client().session();
+##     for (var page in 1..>3) {
+##         var response = session.get($"https://example.com/items?page={page}").value();
+##         print(response.text());
+##     }
+##     # One connection carried all three requests.
+export struct Session {
+    ## The client whose settings the session uses: its TLS connector and
+    ## `max_redirects`.
+    var client: Client;
+    # The idle connections.
+    var _pool: _HttpPool;
+
+    ## Creates a session with no connections yet; `client.session()` does
+    ## the same.
+    ##
+    ## @param client the client whose settings the session uses
+    construct(client: Client) {
+        this.client = client;
+        this._pool = _HttpPool();
+    }
+
+    ## How long a connection may wait unused before the session closes it
+    ## rather than send on it: 90 seconds unless changed. Servers close idle
+    ## connections too, often sooner.
+    var idle_timeout: os.Duration {
+        get {
+            return _pool._idle_timeout;
         }
-        result.value().url = request.url;
+        set {
+            _pool._idle_timeout = value;
+        }
+    }
+
+    ## The most idle connections kept for one scheme, host and port: 4
+    ## unless changed. 0 keeps none, so every request uses a new connection.
+    var max_idle_per_host: ulong {
+        get {
+            return _pool._max_idle;
+        }
+        set {
+            _pool._max_idle = value;
+        }
+    }
+
+    ## The number of idle connections the session holds, for every host.
+    var idle_count: ulong {
+        get {
+            return _pool._count();
+        }
+    }
+
+    ## Sends a `GET` request for `url`, as `Client.get` does.
+    ##
+    ## @param url an absolute `http://` or `https://` URL
+    ## @returns the response; the errors of `Client.send`
+    get(url: String): io.IoResult<Response> {
+        return send(Request("GET", url));
+    }
+
+    ## Sends a `POST` request for `url` with `body` as a `Content-Type` of
+    ## `content_type`, as `Client.post` does.
+    ##
+    ## @param url an absolute `http://` or `https://` URL
+    ## @param content_type the body's media type, such as `application/json`
+    ## @param body the body
+    ## @returns the response; the errors of `Client.send`
+    post(url: String, content_type: String, body: String): io.IoResult<Response> {
+        var request = Request("POST", url).set_text(body);
+        request.headers["Content-Type"] = content_type;
+        return send(request);
+    }
+
+    ## Sends `request` on an idle connection to its host if there is one,
+    ## and reads the response, body and all, as `Client.send` does. The
+    ## request keeps the connection open, so the client sends no
+    ## `Connection: close`.
+    ##
+    ## @param request the request; its `url` must be absolute
+    ## @returns the response; the errors of `Client.send`
+    send(request: Request): io.IoResult<Response> {
+        return _http_send(client, Optional<_HttpPool>.Value(_pool), request);
+    }
+
+    ## Sends `request` as `send` does and returns at the response's header
+    ## fields, as `Client.open` does. The connection goes back to the
+    ## session when the body has been read to its end; closing the
+    ## `BodyReader` early closes the connection.
+    ##
+    ## @param request the request; its `url` must be absolute
+    ## @returns the response with its body unread; the errors of
+    ##   `Client.open`
+    open(request: Request): io.IoResult<Response> {
+        return _http_open(client, Optional<_HttpPool>.Value(_pool), request);
+    }
+
+    ## Closes every idle connection. The session stays usable: later
+    ## requests open new connections.
+    close() {
+        _pool._close_all();
+    }
+}
+
+# Idle connections by origin (`_http_origin_key`), each with the moment it
+# went idle, oldest first.
+struct _HttpPool {
+    var _idle: HashMap<String, _HttpIdle[]>;
+    var _idle_timeout: os.Duration;
+    var _max_idle: ulong;
+
+    construct() {
+        _idle = HashMap<String, _HttpIdle[]>();
+        _idle_timeout = os.Duration.from_seconds(90);
+        _max_idle = 4;
+    }
+
+    _count(): ulong {
+        ulong total = 0;
+        for (var (key, list) in _idle) {
+            total = total + list.count;
+        }
+        return total;
+    }
+
+    # The most recently idle connection for `key` that has not timed out,
+    # closing the ones that have.
+    _take(key: String): _HttpConnection? {
+        var list = _idle.get(key);
+        if (list === __null) {
+            return Optional<_HttpConnection>.Empty;
+        }
+        while (list.count > 0) {
+            var idle = list.pop();
+            if (idle._since.elapsed().nanoseconds() < _idle_timeout.nanoseconds()) {
+                return Optional<_HttpConnection>.Value(idle._connection);
+            }
+            idle._connection._close();
+        }
+        return Optional<_HttpConnection>.Empty;
+    }
+
+    # Keeps `connection` for the next request to `key`, or closes it when
+    # `key` already has `_max_idle`.
+    _put(key: String, connection: _HttpConnection) {
+        var list = _idle.get(key);
+        if (list === __null) {
+            list = Array<_HttpIdle>();
+            _idle[key] = list;
+        }
+        if (list.count >= _max_idle) {
+            connection._close();
+            return;
+        }
+        list.append(_HttpIdle(connection));
+    }
+
+    _close_all() {
+        for (var (key, list) in _idle) {
+            for (var idle in list) {
+                idle._connection._close();
+            }
+        }
+        _idle = HashMap<String, _HttpIdle[]>();
+    }
+}
+
+struct _HttpIdle {
+    var _connection: _HttpConnection;
+    var _since: os.Instant;
+
+    construct(connection: _HttpConnection) {
+        _connection = connection;
+        _since = os.Instant.now();
+    }
+}
+
+# The pool key of `url`: its scheme, host and port.
+_http_origin_key(url: _HttpUrl): String {
+    var scheme = url._secure ? "https" : "http";
+    var host = url._host.lower();
+    return $"{scheme}://{host}:{url._port}";
+}
+
+# `Client.send` and `Session.send`: opens the response and reads its body.
+_http_send(client: Client, pool: _HttpPool?, request: Request): io.IoResult<Response> {
+    var opened = _http_open(client, pool, request);
+    if (opened.is_err()) {
+        return opened;
+    }
+    var response = opened.value();
+    var source = response._source;
+    var body = Array<u8>();
+    while (true) {
+        var read = source.read(body, 65536);
+        if (read.is_err()) {
+            return io.IoResult<Response>.err(read.error());
+        }
+        if (read.value() == 0) {
+            break;
+        }
+        if (body.count > MAX_RESPONSE_BODY) {
+            _http_close_body(response);
+            return io.IoResult<Response>.err(_http_too_large("the body is too large"));
+        }
+    }
+    response.set_body(body);
+    return io.IoResult<Response>.ok(response);
+}
+
+# `Client.open` and `Session.open`: sends `request` and follows redirects.
+_http_open(client: Client, pool: _HttpPool?, request: Request): io.IoResult<Response> {
+    var current = request;
+    var redirects = 0;
+    while (true) {
+        var opened = _http_open_once(client, pool, current);
+        if (opened.is_err() || client.max_redirects <= 0) {
+            return opened;
+        }
+        var response = opened.value();
+        var next = _http_redirected(current, response);
+        if (next.is_empty()) {
+            return opened;
+        }
+        _http_close_body(response);
+        if (redirects >= client.max_redirects) {
+            return io.IoResult<Response>.err(_http_error($"too many redirects: more than {client.max_redirects}"));
+        }
+        redirects = redirects + 1;
+        current = next.value();
+    }
+    return io.IoResult<Response>.err(_http_error("no response"));
+}
+
+# Sends `request` and reads the response's head: on an idle connection from
+# `pool` if it has one for the URL's origin (and again on a new connection
+# if that one turns out closed), else on a new connection.
+_http_open_once(client: Client, pool: _HttpPool?, request: Request): io.IoResult<Response> {
+    var parsed = _http_parse_url(request.url);
+    if (parsed.is_err()) {
+        return io.IoResult<Response>.err(parsed.error());
+    }
+    var url = parsed.value();
+    var key = _http_origin_key(url);
+    if (pool.is_value()) {
+        var idle = pool.value()._take(key);
+        if (idle.is_value()) {
+            var reused = _http_exchange(idle.value(), request, url, true);
+            if (reused.is_ok()) {
+                _http_pool_body(reused.value(), pool.value(), key);
+                reused.value().url = request.url;
+                return reused;
+            }
+            idle.value()._close();
+            if (request._streamed) {
+                return reused;  # its body is gone, so it cannot be sent again
+            }
+        }
+    }
+    var connected = client._connect(url);
+    if (connected.is_err()) {
+        return io.IoResult<Response>.err(connected.error());
+    }
+    var connection = connected.value();
+    var result = _http_exchange(connection, request, url, pool.is_value());
+    if (result.is_err()) {
+        connection._close();
         return result;
+    }
+    if (pool.is_value()) {
+        _http_pool_body(result.value(), pool.value(), key);
+    }
+    result.value().url = request.url;
+    return result;
+}
+
+# Has the `BodyReader` of `response` give its connection to `pool` at the
+# end of the body.
+_http_pool_body(response: Response, pool: _HttpPool, key: String) {
+    var body = response._source as? BodyReader;
+    if (body.is_value()) {
+        body.value()._pool = Optional<_HttpPool>.Value(pool);
+        body.value()._key = key;
     }
 }
 
@@ -270,7 +535,7 @@ _http_redirected(request: Request, response: Response): Request? {
     return Optional<Request>.Value(next);
 }
 
-# Closes the connection of a response from `_open_once` whose body is not
+# Closes the connection of a response from `_http_open_once` whose body is not
 # wanted.
 _http_close_body(response: Response) {
     var body = response._source as? BodyReader;
@@ -293,6 +558,11 @@ export struct BodyReader {
     var _mode: int;
     var _left: ulong;
     var _chunks: ulong;
+    # Whether the server keeps the connection open after the body, and the
+    # session pool (with the origin's key) it then goes back to.
+    var _reusable: bool;
+    var _pool: _HttpPool?;
+    var _key: String;
 
     ## Makes a reader of a body framed by `mode` on `reader`'s connection.
     ## `Client.open` makes it; there is no other use.
@@ -300,14 +570,16 @@ export struct BodyReader {
     ## @param reader the connection's reader, positioned at the body
     ## @param mode how the body is framed
     ## @param length the body's length, for a `Content-Length` body
-    construct(reader: _HttpReader, mode: int, length: ulong) {
+    ## @param reusable whether the server keeps the connection open after
+    ##   the body
+    construct(reader: _HttpReader, mode: int, length: ulong, reusable: bool) {
         _reader = reader;
         _mode = mode;
         _left = length;
         _chunks = 0;
-        if (_mode == _BODY_LENGTH && _left == 0) {
-            close();
-        }
+        _reusable = reusable && mode != _BODY_TO_END;
+        _pool = Optional<_HttpPool>.Empty;
+        _key = "";
     }
 
     ## Reports whether the body has been read to its end, or the reader
@@ -327,6 +599,9 @@ export struct BodyReader {
     ##   error when the connection fails, closes before the body ends, or
     ##   the chunked framing is not valid
     read(buffer: u8[], max: ulong): io.IoResult<ulong> {
+        if (_mode == _BODY_LENGTH && _left == 0) {
+            _finish();
+        }
         if (max == 0 || _mode == _BODY_DONE) {
             return io.IoResult<ulong>.ok(0);
         }
@@ -358,10 +633,24 @@ export struct BodyReader {
         if (_mode != _BODY_TO_END) {
             _left = _left - got;
             if (_mode == _BODY_LENGTH && _left == 0) {
-                close();
+                _finish();
             }
         }
         return read;
+    }
+
+    # The body has ended: the connection goes back to the session that
+    # opened it when the server keeps it open, and closes otherwise.
+    _finish() {
+        if (_mode == _BODY_DONE) {
+            return;
+        }
+        if (_reusable && _pool.is_value() && _reader._available() == 0) {
+            _mode = _BODY_DONE;
+            _pool.value()._put(_key, _reader._connection);
+            return;
+        }
+        close();
     }
 
     ## Stops reading the body and closes the connection. Reading then
@@ -403,7 +692,7 @@ export struct BodyReader {
             if (trailer.is_err()) {
                 return trailer;
             }
-            close();
+            _finish();
             return io.IoResult<void>.ok();
         }
         _left = size as ulong;
@@ -421,7 +710,7 @@ const _BODY_DONE: int = 3;
 
 # Writes `request` to `connection` and reads the response's head, leaving
 # its body to a `BodyReader`.
-_http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io.IoResult<Response> {
+_http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl, keep: bool): io.IoResult<Response> {
     var headers = Headers();
     headers.add("Host", url._authority);
     for (var name in request.headers.names()) {
@@ -450,7 +739,9 @@ _http_exchange(connection: _HttpConnection, request: Request, url: _HttpUrl): io
             headers.add("Content-Length", to_string(request._body.count));
         }
     }
-    headers.add("Connection", "close");
+    if (!keep) {
+        headers.add("Connection", "close");
+    }
     var out = Array<u8>();
     _http_write_head(out, $"{method} {url._target} HTTP/1.1", headers);
     var sent = connection._write_all(out);
@@ -528,8 +819,19 @@ _http_read_response(reader: _HttpReader, head: bool): io.IoResult<Response> {
         mode = _BODY_LENGTH;
         length = n as ulong;
     }
+    # HTTP/1.1 keeps the connection unless the server says close; HTTP/1.0
+    # closes it unless the server says keep-alive.
+    var reusable = line.starts_with("HTTP/1.1");
+    var connection_field = response.headers.get("Connection");
+    if (connection_field.is_value()) {
+        if (_http_contains_token(connection_field.value(), "close")) {
+            reusable = false;
+        } else if (_http_contains_token(connection_field.value(), "keep-alive")) {
+            reusable = true;
+        }
+    }
     response._streamed = true;
-    response._source = BodyReader(reader, mode, length);
+    response._source = BodyReader(reader, mode, length, reusable);
     return io.IoResult<Response>.ok(response);
 }
 

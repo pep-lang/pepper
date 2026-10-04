@@ -7,7 +7,7 @@
 ## streamed through an `io.Reader` (`Client.open`, `set_reader`).
 ##
 ## - [Messages](http-message.md): `Headers`, `Request`, and `Response`
-## - [Client](http-client.md): `Client` and `BodyReader`
+## - [Client](http-client.md): `Client`, `Session` and `BodyReader`
 ## - [Server](http-server.md): `Server` and `reason_phrase`
 ##
 ## @example
@@ -42,6 +42,7 @@ export Response;
 export Client;
 export MAX_RESPONSE_BODY;
 export BodyReader;
+export Session;
 export Server;
 export MAX_REQUEST_BODY;
 export reason_phrase;
