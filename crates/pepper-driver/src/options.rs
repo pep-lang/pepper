@@ -158,6 +158,11 @@ pub struct Options {
     #[arg(long = "emit-checked")]
     pub emit_checked: bool,
 
+    /// Load, link, check and build the program's sema model instead of
+    /// compiling it, and print the model before any sema pass, as JSON.
+    #[arg(long = "emit-model")]
+    pub emit_model: bool,
+
     /// Enable a trace channel (see `TRACE_CHANNELS`). `time` prints how long
     /// each compile stage took; `passes` prints how long each sema pass
     /// took, summed over its runs; `cache` prints whether each unit's object

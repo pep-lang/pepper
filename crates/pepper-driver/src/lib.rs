@@ -96,6 +96,10 @@ fn run_for_target(options: Options) -> Result<i32, String> {
         return run_emit_checked(&options);
     }
 
+    if options.emit_model {
+        return run_emit_model(&options);
+    }
+
     if let Some(warning) = options.runtime_checks_warning() {
         report_warnings(&warning);
     }
@@ -711,6 +715,36 @@ fn run_emit_checked(options: &Options) -> Result<i32, String> {
         out.push(warnings);
     }
     println!("{}", out.join("\n"));
+    Ok(0)
+}
+
+/// Load, link and check the program, build its sema model, and print the
+/// model as JSON before any pass runs, so the Pepper compiler's builder can
+/// be compared byte for byte. Object keys and sets are printed sorted.
+fn run_emit_model(options: &Options) -> Result<i32, String> {
+    let entry_source = options.source_files.first().ok_or_else(|| "no source files".to_string())?;
+    let program = compiler::load_uncached(options, entry_source)?;
+    let module = pepper_sema::program::merge(&program)?;
+    let mut value = serde_json::to_value(&module).map_err(|e| format!("cannot write the model as JSON: {}", e))?;
+    // Sets serialize in hash order; keys print sorted.
+    fn sort(set: Option<&mut serde_json::Value>) {
+        if let Some(serde_json::Value::Array(items)) = set {
+            items.sort_by(|a, b| match (a.as_u64(), b.as_u64()) {
+                (Some(a), Some(b)) => a.cmp(&b),
+                _ => a.to_string().cmp(&b.to_string()),
+            });
+        }
+    }
+    sort(value.get_mut("private_functions"));
+    if let Some(scopes) = value.get_mut("extension_scopes") {
+        sort(scopes.get_mut("prelude"));
+        if let Some(serde_json::Value::Array(visible)) = scopes.get_mut("visible") {
+            for set in visible {
+                sort(Some(set));
+            }
+        }
+    }
+    println!("{}", value);
     Ok(0)
 }
 

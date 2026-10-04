@@ -2648,10 +2648,27 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `pep-build --emit-checked` prints the checks' rendered errors and
   warnings, and the same test requires `Program.check_report()` to match it
   on those programs and on programs that break each check.
+- `compiler.sema` (`sema/`) is `pepper_sema`'s model and builder in
+  Pepper. `model.pep` is `model.rs` and `type_name.rs`, generated from
+  them by `scripts/gen-sema-model.py` (rerun it, then `pep-fmt -w`, after
+  changing the Rust model): each enum variant with named fields holds a struct of its own
+  (`SymbolRefExpression` for `Expression::SymbolRef`) so a pass can change
+  its fields in place, and every type has a deep `copy()` and a `to_json()`
+  that writes what serde writes. `type_name.pep` adds `TypeName`'s helpers,
+  `walk.pep` is `rewrite_block`/`rewrite_expression` (a `Rewriter` trait),
+  `builder.pep` is `builder.rs` with `static_items.rs` and `tries.rs`, and
+  `program.pep` is `program::merge` (check, build each file, join, order
+  the globals by `initialization_order`) with `model_json`, the canonical
+  JSON writer (sorted keys and sets, numbers as serde_json prints them).
+- `pep-build --emit-model` prints the model `merge` returns, before any
+  pass, and `compiler/sema_test.pep` requires `compiler.sema`'s JSON to
+  match byte for byte on the corpus, the documentation's programs of
+  several modules, and programs that exercise each lowering, and the
+  rendered error to match on programs the builder rejects.
 - `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,
-  `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`
-  and `pepc --emit-checked ...` print the same output as `pep-build`, to
-  diff a program by hand.
+  `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`,
+  `pepc --emit-checked ...` and `pepc --emit-model ...` print the same
+  output as `pep-build`, to diff a program by hand.
 
 ---
 

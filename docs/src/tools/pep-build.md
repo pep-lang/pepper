@@ -32,6 +32,7 @@ short, and `pepper help build` runs it.
 | `--emit-ast[=text\|json]` | Print the syntax tree instead of compiling | off |
 | `--emit-linked` | Print every file's syntax tree after linking, as JSON, instead of compiling | off |
 | `--emit-checked` | Print what the checks after linking report, instead of compiling | off |
+| `--emit-model` | Print the program's sema model before any sema pass, as JSON, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
@@ -284,6 +285,21 @@ program with neither prints an empty line.
 
 `-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
 The compiler written in Pepper (`tools/compiler`) prints the same text, and
+its test compares the two.
+
+### `--emit-model`
+
+Loads, links and checks the program as `--emit-checked` does, builds the
+sema model of each file and joins them, and prints the model as one line of
+JSON instead of compiling: what the sema builder made of the syntax trees
+(`for`, `with`, `match`, `?`, destructuring, ranges, collection literals and
+properties lowered), before any sema pass runs. Object keys are sorted, and
+so are the sets (`private_functions` and the `extension_scopes`). When the
+checks or the builder reject the program, it prints the rendered error and
+fails.
+
+`-I`, `--import`, `--no-runtime`, `-D` and `--test` apply as for a build.
+The compiler written in Pepper (`tools/compiler`) prints the same JSON, and
 its test compares the two.
 
 ## Optimization and code generation

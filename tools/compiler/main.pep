@@ -5,20 +5,24 @@
 #     pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #     pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
+#     pepc --emit-model [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#
 # print the file's syntax tree, or the whole program after linking, as the
 # JSON that `pep-build` prints with the same options, or what the checks
-# after linking report, as `pep-build` prints it, so the two can be
-# compared.
+# after linking report, or the sema model before any pass, as `pep-build`
+# prints it, so the two can be compared.
 
 import io;
 import [File, Path] from io;
 import compiler.link;
 import compiler.parse;
+import compiler.sema;
 
 main(args: String[]): int {
     String? path;
     bool linked = false;
     bool checked = false;
+    bool model = false;
     var setup = link.Setup();
     ulong i = 1;
     while (i < args.count) {
@@ -27,6 +31,8 @@ main(args: String[]): int {
             linked = true;
         } else if (arg == "--emit-checked") {
             checked = true;
+        } else if (arg == "--emit-model") {
+            model = true;
         } else if (arg == "--no-runtime") {
             setup.runtime = false;
         } else if (arg == "-I" or arg == "--import" or arg == "-D" or arg.starts_with("-I") or arg.starts_with("-D")) {
@@ -62,15 +68,23 @@ main(args: String[]): int {
         print("usage: pepc --emit-ast=json <file.pep>");
         print("       pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         print("       pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
+        print("       pepc --emit-model [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         return 2;
     }
-    if (linked or checked) {
+    if (linked or checked or model) {
         var program = link.load_program(Path(path.value()), setup);
         if (program.is_err()) {
             print($"pepc: {program.error()}");
             return 1;
         }
-        if (linked) {
+        if (model) {
+            var built = sema.merge(program.value());
+            if (built.is_err()) {
+                print(built.error());
+                return 1;
+            }
+            print(sema.model_json(built.value()));
+        } else if (linked) {
             print(program.value().to_json().to_string());
         } else {
             print(program.value().check_report());

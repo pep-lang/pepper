@@ -55,6 +55,11 @@ export const EXTERN_FUNCTION_TYPE = "__extern_function";
 export const OPTIONAL_TYPE = "Optional";
 
 ## A literal value.
+## The printable ASCII characters, from the space on.
+const _PRINTABLE = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+## The hexadecimal digits, upper case.
+const _HEX_DIGITS = "0123456789ABCDEF";
+
 export enum Literal {
     ## A string literal's text, escapes decoded.
     ##
@@ -78,6 +83,87 @@ export enum Literal {
     Char(value: u8),
     ## `null`.
     Null,
+
+    ## Returns the literal as source writes it: `"a\n"`, `'x'`, `42`.
+    ##
+    ## @returns the text
+    to_string(): String {
+        match (this) {
+            String(text) => {
+                var out = StringBuilder();
+                out.append("\"");
+                for (var c in text) {
+                    match (c) {
+                        "\n" => {
+                            out.append("\\n");
+                        }
+                        "\t" => {
+                            out.append("\\t");
+                        }
+                        "\r" => {
+                            out.append("\\r");
+                        }
+                        "\0" => {
+                            out.append("\\0");
+                        }
+                        "\\" => {
+                            out.append("\\\\");
+                        }
+                        "\"" => {
+                            out.append("\\\"");
+                        }
+                        else => {
+                            out.append(c);
+                        }
+                    }
+                }
+                out.append("\"");
+                return out.to_string();
+            }
+            Integer(value) => {
+                return $"{value}";
+            }
+            Float(value) => {
+                return $"{value}";
+            }
+            Bool(value) => {
+                return value ? "true" : "false";
+            }
+            Char(value) => {
+                match (value) {
+                    10 => {
+                        return "'\\n'";
+                    }
+                    9 => {
+                        return "'\\t'";
+                    }
+                    13 => {
+                        return "'\\r'";
+                    }
+                    0 => {
+                        return "'\\0'";
+                    }
+                    92 => {
+                        return "'\\\\'";
+                    }
+                    39 => {
+                        return "'\\''";
+                    }
+                    else => {}
+                }
+                if (value >= 32 and value <= 126) {
+                    return $"'{_PRINTABLE.substr_bytes((value - 32) as ulong, 1)}'";
+                }
+                var high = _HEX_DIGITS.substr_bytes((value >> 4) as ulong, 1);
+                var low = _HEX_DIGITS.substr_bytes((value & 15) as ulong, 1);
+                return $"'\\x{high}{low}'";
+            }
+            Null => {
+                return "__null";
+            }
+        }
+        return "";
+    }
 
     ## Returns the literal as JSON, externally tagged like serde.
     ##
@@ -488,6 +574,137 @@ export enum Expression {
             }
         }
         return Span();
+    }
+
+    ## Returns the span from the expression's first byte to its last: a
+    ## binary's operands, a call's callee and arguments, and so on, which
+    ## `span()` leaves out.
+    ##
+    ## @returns the span
+    extent(): Span {
+        match (this) {
+            Unary(_, _, operand, span) => {
+                return _union(span, operand.extent());
+            }
+            Cast(expr, type_name, span, _, _) => {
+                return _union(_union(span, expr.extent()), type_name.span);
+            }
+            Binary(lhs, _, rhs, span) => {
+                return _union(_union(span, lhs.extent()), rhs.extent());
+            }
+            Index(lhs, rhs, span) => {
+                return _union(_union(span, lhs.extent()), rhs.extent());
+            }
+            Ternary(condition, true_expr, false_expr, span) => {
+                return _union(_union(_union(span, condition.extent()), true_expr.extent()), false_expr.extent());
+            }
+            MemberAccess(lhs, _, _, span) => {
+                return _union(span, lhs.extent());
+            }
+            FunctionCall(function, arguments, span) => {
+                var out = _union(span, function.extent());
+                for (var argument in arguments) {
+                    out = _union(out, argument.extent());
+                }
+                return out;
+            }
+            NamedArgument(_, _, value, span) => {
+                return _union(span, value.extent());
+            }
+            Is(value, _, _, span) => {
+                return _union(span, value.extent());
+            }
+            else => {
+                return span();
+            }
+        }
+    }
+
+    ## Returns the expression as source writes it, every binary in
+    ## parentheses: `(a + 1)`, `f(x, "y")`. A closure's block body and a
+    ## `match` print in short.
+    ##
+    ## @returns the text
+    to_string(): String {
+        match (this) {
+            Literal(value, _) => {
+                return value.to_string();
+            }
+            SymbolRef(id, _) => {
+                return id;
+            }
+            TypeLiteral(type_name) => {
+                return type_name.to_string();
+            }
+            SizeOf(type_name) => {
+                return $"sizeof<{type_name.to_string()}>()";
+            }
+            Unary(op, prefix, operand, _) => {
+                return prefix ? op + operand.to_string() : operand.to_string() + op;
+            }
+            Binary(lhs, op, rhs, _) => {
+                return $"({lhs.to_string()} {op} {rhs.to_string()})";
+            }
+            Cast(expr, type_name, _, _, optional) => {
+                var mark = optional ? "?" : "";
+                return $"({expr.to_string()} as{mark} {type_name.to_string()})";
+            }
+            Ternary(condition, true_expr, false_expr, _) => {
+                return $"({condition.to_string()} ? {true_expr.to_string()} : {false_expr.to_string()})";
+            }
+            Index(lhs, rhs, _) => {
+                return $"{lhs.to_string()}[{rhs.to_string()}]";
+            }
+            MemberAccess(lhs, name, _, _) => {
+                return $"{lhs.to_string()}.{name}";
+            }
+            FunctionCall(function, arguments, _) => {
+                return $"{function.to_string()}({_joined(arguments)})";
+            }
+            NamedArgument(name, _, value, _) => {
+                return $"{name} = {value.to_string()}";
+            }
+            Closure(closure) => {
+                var params = Array<String>();
+                for (var p in closure.parameters) {
+                    params.append(p.type_name.name == AUTO_TYPE ? p.name : $"{p.name}: {p.type_name.to_string()}");
+                }
+                var returns = closure.return_type.name == AUTO_TYPE ? "" : $": {closure.return_type.to_string()}";
+                return $"({", ".join(params)}){returns} => {{ ... }}";
+            }
+            Tuple(elements, labels, _) => {
+                if (labels.count == 0) {
+                    return $"({_joined(elements)})";
+                }
+                var parts = Array<String>();
+                ulong i = 0;
+                while (i < elements.count and i < labels.count) {
+                    parts.append($"{labels[i].name}: {elements[i].to_string()}");
+                    i += 1;
+                }
+                return $"({", ".join(parts)})";
+            }
+            ArrayLiteral(elements, _) => {
+                return $"[{_joined(elements)}]";
+            }
+            MapLiteral(entries, _) => {
+                if (entries.count == 0) {
+                    return "[:]";
+                }
+                var parts = Array<String>();
+                for (var entry in entries) {
+                    parts.append($"{entry.key.to_string()}: {entry.value.to_string()}");
+                }
+                return $"[{", ".join(parts)}]";
+            }
+            Match(expression) => {
+                return $"match ({expression.value.to_string()}) {{ ... }}";
+            }
+            Is(value, pattern, _, _) => {
+                return $"({value.to_string()} is {pattern.to_string()})";
+            }
+        }
+        return "";
     }
 
     ## Returns the expression as JSON, externally tagged like serde.
@@ -1520,6 +1737,29 @@ export struct MatchArm {
     }
 }
 
+## Returns the smallest span holding both `a` and `b`.
+_union(a: Span, b: Span): Span {
+    return Span(a.start < b.start ? a.start : b.start, a.end > b.end ? a.end : b.end);
+}
+
+## Returns `expressions` as source writes them, separated by commas.
+_joined(expressions: Expression[]): String {
+    var parts = Array<String>();
+    for (var e in expressions) {
+        parts.append(e.to_string());
+    }
+    return ", ".join(parts);
+}
+
+## Returns `patterns` as source writes them, separated by commas.
+_patterns_text(patterns: Pattern[]): String {
+    var parts = Array<String>();
+    for (var p in patterns) {
+        parts.append(p.to_string());
+    }
+    return ", ".join(parts);
+}
+
 ## A pattern: a case (`Circle(r)`), a literal, a range, or a tuple.
 export struct Pattern {
     ## A literal pattern's literal, or a range's start.
@@ -1558,6 +1798,39 @@ export struct Pattern {
             and qualifier.is_empty()
             and bindings.is_empty()
             and constant.is_empty();
+    }
+
+    ## Returns the pattern as source writes it: `Shape.Circle(r)`, `1..>9`,
+    ## `(a, _)`.
+    ##
+    ## @returns the text
+    to_string(): String {
+        if (literal.is_value()) {
+            if (range_end.is_value()) {
+                var dots = range_inclusive ? "..>" : "..";
+                return $"{literal.value().to_string()}{dots}{range_end.value().to_string()}";
+            }
+            return literal.value().to_string();
+        }
+        if (elements.is_value()) {
+            return $"({_patterns_text(elements.value())})";
+        }
+        var out = "";
+        if (qualifier.is_value()) {
+            out = qualifier.value().to_string() + ".";
+        }
+        out = out + case_name;
+        if (type_name.is_value() and type_name.value().generic_types.count > 0) {
+            var arguments = Array<String>();
+            for (var t in type_name.value().generic_types) {
+                arguments.append(t.to_string());
+            }
+            out = $"{out}<{", ".join(arguments)}>";
+        }
+        if (bindings.is_value()) {
+            out = $"{out}({_patterns_text(bindings.value())})";
+        }
+        return out;
     }
 
     ## Returns the names the pattern may bind, `_` left out: each bare name
@@ -1718,6 +1991,51 @@ export enum Statement {
     ##
     ## @param block the block
     Static(block: StaticBlock),
+
+    ## Returns where the statement is written.
+    ##
+    ## @returns the span
+    span(): Span {
+        match (this) {
+            Expression(expression) => {
+                return expression.span();
+            }
+            Block(block) => {
+                return block.span;
+            }
+            Declaration(declaration) => {
+                return declaration.span();
+            }
+            Branch(_, _, _, span) => {
+                return span;
+            }
+            While(_, _, span) => {
+                return span;
+            }
+            For(_, _, _, _, span) => {
+                return span;
+            }
+            With(_, _, _, _, span) => {
+                return span;
+            }
+            Return(_, span) => {
+                return span;
+            }
+            LoopBreak(_, span) => {
+                return span;
+            }
+            Destructure(_, _, _, span) => {
+                return span;
+            }
+            Match(statement) => {
+                return statement.span;
+            }
+            Static(block) => {
+                return block.span;
+            }
+        }
+        return Span();
+    }
 
     ## Returns the statement as JSON, externally tagged like serde.
     ##
