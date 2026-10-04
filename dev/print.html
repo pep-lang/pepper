@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a63d1a7d.js";
+            window.path_to_searchindex_js = "searchindex-cbf7fc2d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -16817,6 +16817,8 @@ costs speed and nothing else.</p>
 <ul>
 <li><strong>Which way a branch goes</strong>: write <code>[Likely]</code> or <code>[Unlikely]</code> above the
 <code>if</code> or <code>match</code> arm (see <a href="#branch-hints-likely-and-unlikely">branch hints</a>).</li>
+<li><strong>A function rarely called</strong>: <code>[Cold]</code> above it (see
+<a href="#cold-functions">cold functions</a>).</li>
 <li><strong>Memory a loop will soon touch</strong>: the <code>hint</code> module’s prefetches.</li>
 </ul>
 <div class="table-wrapper">
@@ -16852,6 +16854,49 @@ main(): int {
 <a href="#llvm-intrinsics">LLVM intrinsics</a>). They matter only with
 optimization (<code>-O2</code> and up, where the runtime’s functions inline into the
 caller); at <code>-O0</code> they cost a call and do nothing.</p>
+<h2 id="cold-functions"><a class="header" href="#cold-functions">Cold functions</a></h2>
+<p><code>[Cold]</code> above a function, method or constructor marks it rarely called:
+the optimizer never inlines it and treats a call to it as the unlikely
+side of a branch. Split the rare work out of a hot function into a <code>[Cold]</code>
+one, so the hot function stays small enough to inline into its callers:</p>
+<pre><code class="language-pepper"># A hot method with its rare work split out into a [Cold] one.
+struct Counter {
+    var count: int;
+    var wraps: int;
+
+    construct() {
+        count = 0;
+        wraps = 0;
+    }
+
+    # Called on every event: small enough to inline.
+    add() {
+        if (count == 1000) {
+            _wrap();
+        }
+        count += 1;
+    }
+
+    # Called once per thousand events: kept out of line.
+    [Cold]
+    _wrap() {
+        count = 0;
+        wraps += 1;
+    }
+}
+
+main(): int {
+    var counter = Counter();
+    for (var index in 0..2500) {
+        counter.add();
+    }
+    assert(counter.wraps == 2 &amp;&amp; counter.count == 500, "[Cold] changes nothing the program computes");
+    return 0;
+}
+</code></pre>
+<p><code>[Cold]</code> is LLVM’s <code>cold</code> and <code>noinline</code> function attributes. The runtime’s
+allocator marks its slow paths this way.</p>
+<h2 id="deprecated-hints"><a class="header" href="#deprecated-hints">Deprecated hints</a></h2>
 <p><code>hint.likely(condition)</code> and <code>hint.unlikely(condition)</code> are deprecated:
 each use warns and suggests the attribute.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -21895,6 +21940,12 @@ too. Removing <code>bounds</code> or <code>null</code> gives up memory safety in
 </code></pre>
 <p>The checks to remove, comma-separated: <code>overflow</code>, <code>divide</code>, <code>shift</code>,
 <code>bounds</code>, <code>null</code>, or <code>all</code>.</p>
+<h2 id="cold"><a class="header" href="#cold">Cold</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Cold
+</code></pre>
+<p>Marks a function rarely called, such as an allocator’s slow path or
+error handling, so the optimizer never inlines it and its callers’ fast
+paths stay small enough to inline themselves.</p>
 <h2 id="test"><a class="header" href="#test">Test</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Test
 </code></pre>

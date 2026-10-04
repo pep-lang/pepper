@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a63d1a7d.js";
+            window.path_to_searchindex_js = "../searchindex-cbf7fc2d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -387,6 +387,12 @@ too. Removing <code>bounds</code> or <code>null</code> gives up memory safety in
 </code></pre>
 <p>The checks to remove, comma-separated: <code>overflow</code>, <code>divide</code>, <code>shift</code>,
 <code>bounds</code>, <code>null</code>, or <code>all</code>.</p>
+<h2 id="cold"><a class="header" href="#cold">Cold</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Cold
+</code></pre>
+<p>Marks a function rarely called, such as an allocator’s slow path or
+error handling, so the optimizer never inlines it and its callers’ fast
+paths stay small enough to inline themselves.</p>
 <h2 id="test"><a class="header" href="#test">Test</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Test
 </code></pre>
