@@ -25,6 +25,21 @@ empty_string() {
 }
 
 [Test]
+empty_string_with_no_buffer_goes_to_c() {
+    # `String()` has no buffer; `c_str()` must still hand C a valid empty
+    # string, or `print` and every other C call crash on it.
+    var e = String();
+    var joined = "\n".join(Array<String>());
+    expect_true(e.c_str() != __null);
+    expect_true(joined.c_str() != __null);
+    expect_equal(_pep_c_strlen(e.c_str()), 0);
+    expect_equal(_pep_c_strlen(joined.c_str()), 0);
+    print(e);
+    print(joined);
+    expect_equal(e + "x", "x");
+}
+
+[Test]
 negative_indexing_from_end() {
     var s = "TEST";
     expect_equal(s[-1], "T");

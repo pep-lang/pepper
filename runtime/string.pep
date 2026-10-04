@@ -73,7 +73,7 @@ export struct String {
 
     ## Creates a String by copying `size` bytes of `data` into a new
     ## NUL-terminated buffer. With no arguments, it creates an empty String
-    ## whose `c_str()` is `__null`.
+    ## with no buffer; its `c_str()` is still a valid empty C string.
     ##
     ## When `data` is not `__null` and `size` is 0, `data` is treated as a
     ## NUL-terminated C string:
@@ -389,12 +389,16 @@ export struct String {
     ## the terminator calls `c_str()` rather than relying on the buffer.
     ##
     ## The pointer is owned by the String. It is valid until the String is
-    ## destroyed or `append`, `+=`, or `grow` reallocates it. It is `__null`
-    ## for a String built with no data (`String()`), so check it before you
-    ## pass it to C. C functions stop at the first NUL byte in the content.
+    ## destroyed or `append`, `+=`, or `grow` reallocates it. It is never
+    ## `__null`: a String built with no data (`String()`) returns a constant
+    ## empty C string, so it can go to C as it is. C functions stop at the
+    ## first NUL byte in the content.
     ##
-    ## @returns the String's NUL-terminated byte buffer, or `__null`
+    ## @returns the String's NUL-terminated byte buffer
     c_str(): __ptr<char> {
+        if (_data == __null) {
+            return "";
+        }
         return _data;
     }
 
@@ -905,9 +909,8 @@ export struct StringConstant {
         }
     }
 
-    ## Returns the text as a NUL-terminated C string, with no copy. Unlike
-    ## `String.c_str()`, it is never `__null`, and it stays valid for the
-    ## whole run of the program.
+    ## Returns the text as a NUL-terminated C string, with no copy. It is
+    ## never `__null`, and it stays valid for the whole run of the program.
     ##
     ## @returns the constant NUL-terminated bytes
     c_str(): __ptr<char> {
