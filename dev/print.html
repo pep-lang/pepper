@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0a5ec0f5.js";
+            window.path_to_searchindex_js = "searchindex-c840d919.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -16459,9 +16459,9 @@ main(): int {
 tests and runs them:</p>
 <pre><code class="language-text">$ pepper test words_test.pep
 running 3 tests
-test counts_the_words ... ok
-test an_empty_string_has_no_words ... ok
-test reading_past_the_last_word_panics ... ok
+test counts_the_words ... ok (4 ms)
+test an_empty_string_has_no_words ... ok (3 ms)
+test reading_past_the_last_word_panics ... ok (5 ms)
 3 passed, 0 failed
 </code></pre>
 <p>Given a folder, or nothing (the current folder), it runs every test in the
@@ -20301,9 +20301,9 @@ pepper test --list src               # list them without running them
 pepper test -I . geometry/tests      # tests that import the module geometry
 </code></pre>
 <pre><code class="language-text">running 3 tests
-test counts_the_words ... ok
-test an_empty_string_has_no_words ... ok
-test reading_past_the_last_word_panics ... ok
+test counts_the_words ... ok (4 ms)
+test an_empty_string_has_no_words ... ok (3 ms)
+test reading_past_the_last_word_panics ... ok (5 ms)
 3 passed, 0 failed
 </code></pre>
 <p><code>pep-test</code> is written in Pepper (<code>tools/pep-test</code>). Build it with the
@@ -20349,10 +20349,12 @@ tests still run.</li>
 <code>--filter</code>. With <code>--list</code> it prints them and stops: the test’s name, or
 <code>file::name</code> when the tests come from more than one file.</li>
 <li><strong>Runs each test</strong> as <code>program --run NAME --timeout SECONDS</code>, up to
-<code>--jobs</code> at once, and prints <code>test NAME ... ok</code> or <code>... FAILED</code> as each
-ends (in order with <code>--jobs 1</code>). A test passes when its process exits
-with 0; a <code>[ShouldPanic]</code> test passes when its process panics with a
-message that contains the attribute’s text.</li>
+<code>--jobs</code> at once, and prints <code>test NAME ... ok (TIME)</code> or
+<code>... FAILED (TIME)</code> as each ends (in order with <code>--jobs 1</code>). TIME is
+how long the test’s process ran: whole milliseconds (<code>12 ms</code>), or
+seconds with two decimals from one second up (<code>1.25 s</code>). A test passes
+when its process exits with 0; a <code>[ShouldPanic]</code> test passes when its
+process panics with a message that contains the attribute’s text.</li>
 <li><strong>Reports the failures,</strong> each with what the test printed (the panic’s
 message and location) and why it failed, then a summary:
 <code>2 passed, 1 failed</code>, with the number of tests <code>--filter</code> left out and of
