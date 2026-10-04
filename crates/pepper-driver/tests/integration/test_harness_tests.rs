@@ -132,6 +132,34 @@ fn a_test_build_lists_and_runs_each_test() {
 }
 
 #[test]
+fn a_test_build_of_several_files_makes_one_program() {
+    // Each file keeps its own scope, as in any program: both declare a
+    // `helper` and a test named `adds`.
+    let dir = scratch("several");
+    let first = dir.join("first_test.pep");
+    let second = dir.join("second_test.pep");
+    std::fs::write(&first, "helper(): int { return 1; }\n\n[Test]\nadds() { expect_equal(helper(), 1); }\n").unwrap();
+    std::fs::write(&second, "helper(): int { return 2; }\n\n[Test]\nadds() { expect_equal(helper(), 2); }\n\n[Test]\nfails() { expect_equal(helper(), 3); }\n").unwrap();
+    let program = dir.join(if cfg!(windows) { "several.exe" } else { "several" });
+    let second_arg = second.to_string_lossy().into_owned();
+    support::build_executable_with(&first, &[], &["--test", &second_arg], &program, &dir.join("obj"));
+    let (first, second) = (first.to_string_lossy(), second.to_string_lossy());
+
+    let listed = run(&program, &["--list"]);
+    assert!(listed.status.success(), "{}", output_text(&listed));
+    assert_eq!(stdout_of(&listed), format!("adds\t{first}:4\treturns\t\nadds\t{second}:4\treturns\t\nfails\t{second}:7\treturns\t\n"));
+
+    for file in [&first, &second] {
+        let passed = run(&program, &["--run", &format!("{file}::adds")]);
+        assert!(passed.status.success(), "{}", output_text(&passed));
+    }
+    let failed = run(&program, &["--run", &format!("{second}::fails")]);
+    assert!(!failed.status.success());
+    assert_eq!(output_text(&failed), format!("{second}:7:11: panic: expect_equal failed\n  actual:   2\n  expected: 3\n"));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn test_only_code_is_marked_with_the_test_build_option() {
     let dir = scratch("build_option");
     let source = r#"

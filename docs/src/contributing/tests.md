@@ -25,8 +25,12 @@ test that checks what the compiler emits or reports stays in Rust.
 | A file's private functions | `[Test]` functions in that file itself |
 | A Pepper tool, `tools/<tool>/` | `tools/<tool>/<topic>_test.pep`, which imports the tool's files (`import "format";`) |
 
-A `test/` folder holds no `module.pep`, so it is never part of the module:
-no program that imports the module sees it. Prefer it to tests inside a
+A `test/` folder holds no `module.pep`, so no program that imports the
+module loads it. Its files are still files of the module, though: they see
+the module's unexported names and each other's. `pep-test` builds each
+folder's tests into one program, so a helper (or test name) that two test
+files of one folder declare collides; mark it `private` in each (as
+`runtime/async/test/` does). Prefer it to tests inside a
 source file, which only a test of private internals needs. The reference
 generator and the doc-comment check skip `test/` folders, so a test file
 needs no `##` comments.

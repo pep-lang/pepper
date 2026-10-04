@@ -25,7 +25,7 @@ short, and `pepper help build` runs it.
 | `--no-runtime` | Compile without the standard library | the runtime is used |
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |
-| `--test` | Build the entry file's `[Test]` functions into a test program | off |
+| `--test` | Build the `[Test]` functions of the entry file (or of several files of one folder) into a test program | off |
 | `--build <dir>` | Folder for intermediate files | `.pep/build` (in a project's folder when building it) |
 | `--emit-llvm` | Write LLVM IR instead of an executable | off |
 | `--emit-static`, `--emit-static=keep` | Write the source with each `static` block expanded, instead of compiling | off |
@@ -173,8 +173,14 @@ function out. With it:
   `--run NAME [--timeout SECONDS]` (run that test; a test still running
   after the timeout ends the program with exit status 124).
 
-Only the entry file's `[Test]` functions become tests. It cannot be
-combined with `--lib`. See [Unit tests](../language/testing.md).
+Only the entry file's `[Test]` functions become tests. Given several files
+of one folder (`pep-build --test a_test.pep b_test.pep`), it builds the
+tests of them all into one program: a generated entry file in that folder
+(`_pep_test_main.pep`, never written to disk) imports each file and
+registers its tests, and each file keeps the scope it has in any program.
+`--list` then gives each test's own file, and `--run` also takes
+`FILE::NAME`, as `--list` spells the file, to tell apart tests of one name
+in two files. It cannot be combined with `--lib`. See [Unit tests](../language/testing.md).
 
 ### `--build <dir>`
 

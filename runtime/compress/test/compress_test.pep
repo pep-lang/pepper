@@ -286,7 +286,7 @@ decodes_streams_from_other_encoders() {
 }
 
 # Checks that `result` is an invalid-input error whose message contains `text`.
-expect_invalid(result: io.IoResult<u8[]>, text: String, location: __ptr<char> = __caller_location()) {
+private expect_invalid(result: io.IoResult<u8[]>, text: String, location: __ptr<char> = __caller_location()) {
     if (result.is_ok()) {
         panic($"expected an error containing '{text}'", location);
     }

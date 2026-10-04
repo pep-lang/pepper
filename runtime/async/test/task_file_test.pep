@@ -5,7 +5,7 @@ import async;
 import io;
 import [has_io_uring] from "backends";
 
-const ticks = async.Atomic<long>(0);
+private const ticks = async.Atomic<long>(0);
 
 # Writes `size` patterned bytes to `path`, reads them back in 64 KiB reads,
 # and checks them. Returns how many reads it took.

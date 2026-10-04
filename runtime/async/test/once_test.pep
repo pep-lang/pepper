@@ -26,7 +26,7 @@ build_settings(): Settings {
     return Settings(7);
 }
 
-const first = async.Atomic<Settings>();
+private const first = async.Atomic<Settings>();
 
 race(settings: async.Lazy<Settings>) {
     once.call(slow_setup);

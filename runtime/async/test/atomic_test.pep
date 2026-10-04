@@ -149,7 +149,7 @@ is_lock_free() {
     expect_true(async.Atomic<Point>().is_lock_free());
 }
 
-const THREADS = 4;
+private const THREADS = 4;
 const ADD_STEPS = 50000;
 const COMPARE_EXCHANGE_STEPS = 25000;
 const added = async.Atomic<long>(0);
@@ -158,7 +158,7 @@ const swapped = async.Atomic<long>(0);
 const wins = async.Atomic<long>(0);
 
 # Adds one ADD_STEPS times, summing the values fetch_add returned.
-add_many() {
+private add_many() {
     long total = 0;
     var i = 0;
     while (i < ADD_STEPS) {

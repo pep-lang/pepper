@@ -2,8 +2,8 @@
 
 # TestRunner
 
-The `main` of a test program: `TestRunner` holds the entry file's tests
-and answers `pep-test`'s `--list` and `--run NAME`.
+The `main` of a test program: `TestRunner` holds the tests of the files
+it was built from and answers `pep-test`'s `--list` and `--run NAME`.
 
 Source: `runtime/testing/runner.pep`
 
@@ -61,7 +61,8 @@ The program answers two requests, both made by `pep-test`:
 - `--list` prints one line per test, its fields separated by tabs: the
   name, `file:line`, `returns` or `panics` (for `[ShouldPanic]`), and the
   text the panic must contain (empty for any panic or none).
-- `--run NAME [--timeout SECONDS]` runs the test `NAME` and exits with 0
+- `--run NAME [--timeout SECONDS]` runs the test `NAME` (or `file::NAME`,
+  which tells apart tests of one name in two files) and exits with 0
   when it returns, or with 1 when it left an allocation behind (or
   released one too many); a panic aborts the program. With a timeout above 0, a
   test still running after that many seconds ends the program with exit
@@ -78,9 +79,20 @@ construct(file: String)
 Creates a runner for the tests of `file`.
 
 **Parameters**
-- `file` — the entry file's path, as `pep-build` was given it
+- `file` — the entry file's path, as `pep-build` was given it, or the folder of the files of a test program built from several
 
 ### Methods
+
+#### from_file
+
+```pepper
+from_file(file: String)
+```
+
+Makes `file` the file of the tests registered after this call.
+
+**Parameters**
+- `file` — the path of the file that declares them, as `pep-build` was given it
 
 #### add
 

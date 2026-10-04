@@ -13,15 +13,15 @@ struct Message {
     }
 }
 
-const released = async.Atomic<long>(0);
+private const released = async.Atomic<long>(0);
 const fifo = async.Channel<long>();
 const bounded = async.Channel<long>(1);
 const second_sent = async.Atomic<long>(0);
 const empty = async.Channel<long>();
 const full = async.Channel<long>(1);
 const woken = async.Atomic<long>(0);
-const work = async.Channel<long>(8);
-const sum = async.Atomic<long>(0);
+private const work = async.Channel<long>(8);
+private const sum = async.Atomic<long>(0);
 const received_count = async.Atomic<long>(0);
 
 check_order() {
@@ -52,7 +52,7 @@ send_into_full() {
     woken.fetch_add(1);
 }
 
-produce() {
+private produce() {
     long i = 1;
     while (i <= 1000) {
         work.send(i);
@@ -187,7 +187,7 @@ struct Order {
 const orders = async.Channel<Order>(8);
 const received_items = async.Atomic<long>(0);
 const received_letters = async.Atomic<long>(0);
-const first = async.Channel<String>();
+private const first = async.Channel<String>();
 
 produce_orders() {
     var i = 0;

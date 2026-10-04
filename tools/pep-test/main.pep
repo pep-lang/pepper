@@ -6,12 +6,14 @@
 #     pep-test -f parse src             # only tests whose name contains "parse"
 #     pep-test --list src               # list them without running them
 #
-# Each file holding a `[Test]` function is built with `pep-build --test`
-# into a test program, which lists its tests (`--list`) and runs one
-# (`--run NAME`). The tests of every program run in parallel, one child
-# process each, so a panic, a crash or a timeout fails that test and the
-# rest carry on. The exit status is 0 only when every file builds and
-# every test passes.
+# The files holding `[Test]` functions in one folder are built together
+# with `pep-build --test` into one test program, which lists their tests
+# (`--list`) and runs one (`--run FILE::NAME`). The tests of every program
+# run in parallel, one child process each, so a panic, a crash or a
+# timeout fails that test and the rest carry on. A folder whose program
+# does not build is reported with the compiler's errors, and the other
+# folders' tests still run. The exit status is 0 only when every program
+# builds and every test passes.
 #
 # Build it from the repository root, next to the compiler:
 #
@@ -164,33 +166,72 @@ struct Counter {
     construct() {}
 }
 
-# Builds each file's test program, then lists or runs the tests.
+# Builds each folder's test program, then lists or runs the tests.
 build_and_run(options: Options, list_only: bool, files: Array<String>, compiler: String, scratch: Path): int {
+    var groups = by_folder(files);
     var programs = Array<String>();
     var builds = Array<String>();
     ulong index = 0;
-    for (var file in files) {
-        var stem = Path(file).file_stem();
+    for (var group in groups) {
+        var stem = Path(group[0]).file_stem();
         var name = $"{index}-{stem.is_value() ? stem.value() : "test"}{executable_suffix()}";
         programs.append(scratch.join(name).to_string());
         builds.append("");
         index += 1;
     }
-    in_parallel(files.count, options.jobs, (i: ulong) => {
-        builds[i] = build(compiler, files[i], programs[i], options);
+    in_parallel(groups.count, options.jobs, (i: ulong) => {
+        builds[i] = build(compiler, groups[i], programs[i], options);
     });
 
     var tests = Array<Test>();
     ulong broken = 0;
+    # A folder whose program does not build is built again a file at a
+    # time, so the errors name the file that fails and the other files'
+    # tests still run. When each file builds alone, the files clash with
+    # each other (two declare one name), which the folder's errors say.
+    var count = groups.count;
+    var first_alone = groups.count;
     index = 0;
-    while (index < files.count) {
+    while (index < count) {
+        if (!builds[index].is_empty and groups[index].count > 1) {
+            for (var file in groups[index]) {
+                var alone = Array<String>();
+                alone.append(file);
+                var stem = Path(file).file_stem();
+                programs.append(
+                    scratch.join(
+                        $"{groups.count}-{stem.is_value() ? stem.value() : "test"}{executable_suffix()}"
+                    ).to_string()
+                );
+                groups.append(alone);
+                builds.append("");
+            }
+        }
+        index += 1;
+    }
+    in_parallel(groups.count - first_alone, options.jobs, (i: ulong) => {
+        var at = first_alone + i;
+        builds[at] = build(compiler, groups[at], programs[at], options);
+    });
+    index = 0;
+    while (index < groups.count) {
+        if (index < count and !builds[index].is_empty and groups[index].count > 1) {
+            if (!any_failed_alone(groups[index], groups, builds, first_alone)) {
+                var what = describe(groups[index]);
+                File.stderr().write_all($"error: cannot build the tests of {what} together:\n{builds[index]}");
+                broken += 1;
+            }
+            index += 1;
+            continue;
+        }
+        var what = describe(groups[index]);
         if (!builds[index].is_empty) {
-            File.stderr().write_all($"error: cannot build the tests of '{files[index]}':\n{builds[index]}");
+            File.stderr().write_all($"error: cannot build the tests of {what}:\n{builds[index]}");
             broken += 1;
         } else {
-            var listed = list_tests(programs[index], files[index], tests);
+            var listed = list_tests(programs[index], tests);
             if (listed.is_value()) {
-                File.stderr().write_all($"error: cannot list the tests of '{files[index]}': {listed.value()}\n");
+                File.stderr().write_all($"error: cannot list the tests of {what}: {listed.value()}\n");
                 broken += 1;
             }
         }
@@ -254,7 +295,7 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
         summary += $", {tests.count - selected.count} filtered out";
     }
     if (broken > 0) {
-        summary += $"; {broken} {plural(broken, "file", "files")} did not build";
+        summary += $"; {broken} {plural(broken, "test program", "test programs")} did not build";
     }
     print(summary);
     return failed.is_empty and broken == 0 ? 0 : 1;
@@ -282,12 +323,61 @@ in_parallel(count: ulong, jobs: ulong, work: (ulong) => void) {
     });
 }
 
-# Builds `file`'s test program at `program`, returning what pep-build
-# printed when it fails, else empty.
-build(compiler: String, file: String, program: String, options: Options): String {
+# Whether a file of `group` failed to build alone: the groups from
+# `first_alone` on hold one file each.
+any_failed_alone(group: Array<String>, groups: Array<Array<String>>, builds: Array<String>, first_alone: ulong): bool {
+    var index = first_alone;
+    while (index < groups.count) {
+        if (!builds[index].is_empty and group.contains(groups[index][0])) {
+            return true;
+        }
+        index += 1;
+    }
+    return false;
+}
+
+# The test files of each folder, in the order first met: each folder's
+# files build into one test program.
+by_folder(files: Array<String>): Array<Array<String>> {
+    var groups = Array<Array<String>>();
+    var folders = Array<String>();
+    for (var file in files) {
+        var folder = folder_of(file);
+        ulong index = 0;
+        while (index < folders.count and folders[index] != folder) {
+            index += 1;
+        }
+        if (index == folders.count) {
+            folders.append(folder);
+            groups.append(Array<String>());
+        }
+        groups[index].append(file);
+    }
+    return groups;
+}
+
+# The folder part of `file`, as written: empty for a file in the current
+# folder.
+folder_of(file: String): String {
+    var parent = Path(file).parent();
+    return parent.is_value() ? parent.value().to_string() : "";
+}
+
+# How messages name a test program: its file, or the folder of its files.
+describe(group: Array<String>): String {
+    if (group.count == 1) {
+        return $"'{group[0]}'";
+    }
+    var folder = folder_of(group[0]);
+    return $"the folder '{folder.is_empty ? "." : folder}' ({group.count} files)";
+}
+
+# Builds the test program of `files` (one folder's) at `program`, returning
+# what pep-build printed when it fails, else empty.
+build(compiler: String, files: Array<String>, program: String, options: Options): String {
     var arguments = Array<String>();
     arguments.append("--test");
-    arguments.append(file);
+    arguments.append_all(files);
     for (var directory in options.imports) {
         arguments.append("-I");
         arguments.append(directory);
@@ -314,9 +404,9 @@ build(compiler: String, file: String, program: String, options: Options): String
     return text.is_empty ? $"pep-build failed ({output.status.to_string()})\n" : text;
 }
 
-# Adds the tests `program` (built from `file`) lists to `tests`, returning
-# why it could not list them, if it could not.
-list_tests(program: String, file: String, tests: Array<Test>): String? {
+# Adds the tests `program` lists to `tests`, returning why it could not
+# list them, if it could not.
+list_tests(program: String, tests: Array<Test>): String? {
     var ran = process.Command(program).argument("--list").run();
     if (ran.is_err()) {
         return Optional<String>.Value(ran.error().message);
@@ -336,9 +426,11 @@ list_tests(program: String, file: String, tests: Array<Test>): String? {
         }
         var test = Test();
         test.program = program;
-        test.file = file;
         test.name = fields[0];
         test.location = fields[1];
+        # `file:line`: the file is everything before the last colon.
+        var colon = test.location.rfind(":");
+        test.file = colon < 0 ? test.location : test.location.substr_bytes(0, colon as ulong);
         test.should_panic = fields[2] == "panics";
         test.panic_message = fields[3];
         tests.append(test);
@@ -348,7 +440,7 @@ list_tests(program: String, file: String, tests: Array<Test>): String? {
 
 # Runs `test` in a child process and judges how it ended.
 run_test(test: Test, timeout: ulong): Outcome {
-    var command = process.Command(test.program).argument("--run").argument(test.name);
+    var command = process.Command(test.program).argument("--run").argument($"{test.file}::{test.name}");
     if (timeout > 0) {
         command.argument("--timeout").argument($"{timeout}");
     }

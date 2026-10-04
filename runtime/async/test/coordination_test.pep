@@ -4,11 +4,11 @@
 
 import async;
 
-const THREADS = 6;
-const ROUNDS = 200;
+private const THREADS = 6;
+private const ROUNDS = 200;
 
-const slots = async.Semaphore(2);
-const inside = async.Atomic<long>(0);
+private const slots = async.Semaphore(2);
+private const inside = async.Atomic<long>(0);
 const most_inside = async.Atomic<long>(0);
 
 const round_done = async.Barrier(THREADS);
@@ -38,7 +38,7 @@ use_slot() {
 
 # Every thread arrives once per round; the leader checks that the whole
 # round arrived before anyone went on.
-meet() {
+private meet() {
     var round: long = 0;
     while (round < ROUNDS) {
         arrivals.fetch_add(1);
@@ -60,7 +60,7 @@ count_and_wait() {
     passed.fetch_add(1);
 }
 
-spawn_all(body: shared () => void, count: long): Array<async.Thread> {
+private spawn_all(body: shared () => void, count: long): Array<async.Thread> {
     var threads = Array<async.Thread>();
     var i: long = 0;
     while (i < count) {

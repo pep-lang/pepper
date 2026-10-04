@@ -176,6 +176,35 @@ fn pep_test_reports_a_file_that_does_not_build() {
     assert!(text.contains("bad_test.pep:3:5: error: call to undeclared function 'nope'"), "{}", text);
     let summary = stdout_of(&output);
     assert!(summary.contains("test good_test.pep::passes ... ok ("), "{}", summary);
-    assert!(summary.ends_with("1 passed, 0 failed; 1 file did not build\n"), "{}", summary);
+    assert!(summary.ends_with("1 passed, 0 failed; 1 test program did not build\n"), "{}", summary);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn pep_test_reports_test_files_of_a_module_that_clash() {
+    // The test files of a module's folder see each other's names (their
+    // tests' included), so two `helper`s clash in their folder's program;
+    // `private` keeps them apart.
+    let dir = scratch("pep_test_clash");
+    std::fs::create_dir_all(dir.join("shop/test")).unwrap();
+    std::fs::write(dir.join("shop/module.pep"), "").unwrap();
+    for name in ["a", "b"] {
+        let source = format!("helper(): int {{ return 1; }}\n\n[Test]\n{name}_runs() {{ expect_equal(helper(), 1); }}\n");
+        std::fs::write(dir.join("shop/test").join(format!("{name}_test.pep")), source).unwrap();
+    }
+    let output = pep_test(&dir, &[]);
+    let text = output_text(&output);
+    assert_eq!(output.status.code(), Some(1), "{}", text);
+    assert!(text.contains("(2 files) together:\n"), "{}", text);
+    assert!(text.contains("error: redefinition of 'helper'"), "{}", text);
+    assert!(stdout_of(&output).ends_with("2 passed, 0 failed; 1 test program did not build\n"), "{}", text);
+
+    for name in ["a", "b"] {
+        let source = format!("private helper(): int {{ return 1; }}\n\n[Test]\n{name}_runs() {{ expect_equal(helper(), 1); }}\n");
+        std::fs::write(dir.join("shop/test").join(format!("{name}_test.pep")), source).unwrap();
+    }
+    let output = pep_test(&dir, &[]);
+    assert!(output.status.success(), "{}", output_text(&output));
+    assert!(stdout_of(&output).ends_with("2 passed, 0 failed\n"), "{}", output_text(&output));
     let _ = std::fs::remove_dir_all(&dir);
 }

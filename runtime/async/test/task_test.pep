@@ -5,7 +5,7 @@
 import async;
 import os;
 
-struct Counter {
+private struct Counter {
     var n: int;
     construct() {}
 }
@@ -234,7 +234,7 @@ sleep_takes_a_duration() {
 
 const request_id = async.TaskLocal<long>();
 const names = async.TaskLocal<Array<String>>();
-const released = async.Atomic<long>(0);
+private const released = async.Atomic<long>(0);
 
 struct Noisy {
     var n: long;

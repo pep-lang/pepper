@@ -24,7 +24,7 @@ use crate::passes::static_source::{self, Edit, Piece, Rendered};
 use crate::type_name::TypeName;
 use pepper_parser::ast;
 use pepper_parser::diagnostic::{Diagnostic, FileId, Loc};
-use pepper_parser::namespace::{demangle, demangle_name};
+use pepper_parser::namespace::{demangle_name, display_name};
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
@@ -235,7 +235,7 @@ impl Context {
         let mut runtime: HashSet<String> = function.parameters.iter().map(|p| p.name.trim_start_matches("this.").to_string()).collect();
         runtime.insert("this".to_string());
         collect_locals(body, &mut runtime);
-        Context { name: demangle(&function.name).into_owned(), symbol: function.name.clone(), loc: function.loc, runtime }
+        Context { name: display_name(&function.name), symbol: function.name.clone(), loc: function.loc, runtime }
     }
 }
 
@@ -345,7 +345,7 @@ impl Value {
                 "reflect.Member",
                 vec![
                     ("name", StaticConstant::String(m.name.clone())),
-                    ("type_name", StaticConstant::String(demangle(&m.ty.display()).into_owned())),
+                    ("type_name", StaticConstant::String(display_name(&m.ty.display()))),
                     ("index", StaticConstant::Int(m.index as i64)),
                     ("is_last", StaticConstant::Bool(m.index + 1 == m.count)),
                     ("is_const", StaticConstant::Bool(m.is_const)),
@@ -399,7 +399,7 @@ impl Value {
             Value::Float(v) => v.to_string(),
             Value::Bool(v) => v.to_string(),
             Value::String(v) => v.clone(),
-            Value::Case(case) => format!("{}.{}", demangle(&case.enumeration.display()), case.name),
+            Value::Case(case) => format!("{}.{}", display_name(&case.enumeration.display()), case.name),
             Value::Member(member) => member.name.clone(),
             Value::Function(function) => demangle_name(&function.symbol).to_string(),
             Value::List(items) => format!("[{}]", items.iter().map(Value::display).collect::<Vec<_>>().join(", ")),
@@ -418,7 +418,7 @@ impl Value {
             Value::Float(v) => format!("{:?}", v),
             Value::Bool(v) => v.to_string(),
             Value::String(v) => static_source::string_literal(v),
-            Value::Case(case) if case.is_value => format!("{}.{}", demangle(&case.enumeration.display()), case.name),
+            Value::Case(case) if case.is_value => format!("{}.{}", display_name(&case.enumeration.display()), case.name),
             _ => return None,
         })
     }
@@ -553,7 +553,7 @@ impl<'m> Expander<'m> {
             if written.is_empty() {
                 written = vec!["{}".to_string()];
             }
-            let type_arguments = block.type_map.iter().map(|(param, ty)| (param.clone(), demangle(&ty.display()).into_owned())).collect();
+            let type_arguments = block.type_map.iter().map(|(param, ty)| (param.clone(), display_name(&ty.display()))).collect();
             static_source::add(static_source::Expansion { loc: block.loc, span: block.span, type_arguments, lines: written, positions });
         }
         // The statements emitted outside any pass, for the debugger.
@@ -780,8 +780,8 @@ impl<'m> Expander<'m> {
         let edits = std::mem::take(&mut self.edits);
         let (_, source) = pepper_parser::diagnostic::Sources::get(&self.module.sources, self.file)?;
         let mut names: Vec<(String, String)> =
-            self.member_types().into_iter().map(|(spelled, ty)| (spelled, demangle(&ty.display()).into_owned())).collect();
-        names.extend(self.type_map.iter().map(|(param, ty)| (param.clone(), demangle(&ty.display()).into_owned())));
+            self.member_types().into_iter().map(|(spelled, ty)| (spelled, display_name(&ty.display()))).collect();
+        names.extend(self.type_map.iter().map(|(param, ty)| (param.clone(), display_name(&ty.display()))));
         if span.end > source.len() {
             return None;
         }
@@ -972,7 +972,7 @@ impl<'m> Expander<'m> {
                 if self.context.runtime.contains(id) {
                     return Err(self.error(format!("'{}' is a runtime value; add it to the static block's capture list", id), *span));
                 }
-                Err(self.error(format!("'{}' has no compile-time value", demangle(id)), *span))
+                Err(self.error(format!("'{}' has no compile-time value", display_name(id)), *span))
             }
             E::Unary { op, operand, span, .. } => {
                 let value = self.evaluate(operand)?;
@@ -1124,7 +1124,7 @@ impl<'m> Expander<'m> {
             (Value::Member(m), "name") => Some(Value::String(m.name.clone())),
             (Value::Member(m), "index") => Some(Value::Int(m.index as i64)),
             (Value::Member(m), "is_last") => Some(Value::Bool(m.index + 1 == m.count)),
-            (Value::Member(m), "type_name") => Some(Value::String(demangle(&m.ty.display()).into_owned())),
+            (Value::Member(m), "type_name") => Some(Value::String(display_name(&m.ty.display()))),
             (Value::Member(m), "is_const") => Some(Value::Bool(m.is_const)),
             (Value::Member(m), "is_property") => Some(Value::Bool(m.is_property)),
             (Value::Case(c), "name") => Some(Value::String(c.name.clone())),
@@ -1214,7 +1214,7 @@ impl<'m> Expander<'m> {
             }
             other => {
                 let name = match other {
-                    E::SymbolRef { id, .. } => demangle(id).into_owned(),
+                    E::SymbolRef { id, .. } => display_name(id),
                     E::TypeLiteral(ty) => ty.to_string(),
                     _ => other.to_string(),
                 };
@@ -1259,7 +1259,7 @@ impl<'m> Expander<'m> {
             "name" => {
                 let [ty] = self.expect_types(name, type_args, 1, span)? else { unreachable!() };
                 self.expect_arguments(name, arguments, 0, span)?;
-                Ok(Value::String(demangle(&ty.display()).into_owned()))
+                Ok(Value::String(display_name(&ty.display())))
             }
             "properties" | "fields" => {
                 let [ty] = self.expect_types(name, type_args, 1, span)? else { unreachable!() };
@@ -1319,10 +1319,10 @@ impl<'m> Expander<'m> {
                 } else if let Some(e) = self.find_enum(&ty.name) {
                     (&e.attributes, e.loc.file)
                 } else {
-                    return Err(self.error(format!("'{}' is not a struct or an enum", demangle(&ty.display())), span));
+                    return Err(self.error(format!("'{}' is not a struct or an enum", display_name(&ty.display())), span));
                 };
                 let attributes = attributes.clone();
-                self.attribute_of(&attributes, file, attribute, name == "attribute", &format!("'{}'", demangle(&ty.display())), span)
+                self.attribute_of(&attributes, file, attribute, name == "attribute", &format!("'{}'", display_name(&ty.display())), span)
             }
             "has_build_option" => {
                 self.expect_types(name, type_args, 0, span)?;
@@ -1430,7 +1430,7 @@ impl<'m> Expander<'m> {
     }
 
     fn members(&self, ty: &TypeName, all: bool, span: ast::Span) -> Result<Value> {
-        let shown = demangle(&ty.display()).into_owned();
+        let shown = display_name(&ty.display());
         let Some((st, map)) = self.find_struct(ty) else {
             if self.find_enum(&ty.name).is_some() {
                 return Err(self.error(format!("'{}' is an enum; use 'reflect.cases<{}>()'", shown, shown), span));
@@ -1538,7 +1538,7 @@ impl<'m> Expander<'m> {
                     .collect(),
             )));
         }
-        Err(self.error(format!("'{}' is not an enum", demangle(&ty.display())), span))
+        Err(self.error(format!("'{}' is not an enum", display_name(&ty.display())), span))
     }
 
     /// The `[Attribute]` struct `ty` names, or the name of a built-in
@@ -1554,7 +1554,7 @@ impl<'m> Expander<'m> {
         if BUILT_IN_ATTRIBUTES.contains(&base) {
             return Ok(AttributeName::BuiltIn(base.to_string(), found.is_some()));
         }
-        Err(self.error(format!("'{}' is not an attribute; an attribute is a struct marked '[Attribute]'", demangle(&ty.display())), span))
+        Err(self.error(format!("'{}' is not an attribute; an attribute is a struct marked '[Attribute]'", display_name(&ty.display())), span))
     }
 
     /// Whether `attribute`, written in `file`, is an `A`.
@@ -1574,7 +1574,7 @@ impl<'m> Expander<'m> {
         if !value {
             return Ok(Value::Bool(found.is_some()));
         }
-        let shown = demangle(&attribute.display()).into_owned();
+        let shown = display_name(&attribute.display());
         let Some(found) = found else {
             return Err(self.error(format!("{} has no attribute '{}'; test it with 'has_attribute<{}>()' first", what, shown, shown), span));
         };
@@ -1675,7 +1675,7 @@ fn empty_static() -> StaticBlock {
 fn member_source(receiver: &Value, method: &str, arguments: &[ast::Span]) -> Option<Vec<Piece>> {
     let text = |t: &str| Piece::Text(t.to_string());
     let argument = |i: usize| arguments.get(i).map(|span| Piece::Argument(*span));
-    let enumeration = |ty: &TypeName| demangle(&ty.display()).into_owned();
+    let enumeration = |ty: &TypeName| display_name(&ty.display());
     Some(match (receiver, method) {
         // A case's value: only a `match` can read it in source.
         (Value::Member(m), "get") if m.field.is_some() => {
@@ -1684,7 +1684,7 @@ fn member_source(receiver: &Value, method: &str, arguments: &[ast::Span]) -> Opt
             vec![
                 text("match ("),
                 argument(0)?,
-                Piece::Text(format!(") {{ {}.{}({}) => _pep_value, else => __default<{}>() }}", enumeration, case, bindings.join(", "), demangle(&m.ty.display()))),
+                Piece::Text(format!(") {{ {}.{}({}) => _pep_value, else => __default<{}>() }}", enumeration, case, bindings.join(", "), display_name(&m.ty.display()))),
             ]
         }
         (Value::Member(m), "get") => vec![argument(0)?, Piece::Text(format!(".{}", m.name))],
@@ -1859,7 +1859,7 @@ fn attribute_argument(module: &Module, expr: &ast::Expression, file: FileId) -> 
                 .find(|e| &e.name == id)
                 .or_else(|| prefer_file(module.enums.iter().filter(|e| demangle_name(&e.name) == id), |e| e.loc.file, file))
                 .ok_or_else(not_constant)?;
-            let index = def.cases.iter().position(|c| &c.name == name).ok_or_else(|| error(&format!("no case named '{}' in '{}'", name, demangle(&def.name))))?;
+            let index = def.cases.iter().position(|c| &c.name == name).ok_or_else(|| error(&format!("no case named '{}' in '{}'", name, display_name(&def.name))))?;
             Ok(Value::Case(Rc::new(case_of(def, index))))
         }
         _ => Err(not_constant()),
@@ -1974,7 +1974,7 @@ fn attribute_value(module: &Module, attribute: &ast::Attribute, file: FileId) ->
                 value.kind_with_article(),
                 field,
                 shown,
-                demangle(&declared.ty.display())
+                display_name(&declared.ty.display())
             ))
             .at(at(span)));
         }
@@ -2063,7 +2063,7 @@ pub fn check_attributes(module: &Module) {
                         "field '{}' of attribute '{}' must be a number, 'bool', 'char', 'String' or an enum, not '{}'",
                         field.name,
                         demangle_name(&st.name),
-                        demangle(&field.ty.display())
+                        display_name(&field.ty.display())
                     ))
                     .at(if field.type_loc.is_none() { field.loc } else { field.type_loc }),
                 );

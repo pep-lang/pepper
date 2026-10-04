@@ -4,7 +4,7 @@
 import json;
 
 [Tag("kind")]
-enum Shape {
+private enum Shape {
     [Name("circle")]
     Circle(radius: int),
     Rect(width: int, height: int),
@@ -18,14 +18,14 @@ enum Event {
 }
 
 [Untagged]
-enum Size {
+private enum Size {
     Box(width: int, height: int),
     Fixed(px: int),
     Auto,
     Fill,
 }
 
-enum Mode {
+private enum Mode {
     [Name("read-only")]
     ReadOnly,
     [Name("cmd")]

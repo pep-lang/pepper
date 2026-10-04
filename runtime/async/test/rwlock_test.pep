@@ -66,7 +66,7 @@ write_gate() {
     writer_done.store(1);
 }
 
-spawn_all(body: shared () => void, count: long): Array<async.Thread> {
+private spawn_all(body: shared () => void, count: long): Array<async.Thread> {
     var threads = Array<async.Thread>();
     var i: long = 0;
     while (i < count) {

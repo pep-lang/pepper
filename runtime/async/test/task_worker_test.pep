@@ -10,7 +10,7 @@ import [has_io_uring] from "backends";
 
 const running = async.Atomic<long>(0);
 const overlapped = async.Atomic<long>(0);
-const total = async.Atomic<long>(0);
+private const total = async.Atomic<long>(0);
 
 # Waits (without yielding) until another task runs at the same time, for up
 # to two seconds: only another worker can run it meanwhile.
@@ -27,7 +27,7 @@ meet(): long {
     return until as long;
 }
 
-sum(from: long, to: long): long {
+private sum(from: long, to: long): long {
     long result = 0;
     var i = from;
     while (i < to) {
@@ -192,10 +192,10 @@ spawned_tasks_run_on_any_worker_with_io_uring() {
     }
 }
 
-const inside = async.Atomic<long>(0);
+private const inside = async.Atomic<long>(0);
 const most = async.Atomic<long>(0);
 const finished = async.Atomic<long>(0);
-const ticks = async.Atomic<long>(0);
+private const ticks = async.Atomic<long>(0);
 const served = async.Atomic<long>(0);
 
 # Blocks its thread for `milliseconds`, counting how many run at once.

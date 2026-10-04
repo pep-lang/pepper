@@ -2547,3 +2547,18 @@ fn private_is_optional_where_names_do_not_collide() {
     ];
     assert_eq!(run("private_optional", &files), 7);
 }
+
+#[test]
+fn reflect_name_spells_a_private_type_as_written() {
+    // A file's private type takes a mangled name in the program; its
+    // `reflect.name` is still the name the file gave it.
+    let files = [
+        ("shop/module.pep", "export * from \"a\";\n"),
+        (
+            "shop/a.pep",
+            "private struct Box {}\nprivate enum Mode { Fast }\nexport f(): int {\n    static {\n        reflect.assert(reflect.name<Box>() == \"Box\", reflect.name<Box>());\n        reflect.assert(reflect.name<Box[]>() == \"Array<Box>\", reflect.name<Box[]>());\n        reflect.assert(reflect.name<Mode>() == \"Mode\", reflect.name<Mode>());\n    }\n    return 5;\n}\n",
+        ),
+        ("main.pep", "import shop;\ntest(): int { return shop.f(); }"),
+    ];
+    assert_eq!(run("reflect_name_private", &files), 5);
+}

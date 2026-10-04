@@ -3,7 +3,7 @@
 
 import json;
 
-enum Shape {
+private enum Shape {
     Circle(radius: int),
     Rect(width: int, height: double),
     Point,
@@ -15,7 +15,7 @@ enum Tree {
 }
 
 [Value]
-enum Size {
+private enum Size {
     Fixed(px: int),
     Auto,
 }
@@ -26,7 +26,7 @@ struct Drawing {
     var sizes: Array<Size>;
 }
 
-error_of(text: String): String {
+private error_of(text: String): String {
     return json.decode<Shape>(text, unknown_keys = json.UnknownKeys.Reject).error().to_string();
 }
 

@@ -13,11 +13,11 @@ struct Tally {
 }
 
 const tally = async.Mutex<Tally>(Tally());
-const changed = tally.condition();
-const ticks = async.Atomic<long>(0);
+private const changed = tally.condition();
+private const ticks = async.Atomic<long>(0);
 const pings = async.Channel<long>();
 const pongs = async.Channel<long>();
-const slots = async.Channel<long>(1);
+private const slots = async.Channel<long>(1);
 const results = async.Channel<long>();
 const inbox = async.Channel<long>();
 
@@ -267,15 +267,15 @@ sync_objects_park_tasks_with_io_uring() {
     }
 }
 
-enum Event {
+private enum Event {
     Number(value: long),
     Word(text: String),
 }
 
-const numbers = async.Channel<long>();
-const words = async.Channel<String>();
-const jobs = async.Mutex<Array<long>>(Array<long>());
-const ready = jobs.condition();
+private const numbers = async.Channel<long>();
+private const words = async.Channel<String>();
+private const jobs = async.Mutex<Array<long>>(Array<long>());
+private const ready = jobs.condition();
 const COUNT = 50;
 
 from_thread() {

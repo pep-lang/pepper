@@ -6,7 +6,7 @@
 import async;
 
 [Shared]
-struct Counter {
+private struct Counter {
     const slot: __ptr<long>;
     construct() {
         slot = _pep_malloc(sizeof<long>());
@@ -16,9 +16,9 @@ struct Counter {
     }
 }
 
-const THREADS = 8;
+private const THREADS = 8;
 const INCREMENTS = 50000;
-const ROUNDS = 2000;
+private const ROUNDS = 2000;
 const MESSAGES = 20000;
 
 const hammered = async.Mutex<Counter>(Counter());

@@ -4,7 +4,7 @@
 import compress;
 import io;
 
-expect_invalid(result: io.IoResult<u8[]>, text: String, location: __ptr<char> = __caller_location()) {
+private expect_invalid(result: io.IoResult<u8[]>, text: String, location: __ptr<char> = __caller_location()) {
     expect_true(result.is_err(), location);
     if (result.is_err()) {
         expect_true(result.error().is_invalid_input(), location);

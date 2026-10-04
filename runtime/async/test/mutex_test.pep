@@ -5,7 +5,7 @@
 import async;
 
 [Shared]
-struct Counter {
+private struct Counter {
     const slot: __ptr<long>;
     construct() {
         slot = _pep_malloc(sizeof<long>());
@@ -22,11 +22,11 @@ struct Label {
     construct(this.id = 0) {}
 }
 
-const counter = async.Mutex<Counter>(Counter());
+private const counter = async.Mutex<Counter>(Counter());
 const busy_seen = async.Atomic<long>(0);
 const free_seen = async.Atomic<long>(0);
 
-add_many() {
+private add_many() {
     var i = 0;
     while (i < 20000) {
         with (var c = counter.lock()) {
@@ -180,7 +180,7 @@ struct Queue {
 }
 
 const queue = async.Mutex<Queue>(Queue());
-const changed = queue.condition();
+private const changed = queue.condition();
 const taken = async.Atomic<long>(0);
 
 consumer() {
@@ -331,8 +331,8 @@ mutex_of_values_that_are_not_thread_safe() {
     expect_equal(count_lines(), 0);
 }
 
-const jobs = async.Mutex<Array<String>>(Array<String>());
-const ready = jobs.condition();
+private const jobs = async.Mutex<Array<String>>(Array<String>());
+private const ready = jobs.condition();
 const JOB_COUNT = 200;
 
 produce_jobs() {

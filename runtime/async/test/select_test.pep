@@ -4,19 +4,19 @@
 
 import async;
 
-enum Event {
+private enum Event {
     Word(text: String),
     Number(value: long),
     Stop,
 }
 
-const words = async.Channel<String>();
-const numbers = async.Channel<long>();
+private const words = async.Channel<String>();
+private const numbers = async.Channel<long>();
 const quit = async.Channel<bool>();
 const STREAMS = 4;
 const PER_STREAM = 2000;
 
-produce() {
+private produce() {
     words.send("ab");
     numbers.send(2);
     words.send("cde");

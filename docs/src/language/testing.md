@@ -121,9 +121,18 @@ pepper test -I . geometry/tests
 ```
 
 `pep-test` looks at each `.pep` file under the folders it is given and
-builds those with a line that starts with `[Test]`: each such file is the
-entry file of one test program, and its own `[Test]` functions are the
-program's tests. Folders whose names start with `.` are skipped.
+builds those with a line that starts with `[Test]`. The test files of one
+folder build into one test program, whose tests are their `[Test]`
+functions. Folders whose names start with `.` are skipped.
+
+Each file keeps the scope it has in any program. A folder inside a module
+(a `test/` folder below its `module.pep`, say) holds files of that module,
+which see each other's names: two of them that declare the same helper,
+or the same test name, collide (`redefinition of 'helper'`). Mark such a
+declaration
+[`private`](visibility.md#keeping-a-declaration-to-its-file) in each file,
+or rename it. Test files outside a module see only each other's exports,
+so their names never collide.
 
 ## Test builds
 
@@ -137,7 +146,9 @@ file of tests can keep a `main` of its own. `pep-build --test`, which
   `[BuildOption("TEST")]`;
 - it replaces the entry file's `main` with one that answers `--list` (each
   test, one per line) and `--run NAME` (run one test), which is how
-  `pep-test` drives it.
+  `pep-test` drives it. Given several files of one folder, it builds the
+  tests of them all into one program, and `--run FILE::NAME` tells apart
+  two tests of one name.
 
 A `[Test]` function that takes parameters, returns a value or is generic is
 an error, as are `[Test]` on a method and `[ShouldPanic]` without `[Test]`:

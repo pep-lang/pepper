@@ -10,7 +10,7 @@ const names_ok = async.Atomic<long>(0);
 # initializer may already use the async module.
 const initializing_thread = async.Thread.current();
 
-work() {
+private work() {
     var me = async.Thread.current();
     if (me.name() == "worker" && !me.is_finished()) {
         names_ok.fetch_add(1);
@@ -71,10 +71,10 @@ struct Tracker {
     }
 }
 
-const released = async.Atomic<long>(0);
-const counter = async.ThreadLocal<int>();
+private const released = async.Atomic<long>(0);
+private const counter = async.ThreadLocal<int>();
 const tracker = async.ThreadLocal<Tracker>();
-const sum = async.Atomic<long>(0);
+private const sum = async.Atomic<long>(0);
 
 count_locally() {
     expect_false(counter.is_set());
@@ -156,7 +156,7 @@ struct Job {
     construct(this.weight = 1, this.run = (n: long) => {}) {}
 }
 
-const total = async.Atomic<long>(0);
+private const total = async.Atomic<long>(0);
 const named_runs = async.Atomic<long>(0);
 
 count_named() {

@@ -4,7 +4,7 @@
 
 import json;
 
-enum Mode {
+private enum Mode {
     Fast,
     Safe,
 }
@@ -85,7 +85,7 @@ encodes_and_decodes_structs() {
     expect_true(json.encode(config, indent = 2).contains("\n  \"port\": 8080,"));
 }
 
-error_of(text: String): String {
+private error_of(text: String): String {
     var decoded = json.decode<ServerConfig>(text, path = "s.json");
     if (decoded.is_ok()) { return "ok"; }
     return decoded.error().to_string();

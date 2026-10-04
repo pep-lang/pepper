@@ -99,7 +99,9 @@ pub struct Options {
 
     /// Build the entry file's tests: keep its `[Test]` functions, define
     /// the build option `TEST`, and replace its `main` with one that lists
-    /// or runs them (`--list`, `--run NAME`). `pep-test` builds with it.
+    /// or runs them (`--list`, `--run NAME`). Given several files of one
+    /// folder, builds the tests of them all into one program, each file
+    /// keeping the scope it has in any program. `pep-test` builds with it.
     #[arg(long = "test", conflicts_with = "library")]
     pub test: bool,
 

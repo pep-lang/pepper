@@ -368,11 +368,15 @@ pub struct Setup<'a> {
     pub mode: Mode,
     /// Syntax trees kept from earlier compiles, used in place of parsing.
     pub parsed: Option<&'a dyn ParseCache>,
+    /// Text to use in place of what is on disk, for the files at these
+    /// paths when the program loads them (a test build's test files, with
+    /// their registrations added).
+    pub sources: &'a [(PathBuf, String)],
 }
 
 impl Default for Setup<'_> {
     fn default() -> Self {
-        Setup { import_dirs: &[], forced_imports: &[], runtime: true, mode: Mode::Strict, parsed: None }
+        Setup { import_dirs: &[], forced_imports: &[], runtime: true, mode: Mode::Strict, parsed: None, sources: &[] }
     }
 }
 
@@ -467,7 +471,7 @@ pub fn load_program(root: Root, setup: &Setup) -> Result<Program, String> {
         prelude.push(path);
     }
     prelude.extend(runtime_sources);
-    load_with(root, &prelude, &search_paths, setup.mode, setup.parsed)
+    load_with(root, &prelude, &search_paths, setup.mode, setup.parsed, setup.sources)
 }
 
 /// Read the project file at `path` and check it against the runtime in
@@ -516,12 +520,21 @@ pub fn render_manifest_errors(path: &Path, text: &str, errors: &[ManifestError])
 /// resolving module imports against `search_paths`; then link. The root is
 /// `files[0]`, followed by the files it reaches, then the prelude.
 pub fn load(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mode) -> Result<Program, String> {
-    load_with(root, prelude, search_paths, mode, None)
+    load_with(root, prelude, search_paths, mode, None, &[])
 }
 
 /// [`load`], taking each file's syntax tree from `parsed` when it has one
-/// for the file's text.
-pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode: Mode, parsed: Option<&dyn ParseCache>) -> Result<Program, String> {
+/// for the file's text, and the text of each file `sources` names from
+/// there instead of the disk.
+pub fn load_with(
+    root: Root,
+    prelude: &[PathBuf],
+    search_paths: &[PathBuf],
+    mode: Mode,
+    parsed: Option<&dyn ParseCache>,
+    sources: &[(PathBuf, String)],
+) -> Result<Program, String> {
+    let given: HashMap<String, &str> = sources.iter().map(|(p, text)| (path_key(p), text.as_str())).collect();
     let mut files: Vec<ProgramFile> = vec![];
     let mut index: HashMap<String, usize> = HashMap::new();
     // Resolved import paths per file, mapped to indices once all are loaded.
@@ -558,7 +571,7 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
             let prelude = prelude_keys.contains(&root_key);
             (root.name, root.source, root.path, prelude, root_key.clone())
         } else if let Some((path, key, prelude)) = stack.pop() {
-            match std::fs::read_to_string(&path) {
+            match given.get(&key).map_or_else(|| std::fs::read_to_string(&path), |text| Ok(text.to_string())) {
                 Ok(s) => (path.to_string_lossy().into_owned(), s, path, prelude, key),
                 Err(e) if mode == Mode::Strict => return Err(format!("cannot read {}: {}", path.display(), e)),
                 Err(e) => {

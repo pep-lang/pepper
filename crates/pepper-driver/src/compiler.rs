@@ -23,12 +23,30 @@ pub fn compile_sources(options: &Options, entry_source: &Path) -> Result<SemaMod
 /// [`load`] without the build cache's syntax trees: every file is parsed.
 pub(crate) fn load_uncached(options: &Options, entry_source: &Path) -> Result<Program, String> {
     let forced_imports = options.effective_forced_imports();
-    let setup = Setup { import_dirs: &options.import_paths, forced_imports: &forced_imports, runtime: !options.no_runtime, ..Setup::default() };
+    let (root, sources) = entry_root(options, entry_source)?;
+    let setup = Setup {
+        import_dirs: &options.import_paths,
+        forced_imports: &forced_imports,
+        runtime: !options.no_runtime,
+        sources: &sources,
+        ..Setup::default()
+    };
+    program::load_program(root, &setup)
+}
+
+/// The file the program is rooted at, and the files to load from given text
+/// rather than the disk: the entry file, or in a test build its tests'
+/// `main` added to it, or for several test files the generated entry that
+/// runs them all (see `test_main`).
+fn entry_root(options: &Options, entry_source: &Path) -> Result<(Root, Vec<(PathBuf, String)>), String> {
+    if options.test && options.source_files.len() > 1 {
+        return crate::test_main::test_program(&options.source_files);
+    }
     let mut root = Root::from_file(entry_source)?;
     if options.test {
         crate::test_main::add_test_main(&mut root);
     }
-    program::load_program(root, &setup)
+    Ok((root, vec![]))
 }
 
 /// Load and link the program rooted at `entry_source` with the options'
@@ -37,17 +55,15 @@ fn load(options: &Options, entry_source: &Path) -> Result<Program, String> {
     // Files whose text is unchanged come from the build cache's syntax trees.
     let cache = options.effective_cache_dir().map(|root| crate::cache::Cache::open(&root, options.effective_build()?)).transpose()?;
     let forced_imports = options.effective_forced_imports();
+    let (root, sources) = entry_root(options, entry_source)?;
     let setup = Setup {
         import_dirs: &options.import_paths,
         forced_imports: &forced_imports,
         runtime: !options.no_runtime,
         parsed: cache.as_ref().map(|c| c as &dyn program::ParseCache),
+        sources: &sources,
         ..Setup::default()
     };
-    let mut root = Root::from_file(entry_source)?;
-    if options.test {
-        crate::test_main::add_test_main(&mut root);
-    }
     program::load_program(root, &setup)
 }
 

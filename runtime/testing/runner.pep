@@ -1,5 +1,5 @@
-## The `main` of a test program: `TestRunner` holds the entry file's tests
-## and answers `pep-test`'s `--list` and `--run NAME`.
+## The `main` of a test program: `TestRunner` holds the tests of the files
+## it was built from and answers `pep-test`'s `--list` and `--run NAME`.
 
 import async;
 import [File] from io;
@@ -44,13 +44,15 @@ export struct TestMain {}
 
 # One `[Test]` function, as the generated `main` registers it.
 struct _TestCase {
+    var file: String;
     var name: String;
     var body: () => void;
     var line: int;
     var should_panic: bool;
     var panic_message: String;
 
-    construct(name: String, body: () => void, line: int, should_panic: bool, panic_message: String) {
+    construct(file: String, name: String, body: () => void, line: int, should_panic: bool, panic_message: String) {
+        this.file = file;
         this.name = name;
         this.body = body;
         this.line = line;
@@ -67,21 +69,33 @@ struct _TestCase {
 ## - `--list` prints one line per test, its fields separated by tabs: the
 ##   name, `file:line`, `returns` or `panics` (for `[ShouldPanic]`), and the
 ##   text the panic must contain (empty for any panic or none).
-## - `--run NAME [--timeout SECONDS]` runs the test `NAME` and exits with 0
+## - `--run NAME [--timeout SECONDS]` runs the test `NAME` (or `file::NAME`,
+##   which tells apart tests of one name in two files) and exits with 0
 ##   when it returns, or with 1 when it left an allocation behind (or
 ##   released one too many); a panic aborts the program. With a timeout above 0, a
 ##   test still running after that many seconds ends the program with exit
 ##   status 124 and a message on standard error.
 export struct TestRunner {
     var _file: String;
+    var _adding: String;
     var _tests: Array<_TestCase>;
 
     ## Creates a runner for the tests of `file`.
     ##
-    ## @param file the entry file's path, as `pep-build` was given it
+    ## @param file the entry file's path, as `pep-build` was given it, or
+    ##   the folder of the files of a test program built from several
     construct(file: String) {
         _file = file;
+        _adding = file;
         _tests = Array<_TestCase>();
+    }
+
+    ## Makes `file` the file of the tests registered after this call.
+    ##
+    ## @param file the path of the file that declares them, as `pep-build`
+    ##   was given it
+    from_file(file: String) {
+        _adding = file;
     }
 
     ## Registers a test that passes when `body` returns.
@@ -90,7 +104,7 @@ export struct TestRunner {
     ## @param body the test function
     ## @param line the line that declares it
     add(name: String, body: () => void, line: int) {
-        _tests.append(_TestCase(name, body, line, false, ""));
+        _tests.append(_TestCase(_adding, name, body, line, false, ""));
     }
 
     ## Registers a `[ShouldPanic]` test, which passes only when `body`
@@ -102,7 +116,7 @@ export struct TestRunner {
     ## @param message text the panic's message must contain; empty for any
     ##   panic
     add_should_panic(name: String, body: () => void, line: int, message: String) {
-        _tests.append(_TestCase(name, body, line, true, message));
+        _tests.append(_TestCase(_adding, name, body, line, true, message));
     }
 
     ## Answers the request `args` makes (see the struct's description).
@@ -114,7 +128,7 @@ export struct TestRunner {
         if (args.count == 2 and args[1] == "--list") {
             for (var test in _tests) {
                 var kind = test.should_panic ? "panics" : "returns";
-                print($"{test.name}\t{_file}:{test.line}\t{kind}\t{_one_line(test.panic_message)}");
+                print($"{test.name}\t{test.file}:{test.line}\t{kind}\t{_one_line(test.panic_message)}");
             }
             return 0;
         }
@@ -128,7 +142,7 @@ export struct TestRunner {
                 seconds = parsed.value();
             }
             for (var test in _tests) {
-                if (test.name == args[2]) {
+                if (test.name == args[2] or $"{test.file}::{test.name}" == args[2]) {
                     return _run(test, seconds);
                 }
             }
