@@ -334,7 +334,7 @@ A variable declared outside any function is a module-level (global) variable. It
 exists for the whole run of the program and every function in the file can read
 it. Its initializer can be any expression, including a function call, and runs
 before `main`. Like other top-level declarations, a global is private to its
-file unless you mark it `export` (see [Visibility](visibility.md)).
+file (or module) unless you mark it `export` (see [Visibility](visibility.md)).
 
 Any function can run on any thread, so every thread can reach a global. It
 must therefore be declared `const` and have a thread-safe type, such as a

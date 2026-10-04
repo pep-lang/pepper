@@ -39,8 +39,8 @@ are long to write out: `Predicate<int>` reads better than `(int) => bool`.
 
 ## Aliases across files
 
-Like other top-level declarations, an alias is private to the file that
-declares it. Mark it `export` to let files that import it use it; see
+Like other top-level declarations, an alias is private to the file (or
+module) that declares it. Mark it `export` to let files that import it use it; see
 [Visibility](visibility.md) and [Modules and imports](modules.md).
 
 ## Recursive aliases

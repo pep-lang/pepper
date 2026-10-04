@@ -5330,3 +5330,47 @@ fn an_error_in_a_runtime_generic_notes_the_call_that_specialized_it() {
         error
     );
 }
+
+#[test]
+fn module_internal_name_used_outside_the_module() {
+    let others = [
+        ("geo/module.pep", "import \"rules\";\nexport * from \"shapes\";\n"),
+        ("geo/rules.pep", "struct Shelf { var count: int; }\nscale(x: int): int { return x * 2; }\n"),
+        ("geo/shapes.pep", "export area(w: int): int { return scale(w); }\n"),
+    ];
+    let error = error_of_files("module_internal", "import \"geo\";\nmain(): int {\n    return scale(area(1));\n}\n", &others);
+    let rules = format!("geo{}rules.pep", std::path::MAIN_SEPARATOR);
+    assert_eq!(
+        error,
+        format!(
+            "main.pep:3:12: error: 'scale' is internal to module 'geo'; export it from the module to use it here\n\
+             \x20   3 |     return scale(area(1));\n\
+             \x20     |            ^~~~~\n\
+             {rules}:2:1: note: declared here\n\
+             \x20   2 | scale(x: int): int {{ return x * 2; }}\n\
+             \x20     | ^~~~~"
+        )
+    );
+}
+
+#[test]
+fn two_module_files_declaring_one_type() {
+    let others = [
+        ("geo/module.pep", "import \"a\";\nimport \"b\";\n"),
+        ("geo/a.pep", "struct Point { var x: int; }\n"),
+        ("geo/b.pep", "\nstruct Point { var y: int; }\n"),
+    ];
+    let error = error_of_files("module_type_twice", "import \"geo\";\nmain(): int { return 0; }\n", &others);
+    let (a, b) = (format!("geo{}a.pep", std::path::MAIN_SEPARATOR), format!("geo{}b.pep", std::path::MAIN_SEPARATOR));
+    assert_eq!(
+        error,
+        format!(
+            "{b}:2:8: error: redefinition of 'Point'\n\
+             \x20   2 | struct Point {{ var y: int; }}\n\
+             \x20     |        ^~~~~\n\
+             {a}:1:8: note: previous definition is here\n\
+             \x20   1 | struct Point {{ var x: int; }}\n\
+             \x20     |        ^~~~~"
+        )
+    );
+}

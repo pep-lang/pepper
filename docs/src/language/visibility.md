@@ -1,9 +1,15 @@
 # Visibility
 
 Visibility decides which declarations other files may use. Every top-level
-declaration is **private to the file that declares it** unless you mark it with
-`export`. This lets a file keep its helpers to itself and offer a small, clear
-surface to the files that import it.
+declaration is **internal to its module** unless you mark it with `export`:
+the files of one [module](modules.md#modules) see each other's declarations,
+and nothing else does. A file outside any module is a module of its own, so
+its declarations are **private to the file**. This lets a module, or a file,
+keep its helpers to itself and offer a small, clear surface to the code that
+imports it.
+
+There is no smaller visibility than the module: Pepper has no `private`
+keyword, and no way to hide a declaration from the other files of its module.
 
 ## Exporting declarations
 
@@ -56,6 +62,62 @@ lib.pep:29:1: note: declared here
 The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports `'name' is private to file.pep`.
 
+## Files of a module share their declarations
+
+Inside a module, `export` is not needed for one file to use another's
+declarations. Every file of the module sees the top-level declarations of
+the module's other files, exported or not, with no import, as if they were
+its own. `export` means visible **outside** the module, through its
+`module.pep`.
+
+Here the `inventory` module keeps its rules in `rules.pep`, which exports
+nothing, and `stock.pep` uses them freely:
+
+```pepper
+{{#include ../../examples/visibility-modules/inventory/rules.pep}}
+```
+
+```pepper
+{{#include ../../examples/visibility-modules/inventory/stock.pep}}
+```
+
+```pepper
+{{#include ../../examples/visibility-modules/inventory/module.pep}}
+```
+
+```pepper
+{{#include ../../examples/visibility-modules/main.pep}}
+```
+
+A file's own declarations come first, then what its imports bring in, then
+the declarations of the module's other files, then the runtime's. A module's
+files are the files of the program in its folder (and in subfolders that are
+not modules themselves): a file joins the program when the module imports
+it, so `module.pep` imports a file with nothing to export, like `rules.pep`,
+just to include it. A `[Target(...)]` on that import (see
+[Platform-specific imports](modules.md#platform-specific-imports)) includes
+the file only on some platforms.
+
+Outside the module, its internal declarations stay hidden. Using one is an
+error that names the module:
+
+```text
+main.pep:3:13: error: 'Shelf' is internal to module 'inventory'; export it from the module to use it here
+    3 |     var s = Shelf();
+      |             ^~~~~
+inventory/rules.pep:4:8: note: declared here
+    4 | struct Shelf {
+      |        ^~~~~
+```
+
+Because the files of a module share one set of names, two of them may not
+both declare a struct, enum, type alias, trait, or variable of one name:
+the second is a `redefinition of 'name'`, with a note at the first.
+Functions are different: functions of one name in several files of a module
+are one [overload set](overloading.md), as they are within a file.
+Extensions are shared the same way: a file sees the methods its module's
+other files add, exported or not.
+
 ## Members of structs and extensions
 
 Fields and methods declared inside a struct's body are reached through the
@@ -67,8 +129,9 @@ To let other code read a value but not write it, make it a
 can be assigned only by the struct's own constructors and methods.
 
 Methods added by an extension share the **extension's** visibility instead. In
-the example, `norm()` is added by a private extension, so only `lib.pep` can
-call it, even though `Point` itself is exported:
+the example, `norm()` is added by a private extension, so only `lib.pep` (or,
+in a module, the module's files) can call it, even though `Point` itself is
+exported:
 
 ```text
 main.pep:4:14: error: 'norm' is declared in a private extension in lib.pep; declare the extension with 'export' to use it from another file
@@ -172,11 +235,12 @@ are private, so calling one, such as `_pep_check_sync_enabled`, reports
 `'_pep_check_sync_enabled' is private to` followed by the path of the
 runtime's `internals.pep`.
 
-## Each file has its own namespace
+## Each module has its own namespace
 
-A private declaration belongs to its file alone, so two files may each
-declare a private name without clashing. Here `main.pep` and `lib.pep` each
-have their own `Counter` and `make`, and each file's code reaches its own:
+A private declaration belongs to its file (or its module) alone, so two
+files outside any module, or two modules, may each declare a private name
+without clashing. Here `main.pep` and `lib.pep` each have their own
+`Counter` and `make`, and each file's code reaches its own:
 
 ```pepper
 {{#include ../../examples/visibility-namespaces/lib.pep}}
@@ -188,7 +252,9 @@ have their own `Counter` and `make`, and each file's code reaches its own:
 
 This holds across modules too: two modules may each have a `util.pep` with a
 private `helper`. Files are told apart by their path inside their module
-(`io/file.pep`), not by their file name alone.
+(`io/file.pep`), not by their file name alone. Within one module, the files
+share their names instead (see
+[Files of a module share their declarations](#files-of-a-module-share-their-declarations)).
 
 Exported names work the same way between modules: each module's exports
 are its own, so two modules may export the same name, and importers tell

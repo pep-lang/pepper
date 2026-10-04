@@ -104,9 +104,17 @@ export struct VisibilityError {
         var other = files[declared_in].name;
         match (kind) {
             Private => {
+                var module = _module_name(files[declared_in]);
+                if (module.is_value()) {
+                    return $"'{name}' is internal to module '{module.value()}'; export it from the module to use it here";
+                }
                 return $"'{name}' is private to {other}; declare it with 'export' to use it from another file";
             }
             PrivateExtension => {
+                var module = _module_name(files[declared_in]);
+                if (module.is_value()) {
+                    return $"'{name}' is declared in an extension internal to module '{module.value()}'; export the extension to use it here";
+                }
                 return $"'{name}' is declared in a private extension in {other}; declare the extension with 'export' to use it from another file";
             }
             ExtensionNotImported => {
@@ -265,18 +273,8 @@ struct _Owner {
     }
 }
 
-# A method or property an extension declares.
-struct _ExtensionMember {
-    var name: String;
-    var file: ulong;
-    var exported: bool;
-
-    construct(name: String, file: ulong, exported: bool) {
-        this.name = name;
-        this.file = file;
-        this.exported = exported;
-    }
-}
+# `_ExtensionMember` (a method or property an extension declares) is
+# link.pep's: the files of a module share their declarations.
 
 # A method a trait declares.
 struct _TraitMethod {
@@ -293,7 +291,7 @@ struct _TraitMethod {
 
 # Member names across the program, for bare member references in method
 # bodies and for `x.m` accesses.
-struct _Members {
+struct _VisibilityMembers {
     # Struct -> its generic parameters' names.
     var struct_params: HashMap<String, String[]> = HashMap<String, String[]>();
     # Struct -> the names its body declares (fields, properties, methods).
@@ -442,7 +440,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
     # whatever the map's order.
     var decl_names = Array<String>();
     var types = HashSet<String>();
-    var members = _Members();
+    var members = _VisibilityMembers();
     var traits = Map<String, _TraitMethod>();
     var trait_methods = HashMap<String, String[]>();
     # An extension may name its target or its traits through an alias.
@@ -782,7 +780,7 @@ struct _Checker {
     var decls: HashMap<String, _Decl[]>;
     # Other files' private declarations, by the name the user wrote.
     var private: HashMap<String, _Decl[]>;
-    var members: _Members;
+    var members: _VisibilityMembers;
     var target: Target;
     var errors: VisibilityError[];
     var walk_scopes: Scopes = Scopes();
@@ -800,7 +798,7 @@ struct _Checker {
         prelude: bool[],
         decls: HashMap<String, _Decl[]>,
         private: HashMap<String, _Decl[]>,
-        members: _Members,
+        members: _VisibilityMembers,
         target: Target,
         errors: VisibilityError[]
     ) {
@@ -1162,4 +1160,17 @@ extend _Checker with ScopeWalk {
             _type_locals(g, out);
         }
     }
+}
+
+# The name of the module `file` belongs to, if any.
+_module_name(file: ProgramFile): Optional<String> {
+    var root = file.module_root;
+    if (!root.is_value()) {
+        return Optional<String>.Empty;
+    }
+    var name = root.value().file_name();
+    if (!name.is_value()) {
+        return Optional<String>.Empty;
+    }
+    return Optional<String>.Value(name.value());
 }

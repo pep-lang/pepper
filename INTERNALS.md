@@ -43,7 +43,7 @@ names and the pass order come from that implementation.
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each with `pep-build --test`, lists its tests (`--list`) and runs each in a child process (`--run NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
 | `tools/pep-package` | `pep-package`, the package manager, written in Pepper and itself a `pep.toml` project (it depends on `tools/toml`, a copy of the private `pepper-toml` package, by `path`, so CI builds it offline): `semver.pep` (versions and ranges), `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides). The driver's `fetch.rs` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package, or checks the commits out with git itself when `pep-package` is not installed. Tested by `package_tests.rs`. |
 | `tools/pepper` | `pepper`, the entry point written in Pepper: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler). Tested by `pepper_entry_tests.rs`. |
-| `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder (no `module.pep`, so not part of the module), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
+| `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder, a subfolder of the module, so each test file sees the module's internal declarations (a test helper may not repeat one of their names), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the runtime's and tools' Pepper tests (`pepper-tests.sh`), and `install-vscode-extension.ps1`. |
@@ -258,7 +258,31 @@ with no extension (with `--lib`, the library's file name for the stem,
   functions hide). The
   visibility check applies the same override rule (`Decl::is_override`).
   A file's overloads of a name take one name whatever their visibility, so
-  an import binds the whole set. Where an import or re-export would bind
+  an import binds the whole set.
+  **Files of one module see each other's declarations** (#559): `module_mates`
+  groups the files of the program by `module_root`, and `module_bindings`
+  gives each file `Bindings::module`, every name its module's other files
+  declare (exported or not) -> the name it takes in the merged program.
+  Functions of one name declared by several files of a module form one
+  union (`Unions::merge`), which the declaring files see too (it seeds the
+  union an import of that name joins); externs keep their names; any other
+  name two files declare is the first's here, and the visibility check
+  reports the second (`redefinition of 'x'`, a note at the first). Lookup
+  of an unqualified name (`resolve_imported`) is the file's own, then its
+  imports, then `Bindings::module` (`Source::Module`, captured by a hidden
+  extension method like an import), then the prelude; `denote` records the
+  reference in `FileScope::imported`, so the visibility check, the LSP
+  (go to definition, hover) and the deprecation check follow it like an
+  import. `Overrides::of` counts the module's other files' types and
+  generic bases as the file's own; `FileScope::extensions` includes the
+  module's other files (so `Program::unit_inputs` hashes them into the
+  file's build-cache key), and their extensions are visible whether or not
+  exported (`Rewriter::mates`, `Checker::same_module`,
+  `ExtensionScopes::same_module`, also used by `Overloads::set` for a
+  set's private members). `load` queues a module file's `module.pep`,
+  so a file of a module never loads without the files its module imports.
+  Files outside any module, and the runtime's top-level prelude files, keep
+  per-file visibility. Where an import or re-export would bind
   one name to functions of two files (of one module or of several), or a
   file's own functions of a name meet an import of it, it binds a union
   instead (`Unions::merge`, a name like `f@geo/a#set1`; the prelude never
@@ -315,7 +339,9 @@ with no extension (with `--lib`, the library's file name for the stem,
   bind, spelled or not (`FileScope::bound`),
   duplicate
   exports, concrete overrides declared in several files, and a type or
-  variable declared twice in one file or exported by two prelude files.
+  variable declared twice in one file or exported by two prelude files, or
+  declared by two files of one module (compared demangled). A private
+  symbol of a file in a module is reported as `internal to module 'm'`.
   Extern redeclarations are exempt.
 
 ### 2.3 Parsing (`crates/pepper-parser`)

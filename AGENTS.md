@@ -265,7 +265,10 @@ Pepper source embedded in Rust tests) follows
   character) are `SCREAMING_CASE` (`LINE_WIDTH`); a `const` holding an object
   (`Atomic<int>`) is a variable and stays `snake_case`.
 - A private data member or method starts with `_` (`_size`, `_grow`), and so
-  does a runtime helper shared between files but not public (`_pep_malloc`).
+  does a runtime helper exported but not public (`_pep_malloc`, which the
+  compiler calls by name, or one that one runtime module shares with
+  another). Files of one module see each other's declarations without
+  `export`, so a helper used only inside its module stays unexported.
 - Spell words out (`iterate`, `index`, not `iter`, `idx`).
 - `extern` declarations keep the C library's name (`GetCurrentThreadId`).
 

@@ -433,7 +433,7 @@ fn a_qualified_use_does_not_unlock_the_bare_name() {
         "bare_after_qualified",
         &with_geometry("import geometry as g;\ntest(): int { g.revealed(); return secret(); }"),
     );
-    assert!(err.contains("'secret' is private to"), "{}", err);
+    assert!(err.contains("'secret' is internal to module 'geometry'"), "{}", err);
     let err = error(
         "bare_after_list",
         &with_geometry("import [rect_area] from geometry;\ntest(): int { rect_area(1, 1); return area(1, 2); }"),
@@ -443,16 +443,14 @@ fn a_qualified_use_does_not_unlock_the_bare_name() {
 
 #[test]
 fn private_extensions_elsewhere_do_not_shadow_imports() {
-    // Another file's private extension adds `g` to Counter; Counter's own file
-    // cannot see it, so `g.area2` there is still the module qualifier.
+    // Another module's private extension adds `g` to Counter; Counter's own
+    // file cannot see it, so `g.area2` there is still the module qualifier.
+    // (An extension in a file of Counter's own module would be visible.)
     let files = [
         ("geo/module.pep", "export area2(): int { return 7; }"),
-        (
-            "c/module.pep",
-            "import geo as g;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return g.area2(); } }",
-        ),
-        ("c/other.pep", "import \"module\";\nextend Counter { g(): int { return 0; } }"),
-        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
+        ("c/module.pep", "import geo as g;\nexport struct Counter { var n: int; f(): int { return g.area2(); } }"),
+        ("other.pep", "import c;\nextend c.Counter { g(): int { return 0; } }"),
+        ("main.pep", "import c;\nimport \"other\";\ntest(): int { var k = c.Counter(); return k.f(); }"),
     ];
     assert_eq!(run("private_ext", &files), 7);
 }
@@ -876,12 +874,9 @@ fn malformed_target_on_imports_and_re_exports_is_an_error() {
 fn an_unaliased_import_is_not_captured_by_a_hidden_extension_method() {
     let files = [
         ("geo/module.pep", "export area2(): int { return 7; }"),
-        (
-            "c/module.pep",
-            "import [area2] from geo;\nimport \"other\";\nexport struct Counter { var n: int; f(): int { return area2(); } }",
-        ),
-        ("c/other.pep", "import \"module\";\nextend Counter { area2(): int { return 100; } }"),
-        ("main.pep", "import c;\ntest(): int { var k = c.Counter(); return k.f(); }"),
+        ("c/module.pep", "import [area2] from geo;\nexport struct Counter { var n: int; f(): int { return area2(); } }"),
+        ("other.pep", "import c;\nextend c.Counter { area2(): int { return 100; } }"),
+        ("main.pep", "import c;\nimport \"other\";\ntest(): int { var k = c.Counter(); return k.f(); }"),
     ];
     assert_eq!(run("unaliased_capture", &files), 7);
 }
@@ -2025,12 +2020,21 @@ test(): int {
 
 #[test]
 fn export_from_binds_no_name_in_its_own_file() {
+    // `export * from` binds nothing: `f` is visible in `module.pep` only
+    // because the files of a module see each other's declarations. In a
+    // file outside the module, it is not.
     let files = [
         ("lib/module.pep", "export * from \"impl\";\nexport g(): int { return f(); }\n"),
         ("lib/impl.pep", "export f(): int { return 1; }\n"),
         ("main.pep", "import lib;\ntest(): int { return lib.g(); }"),
     ];
-    let err = error("export_from_binds_nothing", &files);
+    assert_eq!(run("export_from_binds_nothing", &files), 1);
+    let files = [
+        ("lib/module.pep", "export * from \"impl\";\n"),
+        ("lib/impl.pep", "export f(): int { return 1; }\n"),
+        ("main.pep", "export * from lib;\ntest(): int { return f(); }"),
+    ];
+    let err = error("export_from_binds_nothing_outside", &files);
     assert!(err.contains("'f'"), "{}", err);
 }
 
@@ -2348,4 +2352,106 @@ test(): int {
 "#;
     let files = [("limits/module.pep", limits), ("main.pep", main)];
     assert_eq!(run("pattern_constants", &files), 1 + 20 + 300 + 4000);
+}
+
+/// A module whose files use each other's private declarations with no
+/// import: a function, a struct, a constant, a private extension's method,
+/// a generic, and functions of one name in two files, which are one set.
+const SHARED: &[(&str, &str)] = &[
+    ("shop/module.pep", "import \"rules\";\nexport * from \"stock\";\n"),
+    (
+        "shop/rules.pep",
+        r#"
+const LEVEL = 5;
+struct Shelf { var count: int; }
+extend Shelf { missing(): int { return LEVEL - count; } }
+scale(x: int): int { return x * 2; }
+first<T>(items: T[]): T { return items[0]; }
+"#,
+    ),
+    (
+        "shop/stock.pep",
+        r#"
+scale(x: int, y: int): int { return x * y; }
+export total(count: int): int {
+    var shelf = Shelf();
+    shelf.count = count;
+    return shelf.missing() + scale(10) + scale(2, 3) + first<int>([100]);
+}
+"#,
+    ),
+];
+
+#[test]
+fn module_files_see_each_others_private_declarations() {
+    let mut files = SHARED.to_vec();
+    files.push(("main.pep", "import shop;\ntest(): int { return shop.total(1); }"));
+    assert_eq!(run("module_internal_names", &files), 4 + 20 + 6 + 100);
+}
+
+#[test]
+fn module_internal_declarations_are_hidden_outside_the_module() {
+    for (test, main, name) in [
+        ("module_internal_function", "import shop;\ntest(): int { return scale(1); }", "scale"),
+        ("module_internal_struct", "import shop;\ntest(): int { var s = Shelf(); return 0; }", "Shelf"),
+        ("module_internal_qualified", "import shop;\ntest(): int { return shop.scale(1); }", "scale"),
+    ] {
+        let mut files = SHARED.to_vec();
+        files.push(("main.pep", main));
+        let err = error(test, &files);
+        let expected = match test {
+            "module_internal_qualified" => format!("'{}' is not exported by 'shop'", name),
+            _ => format!("'{}' is internal to module 'shop'", name),
+        };
+        assert!(err.contains(&expected), "{}: {}", test, err);
+    }
+}
+
+#[test]
+fn a_files_imports_come_before_its_modules_other_files() {
+    // `stock.pep` imports `util`'s `bonus`; `rules.pep` has its own private
+    // `bonus`, which the import hides in `stock.pep` only.
+    let files = [
+        ("util/module.pep", "export bonus(): int { return 1000; }\n"),
+        ("shop/module.pep", "import \"rules\";\nexport * from \"stock\";\n"),
+        ("shop/rules.pep", "bonus(): int { return 1; }\nexport extra(): int { return bonus(); }\n"),
+        ("shop/stock.pep", "import [bonus] from util;\nexport total(): int { return bonus() + extra(); }\n"),
+        ("main.pep", "import shop;\ntest(): int { return shop.total(); }"),
+    ];
+    assert_eq!(run("module_imports_first", &files), 1001);
+}
+
+#[test]
+fn files_of_a_module_may_not_declare_one_type_twice() {
+    let files = [
+        ("shop/module.pep", "import \"a\";\nimport \"b\";\n"),
+        ("shop/a.pep", "const LIMIT = 1;\n"),
+        ("shop/b.pep", "struct LIMIT { }\n"),
+        ("main.pep", "import shop;\ntest(): int { return 0; }"),
+    ];
+    let err = error("module_name_twice", &files);
+    assert!(err.contains("b.pep:1:8: error: redefinition of 'LIMIT'"), "{}", err);
+    // Externs may repeat, as across files.
+    let files = [
+        ("shop/module.pep", "import \"a\";\nexport * from \"b\";\n"),
+        ("shop/a.pep", "extern int abs(int x);\n"),
+        ("shop/b.pep", "extern int abs(int x);\nexport magnitude(x: int): int { return abs(x); }\n"),
+        ("main.pep", "import shop;\ntest(): int { return shop.magnitude(-7); }"),
+    ];
+    assert_eq!(run("module_extern_twice", &files), 7);
+}
+
+#[test]
+fn a_module_file_loads_its_module() {
+    // The root is a file of `shop` that imports nothing: loading it loads
+    // `shop/module.pep`, and so `rules.pep`, whose names it uses.
+    std::env::set_current_dir(repo_root()).unwrap();
+    let dir = write_tree("module_root_file", SHARED);
+    let path = dir.join("deps/shop/check.pep");
+    std::fs::write(&path, "test(): int { var s = Shelf(); s.count = 2; return s.missing() + scale(1); }").unwrap();
+    let options = pepper_driver::Options::parse_from(["pepper", path.to_str().unwrap()]);
+    let mut module = pepper_driver::compiler::compile(&options, "main").expect("compile");
+    let ctx = inkwell::context::Context::create();
+    let mut generator = CodeGenerator::new(&ctx, "test");
+    assert_eq!(generator.jit_execute(&mut module, "test").expect("jit"), 5);
 }

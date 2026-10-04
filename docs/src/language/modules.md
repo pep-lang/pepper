@@ -77,7 +77,11 @@ main.pep:2:1: error: imports must come before all declarations
 A **module** is a folder that contains a `module.pep` file. The module is named
 after its folder, and its exports are exactly what its `module.pep` exports.
 The other files in the folder are the module's own files: `module.pep` imports
-them and chooses what to pass on to the module's users.
+them and chooses what to pass on to the module's users. The files of a module
+see each other's declarations, exported or not, without importing each other
+(see [Files of a module share their declarations](visibility.md#files-of-a-module-share-their-declarations)).
+Loading any file of a module loads its `module.pep`, and with it every file
+the module imports.
 
 This example has a `geometry` module next to `main.pep`:
 
@@ -153,8 +157,9 @@ A `module.pep` that only passes on its files' exports would repeat every name.
 ```
 
 - **It re-exports; it doesn't import.** `export * from "rect";` makes no name
-  visible in the file that contains it. A file that also uses those names
-  imports them as usual, with `import "rect";`.
+  visible in the file that contains it. Inside a module that does not
+  matter, since the module's files see each other's declarations anyway; a
+  file outside it imports the names as usual (`import "rect";`).
 - **Only exports travel.** Private declarations stay behind, and extensions
   stay visible only as they always are.
 - **Collisions are errors.** If two re-exports, or a re-export and one of the
@@ -320,10 +325,11 @@ runtime/iterator.pep:182:15: note: also exported here
   `say`, a local named `print` where you call `say` is an error that asks you
   to rename one of them.
 
-Each file has its own namespace, for its exported declarations as well as
-its private ones, so files and modules may reuse names freely: two modules
-may both export `parse`, and `a.parse` and `b.parse` stay apart. See
-[Each file has its own namespace](visibility.md#each-file-has-its-own-namespace).
+Each module (and each file outside a module) has its own namespace, for its
+exported declarations as well as its private ones, so modules may reuse names
+freely: two modules may both export `parse`, and `a.parse` and `b.parse` stay
+apart. See
+[Each module has its own namespace](visibility.md#each-module-has-its-own-namespace).
 Here `metric` and `imperial` each export a `Length`, a `parse` and a `unit`:
 
 ```pepper

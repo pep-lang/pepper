@@ -58,7 +58,7 @@ Some things to know about `extern` declarations:
 - The prototype uses C syntax only. The `name(parameter: type): type` form that
   Pepper functions use is a parse error on an extern, and `__ptr<T>` as a
   parameter type is an error too: write `char*`, not `__ptr<char>`.
-- An extern is private to its file, like every declaration. Write
+- An extern is private to its file (or module), like every declaration. Write
   `export extern ...` to let files that import this one call it (see
   [Visibility](visibility.md)).
 - Several files may declare the same extern, since every declaration names the

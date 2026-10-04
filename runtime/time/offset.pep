@@ -5,8 +5,6 @@ import os;
 import "civil";
 import "format";
 
-const NANOSECONDS_PER_SECOND: long = 1000000000;
-
 ## A fixed offset from UTC, east positive: `+02:00` for Central European
 ## Summer Time, `-05:00` for US Eastern Standard Time, `+00:00` for UTC.
 ##

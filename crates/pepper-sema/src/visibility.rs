@@ -1,6 +1,8 @@
 //! Module visibility: every top-level declaration — functions (including
 //! externs), structs, type aliases, traits, extensions, and module variables
-//! — is private to the file that declares it unless marked `export`. Checked
+//! — is internal to its module (the files of the program in its module
+//! folder; for a file outside any module, the file itself) unless marked
+//! `export`. Checked
 //! on the per-file ASTs before they are merged into one sema `Module`, since
 //! the merged model no longer knows where a name came from.
 //!
@@ -8,8 +10,9 @@
 //! spelling, program-wide — with two refinements: a name the referencing file
 //! declares itself (or binds locally: parameters, locals, generic parameters,
 //! and the members of the struct being defined or extended) is always
-//! visible, and a name declared only in other files is visible only if one of
-//! those declarations is exported. Names with no top-level declaration
+//! visible, as is one linking resolved to another file of its module, and a
+//! name declared only in other files is visible only if one of those
+//! declarations is exported. Names with no top-level declaration
 //! (builtins, intrinsics, primitive types) are not this check's concern.
 //!
 //! Linking has already given private declarations names no other file can
@@ -73,7 +76,8 @@ pub struct SourceFile<'a> {
 /// What a [`VisibilityError`] is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisibilityErrorKind {
-    /// A reference to a private top-level declaration of another file.
+    /// A reference to a private top-level declaration of another file: one
+    /// outside any module, or internal to another module.
     Private,
     /// A reference to a method of another file's private extension.
     PrivateExtension,
@@ -87,7 +91,8 @@ pub enum VisibilityErrorKind {
     /// An exported declaration of a non-prelude file whose name another file
     /// also declares: imports would resolve both to one of them.
     DuplicateExport,
-    /// A type or variable a file declares twice.
+    /// A type or variable a file declares twice, or two files of one module
+    /// declare (anything but functions, which join one overload set).
     Redefinition,
     /// A type or variable that two prelude files both export: the merged
     /// program has one namespace, so one would silently replace the other.
@@ -120,13 +125,23 @@ impl VisibilityError {
     pub fn message(&self, files: &[SourceFile]) -> String {
         let other = files[self.declared_in].name;
         match self.kind {
-            VisibilityErrorKind::Private => {
-                format!("'{}' is private to {}; declare it with 'export' to use it from another file", self.name, other)
-            }
-            VisibilityErrorKind::PrivateExtension => format!(
-                "'{}' is declared in a private extension in {}; declare the extension with 'export' to use it from another file",
-                self.name, other
-            ),
+            VisibilityErrorKind::Private => match module_name(files[self.declared_in].module_root) {
+                Some(module) => format!(
+                    "'{}' is internal to module '{}'; export it from the module to use it here",
+                    self.name, module
+                ),
+                None => format!("'{}' is private to {}; declare it with 'export' to use it from another file", self.name, other),
+            },
+            VisibilityErrorKind::PrivateExtension => match module_name(files[self.declared_in].module_root) {
+                Some(module) => format!(
+                    "'{}' is declared in an extension internal to module '{}'; export the extension to use it here",
+                    self.name, module
+                ),
+                None => format!(
+                    "'{}' is declared in a private extension in {}; declare the extension with 'export' to use it from another file",
+                    self.name, other
+                ),
+            },
             VisibilityErrorKind::ExtensionNotImported => {
                 // A file of another module is reached through its module.
                 let root = files[self.declared_in].module_root;
@@ -178,6 +193,11 @@ impl VisibilityError {
     pub fn render(&self, files: &[SourceFile]) -> String {
         self.to_diagnostic(files).render(&Files(files))
     }
+}
+
+/// The name of the module whose folder is `root`.
+fn module_name(root: Option<&std::path::Path>) -> Option<String> {
+    root.and_then(|r| r.file_name()).map(|n| n.to_string_lossy().into_owned())
 }
 
 /// `files` as the name and text lookup diagnostics render against.
@@ -355,6 +375,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     };
 
     let prelude: Vec<bool> = files.iter().map(|f| f.prelude).collect();
+    let roots: Vec<Option<&std::path::Path>> = files.iter().map(|f| f.module_root).collect();
     let exempt: Vec<bool> = files.iter().map(|f| f.duplicate_exempt).collect();
     let mut errors = vec![];
     for (name, entries) in &decls {
@@ -399,6 +420,43 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
                     declared_at: Some(d.span),
                     kind: VisibilityErrorKind::PreludeRedefinition,
                 });
+            }
+        }
+    }
+    // Files of one module see each other's declarations: two of them may
+    // declare a function of one name (an overload set) or an extern, but
+    // nothing else. Mangling keeps their names apart, so they are compared
+    // by the names the user wrote, in path order (the first is the one kept).
+    let mut in_module: HashMap<(&std::path::Path, &str), (usize, Span, bool)> = HashMap::new();
+    let mut by_path: Vec<usize> = (0..files.len()).filter(|&i| files[i].module_root.is_some()).collect();
+    by_path.sort_by_key(|&i| files[i].name);
+    for i in by_path {
+        let file = &files[i];
+        let Some(root) = file.module_root else { continue };
+        for d in file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
+            let function = match d {
+                Declaration::Extend(_) | Declaration::Static(_) => continue,
+                Declaration::Function(f) if is_function_override(f) => continue,
+                Declaration::Function(_) => true,
+                _ => false,
+            };
+            let external = matches!(d, Declaration::Function(f) if f.external);
+            let name = demangle_name(d.name());
+            match in_module.get(&(root, name)) {
+                None => {
+                    in_module.insert((root, name), (i, d.name_span(), function && !external));
+                }
+                Some(&(first, span, first_function)) if first != i && !(function && first_function) && !external => {
+                    errors.push(VisibilityError {
+                        file: i,
+                        span: d.name_span(),
+                        name: name.to_string(),
+                        declared_in: first,
+                        declared_at: Some(span),
+                        kind: VisibilityErrorKind::Redefinition,
+                    });
+                }
+                Some(_) => {}
             }
         }
     }
@@ -457,6 +515,7 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             .collect();
         let mut checker = Checker {
             file: i,
+            roots: &roots,
             own,
             imported: file.imported,
             extensions: file.extensions,
@@ -555,6 +614,8 @@ fn struct_member_names(s: &StructDecl) -> impl Iterator<Item = &str> {
 
 struct Checker<'a, 'e> {
     file: usize,
+    /// Per file, its module's folder, if any.
+    roots: &'a [Option<&'a std::path::Path>],
     own: HashSet<&'a str>,
     /// References linking rewrote from an import: span start -> name.
     imported: &'a HashMap<usize, String>,
@@ -601,10 +662,15 @@ impl Checker<'_, '_> {
         }
     }
 
-    /// An extension in `file` is visible here: it is this file's own, or
-    /// exported by a prelude file or a file this one imports.
+    /// `file` is this file, or another file of its module.
+    fn same_module(&self, file: usize) -> bool {
+        file == self.file || (self.roots[file].is_some() && self.roots[file] == self.roots[self.file])
+    }
+
+    /// An extension in `file` is visible here: it is this file's own or its
+    /// module's, or exported by a prelude file or a file this one imports.
     fn sees_extension(&self, file: usize, exported: bool) -> bool {
-        file == self.file || (exported && (self.prelude[file] || self.extensions.contains(&file)))
+        self.same_module(file) || (exported && (self.prelude[file] || self.extensions.contains(&file)))
     }
 
     fn module(&mut self, module: &Module) {
@@ -789,7 +855,7 @@ impl ScopeWalk for Checker<'_, '_> {
         if self.unknown_receivers.contains(&span.start) {
             return;
         }
-        let visible_body = |&(file, exported): &(usize, bool)| exported || file == self.file;
+        let visible_body = |&(file, exported): &(usize, bool)| exported || self.same_module(file);
         // A trait this file can see may declare it: the call may go through
         // a value of that trait, which needs no conformance in view.
         let through_trait = self.members.in_traits.get(name).is_some_and(|t| {

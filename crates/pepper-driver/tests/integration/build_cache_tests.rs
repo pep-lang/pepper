@@ -587,3 +587,29 @@ fn a_cached_vtable_serves_a_new_copy_of_its_trait() {
     assert_eq!(outcome(&copied, "shapes"), Some(Outcome::Hit), "{:?}", outcomes(&copied));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_module_file_is_rebuilt_when_another_file_of_its_module_changes() {
+    // `stock.pep` calls `rules.pep`'s private `scale` with no import between
+    // them (files of a module see each other's declarations), so a change to
+    // `scale`'s signature must reach `stock.pep`'s unit.
+    let dir = scratch("module_mates");
+    let cache = dir.join("cache");
+    std::fs::create_dir_all(dir.join("shop")).unwrap();
+    write(
+        &dir,
+        &[
+            ("main.pep", "import \"shop\";\nmain(): int { return total(2) - 4; }\n"),
+            ("shop/module.pep", "import \"rules\";\nexport * from \"stock\";\n"),
+            ("shop/rules.pep", "scale(x: int): int { return x * 2; }\n"),
+            ("shop/stock.pep", "export total(x: int): int { return scale(x); }\n"),
+        ],
+    );
+    let entry = dir.join("main.pep");
+    let first = build_entry(&entry, &cache, &dir.join("a"));
+    assert_eq!(outcome(&first, "shop/stock"), Some(Outcome::Miss), "{:?}", outcomes(&first));
+    write(&dir, &[("shop/rules.pep", "scale(x: int, by: int = 3): int { return x * by; }\n")]);
+    let second = build_entry(&entry, &cache, &dir.join("b"));
+    assert_ne!(outcome(&second, "shop/stock"), Some(Outcome::Hit), "{:?}", outcomes(&second));
+    let _ = std::fs::remove_dir_all(&dir);
+}

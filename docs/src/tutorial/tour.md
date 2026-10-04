@@ -147,7 +147,7 @@ What is new here:
 
 - **Imports.** `import "counter";` makes the declarations that `counter.pep`
   marks with `export` available in `main.pep`. Anything not exported stays
-  private to its file. `import [File, Directory, Path] from io;` brings three
+  private to its file (or, in a module, to the module's files). `import [File, Directory, Path] from io;` brings three
   names in from the standard library's `io` module, which, unlike `String` or
   `Array`, must be imported. See [Modules and imports](../language/modules.md)
   and [Visibility](../language/visibility.md).

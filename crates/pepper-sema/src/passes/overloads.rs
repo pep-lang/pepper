@@ -761,7 +761,7 @@ impl Overloads {
 
     /// The members of `set` that code at `at` can see: all of them, except
     /// that the private members of a set with exported ones are seen only
-    /// in their own file, and a file's own member hides an imported member
+    /// in their own file and module, and a file's own member hides an imported member
     /// with the same parameters. A synthesized location (`Loc::NONE`) sees
     /// all.
     fn set(&self, set: &str, at: Loc) -> Option<impl Iterator<Item = &Member>> {
@@ -771,7 +771,9 @@ impl Overloads {
             false => members.iter().filter(|m| m.loc.file == at.file).map(|m| &m.key).collect(),
         };
         let visible = move |m: &&Member| {
-            at == Loc::NONE || m.loc.file == at.file || (!self.hidden.contains(&m.loc) && !own.contains(&&m.key))
+            at == Loc::NONE
+                || m.loc.file == at.file
+                || ((!self.hidden.contains(&m.loc) || self.scopes.same_module(m.loc.file, at.file)) && !own.contains(&&m.key))
         };
         Some(members.iter().filter(visible))
     }

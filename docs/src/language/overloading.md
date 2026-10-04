@@ -60,9 +60,11 @@ from two files:
 {{#include ../../examples/overloading-modules/main.pep}}
 ```
 
-A file of the module that imports both files (`import "square";` and
-`import "rect";`, or an import list naming `area` from each) sees the
-same set. Members from different files must still differ in their
+Every file of the module sees the same set, with no import, since the
+files of a module share their declarations (see
+[Visibility](visibility.md#files-of-a-module-share-their-declarations)).
+That holds for private functions too: functions of one name that several
+files of a module declare, exported or not, are one set there. Members from different files must still differ in their
 parameters (`redefinition of 'area'`). Names that are not all functions,
 such as two structs `Point`, and a renaming re-export
 (`export size as area` beside an `area`) are still `exported twice`.
@@ -113,7 +115,7 @@ joined.
 ### Members may differ in visibility
 
 Exported members are what other files see; a private member is a candidate
-only for calls in its own file. Here `shapes.pep` exports `area(int)` and
+only for calls in its own file, or in its module's files. Here `shapes.pep` exports `area(int)` and
 keeps the two-argument form as a helper:
 
 ```pepper

@@ -126,6 +126,7 @@ main.pep:3:5: warning: `new` is deprecated; constructors are spelled `construct`
 | Deprecated | Replacement |
 |------------|-------------|
 | `new(...)` constructor | `construct(...)` |
+| A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their declarations) | one declaration, or two names |
 | `io.Path.join_str(String)` | `io.Path.join(Path)`, which accepts a `String` |
 | `String.clone()` | `String.copy()` |
 | `ThreadLocal<T>.get()` for a `T` that is not thread-safe (now an error) | `with (var value = local.enter()) { ... }` |

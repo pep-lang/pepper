@@ -2819,7 +2819,12 @@ Returns a fresh value: it shares nothing with the arguments.");
         {
             let scope = body_at(&ast, offset);
             let locals: Vec<Symbol> = scope_locals(&ast, offset);
-            let globals = collect_globals(&ast);
+            let mut globals = collect_globals(&ast);
+            if let Some(view) = self.view(uri)
+                && let Ok(program) = view.latest.program()
+            {
+                globals.extend(module_globals(program));
+            }
             let struct_members: Vec<Symbol> = scope
                 .as_ref()
                 .and_then(|(_, s)| *s)
@@ -2849,6 +2854,24 @@ Returns a fresh value: it shares nothing with the arguments.");
         }
         items
     }
+}
+
+/// The top-level declarations of the other files of the module of
+/// `program.files[0]`, which it sees with no import, spelled as written
+/// (the linked program mangles them).
+fn module_globals(program: &Program) -> Vec<Symbol> {
+    let Some(root) = program.files.first().and_then(|f| f.module_root.as_ref()) else { return vec![] };
+    program
+        .files
+        .iter()
+        .skip(1)
+        .filter(|f| f.module_root.as_ref() == Some(root))
+        .flat_map(|f| collect_globals(&f.module))
+        .map(|mut s| {
+            s.name = pepper_parser::namespace::demangle_name(&s.name).to_string();
+            s
+        })
+        .collect()
 }
 
 #[async_trait]

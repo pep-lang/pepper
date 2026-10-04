@@ -16,7 +16,7 @@ expect_bad_ip(text: String) {
     assert(r.error().is_invalid_input(), "invalid input: " + text);
 }
 
-socket(text: String): String {
+socket_text(text: String): String {
     var r = io.SocketAddress.parse(text);
     assert(r.is_ok(), "parses: " + text);
     return r.value().to_string();
@@ -106,10 +106,10 @@ ip_construction_equality_and_predicates() {
 
 [Test]
 socket_addresses_parse_and_format() {
-    expect_equal(socket("1.2.3.4:0"), "1.2.3.4:0");
-    expect_equal(socket("1.2.3.4:65535"), "1.2.3.4:65535");
-    expect_equal(socket("[::1]:8080"), "[::1]:8080");
-    expect_equal(socket("[2001:DB8::1]:443"), "[2001:db8::1]:443");
+    expect_equal(socket_text("1.2.3.4:0"), "1.2.3.4:0");
+    expect_equal(socket_text("1.2.3.4:65535"), "1.2.3.4:65535");
+    expect_equal(socket_text("[::1]:8080"), "[::1]:8080");
+    expect_equal(socket_text("[2001:DB8::1]:443"), "[2001:db8::1]:443");
     expect_bad_socket("");
     expect_bad_socket("1.2.3.4");
     expect_bad_socket("1.2.3.4:");

@@ -70,7 +70,8 @@ leaves `_` members out, and [doc comments](doc-comments.md) are required only
 on members without the prefix.
 
 A top-level declaration does not need the prefix to be private: it is
-private to its file unless it is exported (see [Visibility](visibility.md)).
-The runtime also uses the prefix on top-level helpers that its own files
-export to each other, such as `_pep_malloc`: they are not part of its public
-API, and the reference leaves them out too.
+internal to its module (or, outside any module, private to its file) unless
+it is exported (see [Visibility](visibility.md)). The runtime also uses the
+prefix on top-level helpers it exports but that are not part of its public
+API, such as `_pep_malloc`, which the compiler calls by name, or a helper
+one runtime module shares with another: the reference leaves them out too.

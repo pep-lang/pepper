@@ -18,10 +18,17 @@
 //! - `import "f"`: the file's exports, unqualified;
 //! - `import [x, y as z] from m`: those exports, as `x` and `z`.
 //!
-//! Locally bound names (parameters, locals, generic parameters, struct
-//! members) shadow imports; a name the file declares itself may not also be
-//! imported. The visibility check then rejects references to exports of
-//! non-prelude files that the referencing file did not import.
+//! - every top-level declaration of the other files of its module (the
+//!   files of the program in the same module folder), exported or not, with
+//!   no import: a module is the smallest unit of visibility.
+//!
+//! An unqualified name is the file's own declaration, else what its imports
+//! bind, else a declaration of another file of its module, else a prelude
+//! export. Locally bound names (parameters, locals, generic parameters,
+//! struct members) shadow them all; a name the file declares itself may not
+//! also be imported. The visibility check then rejects references to
+//! exports of non-prelude files that the referencing file did not import,
+//! and to declarations internal to another file or module.
 
 use crate::passes::platform::keep;
 use crate::scope_walk::{ScopeWalkMut, Scopes};
@@ -121,6 +128,11 @@ struct Bindings {
     /// A whole-file import did not resolve: any unknown name may be one of
     /// its exports, so re-exports of unknown names are not reported again.
     unresolved_whole_file: bool,
+    /// The declarations of the other files of the file's module, by name,
+    /// which it sees after its imports: each name -> the declaration it
+    /// denotes, or the union of the module's functions of that name. A name
+    /// the file declares itself is here only as such a union.
+    module: HashMap<String, String>,
 }
 
 /// Overload sets that span files and modules. Each file's functions of a
@@ -386,6 +398,21 @@ fn visible_names(files: &[ProgramFile], own: &[Names], exported: &[Names], shado
 impl Overrides {
     /// The rule over the files of a program, before linking.
     fn of(files: &[ProgramFile]) -> Overrides {
+        // A file sees the declarations of its module's other files as its own.
+        let mates = module_mates(files);
+        let with_mates = |own: &[Names]| -> Vec<Names> {
+            (0..files.len())
+                .map(|i| {
+                    let mut names = own[i].clone();
+                    for &j in &mates[i] {
+                        for (k, v) in &own[j] {
+                            add_names(&mut names, k, v);
+                        }
+                    }
+                    names
+                })
+                .collect()
+        };
         // Per file, the visible names of the declarations `kind` accepts.
         let visible = |kind: fn(&Declaration) -> bool| -> Vec<HashSet<String>> {
             let names_of = |f: &ProgramFile, exported_only: bool| -> Names {
@@ -394,9 +421,11 @@ impl Overrides {
                     .map(|d| (d.name().to_string(), HashSet::new()))
                     .collect()
             };
-            let own: Vec<Names> = files.iter().map(|f| names_of(f, false)).collect();
+            let own: Vec<Names> = with_mates(&files.iter().map(|f| names_of(f, false)).collect::<Vec<_>>());
             let exported: Vec<Names> = files.iter().map(|f| names_of(f, true)).collect();
-            let own_names: Vec<HashSet<String>> = own.iter().map(|o| o.keys().cloned().collect()).collect();
+            // Imports come before the module's other files.
+            let own_names: Vec<HashSet<String>> =
+                files.iter().map(|f| named_decls(&f.module).filter(|d| kind(d)).map(|d| d.name().to_string()).collect()).collect();
             visible_names(files, &own, &exported, &own_names).into_iter().map(|v| v.into_keys().collect()).collect()
         };
         // An override's type argument may name any type, and is an error
@@ -418,7 +447,8 @@ impl Overrides {
             }
             out
         };
-        let own: Vec<Names> = (0..files.len()).map(|i| bases_of(i, false)).collect();
+        let own_file: Vec<Names> = (0..files.len()).map(|i| bases_of(i, false)).collect();
+        let own = with_mates(&own_file);
         let exported: Vec<Names> = (0..files.len()).map(|i| bases_of(i, true)).collect();
         // A file's own declaration of a name hides what its imports bind
         // under that name, as linking resolves it: a plain function, or a
@@ -433,7 +463,7 @@ impl Overrides {
             })
             .collect();
         let shadow: Vec<HashSet<String>> =
-            plain.iter().zip(&own).map(|(p, o)| p.iter().cloned().chain(o.keys().cloned()).collect()).collect();
+            plain.iter().zip(&own_file).map(|(p, o)| p.iter().cloned().chain(o.keys().cloned()).collect()).collect();
         let bases = visible_names(files, &own, &exported, &shadow);
         let none: Vec<Names> = vec![Names::new(); files.len()];
         let imported_bases = visible_names(files, &none, &exported, &plain);
@@ -480,6 +510,80 @@ fn names_type(types: &HashSet<String>, param: &str) -> bool {
 /// The named top-level declarations that survive platform selection.
 fn named_decls(module: &Module) -> impl Iterator<Item = &Declaration> {
     module.declarations.iter().filter(|d| !matches!(d, Declaration::Extend(_)) && keep(d.attributes()).unwrap_or(true))
+}
+
+/// Per file, the other files of the program in its module: those with the
+/// same module folder. A file outside any module has none.
+fn module_mates(files: &[ProgramFile]) -> Vec<Vec<usize>> {
+    let mut by_root: HashMap<&std::path::Path, Vec<usize>> = HashMap::new();
+    for (i, f) in files.iter().enumerate() {
+        if let Some(root) = &f.module_root {
+            by_root.entry(root).or_default().push(i);
+        }
+    }
+    files
+        .iter()
+        .enumerate()
+        .map(|(i, f)| match &f.module_root {
+            Some(root) => by_root[root.as_path()].iter().copied().filter(|&j| j != i).collect(),
+            None => vec![],
+        })
+        .collect()
+}
+
+/// Per file, the names its module's other files declare ([`Bindings::module`]).
+/// The functions several files of a module declare under one name form one
+/// overload set, a union (see [`Unions`]), which the declaring files see
+/// too. Externs keep their names. Any other name declared by two files of
+/// one module is the first one's; the visibility check reports the second.
+fn module_bindings(files: &[ProgramFile], own: &[Own], mates: &[Vec<usize>], unions: &mut Unions) -> Vec<HashMap<String, String>> {
+    let mut out: Vec<HashMap<String, String>> = vec![HashMap::new(); files.len()];
+    let mut done = vec![false; files.len()];
+    for i in 0..files.len() {
+        if done[i] || mates[i].is_empty() {
+            continue;
+        }
+        let mut group: Vec<usize> = std::iter::once(i).chain(mates[i].iter().copied()).collect();
+        // In path order: the first declaration of a name is the one kept.
+        group.sort_by(|&a, &b| files[a].name.cmp(&files[b].name));
+        // name -> (declaring file, the name it takes, a function).
+        let mut by_name: std::collections::BTreeMap<&str, Vec<(usize, &String, bool)>> = Default::default();
+        for &j in &group {
+            done[j] = true;
+            let mut seen = HashSet::new();
+            for d in named_decls(&files[j].module) {
+                let Some(c) = own[j].get(d.name()) else { continue };
+                if !seen.insert(d.name()) {
+                    continue;
+                }
+                let function = matches!(d, Declaration::Function(f) if !f.external);
+                by_name.entry(d.name()).or_default().push((j, c, function));
+            }
+        }
+        for (name, declared) in by_name {
+            let canonical = match declared.as_slice() {
+                [(_, c, _)] => (*c).clone(),
+                _ if declared.iter().all(|(_, _, function)| *function) => {
+                    let mut union = Some(declared[0].1.clone());
+                    for (_, c, _) in &declared[1..] {
+                        union = union.and_then(|u| unions.merge(&u, c));
+                    }
+                    match union {
+                        Some(union) => union,
+                        None => continue,
+                    }
+                }
+                _ => declared[0].1.clone(),
+            };
+            let union = declared.len() > 1 && declared.iter().all(|(_, _, function)| *function);
+            for &j in &group {
+                if union || !own[j].contains_key(name) {
+                    out[j].insert(name.to_string(), canonical.clone());
+                }
+            }
+        }
+    }
+    out
 }
 
 /// A file's own names, each mapped to the name its declaration takes in the
@@ -555,6 +659,8 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
     let overrides = Overrides::of(files);
     let own = own_names(files, &overrides);
     let mut unions = Unions::of(files, &own, &overrides);
+    let mates = module_mates(files);
+    let module = module_bindings(files, &own, &mates, &mut unions);
 
     // Every type the program declares: in `extend Box<X>`, a declared `X`
     // specializes rather than introducing a parameter.
@@ -660,7 +766,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             }
             if inputs_changed {
                 let mut errs = vec![];
-                let b = bind_imports(i, files, &exports, &own[i], &mut unions, &mut errs);
+                let b = bind_imports(i, files, &exports, &own[i], &module[i], &mut unions, &mut errs);
                 bound.insert(i, (b, errs));
             }
             let mut errs = vec![];
@@ -746,7 +852,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             bindings.push(b);
             continue;
         }
-        let b = bind_imports(i, files, &exports, &own[i], &mut unions, &mut errors);
+        let b = bind_imports(i, files, &exports, &own[i], &module[i], &mut unions, &mut errors);
         if is_reexporting[i] {
             resolve_reexports(i, files, &direct[i], &own[i], &overrides, &b, &exports, &prelude, &mut unions, &mut errors);
         }
@@ -806,7 +912,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
         }
     }
 
-    let extensions = visible_extensions(files);
+    let extensions = visible_extensions(files, &mates);
     // Every struct by the name it takes in the merged program.
     let linked_structs: HashSet<String> = files
         .iter()
@@ -847,6 +953,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             names: &names,
             members: &members,
             extensions: &extensions[i],
+            mates: &mates[i],
             scopes: Scopes::default(),
             imported: HashMap::new(),
             errors: &mut errors,
@@ -859,6 +966,7 @@ pub fn link(files: &mut [ProgramFile]) -> Linked {
             .flatten()
             .cloned()
             .chain(bindings[i].qualified.values().flat_map(|&t| exports[t].values().cloned()))
+            .chain(bindings[i].module.values().cloned())
             .collect();
         scopes.push(FileScope { imported, named, extensions: extensions[i].clone(), bound });
     }
@@ -882,13 +990,16 @@ pub struct Linked {
 /// Per file, the other files whose exported extensions it may use (see
 /// [`FileScope::extensions`]). An import of a module (`import m`, or a
 /// local import of a module folder) reaches every file of that module; an
-/// import of a file reaches that file.
-fn visible_extensions(files: &[ProgramFile]) -> Vec<HashSet<usize>> {
+/// import of a file reaches that file. The other files of its own module
+/// are always reached (their extensions are visible exported or not).
+fn visible_extensions(files: &[ProgramFile], mates: &[Vec<usize>]) -> Vec<HashSet<usize>> {
     let everywhere: HashSet<usize> = (0..files.len()).filter(|&j| files[j].prelude || files[j].prelude_part).collect();
     files
         .iter()
-        .map(|f| {
+        .zip(mates)
+        .map(|(f, mates)| {
             let mut out = everywhere.clone();
+            out.extend(mates.iter().copied());
             let kept = f.module.imports.iter().zip(&f.imports).zip(&f.folder_imports);
             for ((imp, target), folder) in kept.filter(|((imp, _), _)| !imp.reexport && keep(&imp.attributes).unwrap_or(true)) {
                 let Some(t) = *target else { continue };
@@ -1114,7 +1225,8 @@ fn resolve_top_level(
 
 /// What an unqualified name that is not the file's own (or local) denotes.
 enum Resolution {
-    /// A declaration, by name: bound by an import, or a prelude export.
+    /// A declaration, by name: bound by an import, declared by another file
+    /// of the module, or a prelude export.
     Declared(String, Source),
     /// Two whole-file imports bind it to different declarations.
     Ambiguous,
@@ -1125,15 +1237,20 @@ enum Resolution {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Source {
     Import,
+    Module,
     Prelude,
 }
 
-/// Resolve an unqualified name through the file's imports, then the prelude.
+/// Resolve an unqualified name through the file's imports, then the other
+/// files of its module, then the prelude.
 fn resolve_imported(name: &str, bindings: &Bindings, prelude: &HashMap<String, String>) -> Resolution {
     match bindings.unqualified.get(name) {
         Some(Some(c)) => Resolution::Declared(c.clone(), Source::Import),
         Some(None) => Resolution::Ambiguous,
-        None => prelude.get(name).map_or(Resolution::Unknown, |c| Resolution::Declared(c.clone(), Source::Prelude)),
+        None => match bindings.module.get(name) {
+            Some(c) => Resolution::Declared(c.clone(), Source::Module),
+            None => prelude.get(name).map_or(Resolution::Unknown, |c| Resolution::Declared(c.clone(), Source::Prelude)),
+        },
     }
 }
 
@@ -1149,10 +1266,11 @@ fn bind_imports(
     files: &[ProgramFile],
     exports: &[HashMap<String, String>],
     own: &Own,
+    module: &HashMap<String, String>,
     unions: &mut Unions,
     errors: &mut Vec<ModuleError>,
 ) -> Bindings {
-    let mut b = Bindings::default();
+    let mut b = Bindings { module: module.clone(), ..Bindings::default() };
     // An import platform selection drops binds nothing, and is no error.
     let kept = || {
         files[i]
@@ -1204,12 +1322,13 @@ fn bind_imports(
         // The merge is order-independent: equal keeps, functions declared
         // under one name join a union, anything else different -> None.
         for (name, c) in &exports[target] {
-            // The file's own functions of the name join an imported set of
-            // it; anything else of the file's own hides the import.
+            // The file's own functions of the name (with its module's) join
+            // an imported set of it; anything else of the file's own hides
+            // the import.
             if let Some(o) = own.get(name) {
                 let seed = match b.unqualified.get(name) {
                     Some(Some(union)) => union.clone(),
-                    _ => o.clone(),
+                    _ => module.get(name).unwrap_or(o).clone(),
                 };
                 if let Some(union) = unions.merge(&seed, c) {
                     b.unqualified.insert(name.clone(), Some(union));
@@ -1245,7 +1364,7 @@ fn bind_imports(
             };
             let local = s.local_name();
             // Only functions join the file's own of the name.
-            let existing = explicit.get(local).or_else(|| own.get(local));
+            let existing = explicit.get(local).or_else(|| module.get(local).filter(|_| own.contains_key(local))).or_else(|| own.get(local));
             if own.contains_key(local) && unions.merge(existing.unwrap(), c).is_none() {
                 errors.push(ModuleError { note: None,
                     unresolved: false,
@@ -1341,6 +1460,9 @@ struct Rewriter<'a, 'e> {
     constants: &'a HashSet<String>,
     /// Other files whose exported extensions this file may use.
     extensions: &'a HashSet<usize>,
+    /// The other files of this file's module, whose extensions it sees
+    /// whether or not they are exported.
+    mates: &'a [usize],
     scopes: Scopes,
     imported: HashMap<usize, String>,
     errors: &'e mut Vec<ModuleError>,
@@ -1418,15 +1540,18 @@ impl Rewriter<'_, '_> {
             if let Some(Some(union)) = self.bindings.unqualified.get(name) {
                 return self.denote(name, union.clone(), span, value, true);
             }
+            if let Some(union) = self.bindings.module.get(name) {
+                return self.denote(name, union.clone(), span, value, true);
+            }
             return (c != name).then(|| c.clone());
         }
         // A prelude name is recorded like an import even when it needs no
         // rewriting: a forced module's `export step` makes `step`, declared
         // in a file of that module, visible everywhere.
         match resolve_imported(name, self.bindings, self.prelude) {
-            // Only an import can be captured by a hidden method: a prelude
-            // name (`hash`) is not an import.
-            Resolution::Declared(c, source) => self.denote(name, c, span, value, source == Source::Import),
+            // Only an import (or another file's declaration) can be captured
+            // by a hidden method: a prelude name (`hash`) is not an import.
+            Resolution::Declared(c, source) => self.denote(name, c, span, value, source != Source::Prelude),
             Resolution::Ambiguous => {
                 self.errors.push(ModuleError { note: None, unresolved: false, file: self.file, span, message: ambiguous(name) });
                 None
@@ -1511,7 +1636,8 @@ impl ScopeWalkMut for Rewriter<'_, '_> {
         self.members.of_body.get(struct_name).is_some_and(|m| m.contains(name))
             || self.members.of_extensions.get(struct_name).is_some_and(|ext| {
                 ext.iter().any(|(m, file, exported)| {
-                    m == name && (*file == self.file || (*exported && self.extensions.contains(file)))
+                    m == name
+                        && (*file == self.file || self.mates.contains(file) || (*exported && self.extensions.contains(file)))
                 })
             })
     }

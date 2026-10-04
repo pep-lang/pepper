@@ -1573,14 +1573,24 @@ pub struct ExtensionScopes {
     pub prelude: std::collections::HashSet<u32>,
     /// Indexed by `FileId`; empty when the module was not linked.
     pub visible: Vec<std::collections::HashSet<u32>>,
+    /// Indexed by `FileId`: the module each file belongs to (an index into
+    /// no table, equal for the files of one module), or `None` outside any
+    /// module.
+    pub module: Vec<Option<u32>>,
 }
 
 impl ExtensionScopes {
     /// Whether code in file `from` may use the methods of an extension
-    /// declared in file `file`.
+    /// declared in file `file`: its own file's or its module's, or an
+    /// exported one it can see.
     pub fn sees(&self, from: FileId, file: FileId, exported: bool) -> bool {
         let Some(visible) = self.visible.get(from.0 as usize) else { return true };
-        file == from || (exported && (self.prelude.contains(&file.0) || visible.contains(&file.0)))
+        self.same_module(from, file) || (exported && (self.prelude.contains(&file.0) || visible.contains(&file.0)))
+    }
+
+    /// Whether files `a` and `b` are one file or belong to one module.
+    pub fn same_module(&self, a: FileId, b: FileId) -> bool {
+        a == b || self.module.get(a.0 as usize).is_some_and(|m| m.is_some() && self.module.get(b.0 as usize) == Some(m))
     }
 }
 

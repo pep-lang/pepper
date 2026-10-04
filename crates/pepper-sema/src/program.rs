@@ -320,6 +320,14 @@ impl Program {
         crate::model::ExtensionScopes {
             prelude: (0..self.files.len()).filter(|&i| self.files[i].prelude || self.files[i].prelude_part).map(|i| i as u32).collect(),
             visible: self.scopes.iter().map(|scope| scope.extensions.iter().map(|&i| i as u32).collect()).collect(),
+            module: self
+                .files
+                .iter()
+                .map(|f| {
+                    let root = f.module_root.as_ref()?;
+                    self.files.iter().position(|g| g.module_root.as_ref() == Some(root)).map(|i| i as u32)
+                })
+                .collect(),
         }
     }
 
@@ -676,6 +684,20 @@ pub fn load_with(root: Root, prelude: &[PathBuf], search_paths: &[PathBuf], mode
         resolved.push(targets);
         let namespace = roots.namespace_of(&path);
         let module_root = roots.module_of(&path);
+        // A file of a module sees the declarations of the module's other
+        // files, so loading one loads its `module.pep`, and with it the files
+        // the module reaches. Spelled from the file's own path, as an import
+        // of it would be.
+        if let Some(root) = &module_root {
+            let root_key = path_key(root);
+            if let Some(dir) = path.ancestors().skip(1).find(|a| path_key(a) == root_key) {
+                let module_file = dir.join(pepper_files::imports::MODULE_FILE);
+                let k = path_key(&module_file);
+                if queued.insert(k.clone()) {
+                    stack.push((module_file, k, false));
+                }
+            }
+        }
         files.push(ProgramFile {
             name,
             namespace,

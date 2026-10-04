@@ -20,12 +20,15 @@ export make(x: int, y: int): Point {
 }
 export area as rect_area;
 export Box;
+## Half of `x`.
+half(x: int): int { return x / 2; }
 "#,
     ),
     (
         "deps/geometry/shapes.pep",
         r#"export area(w: int, h: int): int { return w * h; }
 export struct Box<T> { var value: T; }
+export unit(): Point { return make(half(2), 1); }
 "#,
     ),
     ("deps/solids/module.pep", "export * from \"cube\";\nexport [volume as size] from \"cube\";\n"),
@@ -1728,4 +1731,23 @@ fn arguments_start_the_server_or_answer_without_it() {
     assert_eq!(handle_arguments(&args(&["--version"])), Some(0));
     assert_eq!(handle_arguments(&args(&["--help"])), Some(0));
     assert_eq!(handle_arguments(&args(&["--port", "9000"])), Some(2));
+}
+
+#[test]
+fn a_module_file_reaches_its_modules_other_files() {
+    // `shapes.pep` uses `module.pep`'s exported `make` and private `half`
+    // with no import: files of a module see each other's declarations.
+    let (uri, text, program) = load("module_mates", "", "deps/geometry/shapes.pep");
+    let make = at(&text, "make(", 0, 0);
+    assert!(hover(&uri, &text, &program, make).contains("make(x: int, y: int): Point"));
+    assert_eq!(definition(&uri, &text, &program, make).0, "geometry/module.pep");
+    let half = at(&text, "half(", 0, 0);
+    let h = hover(&uri, &text, &program, half);
+    assert!(h.contains("half(x: int): int") && h.contains("Half of"), "{}", h);
+    let (file, rest) = definition(&uri, &text, &program, half);
+    assert_eq!(file, "geometry/module.pep");
+    assert!(rest.starts_with("half(x: int)"), "{}", rest);
+    // Completion offers them, spelled as written.
+    let names: Vec<String> = module_globals(&program).into_iter().map(|s| s.name).collect();
+    assert!(names.iter().any(|n| n == "half") && names.iter().any(|n| n == "Point"), "{:?}", names);
 }
