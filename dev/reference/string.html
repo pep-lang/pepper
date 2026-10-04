@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-91814d2f.js";
+            window.path_to_searchindex_js = "../searchindex-0e059385.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -250,7 +250,7 @@ for (var c in s) {
 </code></pre>
 <p>Creates a String by copying <code>size</code> bytes of <code>data</code> into a new
 NUL-terminated buffer. With no arguments, it creates an empty String
-whose <code>c_str()</code> is <code>__null</code>.</p>
+with no buffer; its <code>c_str()</code> is still a valid empty C string.</p>
 <p>When <code>data</code> is not <code>__null</code> and <code>size</code> is 0, <code>data</code> is treated as a
 NUL-terminated C string:</p>
 <ul>
@@ -433,12 +433,13 @@ for (var c in "héllo") {
 is not otherwise guaranteed to be NUL-terminated, so code that needs
 the terminator calls <code>c_str()</code> rather than relying on the buffer.</p>
 <p>The pointer is owned by the String. It is valid until the String is
-destroyed or <code>append</code>, <code>+=</code>, or <code>grow</code> reallocates it. It is <code>__null</code>
-for a String built with no data (<code>String()</code>), so check it before you
-pass it to C. C functions stop at the first NUL byte in the content.</p>
+destroyed or <code>append</code>, <code>+=</code>, or <code>grow</code> reallocates it. It is never
+<code>__null</code>: a String built with no data (<code>String()</code>) returns a constant
+empty C string, so it can go to C as it is. C functions stop at the
+first NUL byte in the content.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the String’s NUL-terminated byte buffer, or <code>__null</code></li>
+<li>the String’s NUL-terminated byte buffer</li>
 </ul>
 <h4 id="copy"><a class="header" href="#copy">copy</a></h4>
 <pre><code class="language-pepper">copy(): String
@@ -1062,9 +1063,8 @@ text.</p>
 <h4 id="c_str-1"><a class="header" href="#c_str-1">c_str</a></h4>
 <pre><code class="language-pepper">c_str(): __ptr&lt;char&gt;
 </code></pre>
-<p>Returns the text as a NUL-terminated C string, with no copy. Unlike
-<code>String.c_str()</code>, it is never <code>__null</code>, and it stays valid for the
-whole run of the program.</p>
+<p>Returns the text as a NUL-terminated C string, with no copy. It is
+never <code>__null</code>, and it stays valid for the whole run of the program.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the constant NUL-terminated bytes</li>
