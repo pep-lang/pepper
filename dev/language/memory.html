@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
+            window.path_to_searchindex_js = "../searchindex-a63d1a7d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -711,6 +711,30 @@ is a promise the compiler cannot check: only runtime files may do it. The
 parameter of <code>move</code> is marked <code>[MoveSource]</code>, which is also only allowed in
 the runtime, so a hand-off always shows at the call as <code>move(x)</code>; a function
 of your own that takes over its argument uses <code>[Move]</code>.</p>
+<h2 id="where-objects-live"><a class="header" href="#where-objects-live">Where objects live</a></h2>
+<p>Every object, <code>String</code> buffer and <code>Array</code> buffer comes from the runtime’s
+allocator. A block of up to 128 bytes (most objects and short strings)
+comes from a small block allocator: blocks are grouped by size into
+classes (multiples of 16 bytes up to 128, then four classes per power of
+two), and each thread keeps its own free blocks of each class, so most
+allocations and frees take no lock. Larger blocks come from the C
+library’s <code>calloc</code> and go back with <code>free</code>. A small block’s size is
+rounded up to its class, so a 40-byte object takes 48 bytes.</p>
+<p>The environment variable <code>PEPPER_SMALL_BLOCK_LIMIT</code>, read when the program
+starts, sets the largest size the small block allocator serves, in bytes,
+up to 4096 (a larger value counts as 4096). <code>0</code> turns it off, and then
+every block comes from the C library:</p>
+<pre><code class="language-bash">PEPPER_SMALL_BLOCK_LIMIT=0 ./main      # every block from calloc
+PEPPER_SMALL_BLOCK_LIMIT=512 ./main    # blocks up to 512 bytes from the classes
+</code></pre>
+<p>With it off, a program can use another C allocator, such as mimalloc, by
+loading it in front of the C library (<code>LD_PRELOAD=libmimalloc.so</code> on
+Linux).</p>
+<p>Small blocks live in address space the program reserves at start (4 GiB,
+committed 64 KiB at a time as it is used, and never returned to the
+operating system); a program that fills it falls back to <code>calloc</code>. On
+WebAssembly, which cannot reserve address space, every block comes from
+<code>calloc</code>.</p>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>

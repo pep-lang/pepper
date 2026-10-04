@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d4a1ac9c.js";
+            window.path_to_searchindex_js = "../searchindex-a63d1a7d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -1021,8 +1021,9 @@ other owner. Pepper keeps no reference to it, so there is nothing to
 retain or share; the C code owns it outright and gives it back once with
 <code>pepper_string_free</code>.</li>
 <li><strong>Why not <code>free</code>:</strong> the copy comes from Pepper’s allocator, which tracks
-live allocations and, on Windows, may use a different C runtime’s heap
-than the caller’s. <code>pepper_string_free</code> returns it to the allocator that
+live allocations, serves short strings from its own small block pools
+(see <a href="memory.html#where-objects-live">Where objects live</a>) and, on Windows,
+may use a different C runtime’s heap than the caller’s. <code>pepper_string_free</code> returns it to the allocator that
 made it.</li>
 </ul>
 <p>A <code>String</code> parameter needs neither: Pepper copies the bytes for the call,
