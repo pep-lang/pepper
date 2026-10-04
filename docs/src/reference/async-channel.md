@@ -87,9 +87,6 @@ Creates an open, empty channel.
 **Parameters**
 - `capacity` — how many values may wait before `send` blocks; 0 (the default) for no limit
 
-**Panics**
-- if the operating system cannot create a mutex or condition variable
-
 **Example**
 ```pepper
 var bounded = async.Channel<long>(16);

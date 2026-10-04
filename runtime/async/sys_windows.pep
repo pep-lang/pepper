@@ -6,7 +6,7 @@
 # Thread handles are `HANDLE`s, as `__ptr<void>`. Thread-local keys are fiber
 # local storage indexes (`FlsAlloc`), the Windows keys that take a
 # destructor callback. Everything here is in kernel32, which is linked by
-# default.
+# default, except the wait-on-address calls (synchronization.lib).
 
 [Target(OS(Windows))]
 extern void* CreateThread(
@@ -33,17 +33,16 @@ extern uint GetActiveProcessorCount(ushort group);
 [Target(OS(Windows))]
 extern int GetLogicalProcessorInformationEx(int relationship, void* buffer, uint* length);
 [Target(OS(Windows))]
-extern void AcquireSRWLockExclusive(void* lock);
+extern uint GetLastError();
 [Target(OS(Windows))]
-extern u8 TryAcquireSRWLockExclusive(void* lock);
+[Link("synchronization")]
+extern int WaitOnAddress(void* address, void* compare, ulong size, uint milliseconds);
 [Target(OS(Windows))]
-extern void ReleaseSRWLockExclusive(void* lock);
+[Link("synchronization")]
+extern void WakeByAddressSingle(void* address);
 [Target(OS(Windows))]
-extern int SleepConditionVariableSRW(void* condition, void* lock, uint milliseconds, uint flags);
-[Target(OS(Windows))]
-extern void WakeConditionVariable(void* condition);
-[Target(OS(Windows))]
-extern void WakeAllConditionVariable(void* condition);
+[Link("synchronization")]
+extern void WakeByAddressAll(void* address);
 [Target(OS(Windows))]
 extern ulong GetTickCount64();
 
@@ -112,78 +111,51 @@ export _async_sys_key_set(key: ulong, value: __ptr<void>) {
     FlsSetValue(key as uint, value);
 }
 
-# ── Mutexes and condition variables ──────────────────────────────────────────
+# ── Waiting on an address ────────────────────────────────────────────────────
 #
-# A mutex is an `SRWLOCK` and a condition a `CONDITION_VARIABLE`: one
-# pointer each, initialized by zeroing (`SRWLOCK_INIT`,
-# `CONDITION_VARIABLE_INIT`), which `_pep_malloc` does, and never destroyed.
-# Each still lives in its own heap block, like the POSIX ones, so the Pepper
-# side is the same on every platform.
+# The calls that lock.pep builds mutexes and condition variables on: a
+# thread sleeps while a 4-byte word holds the value it expects, until
+# another thread wakes it through the word's address. `WaitOnAddress` and
+# the `WakeByAddress*` calls (Windows 8 and later) live in
+# API-MS-Win-Core-Synch-l1-2-0, whose import library is synchronization.lib.
 
-# A new, unlocked mutex.
+# Sleeps while `word` holds `expected`, until woken (or spuriously).
 [Target(OS(Windows))]
-export _async_sys_mutex_create(): __ptr<void> {
-    return _pep_malloc(8);
+export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+    _async_wait_on_address(word, expected, 4294967295);  # INFINITE
 }
 
-# Frees an unlocked mutex's block.
+# Like `_async_sys_futex_wait`, for at most `milliseconds`; false if the time
+# ran out. The timeout is a 32-bit count in which 0xFFFFFFFF means forever,
+# so a longer wait is cut below it and reports a wake when it ends.
 [Target(OS(Windows))]
-export _async_sys_mutex_destroy(mutex: __ptr<void>) {
-    _pep_free(mutex);
+export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
+    var capped = milliseconds > 4000000000;
+    var wait = capped ? 4000000000 : milliseconds;
+    return _async_wait_on_address(word, expected, wait as uint) || capped;
 }
 
+# Wakes one thread sleeping on `word`, if any.
 [Target(OS(Windows))]
-export _async_sys_mutex_lock(mutex: __ptr<void>) {
-    AcquireSRWLockExclusive(mutex);
+export _async_sys_futex_wake_one(word: __ptr<uint>) {
+    WakeByAddressSingle(word);
 }
 
-# Locks `mutex` only if it is free; true if it is now held.
+# Wakes every thread sleeping on `word`.
 [Target(OS(Windows))]
-export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
-    return TryAcquireSRWLockExclusive(mutex) != 0;
+export _async_sys_futex_wake_all(word: __ptr<uint>) {
+    WakeByAddressAll(word);
 }
 
+# `WaitOnAddress` compares the word with a value at another address; false
+# if the time ran out.
 [Target(OS(Windows))]
-export _async_sys_mutex_unlock(mutex: __ptr<void>) {
-    ReleaseSRWLockExclusive(mutex);
-}
-
-# A new condition variable.
-[Target(OS(Windows))]
-export _async_sys_condition_create(): __ptr<void> {
-    return _pep_malloc(8);
-}
-
-# Frees a condition variable's block.
-[Target(OS(Windows))]
-export _async_sys_condition_destroy(condition: __ptr<void>) {
-    _pep_free(condition);
-}
-
-# Unlocks `mutex` (held by the caller), sleeps until notified (or woken
-# spuriously), and locks it again.
-[Target(OS(Windows))]
-export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
-    SleepConditionVariableSRW(condition, mutex, 4294967295, 0);  # INFINITE
-}
-
-# Like `_async_sys_condition_wait`, for at most `milliseconds`; false if the
-# time ran out. The timeout is a 32-bit count in which 0xFFFFFFFF means
-# forever, so longer waits are capped below it.
-[Target(OS(Windows))]
-export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
-    var wait = milliseconds > 4000000000 ? 4000000000 : milliseconds;
-    return SleepConditionVariableSRW(condition, mutex, wait as uint, 0) != 0;
-}
-
-[Target(OS(Windows))]
-export _async_sys_condition_notify_one(condition: __ptr<void>) {
-    WakeConditionVariable(condition);
-}
-
-[Target(OS(Windows))]
-export _async_sys_condition_notify_all(condition: __ptr<void>) {
-    WakeAllConditionVariable(condition);
+_async_wait_on_address(word: __ptr<uint>, expected: uint, milliseconds: uint): bool {
+    __ptr<uint> compare = _pep_malloc(4);
+    compare[0] = expected;
+    var woken = WaitOnAddress(word, compare, 4, milliseconds) != 0 || GetLastError() != 1460;  # ERROR_TIMEOUT
+    _pep_free(compare);
+    return woken;
 }
 
 # Milliseconds on a clock that only moves forward, for measuring timeouts.

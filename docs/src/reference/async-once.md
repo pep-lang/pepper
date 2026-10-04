@@ -49,9 +49,6 @@ construct()
 
 Creates a Once whose body has not run.
 
-**Panics**
-- if the operating system cannot create a mutex or condition variable
-
 ### Methods
 
 #### call
@@ -143,9 +140,6 @@ Nothing runs yet.
 
 **Parameters**
 - `initializer` — builds the value; runs at most once, on the thread that first calls `get()`
-
-**Panics**
-- if the operating system cannot create a mutex or condition variable
 
 ### Methods
 

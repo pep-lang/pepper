@@ -36,6 +36,7 @@
 # one.
 
 import "atomic";
+import "lock";
 import "sync_wait";
 import "sys_posix";
 import "sys_wasi";
@@ -117,7 +118,6 @@ export struct Channel<T> {
     ## Creates an open, empty channel.
     ##
     ## @param capacity how many values may wait before `send` blocks; 0 (the default) for no limit
-    ## @panics if the operating system cannot create a mutex or condition variable
     ## @example
     ##     var bounded = async.Channel<long>(16);
     ##     var unbounded = async.Channel<long>();

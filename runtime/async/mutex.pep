@@ -31,6 +31,7 @@
 # thread it runs on. `Condition` does the same with its own `_waiters`.
 
 import "atomic";
+import "lock";
 import "sync_wait";
 import "sys_posix";
 import "sys_wasi";
@@ -92,12 +93,14 @@ import "thread";
 ##     }
 [Shared]
 export struct Mutex<T> {
-    # The platform lock: a heap block holding a `pthread_mutex_t`, or a
-    # Windows `SRWLOCK`. It never moves, which a pthread mutex requires.
+    # The platform lock (see lock.pep): a 4-byte word at the start of one
+    # heap block that also holds the value, 8 bytes in, so a Mutex makes one
+    # allocation for both.
     const _lock: __ptr<void>;
 
-    # A heap slot holding the value: `sizeof<T>()` bytes, one reference for
-    # a struct `T`. Read and written only while the lock is held.
+    # The value's slot in `_lock`'s block: `sizeof<T>()` bytes, one
+    # reference for a struct `T`. Read and written only while the lock is
+    # held.
     const _value: __ptr<void>;
 
     # The holder's id (see `_async_holder_id`), or 0 when the Mutex is
@@ -118,12 +121,13 @@ export struct Mutex<T> {
     ## its reference over, so nothing is copied.
     ##
     ## @param value the value to protect; a new value, which the compiler checks
-    ## @panics if the operating system cannot create a mutex
     ## @example
     ##     const names = async.Mutex<Array<String>>(Array<String>());
     construct([Move] value: T) {
-        _lock = _async_sys_mutex_create();
-        _value = _pep_malloc(sizeof<T>());
+        # A zeroed block is a free lock on every platform.
+        __ptr<u8> block = _pep_malloc(8 + sizeof<T>());
+        _lock = block;
+        _value = block + 8;
         _owner = Atomic<ulong>(0);
         _waiting = Atomic<ulong>(0);
         _waiters = _SyncQueue();
@@ -133,8 +137,7 @@ export struct Mutex<T> {
     destruct {
         # No guard is alive (each holds a reference), so the lock is free.
         this._slot()[0] = __default<T>();
-        _pep_free(_value);
-        _async_sys_mutex_destroy(_lock);
+        _pep_free(_lock);
     }
 
     ## Waits until the calling thread holds the lock, and returns the guard
@@ -398,8 +401,8 @@ export struct Condition<T> {
     # The Mutex this condition waits on.
     const _mutex: Mutex<T>;
 
-    # The platform condition variable: a heap block holding a
-    # `pthread_cond_t`, or a Windows `CONDITION_VARIABLE`.
+    # The platform condition variable (see lock.pep): a heap block holding
+    # its sequence word.
     const _handle: __ptr<void>;
 
     # The tasks waiting on this condition.
@@ -409,7 +412,6 @@ export struct Condition<T> {
     ## does the same.
     ##
     ## @param mutex the Mutex that waiters hold
-    ## @panics if the operating system cannot create a condition variable
     construct(mutex: Mutex<T>) {
         _mutex = mutex;
         _handle = _async_sys_condition_create();

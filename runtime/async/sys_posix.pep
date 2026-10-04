@@ -36,37 +36,17 @@ extern long sysconf(int name);
 [Target(OS(Mac))]
 extern int sysctlbyname(char* name, void* value, void* size, void* new_value, ulong new_size);
 [Target(OS(Linux) || OS(Mac))]
-extern int pthread_mutex_init(void* mutex, void* attributes);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_mutex_destroy(void* mutex);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_mutex_lock(void* mutex);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_mutex_trylock(void* mutex);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_mutex_unlock(void* mutex);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_cond_init(void* condition, void* attributes);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_cond_destroy(void* condition);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_cond_wait(void* condition, void* mutex);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_cond_signal(void* condition);
-[Target(OS(Linux) || OS(Mac))]
-extern int pthread_cond_broadcast(void* condition);
-[Target(OS(Linux) || OS(Mac))]
 extern int clock_gettime(int clock, void* time);
 [Target(OS(Linux))]
-extern int pthread_condattr_init(void* attributes);
-[Target(OS(Linux))]
-extern int pthread_condattr_setclock(void* attributes, int clock);
-[Target(OS(Linux))]
-extern int pthread_condattr_destroy(void* attributes);
-[Target(OS(Linux))]
-extern int pthread_cond_timedwait(void* condition, void* mutex, void* deadline);
+extern long syscall(long number, ...);
+[Target(OS(Linux) && !OS(Android))]
+extern int* __errno_location();
+[Target(OS(Android))]
+extern int* __errno();
 [Target(OS(Mac))]
-extern int pthread_cond_timedwait_relative_np(void* condition, void* mutex, void* timeout);
+extern int __ulock_wait(uint operation, void* address, ulong value, uint timeout);
+[Target(OS(Mac))]
+extern int __ulock_wake(uint operation, void* address, ulong wake_value);
 
 # ── Threads ──────────────────────────────────────────────────────────────────
 
@@ -142,130 +122,102 @@ export _async_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
 }
 
-# ── Mutexes and condition variables ──────────────────────────────────────────
+# ── Waiting on an address ────────────────────────────────────────────────────
 #
-# Each lives in its own 64-byte heap block, which covers `pthread_mutex_t`
-# (40 bytes on Linux x86_64, 48 on Linux aarch64, 64 on macOS) and
-# `pthread_cond_t` (48): a pthread mutex or condition must not move once
-# initialized. Mutexes are the default (non-recursive) kind; `Mutex<T>`
-# panics on a re-lock before it would deadlock.
+# The futex calls that lock.pep builds mutexes and condition variables on:
+# a thread sleeps while a 4-byte word holds the value it expects, until
+# another thread wakes it through the word's address. Linux has `futex`;
+# macOS has `__ulock_wait` / `__ulock_wake`, which every macOS since 10.12
+# has (libc++'s `std::atomic::wait` uses them; `os_sync_wait_on_address`,
+# from 14.4, would need a weak import the compiler cannot declare).
 
-# A new, unlocked mutex.
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_mutex_create(): __ptr<void> {
-    var mutex = _pep_malloc(64);
-    if (pthread_mutex_init(mutex, __null) != 0) {
-        panic("Mutex: the operating system could not create a mutex");
-    }
-    return mutex;
-}
+# The `futex` system call's number: x86-64 and AArch64 differ.
+[Target(OS(Linux) && Arch(x64))]
+const _SYS_FUTEX = 202;
+[Target(OS(Linux) && Arch(aarch64))]
+const _SYS_FUTEX = 98;
 
-# Destroys an unlocked mutex and frees its block.
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_mutex_destroy(mutex: __ptr<void>) {
-    pthread_mutex_destroy(mutex);
-    _pep_free(mutex);
-}
+# FUTEX_WAIT | FUTEX_PRIVATE_FLAG and FUTEX_WAKE | FUTEX_PRIVATE_FLAG: the
+# word is never shared with another process.
+const _FUTEX_WAIT_PRIVATE = 128;
+const _FUTEX_WAKE_PRIVATE = 129;
 
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_mutex_lock(mutex: __ptr<void>) {
-    pthread_mutex_lock(mutex);
-}
+# UL_COMPARE_AND_WAIT | ULF_NO_ERRNO (errors come back negated), and the
+# same with ULF_WAKE_ALL.
+const _ULOCK_COMPARE_AND_WAIT: uint = 16777217;
+const _ULOCK_WAKE_ALL: uint = 16777473;
 
-# Locks `mutex` only if it is free; true if it is now held.
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
-    return pthread_mutex_trylock(mutex) == 0;
-}
-
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_mutex_unlock(mutex: __ptr<void>) {
-    pthread_mutex_unlock(mutex);
-}
-
-# A new condition variable. On Linux it times waits against the monotonic
-# clock (CLOCK_MONOTONIC is 1), so a change to the wall clock cannot stretch
-# or cut a timed wait.
+# Sleeps while `word` holds `expected`, until woken (or spuriously).
 [Target(OS(Linux))]
-export _async_sys_condition_create(): __ptr<void> {
-    var condition = _pep_malloc(64);
-    var attributes = _pep_malloc(16);  # pthread_condattr_t: 4 bytes
-    pthread_condattr_init(attributes);
-    pthread_condattr_setclock(attributes, 1);
-    var result = pthread_cond_init(condition, attributes);
-    pthread_condattr_destroy(attributes);
-    _pep_free(attributes);
-    if (result != 0) {
-        panic("Condition: the operating system could not create a condition variable");
-    }
-    return condition;
+export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+    syscall(_SYS_FUTEX, word, _FUTEX_WAIT_PRIVATE as long, expected as long, 0 as long, 0 as long, 0 as long);
 }
 
-# A new condition variable. macOS times waits with
-# `pthread_cond_timedwait_relative_np`, which needs no clock setting.
-[Target(OS(Mac))]
-export _async_sys_condition_create(): __ptr<void> {
-    var condition = _pep_malloc(64);
-    if (pthread_cond_init(condition, __null) != 0) {
-        panic("Condition: the operating system could not create a condition variable");
-    }
-    return condition;
-}
-
-# Destroys a condition variable no thread waits on and frees its block.
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_condition_destroy(condition: __ptr<void>) {
-    pthread_cond_destroy(condition);
-    _pep_free(condition);
-}
-
-# Unlocks `mutex` (held by the caller), sleeps until notified (or woken
-# spuriously), and locks it again.
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
-    pthread_cond_wait(condition, mutex);
-}
-
-# Like `_async_sys_condition_wait`, for at most `milliseconds`; false if the
-# time ran out. Waits past ~31 years are capped.
+# Like `_async_sys_futex_wait`, for at most `milliseconds`; false if the time
+# ran out. Waits past ~31 years are capped.
 [Target(OS(Linux))]
-export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
+export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
     var wait = milliseconds > 1000000000000 ? 1000000000000 : milliseconds;
-    # An absolute deadline on the monotonic clock: struct timespec
+    # A relative timeout on the monotonic clock: struct timespec
     # { time_t tv_sec; long tv_nsec; }.
-    __ptr<long> deadline = _pep_malloc(16);
-    clock_gettime(1, deadline);
-    deadline[0] = deadline[0] + (wait / 1000) as long;
-    deadline[1] = deadline[1] + ((wait % 1000) * 1000000) as long;
-    if (deadline[1] >= 1000000000) {
-        deadline[0] = deadline[0] + 1;
-        deadline[1] = deadline[1] - 1000000000;
-    }
-    var result = pthread_cond_timedwait(condition, mutex, deadline);
-    _pep_free(deadline);
-    return result == 0;
-}
-
-[Target(OS(Mac))]
-export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
-    var wait = milliseconds > 1000000000000 ? 1000000000000 : milliseconds;
-    # A relative timeout: struct timespec { time_t tv_sec; long tv_nsec; }.
     __ptr<long> timeout = _pep_malloc(16);
     timeout[0] = (wait / 1000) as long;
     timeout[1] = ((wait % 1000) * 1000000) as long;
-    var result = pthread_cond_timedwait_relative_np(condition, mutex, timeout);
+    var result = syscall(
+        _SYS_FUTEX, word, _FUTEX_WAIT_PRIVATE as long, expected as long, timeout, 0 as long, 0 as long
+    );
     _pep_free(timeout);
-    return result == 0;
+    return result == 0 || _async_errno() != 110;  # ETIMEDOUT
 }
 
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_condition_notify_one(condition: __ptr<void>) {
-    pthread_cond_signal(condition);
+# Wakes one thread sleeping on `word`, if any.
+[Target(OS(Linux))]
+export _async_sys_futex_wake_one(word: __ptr<uint>) {
+    syscall(_SYS_FUTEX, word, _FUTEX_WAKE_PRIVATE as long, 1 as long);
 }
 
-[Target(OS(Linux) || OS(Mac))]
-export _async_sys_condition_notify_all(condition: __ptr<void>) {
-    pthread_cond_broadcast(condition);
+# Wakes every thread sleeping on `word`.
+[Target(OS(Linux))]
+export _async_sys_futex_wake_all(word: __ptr<uint>) {
+    syscall(_SYS_FUTEX, word, _FUTEX_WAKE_PRIVATE as long, 2147483647 as long);
+}
+
+[Target(OS(Linux) && !OS(Android))]
+_async_errno(): int {
+    return __errno_location()[0];
+}
+
+[Target(OS(Android))]
+_async_errno(): int {
+    return __errno()[0];
+}
+
+[Target(OS(Mac))]
+export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+    __ulock_wait(_ULOCK_COMPARE_AND_WAIT, word, expected as ulong, 0);  # 0: no timeout
+}
+
+# The timeout is in microseconds, a 32-bit count in which 0 means forever:
+# a longer wait is cut to ~71 minutes and reports a wake when it ends.
+[Target(OS(Mac))]
+export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
+    var capped = milliseconds > 4294967;
+    var microseconds = capped ? 4294967000 : milliseconds * 1000;
+    if (microseconds == 0) {
+        microseconds = 1;
+    }
+    var result = __ulock_wait(_ULOCK_COMPARE_AND_WAIT, word, expected as ulong, microseconds as uint);
+    return result != -60 || capped;  # -ETIMEDOUT
+}
+
+[Target(OS(Mac))]
+export _async_sys_futex_wake_one(word: __ptr<uint>) {
+    __ulock_wake(_ULOCK_COMPARE_AND_WAIT, word, 0);
+}
+
+[Target(OS(Mac))]
+export _async_sys_futex_wake_all(word: __ptr<uint>) {
+    __ulock_wake(_ULOCK_WAKE_ALL, word, 0);
 }
 
 # Milliseconds on a clock that only moves forward (CLOCK_MONOTONIC: 1 on

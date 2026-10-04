@@ -27,7 +27,9 @@ Every program is linked with:
   Line Tools.
 - **Windows:** the Microsoft C runtime (the UCRT, `vcruntime` and the CRT
   startup library), which clang adds, plus `kernel32`, `user32` and `shell32`,
-  which the Pepper compiler adds. clang finds the Visual Studio and Windows SDK
+  which the Pepper compiler adds. A program that uses `async` also links
+  `synchronization`, which the runtime names with `[Link]` for its locks
+  (`WaitOnAddress`). clang finds the Visual Studio and Windows SDK
   libraries itself, so you do not need a Developer Command Prompt.
 
 Any library file named `lib<name>.a` in the runtime directory is linked too.

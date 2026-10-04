@@ -373,6 +373,10 @@ reach the value is a [`with` block](scopes.md):
   thread holds it.
 - A `panic` while a Mutex is held ends the program, so a Mutex is never left
   "poisoned".
+- Taking a free lock is one atomic instruction, and a thread that finds it
+  held spins briefly before it sleeps. Locks sleep on the operating system's
+  wait-on-address call (`futex` on Linux, `__ulock_wait` on macOS,
+  `WaitOnAddress` on Windows), as Rust's do.
 
 `T` is a struct type: a struct of your own, an `Array<String>`, or a
 `[Shared]` struct whose `Atomic` fields must change as a unit.

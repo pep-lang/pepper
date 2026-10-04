@@ -30,6 +30,7 @@
 # calls `_wake_one_locked`, which always looks.
 
 import "atomic";
+import "lock";
 import "sys_posix";
 import "sys_wasi";
 import "sys_windows";

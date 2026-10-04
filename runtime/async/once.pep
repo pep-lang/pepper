@@ -9,6 +9,7 @@
 # store is a release, so a caller that sees 2 also sees what the body did.
 
 import "atomic";
+import "lock";
 import "sys_posix";
 import "sys_wasi";
 import "sys_windows";
@@ -53,7 +54,6 @@ export struct Once {
 
     ## Creates a Once whose body has not run.
     ##
-    ## @panics if the operating system cannot create a mutex or condition variable
     construct() {
         _state = Atomic<int>(0);
         _runner = Atomic<ulong>(0);
@@ -172,7 +172,6 @@ export struct Lazy<T: Shared> {
     ## Nothing runs yet.
     ##
     ## @param initializer builds the value; runs at most once, on the thread that first calls `get()`
-    ## @panics if the operating system cannot create a mutex or condition variable
     construct(initializer: shared () => T) {
         _initializer = initializer;
         _value = _pep_malloc(sizeof<T>());

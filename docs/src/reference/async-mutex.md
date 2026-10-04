@@ -88,9 +88,6 @@ its reference over, so nothing is copied.
 **Parameters**
 - `value` — the value to protect; a new value, which the compiler checks
 
-**Panics**
-- if the operating system cannot create a mutex
-
 **Example**
 ```pepper
 const names = async.Mutex<Array<String>>(Array<String>());
@@ -358,9 +355,6 @@ does the same.
 
 **Parameters**
 - `mutex` — the Mutex that waiters hold
-
-**Panics**
-- if the operating system cannot create a condition variable
 
 ### Methods
 
