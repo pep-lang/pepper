@@ -266,9 +266,7 @@ export struct ThreadLocal<T> {
         # sizeof<T>() is the size of a stored T: one pointer for a struct,
         # two for a trait value (object and vtable), the value itself for a
         # number.
-        return _thread_local_add(_index, sizeof<T>(), (slot: __ptr<void>) => {
-            ThreadLocal<T>._release_slot(slot);
-        });
+        return _thread_local_add(_index, sizeof<T>(), _release_slot);
     }
 
     # The calling thread's slot, or null when it has no value.
