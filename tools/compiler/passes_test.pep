@@ -54,7 +54,47 @@ runs_the_passes_over_the_test_programs_part_8() {
     runs_passes(7);
 }
 
-const PARTS = 8;
+[Test]
+runs_the_passes_over_the_test_programs_part_9() {
+    runs_passes(8);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_10() {
+    runs_passes(9);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_11() {
+    runs_passes(10);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_12() {
+    runs_passes(11);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_13() {
+    runs_passes(12);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_14() {
+    runs_passes(13);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_15() {
+    runs_passes(14);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_16() {
+    runs_passes(15);
+}
+
+const PARTS = 16;
 
 # Runs the passes over every `PARTS`th program of the corpus and the
 # documentation's programs of several files, from the `part`th, with both
