@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-93811922.js";
+            window.path_to_searchindex_js = "../searchindex-9987d0c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -599,6 +599,8 @@ comma-separated list, from an optimized build:</p>
 </div>
 <p>Removing <code>bounds</code> or <code>null</code> gives up memory safety. At <code>-O0</code> the option has
 no effect and prints <code>warning: '--no-runtime-checks' has no effect at -O0</code>.
+To remove checks from one function at every level, mark it
+<code>[Unsafe("overflow,bounds")]</code> instead.
 See <a href="../language/types-and-variables.html#integer-overflow">Integer overflow</a>.</p>
 <pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
 </code></pre>

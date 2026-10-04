@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-93811922.js";
+            window.path_to_searchindex_js = "searchindex-9987d0c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -1748,6 +1748,54 @@ on and the compiler warns
 <code>warning: '--no-runtime-checks' has no effect at -O0</code>. It applies from <code>-O1</code>
 up, <code>-g</code> included. The setting is part of the build cache’s key, like the
 optimization level.</p>
+<p>To remove checks from one function instead of a whole build, mark it
+<code>[Unsafe("...")]</code> with the same names, comma-separated in one string:
+<code>[Unsafe("overflow")]</code>, <code>[Unsafe("overflow,bounds")]</code> or <code>[Unsafe("all")]</code>.
+It removes them from that function’s body only, at every optimization level
+(<code>-O0</code> included), so the function behaves the same in every build. Closures
+written in it lose the same checks. Functions it calls keep theirs, with one
+exception: <code>bounds</code> also removes the index checks that <code>Array</code> and <code>String</code>
+make for it, since those run inside their indexers. <code>[Unsafe]</code> goes on a free
+function, a method or a constructor. An unknown name is an error at the
+string.</p>
+<pre><code class="language-pepper"># `[Unsafe("...")]` removes runtime checks from one function's body.
+
+# A hash that wraps on purpose: without the overflow check, `*` and `+`
+# wrap around instead of panicking.
+[Unsafe("overflow")]
+hash(values: Array&lt;int&gt;): uint {
+    uint result = 2166136261;
+    for (var value in values) {
+        result = (result ^ (value as uint)) * 16777619;
+    }
+    return result;
+}
+
+# A loop that already checked its range: the index checks of `a[i]`, made by
+# `Array`'s indexer for this caller, are removed too.
+[Unsafe("bounds")]
+sum(values: Array&lt;int&gt;): long {
+    long total = 0;
+    ulong i = 0;
+    while (i &lt; values.count) {
+        total = total + values[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+main(): int {
+    var values = Array&lt;int&gt;();
+    for (var i in 0..100) {
+        values.append(i);
+    }
+    assert(hash(values) != 0, "a hash");
+    assert(sum(values) == 4950, "0 + 1 + ... + 99");
+    # Outside those functions every check stays: 2147483647 + 1 here would
+    # still panic.
+    return 0;
+}
+</code></pre>
 <h2 id="bit-operations-and-math-functions"><a class="header" href="#bit-operations-and-math-functions">Bit operations and math functions</a></h2>
 <p>Each integer type has methods that compile to a single instruction on most
 CPUs, through LLVM’s intrinsics, for code that would otherwise loop over
@@ -20068,6 +20116,8 @@ comma-separated list, from an optimized build:</p>
 </div>
 <p>Removing <code>bounds</code> or <code>null</code> gives up memory safety. At <code>-O0</code> the option has
 no effect and prints <code>warning: '--no-runtime-checks' has no effect at -O0</code>.
+To remove checks from one function at every level, mark it
+<code>[Unsafe("overflow,bounds")]</code> instead.
 See <a href="#integer-overflow">Integer overflow</a>.</p>
 <pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
 </code></pre>
@@ -21531,6 +21581,22 @@ as <code>move</code> does.</p>
 </code></pre>
 <p>Marks a function-typed parameter that is called while a lock is held, so
 it may use the locked value.</p>
+<h2 id="unsafe"><a class="header" href="#unsafe">Unsafe</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Unsafe
+</code></pre>
+<p>Removes runtime checks from one function’s body, as
+<code>--no-runtime-checks</code> removes them from a whole build:
+<code>[Unsafe("overflow")]</code>, <code>[Unsafe("overflow,bounds")]</code> or
+<code>[Unsafe("all")]</code>. It applies at every optimization level. Calls the
+function makes keep their own checks, except the index check that an
+<code>Array</code> or <code>String</code> method makes for its caller, which <code>bounds</code> removes
+too. Removing <code>bounds</code> or <code>null</code> gives up memory safety in that function.</p>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="checks-1"><a class="header" href="#checks-1">checks</a></h4>
+<pre><code class="language-pepper">const checks: String
+</code></pre>
+<p>The checks to remove, comma-separated: <code>overflow</code>, <code>divide</code>, <code>shift</code>,
+<code>bounds</code>, <code>null</code>, or <code>all</code>.</p>
 <h2 id="test"><a class="header" href="#test">Test</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Test
 </code></pre>
@@ -21544,7 +21610,7 @@ returns and fails when it panics (see <code>expect_equal</code>). A build withou
 </code></pre>
 <p>Marks a <code>[Test]</code> function as one that passes only when it panics:
 <code>[ShouldPanic]</code> takes any panic, and <code>[ShouldPanic("index out of range")]</code> only a panic whose message contains that text.</p>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
 <pre><code class="language-pepper">const message: String = ""
 </code></pre>
@@ -21555,7 +21621,7 @@ returns and fails when it panics (see <code>expect_equal</code>). A build withou
 <p>Makes a free function callable from C, in a library built with
 <code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
 <code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="name-2"><a class="header" href="#name-2">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -21568,7 +21634,7 @@ otherwise.</p>
 editor: the compiler ignores the declaration, whose functions end in <code>;</code>.
 <code>[__BuiltIn("reflect.name")]</code> names the built-in when it is not the
 declaration’s own name. Only the runtime may use it.</p>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -21825,7 +21891,7 @@ which pass printed it. See
 </code></pre>
 <p>A field or property, from <code>properties</code> or <code>fields</code>. A compile-time value:
 no program can name its type.</p>
-<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
+<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
 <h4 id="name-4"><a class="header" href="#name-4">name</a></h4>
 <pre><code class="language-pepper">const name: String
 </code></pre>
@@ -28781,7 +28847,7 @@ for (var i in 1..&gt;4) {
 var r = 0..10;
 assert(r.contains(9) &amp;&amp; !r.contains(10), "half-open");
 </code></pre>
-<h3 id="fields-12"><a class="header" href="#fields-12">Fields</a></h3>
+<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
 <h4 id="start"><a class="header" href="#start">start</a></h4>
 <pre><code class="language-pepper">T start
 </code></pre>
@@ -31533,7 +31599,7 @@ holding its value or <code>Err</code> holding its error, like Rust’s <code>Res
 <pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 var n = r.error().message.length;   # 4
 </code></pre>
-<h3 id="fields-13"><a class="header" href="#fields-13">Fields</a></h3>
+<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
 <h4 id="message-2"><a class="header" href="#message-2">message</a></h4>
 <pre><code class="language-pepper">String message
 </code></pre>
@@ -32070,7 +32136,7 @@ assert(uri.path == "/a%20b", "the path keeps its escapes");
 assert(Uri.decode(uri.path).value() == "/a b", "decoded");
 assert(uri.query.value() == "x=1" &amp;&amp; uri.fragment.value() == "top", "query and fragment");
 </code></pre>
-<h3 id="fields-14"><a class="header" href="#fields-14">Fields</a></h3>
+<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
 <h4 id="scheme"><a class="header" href="#scheme">scheme</a></h4>
 <pre><code class="language-pepper">var scheme: String
 </code></pre>
@@ -32573,7 +32639,7 @@ if (r.is_err()) {
     }
 }
 </code></pre>
-<h3 id="fields-15"><a class="header" href="#fields-15">Fields</a></h3>
+<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
 <h4 id="code"><a class="header" href="#code">code</a></h4>
 <pre><code class="language-pepper">ErrorCode code
 </code></pre>
@@ -33987,7 +34053,7 @@ if (m.is_ok() &amp;&amp; m.value().is_file) {
     var bytes = m.value().size;
 }
 </code></pre>
-<h3 id="fields-16"><a class="header" href="#fields-16">Fields</a></h3>
+<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
 <h4 id="size-3"><a class="header" href="#size-3">size</a></h4>
 <pre><code class="language-pepper">ulong size
 </code></pre>
@@ -34842,7 +34908,7 @@ while (i &lt; list.count) {
     i = i + 1;
 }
 </code></pre>
-<h3 id="fields-17"><a class="header" href="#fields-17">Fields</a></h3>
+<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
 <h4 id="path-4"><a class="header" href="#path-4">path</a></h4>
 <pre><code class="language-pepper">Path path
 </code></pre>
@@ -36897,7 +36963,7 @@ out.print("n = ");
 out.print_line(3);
 assert(out.bytes == "n = 3\n".bytes(), "collected");
 </code></pre>
-<h3 id="fields-18"><a class="header" href="#fields-18">Fields</a></h3>
+<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
 <h4 id="bytes-2"><a class="header" href="#bytes-2">bytes</a></h4>
 <pre><code class="language-pepper">var bytes: u8[]
 </code></pre>
@@ -37785,7 +37851,7 @@ with the confinement rule (see <code>Mutex</code>).</p>
     totals.requests.fetch_add(1);
 }   # unlocked here
 </code></pre>
-<h3 id="fields-19"><a class="header" href="#fields-19">Fields</a></h3>
+<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
 <h4 id="locked-1"><a class="header" href="#locked-1">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -38356,7 +38422,7 @@ returns the value, and destroying the guard unlocks. Get one from
     total = stats.hits.load() + stats.misses.load();
 }   # unlocked here
 </code></pre>
-<h3 id="fields-20"><a class="header" href="#fields-20">Fields</a></h3>
+<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
 <h4 id="locked-2"><a class="header" href="#locked-2">locked</a></h4>
 <pre><code class="language-pepper">bool locked
 </code></pre>
@@ -38971,7 +39037,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">struct TaskError
 </code></pre>
 <p>Why <code>Task.join</code> did not return the task’s value.</p>
-<h3 id="fields-21"><a class="header" href="#fields-21">Fields</a></h3>
+<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
 <h4 id="message-4"><a class="header" href="#message-4">message</a></h4>
 <pre><code class="language-pepper">const message: String
 </code></pre>
@@ -39751,7 +39817,7 @@ what is written to it is thrown away.</p>
 </code></pre>
 <p>What a program <code>Command.run()</code> waited for left behind: how it ended and
 what it wrote.</p>
-<h3 id="fields-22"><a class="header" href="#fields-22">Fields</a></h3>
+<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
 <h4 id="status"><a class="header" href="#status">status</a></h4>
 <pre><code class="language-pepper">var status: ExitStatus
 </code></pre>
@@ -43862,7 +43928,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-23"><a class="header" href="#fields-23">Fields</a></h3>
+<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
 <h4 id="address-1"><a class="header" href="#address-1">address</a></h4>
 <pre><code class="language-pepper">var address: ulong
 </code></pre>
@@ -45277,7 +45343,7 @@ reports when the text is not JSON.</p>
 line and column where it is.</p>
 <p><code>to_string()</code> renders it like a compiler error:
 <code>config.json:3:17: error: expected ',' or '}'</code>.</p>
-<h3 id="fields-24"><a class="header" href="#fields-24">Fields</a></h3>
+<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
 <h4 id="message-5"><a class="header" href="#message-5">message</a></h4>
 <pre><code class="language-pepper">var message: String
 </code></pre>
@@ -45397,7 +45463,7 @@ assert(
 );
 assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 </code></pre>
-<h3 id="fields-25"><a class="header" href="#fields-25">Fields</a></h3>
+<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
 <h4 id="root"><a class="header" href="#root">root</a></h4>
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
@@ -45702,7 +45768,7 @@ struct Limits {
     var max_connections: int;
 }
 </code></pre>
-<h3 id="fields-26"><a class="header" href="#fields-26">Fields</a></h3>
+<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
 <h4 id="value-5"><a class="header" href="#value-5">value</a></h4>
 <pre><code class="language-pepper">const value: String
 </code></pre>
@@ -46332,7 +46398,7 @@ extracted safely into a directory, or written.</p>
 var entry = archive.TarEntry("bin/run.sh", archive.EntryKind.File);
 entry.mode = 493;   # octal 755: rwxr-xr-x
 </code></pre>
-<h3 id="fields-27"><a class="header" href="#fields-27">Fields</a></h3>
+<h3 id="fields-28"><a class="header" href="#fields-28">Fields</a></h3>
 <h4 id="path-7"><a class="header" href="#path-7">path</a></h4>
 <pre><code class="language-pepper">var path: String
 </code></pre>
@@ -47459,7 +47525,7 @@ struct Options {
     var verbose: bool;
 }
 </code></pre>
-<h3 id="fields-28"><a class="header" href="#fields-28">Fields</a></h3>
+<h3 id="fields-29"><a class="header" href="#fields-29">Fields</a></h3>
 <h4 id="short_name"><a class="header" href="#short_name">short_name</a></h4>
 <pre><code class="language-pepper">const short_name: String = ""
 </code></pre>
@@ -47683,7 +47749,7 @@ full.</p>
 <pre><code class="language-pepper">var request = http.Request("POST", "http://localhost:8080/items").set_text("name=pepper");
 request.headers["Content-Type"] = "application/x-www-form-urlencoded";
 </code></pre>
-<h3 id="fields-29"><a class="header" href="#fields-29">Fields</a></h3>
+<h3 id="fields-30"><a class="header" href="#fields-30">Fields</a></h3>
 <h4 id="method"><a class="header" href="#method">method</a></h4>
 <pre><code class="language-pepper">var method: String
 </code></pre>
@@ -47985,7 +48051,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="fields-30"><a class="header" href="#fields-30">Fields</a></h3>
+<h3 id="fields-31"><a class="header" href="#fields-31">Fields</a></h3>
 <h4 id="max_redirects"><a class="header" href="#max_redirects">max_redirects</a></h4>
 <pre><code class="language-pepper">const max_redirects: int
 </code></pre>
@@ -48847,7 +48913,7 @@ writes_a_file() {
     expect_equal(io.File.read_to_string(path).value(), "hello");
 }
 </code></pre>
-<h3 id="fields-31"><a class="header" href="#fields-31">Fields</a></h3>
+<h3 id="fields-32"><a class="header" href="#fields-32">Fields</a></h3>
 <h4 id="path-9"><a class="header" href="#path-9">path</a></h4>
 <pre><code class="language-pepper">const path: io.Path
 </code></pre>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-93811922.js";
+            window.path_to_searchindex_js = "../searchindex-9987d0c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -352,6 +352,22 @@ as <code>move</code> does.</p>
 </code></pre>
 <p>Marks a function-typed parameter that is called while a lock is held, so
 it may use the locked value.</p>
+<h2 id="unsafe"><a class="header" href="#unsafe">Unsafe</a></h2>
+<pre><code class="language-pepper">[Attribute] struct Unsafe
+</code></pre>
+<p>Removes runtime checks from one function’s body, as
+<code>--no-runtime-checks</code> removes them from a whole build:
+<code>[Unsafe("overflow")]</code>, <code>[Unsafe("overflow,bounds")]</code> or
+<code>[Unsafe("all")]</code>. It applies at every optimization level. Calls the
+function makes keep their own checks, except the index check that an
+<code>Array</code> or <code>String</code> method makes for its caller, which <code>bounds</code> removes
+too. Removing <code>bounds</code> or <code>null</code> gives up memory safety in that function.</p>
+<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h4 id="checks"><a class="header" href="#checks">checks</a></h4>
+<pre><code class="language-pepper">const checks: String
+</code></pre>
+<p>The checks to remove, comma-separated: <code>overflow</code>, <code>divide</code>, <code>shift</code>,
+<code>bounds</code>, <code>null</code>, or <code>all</code>.</p>
 <h2 id="test"><a class="header" href="#test">Test</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Test
 </code></pre>
@@ -365,7 +381,7 @@ returns and fails when it panics (see <code>expect_equal</code>). A build withou
 </code></pre>
 <p>Marks a <code>[Test]</code> function as one that passes only when it panics:
 <code>[ShouldPanic]</code> takes any panic, and <code>[ShouldPanic("index out of range")]</code> only a panic whose message contains that text.</p>
-<h3 id="fields-8"><a class="header" href="#fields-8">Fields</a></h3>
+<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
 <h4 id="message-1"><a class="header" href="#message-1">message</a></h4>
 <pre><code class="language-pepper">const message: String = ""
 </code></pre>
@@ -376,7 +392,7 @@ returns and fails when it panics (see <code>expect_equal</code>). A build withou
 <p>Makes a free function callable from C, in a library built with
 <code>--lib static</code> or <code>--lib shared</code>: <code>[Export]</code>, or
 <code>[Export(name = "c_name")]</code> for a C symbol other than its name.</p>
-<h3 id="fields-9"><a class="header" href="#fields-9">Fields</a></h3>
+<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
 <h4 id="name-2"><a class="header" href="#name-2">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>
@@ -389,7 +405,7 @@ otherwise.</p>
 editor: the compiler ignores the declaration, whose functions end in <code>;</code>.
 <code>[__BuiltIn("reflect.name")]</code> names the built-in when it is not the
 declaration’s own name. Only the runtime may use it.</p>
-<h3 id="fields-10"><a class="header" href="#fields-10">Fields</a></h3>
+<h3 id="fields-11"><a class="header" href="#fields-11">Fields</a></h3>
 <h4 id="name-3"><a class="header" href="#name-3">name</a></h4>
 <pre><code class="language-pepper">const name: String = ""
 </code></pre>

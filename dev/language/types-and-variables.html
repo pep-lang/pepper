@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-93811922.js";
+            window.path_to_searchindex_js = "../searchindex-9987d0c1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -1003,6 +1003,54 @@ on and the compiler warns
 <code>warning: '--no-runtime-checks' has no effect at -O0</code>. It applies from <code>-O1</code>
 up, <code>-g</code> included. The setting is part of the build cache’s key, like the
 optimization level.</p>
+<p>To remove checks from one function instead of a whole build, mark it
+<code>[Unsafe("...")]</code> with the same names, comma-separated in one string:
+<code>[Unsafe("overflow")]</code>, <code>[Unsafe("overflow,bounds")]</code> or <code>[Unsafe("all")]</code>.
+It removes them from that function’s body only, at every optimization level
+(<code>-O0</code> included), so the function behaves the same in every build. Closures
+written in it lose the same checks. Functions it calls keep theirs, with one
+exception: <code>bounds</code> also removes the index checks that <code>Array</code> and <code>String</code>
+make for it, since those run inside their indexers. <code>[Unsafe]</code> goes on a free
+function, a method or a constructor. An unknown name is an error at the
+string.</p>
+<pre><code class="language-pepper"># `[Unsafe("...")]` removes runtime checks from one function's body.
+
+# A hash that wraps on purpose: without the overflow check, `*` and `+`
+# wrap around instead of panicking.
+[Unsafe("overflow")]
+hash(values: Array&lt;int&gt;): uint {
+    uint result = 2166136261;
+    for (var value in values) {
+        result = (result ^ (value as uint)) * 16777619;
+    }
+    return result;
+}
+
+# A loop that already checked its range: the index checks of `a[i]`, made by
+# `Array`'s indexer for this caller, are removed too.
+[Unsafe("bounds")]
+sum(values: Array&lt;int&gt;): long {
+    long total = 0;
+    ulong i = 0;
+    while (i &lt; values.count) {
+        total = total + values[i];
+        i = i + 1;
+    }
+    return total;
+}
+
+main(): int {
+    var values = Array&lt;int&gt;();
+    for (var i in 0..100) {
+        values.append(i);
+    }
+    assert(hash(values) != 0, "a hash");
+    assert(sum(values) == 4950, "0 + 1 + ... + 99");
+    # Outside those functions every check stays: 2147483647 + 1 here would
+    # still panic.
+    return 0;
+}
+</code></pre>
 <h2 id="bit-operations-and-math-functions"><a class="header" href="#bit-operations-and-math-functions">Bit operations and math functions</a></h2>
 <p>Each integer type has methods that compile to a single instruction on most
 CPUs, through LLVM’s intrinsics, for code that would otherwise loop over
