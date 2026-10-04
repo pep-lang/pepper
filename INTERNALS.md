@@ -2245,9 +2245,10 @@ that file's allocation counter must exist before any `String` is built).
 from the small block allocator in `internals.pep` (#600): 28 size classes,
 64 KiB spans cut from one reserved 4 GiB region (so `_pep_free` tells a
 small block by a range check, and a span's first word names its class),
-and a per-thread cache (a `pthread_key`/`TlsAlloc` value, with no
-destructor, since a JIT engine's code is gone when its test thread exits)
-of free lists and bump ranges. Lists longer than twice a class's batch spill a batch to
+and a per-thread cache (`_pep_small_cache`, a `[ThreadLocal]` pointer, so
+reaching it is one thread-relative load; it has no exit hook, since a JIT
+engine's code is gone when its test thread exits) of free lists and bump
+ranges. Lists longer than twice a class's batch spill a batch to
 the class's central stack (spin lock); an empty list refills from there,
 then from ranges exiting threads left, then from a new span. A thread that
 `async.Thread.spawn` started calls `_pep_small_thread_exit` when its body

@@ -89,7 +89,7 @@ export _pep_check_bounds(condition: bool, message: __ptr<char>, location: __ptr<
 # class, named in the span's first word; pages are committed a span at a
 # time, and spans are never returned to the operating system.
 #
-# Each thread has a cache (found through a thread-local key) holding, per
+# Each thread has a cache (a `[ThreadLocal]` pointer) holding, per
 # class, a free list and the unused end of a span, so the common allocation
 # and free take no lock and no atomic read-modify-write. A thread frees into
 # its own cache, whichever thread allocated the block. When a list grows
@@ -133,8 +133,7 @@ const _SMALL_SIZE: ulong = 1;
 # The next unused span (atomic).
 const _SMALL_NEXT_SPAN: ulong = 2;
 const _SMALL_LIMIT: ulong = 3;
-# The thread-local key of each thread's cache.
-const _SMALL_KEY: ulong = 4;
+# Word 4 is unused.
 # The lock of the list of caches, and its head.
 const _SMALL_CACHES_LOCK: ulong = 5;
 const _SMALL_CACHES: ulong = 6;
@@ -170,22 +169,10 @@ extern void* mmap(void* address, ulong length, int protection, int flags, int de
 extern int mprotect(void* address, ulong length, int protection);
 [Target(!OS(Windows) && !OS(Wasi))]
 extern int sched_yield();
-[Target(!OS(Windows) && !OS(Wasi))]
-extern int pthread_key_create(void* key, void* destructor);
-[Target(!OS(Windows) && !OS(Wasi))]
-extern void* pthread_getspecific(ulong key);
-[Target(!OS(Windows) && !OS(Wasi))]
-extern int pthread_setspecific(ulong key, void* value);
 [Target(OS(Windows))]
 extern void* VirtualAlloc(void* address, ulong size, uint allocation_type, uint protect);
 [Target(OS(Windows))]
 extern int SwitchToThread();
-[Target(OS(Windows))]
-extern uint TlsAlloc();
-[Target(OS(Windows))]
-extern void* TlsGetValue(uint index);
-[Target(OS(Windows))]
-extern int TlsSetValue(uint index, void* value);
 
 # MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE.
 [Target(OS(Linux))]
@@ -257,70 +244,14 @@ _pep_small_yield() {
 [Unsafe("overflow")]
 _pep_small_yield() {}
 
-# Creates the thread-local key of the caches into `key`; false if the
-# system has none left. The key has no destructor: a JIT engine's code is
-# gone by the time the thread that ran it exits, so a thread Pepper spawned
-# hands its cache back itself (`_pep_small_thread_exit`), and any other
-# thread keeps its cache. On Windows it is a thread (not fiber) local, so
-# fibers that run on one thread share its cache.
-[Target(!OS(Windows) && !OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_key_create(key: __ptr<ulong>): bool {
-    return pthread_key_create(key, __null) == 0;
-}
-
-[Target(OS(Windows))]
-[Unsafe("overflow")]
-_pep_small_key_create(key: __ptr<ulong>): bool {
-    var index = TlsAlloc();
-    # TLS_OUT_OF_INDEXES.
-    if (index == 4294967295) {
-        return false;
-    }
-    key[0] = index as ulong;
-    return true;
-}
-
-[Target(OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_key_create(key: __ptr<ulong>): bool {
-    return false;
-}
-
-# The calling thread's cache, or null if it has none yet.
-[Target(!OS(Windows) && !OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_cache(): __ptr<ulong> {
-    return pthread_getspecific(_pep_small_key);
-}
-
-[Target(OS(Windows))]
-[Unsafe("overflow")]
-_pep_small_cache(): __ptr<ulong> {
-    return TlsGetValue(_pep_small_key as uint);
-}
-
-[Target(OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_cache(): __ptr<ulong> {
-    return __null;
-}
-
-[Target(!OS(Windows) && !OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_set_cache(cache: __ptr<ulong>) {
-    pthread_setspecific(_pep_small_key, cache);
-}
-
-[Target(OS(Windows))]
-[Unsafe("overflow")]
-_pep_small_set_cache(cache: __ptr<ulong>) {
-    TlsSetValue(_pep_small_key as uint, cache);
-}
-
-[Target(OS(Wasi))]
-[Unsafe("overflow")]
-_pep_small_set_cache(cache: __ptr<ulong>) {}
+# The calling thread's cache, or null if it has none yet. It is a native
+# thread-local with no exit hook: a JIT engine's code is gone by the time the
+# thread that ran it exits, so a thread Pepper spawned hands its cache back
+# itself (`_pep_small_thread_exit`), and any other thread keeps its cache. On
+# Windows it is a thread (not fiber) local, so fibers that run on one thread
+# share its cache.
+[ThreadLocal]
+var _pep_small_cache: __ptr<ulong>;
 
 # The limit PEPPER_SMALL_BLOCK_LIMIT sets: a decimal number of bytes, or the
 # default when it is unset or not a number. No `String` exists yet, so this
@@ -364,9 +295,8 @@ _pep_small_class_size(index: ulong): ulong {
     return base + (step + 1) * (base / 4);
 }
 
-# Builds the state block: the limit, the class tables, the thread-local key,
-# and the reserved region. When the limit is 0, or the key or the
-# reservation cannot be had, the region's size stays 0 and every block
+# Builds the state block: the limit, the class tables and the reserved
+# region. When the limit is 0, or the reservation cannot be had, the region's size stays 0 and every block
 # comes from calloc.
 _pep_small_new_state(): __ptr<ulong> {
     var bytes = _SMALL_STATE_WORDS * 8 + 64;
@@ -399,9 +329,6 @@ _pep_small_new_state(): __ptr<ulong> {
         }
         table[slot] = class_index as u8;
         slot = slot + 1;
-    }
-    if (!_pep_small_key_create(state + _SMALL_KEY)) {
-        return state;
     }
     __ptr<u8> reserved = _pep_small_reserve(_SMALL_REGION + _SMALL_SPAN);
     if (reserved == __null) {
@@ -444,7 +371,7 @@ _pep_small_count(count: __ptr<ulong>, delta: long) {
 }
 
 # A new, empty cache for the calling thread, on the list of caches; null
-# when the thread-local key has no room for it.
+# when the C allocator has no room for it.
 [Unsafe("overflow")]
 _pep_small_new_cache(): __ptr<ulong> {
     __ptr<ulong> cache = malloc(_SMALL_CACHE_WORDS * 8);
@@ -456,7 +383,7 @@ _pep_small_new_cache(): __ptr<ulong> {
     cache[_SMALL_CACHE_NEXT] = _pep_small_state[_SMALL_CACHES];
     _pep_small_state[_SMALL_CACHES] = unsafe_cast<ulong>(cache);
     _pep_small_unlock(_pep_small_state + _SMALL_CACHES_LOCK);
-    _pep_small_set_cache(cache);
+    _pep_small_cache = cache;
     return cache;
 }
 
@@ -519,7 +446,7 @@ _pep_small_refill(lists: __ptr<ulong>, class_index: ulong): bool {
 # span is left (the caller then uses calloc).
 [Unsafe("overflow")]
 _pep_small_alloc(size: ulong): __ptr<void> {
-    var cache = _pep_small_cache();
+    var cache = _pep_small_cache;
     if (cache == __null) {
         cache = _pep_small_new_cache();
         if (cache == __null) {
@@ -586,7 +513,7 @@ _pep_small_free(p: __ptr<void>) {
     var class_index = _pep_small_class(p);
     var address = unsafe_cast<ulong>(p);
     __ptr<ulong> block = p;
-    var cache = _pep_small_cache();
+    var cache = _pep_small_cache;
     if (cache == __null) {
         # A thread whose cache is gone (its exit has begun) or never made.
         block[0] = 0;
@@ -625,11 +552,11 @@ export _pep_small_thread_exit() {
     if (_pep_small_end == 0) {
         return;
     }
-    __ptr<ulong> cache = _pep_small_cache();
+    __ptr<ulong> cache = _pep_small_cache;
     if (cache == __null) {
         return;
     }
-    _pep_small_set_cache(__null);
+    _pep_small_cache = __null;
     ulong class_index = 0;
     while (class_index < _SMALL_CLASSES) {
         __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
@@ -742,7 +669,6 @@ const _pep_small_state: __ptr<ulong> = _pep_small_new_state();
 const _pep_small_base: ulong = _pep_small_state[_SMALL_BASE];
 const _pep_small_end: ulong = _pep_small_base + _pep_small_state[_SMALL_SIZE];
 const _pep_small_limit: ulong = _pep_small_state[_SMALL_LIMIT];
-const _pep_small_key: ulong = _pep_small_state[_SMALL_KEY];
 
 # `PEP_CHECK_SYNC`, a debug switch read once at start: when it is set, a
 # Mutex checks at each unlock that nothing outside the locked value refers
