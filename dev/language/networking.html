@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5536423f.js";
+            window.path_to_searchindex_js = "../searchindex-1f5486a7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-35e92f97.js"></script>
@@ -442,8 +442,62 @@ of <code>SharedTcpListener</code>.</li>
 <li>A path holds at most 107 bytes (103 on macOS); a longer or empty one
 fails with <code>is_invalid_input()</code>.</li>
 </ul>
-<p>Only stream sockets are supported, since Windows (10 version 1803 and later)
-has no Unix datagram sockets.</p>
+<h3 id="unix-datagram-sockets"><a class="header" href="#unix-datagram-sockets">Unix datagram sockets</a></h3>
+<p><code>UnixDatagram</code> is the Unix domain counterpart of <code>UdpSocket</code>, on Linux and
+macOS only (Windows has no Unix datagram sockets, so it is declared with
+<code>[Target(OS(Linux) || OS(Mac))]</code>):</p>
+<pre><code class="language-pepper"># Unix datagram sockets: a server bound to a path answers each datagram.
+import io;
+
+main(): int {
+    # Linux and macOS only: Windows has no Unix datagram sockets.
+    [Target(OS(Linux) || OS(Mac))]
+    {
+        var folder = io.Directory.temp().join("pepper-udgram-example");
+        io.Directory.remove_all(folder);
+        io.Directory.create_all(folder).value();
+        var server_path = folder.join("server.sock");
+        var client_path = folder.join("client.sock");
+
+        var server = io.UnixDatagram.bind(server_path).value();
+        var client = io.UnixDatagram.bind(client_path).value();
+        client.send_to("ping".bytes(), server_path).value();
+
+        # Each receive takes one whole datagram and names its sender.
+        var request = Array&lt;u8&gt;();
+        var (n, sender) = server.receive_from(request, 1024).value();
+        assert(n == 4 &amp;&amp; sender == client_path, "one datagram from the client");
+        server.send_to("pong".bytes(), sender).value();
+
+        var reply = Array&lt;u8&gt;();
+        client.receive(reply, 1024).value();
+        assert(reply.count == 4, "the reply");
+
+        # A pair is two sockets already connected to each other.
+        var (a, b) = io.UnixDatagram.pair().value();
+        a.send("hi".bytes()).value();
+        var got = Array&lt;u8&gt;();
+        assert(b.receive(got, 16).value() == 2, "through the pair");
+
+        # Closing leaves the socket files; remove them.
+        io.Directory.remove_all(folder).value();
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UnixDatagram.bind(path)</code> creates a socket file to receive on, with the
+same path rules and errors as <code>UnixListener.bind</code>; <code>unbound()</code> makes one
+that can only send, and <code>pair()</code> two that are connected to each other.</li>
+<li><code>send_to(data, path)</code> sends one datagram; it fails with <code>is_not_found()</code>
+when there is no socket file and <code>is_connection_refused()</code> when nothing
+is bound to it any more. A datagram is never dropped: a send waits while
+the receiver’s queue is full.</li>
+<li><code>receive_from(buffer, max)</code> returns the byte count and the sender’s path,
+which is empty for an unbound sender. As with UDP, a datagram longer than
+<code>max</code> is cut.</li>
+<li><code>connect(path)</code>, <code>send</code> and <code>receive</code> work as on a <code>UdpSocket</code>.</li>
+</ul>
 <h2 id="tls"><a class="header" href="#tls">TLS</a></h2>
 <p>The <code>tls</code> module encrypts a TCP connection with TLS 1.2 or 1.3. A
 <code>TlsConnector</code> makes client connections and checks the server’s
@@ -560,7 +614,6 @@ program take over the port.</p>
 a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
 <li>TLS clients cannot present certificates.</li>
-<li>Unix datagram sockets are not supported.</li>
 </ul>
 <p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
 <a href="../reference/io-socket.html">sockets</a> and

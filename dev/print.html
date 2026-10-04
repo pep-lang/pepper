@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5536423f.js";
+            window.path_to_searchindex_js = "searchindex-1f5486a7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-35e92f97.js"></script>
@@ -15158,8 +15158,62 @@ of <code>SharedTcpListener</code>.</li>
 <li>A path holds at most 107 bytes (103 on macOS); a longer or empty one
 fails with <code>is_invalid_input()</code>.</li>
 </ul>
-<p>Only stream sockets are supported, since Windows (10 version 1803 and later)
-has no Unix datagram sockets.</p>
+<h3 id="unix-datagram-sockets"><a class="header" href="#unix-datagram-sockets">Unix datagram sockets</a></h3>
+<p><code>UnixDatagram</code> is the Unix domain counterpart of <code>UdpSocket</code>, on Linux and
+macOS only (Windows has no Unix datagram sockets, so it is declared with
+<code>[Target(OS(Linux) || OS(Mac))]</code>):</p>
+<pre><code class="language-pepper"># Unix datagram sockets: a server bound to a path answers each datagram.
+import io;
+
+main(): int {
+    # Linux and macOS only: Windows has no Unix datagram sockets.
+    [Target(OS(Linux) || OS(Mac))]
+    {
+        var folder = io.Directory.temp().join("pepper-udgram-example");
+        io.Directory.remove_all(folder);
+        io.Directory.create_all(folder).value();
+        var server_path = folder.join("server.sock");
+        var client_path = folder.join("client.sock");
+
+        var server = io.UnixDatagram.bind(server_path).value();
+        var client = io.UnixDatagram.bind(client_path).value();
+        client.send_to("ping".bytes(), server_path).value();
+
+        # Each receive takes one whole datagram and names its sender.
+        var request = Array&lt;u8&gt;();
+        var (n, sender) = server.receive_from(request, 1024).value();
+        assert(n == 4 &amp;&amp; sender == client_path, "one datagram from the client");
+        server.send_to("pong".bytes(), sender).value();
+
+        var reply = Array&lt;u8&gt;();
+        client.receive(reply, 1024).value();
+        assert(reply.count == 4, "the reply");
+
+        # A pair is two sockets already connected to each other.
+        var (a, b) = io.UnixDatagram.pair().value();
+        a.send("hi".bytes()).value();
+        var got = Array&lt;u8&gt;();
+        assert(b.receive(got, 16).value() == 2, "through the pair");
+
+        # Closing leaves the socket files; remove them.
+        io.Directory.remove_all(folder).value();
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>UnixDatagram.bind(path)</code> creates a socket file to receive on, with the
+same path rules and errors as <code>UnixListener.bind</code>; <code>unbound()</code> makes one
+that can only send, and <code>pair()</code> two that are connected to each other.</li>
+<li><code>send_to(data, path)</code> sends one datagram; it fails with <code>is_not_found()</code>
+when there is no socket file and <code>is_connection_refused()</code> when nothing
+is bound to it any more. A datagram is never dropped: a send waits while
+the receiver’s queue is full.</li>
+<li><code>receive_from(buffer, max)</code> returns the byte count and the sender’s path,
+which is empty for an unbound sender. As with UDP, a datagram longer than
+<code>max</code> is cut.</li>
+<li><code>connect(path)</code>, <code>send</code> and <code>receive</code> work as on a <code>UdpSocket</code>.</li>
+</ul>
 <h2 id="tls"><a class="header" href="#tls">TLS</a></h2>
 <p>The <code>tls</code> module encrypts a TCP connection with TLS 1.2 or 1.3. A
 <code>TlsConnector</code> makes client connections and checks the server’s
@@ -15276,7 +15330,6 @@ program take over the port.</p>
 a call parks only the task, and <a href="#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
 <li>TLS clients cannot present certificates.</li>
-<li>Unix datagram sockets are not supported.</li>
 </ul>
 <p>The reference pages for <a href="#network-addresses">addresses</a>,
 <a href="#sockets-1">sockets</a> and
@@ -32258,7 +32311,7 @@ the location names the check.</p>
 <li><a href="#directory-1">Directory</a>: listing, creating, and removing directories</li>
 <li><a href="#network-addresses">Network addresses</a>: <code>IpAddress</code>, <code>SocketAddress</code>, and <code>resolve</code></li>
 <li><a href="#sockets-1">Sockets</a>: <code>TcpListener</code>, <code>Incoming</code>, <code>SharedTcpListener</code>, <code>TcpStream</code>, <code>SocketTransfer</code>, and <code>UdpSocket</code></li>
-<li><a href="#unix-domain-sockets-1">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, and <code>UnixStream</code></li>
+<li><a href="#unix-domain-sockets-1">Unix domain sockets</a>: <code>UnixListener</code>, <code>SharedUnixListener</code>, <code>UnixStream</code>, and <code>UnixDatagram</code></li>
 <li><a href="#reader-and-writer">Streams</a>: the <code>Reader</code> and <code>Writer</code> traits, <code>lines()</code> and <code>chunks()</code></li>
 <li><a href="#streams-in-memory">Streams in memory</a>: <code>ByteReader</code> and <code>ByteWriter</code></li>
 <li><a href="#print-3">Print</a>: deprecated; use <code>Writer</code></li>
@@ -36263,11 +36316,12 @@ chose when it was bound to port 0.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/io/unix.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="unix-domain-sockets-1"><a class="header" href="#unix-domain-sockets-1">Unix domain sockets</a></h1>
 <p>Unix domain sockets: <code>UnixListener</code> accepts connections on a path in the
-file system, <code>UnixStream</code> is one connection.</p>
-<p>They work like <code>TcpListener</code> and <code>TcpStream</code>, for processes on the same
-machine: a path names the socket instead of an IP address and a port.
-Linux, macOS and Windows (10 version 1803 and later) all have them; only
-stream sockets are supported.</p>
+file system, <code>UnixStream</code> is one connection, and <code>UnixDatagram</code> sends and
+receives datagrams.</p>
+<p>They work like <code>TcpListener</code>, <code>TcpStream</code> and <code>UdpSocket</code>, for processes
+on the same machine: a path names the socket instead of an IP address and
+a port. Linux, macOS and Windows (10 version 1803 and later) all have the
+stream sockets; <code>UnixDatagram</code> is Linux and macOS only.</p>
 <p>Binding creates a socket file at the path, and closing the listener does
 not remove it: remove it with <code>File.remove</code> when the server is done, and
 before binding again, since binding to a path that exists fails with
@@ -36602,6 +36656,177 @@ can take it from with <code>UnixStream.adopt</code>, as
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;
 </code></pre>
 <p>Closes the connection now. Closing a closed stream does nothing.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success or when already closed; the platform error when closing fails</li>
+</ul>
+<h2 id="unixdatagram"><a class="header" href="#unixdatagram">UnixDatagram</a></h2>
+<pre><code class="language-pepper">[Target(OS(Linux) || OS(Mac))] [NotCopyable("owns an operating-system socket and cannot be copied")] struct UnixDatagram
+</code></pre>
+<p>A Unix domain datagram socket (<code>SOCK_DGRAM</code> on <code>AF_UNIX</code>): like a
+<code>UdpSocket</code> for processes on the same machine, with a path in place of
+an address. Linux and macOS only; Windows has no Unix datagram sockets.</p>
+<p>Each <code>send_to</code> delivers one whole datagram, in order, and the system
+never drops one silently: a send waits while the receiver’s queue is
+full. <code>UnixDatagram.bind</code> creates a socket file at a path, which closing
+does not remove (as for <code>UnixListener</code>); <code>UnixDatagram.unbound</code> makes a
+socket that can send but has no path for replies; <code>UnixDatagram.pair</code>
+makes two connected sockets.</p>
+<p>Closing: the destructor closes the socket when the last reference goes;
+<code>close()</code> closes it earlier and reports errors. Every operation on a
+closed socket fails with an error no <code>IoError</code> predicate identifies
+(<code>EBADF</code>).</p>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>UdpSocket</code></li>
+<li><code>UnixStream</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import io;
+
+var path = io.Directory.temp().join("events.sock");
+io.File.remove(path);   # left over from an earlier run
+var server = io.UnixDatagram.bind(path).value();
+var client = io.UnixDatagram.unbound().value();
+client.send_to("ping".bytes(), path);
+var buffer = Array&lt;u8&gt;();
+var (n, from) = server.receive_from(buffer, 1024).value();   # 4, an empty path
+</code></pre>
+<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
+<h4 id="unixdatagram-1"><a class="header" href="#unixdatagram-1">UnixDatagram()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a closed socket: <code>is_open()</code> is false and every operation
+fails. Use <code>UnixDatagram.bind</code>, <code>unbound</code> or <code>pair</code> to get an open
+one.</p>
+<h3 id="static-methods-3-2"><a class="header" href="#static-methods-3-2">Static methods</a></h3>
+<h4 id="bind-2-1"><a class="header" href="#bind-2-1">bind</a></h4>
+<pre><code class="language-pepper">static bind(path: Path): IoResult&lt;UnixDatagram&gt;
+</code></pre>
+<p>Creates a datagram socket at <code>path</code>, to receive datagrams sent there.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — where to create the socket file: at most 107 bytes (103 on macOS)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the bound socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
+</ul>
+<h4 id="unbound"><a class="header" href="#unbound">unbound</a></h4>
+<pre><code class="language-pepper">static unbound(): IoResult&lt;UnixDatagram&gt;
+</code></pre>
+<p>Creates a datagram socket with no path. It can send, but a receiver
+sees an empty path as the sender and cannot reply.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the socket; an error when the system is out of descriptors, or another platform error</li>
+</ul>
+<h4 id="pair"><a class="header" href="#pair">pair</a></h4>
+<pre><code class="language-pepper">static pair(): IoResult&lt;(UnixDatagram, UnixDatagram)&gt;
+</code></pre>
+<p>Creates two datagram sockets connected to each other, with no path
+(<code>socketpair(2)</code>): what one sends with <code>send</code>, the other receives. A
+common way to talk to a child thread or process.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the two sockets; an error when the system is out of descriptors, or another platform error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var (a, b) = io.UnixDatagram.pair().value();
+a.send("hi".bytes());
+var buffer = Array&lt;u8&gt;();
+b.receive(buffer, 16);   # buffer holds "hi"
+</code></pre>
+<h3 id="methods-3-8"><a class="header" href="#methods-3-8">Methods</a></h3>
+<h4 id="is_open-2-1"><a class="header" href="#is_open-2-1">is_open</a></h4>
+<pre><code class="language-pepper">is_open(): bool
+</code></pre>
+<p>Returns whether the socket is open.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>false after <code>close()</code> and for a <code>UnixDatagram()</code> never opened</li>
+</ul>
+<h4 id="path-1-3"><a class="header" href="#path-1-3">path</a></h4>
+<pre><code class="language-pepper">path(): Path
+</code></pre>
+<p>Returns the path the socket was bound to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the path given to <code>bind</code>; an empty path for an unbound or paired socket</li>
+</ul>
+<h4 id="send_to-1"><a class="header" href="#send_to-1">send_to</a></h4>
+<pre><code class="language-pepper">send_to(data: u8[], path: Path): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to the socket bound at <code>path</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram’s bytes</li>
+<li><code>path</code> — the socket file a <code>UnixDatagram</code> is bound to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent (all of <code>data</code>); an error with <code>is_not_found()</code> when no socket file exists at <code>path</code>, <code>is_connection_refused()</code> when nothing is bound to it any more, <code>is_invalid_input()</code> when the path is empty or too long, or another platform error (such as a datagram larger than the system allows)</li>
+</ul>
+<h4 id="receive_from-1"><a class="header" href="#receive_from-1">receive_from</a></h4>
+<pre><code class="language-pepper">receive_from(buffer: u8[], max: ulong): IoResult&lt;(ulong, Path)&gt;
+</code></pre>
+<p>Waits for the next datagram and appends up to <code>max</code> of its bytes to
+<code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended and the sender’s path (empty when the sender is unbound); an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="connect-1-1"><a class="header" href="#connect-1-1">connect</a></h4>
+<pre><code class="language-pepper">connect(path: Path): IoResult&lt;void&gt;
+</code></pre>
+<p>Sets the socket’s default peer: <code>send</code> goes to the socket at <code>path</code>,
+and <code>receive</code> and <code>receive_from</code> only take datagrams from it. No
+datagram is sent.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>path</code> — the socket file a <code>UnixDatagram</code> is bound to</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result on success; an error with <code>is_not_found()</code> when no socket file exists at <code>path</code>, <code>is_connection_refused()</code> when nothing is bound to it, or another platform error</li>
+</ul>
+<h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
+<pre><code class="language-pepper">send(data: u8[]): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Sends <code>data</code> as one datagram to the connected peer (see <code>connect</code> and
+<code>pair</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>data</code> — the datagram’s bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes sent; an error when the socket is not connected or is closed, or another platform error</li>
+</ul>
+<h4 id="receive-1"><a class="header" href="#receive-1">receive</a></h4>
+<pre><code class="language-pepper">receive(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
+</code></pre>
+<p>Waits for the next datagram from the connected peer and appends up to
+<code>max</code> of its bytes to <code>buffer</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>buffer</code> — the array the bytes are appended to</li>
+<li><code>max</code> — the most bytes to keep; the rest of a longer datagram is lost. 0 reads nothing and returns at once.</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of bytes appended; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="close-2-1"><a class="header" href="#close-2-1">close</a></h4>
+<pre><code class="language-pepper">close(): IoResult&lt;void&gt;
+</code></pre>
+<p>Closes the socket now. Closing a closed socket does nothing. The
+socket file stays.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success or when already closed; the platform error when closing fails</li>
@@ -37936,7 +38161,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-3-3"><a class="header" href="#constructor-3-3">Constructor</a></h3>
+<h3 id="constructor-3-4"><a class="header" href="#constructor-3-4">Constructor</a></h3>
 <h4 id="latch-1"><a class="header" href="#latch-1">Latch()</a></h4>
 <pre><code class="language-pepper">construct(count: ulong)
 </code></pre>
@@ -37945,7 +38170,7 @@ main(): int {
 <ul>
 <li><code>count</code> — how many calls open it; 0 makes a latch that is open from the start</li>
 </ul>
-<h3 id="methods-3-8"><a class="header" href="#methods-3-8">Methods</a></h3>
+<h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
 <h4 id="count_down"><a class="header" href="#count_down">count_down</a></h4>
 <pre><code class="language-pepper">count_down()
 </code></pre>
@@ -38416,7 +38641,7 @@ change it as soon as it returns.</p>
 var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
 <h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
-<h4 id="send-1"><a class="header" href="#send-1">send</a></h4>
+<h4 id="send-2"><a class="header" href="#send-2">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
 <p>Queues <code>value</code>, first waiting while a bounded channel is full.</p>
@@ -38453,7 +38678,7 @@ value is dropped when it is not queued.</p>
 <ul>
 <li>true if the value was queued, false if the channel is full or closed</li>
 </ul>
-<h4 id="receive-1"><a class="header" href="#receive-1">receive</a></h4>
+<h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
 <pre><code class="language-pepper">receive(): Result&lt;T&gt;
 </code></pre>
 <p>Takes the next value, waiting until one arrives.</p>
@@ -38626,7 +38851,7 @@ while (running) {
 </code></pre>
 <p>Creates a select with no channels yet.</p>
 <h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
-<h4 id="receive-2"><a class="header" href="#receive-2">receive</a></h4>
+<h4 id="receive-3"><a class="header" href="#receive-3">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
 <p>Adds <code>channel</code>: its values, turned into an <code>E</code> by <code>wrap</code>, are among
@@ -39177,7 +39402,7 @@ so a long computation can stop early. False outside a task.</p>
 <code>Task.join</code> fails with a <code>TaskError</code> for which <code>is_timed_out()</code> holds,
 and <code>sleep</code> returns early. Code that does not wait is never interrupted.
 Timeouts nest: an inner one cannot extend an outer one.</p>
-<h3 id="constructor-3-4"><a class="header" href="#constructor-3-4">Constructor</a></h3>
+<h3 id="constructor-3-5"><a class="header" href="#constructor-3-5">Constructor</a></h3>
 <h4 id="deadline-1"><a class="header" href="#deadline-1">Deadline()</a></h4>
 <pre><code class="language-pepper">construct(milliseconds: ulong)
 </code></pre>
@@ -39186,7 +39411,7 @@ Timeouts nest: an inner one cannot extend an outer one.</p>
 <ul>
 <li><code>milliseconds</code> — how long from now the limit passes</li>
 </ul>
-<h3 id="methods-3-9"><a class="header" href="#methods-3-9">Methods</a></h3>
+<h3 id="methods-3-10"><a class="header" href="#methods-3-10">Methods</a></h3>
 <h4 id="enter-6"><a class="header" href="#enter-6">enter</a></h4>
 <pre><code class="language-pepper">enter(): Deadline
 </code></pre>
@@ -41772,7 +41997,7 @@ seconds may be left out.</p>
 <ul>
 <li>the date and time, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-3-10"><a class="header" href="#methods-3-10">Methods</a></h3>
+<h3 id="methods-3-11"><a class="header" href="#methods-3-11">Methods</a></h3>
 <h4 id="unix_seconds-1"><a class="header" href="#unix_seconds-1">unix_seconds</a></h4>
 <pre><code class="language-pepper">unix_seconds(): long
 </code></pre>
@@ -43452,7 +43677,7 @@ division does: a zero divisor gives an infinity or NaN.</p>
 <ul>
 <li><code>value</code> — the value of every lane</li>
 </ul>
-<h3 id="methods-3-11"><a class="header" href="#methods-3-11">Methods</a></h3>
+<h3 id="methods-3-12"><a class="header" href="#methods-3-12">Methods</a></h3>
 <h4 id="operator--25-1"><a class="header" href="#operator--25-1">operator []</a></h4>
 <pre><code class="language-pepper">[](index: ulong): bool
 </code></pre>
@@ -47192,7 +47417,7 @@ takes every remaining value, from <code>Parser.multiple</code> or
 <pre><code class="language-pepper">var is_set: bool { get; }
 </code></pre>
 <p>Whether at least one value was given.</p>
-<h3 id="constructor-3-5"><a class="header" href="#constructor-3-5">Constructor</a></h3>
+<h3 id="constructor-3-6"><a class="header" href="#constructor-3-6">Constructor</a></h3>
 <h4 id="argumentlist-1"><a class="header" href="#argumentlist-1">ArgumentList()</a></h4>
 <pre><code class="language-pepper">construct(argument: _CliArgument)
 </code></pre>
@@ -47812,7 +48037,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li>the response; the errors of <code>send</code></li>
 </ul>
-<h4 id="send-2"><a class="header" href="#send-2">send</a></h4>
+<h4 id="send-3"><a class="header" href="#send-3">send</a></h4>
 <pre><code class="language-pepper">send(request: Request): io.IoResult&lt;Response&gt;
 </code></pre>
 <p>Sends <code>request</code> and reads the response, body and all.</p>
