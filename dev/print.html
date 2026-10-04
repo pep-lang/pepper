@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cbf7fc2d.js";
+            window.path_to_searchindex_js = "searchindex-f347a96e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -15569,6 +15569,9 @@ main(): int {
     async.run(
         () =&gt; {
             var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            # Mutual TLS: only clients with a certificate the test
+            # certificate issued (here, the test certificate itself) get in.
+            assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");
             var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
             var port = listener.local_address().value().port();
             var server = async.Task&lt;void&gt;.spawn_local(() =&gt; {
@@ -15583,6 +15586,7 @@ main(): int {
             # The client trusts the test certificate as well as the system's.
             var client = connector.value();
             assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
+            assert(client.set_identity(certificate, key).is_ok(), "present a client certificate");
             var stream = client.connect_host("localhost", port).value();
             stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
@@ -15608,6 +15612,12 @@ the certificate’s addresses.</li>
 <li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
 <code>acceptor.accept(tcp)</code> runs the handshake over a connection a
 <code>TcpListener</code> accepted.</li>
+<li>Mutual TLS: <code>acceptor.require_client_certificate(roots)</code> asks every
+client for a certificate and accepts only one issued by a certificate in
+the PEM file <code>roots</code>; <code>connector.set_identity(certificate_chain, private_key)</code> gives the client a certificate to present. A client with no
+certificate, or an untrusted one, fails the server’s <code>accept</code>. With TLS
+1.3 the client’s <code>connect</code> can succeed first, and its next read then
+fails or returns 0.</li>
 <li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>
@@ -15618,8 +15628,9 @@ returns 0 once the peer has sent one or closed the connection.</li>
 connector or acceptor is made: install it with the system’s package
 manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 <code>create()</code> returns an error. On Windows it uses the system’s SChannel,
-which needs nothing installed; a server’s private key must be PKCS #8
-(<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or Server 2022.</p>
+which needs nothing installed; a private key (a server’s or a client’s)
+must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
+Server 2022.</p>
 <h2 id="errors-3"><a class="header" href="#errors-3">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
@@ -15657,7 +15668,6 @@ program take over the port.</p>
 <li>Outside a task every call blocks its thread, with no timeout. In a task
 a call parks only the task, and <a href="#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
-<li>TLS clients cannot present certificates.</li>
 </ul>
 <p>The reference pages for <a href="#network-addresses">addresses</a>,
 <a href="#sockets-1">sockets</a> and
@@ -49817,8 +49827,11 @@ trusts more, such as a test certificate authority. Each <code>connect</code> run
 the TLS handshake over a connected <code>TcpStream</code> and checks that the
 server’s certificate is valid and issued for the host name given. Only
 TLS 1.2 and 1.3 are offered.</p>
+<p>A server that asks for a client certificate (mutual TLS) gets the one
+set with <code>set_identity</code>; without one, the connector presents none.</p>
 <p>A connector is <code>[Shared]</code>: make one and use it from every thread and
-task. Configure it (<code>add_root_certificate</code>) before the first <code>connect</code>.</p>
+task. Configure it (<code>add_root_certificate</code>, <code>set_identity</code>) before the
+first <code>connect</code>.</p>
 <p><strong>See also</strong></p>
 <ul>
 <li><code>TlsStream</code></li>
@@ -49863,6 +49876,27 @@ test certificate authority.</p>
 <ul>
 <li>an Ok result; an error when the file cannot be read or holds no certificate</li>
 </ul>
+<h4 id="set_identity"><a class="header" href="#set_identity">set_identity</a></h4>
+<pre><code class="language-pepper">set_identity(certificate_chain: io.Path, private_key: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Presents the certificate chain in <code>certificate_chain</code>, with the
+private key in <code>private_key</code>, to servers that ask for a client
+certificate (mutual TLS, as a <code>TlsAcceptor</code> does after
+<code>require_client_certificate</code>). A later call replaces the identity.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>certificate_chain</code> — a PEM file: the client’s certificate first, then any intermediate certificates</li>
+<li><code>private_key</code> — a PEM file with the certificate’s private key (on Windows, PKCS #8: <code>BEGIN PRIVATE KEY</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when a file cannot be read or the key does not match the certificate</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var connector = tls.TlsConnector.create().value();
+connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value();
+var stream = connector.connect_host("internal.example.com", 443).value();
+</code></pre>
 <h4 id="connect-3"><a class="header" href="#connect-3">connect</a></h4>
 <pre><code class="language-pepper">connect(stream: io.TcpStream, host: String): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -49897,7 +49931,8 @@ the handshake as <code>connect</code> does.</p>
 <p>Accepts TLS server connections with one certificate.</p>
 <p>An acceptor presents a certificate chain and its private key, read from
 PEM files. Each <code>accept</code> runs the TLS handshake over a <code>TcpStream</code> that a
-<code>TcpListener</code> accepted. Clients are not asked for certificates.</p>
+<code>TcpListener</code> accepted. Clients are not asked for certificates unless
+<code>require_client_certificate</code> is called (mutual TLS).</p>
 <p>An acceptor is <code>[Shared]</code>, so the accept loops of every worker can share
 one.</p>
 <p><strong>See also</strong></p>
@@ -49943,6 +49978,27 @@ while (true) {
 <li>the acceptor; an error when a file cannot be read, the key does not match the certificate, or no TLS library is available (see <code>TlsConnector.create</code>)</li>
 </ul>
 <h3 id="methods-1-38"><a class="header" href="#methods-1-38">Methods</a></h3>
+<h4 id="require_client_certificate"><a class="header" href="#require_client_certificate">require_client_certificate</a></h4>
+<pre><code class="language-pepper">require_client_certificate(roots: io.Path): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Asks every client for a certificate and accepts only clients whose
+certificate is issued by one of the certificates in the PEM file at
+<code>roots</code> (directly or through intermediates the client sends) and is
+valid for client authentication. A handshake with a client that sends
+no certificate, or an untrusted one, fails. Call it before the first
+<code>accept</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>roots</code> — a file of one or more PEM certificates: the authorities that issue client certificates</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the file cannot be read or holds no certificate</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
+acceptor.require_client_certificate(io.Path("clients-ca.pem")).value();
+</code></pre>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -49953,7 +50009,7 @@ while (true) {
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the encrypted stream; an error when the handshake fails, or an io error from the socket</li>
+<li>the encrypted stream; an error when the handshake fails (including, after <code>require_client_certificate</code>, a client with no trusted certificate), or an io error from the socket</li>
 </ul>
 <h2 id="tlsstream"><a class="header" href="#tlsstream">TlsStream</a></h2>
 <pre><code class="language-pepper">[NotCopyable("owns a TLS connection and cannot be copied")] struct TlsStream

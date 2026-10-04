@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cbf7fc2d.js";
+            window.path_to_searchindex_js = "../searchindex-f347a96e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -525,6 +525,9 @@ main(): int {
     async.run(
         () =&gt; {
             var acceptor = tls.TlsAcceptor.create(certificate, key).value();
+            # Mutual TLS: only clients with a certificate the test
+            # certificate issued (here, the test certificate itself) get in.
+            assert(acceptor.require_client_certificate(certificate).is_ok(), "ask clients for certificates");
             var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
             var port = listener.local_address().value().port();
             var server = async.Task&lt;void&gt;.spawn_local(() =&gt; {
@@ -539,6 +542,7 @@ main(): int {
             # The client trusts the test certificate as well as the system's.
             var client = connector.value();
             assert(client.add_root_certificate(certificate).is_ok(), "trust the test certificate");
+            assert(client.set_identity(certificate, key).is_ok(), "present a client certificate");
             var stream = client.connect_host("localhost", port).value();
             stream.write_all("ping");
             var reply = Array&lt;u8&gt;();
@@ -564,6 +568,12 @@ the certificate’s addresses.</li>
 <li><code>TlsAcceptor.create(certificate_chain, private_key)</code> reads PEM files, and
 <code>acceptor.accept(tcp)</code> runs the handshake over a connection a
 <code>TcpListener</code> accepted.</li>
+<li>Mutual TLS: <code>acceptor.require_client_certificate(roots)</code> asks every
+client for a certificate and accepts only one issued by a certificate in
+the PEM file <code>roots</code>; <code>connector.set_identity(certificate_chain, private_key)</code> gives the client a certificate to present. A client with no
+certificate, or an untrusted one, fails the server’s <code>accept</code>. With TLS
+1.3 the client’s <code>connect</code> can succeed first, and its next read then
+fails or returns 0.</li>
 <li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>
@@ -574,8 +584,9 @@ returns 0 once the peer has sent one or closed the connection.</li>
 connector or acceptor is made: install it with the system’s package
 manager, or <code>brew install openssl@3</code> on macOS. If it is missing,
 <code>create()</code> returns an error. On Windows it uses the system’s SChannel,
-which needs nothing installed; a server’s private key must be PKCS #8
-(<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or Server 2022.</p>
+which needs nothing installed; a private key (a server’s or a client’s)
+must be PKCS #8 (<code>BEGIN PRIVATE KEY</code>), and TLS 1.3 needs Windows 11 or
+Server 2022.</p>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p>Every operation returns an <code>IoResult</code>. Besides the file-system predicates,
 <code>IoError</code> has these for networking:</p>
@@ -613,7 +624,6 @@ program take over the port.</p>
 <li>Outside a task every call blocks its thread, with no timeout. In a task
 a call parks only the task, and <a href="tasks.html#timeouts"><code>async.timeout</code></a>
 limits how long it may wait.</li>
-<li>TLS clients cannot present certificates.</li>
 </ul>
 <p>The reference pages for <a href="../reference/io-address.html">addresses</a>,
 <a href="../reference/io-socket.html">sockets</a> and
