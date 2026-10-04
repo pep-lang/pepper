@@ -33,7 +33,7 @@ const LAST_SECOND: long = 910692730000;
 # The local offset at `seconds`: SYSTEMTIME in UTC through the zone in
 # Windows' settings, and the difference read back.
 [Target(OS(Windows))]
-export _time_sys_local_offset(seconds: long): int {
+_time_sys_local_offset(seconds: long): int {
     var clamped = seconds < FIRST_SECOND ? FIRST_SECOND : (seconds > LAST_SECOND ? LAST_SECOND : seconds);
     var universal = DateTime.from_unix_seconds(clamped);
     # wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute, wSecond, wMilliseconds
@@ -70,7 +70,7 @@ _time_wide_name(name: String): __ptr<u16> {
 
 # A database folder named by TZDIR wins over ICU, as on Linux and macOS.
 [Target(OS(Windows))]
-export _time_sys_named(name: String): Result<TimeZone> {
+_time_sys_named(name: String): Result<TimeZone> {
     var folder = os.environment("TZDIR");
     if (!folder.is_empty()) {
         return _time_zone_from_database(name, folder.value());
@@ -95,7 +95,7 @@ export _time_sys_named(name: String): Result<TimeZone> {
 # UCAL_GREGORIAN is 1; UCAL_ZONE_OFFSET 15 and UCAL_DST_OFFSET 16, in
 # milliseconds.
 [Target(OS(Windows))]
-export _time_sys_icu_offset(name: String, seconds: long): int {
+_time_sys_icu_offset(name: String, seconds: long): int {
     var wide = _time_wide_name(name);
     __ptr<int> status = _pep_malloc(4);
     status[0] = 0;

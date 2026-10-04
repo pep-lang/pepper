@@ -62,126 +62,126 @@ extern int fcntl(int fd, int command, ...);
 # ── Constants ────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_af_inet(): int { return 2; }
+_io_af_inet(): int { return 2; }
 
 [Target(OS(Linux))]
-export _io_af_inet6(): int { return 10; }
+_io_af_inet6(): int { return 10; }
 
 [Target(OS(Mac))]
-export _io_af_inet6(): int { return 30; }
+_io_af_inet6(): int { return 30; }
 
 [Target(OS(Linux))]
-export _io_sol_socket(): int { return 1; }
+_io_sol_socket(): int { return 1; }
 
 [Target(OS(Mac))]
-export _io_sol_socket(): int {
+_io_sol_socket(): int {
     return 65535;
 }  # 0xffff
 
 [Target(OS(Linux))]
-export _io_so_reuseaddr(): int { return 2; }
+_io_so_reuseaddr(): int { return 2; }
 
 [Target(OS(Mac))]
-export _io_so_reuseaddr(): int { return 4; }
+_io_so_reuseaddr(): int { return 4; }
 
 [Target(OS(Linux))]
-export _io_so_broadcast(): int { return 6; }
+_io_so_broadcast(): int { return 6; }
 
 [Target(OS(Mac))]
-export _io_so_broadcast(): int {
+_io_so_broadcast(): int {
     return 32;
 }  # 0x20
 
 [Target(OS(Linux))]
-export _io_sock_cloexec(): int {
+_io_sock_cloexec(): int {
     return 526336;
 }  # SOCK_CLOEXEC | SOCK_NONBLOCK, or'ed into the type
 
 [Target(OS(Mac))]
-export _io_sock_cloexec(): int {
+_io_sock_cloexec(): int {
     return 0;
 }  # none: fcntl instead
 
 [Target(OS(Linux))]
-export _io_so_error(): int { return 4; }
+_io_so_error(): int { return 4; }
 
 [Target(OS(Mac))]
-export _io_so_error(): int {
+_io_so_error(): int {
     return 4103;
 }  # 0x1007
 
 [Target(OS(Linux))]
-export _io_msg_nosignal(): int {
+_io_msg_nosignal(): int {
     return 16384;
 }  # 0x4000
 
 [Target(OS(Mac))]
-export _io_msg_nosignal(): int {
+_io_msg_nosignal(): int {
     return 0;
 }  # none: SO_NOSIGPIPE instead
 
 # ── Errors ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux))]
-export _io_sys_code_timed_out(): ErrorCode {
+_io_sys_code_timed_out(): ErrorCode {
     return 110;
 }  # ETIMEDOUT
 
 [Target(OS(Mac))]
-export _io_sys_code_timed_out(): ErrorCode { return 60; }
+_io_sys_code_timed_out(): ErrorCode { return 60; }
 
 # EAGAIN (the same value as EWOULDBLOCK): a non-blocking call would block.
 [Target(OS(Linux))]
-export _io_posix_would_block(code: ErrorCode): bool { return code == 11; }
+_io_posix_would_block(code: ErrorCode): bool { return code == 11; }
 
 [Target(OS(Mac))]
-export _io_posix_would_block(code: ErrorCode): bool { return code == 35; }
+_io_posix_would_block(code: ErrorCode): bool { return code == 35; }
 
 # EINPROGRESS: a non-blocking connect has started.
 [Target(OS(Linux))]
-export _io_posix_in_progress(code: ErrorCode): bool { return code == 115; }
+_io_posix_in_progress(code: ErrorCode): bool { return code == 115; }
 
 [Target(OS(Mac))]
-export _io_posix_in_progress(code: ErrorCode): bool { return code == 36; }
+_io_posix_in_progress(code: ErrorCode): bool { return code == 36; }
 
 # Code for a stream that ended before the bytes asked for: EIO.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_code_unexpected_end(): ErrorCode { return 5; }
+_io_sys_code_unexpected_end(): ErrorCode { return 5; }
 
 # getaddrinfo's EAI_NONAME and EAI_NODATA: the name has no address.
 [Target(OS(Linux))]
-export _io_eai_no_address(code: int): bool { return code == -2 || code == -5; }
+_io_eai_no_address(code: int): bool { return code == -2 || code == -5; }
 
 [Target(OS(Mac))]
-export _io_eai_no_address(code: int): bool { return code == 8 || code == 7; }
+_io_eai_no_address(code: int): bool { return code == 8 || code == 7; }
 
 # EAI_SYSTEM: the reason is in errno.
 [Target(OS(Linux))]
-export _io_eai_system(code: int): bool { return code == -11; }
+_io_eai_system(code: int): bool { return code == -11; }
 
 [Target(OS(Mac))]
-export _io_eai_system(code: int): bool { return code == 11; }
+_io_eai_system(code: int): bool { return code == 11; }
 
 # The socket call's result: -1 means failure with the reason in errno.
 [Target(OS(Linux) || OS(Mac))]
-export _io_socket_check(rc: int): IoResult<void> {
+_io_socket_check(rc: int): IoResult<void> {
     return _io_posix_check(rc);
 }
 
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_invalid(): SocketHandle {
+_io_sys_socket_invalid(): SocketHandle {
     return -1;
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_valid(h: SocketHandle): bool {
+_io_sys_socket_valid(h: SocketHandle): bool {
     return h >= 0;
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
+_io_sys_socket_close(h: SocketHandle): IoResult<void> {
     _io_socket_forget(h);
     return _io_sys_close(h);
 }
@@ -191,7 +191,7 @@ export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
 # The header of a sockaddr_in / sockaddr_in6: Linux has a 16-bit family at 0;
 # macOS a length byte at 0 and a family byte at 1.
 [Target(OS(Linux))]
-export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
+_io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
     var family = _io_af_inet();
     if (v6) {
         family = _io_af_inet6();
@@ -200,7 +200,7 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
 }
 
 [Target(OS(Mac))]
-export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
+_io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
     var family = _io_af_inet();
     if (v6) {
         family = _io_af_inet6();
@@ -211,7 +211,7 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
 
 # 4 for IPv4, 6 for IPv6, 0 for any other family.
 [Target(OS(Linux))]
-export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
+_io_sys_sockaddr_family(buffer: __ptr<u8>): int {
     var family = unsafe_cast<__ptr<u16>>(buffer)[0] as int;
     if (family == _io_af_inet()) {
         return 4;
@@ -223,7 +223,7 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 }
 
 [Target(OS(Mac))]
-export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
+_io_sys_sockaddr_family(buffer: __ptr<u8>): int {
     var family = buffer[1] as int;
     if (family == _io_af_inet()) {
         return 4;
@@ -237,21 +237,21 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 # sockaddr_un: the header as for sockaddr_in (family AF_UNIX, 1), then the
 # path, NUL-terminated, at 2: at most 108 bytes on Linux, 104 on macOS.
 [Target(OS(Linux))]
-export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+_io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
     unsafe_cast<__ptr<u16>>(buffer)[0] = 1;
 }
 
 [Target(OS(Mac))]
-export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+_io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
     buffer[0] = length as u8;
     buffer[1] = 1;
 }
 
 [Target(OS(Linux))]
-export _io_sys_unix_path_capacity(): ulong { return 108; }
+_io_sys_unix_path_capacity(): ulong { return 108; }
 
 [Target(OS(Mac))]
-export _io_sys_unix_path_capacity(): ulong { return 104; }
+_io_sys_unix_path_capacity(): ulong { return 104; }
 
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
@@ -259,7 +259,7 @@ export _io_sys_unix_path_capacity(): ulong { return 104; }
 # that never raises SIGPIPE. Every socket is non-blocking: a call that would
 # block waits in `_io_socket_wait` and tries again.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
+_io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     var family = _io_af_inet();
     if (v6) {
         family = _io_af_inet6();
@@ -279,7 +279,7 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
 # A new non-blocking, close-on-exec Unix domain stream socket (AF_UNIX 1,
 # SOCK_STREAM 1) that never raises SIGPIPE.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
+_io_sys_socket_open_unix(): IoResult<SocketHandle> {
     var fd = socket(1, 1 | _io_sock_cloexec(), 0);
     if (fd < 0) {
         return IoResult<SocketHandle>.err(IoError.last());
@@ -291,17 +291,17 @@ export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
 # macOS: close-on-exec, non-blocking and SO_NOSIGPIPE, which Linux gets
 # from the type and send flags.
 [Target(OS(Linux))]
-export _io_posix_socket_setup(fd: int) {}
+_io_posix_socket_setup(fd: int) {}
 
 [Target(OS(Mac))]
-export _io_posix_socket_setup(fd: int) {
+_io_posix_socket_setup(fd: int) {
     fcntl(fd, 2, 1);                               # F_SETFD, FD_CLOEXEC
     fcntl(fd, 4, 4);                               # F_SETFL, O_NONBLOCK
     _io_posix_set_int_option(fd, 65535, 4130, 1);  # SOL_SOCKET, SO_NOSIGPIPE (0x1022)
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_posix_set_int_option(fd: int, level: int, name: int, value: int): IoResult<void> {
+_io_posix_set_int_option(fd: int, level: int, name: int, value: int): IoResult<void> {
     var slot = _pep_malloc(4) as __ptr<int>;
     slot[0] = value;
     var rc = setsockopt(fd, level, name, slot, 4);
@@ -311,34 +311,34 @@ export _io_posix_set_int_option(fd: int, level: int, name: int, value: int): IoR
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
+_io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
     return _io_posix_set_int_option(h, _io_sol_socket(), _io_so_reuseaddr(), 1);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
+_io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
     return _io_posix_set_int_option(h, 6, 1, enabled ? 1 : 0);  # IPPROTO_TCP, TCP_NODELAY
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
+_io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
     return _io_posix_set_int_option(h, _io_sol_socket(), _io_so_broadcast(), enabled ? 1 : 0);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
+_io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var sockaddr = _io_sockaddr_write(address);
     return _io_sys_socket_bind_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Binds `h` to the `length`-byte sockaddr at `buffer`, of any family.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+_io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
     return _io_socket_check(bind(h, buffer, length as uint));
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
+_io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
     return _io_socket_check(listen(h, backlog));
 }
 
@@ -346,14 +346,14 @@ export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
 # connection carries on too); it has finished when the socket is writable,
 # and SO_ERROR says how.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
+_io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var sockaddr = _io_sockaddr_write(address);
     return _io_sys_socket_connect_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Connects `h` to the `length`-byte sockaddr at `buffer`, of any family.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+_io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
     var rc = connect(h, buffer, length as uint);
     if (rc == 0) {
         return _io_ok_void();
@@ -384,7 +384,7 @@ export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: in
 
 # Blocks the thread until `h` is ready for `interest` (poll(2)).
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+_io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     var buffer = _IoBuffer(8);
     var descriptor = unsafe_cast<__ptr<int>>(buffer._bytes);
     var events = unsafe_cast<__ptr<u16>>(buffer._bytes);
@@ -412,7 +412,7 @@ export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
 # to return. The error's message is looked up only then, since would-block
 # is the common case.
 [Target(OS(Linux) || OS(Mac))]
-export _io_posix_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
+_io_posix_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
     if (_io_posix_would_block(code)) {
         return _io_socket_wait(h, interest);
     }
@@ -424,12 +424,12 @@ export _io_posix_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResul
 
 # The accepted socket is non-blocking and close-on-exec like the others.
 [Target(OS(Linux))]
-export _io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
+_io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
     return accept4(fd, address, length, _io_sock_cloexec());
 }
 
 [Target(OS(Mac))]
-export _io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
+_io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
     var accepted = accept(fd, address, length);
     if (accepted >= 0) {
         _io_posix_socket_setup(accepted);
@@ -438,7 +438,7 @@ export _io_posix_accept(fd: int, address: __ptr<u8>, length: __ptr<uint>): int {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
+_io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
     var peer = _SockAddr();
     while (true) {
         var fd = _io_posix_accept(h, peer._bytes, peer._length_slot());
@@ -493,7 +493,7 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
+_io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
     var sockaddr = _io_sockaddr_write(address);
     while (true) {
         var r = sendto(h, source, _io_posix_max_rw(n), _io_msg_nosignal(), sockaddr._bytes, sockaddr._length as uint);
@@ -510,9 +510,7 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
 
 # A datagram longer than `n` is truncated to `n` bytes; the rest is lost.
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_receive_from(
-    h: SocketHandle, destination: __ptr<u8>, n: ulong
-): IoResult<(ulong, SocketAddress)> {
+_io_sys_socket_receive_from(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<(ulong, SocketAddress)> {
     var from = _SockAddr();
     while (true) {
         var r = recvfrom(h, destination, _io_posix_max_rw(n), 0, from._bytes, from._length_slot());
@@ -529,25 +527,25 @@ export _io_sys_socket_receive_from(
 
 # how: 0 reading, 1 writing, 2 both (SHUT_RD, SHUT_WR, SHUT_RDWR).
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
+_io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
     return _io_socket_check(shutdown(h, how));
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
     return _io_posix_address_result(getsockname(h, address._bytes, address._length_slot()), address);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
     return _io_posix_address_result(getpeername(h, address._bytes, address._length_slot()), address);
 }
 
 # The address getsockname/getpeername wrote into `address`, or errno.
 [Target(OS(Linux) || OS(Mac))]
-export _io_posix_address_result(rc: int, address: _SockAddr): IoResult<SocketAddress> {
+_io_posix_address_result(rc: int, address: _SockAddr): IoResult<SocketAddress> {
     if (rc != 0) {
         return IoResult<SocketAddress>.err(IoError.last());
     }
@@ -561,13 +559,13 @@ export _io_posix_address_result(rc: int, address: _SockAddr): IoResult<SocketAdd
 # @40; 48 bytes in all.
 
 [Target(OS(Linux) && !OS(Android))]
-export _io_addrinfo_address_offset(): ulong { return 24; }
+_io_addrinfo_address_offset(): ulong { return 24; }
 
 [Target(OS(Mac) || OS(Android))]
-export _io_addrinfo_address_offset(): ulong { return 32; }
+_io_addrinfo_address_offset(): ulong { return 32; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
+_io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     var hints = _IoBuffer(48);
     unsafe_cast<__ptr<int>>(hints._bytes)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address
     var result = _IoBuffer(8);

@@ -649,6 +649,66 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
             j += 1;
         }
     }
+    # Files of one module see each other's declarations: two of them may
+    # declare a function of one name (an overload set) or an extern, but
+    # nothing else. Mangling keeps their names apart, so they are compared
+    # by the names the user wrote, in path order (the first is the one
+    # kept).
+    var in_module = HashMap<String, _ModuleFirst>();
+    var by_path = Array<ulong>();
+    i = 0;
+    while (i < files.count) {
+        if (files[i].module_root.is_value()) {
+            by_path.append(i);
+        }
+        i += 1;
+    }
+    by_path.sort((a, b) => files[a].name.compare(files[b].name));
+    for (var f in by_path) {
+        var root = files[f].module_root.value().to_string();
+        for (var d in files[f].module.declarations) {
+            if (!target.keeps(d.attributes())) {
+                continue;
+            }
+            bool skip = false;
+            bool function = false;
+            bool external = false;
+            match (d) {
+                Extend(_) => {
+                    skip = true;
+                }
+                Static(_) => {
+                    skip = true;
+                }
+                Function(func) => {
+                    skip = _is_function_override(func);
+                    function = true;
+                    external = func.external;
+                }
+                else => {}
+            }
+            if (skip) {
+                continue;
+            }
+            var name = names.demangle_name(d.declared_name());
+            var key = $"{root}\n{name}";
+            var first = in_module.try_get(key);
+            if (!first.is_value()) {
+                in_module[key] = _ModuleFirst(f, d.name_span(), function and !external);
+            } else if (first.value().file != f and !(function and first.value().function) and !external) {
+                errors.append(
+                    VisibilityError(
+                        f,
+                        d.name_span(),
+                        name,
+                        first.value().file,
+                        Optional<Span>.Value(first.value().span),
+                        VisibilityErrorKind.Redefinition
+                    )
+                );
+            }
+        }
+    }
     # A concrete override (`conv<int>`) of a generic base only another file
     # declares, privately, would replace that file's own instantiation of
     # it: the base is out of reach.
@@ -709,8 +769,14 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
     errors.sort((a, b) => _compare_errors(a, b));
 
     var prelude = Array<bool>();
+    var roots = Array<String?>();
     for (var f in files) {
         prelude.append(f.prelude);
+        roots.append(
+            f.module_root.is_value() ?
+                Optional<String>.Value(f.module_root.value().to_string()) :
+                Optional<String>.Empty
+        );
     }
     i = 0;
     while (i < files.count) {
@@ -735,6 +801,7 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
             }
         }
         var checker = _Checker(i, own, scopes[i], types, prelude, decls, private, members, target, errors);
+        checker.roots = roots;
         for (var d in files[i].module.declarations) {
             if (target.keeps(d.attributes())) {
                 checker.walk_declaration(d);
@@ -769,6 +836,20 @@ _compare_errors(a: VisibilityError, b: VisibilityError): int {
 }
 
 # The walk of one file for `check_visibility`.
+# The first declaration of a name in a module (see `check_visibility`).
+struct _ModuleFirst {
+    var file: ulong;
+    var span: Span;
+    # A free function (not an extern), which another may join.
+    var function: bool;
+
+    construct(file: ulong, span: Span, function: bool) {
+        this.file = file;
+        this.span = span;
+        this.function = function;
+    }
+}
+
 struct _Checker {
     var file: ulong;
     var own: HashSet<String>;
@@ -777,6 +858,8 @@ struct _Checker {
     var types: HashSet<String>;
     # Per file: its exports are visible without an import.
     var prelude: bool[];
+    # Per file, its module's folder, if any.
+    var roots: Array<String?> = Array<String?>();
     var decls: HashMap<String, _Decl[]>;
     # Other files' private declarations, by the name the user wrote.
     var private: HashMap<String, _Decl[]>;
@@ -851,10 +934,20 @@ struct _Checker {
         return _is_generic_field(name);
     }
 
-    # An extension in `in_file` is visible here: it is this file's own, or
-    # exported by a prelude file or a file this one imports.
+    # `other` is this file, or another file of its module.
+    _same_module(other: ulong): bool {
+        if (other == file) {
+            return true;
+        }
+        var root = roots[other];
+        return root.is_value() and roots[file].is_value() and root.value() == roots[file].value();
+    }
+
+    # An extension in `in_file` is visible here: it is this file's own or
+    # its module's, or exported by a prelude file or a file this one
+    # imports.
     _sees_extension(in_file: ulong, exported: bool): bool {
-        return in_file == file or (exported and (prelude[in_file] or scope.extensions.contains(in_file)));
+        return _same_module(in_file) or (exported and (prelude[in_file] or scope.extensions.contains(in_file)));
     }
 
     # Checks a reference not bound locally: used as a value, or as a type.
@@ -1122,7 +1215,7 @@ extend _Checker with ScopeWalk {
         var bodies = members.in_struct_bodies.try_get(name);
         if (bodies.is_value()) {
             for (var b in bodies.value()) {
-                if (b.exported or b.file == file) {
+                if (b.exported or _same_module(b.file)) {
                     return;
                 }
             }

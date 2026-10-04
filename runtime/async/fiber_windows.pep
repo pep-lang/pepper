@@ -27,7 +27,7 @@ const _FIBER_FLOAT_SWITCH = 1;
 
 # The calling thread as a context: what a fiber switches back to.
 [Target(OS(Windows))]
-export _async_fiber_thread_context(): __ptr<void> {
+_async_fiber_thread_context(): __ptr<void> {
     var fiber = ConvertThreadToFiber(__null);
     assert(fiber != __null, "async.run: this thread is already a fiber");
     return fiber;
@@ -35,7 +35,7 @@ export _async_fiber_thread_context(): __ptr<void> {
 
 # Turns the thread back from a fiber (`_async_fiber_thread_context`).
 [Target(OS(Windows))]
-export _async_fiber_release_thread_context(context: __ptr<void>) {
+_async_fiber_release_thread_context(context: __ptr<void>) {
     ConvertFiberToThread();
 }
 
@@ -43,20 +43,20 @@ export _async_fiber_release_thread_context(context: __ptr<void>) {
 # calls `entry(null)`; null if the system has no memory for it. `entry`
 # must never return.
 [Target(OS(Windows))]
-export _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
+_async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
     return CreateFiberEx(0, stack_size, _FIBER_FLOAT_SWITCH, entry, __null);
 }
 
 # Deletes a fiber and its stack. The fiber must not be the one running.
 [Target(OS(Windows))]
-export _async_fiber_destroy(context: __ptr<void>) {
+_async_fiber_destroy(context: __ptr<void>) {
     DeleteFiber(context);
 }
 
 # Resumes `to`; returns when something switches back to the running fiber
 # (`from`, which the Fibers API tracks itself).
 [Target(OS(Windows))]
-export _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
+_async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     SwitchToFiber(to);
 }
 
@@ -71,18 +71,18 @@ extern void* TlsGetValue(uint index);
 extern int TlsSetValue(uint index, void* value);
 
 [Target(OS(Windows))]
-export _async_fiber_key_create(): ulong {
+_async_fiber_key_create(): ulong {
     var index = TlsAlloc();
     assert(index != 4294967295, "async: no thread-local keys left");  # TLS_OUT_OF_INDEXES
     return index as ulong;
 }
 
 [Target(OS(Windows))]
-export _async_fiber_key_get(key: ulong): __ptr<void> {
+_async_fiber_key_get(key: ulong): __ptr<void> {
     return TlsGetValue(key as uint);
 }
 
 [Target(OS(Windows))]
-export _async_fiber_key_set(key: ulong, value: __ptr<void>) {
+_async_fiber_key_set(key: ulong, value: __ptr<void>) {
     TlsSetValue(key as uint, value);
 }

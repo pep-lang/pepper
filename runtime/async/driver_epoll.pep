@@ -56,7 +56,7 @@ const _EPOLL_WRITABLE_EVENTS: uint = 28;
 const _EPOLL_CAPACITY = 256;
 
 # A worker's epoll instance.
-export struct _EpollDriver {
+struct _EpollDriver {
     var _epoll: long;
     # Room for `_EPOLL_CAPACITY` events.
     var _events: __ptr<u8>;
@@ -181,7 +181,7 @@ _async_epoll_create_bell(epoll: long): long {
 
 # Rings the doorbell eventfd `bell`.
 [Target(OS(Linux))]
-export _async_epoll_ring(bell: long) {
+_async_epoll_ring(bell: long) {
     __ptr<ulong> one = _pep_malloc(8);
     one[0] = 1;
     write(bell as int, one, 8);
@@ -191,7 +191,7 @@ export _async_epoll_ring(bell: long) {
 # Resets the doorbell eventfd `bell` to 0. The io_uring driver's doorbell is
 # an eventfd too, and drains with this.
 [Target(OS(Linux))]
-export _async_epoll_drain(bell: long) {
+_async_epoll_drain(bell: long) {
     __ptr<ulong> value = _pep_malloc(8);
     read(bell as int, value, 8);
     _pep_free(value);
@@ -237,10 +237,10 @@ _async_epoll_create_bell(epoll: long): long {
 }
 
 [Target(!OS(Linux))]
-export _async_epoll_ring(bell: long) {}
+_async_epoll_ring(bell: long) {}
 
 [Target(!OS(Linux))]
-export _async_epoll_drain(bell: long) {}
+_async_epoll_drain(bell: long) {}
 
 [Target(!OS(Linux))]
 _async_epoll_events(): __ptr<u8> {

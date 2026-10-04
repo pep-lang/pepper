@@ -222,10 +222,10 @@ const _TLS_ENCODING: uint = 65537;
 
 # ERROR_INVALID_DATA: the code of every TLS error.
 [Target(OS(Windows))]
-export _tls_sys_code_protocol(): io.ErrorCode { return 13; }
+_tls_sys_code_protocol(): io.ErrorCode { return 13; }
 
 [Target(OS(Windows))]
-export _tls_error(message: String): io.IoError {
+_tls_error(message: String): io.IoError {
     return io.IoError(_tls_sys_code_protocol(), message);
 }
 
@@ -418,7 +418,7 @@ _tls_acquire(context: __ptr<u8>, server: bool, certificate: __ptr<void>): int {
 # A client context that checks the server's certificate against the
 # system's trusted roots (and any added with `_tls_sys_add_root`).
 [Target(OS(Windows))]
-export _tls_sys_client_context(): io.IoResult<__ptr<void>> {
+_tls_sys_client_context(): io.IoResult<__ptr<void>> {
     __ptr<u8> context = _pep_malloc(_TLS_CONTEXT_SIZE);
     var status = _tls_acquire(context, false, __null);
     if (status != _TLS_SEC_E_OK) {
@@ -500,7 +500,7 @@ _tls_delete_key(name: __ptr<u16>) {
 
 # A server context presenting the PEM certificate chain and private key.
 [Target(OS(Windows))]
-export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
+_tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
     var chain_text = _tls_read_text(chain, "the certificate chain");
     if (chain_text.is_err()) {
         return io.IoResult<__ptr<void>>.err(chain_text.error());
@@ -575,7 +575,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
 
 # Also trusts the PEM certificates in `path`.
 [Target(OS(Windows))]
-export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
+_tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
     var text = _tls_read_text(path, "the certificates");
     if (text.is_err()) {
         return io.IoResult<void>.err(text.error());
@@ -594,7 +594,7 @@ export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void>
 }
 
 [Target(OS(Windows))]
-export _tls_sys_context_free(context: __ptr<void>) {
+_tls_sys_context_free(context: __ptr<void>) {
     __ptr<u8> block = context;
     FreeCredentialsHandle(block);
     var store = _tls_pointer(block, 24);
@@ -891,7 +891,7 @@ _tls_verify(session: __ptr<u8>): io.IoResult<void> {
 # Runs the client handshake on socket `h`, checking that the certificate is
 # for `host` (a name, or an IP address).
 [Target(OS(Windows))]
-export _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoResult<__ptr<void>> {
+_tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoResult<__ptr<void>> {
     var session = _tls_session_new(context, h, host);
     # SNI carries names only: an IP address goes to the certificate check.
     var target = _tls_pointer(session, 96);
@@ -918,7 +918,7 @@ export _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String):
 
 # Runs the server handshake on socket `h`.
 [Target(OS(Windows))]
-export _tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__ptr<void>> {
+_tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__ptr<void>> {
     var session = _tls_session_new(context, h, "");
     var done = _tls_handshake(session);
     if (done.is_ok()) {
@@ -977,7 +977,7 @@ _tls_decrypt(session: __ptr<u8>): int {
 # Reads up to `n` decrypted bytes into `destination`; 0 at the end of the
 # stream.
 [Target(OS(Windows))]
-export _tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io.IoResult<ulong> {
+_tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io.IoResult<ulong> {
     __ptr<u8> block = session;
     while (true) {
         if (_tls_word(block, 64) > _tls_word(block, 56)) {
@@ -1019,7 +1019,7 @@ export _tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io
 
 # Encrypts and sends up to `n` bytes from `source`: at most one TLS record.
 [Target(OS(Windows))]
-export _tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoResult<ulong> {
+_tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoResult<ulong> {
     if (n == 0) {
         return io.IoResult<ulong>.ok(0);
     }
@@ -1057,7 +1057,7 @@ export _tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoR
 
 # Sends close_notify.
 [Target(OS(Windows))]
-export _tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
+_tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
     __ptr<u8> block = session;
     __ptr<uint> kind = _pep_malloc(4);
     kind[0] = 1;  # SCHANNEL_SHUTDOWN
@@ -1107,7 +1107,7 @@ export _tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
 
 # Deletes the security context and frees the block.
 [Target(OS(Windows))]
-export _tls_sys_session_free(session: __ptr<void>) {
+_tls_sys_session_free(session: __ptr<void>) {
     __ptr<u8> block = session;
     if (_tls_session_started(block)) {
         DeleteSecurityContext(block);

@@ -91,13 +91,13 @@ extern _ZlibLong adler32_z(_ZlibLong adler, u8* data, ulong size);
 
 # Continues the CRC-32 `crc` over the `count` bytes at `data`.
 [BuildOption("USE_ZLIB")]
-export _compress_zlib_crc32(crc: uint, data: __ptr<u8>, count: ulong): uint {
+_compress_zlib_crc32(crc: uint, data: __ptr<u8>, count: ulong): uint {
     return crc32_z(crc as _ZlibLong, data, count) as uint;
 }
 
 # Continues the Adler-32 `adler` over the `count` bytes at `data`.
 [BuildOption("USE_ZLIB")]
-export _compress_zlib_adler32(adler: uint, data: __ptr<u8>, count: ulong): uint {
+_compress_zlib_adler32(adler: uint, data: __ptr<u8>, count: ulong): uint {
     return adler32_z(adler as _ZlibLong, data, count) as uint;
 }
 
@@ -214,7 +214,7 @@ _zlib_message(stream: __ptr<void>): String {
 const _ZLIB_CHUNK: ulong = 65536;
 
 [BuildOption("USE_ZLIB")]
-export struct _Deflater {
+struct _Deflater {
     var _stream: Handle<__ptr<void>>;
     # The compressed bytes made so far; the caller takes them.
     var output: u8[];
@@ -273,7 +273,7 @@ export struct _Deflater {
 }
 
 [BuildOption("USE_ZLIB")]
-export struct _Inflater {
+struct _Inflater {
     var _format: Format;
     var _source: io.Reader;
     var _stream: Handle<__ptr<void>>;

@@ -5,30 +5,30 @@
 import "syntax";
 
 # Consume a CHAR: `a` is the code point.
-export const _REGEX_OP_CHAR = 0;
+const _REGEX_OP_CHAR = 0;
 # Consume any code point but a newline.
-export const _REGEX_OP_ANY = 1;
+const _REGEX_OP_ANY = 1;
 # Consume any code point.
-export const _REGEX_OP_ANY_NEWLINE = 2;
+const _REGEX_OP_ANY_NEWLINE = 2;
 # Consume a code point in class `a`.
-export const _REGEX_OP_CLASS = 3;
+const _REGEX_OP_CLASS = 3;
 # Continue at both `a` (preferred) and `b`.
-export const _REGEX_OP_SPLIT = 4;
+const _REGEX_OP_SPLIT = 4;
 # Continue at `a`.
-export const _REGEX_OP_JUMP = 5;
+const _REGEX_OP_JUMP = 5;
 # Record the position in capture slot `a`.
-export const _REGEX_OP_SAVE = 6;
+const _REGEX_OP_SAVE = 6;
 # Continue only where the `_REGEX_AT_` assertion `a` holds.
-export const _REGEX_OP_ASSERT = 7;
+const _REGEX_OP_ASSERT = 7;
 # The pattern matched.
-export const _REGEX_OP_MATCH = 8;
+const _REGEX_OP_MATCH = 8;
 
 # Patterns whose program would be larger fail to compile.
-export const _REGEX_MAX_INSTRUCTIONS: ulong = 100000;
+const _REGEX_MAX_INSTRUCTIONS: ulong = 100000;
 
 # A program being compiled: its instructions, character classes and group
 # names, in arrays that grow. `_RegexProgram` freezes it.
-export struct _RegexBuilder {
+struct _RegexBuilder {
     var ops: int[];
     var a: ulong[];
     var b: ulong[];
@@ -56,7 +56,7 @@ export struct _RegexBuilder {
 # A compiled pattern, immutable and thread-safe: the builder's arrays copied
 # into heap blocks it owns, so a `Regex` can be `[Shared]`.
 [Shared]
-export struct _RegexProgram {
+struct _RegexProgram {
     const ops: __ptr<int>;
     const a: __ptr<ulong>;
     const b: __ptr<ulong>;
@@ -201,7 +201,7 @@ _regex_string(data: __ptr<u8>, size: ulong): String {
 }
 
 # Compiles `pattern` into a program, or gives the reason it is invalid.
-export _regex_compile(pattern: String): Result<_RegexProgram> {
+_regex_compile(pattern: String): Result<_RegexProgram> {
     var parser = _RegexParser(pattern);
     var tree = parser.parse();
     if (parser.failed) {
@@ -236,7 +236,7 @@ _regex_starts_anchored(node: _RegexNode): bool {
     return false;
 }
 
-export struct _RegexCompiler {
+struct _RegexCompiler {
     var program: _RegexBuilder;
     var too_large: bool;
 

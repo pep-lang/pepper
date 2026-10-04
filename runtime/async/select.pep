@@ -26,14 +26,14 @@ import "task";
 # One channel of a `Select`, whatever its value type: taking a value (as an
 # `E`), and joining and leaving its wait queue (`_join` returns what
 # `Channel._select_join` found).
-export trait _SelectCase<E> {
+trait _SelectCase<E> {
     _take(): _Polled<E>;
     _join(waiter: _SyncWaiter): _Joined;
     _leave(waiter: _SyncWaiter);
 }
 
 # A channel of `T` values and how to turn one into an `E`.
-export struct _ReceiveCase<T, E> {
+struct _ReceiveCase<T, E> {
     const _channel: Channel<T>;
     const _wrap: (T) => E;
 

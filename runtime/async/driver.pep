@@ -47,7 +47,7 @@ export enum Backend {
 }
 
 # How a worker waits for sockets.
-export trait _Driver {
+trait _Driver {
     # Starts watching `handle`, the first time a task waits on it; false if
     # this driver cannot watch it.
     _watch(handle: io.SocketHandle): bool;
@@ -111,7 +111,7 @@ export trait _Driver {
 }
 
 # What a doorbell rings.
-export enum _DoorbellKind {
+enum _DoorbellKind {
     EventFd,
     Kqueue,
     Iocp,
@@ -122,7 +122,7 @@ export enum _DoorbellKind {
 # the top of this file). The driver that made it keeps its resources open
 # until every worker has stopped, so a ring never reaches a closed handle.
 [Shared]
-export struct _Doorbell {
+struct _Doorbell {
     const _kind: _DoorbellKind;
     # The eventfd, kqueue or pipe's write end, or the sending UDP socket.
     const _descriptor: long;
@@ -176,14 +176,14 @@ export struct _Doorbell {
 
 # The data word a driver gives its doorbell's registration, which no socket
 # has.
-export _async_doorbell_key(): ulong {
+_async_doorbell_key(): ulong {
     return ~(0 as ulong);
 }
 
 # The driver for `requested`, and the backend it is. Automatic takes
 # PEPPER_IO_BACKEND if set, else the system's best, and falls back to poll
 # when that cannot start.
-export _async_open_driver(requested: Backend): (_Driver, Backend) {
+_async_open_driver(requested: Backend): (_Driver, Backend) {
     var backend = requested;
     if (backend == Backend.Automatic) {
         backend = _async_backend_from_environment();
@@ -280,7 +280,7 @@ _async_backend_from_environment(): Backend {
 # The `io._IO_READABLE` and `io._IO_WRITABLE` bits a system event mask
 # `events` allows: readable when it has any bit of `readable`, writable when
 # it has any bit of `writable`.
-export _async_ready_mask(events: long, readable: long, writable: long): int {
+_async_ready_mask(events: long, readable: long, writable: long): int {
     var ready = 0;
     if ((events & readable) != 0) {
         ready = ready | io._IO_READABLE;

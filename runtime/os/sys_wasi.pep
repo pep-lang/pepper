@@ -16,7 +16,7 @@ extern ushort __wasi_clock_time_get(uint id, u64 precision, void* time);
 # ── Environment ──────────────────────────────────────────────────────────────
 
 [Target(OS(Wasi))]
-export _os_sys_environment(name: String): String? {
+_os_sys_environment(name: String): String? {
     __ptr<char> value = getenv(name.c_str());
     if (value == __null) {
         return Optional<String>.Empty;
@@ -32,7 +32,7 @@ export _os_environ(): __ptr<__ptr<char>> {
 }
 
 [Target(OS(Wasi))]
-export _os_sys_environment_entries(): Array<String> {
+_os_sys_environment_entries(): Array<String> {
     var entries = Array<String>();
     var values = _os_environ();
     if (values == __null) {
@@ -61,56 +61,56 @@ _os_clock_nanoseconds(clock: uint): u64 {
 }
 
 [Target(OS(Wasi))]
-export _os_sys_monotonic_nanoseconds(): ulong {
+_os_sys_monotonic_nanoseconds(): ulong {
     return _os_clock_nanoseconds(1);
 }
 
 [Target(OS(Wasi))]
-export _os_sys_system_nanoseconds(): long {
+_os_sys_system_nanoseconds(): long {
     return _os_clock_nanoseconds(0) as long;
 }
 
 # ── Machine ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Wasi))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.Wasi;
 }
 
 [Target(OS(Wasi))]
-export _os_sys_version(): String {
+_os_sys_version(): String {
     return String();
 }
 
 [Target(OS(Wasi))]
-export _os_sys_hostname(): String {
+_os_sys_hostname(): String {
     return String();
 }
 
 [Target(OS(Wasi))]
-export _os_sys_total_memory(): ulong {
+_os_sys_total_memory(): ulong {
     return 0;
 }
 
 # WebAssembly's page: linear memory grows 64 KiB at a time.
 [Target(OS(Wasi))]
-export _os_sys_page_size(): ulong {
+_os_sys_page_size(): ulong {
     return 65536;
 }
 
 # ── User ─────────────────────────────────────────────────────────────────────
 
 [Target(OS(Wasi))]
-export _os_sys_user_name(): String? {
+_os_sys_user_name(): String? {
     return _os_nonempty_environment("USER");
 }
 
 [Target(OS(Wasi))]
-export _os_sys_is_elevated(): bool {
+_os_sys_is_elevated(): bool {
     return false;
 }
 
 [Target(OS(Wasi))]
-export _os_sys_home_directory(): String? {
+_os_sys_home_directory(): String? {
     return _os_nonempty_environment("HOME");
 }

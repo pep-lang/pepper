@@ -749,7 +749,7 @@ struct _Worker {
 }
 
 # The tasks waiting on one socket.
-export struct _SocketWaits {
+struct _SocketWaits {
     var _readers: Array<_TaskCore>;
     var _writers: Array<_TaskCore>;
 
@@ -925,24 +925,24 @@ _async_file_descriptor(handle: io.FileHandle): long {
 # malloc'd slot holding one reference to it, or null outside `run`.
 const _async_worker_key = _async_fiber_key_create();
 
-export _async_on_worker(): bool {
+_async_on_worker(): bool {
     return _async_fiber_key_get(_async_worker_key) != __null;
 }
 
-export _async_worker(): _Worker {
+_async_worker(): _Worker {
     __ptr<_Worker> slot = _async_fiber_key_get(_async_worker_key);
     assert(slot != __null, "async: not inside async.run");
     return slot[0];
 }
 
 # Whether the calling code runs in a task (on a worker inside `run`).
-export _async_in_task(): bool {
+_async_in_task(): bool {
     return _async_on_worker() && _async_worker()._running;
 }
 
 # The running task's slot for the `TaskLocal` numbered `id`, or null when
 # it has no value. Only in a task.
-export _async_task_local_slot(id: ulong): __ptr<void> {
+_async_task_local_slot(id: ulong): __ptr<void> {
     # An index loop: `TaskLocal.get` calls this, and a `for` would allocate
     # an iterator every time.
     var locals = _async_worker()._current._locals;
@@ -958,13 +958,13 @@ export _async_task_local_slot(id: ulong): __ptr<void> {
 
 # Records `slot` as the running task's value of the `TaskLocal` numbered
 # `id`; `release` frees it when the task ends. Only in a task.
-export _async_task_local_add(id: ulong, slot: __ptr<void>, release: () => void) {
+_async_task_local_add(id: ulong, slot: __ptr<void>, release: () => void) {
     _async_worker()._current._locals.append(_TaskLocalValue(id, slot, release));
 }
 
 # Removes and releases the running task's value of the `TaskLocal`
 # numbered `id`, if it has one. Only in a task.
-export _async_task_local_clear(id: ulong) {
+_async_task_local_clear(id: ulong) {
     var locals = _async_worker()._current._locals;
     var i: ulong = 0;
     while (i < locals.count) {
@@ -984,7 +984,7 @@ const _async_task_tokens = Atomic<ulong>((1 as ulong) << 62);
 # The id that marks the caller as a `Mutex`'s holder: the running task's
 # own, or the thread's outside a task, since tasks on one worker share its
 # thread.
-export _async_holder_id(): ulong {
+_async_holder_id(): ulong {
     if (!_async_in_task()) {
         return _async_sys_os_thread();
     }
@@ -998,7 +998,7 @@ export _async_holder_id(): ulong {
 # A waiter for the running task to add to a `_SyncQueue`. The caller has
 # checked `_async_in_task()`; no Optional is built, since every park takes
 # this path.
-export _async_sync_waiter(): _SyncWaiter {
+_async_sync_waiter(): _SyncWaiter {
     assert(_async_in_task(), "_async_sync_waiter outside a task");
     var worker = _async_worker();
     return _SyncWaiter(worker._inbox, worker._current._id);
@@ -1006,7 +1006,7 @@ export _async_sync_waiter(): _SyncWaiter {
 
 # What `_async_sync_park` reports: woken by a waker, or why the wait ended
 # without one.
-export enum _SyncWake {
+enum _SyncWake {
     Woken,
     Cancelled,
     TimedOut,
@@ -1019,7 +1019,7 @@ export enum _SyncWake {
 # A wait that ends without a wake abandons the waiter and takes it out of
 # `queue`, and the result says why; a waker that got there first wins, and
 # the result is `_SyncWake.Woken`.
-export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong, interruptible: bool): _SyncWake {
+_async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong, interruptible: bool): _SyncWake {
     var worker = _async_worker();
     var me = worker._current;
     var saved = me._deadline;
@@ -1054,7 +1054,7 @@ export _async_sync_park(queue: _SyncQueue, waiter: _SyncWaiter, deadline: ulong,
 # Wakes the task `waiter` stands for: directly when it waits on the calling
 # thread's worker, otherwise through that worker's inbox. A plain thread's
 # waiter (in a `Select`) is signalled through its `_ThreadWake`.
-export _async_sync_wake(waiter: _SyncWaiter) {
+_async_sync_wake(waiter: _SyncWaiter) {
     if (waiter._thread !== __null) {
         waiter._thread._signal();
         return;
@@ -1544,7 +1544,7 @@ export sleep(duration: os.Duration) {
 }
 
 # `sleep`, which `Thread.sleep` also calls in a task.
-export _async_task_sleep(milliseconds: ulong) {
+_async_task_sleep(milliseconds: ulong) {
     if (!_async_on_worker()) {
         _async_sys_sleep(milliseconds);
         return;

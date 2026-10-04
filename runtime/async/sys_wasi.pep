@@ -24,20 +24,20 @@ extern ushort __wasi_poll_oneoff(void* subscriptions, void* events, ulong count,
 
 # WASI preview 1 has no threads.
 [Target(OS(Wasi))]
-export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
     panic("Thread.spawn: threads are not supported on WASI");
     return __null;
 }
 
 [Target(OS(Wasi))]
-export _async_sys_join(handle: __ptr<void>) {}
+_async_sys_join(handle: __ptr<void>) {}
 
 [Target(OS(Wasi))]
-export _async_sys_detach(handle: __ptr<void>) {}
+_async_sys_detach(handle: __ptr<void>) {}
 
 # The one thread.
 [Target(OS(Wasi))]
-export _async_sys_os_thread(): ulong {
+_async_sys_os_thread(): ulong {
     return 1;
 }
 
@@ -46,7 +46,7 @@ export _async_sys_os_thread(): ulong {
 # timeout u64 @24, precision u64 @32, flags u16 @40; 48 bytes), for which it
 # writes one 32-byte event.
 [Target(OS(Wasi))]
-export _async_sys_sleep(milliseconds: ulong) {
+_async_sys_sleep(milliseconds: ulong) {
     __ptr<u8> subscription = _pep_malloc(48);
     __ptr<u8> event = _pep_malloc(32);
     __ptr<u32> returned = _pep_malloc(4);
@@ -66,7 +66,7 @@ export _async_sys_sleep(milliseconds: ulong) {
 # ── Thread-local keys ────────────────────────────────────────────────────────
 
 [Target(OS(Wasi))]
-export _async_sys_key_create(destructor: __ptr<void>): ulong {
+_async_sys_key_create(destructor: __ptr<void>): ulong {
     __ptr<ulong> key = _pep_malloc(8);
     key[0] = 0;
     if (pthread_key_create(key, destructor) != 0) {
@@ -78,17 +78,17 @@ export _async_sys_key_create(destructor: __ptr<void>): ulong {
 }
 
 [Target(OS(Wasi))]
-export _async_sys_key_delete(key: ulong) {
+_async_sys_key_delete(key: ulong) {
     pthread_key_delete(key);
 }
 
 [Target(OS(Wasi))]
-export _async_sys_key_get(key: ulong): __ptr<void> {
+_async_sys_key_get(key: ulong): __ptr<void> {
     return pthread_getspecific(key);
 }
 
 [Target(OS(Wasi))]
-export _async_sys_key_set(key: ulong, value: __ptr<void>) {
+_async_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
 }
 
@@ -101,26 +101,26 @@ export _async_sys_key_set(key: ulong, value: __ptr<void>) {
 # and a timed wait sleeps out its time.
 
 [Target(OS(Wasi))]
-export _async_sys_mutex_create(): __ptr<void> {
+_async_sys_mutex_create(): __ptr<void> {
     __ptr<u8> mutex = _pep_malloc(8);
     mutex[0] = 0;
     return mutex;
 }
 
 [Target(OS(Wasi))]
-export _async_sys_mutex_destroy(mutex: __ptr<void>) {
+_async_sys_mutex_destroy(mutex: __ptr<void>) {
     _pep_free(mutex);
 }
 
 [Target(OS(Wasi))]
-export _async_sys_mutex_lock(mutex: __ptr<void>) {
+_async_sys_mutex_lock(mutex: __ptr<void>) {
     __ptr<u8> flag = mutex;
     assert(flag[0] == 0, "Mutex: locked again on the only thread, which would wait forever");
     flag[0] = 1;
 }
 
 [Target(OS(Wasi))]
-export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
+_async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
     __ptr<u8> flag = mutex;
     if (flag[0] != 0) {
         return false;
@@ -130,26 +130,26 @@ export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
 }
 
 [Target(OS(Wasi))]
-export _async_sys_mutex_unlock(mutex: __ptr<void>) {
+_async_sys_mutex_unlock(mutex: __ptr<void>) {
     __ptr<u8> flag = mutex;
     flag[0] = 0;
 }
 
 [Target(OS(Wasi))]
-export _async_sys_condition_create(): __ptr<void> {
+_async_sys_condition_create(): __ptr<void> {
     return _pep_malloc(8);
 }
 
 [Target(OS(Wasi))]
-export _async_sys_condition_destroy(condition: __ptr<void>) {
+_async_sys_condition_destroy(condition: __ptr<void>) {
     _pep_free(condition);
 }
 
 [Target(OS(Wasi))]
-export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {}
+_async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {}
 
 [Target(OS(Wasi))]
-export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
+_async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
     _async_sys_mutex_unlock(mutex);
     _async_sys_sleep(milliseconds > 1000000000000 ? 1000000000000 : milliseconds);
     _async_sys_mutex_lock(mutex);
@@ -157,13 +157,13 @@ export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>,
 }
 
 [Target(OS(Wasi))]
-export _async_sys_condition_notify_one(condition: __ptr<void>) {}
+_async_sys_condition_notify_one(condition: __ptr<void>) {}
 
 [Target(OS(Wasi))]
-export _async_sys_condition_notify_all(condition: __ptr<void>) {}
+_async_sys_condition_notify_all(condition: __ptr<void>) {}
 
 [Target(OS(Wasi))]
-export _async_sys_monotonic_milliseconds(): ulong {
+_async_sys_monotonic_milliseconds(): ulong {
     __ptr<u64> time = _pep_malloc(8);
     time[0] = 0;
     __wasi_clock_time_get(1, 1000000, time);  # CLOCKID_MONOTONIC, to the millisecond
@@ -176,11 +176,11 @@ export _async_sys_monotonic_milliseconds(): ulong {
 
 # The one thread is the only processor a program can use.
 [Target(OS(Wasi))]
-export _async_sys_logical_cpus(): ulong {
+_async_sys_logical_cpus(): ulong {
     return 1;
 }
 
 [Target(OS(Wasi))]
-export _async_sys_physical_cpus(): ulong {
+_async_sys_physical_cpus(): ulong {
     return 1;
 }

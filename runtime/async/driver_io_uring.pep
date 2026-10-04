@@ -137,7 +137,7 @@ const _IO_URING_POLL_MULTI: uint = 1;
 const _IO_URING_CQE_MORE: uint = 2;
 
 # A worker's io_uring instance.
-export struct _IoUringDriver {
+struct _IoUringDriver {
     var _ring_fd: long;
     # The rings' shared mapping and the submission entries' mapping.
     var _rings: __ptr<u8>;

@@ -770,19 +770,19 @@ extend DateTime with ToString;
 
 # ── Calendar arithmetic ──────────────────────────────────────────────────────
 
-export _time_is_date(year: int, month: int, day: int): bool {
+_time_is_date(year: int, month: int, day: int): bool {
     if (year < MINIMUM_YEAR || year > MAXIMUM_YEAR || month < 1 || month > 12) {
         return false;
     }
     return day >= 1 && day <= _time_days_in_month(year, month);
 }
 
-export _time_is_leap_year(year: int): bool {
+_time_is_leap_year(year: int): bool {
     return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
 }
 
 # The length of a month from 1 to 12.
-export _time_days_in_month(year: int, month: int): int {
+_time_days_in_month(year: int, month: int): int {
     if (month == 2) {
         return _time_is_leap_year(year) ? 29 : 28;
     }
@@ -792,7 +792,7 @@ export _time_days_in_month(year: int, month: int): int {
     return 31;
 }
 
-export _time_is_time(hour: int, minute: int, second: int, nanosecond: int): bool {
+_time_is_time(hour: int, minute: int, second: int, nanosecond: int): bool {
     return hour >= 0
         && hour < 24
         && minute >= 0
@@ -806,7 +806,7 @@ export _time_is_time(hour: int, minute: int, second: int, nanosecond: int): bool
 # Days from 1970-01-01 to a date: Howard Hinnant's days_from_civil, which
 # counts in 400-year eras of 146097 days, with years starting in March so
 # the leap day comes last.
-export _time_days_from_civil(year: int, month: int, day: int): long {
+_time_days_from_civil(year: int, month: int, day: int): long {
     var y = year as long;
     if (month <= 2) {
         y = y - 1;
@@ -820,7 +820,7 @@ export _time_days_from_civil(year: int, month: int, day: int): long {
 }
 
 # The inverse of _time_days_from_civil: (year, month, day).
-export _time_civil_from_days(days: long): (long, int, int) {
+_time_civil_from_days(days: long): (long, int, int) {
     var z = days + 719468;
     var era = (z >= 0 ? z : z - 146096) / 146097;
     var day_of_era = z - era * 146097;
@@ -837,7 +837,7 @@ export _time_civil_from_days(days: long): (long, int, int) {
 }
 
 # A SystemTime from Unix seconds and a nanosecond, checking its range.
-export _time_system_time(seconds: long, nanosecond: int): os.SystemTime {
+_time_system_time(seconds: long, nanosecond: int): os.SystemTime {
     # SystemTime holds a long of nanoseconds: about ±9223372036 seconds.
     var limit = 9223372035 as long;
     assert(seconds <= limit && seconds >= 0 - limit, "time: the date is outside what os.SystemTime reaches");

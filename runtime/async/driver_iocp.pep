@@ -101,7 +101,7 @@ const _AFD_POLL_WRITABLE = 4;
 const _AFD_POLL_ERRORS = 304;
 
 # A worker's completion port and AFD helper handle.
-export struct _IocpDriver {
+struct _IocpDriver {
     var _port: __ptr<void>;
     var _afd: __ptr<void>;
     # Room for `_IOCP_CAPACITY` OVERLAPPED_ENTRY records of 32 bytes.
@@ -363,7 +363,7 @@ _async_iocp_dequeue(port: __ptr<void>, entries: __ptr<u8>, capacity: int, timeou
 
 # Rings the doorbell of the driver whose completion port is `port`.
 [Target(OS(Windows))]
-export _async_iocp_ring(port: __ptr<void>) {
+_async_iocp_ring(port: __ptr<void>) {
     PostQueuedCompletionStatus(port, 0, 0, __null);
 }
 
@@ -378,7 +378,7 @@ _async_iocp_create(): __ptr<void> {
 _async_iocp_close_handle(handle: __ptr<void>) {}
 
 [Target(!OS(Windows))]
-export _async_iocp_ring(port: __ptr<void>) {}
+_async_iocp_ring(port: __ptr<void>) {}
 
 [Target(!OS(Windows))]
 _async_iocp_open_afd(port: __ptr<void>): __ptr<void> {

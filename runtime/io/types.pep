@@ -417,7 +417,7 @@ export type IoResult<T> = Result<T, IoError>;
 # A String holding a copy of `n` bytes at `p`; `n == 0` must not reach the
 # constructor, which would read `p` as a NUL-terminated C string. (For a C
 # string, `String(p)` measures it and takes a null `p` as empty.)
-export _io_string_from(p: __ptr<char>, n: ulong): String {
+_io_string_from(p: __ptr<char>, n: ulong): String {
     if (p == __null || n == 0) {
         return String();
     }
@@ -437,7 +437,7 @@ export _io_text_copy(text: String): __ptr<u8> {
 # A zeroed scratch buffer for a system call wrapper, freed when the last
 # reference goes: a wrapper declares it as a local, and every return frees
 # it at scope exit, so no early return has to.
-export struct _IoBuffer {
+struct _IoBuffer {
     # The buffer's `size` bytes.
     __ptr<u8> _bytes;
 
@@ -451,7 +451,7 @@ export struct _IoBuffer {
 }
 
 # A String from a NUL-terminated C string.
-export _io_string_from_c(p: __ptr<char>): String {
+_io_string_from_c(p: __ptr<char>): String {
     if (p == __null) {
         return String();
     }
@@ -460,21 +460,21 @@ export _io_string_from_c(p: __ptr<char>): String {
 
 # Byte `i` of the `n` bytes at `p`, or 0 past the end: a bounds-checked read
 # for scanning a String's bytes (an empty String has no buffer at all).
-export _io_byte(p: __ptr<u8>, n: ulong, i: ulong): int {
+_io_byte(p: __ptr<u8>, n: ulong, i: ulong): int {
     if (i >= n) {
         return 0;
     }
     return p[i];
 }
 
-export _io_ok_void(): IoResult<void> {
+_io_ok_void(): IoResult<void> {
     return IoResult<void>.ok();
 }
 
-export _io_err_void(e: IoError): IoResult<void> {
+_io_err_void(e: IoError): IoResult<void> {
     return IoResult<void>.err(e);
 }
 
-export _io_last_void(): IoResult<void> {
+_io_last_void(): IoResult<void> {
     return IoResult<void>.err(IoError.last());
 }

@@ -133,22 +133,22 @@ extern void* readdir(void* dir);
 # ── errno ────────────────────────────────────────────────────────────────────
 
 [Target((OS(Linux) && !OS(Android)) || OS(Wasi))]
-export _io_errno(): __ptr<int> {
+_io_errno(): __ptr<int> {
     return __errno_location();
 }
 
 [Target(OS(Android))]
-export _io_errno(): __ptr<int> {
+_io_errno(): __ptr<int> {
     return __errno();
 }
 
 [Target(OS(Mac))]
-export _io_errno(): __ptr<int> {
+_io_errno(): __ptr<int> {
     return __error();
 }
 
 [Target(!OS(Windows))]
-export _io_sys_last_error(): ErrorCode {
+_io_sys_last_error(): ErrorCode {
     return _io_errno()[0];
 }
 
@@ -160,7 +160,7 @@ export _io_sys_error_message(code: ErrorCode): String {
 # The ErrorKind of an errno value. Linux and macOS share the file codes
 # except ENOTEMPTY and ECANCELED; most socket codes differ.
 [Target(OS(Linux))]
-export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+_io_sys_error_kind(code: ErrorCode): ErrorKind {
     return match (code) {
         2 => ErrorKind.NotFound,                    # ENOENT
         13, 1 => ErrorKind.PermissionDenied,        # EACCES, EPERM
@@ -181,7 +181,7 @@ export _io_sys_error_kind(code: ErrorCode): ErrorKind {
 }
 
 [Target(OS(Mac))]
-export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+_io_sys_error_kind(code: ErrorCode): ErrorKind {
     return match (code) {
         2 => ErrorKind.NotFound,                  # ENOENT
         13, 1 => ErrorKind.PermissionDenied,      # EACCES, EPERM
@@ -203,7 +203,7 @@ export _io_sys_error_kind(code: ErrorCode): ErrorKind {
 
 # WASI numbers errno values its own way (wasi/api.h's __WASI_ERRNO_*).
 [Target(OS(Wasi))]
-export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+_io_sys_error_kind(code: ErrorCode): ErrorKind {
     return match (code) {
         44 => ErrorKind.NotFound,                 # ENOENT
         2, 63 => ErrorKind.PermissionDenied,      # EACCES, EPERM
@@ -230,17 +230,17 @@ export _io_sys_code_invalid_input(): ErrorCode {
 }  # EINVAL
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_code_not_a_directory(): ErrorCode {
+_io_sys_code_not_a_directory(): ErrorCode {
     return 20;
 }  # ENOTDIR
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_code_not_found(): ErrorCode {
+_io_sys_code_not_found(): ErrorCode {
     return 2;
 }  # ENOENT
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_code_bad_handle(): ErrorCode {
+_io_sys_code_bad_handle(): ErrorCode {
     return 9;
 }  # EBADF
 
@@ -255,17 +255,17 @@ export _io_sys_code_invalid_input(): ErrorCode {
 }  # EINVAL
 
 [Target(OS(Wasi))]
-export _io_sys_code_not_a_directory(): ErrorCode {
+_io_sys_code_not_a_directory(): ErrorCode {
     return 54;
 }  # ENOTDIR
 
 [Target(OS(Wasi))]
-export _io_sys_code_not_found(): ErrorCode {
+_io_sys_code_not_found(): ErrorCode {
     return 44;
 }  # ENOENT
 
 [Target(OS(Wasi))]
-export _io_sys_code_bad_handle(): ErrorCode {
+_io_sys_code_bad_handle(): ErrorCode {
     return 8;
 }  # EBADF
 
@@ -276,38 +276,38 @@ export _io_sys_code_write_zero(): ErrorCode {
 
 # ERANGE: a buffer was too small.
 [Target(OS(Linux) || OS(Mac))]
-export _io_posix_code_range(): ErrorCode {
+_io_posix_code_range(): ErrorCode {
     return 34;
 }
 
 [Target(OS(Wasi))]
-export _io_posix_code_range(): ErrorCode {
+_io_posix_code_range(): ErrorCode {
     return 68;
 }
 
 [Target(OS(Linux))]
-export _io_sys_code_cancelled(): ErrorCode {
+_io_sys_code_cancelled(): ErrorCode {
     return 125;
 }  # ECANCELED
 
 [Target(OS(Mac))]
-export _io_sys_code_cancelled(): ErrorCode {
+_io_sys_code_cancelled(): ErrorCode {
     return 89;
 }  # ECANCELED
 
 [Target(OS(Wasi))]
-export _io_sys_code_cancelled(): ErrorCode {
+_io_sys_code_cancelled(): ErrorCode {
     return 11;
 }  # ECANCELED
 
 [Target(!OS(Windows))]
-export _io_posix_err_none(): IoResult<void> {
+_io_posix_err_none(): IoResult<void> {
     return IoResult<void>.err(IoError.last());
 }
 
 # 0 -> Ok, -1 -> the errno error.
 [Target(!OS(Windows))]
-export _io_posix_check(rc: int): IoResult<void> {
+_io_posix_check(rc: int): IoResult<void> {
     if (rc == 0) {
         return _io_ok_void();
     }
@@ -316,24 +316,24 @@ export _io_posix_check(rc: int): IoResult<void> {
 
 # An empty path names nothing (and an empty String has no C string).
 [Target(!OS(Windows))]
-export _io_posix_empty_path(): IoError {
+_io_posix_empty_path(): IoError {
     return IoError(_io_sys_code_not_found(), "empty path");
 }
 
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))]
-export _io_sys_invalid_handle(): FileHandle {
+_io_sys_invalid_handle(): FileHandle {
     return -1;
 }
 
 [Target(!OS(Windows))]
-export _io_sys_handle_valid(h: FileHandle): bool {
+_io_sys_handle_valid(h: FileHandle): bool {
     return h >= 0;
 }
 
 [Target(!OS(Windows))]
-export _io_sys_std_handle(stream: StdStream): FileHandle {
+_io_sys_std_handle(stream: StdStream): FileHandle {
     return match (stream) {
         Input => 0,
         Output => 1,
@@ -344,110 +344,110 @@ export _io_sys_std_handle(stream: StdStream): FileHandle {
 # ── O_* flags ────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_o_rdonly(): int { return 0; }
+_io_o_rdonly(): int { return 0; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_o_wronly(): int { return 1; }
+_io_o_wronly(): int { return 1; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_o_rdwr(): int { return 2; }
+_io_o_rdwr(): int { return 2; }
 
 [Target(OS(Linux))]
-export _io_o_creat(): int {
+_io_o_creat(): int {
     return 64;
 }  # 0x40
 
 [Target(OS(Linux))]
-export _io_o_excl(): int {
+_io_o_excl(): int {
     return 128;
 }  # 0x80
 
 [Target(OS(Linux))]
-export _io_o_trunc(): int {
+_io_o_trunc(): int {
     return 512;
 }  # 0x200
 
 [Target(OS(Linux))]
-export _io_o_append(): int {
+_io_o_append(): int {
     return 1024;
 }  # 0x400
 
 [Target(OS(Linux))]
-export _io_o_cloexec(): int {
+_io_o_cloexec(): int {
     return 524288;
 }  # 0x80000
 
 [Target(OS(Mac))]
-export _io_o_creat(): int {
+_io_o_creat(): int {
     return 512;
 }  # 0x200
 
 [Target(OS(Mac))]
-export _io_o_excl(): int {
+_io_o_excl(): int {
     return 2048;
 }  # 0x800
 
 [Target(OS(Mac))]
-export _io_o_trunc(): int {
+_io_o_trunc(): int {
     return 1024;
 }  # 0x400
 
 [Target(OS(Mac))]
-export _io_o_append(): int {
+_io_o_append(): int {
     return 8;
 }  # 0x8
 
 [Target(OS(Mac))]
-export _io_o_cloexec(): int {
+_io_o_cloexec(): int {
     return 16777216;
 }  # 0x1000000
 
 # WASI: the access mode is two rights bits, O_CREAT, O_EXCL and O_TRUNC are
 # WASI's open flags shifted up 12, and there is no exec to close on.
 [Target(OS(Wasi))]
-export _io_o_rdonly(): int {
+_io_o_rdonly(): int {
     return 67108864;
 }  # 0x4000000
 
 [Target(OS(Wasi))]
-export _io_o_wronly(): int {
+_io_o_wronly(): int {
     return 268435456;
 }  # 0x10000000
 
 [Target(OS(Wasi))]
-export _io_o_rdwr(): int {
+_io_o_rdwr(): int {
     return 335544320;
 }  # 0x14000000
 
 [Target(OS(Wasi))]
-export _io_o_creat(): int {
+_io_o_creat(): int {
     return 4096;
 }  # 0x1000
 
 [Target(OS(Wasi))]
-export _io_o_excl(): int {
+_io_o_excl(): int {
     return 16384;
 }  # 0x4000
 
 [Target(OS(Wasi))]
-export _io_o_trunc(): int {
+_io_o_trunc(): int {
     return 32768;
 }  # 0x8000
 
 [Target(OS(Wasi))]
-export _io_o_append(): int {
+_io_o_append(): int {
     return 1;
 }
 
 [Target(OS(Wasi))]
-export _io_o_cloexec(): int {
+_io_o_cloexec(): int {
     return 0;
 }
 
 # ── File operations ──────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))]
-export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
+_io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
     if (path._value.size == 0) {
         return IoResult<FileHandle>.err(_io_posix_empty_path());
     }
@@ -486,14 +486,14 @@ export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_close(h: FileHandle): IoResult<void> {
+_io_sys_close(h: FileHandle): IoResult<void> {
     return _io_posix_check(close(h));
 }
 
 # One read/write call moves at most this many bytes (Linux caps at
 # 0x7ffff000, macOS at INT_MAX).
 [Target(!OS(Windows))]
-export _io_posix_max_rw(n: ulong): ulong {
+_io_posix_max_rw(n: ulong): ulong {
     if (n > 2147479552) {
         return 2147479552;
     }
@@ -501,7 +501,7 @@ export _io_posix_max_rw(n: ulong): ulong {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
+_io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
     while (true) {
         var r = read(h, dst, _io_posix_max_rw(n));
         if (r >= 0) {
@@ -516,7 +516,7 @@ export _io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
+_io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
     while (true) {
         var r = write(h, src, _io_posix_max_rw(n));
         if (r >= 0) {
@@ -532,7 +532,7 @@ export _io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
 
 # whence: 0 start, 1 current, 2 end (SEEK_SET/SEEK_CUR/SEEK_END).
 [Target(!OS(Windows))]
-export _io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset> {
+_io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset> {
     var r = lseek(h, offset, whence);
     if (r < 0) {
         return IoResult<Offset>.err(IoError.last());
@@ -541,12 +541,12 @@ export _io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset
 }
 
 [Target(!OS(Windows))]
-export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
+_io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
     return _io_posix_check(ftruncate(h, size as long));
 }
 
 [Target(!OS(Windows))]
-export _io_sys_sync(h: FileHandle): IoResult<void> {
+_io_sys_sync(h: FileHandle): IoResult<void> {
     return _io_posix_check(fsync(h));
 }
 
@@ -563,91 +563,91 @@ export _io_sys_sync(h: FileHandle): IoResult<void> {
 # 144 bytes in all, and no birth time.
 
 [Target(OS(Linux))]
-export _io_stat_buf_size(): ulong { return 256; }
+_io_stat_buf_size(): ulong { return 256; }
 
 [Target(OS(Linux))]
-export _io_stat_mode_offset(): ulong { return 28; }
+_io_stat_mode_offset(): ulong { return 28; }
 
 [Target(OS(Linux))]
-export _io_stat_size_offset(): ulong { return 40; }
+_io_stat_size_offset(): ulong { return 40; }
 
 [Target(OS(Linux))]
-export _io_stat_atime_offset(): ulong { return 64; }
+_io_stat_atime_offset(): ulong { return 64; }
 
 [Target(OS(Linux))]
-export _io_stat_btime_offset(): ulong { return 80; }
+_io_stat_btime_offset(): ulong { return 80; }
 
 [Target(OS(Linux))]
-export _io_stat_mtime_offset(): ulong { return 112; }
+_io_stat_mtime_offset(): ulong { return 112; }
 
 [Target(OS(Mac))]
-export _io_stat_buf_size(): ulong { return 144; }
+_io_stat_buf_size(): ulong { return 144; }
 
 [Target(OS(Mac))]
-export _io_stat_mode_offset(): ulong { return 4; }
+_io_stat_mode_offset(): ulong { return 4; }
 
 [Target(OS(Mac))]
-export _io_stat_size_offset(): ulong { return 96; }
+_io_stat_size_offset(): ulong { return 96; }
 
 [Target(OS(Mac))]
-export _io_stat_atime_offset(): ulong { return 32; }
+_io_stat_atime_offset(): ulong { return 32; }
 
 [Target(OS(Mac))]
-export _io_stat_btime_offset(): ulong { return 80; }
+_io_stat_btime_offset(): ulong { return 80; }
 
 [Target(OS(Mac))]
-export _io_stat_mtime_offset(): ulong { return 48; }
+_io_stat_mtime_offset(): ulong { return 48; }
 
 [Target(OS(Wasi))]
-export _io_stat_buf_size(): ulong { return 144; }
+_io_stat_buf_size(): ulong { return 144; }
 
 [Target(OS(Wasi))]
-export _io_stat_mode_offset(): ulong { return 24; }
+_io_stat_mode_offset(): ulong { return 24; }
 
 [Target(OS(Wasi))]
-export _io_stat_size_offset(): ulong { return 48; }
+_io_stat_size_offset(): ulong { return 48; }
 
 [Target(OS(Wasi))]
-export _io_stat_atime_offset(): ulong { return 72; }
+_io_stat_atime_offset(): ulong { return 72; }
 
 # Never read: `_io_stat_has_btime` is false.
 [Target(OS(Wasi))]
-export _io_stat_btime_offset(): ulong { return 72; }
+_io_stat_btime_offset(): ulong { return 72; }
 
 [Target(OS(Wasi))]
-export _io_stat_mtime_offset(): ulong { return 88; }
+_io_stat_mtime_offset(): ulong { return 88; }
 
 # statx reports a birth time only when the file system has one.
 [Target(OS(Linux))]
-export _io_stat_has_btime(buf: __ptr<void>): bool {
+_io_stat_has_btime(buf: __ptr<void>): bool {
     return ((buf as __ptr<uint>)[0] & 2048) != 0;  # STATX_BTIME
 }
 
 [Target(OS(Mac))]
-export _io_stat_has_btime(buf: __ptr<void>): bool {
+_io_stat_has_btime(buf: __ptr<void>): bool {
     return true;
 }
 
 [Target(OS(Wasi))]
-export _io_stat_has_btime(buf: __ptr<void>): bool {
+_io_stat_has_btime(buf: __ptr<void>): bool {
     return false;
 }
 
 # Whether st_mode carries permission bits: WASI preview 1 has none, and
 # wasi-libc reports only the file type.
 [Target(OS(Linux) || OS(Mac))]
-export _io_stat_has_permissions(): bool {
+_io_stat_has_permissions(): bool {
     return true;
 }
 
 [Target(OS(Wasi))]
-export _io_stat_has_permissions(): bool {
+_io_stat_has_permissions(): bool {
     return false;
 }
 
 # AT_FDCWD, AT_SYMLINK_NOFOLLOW, STATX_BASIC_STATS | STATX_BTIME.
 [Target(OS(Linux))]
-export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
+_io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
     var flags = 0;
     if (!follow) {
         flags = 256;
@@ -656,7 +656,7 @@ export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
 }
 
 [Target(OS(Mac) || OS(Wasi))]
-export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
+_io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
     if (follow) {
         return stat(path, buf);
     }
@@ -665,27 +665,27 @@ export _io_stat_path(path: __ptr<char>, follow: bool, buf: __ptr<void>): int {
 
 # statx on the descriptor itself: AT_EMPTY_PATH with "".
 [Target(OS(Linux))]
-export _io_stat_fd(fd: int, buf: __ptr<void>): int {
+_io_stat_fd(fd: int, buf: __ptr<void>): int {
     return statx(fd, "", 4096, 4095, buf);
 }
 
 [Target(OS(Mac) || OS(Wasi))]
-export _io_stat_fd(fd: int, buf: __ptr<void>): int {
+_io_stat_fd(fd: int, buf: __ptr<void>): int {
     return fstat(fd, buf);
 }
 
 [Target(!OS(Windows))]
-export _io_read_u16(buf: __ptr<void>, offset: ulong): uint {
+_io_read_u16(buf: __ptr<void>, offset: ulong): uint {
     return ((buf + offset) as __ptr<u16>)[0];
 }
 
 [Target(!OS(Windows))]
-export _io_read_i64(buf: __ptr<void>, offset: ulong): long {
+_io_read_i64(buf: __ptr<void>, offset: ulong): long {
     return ((buf + offset) as __ptr<long>)[0];
 }
 
 [Target(!OS(Windows))]
-export _io_read_u32(buf: __ptr<void>, offset: ulong): uint {
+_io_read_u32(buf: __ptr<void>, offset: ulong): uint {
     return ((buf + offset) as __ptr<uint>)[0];
 }
 
@@ -693,14 +693,14 @@ export _io_read_u32(buf: __ptr<void>, offset: ulong): uint {
 # read as 32 bits: statx stores a u32, macOS a long whose value (< 10^9) sits
 # in its low half, and wasi-libc a 32-bit long.
 [Target(!OS(Windows))]
-export _io_stat_time(buf: __ptr<void>, offset: ulong): long {
+_io_stat_time(buf: __ptr<void>, offset: ulong): long {
     var sec = _io_read_i64(buf, offset);
     var nsec = _io_read_u32(buf, offset + 8) as long;
     return sec * 1000000000 + nsec;
 }
 
 [Target(!OS(Windows))]
-export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
+_io_metadata_from_stat(buf: __ptr<void>): Metadata {
     var m = Metadata();
     var mode = _io_read_u16(buf, _io_stat_mode_offset());
     var kind = mode & 61440;         # S_IFMT 0170000
@@ -722,7 +722,7 @@ export _io_metadata_from_stat(buf: __ptr<void>): Metadata {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
+_io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
     if (path._value.size == 0) {
         return IoResult<Metadata>.err(_io_posix_empty_path());
     }
@@ -731,14 +731,14 @@ export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_fstat(h: FileHandle): IoResult<Metadata> {
+_io_sys_fstat(h: FileHandle): IoResult<Metadata> {
     var buf = _IoBuffer(_io_stat_buf_size());
     return _io_posix_stat_result(_io_stat_fd(h, buf._bytes), buf);
 }
 
 # The metadata a stat call that returned `rc` wrote into `buf`, or errno.
 [Target(!OS(Windows))]
-export _io_posix_stat_result(rc: int, buf: _IoBuffer): IoResult<Metadata> {
+_io_posix_stat_result(rc: int, buf: _IoBuffer): IoResult<Metadata> {
     if (rc != 0) {
         return IoResult<Metadata>.err(IoError.last());
     }
@@ -752,45 +752,45 @@ export _io_posix_stat_result(rc: int, buf: _IoBuffer): IoResult<Metadata> {
 # types: 3, 4 and 7.
 
 [Target(OS(Linux))]
-export _io_dirent_type_offset(): ulong { return 18; }
+_io_dirent_type_offset(): ulong { return 18; }
 
 [Target(OS(Linux))]
-export _io_dirent_name_offset(): ulong { return 19; }
+_io_dirent_name_offset(): ulong { return 19; }
 
 [Target(OS(Mac))]
-export _io_dirent_type_offset(): ulong { return 20; }
+_io_dirent_type_offset(): ulong { return 20; }
 
 [Target(OS(Mac))]
-export _io_dirent_name_offset(): ulong { return 21; }
+_io_dirent_name_offset(): ulong { return 21; }
 
 [Target(OS(Wasi))]
-export _io_dirent_type_offset(): ulong { return 8; }
+_io_dirent_type_offset(): ulong { return 8; }
 
 [Target(OS(Wasi))]
-export _io_dirent_name_offset(): ulong { return 9; }
+_io_dirent_name_offset(): ulong { return 9; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_dirent_directory(): u8 { return 4; }
+_io_dirent_directory(): u8 { return 4; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_dirent_file(): u8 { return 8; }
+_io_dirent_file(): u8 { return 8; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_dirent_symlink(): u8 { return 10; }
+_io_dirent_symlink(): u8 { return 10; }
 
 [Target(OS(Wasi))]
-export _io_dirent_directory(): u8 { return 3; }
+_io_dirent_directory(): u8 { return 3; }
 
 [Target(OS(Wasi))]
-export _io_dirent_file(): u8 { return 4; }
+_io_dirent_file(): u8 { return 4; }
 
 [Target(OS(Wasi))]
-export _io_dirent_symlink(): u8 { return 7; }
+_io_dirent_symlink(): u8 { return 7; }
 
 # Opens the listing of `iterator._path` and reads its first entry into
 # `iterator._entry`: false when there is none.
 [Target(!OS(Windows))]
-export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
+_io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
     if (iterator._path._value.size == 0) {
         return IoResult<bool>.err(_io_posix_empty_path());
     }
@@ -804,7 +804,7 @@ export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
 # Reads the next entry of an open listing into `iterator._entry`, skipping
 # `.` and `..`: false at the end.
 [Target(!OS(Windows))]
-export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
+_io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
     while (true) {
         # readdir returns null at the end and on error; only errno tells.
         _io_errno()[0] = 0;
@@ -846,12 +846,12 @@ export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
 
 # Closes an open listing.
 [Target(!OS(Windows))]
-export _io_sys_directory_close(handle: __ptr<void>) {
+_io_sys_directory_close(handle: __ptr<void>) {
     closedir(handle);
 }
 
 [Target(!OS(Windows))]
-export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
+_io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -859,7 +859,7 @@ export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_rmdir(path: Path): IoResult<void> {
+_io_sys_rmdir(path: Path): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -867,7 +867,7 @@ export _io_sys_rmdir(path: Path): IoResult<void> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_unlink(path: Path): IoResult<void> {
+_io_sys_unlink(path: Path): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -876,12 +876,12 @@ export _io_sys_unlink(path: Path): IoResult<void> {
 
 # Remove a non-directory or a symlink (to anything); `unlink` handles both.
 [Target(!OS(Windows))]
-export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
+_io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
     return _io_sys_unlink(path);
 }
 
 [Target(!OS(Windows))]
-export _io_sys_rename(from: Path, to: Path): IoResult<void> {
+_io_sys_rename(from: Path, to: Path): IoResult<void> {
     if (from._value.size == 0 || to._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -889,7 +889,7 @@ export _io_sys_rename(from: Path, to: Path): IoResult<void> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_getcwd(): IoResult<Path> {
+_io_sys_getcwd(): IoResult<Path> {
     ulong size = 4096;
     while (true) {
         var buf = _IoBuffer(size);
@@ -907,7 +907,7 @@ export _io_sys_getcwd(): IoResult<Path> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_chdir(path: Path): IoResult<void> {
+_io_sys_chdir(path: Path): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -915,7 +915,7 @@ export _io_sys_chdir(path: Path): IoResult<void> {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_realpath(path: Path): IoResult<Path> {
+_io_sys_realpath(path: Path): IoResult<Path> {
     if (path._value.size == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
@@ -952,7 +952,7 @@ export _io_sys_temp_dir(): Path {
 # ── Permissions, times and links ─────────────────────────────────────────────
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+_io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -960,7 +960,7 @@ export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+_io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
     return _io_posix_check(fchmod(h, mode));
 }
 
@@ -971,19 +971,19 @@ _io_wasi_no_permissions(): IoResult<void> {
 }
 
 [Target(OS(Wasi))]
-export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+_io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
     return _io_wasi_no_permissions();
 }
 
 [Target(OS(Wasi))]
-export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+_io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
     return _io_wasi_no_permissions();
 }
 
 # `current` with every write bit (0222) cleared, or with the owner's (0200)
 # set: making a file writable never opens it to group or others.
 [Target(!OS(Windows))]
-export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
+_io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
     if (read_only) {
         return (current | 146) ^ 146;
     }
@@ -993,7 +993,7 @@ export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
 # `current` with an execute bit (0111) for each class that may read it
 # (0444), as `chmod +x` gives, or with every execute bit cleared.
 [Target(!OS(Windows))]
-export _io_sys_executable_mode(current: Mode, executable: bool): Mode {
+_io_sys_executable_mode(current: Mode, executable: bool): Mode {
     if (executable) {
         return current | ((current & 292) >> 2);
     }
@@ -1046,7 +1046,7 @@ _io_posix_timespec(at: __ptr<u8>, time: long?) {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
+_io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
     if (path._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -1055,14 +1055,14 @@ export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult
 }
 
 [Target(!OS(Windows))]
-export _io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
+_io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
     var times = _io_posix_times(accessed, modified);
     return _io_posix_check(futimens(h, times._bytes));
 }
 
 # POSIX makes one kind of symlink, whatever it points to.
 [Target(!OS(Windows))]
-export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
+_io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
     if (target._value.size == 0 || link._value.size == 0) {
         return IoResult<void>.err(_io_posix_empty_path());
     }
@@ -1072,7 +1072,7 @@ export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void
 # readlink does not say when the buffer was too small, only fills it: retry
 # with a bigger one until the target fits with room to spare.
 [Target(!OS(Windows))]
-export _io_sys_readlink(path: Path): IoResult<Path> {
+_io_sys_readlink(path: Path): IoResult<Path> {
     if (path._value.size == 0) {
         return IoResult<Path>.err(_io_posix_empty_path());
     }
@@ -1096,7 +1096,7 @@ export _io_sys_readlink(path: Path): IoResult<Path> {
 # A new thread-local key (pthread_key_t is 4 bytes on Linux and WASI, 8 on
 # macOS; the slot is zeroed first so either reads back whole).
 [Target(!OS(Windows))]
-export _io_sys_key_create(): ulong {
+_io_sys_key_create(): ulong {
     __ptr<ulong> key = _pep_malloc(8);
     key[0] = 0;
     if (pthread_key_create(key, __null) != 0) {
@@ -1108,11 +1108,11 @@ export _io_sys_key_create(): ulong {
 }
 
 [Target(!OS(Windows))]
-export _io_sys_key_get(key: ulong): __ptr<void> {
+_io_sys_key_get(key: ulong): __ptr<void> {
     return pthread_getspecific(key);
 }
 
 [Target(!OS(Windows))]
-export _io_sys_key_set(key: ulong, value: __ptr<void>) {
+_io_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
 }

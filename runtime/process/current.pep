@@ -43,7 +43,7 @@ import "sys_windows";
 ##         }
 ##         return false;
 ##     }
-export _process_arguments(): Array<String> {
+_process_arguments(): Array<String> {
     return _pep_arguments();
 }
 
@@ -67,7 +67,7 @@ export _process_arguments(): Array<String> {
 ##         }
 ##         return 0;
 ##     }
-export _process_exit(code: int) {
+_process_exit(code: int) {
     _pep_exit(code);
 }
 

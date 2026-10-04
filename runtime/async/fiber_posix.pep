@@ -51,13 +51,13 @@ const _FIBER_PAGE_SIZE_NAME = 29;
 
 # The calling thread as a context: what a fiber switches back to.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_thread_context(): __ptr<void> {
+_async_fiber_thread_context(): __ptr<void> {
     return _pep_malloc(24);
 }
 
 # Frees what `_async_fiber_thread_context` made.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_release_thread_context(context: __ptr<void>) {
+_async_fiber_release_thread_context(context: __ptr<void>) {
     _pep_free(context);
 }
 
@@ -65,7 +65,7 @@ export _async_fiber_release_thread_context(context: __ptr<void>) {
 # plus a guard page) whose first switch calls `entry(null)`; null if the
 # system has no memory for the stack. `entry` must never return.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
+_async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
     var page = sysconf(_FIBER_PAGE_SIZE_NAME) as ulong;
     var length = (stack_size + page - 1) / page * page + page;
     var base = mmap(__null, length, _FIBER_READ_WRITE, _FIBER_MAP_FLAGS, -1, 0);
@@ -86,7 +86,7 @@ export _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
 # Unmaps a fiber's stack and frees its context. The fiber must not be the
 # one running.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_destroy(context: __ptr<void>) {
+_async_fiber_destroy(context: __ptr<void>) {
     __ptr<__ptr<void>> pointers = context;
     __ptr<ulong> words = context;
     munmap(pointers[1], words[2]);
@@ -96,7 +96,7 @@ export _async_fiber_destroy(context: __ptr<void>) {
 # Saves the running context into `from` and resumes `to`. Returns when
 # something switches back to `from`.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
+_async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     __ptr<__ptr<void>> resume = to;
     __switch_context(from, resume[0]);
 }
@@ -104,16 +104,16 @@ export _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
 # A thread-local key shared by every fiber on a thread: a pthread key, since
 # a switch leaves the thread's own storage alone.
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_key_create(): ulong {
+_async_fiber_key_create(): ulong {
     return _async_sys_key_create(__null);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_key_get(key: ulong): __ptr<void> {
+_async_fiber_key_get(key: ulong): __ptr<void> {
     return _async_sys_key_get(key);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_fiber_key_set(key: ulong, value: __ptr<void>) {
+_async_fiber_key_set(key: ulong, value: __ptr<void>) {
     _async_sys_key_set(key, value);
 }

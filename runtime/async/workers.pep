@@ -56,14 +56,14 @@ import "task";
 # What a message tells a worker about one of its tasks. `Wake`: a task
 # parked on a `Mutex`, `Condition` or `Channel` here was woken (see
 # sync_wait.pep). Messages travel packed in a `ulong` (`_Inbox._send`).
-export enum _Message: ulong {
+enum _Message: ulong {
     Complete,
     Cancel,
     Wake,
 }
 
 # The task id and kind packed in an inbox message.
-export _async_unpack_message(message: ulong): (id: ulong, kind: _Message) {
+_async_unpack_message(message: ulong): (id: ulong, kind: _Message) {
     var id = message / 4;
     match (message % 4) {
         0 => {
@@ -84,7 +84,7 @@ const _async_inbox_ids = Atomic<ulong>(1);
 
 # Messages to one worker, and its doorbell.
 [Shared]
-export struct _Inbox {
+struct _Inbox {
     # Unique among inboxes, so a waker can tell whether a task waits on its
     # own worker.
     const _id: ulong;
@@ -124,7 +124,7 @@ export struct _Inbox {
 
 # A task from `spawn`, which any worker may run.
 [Shared]
-export struct _SharedTask {
+struct _SharedTask {
     # Runs the body and stores its result.
     const _body: shared () => void;
     # The worker that spawned it, and the id there of the stand-in task that
@@ -160,7 +160,7 @@ export struct _SharedTask {
 # The result of a spawned task: stored on the worker that runs it, taken on
 # the worker that spawned it.
 [Shared]
-export struct _TaskResult<T: Shared> {
+struct _TaskResult<T: Shared> {
     # A heap slot for the value (one reference for a struct `T`).
     const _value: __ptr<T>;
 
@@ -189,7 +189,7 @@ export struct _TaskResult<T: Shared> {
 
 # What the workers of one `run` share.
 [Shared]
-export struct _Runtime {
+struct _Runtime {
     # How many workers.
     const _count: ulong;
     # Each worker's inbox, stored by the worker when it starts.
@@ -322,7 +322,7 @@ export struct _Runtime {
 
 # The loop of a pool thread: runs bodies from `run_blocking` and reports
 # each to the worker that queued it, until the runtime closes the queue.
-export _async_blocking_main(runtime: _Runtime) {
+_async_blocking_main(runtime: _Runtime) {
     while (true) {
         var next = runtime._blocking.receive();
         if (next.is_err()) {
@@ -338,6 +338,6 @@ export _async_blocking_main(runtime: _Runtime) {
 extern void memset(void* p, int c, ulong n);
 
 # Zeroes `size` bytes at `memory`.
-export _async_zero(memory: __ptr<void>, size: ulong) {
+_async_zero(memory: __ptr<void>, size: ulong) {
     memset(memory, 0, size);
 }

@@ -34,7 +34,7 @@ const _KQUEUE_FILTER_USER = -10;
 const _KQUEUE_END_FLAGS = 49152;
 
 # A worker's kqueue.
-export struct _KqueueDriver {
+struct _KqueueDriver {
     var _queue: long;
     # Room for `_KQUEUE_CAPACITY` events of 32 bytes.
     var _events: __ptr<u8>;
@@ -169,7 +169,7 @@ _async_kqueue_call(
 
 # Triggers the doorbell event of `queue`.
 [Target(OS(Mac))]
-export _async_kqueue_ring(queue: long) {
+_async_kqueue_ring(queue: long) {
     __ptr<u8> change = _pep_malloc(32);
     _async_kqueue_change(change, 0, 0, _KQUEUE_FILTER_USER);
     unsafe_cast<__ptr<u16>>(change + 10)[0] = 0;
@@ -189,7 +189,7 @@ _async_kqueue_create(): long {
 _async_kqueue_close(queue: long) {}
 
 [Target(!OS(Mac))]
-export _async_kqueue_ring(queue: long) {}
+_async_kqueue_ring(queue: long) {}
 
 [Target(!OS(Mac))]
 _async_kqueue_call(

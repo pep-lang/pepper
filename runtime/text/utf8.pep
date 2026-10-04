@@ -146,7 +146,7 @@ export struct Utf8 {
 
 # The code point of the valid UTF-8 sequence of `run` bytes at `index` of
 # `data`.
-export _text_code_point(data: __ptr<u8>, index: ulong, run: ulong): uint {
+_text_code_point(data: __ptr<u8>, index: ulong, run: ulong): uint {
     var first = data[index] as uint;
     if (run == 1) {
         return first;
@@ -168,7 +168,7 @@ export _text_code_point(data: __ptr<u8>, index: ulong, run: ulong): uint {
 }
 
 # Appends the UTF-8 bytes of the code point `value` to `out`.
-export _text_append_utf8(out: u8[], value: uint) {
+_text_append_utf8(out: u8[], value: uint) {
     if (value < 128) {
         out.append(value as u8);
     } else if (value < 2048) {

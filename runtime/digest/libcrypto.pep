@@ -40,7 +40,7 @@ extern int EVP_DigestFinal_ex(void* context, u8* digest, uint* size);
 
 # A libcrypto digest context for one algorithm, freed with the struct.
 [Target(BuildOption(USE_LIBCRYPTO) && !OS(Windows))]
-export struct _DigestNative {
+struct _DigestNative {
     var _context: Handle<__ptr<void>>;
     # The `EVP_MD` (`EVP_sha256()`, `EVP_sha1()`).
     var _algorithm: __ptr<void>;
@@ -116,7 +116,7 @@ const _DIGEST_CNG_REUSABLE: uint = 0x20;
 
 # A CNG hash object for one algorithm, destroyed with the struct.
 [Target(BuildOption(USE_LIBCRYPTO) && OS(Windows))]
-export struct _DigestNative {
+struct _DigestNative {
     var _hash: Handle<__ptr<void>>;
     # The digest's size in bytes.
     var _size: ulong;
@@ -173,7 +173,7 @@ _digest_native_sha1(): _DigestNative {
 # ── The engines ──────────────────────────────────────────────────────────────
 
 [BuildOption("USE_LIBCRYPTO")]
-export struct _Sha256Engine {
+struct _Sha256Engine {
     var _native: _DigestNative;
 
     construct() {
@@ -194,7 +194,7 @@ export struct _Sha256Engine {
 }
 
 [BuildOption("USE_LIBCRYPTO")]
-export struct _Sha1Engine {
+struct _Sha1Engine {
     var _native: _DigestNative;
 
     construct() {

@@ -8,7 +8,7 @@ import "syntax";
 # The threads at one text position, in priority order, each with the
 # capture slots it carries. A sparse set: membership by instruction index
 # in O(1), and clearing in O(1).
-export struct _RegexThreads {
+struct _RegexThreads {
     var sparse: ulong[];
     var dense: ulong[];
     var count: ulong;
@@ -47,7 +47,7 @@ export struct _RegexThreads {
 }
 
 # Runs one program, keeping its scratch space between searches.
-export struct _RegexMatcher {
+struct _RegexMatcher {
     var program: _RegexProgram;
     var _current: _RegexThreads;
     var _next: _RegexThreads;

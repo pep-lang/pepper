@@ -10,48 +10,48 @@ import "message";
 
 # The most bytes a request or status line, or all the header fields of one
 # message, may take.
-export const _HTTP_MAX_LINE: ulong = 8192;
-export const _HTTP_MAX_HEAD: ulong = 65536;
+const _HTTP_MAX_LINE: ulong = 8192;
+const _HTTP_MAX_HEAD: ulong = 65536;
 
 # EPROTO (ERROR_INVALID_DATA on Windows): the code of every HTTP error.
 [Target(OS(Linux))]
-export _http_code_protocol(): io.ErrorCode { return 71; }
+_http_code_protocol(): io.ErrorCode { return 71; }
 
 [Target(OS(Mac))]
-export _http_code_protocol(): io.ErrorCode { return 100; }
+_http_code_protocol(): io.ErrorCode { return 100; }
 
 [Target(OS(Windows))]
-export _http_code_protocol(): io.ErrorCode { return 13; }
+_http_code_protocol(): io.ErrorCode { return 13; }
 
 [Target(OS(Wasi))]
-export _http_code_protocol(): io.ErrorCode { return 65; }
+_http_code_protocol(): io.ErrorCode { return 65; }
 
-export _http_error(message: String): io.IoError {
+_http_error(message: String): io.IoError {
     return io.IoError(_http_code_protocol(), message);
 }
 
 # EMSGSIZE (WSAEMSGSIZE on Windows): a message too large to accept, which a
 # server answers with 431 (the head) or 413 (the body) rather than 400.
 [Target(OS(Linux))]
-export _http_code_too_large(): io.ErrorCode { return 90; }
+_http_code_too_large(): io.ErrorCode { return 90; }
 
 [Target(OS(Mac))]
-export _http_code_too_large(): io.ErrorCode { return 40; }
+_http_code_too_large(): io.ErrorCode { return 40; }
 
 [Target(OS(Windows))]
-export _http_code_too_large(): io.ErrorCode { return 10040; }
+_http_code_too_large(): io.ErrorCode { return 10040; }
 
 [Target(OS(Wasi))]
-export _http_code_too_large(): io.ErrorCode { return 35; }
+_http_code_too_large(): io.ErrorCode { return 35; }
 
-export _http_too_large(message: String): io.IoError {
+_http_too_large(message: String): io.IoError {
     return io.IoError(_http_code_too_large(), message);
 }
 
 # One connection: plain TCP, or TLS over it. Reads and writes go through
 # `_reader` and `_writer`, which are the TLS stream once `_use_tls` is called
 # and the TCP stream before.
-export struct _HttpConnection {
+struct _HttpConnection {
     var _tcp: io.TcpStream;
     var _tls: tls.TlsStream?;
     var _reader: io.Reader;
@@ -91,7 +91,7 @@ export struct _HttpConnection {
 
 # Reads lines and byte runs from a connection, keeping what arrived beyond
 # them for the next read.
-export struct _HttpReader {
+struct _HttpReader {
     var _connection: _HttpConnection;
     # Bytes read but not consumed start at `_start`.
     var _buffer: u8[];
@@ -214,7 +214,7 @@ export struct _HttpReader {
 }
 
 # Reads header fields up to the empty line into `headers`.
-export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<void> {
+_http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<void> {
     ulong total = 0;
     while (true) {
         var read = reader._required_line(_HTTP_MAX_LINE);
@@ -242,9 +242,7 @@ export _http_read_headers(reader: _HttpReader, headers: Headers): io.IoResult<vo
 
 # Reads a body framed by `headers` into `into`: chunked, Content-Length, or
 # (when `to_end`) everything until the connection closes; nothing otherwise.
-export _http_read_body(
-    reader: _HttpReader, headers: Headers, into: u8[], to_end: bool, limit: ulong
-): io.IoResult<void> {
+_http_read_body(reader: _HttpReader, headers: Headers, into: u8[], to_end: bool, limit: ulong): io.IoResult<void> {
     var encoding = headers.get("Transfer-Encoding");
     if (encoding.is_value()) {
         if (_http_contains_token(encoding.value(), "chunked")) {
@@ -269,7 +267,7 @@ export _http_read_body(
 }
 
 # A chunked body: hex size lines, data, and a trailer section.
-export _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoResult<void> {
+_http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoResult<void> {
     while (true) {
         var read = reader._required_line(_HTTP_MAX_LINE);
         if (read.is_err()) {
@@ -304,7 +302,7 @@ export _http_read_chunked(reader: _HttpReader, into: u8[], limit: ulong): io.IoR
 }
 
 # Appends a start line, the fields and the empty line to `out`.
-export _http_write_head(out: u8[], start: String, headers: Headers) {
+_http_write_head(out: u8[], start: String, headers: Headers) {
     _http_append(out, start);
     _http_append(out, "\r\n");
     for (var name in headers.names()) {
@@ -333,14 +331,14 @@ _http_line_text(data: __ptr<u8>, size: ulong): String {
     return text.Utf8.decode_lossy(bytes);
 }
 
-export _http_append(out: u8[], text: String) {
+_http_append(out: u8[], text: String) {
     out._append_raw(unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
 }
 
 # ── Text ─────────────────────────────────────────────────────────────────────
 
 # A non-negative decimal number, or -1.
-export _http_parse_decimal(text: String): long {
+_http_parse_decimal(text: String): long {
     var t = text.trim();
     if (t.size == 0 || t.size > 18) {
         return -1;
@@ -360,7 +358,7 @@ export _http_parse_decimal(text: String): long {
 }
 
 # A non-negative hexadecimal number, or -1.
-export _http_parse_hex(text: String): long {
+_http_parse_hex(text: String): long {
     if (text.size == 0 || text.size > 15) {
         return -1;
     }
@@ -379,7 +377,7 @@ export _http_parse_hex(text: String): long {
 }
 
 # Whether the comma-separated `list` has `token`, ignoring case.
-export _http_contains_token(list: String, token: String): bool {
+_http_contains_token(list: String, token: String): bool {
     var wanted = token.lower();
     var rest = list;
     while (true) {

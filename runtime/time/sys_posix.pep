@@ -12,7 +12,7 @@ extern void* localtime_r(long* time, void* result);
 # The local offset at `seconds`: struct tm's tm_gmtoff, the long after its
 # nine ints (byte 40) in glibc, musl, bionic and Darwin alike.
 [Target(OS(Linux) || OS(Mac))]
-export _time_sys_local_offset(seconds: long): int {
+_time_sys_local_offset(seconds: long): int {
     __ptr<long> time = _pep_malloc(8);
     time[0] = seconds;
     __ptr<long> parts = _pep_malloc(64);
@@ -26,12 +26,12 @@ export _time_sys_local_offset(seconds: long): int {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _time_sys_named(name: String): Result<TimeZone> {
+_time_sys_named(name: String): Result<TimeZone> {
     return _time_zone_from_database(name, os.environment("TZDIR").value_or("/usr/share/zoneinfo"));
 }
 
 # ICU is only used on Windows.
 [Target(OS(Linux) || OS(Mac))]
-export _time_sys_icu_offset(name: String, seconds: long): int {
+_time_sys_icu_offset(name: String, seconds: long): int {
     return 0;
 }

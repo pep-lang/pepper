@@ -71,7 +71,7 @@ export struct Sha256 {
 # The portable SHA-256, used unless the build defines `USE_LIBCRYPTO`
 # (see libcrypto.pep).
 [Target(!BuildOption(USE_LIBCRYPTO))]
-export struct _Sha256Engine {
+struct _Sha256Engine {
     # The eight state words (H0-H7).
     var _state: uint[];
     # The 64-word message schedule, scratch space for `_compress`.

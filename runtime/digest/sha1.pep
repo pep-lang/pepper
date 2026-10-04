@@ -75,7 +75,7 @@ export struct Sha1 {
 # The portable SHA-1, used unless the build defines `USE_LIBCRYPTO` (see
 # libcrypto.pep).
 [Target(!BuildOption(USE_LIBCRYPTO))]
-export struct _Sha1Engine {
+struct _Sha1Engine {
     # The five state words (H0-H4).
     var _state: uint[];
     # The 80-word message schedule, scratch space for `_compress`.

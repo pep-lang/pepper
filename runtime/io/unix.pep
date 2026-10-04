@@ -26,7 +26,7 @@ import "types";
 import "wait";
 
 # `path` as a sockaddr_un.
-export _io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
+_io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
     var text = path._value;
     var n = text.size;
     var capacity = _io_sys_unix_path_capacity();
@@ -49,7 +49,7 @@ export _io_sockaddr_unix_write(path: Path): IoResult<_SockAddr> {
 }
 
 # Binds the socket `h` to `path`.
-export _io_unix_bind(h: SocketHandle, path: Path): IoResult<void> {
+_io_unix_bind(h: SocketHandle, path: Path): IoResult<void> {
     var sockaddr = _io_sockaddr_unix_write(path);
     if (sockaddr.is_err()) {
         return IoResult<void>.err(sockaddr.error());
@@ -59,7 +59,7 @@ export _io_unix_bind(h: SocketHandle, path: Path): IoResult<void> {
 }
 
 # Connects the socket `h` to the listener at `path`.
-export _io_unix_connect(h: SocketHandle, path: Path): IoResult<void> {
+_io_unix_connect(h: SocketHandle, path: Path): IoResult<void> {
     var sockaddr = _io_sockaddr_unix_write(path);
     if (sockaddr.is_err()) {
         return IoResult<void>.err(sockaddr.error());

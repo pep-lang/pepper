@@ -47,7 +47,7 @@ _tls_openssl_paths(): String[] {
 # The OpenSSL functions tls calls, or none when libssl could not be opened.
 [Target(OS(Linux) || OS(Mac))]
 [Shared]
-export struct _OpenSsl {
+struct _OpenSsl {
     # Whether libssl was found; every other field is null otherwise.
     const _loaded: bool;
     const _client_method: extern () => __ptr<void>;
@@ -245,13 +245,13 @@ _tls_bio_ctrl(bio: __ptr<void>, command: int, number: long, pointer: __ptr<void>
 
 # EPROTO: the code of every TLS error.
 [Target(OS(Linux))]
-export _tls_sys_code_protocol(): io.ErrorCode { return 71; }
+_tls_sys_code_protocol(): io.ErrorCode { return 71; }
 
 [Target(OS(Mac))]
-export _tls_sys_code_protocol(): io.ErrorCode { return 100; }
+_tls_sys_code_protocol(): io.ErrorCode { return 100; }
 
 [Target(OS(Linux) || OS(Mac))]
-export _tls_error(message: String): io.IoError {
+_tls_error(message: String): io.IoError {
     return io.IoError(_tls_sys_code_protocol(), message);
 }
 
@@ -340,7 +340,7 @@ _tls_context_new(ssl: _OpenSsl, server: bool): __ptr<void> {
 # A client context that checks the server's certificate against the
 # system's trusted roots.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_client_context(): io.IoResult<__ptr<void>> {
+_tls_sys_client_context(): io.IoResult<__ptr<void>> {
     var loaded = _tls_openssl_loaded();
     if (loaded.is_err()) {
         return io.IoResult<__ptr<void>>.err(loaded.error());
@@ -359,7 +359,7 @@ export _tls_sys_client_context(): io.IoResult<__ptr<void>> {
 
 # A server context presenting the PEM certificate chain and private key.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
+_tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<void>> {
     var loaded = _tls_openssl_loaded();
     if (loaded.is_err()) {
         return io.IoResult<__ptr<void>>.err(loaded.error());
@@ -393,7 +393,7 @@ export _tls_sys_server_context(chain: io.Path, key: io.Path): io.IoResult<__ptr<
 
 # Also trusts the PEM certificates in `path`.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
+_tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
     var ssl = _tls_openssl.get();
     var load = ssl._context_load_roots;
     var text = path.to_string();
@@ -404,7 +404,7 @@ export _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void>
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_context_free(context: __ptr<void>) {
+_tls_sys_context_free(context: __ptr<void>) {
     var context_free = _tls_openssl.get()._context_free;
     context_free(context);
 }
@@ -439,7 +439,7 @@ _tls_session_new(context: __ptr<void>, h: io.SocketHandle): __ptr<void> {
 # Runs the client handshake on socket `h`, checking that the certificate is
 # for `host` (a name, or an IP address).
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoResult<__ptr<void>> {
+_tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String): io.IoResult<__ptr<void>> {
     var session = _tls_session_new(context, h);
     if (session == __null) {
         return io.IoResult<__ptr<void>>.err(_tls_openssl_error("cannot create a TLS connection"));
@@ -468,7 +468,7 @@ export _tls_sys_connect(context: __ptr<void>, h: io.SocketHandle, host: String):
 
 # Runs the server handshake on socket `h`.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__ptr<void>> {
+_tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__ptr<void>> {
     var session = _tls_session_new(context, h);
     if (session == __null) {
         return io.IoResult<__ptr<void>>.err(_tls_openssl_error("cannot create a TLS connection"));
@@ -486,7 +486,7 @@ export _tls_sys_accept(context: __ptr<void>, h: io.SocketHandle): io.IoResult<__
 # Reads up to `n` decrypted bytes into `destination`; 0 at the end of the
 # stream.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io.IoResult<ulong> {
+_tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io.IoResult<ulong> {
     var ssl = _tls_openssl.get();
     var read = ssl._ssl_read;
     var connection = _tls_session_ssl(session);
@@ -510,7 +510,7 @@ export _tls_sys_read(session: __ptr<void>, destination: __ptr<u8>, n: ulong): io
 
 # Encrypts and sends up to `n` bytes from `source`.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoResult<ulong> {
+_tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoResult<ulong> {
     if (n == 0) {
         return io.IoResult<ulong>.ok(0);
     }
@@ -524,7 +524,7 @@ export _tls_sys_write(session: __ptr<void>, source: __ptr<u8>, n: ulong): io.IoR
 
 # Sends close_notify.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
+_tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
     var shutdown = _tls_openssl.get()._ssl_shutdown;
     var rc = shutdown(_tls_session_ssl(session));
     if (rc < 0) {
@@ -535,7 +535,7 @@ export _tls_sys_shutdown(session: __ptr<void>): io.IoResult<void> {
 
 # Frees the SSL (and with it the BIO) and the block.
 [Target(OS(Linux) || OS(Mac))]
-export _tls_sys_session_free(session: __ptr<void>) {
+_tls_sys_session_free(session: __ptr<void>) {
     var ssl_free = _tls_openssl.get()._ssl_free;
     ssl_free(_tls_session_ssl(session));
     _tls_session_error(session)[0] = __default<io.IoError>();

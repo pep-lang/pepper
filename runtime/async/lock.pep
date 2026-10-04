@@ -37,18 +37,18 @@ const _LOCK_SPINS = 100;
 
 # A new, free mutex.
 [Target(!OS(Wasi))]
-export _async_sys_mutex_create(): __ptr<void> {
+_async_sys_mutex_create(): __ptr<void> {
     return _pep_malloc(8);
 }
 
 # Frees a free mutex's block.
 [Target(!OS(Wasi))]
-export _async_sys_mutex_destroy(mutex: __ptr<void>) {
+_async_sys_mutex_destroy(mutex: __ptr<void>) {
     _pep_free(mutex);
 }
 
 [Target(!OS(Wasi))]
-export _async_sys_mutex_lock(mutex: __ptr<void>) {
+_async_sys_mutex_lock(mutex: __ptr<void>) {
     __ptr<uint> word = mutex;
     if (!__atomic_cmpxchg<uint>(word, _LOCK_FREE, _LOCK_HELD)) {
         _async_lock_contended(word);
@@ -57,13 +57,13 @@ export _async_sys_mutex_lock(mutex: __ptr<void>) {
 
 # Locks `mutex` only if it is free; true if it is now held.
 [Target(!OS(Wasi))]
-export _async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
+_async_sys_mutex_try_lock(mutex: __ptr<void>): bool {
     __ptr<uint> word = mutex;
     return __atomic_cmpxchg<uint>(word, _LOCK_FREE, _LOCK_HELD);
 }
 
 [Target(!OS(Wasi))]
-export _async_sys_mutex_unlock(mutex: __ptr<void>) {
+_async_sys_mutex_unlock(mutex: __ptr<void>) {
     __ptr<uint> word = mutex;
     if (_async_lock_exchange(word, _LOCK_FREE) == _LOCK_CONTENDED) {
         _async_sys_futex_wake_one(word);
@@ -72,20 +72,20 @@ export _async_sys_mutex_unlock(mutex: __ptr<void>) {
 
 # A new condition variable.
 [Target(!OS(Wasi))]
-export _async_sys_condition_create(): __ptr<void> {
+_async_sys_condition_create(): __ptr<void> {
     return _pep_malloc(8);
 }
 
 # Frees a condition variable's block.
 [Target(!OS(Wasi))]
-export _async_sys_condition_destroy(condition: __ptr<void>) {
+_async_sys_condition_destroy(condition: __ptr<void>) {
     _pep_free(condition);
 }
 
 # Unlocks `mutex` (held by the caller), sleeps until notified (or woken
 # spuriously), and locks it again.
 [Target(!OS(Wasi))]
-export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
+_async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
     __ptr<uint> sequence = condition;
     var seen = __atomic_load<uint>(sequence);
     _async_sys_mutex_unlock(mutex);
@@ -96,7 +96,7 @@ export _async_sys_condition_wait(condition: __ptr<void>, mutex: __ptr<void>) {
 # Like `_async_sys_condition_wait`, for at most `milliseconds`; false if the
 # time ran out.
 [Target(!OS(Wasi))]
-export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
+_async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>, milliseconds: ulong): bool {
     __ptr<uint> sequence = condition;
     var seen = __atomic_load<uint>(sequence);
     _async_sys_mutex_unlock(mutex);
@@ -106,14 +106,14 @@ export _async_sys_condition_wait_for(condition: __ptr<void>, mutex: __ptr<void>,
 }
 
 [Target(!OS(Wasi))]
-export _async_sys_condition_notify_one(condition: __ptr<void>) {
+_async_sys_condition_notify_one(condition: __ptr<void>) {
     __ptr<uint> sequence = condition;
     __atomic_fetch_add<uint>(sequence, 1);
     _async_sys_futex_wake_one(sequence);
 }
 
 [Target(!OS(Wasi))]
-export _async_sys_condition_notify_all(condition: __ptr<void>) {
+_async_sys_condition_notify_all(condition: __ptr<void>) {
     __ptr<uint> sequence = condition;
     __atomic_fetch_add<uint>(sequence, 1);
     _async_sys_futex_wake_all(sequence);

@@ -92,7 +92,7 @@ extern int SetHandleInformation(ulong h, uint mask, uint flags);  # the SOCKET a
 const _io_winsock_started = async.Atomic<int>(0);
 
 [Target(OS(Windows))]
-export _io_win_socket_startup() {
+_io_win_socket_startup() {
     if (_io_winsock_started.load() != 0) {
         return;
     }
@@ -105,22 +105,22 @@ export _io_win_socket_startup() {
 # ── Errors ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_code_timed_out(): ErrorCode { return 10060; }
+_io_sys_code_timed_out(): ErrorCode { return 10060; }
 
 # Code for a stream that ended before the bytes asked for: ERROR_HANDLE_EOF.
 [Target(OS(Windows))]
-export _io_sys_code_unexpected_end(): ErrorCode { return 38; }
+_io_sys_code_unexpected_end(): ErrorCode { return 38; }
 
 # The calling thread's last Winsock error.
 [Target(OS(Windows))]
-export _io_win_socket_error(): IoError {
+_io_win_socket_error(): IoError {
     var code = WSAGetLastError() as ErrorCode;
     return IoError(code, _io_sys_error_message(code));
 }
 
 # 0 -> Ok, SOCKET_ERROR (-1) -> the Winsock error.
 [Target(OS(Windows))]
-export _io_win_socket_check(rc: int): IoResult<void> {
+_io_win_socket_check(rc: int): IoResult<void> {
     if (rc == 0) {
         return _io_ok_void();
     }
@@ -130,17 +130,17 @@ export _io_win_socket_check(rc: int): IoResult<void> {
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_socket_invalid(): SocketHandle {
+_io_sys_socket_invalid(): SocketHandle {
     return ~(0 as ulong);  # INVALID_SOCKET
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_valid(h: SocketHandle): bool {
+_io_sys_socket_valid(h: SocketHandle): bool {
     return h != _io_sys_socket_invalid();
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
+_io_sys_socket_close(h: SocketHandle): IoResult<void> {
     _io_socket_forget(h);
     return _io_win_socket_check(closesocket(h));
 }
@@ -148,7 +148,7 @@ export _io_sys_socket_close(h: SocketHandle): IoResult<void> {
 # Blocks the thread until `h` is ready for `interest`, or reports an error
 # (WSAPoll).
 [Target(OS(Windows))]
-export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+_io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
     var descriptor = _pep_malloc(16) as __ptr<ulong>;
     var events = unsafe_cast<__ptr<u16>>(descriptor);
     descriptor[0] = h;
@@ -169,7 +169,7 @@ export _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
 
 # A 16-bit family at 0: AF_INET 2, AF_INET6 23.
 [Target(OS(Windows))]
-export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
+_io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
     var family = 2;
     if (v6) {
         family = 23;
@@ -179,7 +179,7 @@ export _io_sys_sockaddr_header(buffer: __ptr<u8>, v6: bool, length: int) {
 
 # 4 for IPv4, 6 for IPv6, 0 for any other family.
 [Target(OS(Windows))]
-export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
+_io_sys_sockaddr_family(buffer: __ptr<u8>): int {
     var family = unsafe_cast<__ptr<u16>>(buffer)[0] as int;
     if (family == 2) {
         return 4;
@@ -193,12 +193,12 @@ export _io_sys_sockaddr_family(buffer: __ptr<u8>): int {
 # sockaddr_un: a 16-bit family (AF_UNIX, 1), then the path, NUL-terminated,
 # at 2: at most 108 bytes.
 [Target(OS(Windows))]
-export _io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
+_io_sys_sockaddr_unix_header(buffer: __ptr<u8>, length: int) {
     unsafe_cast<__ptr<u16>>(buffer)[0] = 1;
 }
 
 [Target(OS(Windows))]
-export _io_sys_unix_path_capacity(): ulong { return 108; }
+_io_sys_unix_path_capacity(): ulong { return 108; }
 
 # ── Socket calls ─────────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ export _io_sys_unix_path_capacity(): ulong { return 108; }
 # SOCK_DGRAM 2). Every socket is non-blocking: a call that would block waits
 # in `_io_socket_wait` and tries again.
 [Target(OS(Windows))]
-export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
+_io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
     _io_win_socket_startup();
     var family = 2;
     if (v6) {
@@ -227,7 +227,7 @@ export _io_sys_socket_open(v6: bool, stream: bool): IoResult<SocketHandle> {
 # A new overlapped, non-inheritable, non-blocking Unix domain stream socket
 # (AF_UNIX 1, SOCK_STREAM 1; Windows 10 1803 and later).
 [Target(OS(Windows))]
-export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
+_io_sys_socket_open_unix(): IoResult<SocketHandle> {
     _io_win_socket_startup();
     var s = WSASocketW(1, 1, 0, __null, 0, 129);  # WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT
     if (!_io_sys_socket_valid(s)) {
@@ -239,7 +239,7 @@ export _io_sys_socket_open_unix(): IoResult<SocketHandle> {
 
 # FIONBIO: makes `s` non-blocking.
 [Target(OS(Windows))]
-export _io_win_set_non_blocking(s: SocketHandle) {
+_io_win_set_non_blocking(s: SocketHandle) {
     var on = _pep_malloc(4) as __ptr<uint>;
     on[0] = 1;
     ioctlsocket(s, -2147195266, on);  # FIONBIO (0x8004667E)
@@ -251,7 +251,7 @@ export _io_win_set_non_blocking(s: SocketHandle) {
 # tried again; otherwise fails with the error to return. The error's message
 # is looked up only then, since would-block is the common case.
 [Target(OS(Windows))]
-export _io_win_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
+_io_win_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<void> {
     if (code == 10035) {  # WSAEWOULDBLOCK
         return _io_socket_wait(h, interest);
     }
@@ -259,7 +259,7 @@ export _io_win_retry(h: SocketHandle, code: ErrorCode, interest: int): IoResult<
 }
 
 [Target(OS(Windows))]
-export _io_win_set_int_option(s: SocketHandle, level: int, name: int, value: int): IoResult<void> {
+_io_win_set_int_option(s: SocketHandle, level: int, name: int, value: int): IoResult<void> {
     var slot = _pep_malloc(4) as __ptr<int>;
     slot[0] = value;
     var rc = setsockopt(s, level, name, slot, 4);
@@ -271,48 +271,48 @@ export _io_win_set_int_option(s: SocketHandle, level: int, name: int, value: int
 # SO_REUSEADDR on Windows lets another socket take over a bound port, which
 # POSIX's does not; listeners go without it, as Rust's do.
 [Target(OS(Windows))]
-export _io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
+_io_sys_socket_set_reuse_address(h: SocketHandle): IoResult<void> {
     return _io_ok_void();
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
+_io_sys_socket_set_no_delay(h: SocketHandle, enabled: bool): IoResult<void> {
     return _io_win_set_int_option(h, 6, 1, enabled ? 1 : 0);  # IPPROTO_TCP, TCP_NODELAY
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
+_io_sys_socket_set_broadcast(h: SocketHandle, enabled: bool): IoResult<void> {
     return _io_win_set_int_option(h, 65535, 32, enabled ? 1 : 0);  # SOL_SOCKET, SO_BROADCAST
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
+_io_sys_socket_bind(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var sockaddr = _io_sockaddr_write(address);
     return _io_sys_socket_bind_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Binds `h` to the `length`-byte sockaddr at `buffer`, of any family.
 [Target(OS(Windows))]
-export _io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+_io_sys_socket_bind_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
     return _io_win_socket_check(bind(h, buffer, length));
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
+_io_sys_socket_listen(h: SocketHandle, backlog: int): IoResult<void> {
     return _io_win_socket_check(listen(h, backlog));
 }
 
 # A non-blocking connect fails with WSAEWOULDBLOCK; it has finished when the
 # socket is writable (or reports an error), and SO_ERROR says how.
 [Target(OS(Windows))]
-export _io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
+_io_sys_socket_connect(h: SocketHandle, address: SocketAddress): IoResult<void> {
     var sockaddr = _io_sockaddr_write(address);
     return _io_sys_socket_connect_raw(h, sockaddr._bytes, sockaddr._length);
 }
 
 # Connects `h` to the `length`-byte sockaddr at `buffer`, of any family.
 [Target(OS(Windows))]
-export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
+_io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoResult<void> {
     var rc = connect(h, buffer, length);
     if (rc == 0) {
         return _io_ok_void();
@@ -342,7 +342,7 @@ export _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: in
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
+_io_sys_socket_accept(h: SocketHandle): IoResult<(SocketHandle, SocketAddress)> {
     var peer = _SockAddr();
     var s = _io_sys_socket_invalid();
     while (true) {
@@ -391,7 +391,7 @@ export _io_sys_socket_send(h: SocketHandle, source: __ptr<u8>, n: ulong): IoResu
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
+_io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, address: SocketAddress): IoResult<ulong> {
     var sockaddr = _io_sockaddr_write(address);
     while (true) {
         var r = sendto(h, source, (_io_win_max_rw(n) as int), 0, sockaddr._bytes, sockaddr._length);
@@ -410,9 +410,7 @@ export _io_sys_socket_send_to(h: SocketHandle, source: __ptr<u8>, n: ulong, addr
 # as WSAEMSGSIZE with the buffer filled, which counts as success here, as on
 # POSIX.
 [Target(OS(Windows))]
-export _io_sys_socket_receive_from(
-    h: SocketHandle, destination: __ptr<u8>, n: ulong
-): IoResult<(ulong, SocketAddress)> {
+_io_sys_socket_receive_from(h: SocketHandle, destination: __ptr<u8>, n: ulong): IoResult<(ulong, SocketAddress)> {
     var from = _SockAddr();
     var limit = (_io_win_max_rw(n) as int);
     var r = 0;
@@ -436,12 +434,12 @@ export _io_sys_socket_receive_from(
 
 # how: 0 reading, 1 writing, 2 both (SD_RECEIVE, SD_SEND, SD_BOTH).
 [Target(OS(Windows))]
-export _io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
+_io_sys_socket_shutdown(h: SocketHandle, how: int): IoResult<void> {
     return _io_win_socket_check(shutdown(h, how));
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
     return _io_win_address_result(
         getsockname(h, address._bytes, unsafe_cast<__ptr<int>>(address._length_slot())), address
@@ -449,7 +447,7 @@ export _io_sys_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
     var address = _SockAddr();
     return _io_win_address_result(
         getpeername(h, address._bytes, unsafe_cast<__ptr<int>>(address._length_slot())), address
@@ -459,7 +457,7 @@ export _io_sys_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
 # The address getsockname/getpeername wrote into `address`, or the Winsock
 # error.
 [Target(OS(Windows))]
-export _io_win_address_result(rc: int, address: _SockAddr): IoResult<SocketAddress> {
+_io_win_address_result(rc: int, address: _SockAddr): IoResult<SocketAddress> {
     if (rc != 0) {
         return IoResult<SocketAddress>.err(_io_win_socket_error());
     }
@@ -472,7 +470,7 @@ export _io_win_address_result(rc: int, address: _SockAddr): IoResult<SocketAddre
 # bytes in all.
 
 [Target(OS(Windows))]
-export _io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
+_io_sys_resolve(host: String, port: u16): IoResult<SocketAddress[]> {
     _io_win_socket_startup();
     var hints = _IoBuffer(48);
     unsafe_cast<__ptr<int>>(hints._bytes)[2] = 1;  # ai_socktype = SOCK_STREAM: one entry per address

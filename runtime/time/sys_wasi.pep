@@ -6,16 +6,16 @@ import os;
 import "zone";
 
 [Target(OS(Wasi))]
-export _time_sys_local_offset(seconds: long): int {
+_time_sys_local_offset(seconds: long): int {
     return 0;
 }
 
 [Target(OS(Wasi))]
-export _time_sys_named(name: String): Result<TimeZone> {
+_time_sys_named(name: String): Result<TimeZone> {
     return _time_zone_from_database(name, os.environment("TZDIR").value_or("/usr/share/zoneinfo"));
 }
 
 [Target(OS(Wasi))]
-export _time_sys_icu_offset(name: String, seconds: long): int {
+_time_sys_icu_offset(name: String, seconds: long): int {
     return 0;
 }

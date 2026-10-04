@@ -31,7 +31,7 @@ extern int getpwuid_r(uint uid, void* entry, char* buffer, ulong size, void* res
 # ── Environment ──────────────────────────────────────────────────────────────
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_environment(name: String): String? {
+_os_sys_environment(name: String): String? {
     # Safe from any thread: nothing in the runtime calls setenv.
     __ptr<char> value = getenv(name.c_str());
     if (value == __null) {
@@ -60,7 +60,7 @@ export _os_environ(): __ptr<__ptr<char>> {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_environment_entries(): Array<String> {
+_os_sys_environment_entries(): Array<String> {
     var entries = Array<String>();
     var values = _os_environ();
     if (values == __null) {
@@ -78,18 +78,18 @@ export _os_sys_environment_entries(): Array<String> {
 
 # CLOCK_MONOTONIC: 1 on Linux, 6 on macOS (as async's timeouts use).
 [Target(OS(Linux))]
-export _os_sys_monotonic_nanoseconds(): ulong {
+_os_sys_monotonic_nanoseconds(): ulong {
     return _os_clock_nanoseconds(1) as ulong;
 }
 
 [Target(OS(Mac))]
-export _os_sys_monotonic_nanoseconds(): ulong {
+_os_sys_monotonic_nanoseconds(): ulong {
     return _os_clock_nanoseconds(6) as ulong;
 }
 
 # CLOCK_REALTIME is 0 on both.
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_system_nanoseconds(): long {
+_os_sys_system_nanoseconds(): long {
     return _os_clock_nanoseconds(0);
 }
 
@@ -106,29 +106,29 @@ _os_clock_nanoseconds(clock: int): long {
 # ── Machine ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Linux) && !OS(Android))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.Linux;
 }
 
 [Target(OS(Android))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.Android;
 }
 
 [Target(OS(Mac) && !OS(IOS))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.Mac;
 }
 
 [Target(OS(IOS))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.IOS;
 }
 
 # The release field of struct utsname: six 65-byte fields on Linux, release
 # the third.
 [Target(OS(Linux))]
-export _os_sys_version(): String {
+_os_sys_version(): String {
     __ptr<char> fields = _pep_malloc(390);
     var version = uname(fields) == 0 ? String(fields + 130) : String();
     _pep_free(fields);
@@ -136,7 +136,7 @@ export _os_sys_version(): String {
 }
 
 [Target(OS(Mac))]
-export _os_sys_version(): String {
+_os_sys_version(): String {
     return _os_sysctl_string("kern.osproductversion");
 }
 
@@ -157,7 +157,7 @@ _os_sysctl_string(name: String): String {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_hostname(): String {
+_os_sys_hostname(): String {
     # HOST_NAME_MAX is 64 on Linux and 255 on macOS; the last byte stays NUL
     # in case the name was cut short.
     __ptr<char> buffer = _pep_malloc(257);
@@ -172,7 +172,7 @@ export _os_sys_hostname(): String {
 # ("max" when unlimited) or v1's `memory.limit_in_bytes` (a huge number when
 # unlimited), as the JVM reads them.
 [Target(OS(Linux))]
-export _os_sys_total_memory(): ulong {
+_os_sys_total_memory(): ulong {
     var pages = sysconf(85);
     ulong bytes = pages < 1 ? 0 : (pages as ulong) * _os_sys_page_size();
     for (var directory in async._async_sys_cgroup_directories("memory")) {
@@ -191,7 +191,7 @@ export _os_sys_total_memory(): ulong {
 }
 
 [Target(OS(Mac))]
-export _os_sys_total_memory(): ulong {
+_os_sys_total_memory(): ulong {
     __ptr<ulong> value = _pep_malloc(8);
     __ptr<ulong> size = _pep_malloc(8);
     value[0] = 0;
@@ -205,12 +205,12 @@ export _os_sys_total_memory(): ulong {
 
 # _SC_PAGESIZE: 30 on Linux, 29 on macOS.
 [Target(OS(Linux))]
-export _os_sys_page_size(): ulong {
+_os_sys_page_size(): ulong {
     return sysconf(30) as ulong;
 }
 
 [Target(OS(Mac))]
-export _os_sys_page_size(): ulong {
+_os_sys_page_size(): ulong {
     return sysconf(29) as ulong;
 }
 
@@ -253,7 +253,7 @@ _os_passwd_field(field: ulong): String? {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_user_name(): String? {
+_os_sys_user_name(): String? {
     var name = _os_passwd_field(0);
     if (name.is_value() && !name.value().is_empty) {
         return name;
@@ -262,12 +262,12 @@ export _os_sys_user_name(): String? {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_is_elevated(): bool {
+_os_sys_is_elevated(): bool {
     return geteuid() == 0;
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _os_sys_home_directory(): String? {
+_os_sys_home_directory(): String? {
     var home = _os_nonempty_environment("HOME");
     if (home.is_value()) {
         return home;

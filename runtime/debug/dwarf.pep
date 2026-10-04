@@ -5,7 +5,7 @@
 import "backtrace";
 
 # The little-endian unsigned integer of `size` (1-8) bytes at `data + offset`.
-export _debug_read(data: __ptr<u8>, offset: ulong, size: ulong): ulong {
+_debug_read(data: __ptr<u8>, offset: ulong, size: ulong): ulong {
     ulong value = 0;
     ulong index = 0;
     while (index < size) {
@@ -18,7 +18,7 @@ export _debug_read(data: __ptr<u8>, offset: ulong, size: ulong): ulong {
 # A bounds-checked reader over `data[position..end]`. A read past `end`
 # returns 0 and sets `failed`, so a damaged table ends the walk instead of
 # reading outside the section.
-export struct _DwarfCursor {
+struct _DwarfCursor {
     var _data: __ptr<u8>;
     var position: ulong;
     var end: ulong;
@@ -216,7 +216,7 @@ struct _DwarfLineHeader {
 # `targets[i]` (an address as the line table writes it; 0 to skip the
 # frame), the `.debug_line` section `data[0..size]` covers. Reads DWARF
 # versions 2 to 4, which the compiler emits.
-export _debug_dwarf_lines(data: __ptr<u8>, size: ulong, targets: Array<ulong>, frames: Array<StackFrame>) {
+_debug_dwarf_lines(data: __ptr<u8>, size: ulong, targets: Array<ulong>, frames: Array<StackFrame>) {
     # The row each target falls in, by the closest row start found so far.
     var best = Array<ulong>();
     for (var target in targets) {
@@ -361,7 +361,7 @@ _debug_match_rows(
 
 # The DWARF sections a backtrace reads, as the program maps them; a section
 # the program lacks has size 0.
-export struct _DwarfSections {
+struct _DwarfSections {
     var info: __ptr<u8>;
     var info_size: ulong;
     var abbrev: __ptr<u8>;
@@ -415,9 +415,7 @@ export struct _DwarfSections {
 # 0 to leave the frame as it is.
 #
 # @returns the frames, with the inlined ones added
-export _debug_dwarf_frames(
-    sections: _DwarfSections, targets: Array<ulong>, frames: Array<StackFrame>
-): Array<StackFrame> {
+_debug_dwarf_frames(sections: _DwarfSections, targets: Array<ulong>, frames: Array<StackFrame>): Array<StackFrame> {
     if (sections.line_size > 0) {
         _debug_dwarf_lines(sections.line, sections.line_size, targets, frames);
     }

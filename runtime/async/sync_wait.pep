@@ -37,16 +37,16 @@ import "sys_windows";
 import "task";
 import "workers";
 
-export const _WAITER_WAITING = 0;
-export const _WAITER_WOKEN = 1;
-export const _WAITER_ABANDONED = 2;
+const _WAITER_WAITING = 0;
+const _WAITER_WOKEN = 1;
+const _WAITER_ABANDONED = 2;
 
 # Gives every waiter its own id.
 const _async_waiter_ids = Atomic<ulong>(1);
 
 # One task, or one plain thread in a `Select`, waiting on sync objects.
 [Shared]
-export struct _SyncWaiter {
+struct _SyncWaiter {
     # Unique among waiters, for `_SyncQueue._remove`.
     const _id: ulong;
     # The inbox of the task's worker, and the task's id there (null and 0
@@ -80,7 +80,7 @@ export struct _SyncWaiter {
 # under the lock, and the thread checks the state under it, so no wake is
 # missed.
 [Shared]
-export struct _ThreadWake {
+struct _ThreadWake {
     const _lock: __ptr<void>;
     const _condition: __ptr<void>;
 
@@ -106,7 +106,7 @@ export struct _ThreadWake {
 # `_ThreadWake`, is woken, or until `deadline` (monotonic milliseconds, 0
 # for none) passes; returns `_SyncWake.Woken` or `_SyncWake.TimedOut`. A wait that
 # times out abandons the waiter; the caller takes it out of its queues.
-export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): _SyncWake {
+_async_thread_park(waiter: _SyncWaiter, deadline: ulong): _SyncWake {
     var wake = waiter._thread;
     var result = _SyncWake.Woken;
     _async_sys_mutex_lock(wake._lock);
@@ -131,7 +131,7 @@ export _async_thread_park(waiter: _SyncWaiter, deadline: ulong): _SyncWake {
 # The tasks waiting on one sync object, first come first woken. The ring
 # buffer exists only while some task waits.
 [Shared]
-export struct _SyncQueue {
+struct _SyncQueue {
     # The platform mutex that guards `_state` and `_buffer`.
     const _lock: __ptr<void>;
     # The head index, the number of waiters, and the number of slots.

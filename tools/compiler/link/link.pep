@@ -229,13 +229,33 @@ struct _Bindings {
     var unresolved: HashSet<String> = HashSet<String>();
     # A whole-file import did not resolve.
     var unresolved_whole_file: bool;
+    # The declarations of the other files of the file's module, which it
+    # sees after its imports: each name -> the declaration it denotes, or
+    # the union of the module's functions of that name. A name the file
+    # declares itself is here only as such a union.
+    var module: HashMap<String, String> = HashMap<String, String>();
 
     construct() {}
 }
 
+# A declaration of a module file, as `compute_module_names` groups them.
+struct _ModuleDeclaration {
+    # The name it takes in the merged program.
+    var name: String;
+    # A free function (not an extern).
+    var function: bool;
+
+    construct(name: String, function: bool) {
+        this.name = name;
+        this.function = function;
+    }
+}
+
 # What an unqualified name that is not the file's own denotes.
 enum _Resolution {
-    # A declaration, by name, bound by an import or a prelude export.
+    # A declaration, by name: bound by an import, declared by another file
+    # of the module, or a prelude export. `from_import` is false for a
+    # prelude export.
     Declared(name: String, from_import: bool),
     # Two whole-file imports bind it to different declarations.
     Ambiguous,
@@ -243,7 +263,7 @@ enum _Resolution {
 }
 
 # Resolves an unqualified name through the file's imports, then the
-# prelude.
+# other files of its module, then the prelude.
 _resolve_imported(name: String, bindings: _Bindings, prelude: HashMap<String, String>): _Resolution {
     var bound = bindings.unqualified.try_get(name);
     if (bound.is_value()) {
@@ -251,6 +271,10 @@ _resolve_imported(name: String, bindings: _Bindings, prelude: HashMap<String, St
             return _Resolution.Declared(bound.value().value(), true);
         }
         return _Resolution.Ambiguous;
+    }
+    var mate = bindings.module.try_get(name);
+    if (mate.is_value()) {
+        return _Resolution.Declared(mate.value(), true);
     }
     var exported = prelude.try_get(name);
     if (exported.is_value()) {
@@ -488,6 +512,10 @@ struct _Linker {
     var bases: _Names[] = Array<_Names>();
     # Per file, its own names -> the names their declarations take.
     var own: HashMap<String, String>[] = Array<HashMap<String, String>>();
+    # Per file, the other files of the program in its module.
+    var mates: Array<ulong[]> = Array<ulong[]>();
+    # Per file, the names its module's other files declare (`_Bindings.module`).
+    var module_names: HashMap<String, String>[] = Array<HashMap<String, String>>();
     var unions: _Unions = _Unions();
     # Every type name declared at top level, in any file.
     var types: HashSet<String> = HashSet<String>();
@@ -736,8 +764,9 @@ struct _Linker {
             exported.append(out);
             shadow.append(keys);
         }
+        # Imports come before the module's other files.
         var out = Array<HashSet<String>>();
-        for (var v in visible_names(own_names, exported, shadow)) {
+        for (var v in visible_names(_with_mates(own_names), exported, shadow)) {
             var keys = HashSet<String>();
             for (var (k, _) in v) {
                 keys.insert(k);
@@ -772,6 +801,134 @@ struct _Linker {
             }
         }
         return out;
+    }
+
+    # Per file, the other files of the program in its module: those with the
+    # same module folder. A file outside any module has none.
+    compute_mates() {
+        var by_root = HashMap<String, ulong[]>();
+        ulong i = 0;
+        while (i < files.count) {
+            var root = files[i].module_root;
+            if (root.is_value()) {
+                var key = root.value().to_string();
+                if (!by_root.contains(key)) {
+                    by_root[key] = Array<ulong>();
+                }
+                by_root[key].append(i);
+            }
+            i += 1;
+        }
+        i = 0;
+        while (i < files.count) {
+            var out = Array<ulong>();
+            var root = files[i].module_root;
+            if (root.is_value()) {
+                for (var j in by_root[root.value().to_string()]) {
+                    if (j != i) {
+                        out.append(j);
+                    }
+                }
+            }
+            mates.append(out);
+            i += 1;
+        }
+    }
+
+    # Per file, `own` with the names of its module's other files added: a
+    # file sees them as its own.
+    _with_mates(own_names: _Names[]): _Names[] {
+        var out = Array<_Names>();
+        ulong i = 0;
+        while (i < files.count) {
+            var names_here = _copy_names(own_names[i]);
+            for (var j in mates[i]) {
+                for (var (k, v) in own_names[j]) {
+                    _add_names(names_here, k, v);
+                }
+            }
+            out.append(names_here);
+            i += 1;
+        }
+        return out;
+    }
+
+    # Per file, the names its module's other files declare. The functions
+    # several files of a module declare under one name form one overload
+    # set, a union, which the declaring files see too. Externs keep their
+    # names. Any other name declared by two files of one module is the
+    # first one's; the visibility check reports the second.
+    compute_module_names() {
+        ulong i = 0;
+        while (i < files.count) {
+            module_names.append(HashMap<String, String>());
+            i += 1;
+        }
+        var done = HashSet<ulong>();
+        i = 0;
+        while (i < files.count) {
+            if (done.contains(i) or mates[i].count == 0) {
+                i += 1;
+                continue;
+            }
+            var group = Array<ulong>();
+            group.append(i);
+            group.append_all(mates[i]);
+            # In path order: the first declaration of a name is the one kept.
+            group.sort((a, b) => files[a].name.compare(files[b].name));
+            # name -> (declaring file, the name it takes, a function).
+            var by_name = Map<String, _ModuleDeclaration[]>();
+            for (var j in group) {
+                done.insert(j);
+                var seen = HashSet<String>();
+                for (var d in named_decls(files[j].module)) {
+                    var name = d.declared_name();
+                    var c = own[j].try_get(name);
+                    if (!c.is_value() or !seen.insert(name)) {
+                        continue;
+                    }
+                    bool function = false;
+                    match (d) {
+                        Function(f) => {
+                            function = !f.external;
+                        }
+                        else => {}
+                    }
+                    if (!by_name.contains(name)) {
+                        by_name[name] = Array<_ModuleDeclaration>();
+                    }
+                    by_name[name].append(_ModuleDeclaration(c.value(), function));
+                }
+            }
+            for (var (name, declared) in by_name) {
+                bool all_functions = true;
+                for (var d in declared) {
+                    if (!d.function) {
+                        all_functions = false;
+                    }
+                }
+                bool union = declared.count > 1 and all_functions;
+                var canonical = declared[0].name;
+                if (union) {
+                    String? merged = Optional<String>.Value(declared[0].name);
+                    ulong k = 1;
+                    while (k < declared.count and merged.is_value()) {
+                        merged = unions.merge(merged.value(), declared[k].name);
+                        k += 1;
+                    }
+                    if (!merged.is_value()) {
+                        continue;
+                    }
+                    canonical = merged.value();
+                }
+                for (var j in group) {
+                    if (union or !own[j].contains(name)) {
+                        module_names[j][name] = canonical;
+                    }
+                }
+            }
+            i += 1;
+        }
     }
 
     # The override rule over the files of the program, before linking.
@@ -816,7 +973,7 @@ struct _Linker {
             shadow.append(hidden);
             i += 1;
         }
-        bases = visible_names(own_bases, exported_bases, shadow);
+        bases = visible_names(_with_mates(own_bases), exported_bases, shadow);
         var none = Array<_Names>();
         i = 0;
         while (i < files.count) {
@@ -1016,6 +1173,7 @@ struct _Linker {
     # import list always wins over a whole-file import of the same name.
     bind_imports(i: ulong, out: ModuleError[]): _Bindings {
         var b = _Bindings();
+        b.module = module_names[i];
         var module = files[i].module;
         var own_names = own[i];
         # Whether each import resolved to a module folder, by span start.
@@ -1075,11 +1233,12 @@ struct _Linker {
                 continue;
             }
             for (var (name, c) in exports[t]) {
-                # The file's own functions of the name join an imported set
-                # of it; anything else of the file's own hides the import.
+                # The file's own functions of the name (with its module's)
+                # join an imported set of it; anything else of the file's own
+                # hides the import.
                 var mine = own_names.try_get(name);
                 if (mine.is_value()) {
-                    var seed = mine.value();
+                    var seed = module_names[i].try_get(name).value_or(mine.value());
                     var bound = b.unqualified.try_get(name);
                     if (bound.is_value() and bound.value().is_value()) {
                         seed = bound.value().value();
@@ -1118,6 +1277,9 @@ struct _Linker {
                 var local = s.local_name();
                 # Only functions join the file's own of the name.
                 var existing = explicit.try_get(local);
+                if (!existing.is_value() and own_names.contains(local)) {
+                    existing = module_names[i].try_get(local);
+                }
                 if (!existing.is_value()) {
                     existing = own_names.try_get(local);
                 }
@@ -1321,8 +1483,15 @@ struct _Linker {
             j += 1;
         }
         var out = Array<HashSet<ulong>>();
+        ulong i = 0;
         for (var f in files) {
             var visible = everywhere.copy();
+            # The other files of its own module: their extensions are
+            # visible exported or not.
+            for (var mate in mates[i]) {
+                visible.insert(mate);
+            }
+            i += 1;
             ulong m = 0;
             while (m < f.module.imports.count) {
                 var imp = f.module.imports[m];
@@ -1433,9 +1602,11 @@ struct _Linker {
         for (var f in files) {
             file_names.append(f.name);
         }
+        compute_mates();
         compute_overrides();
         compute_own_names();
         compute_unions();
+        compute_module_names();
         for (var f in files) {
             for (var d in named_decls(f.module)) {
                 match (d) {
@@ -1767,6 +1938,9 @@ struct _Linker {
                     scope.bound.insert(c);
                 }
             }
+            for (var (_, c) in bindings[i].module) {
+                scope.bound.insert(c);
+            }
             linked.scopes.append(scope);
             i += 1;
         }
@@ -1921,6 +2095,10 @@ struct _Rewriter {
             if (bound.is_value() and bound.value().is_value()) {
                 return _denote(name, bound.value().value(), span, value, true);
             }
+            var union = bindings.module.try_get(name);
+            if (union.is_value()) {
+                return _denote(name, union.value(), span, value, true);
+            }
             return mine.value() != name ? mine : Optional<String>.Empty;
         }
         match (_resolve_imported(name, bindings, linker.prelude)) {
@@ -2006,7 +2184,9 @@ extend _Rewriter with ScopeWalk {
         if (extension.is_value()) {
             for (var member in extension.value()) {
                 if (member.name == name
-                    and (member.file == file or (member.exported and extensions.contains(member.file)))) {
+                    and (member.file == file
+                        or linker.mates[file].contains(member.file)
+                        or (member.exported and extensions.contains(member.file)))) {
                     return true;
                 }
             }

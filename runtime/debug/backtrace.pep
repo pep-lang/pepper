@@ -284,7 +284,7 @@ _debug_is_internal(function: String): bool {
 # (see `symbol_name` in pepper-codegen's partition.rs), then a name's file
 # (`helper@io/file`) and overload suffix (`panic$1`) are dropped:
 # `_PArray_3cint_3e.count` is `Array<int>.count`.
-export _debug_demangle(symbol: String): String {
+_debug_demangle(symbol: String): String {
     var name = symbol;
     if (symbol.starts_with("_P")) {
         var bytes = symbol.c_str();

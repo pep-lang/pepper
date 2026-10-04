@@ -268,11 +268,11 @@ export struct Thread {
 }
 
 # The body of a Thread that `current()` made for a thread it did not spawn.
-export _async_no_body() {}
+_async_no_body() {}
 
 # Runs a spawned thread: `start` is the slot holding the thread's own
 # reference to its Thread (see `spawn`).
-export _async_thread_run(start: __ptr<void>) {
+_async_thread_run(start: __ptr<void>) {
     __ptr<Thread> slot = start;
     Thread thread = slot[0];
     slot[0] = __default<Thread>();
@@ -285,13 +285,13 @@ export _async_thread_run(start: __ptr<void>) {
 # The C entry point of a spawned thread: `void* (*)(void*)` for pthreads, and
 # `DWORD (WINAPI *)(void*)` on Windows.
 [Target(!OS(Windows))]
-export _async_thread_main(start: __ptr<void>): __ptr<void> {
+_async_thread_main(start: __ptr<void>): __ptr<void> {
     _async_thread_run(start);
     return __null;
 }
 
 [Target(OS(Windows))]
-export _async_thread_main(start: __ptr<void>): uint {
+_async_thread_main(start: __ptr<void>): uint {
     _async_thread_run(start);
     return 0;
 }

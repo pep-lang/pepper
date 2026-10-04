@@ -498,7 +498,7 @@ export resolve(host: String, port: u16): IoResult<SocketAddress[]> {
 # ── Text helpers ─────────────────────────────────────────────────────────────
 
 # The dotted-decimal text of the IPv4 address in the low 32 bits of `value`.
-export _io_v4_text(value: ulong): String {
+_io_v4_text(value: ulong): String {
     return $"{(value >> 24) & 255}.{(value >> 16) & 255}.{(value >> 8) & 255}.{value & 255}";
 }
 
@@ -506,7 +506,7 @@ export _io_v4_text(value: ulong): String {
 
 # Dotted decimal: exactly four parts of 0 to 255, no leading zeros. Returns
 # the 32-bit value, or none when the text is not an IPv4 address.
-export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
+_io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
     ulong value = 0;
     ulong parts = 0;
     var i = start;
@@ -553,7 +553,7 @@ export _io_parse_v4(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
 # RFC 4291 text: up to eight hex groups, at most one `::`, an optional
 # dotted IPv4 tail. Returns the high and low 64 bits, or none when the text
 # is not an IPv6 address.
-export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<(high: ulong, low: ulong)> {
+_io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<(high: ulong, low: ulong)> {
     var fail = Optional<(high: ulong, low: ulong)>.Empty;
     if (start >= end) {
         return fail;
@@ -647,7 +647,7 @@ export _io_parse_v6(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): Optional<
 
 # A decimal port, 0 to 65535, one to five digits; none when the text is not
 # one.
-export _io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
+_io_parse_port(p: __ptr<u8>, n: ulong, start: ulong, end: ulong): ulong? {
     if (start >= end || end - start > 5) {
         return Optional<ulong>.Empty;
     }

@@ -26,7 +26,7 @@ extern void* mmap(void* address, ulong length, int protection, int flags, int de
 extern int munmap(void* address, ulong length);
 
 [Target(OS(Mac))]
-export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
+_debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
     __ptr<u8> header = _debug_executable_header();
     # Dl_info { dli_fname, dli_fbase, dli_sname, dli_saddr }
     __ptr<ulong> info = _pep_malloc(32);

@@ -446,6 +446,25 @@ export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): 
         var loaded = ProgramFile(path.to_string(), source.value(), module);
         loaded.namespace = roots.namespace_of(path);
         loaded.module_root = roots.module_of(path);
+        # A file of a module sees the declarations of the module's other
+        # files, so loading one loads its `module.pep`, and with it the
+        # files the module reaches. Spelled from the file's own path, as an
+        # import of it would be.
+        if (loaded.module_root.is_value()) {
+            var module_key = files.path_key(loaded.module_root.value());
+            var dir = path.parent();
+            while (dir.is_value()) {
+                if (files.path_key(dir.value()) == module_key) {
+                    var module_file = dir.value().join(Path(files.MODULE_FILE));
+                    var k = files.path_key(module_file);
+                    if (queued.insert(k)) {
+                        stack.append(_Queued(module_file, k, false));
+                    }
+                    break;
+                }
+                dir = dir.value().parent();
+            }
+        }
         loaded.prelude = next.prelude;
         loaded.folder_imports = folders;
         program.files.append(loaded);

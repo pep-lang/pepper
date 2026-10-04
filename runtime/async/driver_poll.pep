@@ -69,7 +69,7 @@ extern int sendto(ulong s, void* buffer, int length, int flags, void* address, i
 extern int ioctlsocket(ulong s, int command, uint* argument);
 
 # The portable driver.
-export struct _PollDriver {
+struct _PollDriver {
     # The handle the doorbell makes readable: the pipe's read end, or the
     # UDP socket.
     var _bell: ulong;
@@ -192,7 +192,7 @@ _async_poll_set_nonblocking(fd: int) {
 
 # Writes a byte to the pipe's write end `descriptor`.
 [Target(!OS(Windows))]
-export _async_poll_ring(descriptor: long, address: __ptr<u8>) {
+_async_poll_ring(descriptor: long, address: __ptr<u8>) {
     __ptr<u8> byte = _pep_malloc(1);
     byte[0] = 1;
     write(descriptor as int, byte, 1);
@@ -302,7 +302,7 @@ _async_poll_create_bell(made: __ptr<long>): __ptr<u8> {
 
 # Sends a byte from the UDP socket `descriptor` to the bell at `address`.
 [Target(OS(Windows))]
-export _async_poll_ring(descriptor: long, address: __ptr<u8>) {
+_async_poll_ring(descriptor: long, address: __ptr<u8>) {
     __ptr<u8> byte = _pep_malloc(1);
     byte[0] = 1;
     sendto(descriptor as ulong, byte, 1, 0, address, 16);

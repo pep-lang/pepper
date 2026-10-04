@@ -100,7 +100,7 @@ export parse(
 
 # Parses JSONC `text` like `parse` with `comments = true`, filing its
 # comments in `notes`.
-export _json_parse_commented(
+_json_parse_commented(
     text: String, notes: _JsonComments, path: String, max_depth: ulong
 ): Result<JsonValue, JsonError> {
     var parser = _JsonParser(text, true, path, max_depth);
@@ -111,7 +111,7 @@ export _json_parse_commented(
 # The byte offset in `text`, which must parse, of the value at `value_path`
 # (`$.server.port`, as `_json_path_key` writes it), or none when it is not
 # there. Parses the text again, so it is only for errors.
-export _json_locate(text: String, comments: bool, value_path: String): ulong? {
+_json_locate(text: String, comments: bool, value_path: String): ulong? {
     var parser = _JsonParser(text, comments, "", 1000000);
     parser._find = value_path;
     parser.run();
@@ -713,7 +713,7 @@ struct _JsonParser {
 }
 
 # Sets `error`'s offset, and the line and column of that offset in `text`.
-export _json_place(error: JsonError, text: String, offset: ulong) {
+_json_place(error: JsonError, text: String, offset: ulong) {
     ulong line = 1;
     ulong line_start = 0;
     ulong index = 0;

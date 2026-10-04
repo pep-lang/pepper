@@ -5,7 +5,7 @@ extern void memcpy(void* dest, void* src, ulong n);
 extern void memset(void* p, int c, ulong n);
 
 # The big-endian 32-bit word at `data[index]`.
-export _digest_load_be(data: __ptr<u8>, index: ulong): uint {
+_digest_load_be(data: __ptr<u8>, index: ulong): uint {
     return ((data[index] as uint) << 24)
         | ((data[index + 1] as uint) << 16)
         | ((data[index + 2] as uint) << 8)
@@ -13,7 +13,7 @@ export _digest_load_be(data: __ptr<u8>, index: ulong): uint {
 }
 
 # The little-endian 32-bit word at `data[index]`.
-export _digest_load_le(data: __ptr<u8>, index: ulong): uint {
+_digest_load_le(data: __ptr<u8>, index: ulong): uint {
     return (data[index] as uint)
         | ((data[index + 1] as uint) << 8)
         | ((data[index + 2] as uint) << 16)
@@ -21,7 +21,7 @@ export _digest_load_le(data: __ptr<u8>, index: ulong): uint {
 }
 
 # Appends `value` to `out` as 4 big-endian bytes.
-export _digest_append_be(out: u8[], value: uint) {
+_digest_append_be(out: u8[], value: uint) {
     out.append((value >> 24) as u8);
     out.append((value >> 16) as u8);
     out.append((value >> 8) as u8);
@@ -29,7 +29,7 @@ export _digest_append_be(out: u8[], value: uint) {
 }
 
 # Appends `value` to `out` as 4 little-endian bytes.
-export _digest_append_le(out: u8[], value: uint) {
+_digest_append_le(out: u8[], value: uint) {
     out.append(value as u8);
     out.append((value >> 8) as u8);
     out.append((value >> 16) as u8);
@@ -37,17 +37,17 @@ export _digest_append_le(out: u8[], value: uint) {
 }
 
 # `value` rotated right by `count` bits (1-31).
-export _digest_rotate_right(value: uint, count: uint): uint {
+_digest_rotate_right(value: uint, count: uint): uint {
     return (value >> count) | (value << (32 - count));
 }
 
 # `value` rotated left by `count` bits (1-31).
-export _digest_rotate_left(value: uint, count: uint): uint {
+_digest_rotate_left(value: uint, count: uint): uint {
     return (value << count) | (value >> (32 - count));
 }
 
 # A new array of `count` zero words.
-export _digest_words(count: ulong): uint[] {
+_digest_words(count: ulong): uint[] {
     var words = Array<uint>(count);
     ulong index = 0;
     while (index < count) {
@@ -58,7 +58,7 @@ export _digest_words(count: ulong): uint[] {
 }
 
 # A new array of `count` zero bytes.
-export _digest_bytes(count: ulong): u8[] {
+_digest_bytes(count: ulong): u8[] {
     var bytes = Array<u8>(count);
     ulong index = 0;
     while (index < count) {
@@ -69,24 +69,24 @@ export _digest_bytes(count: ulong): u8[] {
 }
 
 # Copies `size` bytes from `source` to `target`; the two must not overlap.
-export _digest_copy(target: __ptr<u8>, source: __ptr<u8>, size: ulong) {
+_digest_copy(target: __ptr<u8>, source: __ptr<u8>, size: ulong) {
     memcpy(target as __ptr<void>, source as __ptr<void>, size);
 }
 
 # Sets `size` bytes at `target` to zero.
-export _digest_zero(target: __ptr<u8>, size: ulong) {
+_digest_zero(target: __ptr<u8>, size: ulong) {
     memset(target as __ptr<void>, 0, size);
 }
 
 # A hash built on a 64-byte block compression function (SHA-1, SHA-256).
-export trait _DigestCompressor {
+trait _DigestCompressor {
     _compress(block: __ptr<u8>);
 }
 
 # The input of a Merkle-Damgård hash (SHA-1, SHA-256) not yet compressed,
 # and its total length. Splits the input into 64-byte blocks for a
 # `_DigestCompressor` and pads the last one.
-export struct _DigestBuffer {
+struct _DigestBuffer {
     # The pending input: `size` of its 64 bytes.
     var block: u8[];
     var size: ulong;

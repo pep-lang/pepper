@@ -263,7 +263,7 @@ _time_is_zone_name(name: String): bool {
 # ── TZif files (RFC 8536) ────────────────────────────────────────────────────
 
 # A named zone from the files of the time zone database under `folder`.
-export _time_zone_from_database(name: String, folder: String): Result<TimeZone> {
+_time_zone_from_database(name: String, folder: String): Result<TimeZone> {
     var read = io.File.read_bytes(io.Path($"{folder}/{name}"));
     if (read.is_err()) {
         return Result<TimeZone>.err(Error($"unknown time zone '{name}'"));
@@ -289,7 +289,7 @@ _time_big_endian(data: u8[], at: ulong, size: ulong): long {
 
 # The zone in a TZif file: the version 2+ block of 64-bit times and the TZ
 # rule after it, or the version 1 block of a version 1 file.
-export _time_parse_tzif(name: String, data: u8[]): TimeZone? {
+_time_parse_tzif(name: String, data: u8[]): TimeZone? {
     var none = Optional<TimeZone>.Empty;
     if (data.count < 44 || data[0] != 'T' || data[1] != 'Z' || data[2] != 'i' || data[3] != 'f') {
         return none;
@@ -383,7 +383,7 @@ _time_tzif_block_size(data: u8[], at: ulong, time_size: ulong): long {
 # A POSIX TZ string's rule, such as `CET-1CEST,M3.5.0,M10.5.0/3`: standard
 # and daylight saving offsets (seconds east), and the dates the change
 # happens on.
-export struct _TimeRule {
+struct _TimeRule {
     var is_set: bool;
     var standard: int;
     var daylight: int;
@@ -419,7 +419,7 @@ export struct _TimeRule {
 # Sunday 0, of week w, 5 meaning the last, of month m); then the local time
 # of the change, in seconds.
 [Value]
-export struct _TimeRuleDate {
+struct _TimeRuleDate {
     var kind: int;
     var month: int;
     var week: int;
@@ -462,7 +462,7 @@ export struct _TimeRuleDate {
 
 # Reads a POSIX TZ string; an empty or unreadable one gives a rule that is
 # not set.
-export _time_parse_rule(text: String): _TimeRule {
+_time_parse_rule(text: String): _TimeRule {
     var rule = _TimeRule();
     var parser = _TimeRuleParser(text);
     if (!parser.name()) {

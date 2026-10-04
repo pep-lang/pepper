@@ -63,7 +63,7 @@ extern void free(void* pointer);
 
 # A child process: its id.
 [Target(OS(Linux) || OS(Mac))]
-export type _ProcessHandle = int;
+type _ProcessHandle = int;
 
 # Bigger than posix_spawn_file_actions_t and posix_spawnattr_t on both
 # systems (80 and 336 bytes on glibc, a pointer on macOS).
@@ -71,22 +71,22 @@ export type _ProcessHandle = int;
 const _PROCESS_SPAWN_STATE_SIZE: ulong = 512;
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_names_ignore_case(): bool {
+_process_sys_names_ignore_case(): bool {
     return false;
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_error_message(code: io.ErrorCode): String {
+_process_sys_error_message(code: io.ErrorCode): String {
     return io._io_sys_error_message(code);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_id(): ulong {
+_process_sys_id(): ulong {
     return getpid() as ulong;
 }
 
 [Target(OS(Linux))]
-export _process_sys_executable_path(): io.IoResult<io.Path> {
+_process_sys_executable_path(): io.IoResult<io.Path> {
     ulong capacity = 4096;
     while (true) {
         __ptr<char> buffer = _pep_malloc(capacity);
@@ -109,7 +109,7 @@ export _process_sys_executable_path(): io.IoResult<io.Path> {
 }
 
 [Target(OS(Mac))]
-export _process_sys_executable_path(): io.IoResult<io.Path> {
+_process_sys_executable_path(): io.IoResult<io.Path> {
     __ptr<uint> size = _pep_malloc(4);
     size[0] = 0;
     _NSGetExecutablePath(__null, size);
@@ -216,7 +216,7 @@ _process_c_strings(values: Array<String>): __ptr<__ptr<char>> {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
+_process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
     __ptr<void> actions = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     __ptr<void> attributes = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     posix_spawn_file_actions_init(actions);
@@ -328,7 +328,7 @@ _process_exec_program(program: String, argv: __ptr<__ptr<char>>, envp: __ptr<__p
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_exec(command: Command): io.IoError {
+_process_sys_exec(command: Command): io.IoError {
     # The program starts in the working directory this process has when it
     # execs, so enter the Command's and come back if the exec fails.
     var previous = Optional<io.Path>.Empty;
@@ -380,7 +380,7 @@ _process_pipe_file(descriptor: int, name: String): io.File {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
+_process_sys_borrowed_file(handle: io.FileHandle): io.File {
     var file = io.File();
     file._handle = handle;
     file._owned = false;
@@ -388,7 +388,7 @@ export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
+_process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
     __ptr<int> status = _pep_malloc(4);
     while (true) {
         status[0] = 0;
@@ -417,7 +417,7 @@ export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
+_process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
     if (kill(handle, 9) != 0) {  # SIGKILL
         return io.IoResult<void>.err(io.IoError.last());
     }
@@ -425,7 +425,7 @@ export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _process_sys_release(handle: _ProcessHandle) {}
+_process_sys_release(handle: _ProcessHandle) {}
 
 # Adds a change of folder to `actions`. glibc has
 # posix_spawn_file_actions_addchdir_np from 2.29 on, and the prebuilt

@@ -334,7 +334,7 @@ export struct OffsetDateTime {
 
 extend OffsetDateTime with ToString;
 
-export _time_floor_divide(value: long, unit: long): long {
+_time_floor_divide(value: long, unit: long): long {
     var quotient = value / unit;
     if (value % unit < 0) {
         quotient = quotient - 1;
@@ -342,7 +342,7 @@ export _time_floor_divide(value: long, unit: long): long {
     return quotient;
 }
 
-export _time_floor_modulo(value: long, unit: long): long {
+_time_floor_modulo(value: long, unit: long): long {
     var rest = value % unit;
     return rest < 0 ? rest + unit : rest;
 }

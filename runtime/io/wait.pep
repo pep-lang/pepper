@@ -143,7 +143,7 @@ export _io_clear_waiter() {
 # Waits until `h` may be ready for `interest`: parks the task inside a task,
 # blocks the thread outside one. Fails when the task is cancelled or times
 # out first.
-export _io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
+_io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
     var slot = _io_waiter_slot();
     if (slot != __null) {
         var waiter = slot[0];
@@ -203,7 +203,7 @@ export struct _FileTransfer {
 # Reads `count` bytes into `buffer` from `h` (or writes them from it, when
 # `write`) with one system call: inside a task through the runtime, which
 # keeps the worker running, and directly outside one.
-export _io_file_transfer(h: FileHandle, buffer: __ptr<u8>, count: ulong, write: bool): IoResult<ulong> {
+_io_file_transfer(h: FileHandle, buffer: __ptr<u8>, count: ulong, write: bool): IoResult<ulong> {
     var slot = _io_waiter_slot();
     if (slot != __null) {
         var waiter = slot[0];
@@ -219,7 +219,7 @@ export _io_file_transfer(h: FileHandle, buffer: __ptr<u8>, count: ulong, write: 
 }
 
 # The result `_FileTransfer._run` encoded.
-export _io_file_transfer_result(raw: long): IoResult<ulong> {
+_io_file_transfer_result(raw: long): IoResult<ulong> {
     if (raw >= 0) {
         return IoResult<ulong>.ok(raw as ulong);
     }
@@ -231,7 +231,7 @@ export _io_file_transfer_result(raw: long): IoResult<ulong> {
 # `h` through the task runtime (see `_IoWaiter._socket_transfer`): none
 # when the caller is not in a task or the runtime declines, and the caller
 # then makes the call itself.
-export _io_task_socket_transfer(h: SocketHandle, p: __ptr<u8>, n: ulong, write: bool): IoResult<ulong>? {
+_io_task_socket_transfer(h: SocketHandle, p: __ptr<u8>, n: ulong, write: bool): IoResult<ulong>? {
     var slot = _io_waiter_slot();
     if (slot == __null) {
         return Optional<IoResult<ulong>>.Empty;
@@ -267,7 +267,7 @@ export _io_in_task(): bool {
 }
 
 # Tells this thread's waiter that `h` is moving to another thread.
-export _io_socket_release(h: SocketHandle) {
+_io_socket_release(h: SocketHandle) {
     var slot = _io_waiter_slot();
     if (slot != __null) {
         slot[0]._release(h);
@@ -275,7 +275,7 @@ export _io_socket_release(h: SocketHandle) {
 }
 
 # Tells this thread's waiter to stop watching `h` unless a task waits on it.
-export _io_socket_release_idle(h: SocketHandle) {
+_io_socket_release_idle(h: SocketHandle) {
     var slot = _io_waiter_slot();
     if (slot != __null) {
         slot[0]._release_idle(h);
@@ -283,7 +283,7 @@ export _io_socket_release_idle(h: SocketHandle) {
 }
 
 # Tells this thread's waiter that `h` is about to be closed.
-export _io_socket_forget(h: SocketHandle) {
+_io_socket_forget(h: SocketHandle) {
     var slot = _io_waiter_slot();
     if (slot != __null) {
         slot[0]._forget(h);

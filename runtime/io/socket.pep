@@ -21,11 +21,11 @@ import "wait";
 
 # The listen backlog: how many connections the system queues before
 # `accept` takes them (the system may cap it lower).
-export _io_listen_backlog(): int {
+_io_listen_backlog(): int {
     return 1024;
 }
 
-export _io_socket_closed_error(): IoError {
+_io_socket_closed_error(): IoError {
     return IoError(_io_sys_code_bad_handle(), "socket is closed");
 }
 
@@ -35,14 +35,14 @@ export _io_socket_closed_error(): IoError {
 # 28 bytes. The header is platform-specific (_io_sys_sockaddr_header).
 
 # Bytes to allocate for any sockaddr (sizeof(struct sockaddr_storage)).
-export _io_sockaddr_capacity(): ulong {
+_io_sockaddr_capacity(): ulong {
     return 128;
 }
 
 # A sockaddr of any family in a buffer of its own, freed with the value:
 # `_io_sockaddr_capacity()` zeroed bytes, then a 4-byte slot for the length
 # a call writes back (a socklen_t, or an int on Windows).
-export struct _SockAddr {
+struct _SockAddr {
     # The sockaddr's bytes, then the length slot.
     __ptr<u8> _bytes;
     # The sockaddr's length in bytes.
@@ -72,7 +72,7 @@ export struct _SockAddr {
 }
 
 # `address` as a sockaddr.
-export _io_sockaddr_write(address: SocketAddress): _SockAddr {
+_io_sockaddr_write(address: SocketAddress): _SockAddr {
     var sockaddr = _SockAddr();
     var buffer = sockaddr._bytes;
     var ip = address._address;
@@ -101,7 +101,7 @@ export _io_sockaddr_write(address: SocketAddress): _SockAddr {
 
 # The address in a sockaddr the system wrote; `0.0.0.0:0` for a family
 # other than IPv4 and IPv6.
-export _io_sockaddr_read(buffer: __ptr<u8>): SocketAddress {
+_io_sockaddr_read(buffer: __ptr<u8>): SocketAddress {
     var family = _io_sys_sockaddr_family(buffer);
     var port = ((buffer[2] as ulong) << 8) | (buffer[3] as ulong);
     var ip = IpAddress();
@@ -119,7 +119,7 @@ export _io_sockaddr_read(buffer: __ptr<u8>): SocketAddress {
 }
 
 # The `count` bytes at `p` as a big-endian number.
-export _io_big_endian(p: __ptr<u8>, count: ulong): ulong {
+_io_big_endian(p: __ptr<u8>, count: ulong): ulong {
     ulong value = 0;
     ulong i = 0;
     while (i < count) {
@@ -742,7 +742,7 @@ export struct SocketTransfer {
 # handle.
 
 # Ok for an open socket, the closed-socket error otherwise.
-export _io_socket_require_open(h: SocketHandle): IoResult<void> {
+_io_socket_require_open(h: SocketHandle): IoResult<void> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<void>.err(_io_socket_closed_error());
     }
@@ -750,7 +750,7 @@ export _io_socket_require_open(h: SocketHandle): IoResult<void> {
 }
 
 # A stream's `read`.
-export _io_stream_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
+_io_stream_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<ulong>.err(_io_socket_closed_error());
     }
@@ -758,7 +758,7 @@ export _io_stream_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulon
 }
 
 # A stream's `read_exact`.
-export _io_stream_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
+_io_stream_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
     var c = _io_socket_require_open(h);
     if (c.is_err()) {
         return c;
@@ -767,7 +767,7 @@ export _io_stream_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoRes
 }
 
 # A stream's `write` (and a UDP socket's `send`): one send.
-export _io_stream_write(h: SocketHandle, data: u8[]): IoResult<ulong> {
+_io_stream_write(h: SocketHandle, data: u8[]): IoResult<ulong> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<ulong>.err(_io_socket_closed_error());
     }
@@ -780,7 +780,7 @@ export _io_stream_write(h: SocketHandle, data: u8[]): IoResult<ulong> {
 }
 
 # A stream's `write_all`.
-export _io_stream_write_all(h: SocketHandle, data: u8[]): IoResult<void> {
+_io_stream_write_all(h: SocketHandle, data: u8[]): IoResult<void> {
     var c = _io_socket_require_open(h);
     if (c.is_err()) {
         return c;
@@ -789,7 +789,7 @@ export _io_stream_write_all(h: SocketHandle, data: u8[]): IoResult<void> {
 }
 
 # A stream's `write_all(text)`.
-export _io_stream_write_string(h: SocketHandle, text: String): IoResult<void> {
+_io_stream_write_string(h: SocketHandle, text: String): IoResult<void> {
     var c = _io_socket_require_open(h);
     if (c.is_err()) {
         return c;
@@ -798,7 +798,7 @@ export _io_stream_write_string(h: SocketHandle, text: String): IoResult<void> {
 }
 
 # A stream's `shutdown_write`.
-export _io_stream_shutdown_write(h: SocketHandle): IoResult<void> {
+_io_stream_shutdown_write(h: SocketHandle): IoResult<void> {
     var c = _io_socket_require_open(h);
     if (c.is_err()) {
         return c;
@@ -807,7 +807,7 @@ export _io_stream_shutdown_write(h: SocketHandle): IoResult<void> {
 }
 
 # A socket's `local_address`.
-export _io_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<SocketAddress>.err(_io_socket_closed_error());
     }
@@ -815,7 +815,7 @@ export _io_socket_local_address(h: SocketHandle): IoResult<SocketAddress> {
 }
 
 # A socket's `peer_address`.
-export _io_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
+_io_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<SocketAddress>.err(_io_socket_closed_error());
     }
@@ -824,7 +824,7 @@ export _io_socket_peer_address(h: SocketHandle): IoResult<SocketAddress> {
 
 # Closes `h`, which its owner no longer holds (a `close()`, or a
 # destructor); Ok for an invalid handle.
-export _io_socket_close_taken(h: SocketHandle): IoResult<void> {
+_io_socket_close_taken(h: SocketHandle): IoResult<void> {
     if (!_io_sys_socket_valid(h)) {
         return _io_ok_void();
     }
@@ -832,7 +832,7 @@ export _io_socket_close_taken(h: SocketHandle): IoResult<void> {
 }
 
 # A stream's `into_transfer`, for `h`, which the stream no longer holds.
-export _io_socket_transfer(h: SocketHandle): SocketTransfer {
+_io_socket_transfer(h: SocketHandle): SocketTransfer {
     if (_io_sys_socket_valid(h)) {
         _io_socket_release(h);
     }
@@ -840,7 +840,7 @@ export _io_socket_transfer(h: SocketHandle): SocketTransfer {
 }
 
 # The socket a stream's `adopt` takes out of `transfer`.
-export _io_socket_adopt(transfer: SocketTransfer): IoResult<SocketHandle> {
+_io_socket_adopt(transfer: SocketTransfer): IoResult<SocketHandle> {
     var h = transfer._take();
     if (!_io_sys_socket_valid(h)) {
         return IoResult<SocketHandle>.err(_io_socket_closed_error());
@@ -851,7 +851,7 @@ export _io_socket_adopt(transfer: SocketTransfer): IoResult<SocketHandle> {
 # A listener's `accept`: the accepted socket and the peer's address.
 # `shared` for a listener other threads may close once this one stops
 # using it (`SharedTcpListener`, `SharedUnixListener`).
-export _io_listener_accept(h: SocketHandle, shared: bool): IoResult<(SocketHandle, SocketAddress)> {
+_io_listener_accept(h: SocketHandle, shared: bool): IoResult<(SocketHandle, SocketAddress)> {
     if (!_io_sys_socket_valid(h)) {
         return IoResult<(SocketHandle, SocketAddress)>.err(_io_socket_closed_error());
     }
@@ -864,7 +864,7 @@ export _io_listener_accept(h: SocketHandle, shared: bool): IoResult<(SocketHandl
 
 # Appends up to `max` bytes received on `h` to `buffer` (a stream socket's
 # `read`).
-export _io_socket_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
+_io_socket_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulong> {
     if (max == 0) {
         return IoResult<ulong>.ok(0);
     }
@@ -882,7 +882,7 @@ export _io_socket_read(h: SocketHandle, buffer: u8[], max: ulong): IoResult<ulon
 
 # Reads from `h` until `count` more bytes are appended to `buffer` (a stream
 # socket's `read_exact`).
-export _io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
+_io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoResult<void> {
     ulong done = 0;
     while (done < count) {
         var r = _io_socket_read(h, buffer, count - done);
@@ -900,7 +900,7 @@ export _io_socket_read_exact(h: SocketHandle, buffer: u8[], count: ulong): IoRes
 
 # Sends all of `data`, pinned so no other task can grow it while a send
 # waits.
-export _io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
+_io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
     data._pins = data._pins + 1;
     var r = _io_socket_send_all(h, data._data, data._size);
     data._pins = data._pins - 1;
@@ -910,7 +910,7 @@ export _io_socket_send_bytes(h: SocketHandle, data: u8[]): IoResult<void> {
 # Sends all of `text`'s bytes. Inside a task a send can wait, and another
 # task could change `text` meanwhile, so a copy is sent, as
 # `File.write_all` does.
-export _io_socket_send_text(h: SocketHandle, text: String): IoResult<void> {
+_io_socket_send_text(h: SocketHandle, text: String): IoResult<void> {
     if (!_io_in_task()) {
         return _io_socket_send_all(h, unsafe_cast<__ptr<u8>>(text.c_str()), text.size);
     }

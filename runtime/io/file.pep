@@ -290,7 +290,7 @@ export struct Metadata {
 
 # The FileType of an object with these kind flags; a symlink wins over the
 # directory flag Windows also sets for a link to a directory.
-export _io_file_type(is_file: bool, is_directory: bool, is_symlink: bool): FileType {
+_io_file_type(is_file: bool, is_directory: bool, is_symlink: bool): FileType {
     if (is_symlink) {
         return FileType.Symlink;
     }
@@ -304,12 +304,12 @@ export _io_file_type(is_file: bool, is_directory: bool, is_symlink: bool): FileT
 }
 
 # Bytes per read when a whole file or stream is read.
-export _io_chunk_size(): ulong {
+_io_chunk_size(): ulong {
     return 65536;
 }
 
 # Write all `n` bytes at `p`, looping over partial writes.
-export _io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> {
+_io_write_all_raw(h: FileHandle, p: __ptr<u8>, n: ulong): IoResult<void> {
     ulong done = 0;
     while (done < n) {
         var r = _io_file_transfer(h, p + done, n - done, true);

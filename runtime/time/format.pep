@@ -11,7 +11,7 @@ const MONTH_NAMES: StringConstant = "January,February,March,April,May,June,July,
 # Reads ISO 8601 / RFC 3339 pieces from the front of a text, one call after
 # another; each returns an Err (and leaves `index` wherever it stopped) when
 # the text does not continue with that piece.
-export struct _TimeScanner {
+struct _TimeScanner {
     var _text: String;
     var _data: u8[];
     var index: ulong;
@@ -211,7 +211,7 @@ export struct _TimeScanner {
 # ── Writing ──────────────────────────────────────────────────────────────────
 
 # The year with at least four digits, signed outside 0 to 9999.
-export _time_write_year(out: StringBuilder, year: int) {
+_time_write_year(out: StringBuilder, year: int) {
     if (year < 0) {
         out.append($"-{0 - year:04}");
     } else if (year > 9999) {
@@ -221,13 +221,13 @@ export _time_write_year(out: StringBuilder, year: int) {
     }
 }
 
-export _time_write_date(out: StringBuilder, date: Date) {
+_time_write_date(out: StringBuilder, date: Date) {
     _time_write_year(out, date.year);
     out.append($"-{date.month:02}-{date.day:02}");
 }
 
 # HH:MM:SS, then the fraction of a second without trailing zeros.
-export _time_write_time(out: StringBuilder, time: Time) {
+_time_write_time(out: StringBuilder, time: Time) {
     out.append($"{time.hour:02}:{time.minute:02}:{time.second:02}");
     if (time.nanosecond != 0) {
         var fraction = $"{time.nanosecond:09}";
@@ -242,7 +242,7 @@ export _time_write_time(out: StringBuilder, time: Time) {
 
 # +HH:MM (or +HHMM without `colon`), with :SS when there are seconds, or Z
 # for zero when `z_for_utc`.
-export _time_write_offset(out: StringBuilder, seconds: int, colon: bool, z_for_utc: bool) {
+_time_write_offset(out: StringBuilder, seconds: int, colon: bool, z_for_utc: bool) {
     if (seconds == 0 && z_for_utc) {
         out.append("Z");
         return;
@@ -256,17 +256,17 @@ export _time_write_offset(out: StringBuilder, seconds: int, colon: bool, z_for_u
     }
 }
 
-export _time_month_abbreviation(month: int): String {
+_time_month_abbreviation(month: int): String {
     return MONTH_ABBREVIATIONS.substr_bytes(((month - 1) * 3) as ulong, 3);
 }
 
-export _time_month_name(month: int): String {
+_time_month_name(month: int): String {
     return MONTH_NAMES.split(",")[(month - 1) as ulong];
 }
 
 # The ISO 8601 week-numbering year and week (1 to 53) of a date. Weeks start
 # on Monday, and week 1 is the one holding the year's first Thursday.
-export _time_iso_week(date: Date): (int, int) {
+_time_iso_week(date: Date): (int, int) {
     var weekday = date.weekday() as int;
     var week = (date.day_of_year() - weekday + 10) / 7;
     if (week < 1) {
@@ -290,7 +290,7 @@ _time_iso_weeks_in(year: int): int {
 
 # strftime: `%` codes in `pattern` replaced by parts of the date, time and,
 # when there is one, offset (seconds east of UTC).
-export _time_format(pattern: String, date: Date, time: Time, offset: int?): String {
+_time_format(pattern: String, date: Date, time: Time, offset: int?): String {
     var out = StringBuilder();
     var data = pattern.bytes();
     var size = data.count;
@@ -439,7 +439,7 @@ _time_scan_clock(scanner: _TimeScanner): Time? {
 
 # An IMF-fixdate, RFC 850 date or asctime date (RFC 9110 section 5.6.7), in
 # UTC.
-export _time_parse_http_date(text: String): DateTime? {
+_time_parse_http_date(text: String): DateTime? {
     var none = Optional<DateTime>.Empty;
     var scanner = _TimeScanner(text);
     var weekday = scanner.word();

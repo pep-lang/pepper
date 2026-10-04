@@ -50,29 +50,29 @@ extern ulong GetTickCount64();
 
 # Starts a thread running `start(argument)`; its handle, or null on failure.
 [Target(OS(Windows))]
-export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
     return CreateThread(__null, 0, start, argument, 0, __null);
 }
 
 [Target(OS(Windows))]
-export _async_sys_join(handle: __ptr<void>) {
+_async_sys_join(handle: __ptr<void>) {
     WaitForSingleObject(handle, 4294967295);  # INFINITE
     CloseHandle(handle);
 }
 
 [Target(OS(Windows))]
-export _async_sys_detach(handle: __ptr<void>) {
+_async_sys_detach(handle: __ptr<void>) {
     CloseHandle(handle);
 }
 
 # The operating system's identity of the calling thread.
 [Target(OS(Windows))]
-export _async_sys_os_thread(): ulong {
+_async_sys_os_thread(): ulong {
     return GetCurrentThreadId() as ulong;
 }
 
 [Target(OS(Windows))]
-export _async_sys_sleep(milliseconds: ulong) {
+_async_sys_sleep(milliseconds: ulong) {
     # Sleep takes a 32-bit count, and 0xFFFFFFFF means forever: sleep in
     # steps below it.
     var left = milliseconds;
@@ -88,7 +88,7 @@ export _async_sys_sleep(milliseconds: ulong) {
 # A new key whose `destructor(value)` runs on each exiting thread with a
 # non-null value.
 [Target(OS(Windows))]
-export _async_sys_key_create(destructor: __ptr<void>): ulong {
+_async_sys_key_create(destructor: __ptr<void>): ulong {
     var index = FlsAlloc(destructor);
     if (index == 4294967295) {  # FLS_OUT_OF_INDEXES
         panic("ThreadLocal: the operating system has no thread-local keys left");
@@ -97,17 +97,17 @@ export _async_sys_key_create(destructor: __ptr<void>): ulong {
 }
 
 [Target(OS(Windows))]
-export _async_sys_key_delete(key: ulong) {
+_async_sys_key_delete(key: ulong) {
     FlsFree(key as uint);
 }
 
 [Target(OS(Windows))]
-export _async_sys_key_get(key: ulong): __ptr<void> {
+_async_sys_key_get(key: ulong): __ptr<void> {
     return FlsGetValue(key as uint);
 }
 
 [Target(OS(Windows))]
-export _async_sys_key_set(key: ulong, value: __ptr<void>) {
+_async_sys_key_set(key: ulong, value: __ptr<void>) {
     FlsSetValue(key as uint, value);
 }
 
@@ -121,7 +121,7 @@ export _async_sys_key_set(key: ulong, value: __ptr<void>) {
 
 # Sleeps while `word` holds `expected`, until woken (or spuriously).
 [Target(OS(Windows))]
-export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+_async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
     _async_wait_on_address(word, expected, 4294967295);  # INFINITE
 }
 
@@ -129,7 +129,7 @@ export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
 # ran out. The timeout is a 32-bit count in which 0xFFFFFFFF means forever,
 # so a longer wait is cut below it and reports a wake when it ends.
 [Target(OS(Windows))]
-export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
+_async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
     var capped = milliseconds > 4000000000;
     var wait = capped ? 4000000000 : milliseconds;
     return _async_wait_on_address(word, expected, wait as uint) || capped;
@@ -137,13 +137,13 @@ export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds
 
 # Wakes one thread sleeping on `word`, if any.
 [Target(OS(Windows))]
-export _async_sys_futex_wake_one(word: __ptr<uint>) {
+_async_sys_futex_wake_one(word: __ptr<uint>) {
     WakeByAddressSingle(word);
 }
 
 # Wakes every thread sleeping on `word`.
 [Target(OS(Windows))]
-export _async_sys_futex_wake_all(word: __ptr<uint>) {
+_async_sys_futex_wake_all(word: __ptr<uint>) {
     WakeByAddressAll(word);
 }
 
@@ -160,14 +160,14 @@ _async_wait_on_address(word: __ptr<uint>, expected: uint, milliseconds: uint): b
 
 # Milliseconds on a clock that only moves forward, for measuring timeouts.
 [Target(OS(Windows))]
-export _async_sys_monotonic_milliseconds(): ulong {
+_async_sys_monotonic_milliseconds(): ulong {
     return GetTickCount64();
 }
 
 # ── Processor counts (0 when unknown) ────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _async_sys_logical_cpus(): ulong {
+_async_sys_logical_cpus(): ulong {
     return GetActiveProcessorCount(65535) as ulong;  # ALL_PROCESSOR_GROUPS
 }
 
@@ -175,7 +175,7 @@ export _async_sys_logical_cpus(): ulong {
 # (RelationProcessorCore); each record starts with its Relationship (4 bytes)
 # and Size (4 bytes).
 [Target(OS(Windows))]
-export _async_sys_physical_cpus(): ulong {
+_async_sys_physical_cpus(): ulong {
     __ptr<uint> length = _pep_malloc(4);
     # Asking with no buffer fails and reports the size needed.
     GetLogicalProcessorInformationEx(0, __null, length);

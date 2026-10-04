@@ -24,7 +24,7 @@ extern int sysctl(int* name, uint count, void* value, ulong* size, void* new_val
 # libSystem's `backtrace`, which unwinds through the tables every function
 # carries (`uwtable`).
 [Target((OS(Linux) && !OS(Android)) || OS(Mac))]
-export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
+_debug_sys_capture(addresses: Array<ulong>, limit: int) {
     __ptr<ulong> buffer = _pep_malloc((limit as ulong) * 8);
     var count = backtrace(buffer, limit);
     ulong index = 0;
@@ -39,7 +39,7 @@ export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
 # unwinder every Android program links (the NDK's libunwind), as `backtrace`
 # does. `state` holds the count so far, the limit, then the addresses.
 [Target(OS(Android))]
-export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
+_debug_sys_capture(addresses: Array<ulong>, limit: int) {
     __ptr<ulong> state = _pep_malloc(((limit as ulong) + 2) * 8);
     state[0] = 0;
     state[1] = limit as ulong;
@@ -69,7 +69,7 @@ _debug_unwind_step(context: __ptr<void>, data: __ptr<void>): int {
 # Linux and macOS have no debugger channel apart from the program's own
 # streams: debuggers show standard error.
 [Target(OS(Linux) || OS(Mac))]
-export _debug_sys_output(text: String) {
+_debug_sys_output(text: String) {
     var line = text.ends_with("\n") ? text : $"{text}\n";
     _pep_write_error(line.c_str());
 }
@@ -77,7 +77,7 @@ export _debug_sys_output(text: String) {
 # Linux: the `TracerPid:` line of /proc/self/status names the tracing
 # process, 0 when there is none.
 [Target(OS(Linux))]
-export _debug_sys_debugger_attached(): bool {
+_debug_sys_debugger_attached(): bool {
     var fd = open("/proc/self/status".c_str(), 0);
     if (fd < 0) {
         return false;
@@ -109,7 +109,7 @@ export _debug_sys_debugger_attached(): bool {
 # macOS: `P_TRACED` in the process's `kinfo_proc` (Apple's technical Q&A
 # QA1361): `kp_proc.p_flag` is the int at offset 32.
 [Target(OS(Mac))]
-export _debug_sys_debugger_attached(): bool {
+_debug_sys_debugger_attached(): bool {
     # CTL_KERN, KERN_PROC, KERN_PROC_PID, pid
     __ptr<int> name = _pep_malloc(16);
     name[0] = 1;
@@ -137,6 +137,6 @@ export _debug_sys_debugger_attached(): bool {
 extern void _debug_trap();
 
 [Target(OS(Linux) || OS(Mac))]
-export _debug_sys_breakpoint() {
+_debug_sys_breakpoint() {
     _debug_trap();
 }

@@ -467,7 +467,7 @@ export struct Channel<T> {
 
 # What `Channel._select_join` found (and, in select.pep, what a case's
 # last `_take` found).
-export enum _Joined {
+enum _Joined {
     Ready,
     Empty,
     Closed,
@@ -475,7 +475,7 @@ export enum _Joined {
 
 # What `Channel._select_take` found: a value, nothing yet, or a closed and
 # empty channel.
-export enum _Polled<T> {
+enum _Polled<T> {
     Ready(value: T),
     Empty,
     Closed,

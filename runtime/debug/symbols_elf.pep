@@ -24,7 +24,7 @@ extern int munmap(void* address, ulong length);
 const _DEBUG_AT_ENTRY: ulong = 9;
 
 [Target(OS(Linux))]
-export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
+_debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
     # Dl_info { dli_fname, dli_fbase, dli_sname, dli_saddr }
     __ptr<ulong> info = _pep_malloc(32);
     ulong main_base = 0;

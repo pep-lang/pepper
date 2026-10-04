@@ -5,29 +5,29 @@
 # recursive descent; groups nest at most `_REGEX_MAX_DEPTH` deep, so a
 # pattern taken from user input cannot exhaust the stack.
 
-export const _REGEX_NODE_EMPTY = 0;
-export const _REGEX_NODE_CHAR = 1;
-export const _REGEX_NODE_ANY = 2;
-export const _REGEX_NODE_CLASS = 3;
-export const _REGEX_NODE_ASSERT = 4;
-export const _REGEX_NODE_GROUP = 5;
-export const _REGEX_NODE_REPEAT = 6;
-export const _REGEX_NODE_CONCAT = 7;
-export const _REGEX_NODE_ALTERNATE = 8;
+const _REGEX_NODE_EMPTY = 0;
+const _REGEX_NODE_CHAR = 1;
+const _REGEX_NODE_ANY = 2;
+const _REGEX_NODE_CLASS = 3;
+const _REGEX_NODE_ASSERT = 4;
+const _REGEX_NODE_GROUP = 5;
+const _REGEX_NODE_REPEAT = 6;
+const _REGEX_NODE_CONCAT = 7;
+const _REGEX_NODE_ALTERNATE = 8;
 
-export const _REGEX_AT_TEXT_START = 0;
-export const _REGEX_AT_TEXT_END = 1;
-export const _REGEX_AT_LINE_START = 2;
-export const _REGEX_AT_LINE_END = 3;
-export const _REGEX_AT_WORD = 4;
-export const _REGEX_AT_NOT_WORD = 5;
+const _REGEX_AT_TEXT_START = 0;
+const _REGEX_AT_TEXT_END = 1;
+const _REGEX_AT_LINE_START = 2;
+const _REGEX_AT_LINE_END = 3;
+const _REGEX_AT_WORD = 4;
+const _REGEX_AT_NOT_WORD = 5;
 
-export const _REGEX_MAX_DEPTH: ulong = 250;
-export const _REGEX_MAX_REPEAT: ulong = 1000;
-export const _REGEX_MAX_CODE_POINT: uint = 1114111;
+const _REGEX_MAX_DEPTH: ulong = 250;
+const _REGEX_MAX_REPEAT: ulong = 1000;
+const _REGEX_MAX_CODE_POINT: uint = 1114111;
 
 # One node of a parsed pattern.
-export struct _RegexNode {
+struct _RegexNode {
     # One of the `_REGEX_NODE_` kinds.
     var kind: int;
     # A CHAR's code point, an ASSERT's `_REGEX_AT_` kind, or for ANY 1 when
@@ -59,7 +59,7 @@ export struct _RegexNode {
 
 # Parses one pattern. After `parse()`, `failed` says whether the pattern
 # was invalid and `error` says why.
-export struct _RegexParser {
+struct _RegexParser {
     var _data: u8[];
     var _size: ulong;
     var _position: ulong;
@@ -719,7 +719,7 @@ export struct _RegexParser {
 # Decodes the UTF-8 code point at `index` of the `size` bytes at `data`:
 # its value and byte width. A byte that does not start a valid sequence is
 # U+FFFD, one byte wide.
-export _regex_decode(data: __ptr<u8>, index: ulong, size: ulong): (uint, ulong) {
+_regex_decode(data: __ptr<u8>, index: ulong, size: ulong): (uint, ulong) {
     var first = data[index] as uint;
     if (first < 128) {
         return (first, 1);
@@ -745,7 +745,7 @@ export _regex_decode(data: __ptr<u8>, index: ulong, size: ulong): (uint, ulong) 
 }
 
 # The other ASCII case of a letter, or `value` itself.
-export _regex_other_case(value: uint): uint {
+_regex_other_case(value: uint): uint {
     if (value >= 'a' && value <= 'z') {
         return value - 32;
     }
@@ -755,20 +755,20 @@ export _regex_other_case(value: uint): uint {
     return value;
 }
 
-export _regex_add_range(ranges: ulong[], low: uint, high: uint) {
+_regex_add_range(ranges: ulong[], low: uint, high: uint) {
     ranges.append(((low as ulong) << 32) | (high as ulong));
 }
 
-export _regex_range_low(range: ulong): uint {
+_regex_range_low(range: ulong): uint {
     return (range >> 32) as uint;
 }
 
-export _regex_range_high(range: ulong): uint {
+_regex_range_high(range: ulong): uint {
     return (range & 4294967295) as uint;
 }
 
 # Adds the other ASCII case of every letter in `ranges`.
-export _regex_add_other_cases(ranges: ulong[]) {
+_regex_add_other_cases(ranges: ulong[]) {
     var count = ranges.count;
     ulong index = 0;
     while (index < count) {
@@ -781,7 +781,7 @@ export _regex_add_other_cases(ranges: ulong[]) {
 }
 
 # Adds the part of `low..high` inside `first..last`, moved 32 up or down.
-export _regex_add_shifted(ranges: ulong[], low: uint, high: uint, first: uint, last: uint, up: bool) {
+_regex_add_shifted(ranges: ulong[], low: uint, high: uint, first: uint, last: uint, up: bool) {
     var from = low > first ? low : first;
     var to = high < last ? high : last;
     if (from > to) {
@@ -806,7 +806,7 @@ _regex_compare_ranges(a: ulong, b: ulong): int {
 
 # Returns `ranges` sorted with overlapping and touching ranges merged,
 # complemented over all code points when `negated`.
-export _regex_canonical(ranges: ulong[], negated: bool): ulong[] {
+_regex_canonical(ranges: ulong[], negated: bool): ulong[] {
     var sorted = ranges.clone();
     sorted.sort(_regex_compare_ranges);
     var merged = Array<ulong>();
@@ -851,7 +851,7 @@ export _regex_canonical(ranges: ulong[], negated: bool): ulong[] {
 
 # Adds the ranges of `\d`, `\w`, `\s` or (negated) `\D`, `\W`, `\S` for the
 # escape letter `letter`. Returns false for any other letter.
-export _regex_perl_class(ranges: ulong[], letter: int): bool {
+_regex_perl_class(ranges: ulong[], letter: int): bool {
     var named = Array<ulong>();
     if (letter == 'd' || letter == 'D') {
         _regex_posix_class(named, "digit");
@@ -875,7 +875,7 @@ export _regex_perl_class(ranges: ulong[], letter: int): bool {
 
 # Adds the ranges of the POSIX class `[:name:]`. Returns false for an
 # unknown name.
-export _regex_posix_class(ranges: ulong[], name: String): bool {
+_regex_posix_class(ranges: ulong[], name: String): bool {
     if (name == "alnum") {
         _regex_add_range(ranges, '0', '9');
         _regex_add_range(ranges, 'A', 'Z');

@@ -7,42 +7,42 @@
 import "sys_wasi";
 
 [Target(OS(Wasi))]
-export _async_fiber_thread_context(): __ptr<void> {
+_async_fiber_thread_context(): __ptr<void> {
     return _pep_malloc(24);
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_release_thread_context(context: __ptr<void>) {
+_async_fiber_release_thread_context(context: __ptr<void>) {
     _pep_free(context);
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
+_async_fiber_create(stack_size: ulong, entry: __ptr<void>): __ptr<void> {
     panic("async: tasks are not supported on WASI, which cannot switch stacks");
     return __null;
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_destroy(context: __ptr<void>) {
+_async_fiber_destroy(context: __ptr<void>) {
     _pep_free(context);
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
+_async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     panic("async: tasks are not supported on WASI, which cannot switch stacks");
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_key_create(): ulong {
+_async_fiber_key_create(): ulong {
     return _async_sys_key_create(__null);
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_key_get(key: ulong): __ptr<void> {
+_async_fiber_key_get(key: ulong): __ptr<void> {
     return _async_sys_key_get(key);
 }
 
 [Target(OS(Wasi))]
-export _async_fiber_key_set(key: ulong, value: __ptr<void>) {
+_async_fiber_key_set(key: ulong, value: __ptr<void>) {
     _async_sys_key_set(key, value);
 }

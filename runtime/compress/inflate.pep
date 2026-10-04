@@ -20,7 +20,7 @@ const _INFLATE_FINISHED = 5;
 const _INFLATE_FAST_BITS: ulong = 10;
 
 # A canonical Huffman code, for decoding.
-export struct _HuffmanDecoder {
+struct _HuffmanDecoder {
     # Indexed by the next `_INFLATE_FAST_BITS` bits of input (first bit
     # lowest): `symbol << 4 | length` for a code that short, 0 otherwise.
     var fast: uint[];
@@ -113,7 +113,7 @@ export struct _HuffmanDecoder {
 }
 
 # Returns the low `count` bits of `code` in reverse order.
-export _compress_reverse_bits(code: uint, count: ulong): uint {
+_compress_reverse_bits(code: uint, count: ulong): uint {
     uint result = 0;
     ulong index = 0;
     while (index < count) {
@@ -124,7 +124,7 @@ export _compress_reverse_bits(code: uint, count: ulong): uint {
 }
 
 # Decodes one compressed stream of a `Format`.
-export struct _Inflater {
+struct _Inflater {
     var _format: Format;
     var _source: io.Reader;
     # Input read from `_source`, and the index of the next unused byte.
@@ -1041,7 +1041,7 @@ _inflate_decode_long(code: _HuffmanDecoder, bits: ulong): uint {
 
 # Appends `length` bytes to `output`, copied from `distance` bytes back; the
 # two ranges may overlap, which repeats the bytes in between.
-export _compress_copy_match(output: u8[], distance: ulong, length: ulong) {
+_compress_copy_match(output: u8[], distance: ulong, length: ulong) {
     var at = output.count;
     if (at + length > output.capacity) {
         var next = output.capacity * 2;

@@ -41,7 +41,7 @@ extern int IsUserAnAdmin();
 # ── Environment ──────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _os_sys_environment(name: String): String? {
+_os_sys_environment(name: String): String? {
     var wide_name = io._io_win_wide(name);
     uint capacity = 256;
     var found = Optional<String>.Empty;
@@ -71,7 +71,7 @@ export _os_sys_environment(name: String): String? {
 }
 
 [Target(OS(Windows))]
-export _os_sys_environment_entries(): Array<String> {
+_os_sys_environment_entries(): Array<String> {
     var entries = Array<String>();
     var block = GetEnvironmentStringsW();
     if (block == __null) {
@@ -91,7 +91,7 @@ export _os_sys_environment_entries(): Array<String> {
 # ── Clocks ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _os_sys_monotonic_nanoseconds(): ulong {
+_os_sys_monotonic_nanoseconds(): ulong {
     __ptr<long> value = _pep_malloc(8);
     QueryPerformanceFrequency(value);
     var frequency = value[0] as ulong;
@@ -104,7 +104,7 @@ export _os_sys_monotonic_nanoseconds(): ulong {
 
 # A FILETIME counts 100-nanosecond ticks since 1601-01-01 UTC.
 [Target(OS(Windows))]
-export _os_sys_system_nanoseconds(): long {
+_os_sys_system_nanoseconds(): long {
     __ptr<long> value = _pep_malloc(8);
     GetSystemTimePreciseAsFileTime(value);
     var ticks = value[0];
@@ -115,7 +115,7 @@ export _os_sys_system_nanoseconds(): long {
 # ── Machine ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _os_sys_os(): OperatingSystem {
+_os_sys_os(): OperatingSystem {
     return OperatingSystem.Windows;
 }
 
@@ -123,7 +123,7 @@ export _os_sys_os(): OperatingSystem {
 # (276 bytes in all). GetVersionEx would report the version the program's
 # manifest claims, not the system's.
 [Target(OS(Windows))]
-export _os_sys_version(): String {
+_os_sys_version(): String {
     __ptr<uint> info = _pep_malloc(276);
     info[0] = 276;
     var version = String();
@@ -135,7 +135,7 @@ export _os_sys_version(): String {
 }
 
 [Target(OS(Windows))]
-export _os_sys_hostname(): String {
+_os_sys_hostname(): String {
     __ptr<uint> size = _pep_malloc(4);
     size[0] = 0;
     # ComputerNameDnsHostname. Asking with no buffer reports the size
@@ -156,7 +156,7 @@ export _os_sys_hostname(): String {
 # MEMORYSTATUSEX: dwLength, dwMemoryLoad, then ullTotalPhys at byte 8
 # (64 bytes in all).
 [Target(OS(Windows))]
-export _os_sys_total_memory(): ulong {
+_os_sys_total_memory(): ulong {
     __ptr<uint> status = _pep_malloc(64);
     status[0] = 64;
     var bytes: ulong = 0;
@@ -171,7 +171,7 @@ export _os_sys_total_memory(): ulong {
 # SYSTEM_INFO: two 16-bit fields, then dwPageSize at byte 4 (48 bytes in
 # all on 64-bit Windows).
 [Target(OS(Windows))]
-export _os_sys_page_size(): ulong {
+_os_sys_page_size(): ulong {
     __ptr<uint> info = _pep_malloc(48);
     GetSystemInfo(info);
     var size = info[1] as ulong;
@@ -182,7 +182,7 @@ export _os_sys_page_size(): ulong {
 # ── User ─────────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _os_sys_user_name(): String? {
+_os_sys_user_name(): String? {
     __ptr<uint> size = _pep_malloc(4);
     size[0] = 257;  # UNLEN + 1
     __ptr<u16> buffer = _pep_malloc(514);
@@ -200,11 +200,11 @@ export _os_sys_user_name(): String? {
 }
 
 [Target(OS(Windows))]
-export _os_sys_is_elevated(): bool {
+_os_sys_is_elevated(): bool {
     return IsUserAnAdmin() != 0;
 }
 
 [Target(OS(Windows))]
-export _os_sys_home_directory(): String? {
+_os_sys_home_directory(): String? {
     return _os_nonempty_environment("USERPROFILE");
 }

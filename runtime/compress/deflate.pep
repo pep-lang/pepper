@@ -18,7 +18,7 @@ const _DEFLATE_MATCH: uint = 0x80000000;
 
 # Compresses one stream of a `Format`. `write` and `finish` append the
 # compressed bytes to `output`, which the caller empties as it likes.
-export struct _Deflater {
+struct _Deflater {
     var _format: Format;
     var _level: int;
     # The match search's effort, as zlib's table has it: how many earlier
@@ -887,7 +887,7 @@ _compress_length_runs(lengths: u8[]): uint[] {
 # The Huffman code lengths, at most `limit` bits, for symbols with the
 # given counts; 0 for a symbol that does not occur. At least two symbols get
 # a code, so every decoder accepts the code.
-export _compress_code_lengths(counts: uint[], symbol_count: ulong, limit: ulong): u8[] {
+_compress_code_lengths(counts: uint[], symbol_count: ulong, limit: ulong): u8[] {
     var lengths = Array<u8>(symbol_count);
     # The symbols that occur, by count then symbol: count << 16 | symbol.
     var leaves = Array<ulong>();
@@ -1019,7 +1019,7 @@ _compress_compare(a: ulong, b: ulong): int {
 # The canonical codes for the given code lengths (RFC 1951 section 3.2.2),
 # bit-reversed, since codes are written first bit highest into a stream that
 # is filled from the lowest bit.
-export _compress_canonical_codes(lengths: u8[]): uint[] {
+_compress_canonical_codes(lengths: u8[]): uint[] {
     var counts = Array<uint>(16);
     var next_code = Array<uint>(16);
     var index = 0;

@@ -62,7 +62,7 @@ extern void memcpy(void* destination, void* source, ulong size);
 
 # A child process: its `HANDLE`.
 [Target(OS(Windows))]
-export type _ProcessHandle = __ptr<void>;
+type _ProcessHandle = __ptr<void>;
 
 # The value `_process_spawn_lock` guards: nothing; the lock is what matters.
 [Target(OS(Windows))]
@@ -76,22 +76,22 @@ struct _SpawnLock {
 const _process_spawn_lock = async.Mutex<_SpawnLock>(_SpawnLock());
 
 [Target(OS(Windows))]
-export _process_sys_names_ignore_case(): bool {
+_process_sys_names_ignore_case(): bool {
     return true;
 }
 
 [Target(OS(Windows))]
-export _process_sys_error_message(code: io.ErrorCode): String {
+_process_sys_error_message(code: io.ErrorCode): String {
     return io._io_sys_error_message(code);
 }
 
 [Target(OS(Windows))]
-export _process_sys_id(): ulong {
+_process_sys_id(): ulong {
     return GetCurrentProcessId() as ulong;
 }
 
 [Target(OS(Windows))]
-export _process_sys_executable_path(): io.IoResult<io.Path> {
+_process_sys_executable_path(): io.IoResult<io.Path> {
     uint capacity = 512;
     while (true) {
         __ptr<u16> buffer = _pep_malloc((capacity as ulong) * 2);
@@ -258,7 +258,7 @@ _process_stream(which: int, stream: Stream, parent_end: __ptr<__ptr<void>>): __p
 }
 
 [Target(OS(Windows))]
-export _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
+_process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
     var line = io._io_win_wide(_process_command_line(command));
     __ptr<u16> directory = __null;
     if (command._working_directory.is_value()) {
@@ -371,7 +371,7 @@ _process_ignore_control(event: uint): int {
 # would also ignore it, but the program would inherit that and ignore it
 # too.
 [Target(OS(Windows))]
-export _process_sys_exec(command: Command): io.IoError {
+_process_sys_exec(command: Command): io.IoError {
     var handler: extern (uint) => int = _process_ignore_control;
     SetConsoleCtrlHandler(handler, 1);
     var spawned = command.spawn();
@@ -390,7 +390,7 @@ export _process_sys_exec(command: Command): io.IoError {
 }
 
 [Target(OS(Windows))]
-export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
+_process_sys_borrowed_file(handle: io.FileHandle): io.File {
     var file = io.File();
     file._handle = handle;
     file._owned = false;
@@ -398,7 +398,7 @@ export _process_sys_borrowed_file(handle: io.FileHandle): io.File {
 }
 
 [Target(OS(Windows))]
-export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
+_process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
     var process = handle;
     # INFINITE, or 0 to poll.
     var result = WaitForSingleObject(process, block ? 4294967295 : 0);
@@ -419,7 +419,7 @@ export _process_sys_wait_raw(handle: _ProcessHandle, block: bool): long {
 }
 
 [Target(OS(Windows))]
-export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
+_process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
     if (TerminateProcess(handle, 1) == 0) {
         return io.IoResult<void>.err(io.IoError.last());
     }
@@ -427,7 +427,7 @@ export _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _process_sys_release(handle: _ProcessHandle) {
+_process_sys_release(handle: _ProcessHandle) {
     if (handle != __null) {
         CloseHandle(handle);
     }

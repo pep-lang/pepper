@@ -62,7 +62,7 @@ extern int SymGetLineFromInlineContext(
 );
 
 [Target(OS(Windows))]
-export _debug_sys_capture(addresses: Array<ulong>, limit: int) {
+_debug_sys_capture(addresses: Array<ulong>, limit: int) {
     __ptr<ulong> buffer = _pep_malloc((limit as ulong) * 8);
     var count = RtlCaptureStackBackTrace(0, limit as uint, buffer, __null) as ulong;
     ulong index = 0;
@@ -98,7 +98,7 @@ const _DEBUG_LINE_INFO_SIZE: ulong = 40;
 # SymQueryInlineTrace returns, and the real frame takes the context after
 # the last.
 [Target(OS(Windows))]
-export _debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
+_debug_sys_symbolize(frames: Array<StackFrame>): Array<StackFrame> {
     var all = Array<StackFrame>();
     var process = GetCurrentProcess();
     while (!__atomic_cmpxchg<int>(_debug_dbghelp_state, 0, 1)) {
@@ -204,7 +204,7 @@ _debug_symbol_and_line(
 }
 
 [Target(OS(Windows))]
-export _debug_sys_output(text: String) {
+_debug_sys_output(text: String) {
     var line = text.ends_with("\n") ? text : $"{text}\n";
     # CP_UTF8; a size of -1 converts through the terminating NUL.
     var count = MultiByteToWideChar(65001, 0, line.c_str(), -1, __null, 0);
@@ -218,7 +218,7 @@ export _debug_sys_output(text: String) {
 }
 
 [Target(OS(Windows))]
-export _debug_sys_debugger_attached(): bool {
+_debug_sys_debugger_attached(): bool {
     return IsDebuggerPresent() != 0;
 }
 
@@ -227,6 +227,6 @@ export _debug_sys_debugger_attached(): bool {
 extern void _debug_trap();
 
 [Target(OS(Windows))]
-export _debug_sys_breakpoint() {
+_debug_sys_breakpoint() {
     _debug_trap();
 }

@@ -60,7 +60,7 @@ export temp_directory(): io.Path {
 }
 
 # A variable's value when it is set and not empty.
-export _os_nonempty_environment(name: String): String? {
+_os_nonempty_environment(name: String): String? {
     var value = environment(name);
     if (value.is_value() && value.value().is_empty) {
         return Optional<String>.Empty;

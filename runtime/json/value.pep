@@ -347,7 +347,7 @@ _json_write(root: JsonValue, layout: int, ascii_only: bool): String {
 
 # Writes `root` as indented JSON text with the comments in `notes`, each
 # where its path says. `layout` is as for `_json_write`, and not 0.
-export _json_write_commented(root: JsonValue, notes: _JsonComments, layout: int, ascii_only: bool): String {
+_json_write_commented(root: JsonValue, notes: _JsonComments, layout: int, ascii_only: bool): String {
     var writer = _JsonWriter(layout, ascii_only);
     writer._notes = Optional<_JsonComments>.Value(notes);
     writer.write(root);
@@ -360,7 +360,7 @@ export _json_write_commented(root: JsonValue, notes: _JsonComments, layout: int,
 # those before a container's closing bracket (`end`, by the container's
 # path, with "" for those after the whole document). Each comment is its
 # text, `//` or `/* */` included.
-export struct _JsonComments {
+struct _JsonComments {
     HashMap<String, Array<String>> before;
     HashMap<String, Array<String>> after;
     HashMap<String, Array<String>> end;
@@ -393,7 +393,7 @@ export struct _JsonComments {
 
 # `path.key`, or `path["key"]` when the key is not an identifier: how a
 # value's path in a document is written.
-export _json_path_key(path: String, key: String): String {
+_json_path_key(path: String, key: String): String {
     var plain = !key.is_empty;
     for (var b in key.bytes()) {
         var letter = (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || b == '_';

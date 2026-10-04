@@ -128,7 +128,7 @@ export _io_win_narrow(w: __ptr<u16>, n: int): String {
 # ── Errors ───────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_last_error(): ErrorCode {
+_io_sys_last_error(): ErrorCode {
     return GetLastError();
 }
 
@@ -155,7 +155,7 @@ export _io_sys_error_message(code: ErrorCode): String {
 
 # The ErrorKind of a GetLastError() / WSAGetLastError() code.
 [Target(OS(Windows))]
-export _io_sys_error_kind(code: ErrorCode): ErrorKind {
+_io_sys_error_kind(code: ErrorCode): ErrorKind {
     return match (code) {
         2, 3 => ErrorKind.NotFound,                    # FILE_NOT_FOUND, PATH_NOT_FOUND
         5, 1314 => ErrorKind.PermissionDenied,         # ACCESS_DENIED, PRIVILEGE_NOT_HELD
@@ -182,17 +182,17 @@ export _io_sys_code_invalid_input(): ErrorCode {
 }  # INVALID_PARAMETER
 
 [Target(OS(Windows))]
-export _io_sys_code_not_a_directory(): ErrorCode {
+_io_sys_code_not_a_directory(): ErrorCode {
     return 267;
 }  # DIRECTORY
 
 [Target(OS(Windows))]
-export _io_sys_code_not_found(): ErrorCode {
+_io_sys_code_not_found(): ErrorCode {
     return 2;
 }  # FILE_NOT_FOUND
 
 [Target(OS(Windows))]
-export _io_sys_code_bad_handle(): ErrorCode {
+_io_sys_code_bad_handle(): ErrorCode {
     return 6;
 }  # INVALID_HANDLE
 
@@ -202,13 +202,13 @@ export _io_sys_code_write_zero(): ErrorCode {
 }  # WRITE_FAULT
 
 [Target(OS(Windows))]
-export _io_sys_code_cancelled(): ErrorCode {
+_io_sys_code_cancelled(): ErrorCode {
     return 995;
 }  # OPERATION_ABORTED
 
 # A BOOL result: nonzero -> Ok, 0 -> the GetLastError() error.
 [Target(OS(Windows))]
-export _io_win_check(ok: int): IoResult<void> {
+_io_win_check(ok: int): IoResult<void> {
     if (ok != 0) {
         return _io_ok_void();
     }
@@ -219,7 +219,7 @@ export _io_win_check(ok: int): IoResult<void> {
 # call (before freeing its arguments could change it): nonzero -> Ok, 0 ->
 # that error.
 [Target(OS(Windows))]
-export _io_win_check_code(ok: int, code: ErrorCode): IoResult<void> {
+_io_win_check_code(ok: int, code: ErrorCode): IoResult<void> {
     if (ok != 0) {
         return _io_ok_void();
     }
@@ -229,20 +229,20 @@ export _io_win_check_code(ok: int, code: ErrorCode): IoResult<void> {
 # ── Handles ──────────────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_invalid_handle(): FileHandle {
+_io_sys_invalid_handle(): FileHandle {
     return __null;
 }
 
 # Neither null nor INVALID_HANDLE_VALUE (-1).
 [Target(OS(Windows))]
-export _io_sys_handle_valid(h: FileHandle): bool {
+_io_sys_handle_valid(h: FileHandle): bool {
     return h != __null && unsafe_cast<long>(h) != -1;
 }
 
 # STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are (DWORD)-10,
 # -11 and -12.
 [Target(OS(Windows))]
-export _io_sys_std_handle(stream: StdStream): FileHandle {
+_io_sys_std_handle(stream: StdStream): FileHandle {
     uint which = match (stream) {
         Input => 4294967286,   # STD_INPUT_HANDLE (-10)
         Output => 4294967285,  # STD_OUTPUT_HANDLE (-11)
@@ -254,7 +254,7 @@ export _io_sys_std_handle(stream: StdStream): FileHandle {
 # CreateFileW sharing everything (FILE_SHARE_READ | WRITE | DELETE) with
 # FILE_FLAG_BACKUP_SEMANTICS, so directories open too.
 [Target(OS(Windows))]
-export _io_win_create(path: Path, access: ulong, disposition: uint, extra_flags: ulong): IoResult<FileHandle> {
+_io_win_create(path: Path, access: ulong, disposition: uint, extra_flags: ulong): IoResult<FileHandle> {
     var w = _io_win_wide(path._value);
     var flags = 33554560 | extra_flags;  # BACKUP_SEMANTICS | ATTRIBUTE_NORMAL
     var h = CreateFileW(w, access as uint, 7, __null, disposition, flags as uint, __null);
@@ -269,7 +269,7 @@ export _io_win_create(path: Path, access: ulong, disposition: uint, extra_flags:
 # ── File operations ──────────────────────────────────────────────────────────
 
 [Target(OS(Windows))]
-export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
+_io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
     ulong access = 0;
     if (options._read) {
         access = access | 2147483648;  # GENERIC_READ
@@ -299,14 +299,14 @@ export _io_sys_open(path: Path, options: OpenOptions): IoResult<FileHandle> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_close(h: FileHandle): IoResult<void> {
+_io_sys_close(h: FileHandle): IoResult<void> {
     return _io_win_check(CloseHandle(h));
 }
 
 # One ReadFile/WriteFile call moves at most 1 GiB (the count is a DWORD);
 # sockets use the same limit (their length is an int).
 [Target(OS(Windows))]
-export _io_win_max_rw(n: ulong): uint {
+_io_win_max_rw(n: ulong): uint {
     if (n > 1073741824) {
         return 1073741824;
     }
@@ -314,7 +314,7 @@ export _io_win_max_rw(n: ulong): uint {
 }
 
 [Target(OS(Windows))]
-export _io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
+_io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
     var done = _pep_malloc(4) as __ptr<uint>;
     var ok = ReadFile(h, dst, _io_win_max_rw(n), done, __null);
     var count = done[0] as ulong;
@@ -340,7 +340,7 @@ export _io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
+_io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
     var done = _pep_malloc(4) as __ptr<uint>;
     var ok = WriteFile(h, src, _io_win_max_rw(n), done, __null);
     var count = done[0] as ulong;
@@ -353,7 +353,7 @@ export _io_sys_write(h: FileHandle, src: __ptr<u8>, n: ulong): IoResult<ulong> {
 
 # whence: 0 FILE_BEGIN, 1 FILE_CURRENT, 2 FILE_END (the POSIX values).
 [Target(OS(Windows))]
-export _io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset> {
+_io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset> {
     var pos = _pep_malloc(8) as __ptr<long>;
     var ok = SetFilePointerEx(h, offset, pos, whence as uint);
     var at = pos[0];
@@ -367,7 +367,7 @@ export _io_sys_seek(h: FileHandle, offset: Offset, whence: int): IoResult<Offset
 # FILE_END_OF_FILE_INFO through SetFileInformationByHandle(FileEndOfFileInfo):
 # unlike SetEndOfFile it leaves the file pointer where it is.
 [Target(OS(Windows))]
-export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
+_io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
     var info = _pep_malloc(8) as __ptr<long>;
     info[0] = size as long;
     var ok = SetFileInformationByHandle(h, 6, info, 8);
@@ -377,7 +377,7 @@ export _io_sys_truncate(h: FileHandle, size: ulong): IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_sync(h: FileHandle): IoResult<void> {
+_io_sys_sync(h: FileHandle): IoResult<void> {
     return _io_win_check(FlushFileBuffers(h));
 }
 
@@ -387,13 +387,13 @@ export _io_sys_sync(h: FileHandle): IoResult<void> {
 # nFileSizeHigh @32, nFileSizeLow @36.
 
 [Target(OS(Windows))]
-export _io_win_u32(buf: __ptr<void>, offset: ulong): ulong {
+_io_win_u32(buf: __ptr<void>, offset: ulong): ulong {
     return ((buf + offset) as __ptr<uint>)[0] as ulong;
 }
 
 # A FILETIME (100 ns ticks since 1601) as ns since the Unix epoch; 0 stays 0.
 [Target(OS(Windows))]
-export _io_win_time(buf: __ptr<void>, offset: ulong): long {
+_io_win_time(buf: __ptr<void>, offset: ulong): long {
     var ticks = ((_io_win_u32(buf, offset + 4) << 32) | _io_win_u32(buf, offset)) as long;
     if (ticks == 0) {
         return 0;
@@ -402,7 +402,7 @@ export _io_win_time(buf: __ptr<void>, offset: ulong): long {
 }
 
 [Target(OS(Windows))]
-export _io_win_metadata(
+_io_win_metadata(
     buf: __ptr<void>,
     attrs_offset: ulong,
     created: ulong,
@@ -430,7 +430,7 @@ export _io_win_metadata(
 }
 
 [Target(OS(Windows))]
-export _io_sys_fstat(h: FileHandle): IoResult<Metadata> {
+_io_sys_fstat(h: FileHandle): IoResult<Metadata> {
     var info = _IoBuffer(52);
     if (GetFileInformationByHandle(h, info._bytes) == 0) {
         return IoResult<Metadata>.err(IoError.last());
@@ -441,7 +441,7 @@ export _io_sys_fstat(h: FileHandle): IoResult<Metadata> {
 # Opens the path for no access (attributes only); without `follow`,
 # FILE_FLAG_OPEN_REPARSE_POINT opens a symlink itself.
 [Target(OS(Windows))]
-export _io_win_open_query(path: Path, follow: bool): IoResult<FileHandle> {
+_io_win_open_query(path: Path, follow: bool): IoResult<FileHandle> {
     ulong extra = 0;
     if (!follow) {
         extra = 2097152;  # FILE_FLAG_OPEN_REPARSE_POINT
@@ -450,7 +450,7 @@ export _io_win_open_query(path: Path, follow: bool): IoResult<FileHandle> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
+_io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
     var h = _io_win_open_query(path, follow);
     if (h.is_err()) {
         return IoResult<Metadata>.err(h.error());
@@ -468,7 +468,7 @@ export _io_sys_stat(path: Path, follow: bool): IoResult<Metadata> {
 # Opens the listing of `iterator._path` and reads its first entry into
 # `iterator._entry`: false when there is none.
 [Target(OS(Windows))]
-export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
+_io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
     var path = iterator._path;
     # An empty path would search `*`, the current directory; POSIX fails.
     if (path._value.size == 0) {
@@ -502,7 +502,7 @@ export _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
 # Reads the next entry of an open listing into `iterator._entry`, skipping
 # `.` and `..`: false at the end.
 [Target(OS(Windows))]
-export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
+_io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
     var data = iterator._data;
     while (true) {
         if (iterator._pending) {
@@ -534,12 +534,12 @@ export _io_sys_directory_next(iterator: DirectoryIterator): IoResult<bool> {
 
 # Closes an open listing.
 [Target(OS(Windows))]
-export _io_sys_directory_close(handle: __ptr<void>) {
+_io_sys_directory_close(handle: __ptr<void>) {
     FindClose(handle);
 }
 
 [Target(OS(Windows))]
-export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
+_io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
     var w = _io_win_wide(path._value);
     var ok = CreateDirectoryW(w, __null);
     var code = GetLastError();
@@ -548,7 +548,7 @@ export _io_sys_mkdir(path: Path, mode: Mode): IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_rmdir(path: Path): IoResult<void> {
+_io_sys_rmdir(path: Path): IoResult<void> {
     var w = _io_win_wide(path._value);
     var ok = RemoveDirectoryW(w);
     var code = GetLastError();
@@ -557,7 +557,7 @@ export _io_sys_rmdir(path: Path): IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_unlink(path: Path): IoResult<void> {
+_io_sys_unlink(path: Path): IoResult<void> {
     var w = _io_win_wide(path._value);
     var ok = DeleteFileW(w);
     var code = GetLastError();
@@ -568,7 +568,7 @@ export _io_sys_unlink(path: Path): IoResult<void> {
 # A directory symlink (junction) is removed with RemoveDirectoryW, anything
 # else with DeleteFileW.
 [Target(OS(Windows))]
-export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
+_io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
     if (is_dir) {
         return _io_sys_rmdir(path);
     }
@@ -577,7 +577,7 @@ export _io_sys_remove_link(path: Path, is_dir: bool): IoResult<void> {
 
 # MOVEFILE_REPLACE_EXISTING, as POSIX rename replaces.
 [Target(OS(Windows))]
-export _io_sys_rename(from: Path, to: Path): IoResult<void> {
+_io_sys_rename(from: Path, to: Path): IoResult<void> {
     var wf = _io_win_wide(from._value);
     var wt = _io_win_wide(to._value);
     var ok = MoveFileExW(wf, wt, 1);
@@ -588,7 +588,7 @@ export _io_sys_rename(from: Path, to: Path): IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_getcwd(): IoResult<Path> {
+_io_sys_getcwd(): IoResult<Path> {
     var need = GetCurrentDirectoryW(0, __null);  # units, NUL included
     if (need == 0) {
         return IoResult<Path>.err(IoError.last());
@@ -603,7 +603,7 @@ export _io_sys_getcwd(): IoResult<Path> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_chdir(path: Path): IoResult<void> {
+_io_sys_chdir(path: Path): IoResult<void> {
     var w = _io_win_wide(path._value);
     var ok = SetCurrentDirectoryW(w);
     var code = GetLastError();
@@ -614,7 +614,7 @@ export _io_sys_chdir(path: Path): IoResult<void> {
 # GetFinalPathNameByHandleW answers `\\?\C:\x` or `\\?\UNC\server\share`;
 # drop the verbatim prefix (`\\?\UNC\` becomes `\\`).
 [Target(OS(Windows))]
-export _io_sys_realpath(path: Path): IoResult<Path> {
+_io_sys_realpath(path: Path): IoResult<Path> {
     var h = _io_win_open_query(path, true);
     if (h.is_err()) {
         return IoResult<Path>.err(h.error());
@@ -665,7 +665,7 @@ export _io_sys_temp_dir(): Path {
 # then FileAttributes u32 @32), where 0 attributes would also mean
 # unchanged, so a file left with none gets FILE_ATTRIBUTE_NORMAL.
 [Target(OS(Windows))]
-export _io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
+_io_sys_fchmod(h: FileHandle, mode: Mode): IoResult<void> {
     var query = _IoBuffer(52);
     if (GetFileInformationByHandle(h, query._bytes) == 0) {
         return IoResult<void>.err(IoError.last());
@@ -696,7 +696,7 @@ _io_win_open_attributes(path: Path): IoResult<FileHandle> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
+_io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
     var h = _io_win_open_attributes(path);
     if (h.is_err()) {
         return IoResult<void>.err(h.error());
@@ -707,7 +707,7 @@ export _io_sys_chmod(path: Path, mode: Mode): IoResult<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
+_io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
     if (read_only) {
         return current | 1;
     }
@@ -716,7 +716,7 @@ export _io_sys_read_only_mode(current: Mode, read_only: bool): Mode {
 
 # Windows has no execute bit: whether a file runs depends on its extension.
 [Target(OS(Windows))]
-export _io_sys_executable_mode(current: Mode, executable: bool): Mode {
+_io_sys_executable_mode(current: Mode, executable: bool): Mode {
     return current;
 }
 
@@ -737,7 +737,7 @@ _io_win_filetime(at: __ptr<u8>, time: long?): __ptr<void> {
 }
 
 [Target(OS(Windows))]
-export _io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
+_io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoResult<void> {
     var buf = _IoBuffer(16);
     var a = _io_win_filetime(buf._bytes, accessed);
     var m = _io_win_filetime(buf._bytes + 8, modified);
@@ -745,7 +745,7 @@ export _io_sys_fset_times(h: FileHandle, accessed: long?, modified: long?): IoRe
 }
 
 [Target(OS(Windows))]
-export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
+_io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult<void> {
     var h = _io_win_open_attributes(path);
     if (h.is_err()) {
         return IoResult<void>.err(h.error());
@@ -759,7 +759,7 @@ export _io_sys_set_times(path: Path, accessed: long?, modified: long?): IoResult
 # SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE (2), which Developer Mode
 # needs; Windows before 10 1703 rejects that flag, so try again without it.
 [Target(OS(Windows))]
-export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
+_io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void> {
     if (target._value.size == 0 || link._value.size == 0) {
         return IoResult<void>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
@@ -786,7 +786,7 @@ export _io_sys_symlink(target: Path, link: Path, directory: bool): IoResult<void
 # (after its Flags u32 @16) or @16 for a junction. The substitute name of an
 # absolute target starts `\??\`, dropped here (`\??\UNC\` becomes `\\`).
 [Target(OS(Windows))]
-export _io_sys_readlink(path: Path): IoResult<Path> {
+_io_sys_readlink(path: Path): IoResult<Path> {
     if (path._value.size == 0) {
         return IoResult<Path>.err(IoError(_io_sys_code_not_found(), "empty path"));
     }
@@ -837,18 +837,18 @@ _io_win_u16(buf: __ptr<void>, offset: ulong): ulong {
 # Thread local storage, not fiber local storage: every task on a thread
 # shares the value.
 [Target(OS(Windows))]
-export _io_sys_key_create(): ulong {
+_io_sys_key_create(): ulong {
     var index = TlsAlloc();
     assert(index != 4294967295, "io: no thread-local keys left");  # TLS_OUT_OF_INDEXES
     return index as ulong;
 }
 
 [Target(OS(Windows))]
-export _io_sys_key_get(key: ulong): __ptr<void> {
+_io_sys_key_get(key: ulong): __ptr<void> {
     return TlsGetValue(key as uint);
 }
 
 [Target(OS(Windows))]
-export _io_sys_key_set(key: ulong, value: __ptr<void>) {
+_io_sys_key_set(key: ulong, value: __ptr<void>) {
     TlsSetValue(key as uint, value);
 }

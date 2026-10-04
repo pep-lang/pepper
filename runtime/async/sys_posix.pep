@@ -52,7 +52,7 @@ extern int __ulock_wake(uint operation, void* address, ulong wake_value);
 
 # Starts a thread running `start(argument)`; its handle, or null on failure.
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
+_async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> {
     __ptr<__ptr<void>> thread = _pep_malloc(8);
     var result = pthread_create(thread, __null, start, argument);
     __ptr<void> handle = thread[0];
@@ -64,23 +64,23 @@ export _async_sys_spawn(start: __ptr<void>, argument: __ptr<void>): __ptr<void> 
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_join(handle: __ptr<void>) {
+_async_sys_join(handle: __ptr<void>) {
     pthread_join(handle, __null);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_detach(handle: __ptr<void>) {
+_async_sys_detach(handle: __ptr<void>) {
     pthread_detach(handle);
 }
 
 # The operating system's identity of the calling thread.
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_os_thread(): ulong {
+_async_sys_os_thread(): ulong {
     return pthread_self();
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_sleep(milliseconds: ulong) {
+_async_sys_sleep(milliseconds: ulong) {
     # struct timespec { time_t tv_sec; long tv_nsec; }
     __ptr<long> time = _pep_malloc(16);
     time[0] = (milliseconds / 1000) as long;
@@ -97,7 +97,7 @@ export _async_sys_sleep(milliseconds: ulong) {
 # A new key whose `destructor(value)` runs on each exiting thread with a
 # non-null value.
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_key_create(destructor: __ptr<void>): ulong {
+_async_sys_key_create(destructor: __ptr<void>): ulong {
     __ptr<ulong> key = _pep_malloc(8);
     if (pthread_key_create(key, destructor) != 0) {
         panic("ThreadLocal: the operating system has no thread-local keys left");
@@ -108,17 +108,17 @@ export _async_sys_key_create(destructor: __ptr<void>): ulong {
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_key_delete(key: ulong) {
+_async_sys_key_delete(key: ulong) {
     pthread_key_delete(key);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_key_get(key: ulong): __ptr<void> {
+_async_sys_key_get(key: ulong): __ptr<void> {
     return pthread_getspecific(key);
 }
 
 [Target(OS(Linux) || OS(Mac))]
-export _async_sys_key_set(key: ulong, value: __ptr<void>) {
+_async_sys_key_set(key: ulong, value: __ptr<void>) {
     pthread_setspecific(key, value);
 }
 
@@ -149,14 +149,14 @@ const _ULOCK_WAKE_ALL: uint = 16777473;
 
 # Sleeps while `word` holds `expected`, until woken (or spuriously).
 [Target(OS(Linux))]
-export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+_async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
     syscall(_SYS_FUTEX, word, _FUTEX_WAIT_PRIVATE as long, expected as long, 0 as long, 0 as long, 0 as long);
 }
 
 # Like `_async_sys_futex_wait`, for at most `milliseconds`; false if the time
 # ran out. Waits past ~31 years are capped.
 [Target(OS(Linux))]
-export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
+_async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
     var wait = milliseconds > 1000000000000 ? 1000000000000 : milliseconds;
     # A relative timeout on the monotonic clock: struct timespec
     # { time_t tv_sec; long tv_nsec; }.
@@ -172,13 +172,13 @@ export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds
 
 # Wakes one thread sleeping on `word`, if any.
 [Target(OS(Linux))]
-export _async_sys_futex_wake_one(word: __ptr<uint>) {
+_async_sys_futex_wake_one(word: __ptr<uint>) {
     syscall(_SYS_FUTEX, word, _FUTEX_WAKE_PRIVATE as long, 1 as long);
 }
 
 # Wakes every thread sleeping on `word`.
 [Target(OS(Linux))]
-export _async_sys_futex_wake_all(word: __ptr<uint>) {
+_async_sys_futex_wake_all(word: __ptr<uint>) {
     syscall(_SYS_FUTEX, word, _FUTEX_WAKE_PRIVATE as long, 2147483647 as long);
 }
 
@@ -193,14 +193,14 @@ _async_errno(): int {
 }
 
 [Target(OS(Mac))]
-export _async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
+_async_sys_futex_wait(word: __ptr<uint>, expected: uint) {
     __ulock_wait(_ULOCK_COMPARE_AND_WAIT, word, expected as ulong, 0);  # 0: no timeout
 }
 
 # The timeout is in microseconds, a 32-bit count in which 0 means forever:
 # a longer wait is cut to ~71 minutes and reports a wake when it ends.
 [Target(OS(Mac))]
-export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
+_async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds: ulong): bool {
     var capped = milliseconds > 4294967;
     var microseconds = capped ? 4294967000 : milliseconds * 1000;
     if (microseconds == 0) {
@@ -211,24 +211,24 @@ export _async_sys_futex_wait_for(word: __ptr<uint>, expected: uint, milliseconds
 }
 
 [Target(OS(Mac))]
-export _async_sys_futex_wake_one(word: __ptr<uint>) {
+_async_sys_futex_wake_one(word: __ptr<uint>) {
     __ulock_wake(_ULOCK_COMPARE_AND_WAIT, word, 0);
 }
 
 [Target(OS(Mac))]
-export _async_sys_futex_wake_all(word: __ptr<uint>) {
+_async_sys_futex_wake_all(word: __ptr<uint>) {
     __ulock_wake(_ULOCK_WAKE_ALL, word, 0);
 }
 
 # Milliseconds on a clock that only moves forward (CLOCK_MONOTONIC: 1 on
 # Linux, 6 on macOS), for measuring timeouts.
 [Target(OS(Linux))]
-export _async_sys_monotonic_milliseconds(): ulong {
+_async_sys_monotonic_milliseconds(): ulong {
     return _async_monotonic_milliseconds(1);
 }
 
 [Target(OS(Mac))]
-export _async_sys_monotonic_milliseconds(): ulong {
+_async_sys_monotonic_milliseconds(): ulong {
     return _async_monotonic_milliseconds(6);
 }
 
@@ -246,7 +246,7 @@ _async_monotonic_milliseconds(clock: int): ulong {
 # Online processors, capped by a cgroup CPU quota (`docker run --cpus`) the
 # way Go and the JVM cap theirs: a quota of 1.5 processors counts as 2.
 [Target(OS(Linux))]
-export _async_sys_logical_cpus(): ulong {
+_async_sys_logical_cpus(): ulong {
     var count = sysconf(84);  # _SC_NPROCESSORS_ONLN
     if (count < 1) {
         return 0;
@@ -352,7 +352,7 @@ export _async_sys_cgroup_directories(controller: String): String[] {
 # One core per distinct list of hardware threads sharing it, read from the
 # topology of every configured CPU (offline CPUs have none).
 [Target(OS(Linux))]
-export _async_sys_physical_cpus(): ulong {
+_async_sys_physical_cpus(): ulong {
     var configured = sysconf(83);  # _SC_NPROCESSORS_CONF
     var cores = HashSet<String>();
     var cpu: long = 0;
@@ -372,7 +372,7 @@ export _async_sys_physical_cpus(): ulong {
 }
 
 [Target(OS(Mac))]
-export _async_sys_logical_cpus(): ulong {
+_async_sys_logical_cpus(): ulong {
     __ptr<int> value = _pep_malloc(4);
     __ptr<ulong> size = _pep_malloc(8);
     size[0] = 4;
@@ -384,7 +384,7 @@ export _async_sys_logical_cpus(): ulong {
 }
 
 [Target(OS(Mac))]
-export _async_sys_physical_cpus(): ulong {
+_async_sys_physical_cpus(): ulong {
     __ptr<int> value = _pep_malloc(4);
     __ptr<ulong> size = _pep_malloc(8);
     size[0] = 4;

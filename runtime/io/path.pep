@@ -17,34 +17,34 @@ import "types";
 # ── Path syntax per platform (pure; no C calls) ─────────────────────────────
 
 [Target(!OS(Windows))]
-export _io_path_is_sep(b: int): bool {
+_io_path_is_sep(b: int): bool {
     return b == '/';
 }
 
 [Target(OS(Windows))]
-export _io_path_is_sep(b: int): bool {
+_io_path_is_sep(b: int): bool {
     return b == '/' || b == '\\';
 }
 
 [Target(!OS(Windows))]
-export _io_path_separator(): String {
+_io_path_separator(): String {
     return "/";
 }
 
 [Target(OS(Windows))]
-export _io_path_separator(): String {
+_io_path_separator(): String {
     return "\\";
 }
 
 # Length of the prefix before any root separator: always 0 on POSIX; on
 # Windows a drive (`C:`) or a UNC `\\server\share`.
 [Target(!OS(Windows))]
-export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
+_io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
     return 0;
 }
 
 [Target(OS(Windows))]
-export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
+_io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
     if (_io_byte(p, n, 1) == ':') {
         var c = _io_byte(p, n, 0) | 32;  # ASCII lower case
         if (c >= 'a' && c <= 'z') {
@@ -71,12 +71,12 @@ export _io_path_prefix_len(p: __ptr<u8>, n: ulong): ulong {
 # True when a path with this prefix and root is absolute. POSIX: it has a
 # root. Windows: a drive with a root (`C:\x`) or any UNC path.
 [Target(!OS(Windows))]
-export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
+_io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
     return has_root;
 }
 
 [Target(OS(Windows))]
-export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
+_io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
     if (prefix > 2) {
         return true;  # UNC
     }
@@ -85,7 +85,7 @@ export _io_path_absolute(p: __ptr<u8>, prefix: ulong, has_root: bool): bool {
 
 # ── Byte-level helpers ───────────────────────────────────────────────────────
 
-export _io_slice(s: String, begin: ulong, end: ulong): String {
+_io_slice(s: String, begin: ulong, end: ulong): String {
     if (end <= begin) {
         return String();
     }
@@ -93,7 +93,7 @@ export _io_slice(s: String, begin: ulong, end: ulong): String {
 }
 
 # End of the prefix plus any root separators: the part no operation strips.
-export _io_path_root_end(s: String): ulong {
+_io_path_root_end(s: String): ulong {
     var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var n = s.size;
     var i = _io_path_prefix_len(p, n);
@@ -104,7 +104,7 @@ export _io_path_root_end(s: String): ulong {
 }
 
 # End of the path with trailing separators removed (never inside the root).
-export _io_path_trimmed_end(s: String): ulong {
+_io_path_trimmed_end(s: String): ulong {
     var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var root = _io_path_root_end(s);
     var e = s.size;
@@ -115,7 +115,7 @@ export _io_path_trimmed_end(s: String): ulong {
 }
 
 # Start of the last component (== root end when there is no separator).
-export _io_path_name_start(s: String, e: ulong): ulong {
+_io_path_name_start(s: String, e: ulong): ulong {
     var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var root = _io_path_root_end(s);
     var i = e;
@@ -128,7 +128,7 @@ export _io_path_name_start(s: String, e: ulong): ulong {
 # The components after the prefix and root, split at separators, with empty
 # parts dropped. `.` parts are dropped too unless `keep_leading_dot` and the
 # path starts with one.
-export _io_path_parts(s: String, keep_leading_dot: bool): String[] {
+_io_path_parts(s: String, keep_leading_dot: bool): String[] {
     var parts = Array<String>();
     var p = unsafe_cast<__ptr<u8>>(s.c_str());
     var n = s.size;

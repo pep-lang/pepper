@@ -127,7 +127,7 @@ _compress_crc_table(): uint[] {
 
 # The eight bytes at `data + at` as a little-endian number. LLVM turns the
 # byte loads into one unaligned load.
-export _compress_load_64(data: __ptr<u8>, at: ulong): ulong {
+_compress_load_64(data: __ptr<u8>, at: ulong): ulong {
     __ptr<u8> bytes = data + at;
     var low = (bytes[0] as uint) | ((bytes[1] as uint) << 8) | ((bytes[2] as uint) << 16) | ((bytes[3] as uint) << 24);
     var high = (bytes[4] as uint) | ((bytes[5] as uint) << 8) | ((bytes[6] as uint) << 16) | ((bytes[7] as uint) << 24);
@@ -135,7 +135,7 @@ export _compress_load_64(data: __ptr<u8>, at: ulong): ulong {
 }
 
 # Stores `value` as the eight little-endian bytes at `data + at`.
-export _compress_store_64(data: __ptr<u8>, at: ulong, value: ulong) {
+_compress_store_64(data: __ptr<u8>, at: ulong, value: ulong) {
     __ptr<u8> bytes = data + at;
     bytes[0] = (value & 255) as u8;
     bytes[1] = ((value >> 8) & 255) as u8;
