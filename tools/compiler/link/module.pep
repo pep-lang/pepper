@@ -10,3 +10,25 @@ export [
 export [is_build_option_name, Target, TEST_BUILD_OPTION] from "platform";
 export [Runtime] from "files";
 export [demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from "names";
+export [
+    all_hosts,
+    find_manifest,
+    host_named,
+    is_identifier,
+    line_column,
+    load_manifest,
+    package_directory,
+    parse_manifest,
+    read_lock,
+    render_manifest_errors,
+    Dependency,
+    Host,
+    LockedPackage,
+    Manifest,
+    ManifestError,
+    Packages,
+    Resolution,
+    DEPS_DIR,
+    LOCK_FILE
+] from "project";
+export [find_project, MANIFEST_FILE] from "files";

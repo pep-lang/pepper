@@ -4,3 +4,4 @@
 
 export * from "build";
 export * from "linker";
+export * from "project";

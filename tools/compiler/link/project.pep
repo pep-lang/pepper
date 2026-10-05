@@ -1,0 +1,983 @@
+## Projects, as `crates/pepper-files/src/project.rs` reads them: a
+## `pep.toml` marks the root of a project (or of a package, a project other
+## projects depend on) and declares its metadata, how it is built, and its
+## dependencies. Each key of `[dependencies]` is the name source code
+## imports; a fetched dependency lives in the project's
+## `.pep/deps/<host>/<repository>`, and `Packages` resolves the imports of
+## every file of a program against the dependencies of the package that
+## file belongs to.
+
+import [Span] from compiler.ast;
+import [Diagnostic, Location, render_all, SourceText] from compiler.diagnostic;
+import io;
+import [File, Path] from io;
+import os;
+import process;
+import toml;
+import [TomlValue] from toml;
+import "files" as files;
+
+## The folder, in a project's `.pep`, that holds its fetched dependencies.
+export const DEPS_DIR = "deps";
+
+## The file, beside `pep.toml`, that records the exact revision of every
+## dependency in the graph (`pepper package` writes it).
+export const LOCK_FILE = "pep.lock";
+
+## The Git hosts a dependency can come from.
+export enum Host {
+    GitHub,
+    GitLab,
+    Codeberg,
+
+    ## The key that names it in a dependency: `github`.
+    key(): String {
+        match (this) {
+            GitHub => {
+                return "github";
+            }
+            GitLab => {
+                return "gitlab";
+            }
+            Codeberg => {
+                return "codeberg";
+            }
+        }
+    }
+
+    ## Its domain: `github.com`.
+    domain(): String {
+        match (this) {
+            GitHub => {
+                return "github.com";
+            }
+            GitLab => {
+                return "gitlab.com";
+            }
+            Codeberg => {
+                return "codeberg.org";
+            }
+        }
+    }
+
+    ## The address git clones `repository` (`owner/name`) from:
+    ## `https://github.com/owner/name.git`, or under the address in
+    ## `PEPPER_PACKAGE_<HOST>_URL` when that is set (a mirror).
+    clone_url(repository: String): String {
+        var variable = $"PEPPER_PACKAGE_{key().upper()}_URL";
+        var set = os.environment(variable);
+        var base = set.is_value() and !set.value().is_empty ? set.value() : $"https://{domain()}";
+        while (base.ends_with("/")) {
+            base = base.substr_bytes(0, base.size - 1);
+        }
+        return $"{base}/{repository}.git";
+    }
+}
+
+## Every host, in the order `pepper package add` tries them by default.
+export all_hosts(): Host[] {
+    return [Host.GitHub, Host.GitLab, Host.Codeberg];
+}
+
+## The host whose key is `key`, if any.
+export host_named(key: String): Host? {
+    for (var host in all_hosts()) {
+        if (host.key() == key) {
+            return Optional<Host>.Value(host);
+        }
+    }
+    return Optional<Host>.Empty;
+}
+
+## Where a package's files live in the project `project`:
+## `<project>/.pep/deps/<host domain>/<owner>/<name>`.
+export package_directory(project: Path, host: Host, repository: String): Path {
+    var dir = project.join(Path(".pep")).join(Path(DEPS_DIR)).join(Path(host.domain()));
+    for (var part in repository.split("/")) {
+        dir = dir.join(Path(part));
+    }
+    return dir;
+}
+
+## One package `pep.lock` lists.
+export struct LockedPackage {
+    var host: Host;
+    ## `owner/name`.
+    var repository: String;
+    ## The full commit to check out.
+    var commit: String;
+
+    construct(host: Host, repository: String, commit: String) {
+        this.host = host;
+        this.repository = repository;
+        this.commit = commit;
+    }
+
+    ## Its source as `pep.lock` writes it: `github:owner/name`.
+    source(): String {
+        return $"{host.key()}:{repository}";
+    }
+}
+
+## The packages the `pep.lock` at `path` lists; none when it does not
+## exist.
+##
+## @param path the lock file
+## @returns the packages, or why the file is not a valid lock
+export read_lock(path: Path): Result<LockedPackage[], String> {
+    var locked = Array<LockedPackage>();
+    var text = File.read_to_string(path);
+    if (text.is_err()) {
+        return Result<LockedPackage[], String>.ok(locked);
+    }
+    var root = toml.parse(text.value());
+    if (root.is_err()) {
+        return Result<LockedPackage[], String>.err($"{path}: {root.error().message}");
+    }
+    var invalid = $"{path}: 'package' must be an array of tables with a 'source' and a 'commit'";
+    var packages = root.value().try_get("package");
+    if (!packages.is_value()) {
+        return Result<LockedPackage[], String>.ok(locked);
+    }
+    var items = packages.value().as_array();
+    if (!items.is_value()) {
+        return Result<LockedPackage[], String>.err(invalid);
+    }
+    for (var package in items.value()) {
+        if (!package.as_table().is_value()) {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        var source = package.try_get("source");
+        var commit = package.try_get("commit");
+        if (!source.is_value() or !commit.is_value()) {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        var source_string = "";
+        var commit_string = "";
+        if (source.value() is String(s)) {
+            source_string = s;
+        } else {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        if (commit.value() is String(c)) {
+            commit_string = c;
+        } else {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        var split = source_string.split_once(":");
+        if (!split.is_value()) {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        var (host_key, repository) = split.value();
+        var host = host_named(host_key);
+        if (!host.is_value()) {
+            return Result<LockedPackage[], String>.err(invalid);
+        }
+        locked.append(LockedPackage(host.value(), repository, commit_string));
+    }
+    return Result<LockedPackage[], String>.ok(locked);
+}
+
+## One entry of `[dependencies]`.
+export struct Dependency {
+    ## The key: the name source code imports.
+    var name: String;
+    ## The key's span in the manifest's text.
+    var name_span: Span;
+    ## Its host, for a Git dependency; Empty for a folder.
+    var host: Host?;
+    ## `owner/name` on the host, or the folder relative to the `pep.toml`.
+    var location: String;
+
+    construct(name: String, name_span: Span, host: Host?, location: String) {
+        this.name = name;
+        this.name_span = name_span;
+        this.host = host;
+        this.location = location;
+    }
+
+    ## Where the dependency's files are, for a project rooted at `project`
+    ## whose manifest (the one naming the dependency) is in `manifest_dir`.
+    directory(project: Path, manifest_dir: Path): Path {
+        if (host.is_value()) {
+            return package_directory(project, host.value(), location);
+        }
+        return manifest_dir.join(Path(location));
+    }
+
+    ## Its source as `pep.lock` writes it (`github:owner/name`), for a Git
+    ## dependency.
+    locked_source(): String? {
+        if (host.is_value()) {
+            return Optional<String>.Value($"{host.value().key()}:{location}");
+        }
+        return Optional<String>.Empty;
+    }
+}
+
+## A problem with a `pep.toml`, at a byte range of its text.
+export struct ManifestError {
+    var message: String;
+    var span: Span;
+
+    construct(message: String, span: Span) {
+        this.message = message;
+        this.span = span;
+    }
+}
+
+## A parsed `pep.toml`.
+export struct Manifest {
+    ## The `pep.toml` file.
+    var path: Path;
+    ## Its text, for diagnostics.
+    var text: String;
+    ## `[package]`'s `name`.
+    var name: String = "";
+    ## `[build]`'s `entry`, relative to the project, if given.
+    var entry_file: String? = Optional<String>.Empty;
+    ## `[build]`'s `output`, relative to the project, if given.
+    var output_file: String? = Optional<String>.Empty;
+    ## `[build]`'s extra module search directories, relative to the project.
+    var include: String[] = Array<String>();
+    ## `[build]`'s libraries to link.
+    var link: String[] = Array<String>();
+    ## In the order they are written.
+    var dependencies: Dependency[] = Array<Dependency>();
+
+    construct(path: Path, text: String) {
+        this.path = path;
+        this.text = text;
+    }
+
+    ## The folder holding the `pep.toml`: the project's root.
+    dir(): Path {
+        return files.dir_of(path);
+    }
+
+    ## The dependency named `name`, if any.
+    dependency(name: String): Dependency? {
+        for (var d in dependencies) {
+            if (d.name == name) {
+                return Optional<Dependency>.Value(d);
+            }
+        }
+        return Optional<Dependency>.Empty;
+    }
+
+    ## The `[build]` entry file: `entry`, else `main.pep`, in the project.
+    entry(): Path {
+        return dir().join(Path(entry_file.is_value() ? entry_file.value() : "main.pep"));
+    }
+
+    ## The `[build]` executable: `output`, else the package's name, in the
+    ## project.
+    output(): Path {
+        return dir().join(Path(output_file.is_value() ? output_file.value() : name));
+    }
+
+    ## The `[build]` include directories, in the project.
+    include_dirs(): Path[] {
+        var dirs = Array<Path>();
+        for (var dir_name in include) {
+            dirs.append(dir().join(Path(dir_name)));
+        }
+        return dirs;
+    }
+}
+
+## Whether `name` can be imported: an identifier.
+export is_identifier(name: String): bool {
+    if (name.is_empty) {
+        return false;
+    }
+    ulong i = 0;
+    for (var b in name.bytes()) {
+        var letter = (b >= 'a' and b <= 'z') or (b >= 'A' and b <= 'Z') or b == '_';
+        if (!letter and (i == 0 or !(b >= '0' and b <= '9'))) {
+            return false;
+        }
+        i += 1;
+    }
+    return true;
+}
+
+## What a value is, for "expected" messages.
+_kind(value: TomlValue): String {
+    match (value) {
+        String(_) => {
+            return "a string";
+        }
+        Integer(_) => {
+            return "an integer";
+        }
+        Float(_) => {
+            return "a float";
+        }
+        Boolean(_) => {
+            return "a boolean";
+        }
+        DateTime(_) => {
+            return "a date-time";
+        }
+        Array(_) => {
+            return "an array";
+        }
+        Table(_) => {
+            return "a table";
+        }
+    }
+}
+
+## `path` with `key` after it.
+_at(path: String[], key: String): String[] {
+    var out = path.copy();
+    out.append(key);
+    return out;
+}
+
+## Reads a manifest's text, collecting its problems. The parsed tree has no
+## positions, so spans are found in the text by the keys that lead to
+## them.
+struct _Reader {
+    var text: String;
+    var errors: ManifestError[] = Array<ManifestError>();
+
+    construct(text: String) {
+        this.text = text;
+    }
+
+    ## Where the key path `keys` is spelled: the byte offsets of its last
+    ## key and of the value after it. A first key that heads a table
+    ## (`[package]`) is found as the header; each later key as the first
+    ## `key =` after the one before it.
+    _locate(keys: String[]): (ulong, ulong) {
+        ulong at = 0;
+        ulong key_at = 0;
+        ulong i = 0;
+        while (i < keys.count) {
+            var key = keys[i];
+            if (i == 0) {
+                var header = text.find($"[{key}]");
+                if (header >= 0) {
+                    at = header as ulong + 1;
+                    key_at = at;
+                    i += 1;
+                    continue;
+                }
+            }
+            var found = _find_key(key, at);
+            if (!found.is_value()) {
+                return (key_at, at);
+            }
+            key_at = found.value();
+            at = found.value() + key.size;
+            i += 1;
+        }
+        # The value starts after `=` and any spaces.
+        var value_at = at;
+        while (value_at < text.size and (text.byte_at(value_at) == ' ' or text.byte_at(value_at) == '\t')) {
+            value_at += 1;
+        }
+        if (value_at < text.size and text.byte_at(value_at) == '=') {
+            value_at += 1;
+            while (value_at < text.size and (text.byte_at(value_at) == ' ' or text.byte_at(value_at) == '\t')) {
+                value_at += 1;
+            }
+        }
+        return (key_at, value_at);
+    }
+
+    ## The offset of the first `key` at or after `from` that is a whole key
+    ## followed by `=` (or that is quoted).
+    _find_key(key: String, from: ulong): ulong? {
+        var at = from;
+        while (true) {
+            var found = text.find(key, at);
+            if (found < 0) {
+                return Optional<ulong>.Empty;
+            }
+            var start = found as ulong;
+            var end = start + key.size;
+            var before = start == 0 ? '\n' : text.byte_at(start - 1);
+            var whole_start = before == '\n'
+                or before == ' '
+                or before == '\t'
+                or before == '{'
+                or before == ','
+                or before == '"';
+            var after = end;
+            if (after < text.size and text.byte_at(after) == '"') {
+                after += 1;
+            }
+            while (after < text.size and (text.byte_at(after) == ' ' or text.byte_at(after) == '\t')) {
+                after += 1;
+            }
+            if (whole_start and after < text.size and text.byte_at(after) == '=') {
+                return Optional<ulong>.Value(start);
+            }
+            at = end;
+        }
+        return Optional<ulong>.Empty;
+    }
+
+    ## Where the value at `keys` is: a quoted string through its closing
+    ## quote, else up to the next space, `,`, `}` or `]` (a table or array
+    ## value, its first byte).
+    value_span(keys: String[]): Span {
+        var (_, value) = _locate(keys);
+        return Span(value, _value_end(value));
+    }
+
+    ## Where the string `item` of the array at `keys` is written, else the
+    ## array's place.
+    item_span(keys: String[], item: String): Span {
+        var array = value_span(keys);
+        var found = text.find($"\"{item}\"", array.start);
+        if (found < 0) {
+            return array;
+        }
+        return Span(found as ulong, found as ulong + item.size + 2);
+    }
+
+    _value_end(start: ulong): ulong {
+        if (start >= text.size) {
+            return start;
+        }
+        var first = text.byte_at(start);
+        if (first == '"' or first == '\'') {
+            var end = start + 1;
+            while (end < text.size and text.byte_at(end) != first and text.byte_at(end) != '\n') {
+                if (first == '"' and text.byte_at(end) == '\\') {
+                    end += 1;
+                }
+                end += 1;
+            }
+            return end < text.size ? end + 1 : end;
+        }
+        if (first == '{' or first == '[') {
+            return start + 1;
+        }
+        var end = start;
+        while (end < text.size) {
+            var b = text.byte_at(end);
+            if (b == ' ' or b == '\t' or b == '\n' or b == '\r' or b == ',' or b == '}' or b == ']') {
+                break;
+            }
+            end += 1;
+        }
+        return end;
+    }
+
+    ## Where the last key of `keys` is.
+    key_span(keys: String[]): Span {
+        var (key, _) = _locate(keys);
+        return Span(key, key + keys[keys.count - 1].size);
+    }
+
+    error(message: String, span: Span) {
+        errors.append(ManifestError(message, span));
+    }
+
+    table(path: String[], key: String, value: TomlValue): OrderedMap<String, TomlValue>? {
+        var members = value.as_table();
+        if (!members.is_value()) {
+            error($"'{key}' must be a table, not {_kind(value)}", value_span(path));
+        }
+        return members;
+    }
+
+    string(path: String[], key: String, value: TomlValue): String? {
+        if (value is String(text_value)) {
+            return Optional<String>.Value(text_value);
+        }
+        error($"'{key}' must be a string, not {_kind(value)}", value_span(path));
+        return Optional<String>.Empty;
+    }
+
+    strings(path: String[], key: String, value: TomlValue): String[] {
+        var out = Array<String>();
+        var items = value.as_array();
+        if (!items.is_value()) {
+            error($"'{key}' must be an array of strings, not {_kind(value)}", value_span(path));
+            return out;
+        }
+        ulong index = 0;
+        for (var item in items.value()) {
+            if (item is String(s)) {
+                out.append(s);
+            } else {
+                error($"'{key}' must be an array of strings; this is {_kind(item)}", value_span(path));
+            }
+            index += 1;
+        }
+        return out;
+    }
+
+    unknown_key(path: String[], key: String, table: String, known: String[]) {
+        var quoted = Array<String>();
+        for (var k in known) {
+            quoted.append($"'{k}'");
+        }
+        error($"unknown key '{key}' in '[{table}]'; expected one of {", ".join(quoted)}", key_span(_at(path, key)));
+    }
+
+    package(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        var named = false;
+        for (var (key, value) in members) {
+            var path = ["package", key];
+            if (key == "name") {
+                var name = string(path, key, value);
+                if (name.is_value()) {
+                    named = true;
+                    if (!is_identifier(name.value())) {
+                        error(
+                            $"package name '{name.value()}' is not an identifier: use letters, digits and '_', not starting with a digit",
+                            value_span(path)
+                        );
+                    }
+                    manifest.name = name.value();
+                }
+            } else if (key == "version" or key == "description" or key == "license" or key == "repository") {
+                string(path, key, value);
+            } else if (key == "authors") {
+                strings(path, key, value);
+            } else {
+                unknown_key(
+                    ["package"], key, "package", ["name", "version", "description", "authors", "license", "repository"]
+                );
+            }
+        }
+        if (!named) {
+            error("'[package]' needs a 'name'", key_span(["package"]));
+        }
+    }
+
+    build(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (key, value) in members) {
+            var path = ["build", key];
+            if (key == "entry") {
+                manifest.entry_file = string(path, key, value);
+            } else if (key == "output") {
+                manifest.output_file = string(path, key, value);
+            } else if (key == "include") {
+                manifest.include = strings(path, key, value);
+            } else if (key == "link") {
+                manifest.link = strings(path, key, value);
+            } else {
+                unknown_key(["build"], key, "build", ["entry", "output", "include", "link"]);
+            }
+        }
+    }
+
+    fetch(members: OrderedMap<String, TomlValue>) {
+        for (var (key, value) in members) {
+            var path = ["fetch", key];
+            if (key != "hosts") {
+                unknown_key(["fetch"], key, "fetch", ["hosts"]);
+                continue;
+            }
+            var items = value.as_array();
+            if (!items.is_value()) {
+                error($"'hosts' must be an array of strings, not {_kind(value)}", value_span(path));
+                continue;
+            }
+            ulong index = 0;
+            for (var item in items.value()) {
+                var known = false;
+                if (item is String(s)) {
+                    known = host_named(s).is_value();
+                }
+                if (!known) {
+                    var at = value_span(path);
+                    if (item is String(written)) {
+                        at = item_span(path, written);
+                    }
+                    error("'hosts' lists 'github', 'gitlab' or 'codeberg'", at);
+                }
+                index += 1;
+            }
+        }
+    }
+
+    dependencies(manifest: Manifest, members: OrderedMap<String, TomlValue>) {
+        for (var (name, value) in members) {
+            var path = ["dependencies", name];
+            if (!is_identifier(name)) {
+                error($"dependency name '{name}' is not an identifier; it is the name 'import' uses", key_span(path));
+                continue;
+            }
+            var fields = value.as_table();
+            if (!fields.is_value()) {
+                error(
+                    $"dependency '{name}' must be a table, not {_kind(value)}: '{name} = "
+                        + "{ github = \"owner/name\", version = \"1.0\" }'",
+                    value_span(path)
+                );
+                continue;
+            }
+            dependency(manifest, path, name, fields.value());
+        }
+    }
+
+    dependency(manifest: Manifest, path: String[], name: String, fields: OrderedMap<String, TomlValue>) {
+        var before = errors.count;
+        Host? host = Optional<Host>.Empty;
+        String? location;
+        var revision = "";
+        for (var (field, value) in fields) {
+            var field_path = _at(path, field);
+            var field_host = host_named(field);
+            if (field_host.is_value() or field == "path") {
+                var given = string(field_path, field, value);
+                if (!given.is_value()) {
+                    continue;
+                }
+                if (field_host.is_value()) {
+                    # GitLab nests groups: `group/subgroup/name`.
+                    var parts = given.value().split("/");
+                    var well_formed = parts.count == 2 or (field_host.value() == Host.GitLab and parts.count > 2);
+                    for (var part in parts) {
+                        if (part.is_empty or part == "." or part == "..") {
+                            well_formed = false;
+                        }
+                    }
+                    if (!well_formed) {
+                        error(
+                            $"'{field}' must name a repository as 'owner/name', not '{given.value()}'",
+                            value_span(field_path)
+                        );
+                        continue;
+                    }
+                }
+                if (location.is_value()) {
+                    error(
+                        $"'{field}' is a second source; a dependency comes from one of 'github', 'gitlab', 'codeberg' or 'path'",
+                        key_span(field_path)
+                    );
+                    continue;
+                }
+                host = field_host;
+                location = given;
+            } else if (field == "version" or field == "branch" or field == "tag" or field == "commit") {
+                if (!string(field_path, field, value).is_value()) {
+                    continue;
+                }
+                if (!revision.is_empty) {
+                    error(
+                        $"'{revision}' and '{field}' both choose a revision; give one of 'version', 'branch', 'tag' or 'commit'",
+                        key_span(field_path)
+                    );
+                    continue;
+                }
+                revision = field;
+            } else {
+                unknown_key(
+                    path,
+                    field,
+                    "dependencies",
+                    ["github", "gitlab", "codeberg", "path", "version", "branch", "tag", "commit"]
+                );
+            }
+        }
+        if (!location.is_value()) {
+            if (errors.count == before) {
+                error(
+                    $"dependency '{name}' needs a source: 'github', 'gitlab' or 'codeberg' (\"owner/name\"), or 'path'",
+                    value_span(path)
+                );
+            }
+            return;
+        }
+        if (!host.is_value() and !revision.is_empty) {
+            error(
+                $"dependency '{name}' is a 'path'; a folder has no versions, branches, tags or commits",
+                key_span(_at(path, revision))
+            );
+        }
+        if (errors.count != before) {
+            return;
+        }
+        manifest.dependencies.append(Dependency(name, key_span(path), host, location.value()));
+    }
+}
+
+## Parses `text`, the contents of the `pep.toml` at `path`. Every problem
+## found is returned, in the order of the text.
+##
+## @param path the file
+## @param text its contents
+## @returns the manifest, or its problems
+export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[]> {
+    var root = toml.parse(text);
+    if (root.is_err()) {
+        var e = root.error();
+        var message = e.message;
+        var span = Span(e.offset, e.offset);
+        if (message.starts_with("duplicate key '")) {
+            # Named by the key as written, as the Rust compiler names it.
+            var end = e.offset;
+            while (end < text.size
+                and text.byte_at(end) != ' '
+                and text.byte_at(end) != '='
+                and text.byte_at(end) != '\t') {
+                end += 1;
+            }
+            span = Span(e.offset, end);
+            var key = text.substr_bytes(e.offset, end - e.offset);
+            while (key.starts_with("\"") or key.ends_with("\"")) {
+                key = key.starts_with("\"") ? key.substr_bytes(1, key.size - 1) : key.substr_bytes(0, key.size - 1);
+            }
+            message = $"duplicate key '{key}'";
+        }
+        return Result<Manifest, ManifestError[]>.err([ManifestError(message, span)]);
+    }
+    var reader = _Reader(text);
+    var manifest = Manifest(path, text);
+    var package_seen = false;
+    var members = root.value().as_table();
+    for (var (key, value) in members.value()) {
+        var at = [key];
+        if (key == "package") {
+            package_seen = true;
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.package(manifest, table.value());
+            }
+        } else if (key == "build") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.build(manifest, table.value());
+            }
+        } else if (key == "dependencies") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.dependencies(manifest, table.value());
+            }
+        } else if (key == "fetch") {
+            var table = reader.table(at, key, value);
+            if (table.is_value()) {
+                reader.fetch(table.value());
+            }
+        } else {
+            reader.error(
+                $"unknown table '{key}'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'",
+                reader.key_span(at)
+            );
+        }
+    }
+    if (!package_seen) {
+        reader.error("missing '[package]' table with the project's 'name'", Span(0, 0));
+    }
+    if (reader.errors.is_empty) {
+        return Result<Manifest, ManifestError[]>.ok(manifest);
+    }
+    reader.errors.sort((a, b) => a.span.start < b.span.start ? -1 : (a.span.start > b.span.start ? 1 : 0));
+    return Result<Manifest, ManifestError[]>.err(reader.errors);
+}
+
+## `errors` in the `pep.toml` at `path`, whose text is `text`, rendered
+## clang-style.
+export render_manifest_errors(path: Path, text: String, errors: ManifestError[]): String {
+    var diagnostics = Array<Diagnostic>();
+    for (var e in errors) {
+        diagnostics.append(Diagnostic.error(e.message).at(Location(0, e.span)));
+    }
+    return render_all(diagnostics, [SourceText(path.to_string(), text)]);
+}
+
+## Reads the project file at `path` and checks it against the runtime in
+## `runtime_dirs`: a dependency may not be named like a runtime module,
+## which it would otherwise hide. Problems are rendered clang-style.
+##
+## @param path the `pep.toml`
+## @param runtime_dirs the runtime's folders
+## @returns the manifest, or its problems
+export load_manifest(path: Path, runtime_dirs: Path[]): Result<Manifest, String> {
+    var text = File.read_to_string(path);
+    if (text.is_err()) {
+        return Result<Manifest, String>.err($"cannot read {path}: {text.error().message}");
+    }
+    var parsed = parse_manifest(path, text.value());
+    if (parsed.is_err()) {
+        return Result<Manifest, String>.err(render_manifest_errors(path, text.value(), parsed.error()));
+    }
+    var manifest = parsed.value();
+    var errors = Array<ManifestError>();
+    for (var d in manifest.dependencies) {
+        for (var dir in runtime_dirs) {
+            if (dir.join(Path(d.name)).join(Path(files.MODULE_FILE)).is_file()) {
+                errors.append(
+                    ManifestError(
+                        $"dependency '{d.name}' has the name of the runtime module '{d.name}'; give it another name, which source code then imports",
+                        d.name_span
+                    )
+                );
+                break;
+            }
+        }
+    }
+    if (errors.is_empty) {
+        return Result<Manifest, String>.ok(manifest);
+    }
+    return Result<Manifest, String>.err(render_manifest_errors(path, manifest.text, errors));
+}
+
+## The 1-based line and column of byte `offset` in `text`.
+export line_column(text: String, offset: ulong): (ulong, ulong) {
+    ulong line = 1;
+    ulong line_start = 0;
+    ulong i = 0;
+    while (i < offset and i < text.size) {
+        if (text.byte_at(i) == '\n') {
+            line += 1;
+            line_start = i + 1;
+        }
+        i += 1;
+    }
+    return (line, i - line_start + 1);
+}
+
+## What `Packages.resolve` found for `import name`.
+export enum Resolution {
+    ## The first part of the name is not a dependency of the importing
+    ## file's package: search the search paths.
+    NotADependency,
+    ## The module's `module.pep`.
+    Found(path: Path),
+    ## A dependency names it, but its module is not on disk, or the
+    ## importing file's `pep.toml` cannot be used: what is wrong.
+    Missing(message: String),
+}
+
+## The packages of a program: which `pep.toml` each file falls under, and
+## where the dependencies it names are.
+export struct Packages {
+    ## The project's root folder, whose `.pep/deps` holds fetched
+    ## dependencies.
+    var project: Path?;
+    ## Folder -> the manifest governing it, or why it could not be used, or
+    ## Empty when none does.
+    var _by_dir: HashMap<String, Result<Manifest, String>?> = HashMap<String, Result<Manifest, String>?>();
+
+    ## The packages of a program rooted at the file `root`.
+    construct(root: Path) {
+        project = files.find_project(root);
+    }
+
+    _manifest_for(dir: Path): Result<Manifest, String>? {
+        var key = dir.to_string();
+        if (_by_dir.contains(key)) {
+            return _by_dir[key];
+        }
+        var found = Optional<Result<Manifest, String>>.Empty;
+        var path = dir.join(Path(files.MANIFEST_FILE));
+        if (path.is_file()) {
+            var text = File.read_to_string(path);
+            if (text.is_err()) {
+                found = Optional<Result<Manifest, String>>.Value(
+                    Result<Manifest, String>.err($"cannot read {path}: {text.error().message}")
+                );
+            } else {
+                var parsed = parse_manifest(path, text.value());
+                if (parsed.is_err()) {
+                    var first = parsed.error()[0];
+                    var (line, column) = line_column(text.value(), first.span.start);
+                    found = Optional<Result<Manifest, String>>.Value(
+                        Result<Manifest, String>.err($"{path}:{line}:{column}: {first.message}")
+                    );
+                } else {
+                    found = Optional<Result<Manifest, String>>.Value(Result<Manifest, String>.ok(parsed.value()));
+                }
+            }
+        } else {
+            var parent = dir.parent();
+            if (parent.is_value() and parent.value().to_string() != dir.to_string()) {
+                found = _manifest_for(parent.value());
+            }
+        }
+        _by_dir[key] = found;
+        return found;
+    }
+
+    ## `import name` (`a`, or `a.b.c` for a module inside a package) in the
+    ## file `from`: when `a` is a dependency of `from`'s package, the module
+    ## `a` names there (its root `module.pep`, or `b/c/module.pep` inside
+    ## it).
+    ##
+    ## @param from the importing file
+    ## @param name the module name
+    ## @returns what it resolves to
+    resolve(from: Path, name: String): Resolution {
+        if (!project.is_value()) {
+            return Resolution.NotADependency;
+        }
+        var file = from;
+        if (!file.is_absolute()) {
+            var cwd = process.working_directory();
+            if (cwd.is_ok()) {
+                file = cwd.value().join(from).normalize();
+            }
+        }
+        var governing = _manifest_for(files.dir_of(file));
+        if (!governing.is_value()) {
+            return Resolution.NotADependency;
+        }
+        if (governing.value().is_err()) {
+            return Resolution.Missing(governing.value().error());
+        }
+        var manifest = governing.value().value();
+        var parts = name.split(".");
+        var first = parts[0];
+        var dependency = manifest.dependency(first);
+        if (!dependency.is_value()) {
+            return Resolution.NotADependency;
+        }
+        var package = dependency.value().directory(project.value(), manifest.dir());
+        if (!package.is_directory()) {
+            if (dependency.value().host.is_value()) {
+                return Resolution.Missing($"dependency '{first}' is not fetched: no {package}");
+            }
+            return Resolution.Missing($"dependency '{first}' names the folder {package}, which does not exist");
+        }
+        var module = package;
+        ulong i = 1;
+        while (i < parts.count) {
+            module = module.join(Path(parts[i]));
+            i += 1;
+        }
+        var module_file = module.join(Path(files.MODULE_FILE));
+        if (module_file.is_file()) {
+            return Resolution.Found(module_file);
+        }
+        if (parts.count == 1) {
+            return Resolution.Missing($"package '{first}' has no root module: no {module_file}");
+        }
+        return Resolution.Missing($"package '{first}' has no module '{name}': no {module_file}");
+    }
+}
+
+## The `pep.toml` nearest `dir`: in it, or in the closest folder above it
+## that has one.
+export find_manifest(dir: Path): Path? {
+    var start = dir;
+    if (!start.is_absolute()) {
+        var cwd = process.working_directory();
+        if (cwd.is_ok()) {
+            start = cwd.value().join(dir).normalize();
+        }
+    }
+    Path? at = Optional<Path>.Value(start);
+    while (at.is_value()) {
+        var candidate = at.value().join(Path(files.MANIFEST_FILE));
+        if (candidate.is_file()) {
+            return Optional<Path>.Value(candidate);
+        }
+        var parent = at.value().parent();
+        if (!parent.is_value() or parent.value().to_string() == at.value().to_string()) {
+            break;
+        }
+        at = parent;
+    }
+    return Optional<Path>.Empty;
+}

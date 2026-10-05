@@ -2962,10 +2962,18 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   static constructors into `.init_array` on ELF, writes one object to
   `.pep/build`, and links it; `linker.pep` finds clang (as
   `find_link_driver` does) and links with the `[Link]` libraries and
-  folders, `-l` and `-L`, and the OS's default system libraries. Not yet
+  folders, `-l` and `-L`, and the OS's default system libraries;
+  `project.pep` builds a project as `apply_project` and `fetch.rs` do:
+  with no file, the `pep.toml`'s entry and output (and `.pep/build` in the
+  project), its `[build]` `link` libraries, and the missing dependencies
+  fetched with `pep-package` (else checked out with git from `pep.lock`).
+  `compiler/link/project.pep` reads `pep.toml` and `pep.lock` as
+  `pepper-files`' `project.rs` does, with the same errors (the TOML tree
+  has no positions, so spans are found from the keys that lead to them),
+  and `load` resolves imports of dependencies through `Packages`. Not yet
   ported: units and the build cache, `--test`, `--target` and
-  cross-linking, LTO, debug info, libraries (`--shared`, `--static`),
-  packages, and the other options.
+  cross-linking, LTO, debug info, libraries (`--shared`, `--static`), and
+  the other options.
 
 ---
 

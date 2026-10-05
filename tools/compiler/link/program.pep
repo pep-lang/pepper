@@ -19,6 +19,8 @@ import [LocalImport, ModuleRoots, Placement, Runtime] from "files";
 import "link" as link;
 import [FileScope, ModuleError, ProgramFile] from "link";
 import [Target, undefined_build_option_comparisons] from "platform";
+import [load_manifest, Packages] from "project";
+import "project";
 import [check_visibility] from "visibility";
 
 ## Where a program's files come from, beyond its root.
@@ -268,7 +270,18 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
             $"cannot find the Pepper runtime: no runtime directory near {cwd.is_ok() ? cwd.value().to_string() : ""} or the compiler; set {files.RUNTIME_ENV} to its path"
         );
     }
-    var search_paths = setup.import_dirs.copy();
+    # The project's `pep.toml`: its `[build]` include folders follow the
+    # `-I` ones.
+    var import_dirs = setup.import_dirs.copy();
+    var project = files.find_project(root);
+    if (project.is_value()) {
+        var manifest = load_manifest(project.value().join(Path(files.MANIFEST_FILE)), runtime.dirs);
+        if (manifest.is_err()) {
+            return Result<Program, String>.err(manifest.error());
+        }
+        import_dirs.append_all(manifest.value().include_dirs());
+    }
+    var search_paths = import_dirs;
     search_paths.append_all(runtime.dirs);
     # Forced imports join the prelude ahead of the runtime: where one
     # redefines a runtime export, the first definition wins.
@@ -313,14 +326,9 @@ export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): 
     var index = HashMap<String, ulong>();
     # Resolved import keys per file, mapped to indices once all are loaded.
     var resolved = Array<Array<String?>>();
-    var project = files.find_project(root);
-    if (project.is_value()) {
-        # The Rust compiler reads the project's `pep.toml` for its include
-        # folders and dependencies; this loader does not yet.
-        return Result<Program, String>.err(
-            $"{project.value().join(Path(files.MANIFEST_FILE))}: pep.toml projects are not supported yet"
-        );
-    }
+    # The `pep.toml` each file falls under, for the dependencies it imports.
+    var packages = Packages(root);
+    var project = packages.project;
     if (!project.is_value()) {
         var cwd = process.working_directory();
         if (cwd.is_ok()) {
@@ -420,7 +428,21 @@ export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): 
                     }
                 }
             } else {
-                found = files.resolve_module(imp.name, search_paths);
+                match (packages.resolve(path, imp.name)) {
+                    Found(p) => {
+                        found = Optional<Path>.Value(p);
+                    }
+                    NotADependency => {
+                        found = files.resolve_module(imp.name, search_paths);
+                    }
+                    Missing(message) => {
+                        # Fetching the dependency, or fixing the `pep.toml`,
+                        # resolves it.
+                        program.errors.append(ModuleError(file, imp.name_span, message, true));
+                        targets.append(Optional<String>.Empty);
+                        continue;
+                    }
+                }
             }
             if (found.is_value()) {
                 var k = files.path_key(found.value());

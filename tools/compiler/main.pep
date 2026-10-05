@@ -117,7 +117,7 @@ main(args: String[]): int {
         }
         i += 1;
     }
-    if (!path.is_value()) {
+    if (!path.is_value() and (ast or linked or checked or model or ir)) {
         print("usage: pepc --emit-ast=json <file.pep>");
         print("       pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         print("       pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
@@ -130,8 +130,26 @@ main(args: String[]): int {
         );
         return 2;
     }
+    # In a project, the build takes what its `pep.toml` gives: with no file,
+    # the entry and output; and `[build]`'s libraries.
+    var project = driver.apply_project(
+        path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty
+    );
+    if (project.is_err()) {
+        File.stderr().write_all(project.error() + "\n");
+        return 1;
+    }
+    var entry = project.value().entry;
     if (!ast) {
-        var program = link.load_program(Path(path.value()), setup);
+        if (!(linked or checked or model or ir)) {
+            # A project builds with what pep.lock lists: fetch what is missing.
+            var fetched = driver.fetch_dependencies(entry);
+            if (fetched.is_err()) {
+                File.stderr().write_all(fetched.error() + "\n");
+                return 1;
+            }
+        }
+        var program = link.load_program(entry, setup);
         if (program.is_err()) {
             print($"pepc: {program.error()}");
             return 1;
@@ -151,9 +169,7 @@ main(args: String[]): int {
             for (var f in program.value().files) {
                 namespaces.append(f.namespace);
             }
-            var generated = codegen.generate_ir(
-                built.value(), ran.value(), namespaces, Path(path.value()).file_stem().value()
-            );
+            var generated = codegen.generate_ir(built.value(), ran.value(), namespaces, entry.file_stem().value());
             if (generated.is_err()) {
                 print(render_all([generated.error()], program.value().sources()));
                 return 1;
@@ -184,12 +200,21 @@ main(args: String[]): int {
         } else {
             var cwd = process.working_directory();
             var here = cwd.is_ok() ? cwd.value() : Path(".");
-            var stem = Path(path.value()).file_stem();
-            var out = output.is_value() ?
-                Path(output.value()) :
-                here.join(Path(stem.is_value() ? stem.value() : "main"));
-            var options = driver.BuildOptions(out, here.join(Path(".pep")).join(Path("build")));
+            var stem = entry.file_stem();
+            var out = here.join(Path(stem.is_value() ? stem.value() : "main"));
+            if (output.is_value()) {
+                out = Path(output.value());
+            } else if (project.value().output.is_value()) {
+                out = project.value().output.value();
+            }
+            var work = project.value().dir.is_value() ? project.value().dir.value() : here;
+            var options = driver.BuildOptions(out, work.join(Path(".pep")).join(Path("build")));
             options.opt_level = opt_level;
+            for (var library in project.value().libraries) {
+                if (!libraries.contains(library)) {
+                    libraries.append(library);
+                }
+            }
             options.libraries = libraries;
             options.library_dirs = library_dirs;
             var made = driver.build(program.value(), options);
