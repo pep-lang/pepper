@@ -54,10 +54,10 @@ fn parse_prints_help_and_errors() {
 #[test]
 fn struct_options_name_an_unsupported_field() {
     let error = support::compile_error(
-        "import cli;\n\nstruct Options {\n    var count: int;\n}\n\ntest(): int {\n    cli.Parser(\"x\").add_options(Options());\n    return 0;\n}\n",
+        "import cli;\n\nstruct Options {\n    var table: Map<String, int>;\n}\n\ntest(): int {\n    cli.Parser(\"x\").add_options(Options());\n    return 0;\n}\n",
     );
     assert!(
-        error.contains("error: 'add_options' cannot declare field 'count' of type 'int'; use bool, String, String? or String[]"),
+        error.contains("error: 'add_options' cannot declare field 'table' of type 'Map<String, int>'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]"),
         "{}",
         error
     );

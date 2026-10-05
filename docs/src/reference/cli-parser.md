@@ -101,10 +101,12 @@ Declares an option that takes no value, such as `--verbose`.
 #### option
 
 ```pepper
-option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument
+option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument<String>
 ```
 
-Declares an option that takes one value, such as `--output a.out`.
+Declares an option that takes one String value, such as
+`--output a.out`. `option<T>` declares one whose value is a number,
+a path or an enum case.
 
 **Parameters**
 - `name` — the long name, without `--`
@@ -120,14 +122,78 @@ Declares an option that takes one value, such as `--output a.out`.
 **Panics**
 - if `name` or `short_name` is invalid or already declared
 
+#### option
+
+```pepper
+option<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument<T>
+```
+
+Declares an option that takes one value of type `T`, such as
+`--jobs 4` for `option<int>`. A value that does not read as a `T`
+fails the parse: `invalid value 'x' for '--jobs': expected an
+integer`.
+
+`T` may be `String`, an integer type, `float`, `double`, `io.Path`,
+or an enum whose cases carry no values; a case is written in kebab
+case (`DebugInfo` is `debug-info`), and the help lists them.
+
+**Type parameters**
+- `T` — the type of the value
+
+**Parameters**
+- `name` — the long name, without `--`
+- `short_name` — the one-letter short name, without `-`, or empty for none
+- `help` — what the option sets, for the help
+- `value_name` — what the help calls the value; empty for the long name in capitals (`JOBS`)
+- `default_value` — the value when the option is not given, written as on the command line (`"4"`); empty for none
+- `required` — whether leaving the option out is an error
+
+**Returns**
+- the handle that reads the value
+
+**Panics**
+- if `name` or `short_name` is invalid or already declared, or if `default_value` does not read as a `T`
+
+**Example**
+```pepper
+var jobs = parser.option<int>("jobs", "j", "how many at once", default_value = "4");
+```
+
 #### multiple
 
 ```pepper
-multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList
+multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList<String>
 ```
 
 Declares an option that may be given any number of times, each with a
-value, such as `-I src -I lib`.
+String value, such as `-I src -I lib`. `multiple<T>` declares one
+whose values are numbers, paths or enum cases.
+
+**Parameters**
+- `name` — the long name, without `--`
+- `short_name` — the one-letter short name, without `-`, or empty for none
+- `help` — what the option adds, for the help
+- `value_name` — what the help calls the value; empty for the long name in capitals (`IMPORT_PATH`)
+- `required` — whether leaving the option out is an error
+
+**Returns**
+- the handle that reads the values, in the order given
+
+**Panics**
+- if `name` or `short_name` is invalid or already declared
+
+#### multiple
+
+```pepper
+multiple<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList<T>
+```
+
+Declares an option that may be given any number of times, each with a
+value of type `T`, such as `-I src -I lib` for `multiple<io.Path>`.
+`T` is one of the types `option<T>` takes.
+
+**Type parameters**
+- `T` — the type of each value
 
 **Parameters**
 - `name` — the long name, without `--`
@@ -145,11 +211,13 @@ value, such as `-I src -I lib`.
 #### positional
 
 ```pepper
-positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument
+positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument<String>
 ```
 
-Declares the next positional argument. Positional arguments are
-filled in the order they are declared.
+Declares the next positional argument, with a String value.
+Positional arguments are filled in the order they are declared.
+`positional<T>` declares one whose value is a number, a path or an
+enum case.
 
 **Parameters**
 - `name` — what the help and errors call it
@@ -163,14 +231,65 @@ filled in the order they are declared.
 **Panics**
 - if `name` is empty or already declared, if a required argument follows an optional one, if it follows `positionals`, or if the parser has commands
 
+#### positional
+
+```pepper
+positional<T>(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument<T>
+```
+
+Declares the next positional argument, with a value of type `T`.
+`T` is one of the types `option<T>` takes.
+
+**Type parameters**
+- `T` — the type of the value
+
+**Parameters**
+- `name` — what the help and errors call it
+- `help` — what it is, for the help
+- `required` — whether leaving it out is an error
+- `default_value` — the value when it is left out, written as on the command line; empty for none
+
+**Returns**
+- the handle that reads the value
+
+**Panics**
+- if `name` is empty or already declared, if a required argument follows an optional one, if it follows `positionals`, if the parser has commands, or if `default_value` does not read as a `T`
+
 #### positionals
 
 ```pepper
-positionals(name: String, help: String = "", required: bool = false): ArgumentList
+positionals(name: String, help: String = "", required: bool = false): ArgumentList<String>
 ```
 
 Declares a positional argument that takes every remaining value, such
 as a list of files. It must be the last positional argument.
+`positionals<T>` declares one whose values are numbers, paths or enum
+cases.
+
+**Parameters**
+- `name` — what the help and errors call it
+- `help` — what the values are, for the help
+- `required` — whether at least one value must be given
+
+**Returns**
+- the handle that reads the values, in the order given
+
+**Panics**
+- if `name` is empty or already declared, if it follows `positionals`, or if the parser has commands
+
+#### positionals
+
+```pepper
+positionals<T>(name: String, help: String = "", required: bool = false): ArgumentList<T>
+```
+
+Declares a positional argument that takes every remaining value, each
+of type `T`, such as a list of files for `positionals<io.Path>`. It
+must be the last positional argument. `T` is one of the types
+`option<T>` takes.
+
+**Type parameters**
+- `T` — the type of each value
 
 **Parameters**
 - `name` — what the help and errors call it
@@ -400,11 +519,14 @@ for the runtime.
 ## Argument
 
 ```pepper
-struct Argument
+struct Argument<T>
 ```
 
 An option or positional argument that takes one value, from
 `Parser.option` or `Parser.positional`.
+
+**Type parameters**
+- `T` — the type of the value: `String`, or what `option<T>` or `positional<T>` declared
 
 ### Properties
 
@@ -436,7 +558,7 @@ arguments; this constructor is for the runtime.
 #### value
 
 ```pepper
-value(): String
+value(): T
 ```
 
 Returns the value given, or the default when it was left out.
@@ -450,7 +572,7 @@ Returns the value given, or the default when it was left out.
 #### value_or
 
 ```pepper
-value_or(fallback: String): String
+value_or(fallback: T): T
 ```
 
 Returns the value given, or `fallback` when it was left out.
@@ -464,12 +586,15 @@ Returns the value given, or `fallback` when it was left out.
 ## ArgumentList
 
 ```pepper
-struct ArgumentList
+struct ArgumentList<T>
 ```
 
 An option that may be given many times, or a positional argument that
 takes every remaining value, from `Parser.multiple` or
 `Parser.positionals`.
+
+**Type parameters**
+- `T` — the type of each value: `String`, or what `multiple<T>` or `positionals<T>` declared
 
 ### Properties
 
@@ -500,7 +625,7 @@ argument lists; this constructor is for the runtime.
 #### values
 
 ```pepper
-values(): Array<String>
+values(): Array<T>
 ```
 
 Returns the values given, in command-line order.

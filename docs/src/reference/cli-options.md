@@ -79,9 +79,10 @@ Whether leaving the option out is an error.
 ```
 
 Declares a field of an options struct as the next positional argument
-instead of an option. A `String` field takes one value, required unless
-the field starts with a value (its default); a `String?` field takes an
-optional one; a `String[]` field takes every value that is left.
+instead of an option. A `T` field takes one value, required unless the
+field starts with a value (its default; an empty `String` or a null
+`io.Path` is none); a `T?` field takes an optional one; a `T[]` field
+takes every value that is left.
 
 **Example**
 ```pepper
@@ -117,5 +118,6 @@ What the help and errors call it; empty for the field's name.
 const required: bool = false
 ```
 
-For a `String[]` field, whether at least one value must be given;
-other fields ignore it.
+Whether leaving it out is an error, even when the field has a
+default; for a `T[]` field, whether at least one value must be
+given. A `T?` field ignores it.

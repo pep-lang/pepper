@@ -24,7 +24,7 @@ Arguments:
 Options:
   -g, --greeting <GREETING>  what to say [default: hello]
   -l, --loud                 shout it
-  -n, --times <COUNT>        how many times to say it
+  -n, --times <COUNT>        how many times to say it [default: 1]
   -h, --help                 show this help
   -V, --version              show the version
 ```
@@ -38,10 +38,13 @@ receives them, program name first.
 | Declaration | Handle | Reads |
 |-------------|--------|-------|
 | `flag(name, short_name, help)` | `Flag` | `is_set` and `occurrences` (properties) |
-| `option(name, short_name, help, value_name, default_value, required)` | `Argument` | `value()`, `value_or(fallback)`, `is_set` |
-| `multiple(name, short_name, help, value_name, required)` | `ArgumentList` | `values()`, `is_set` |
-| `positional(name, help, required, default_value)` | `Argument` | `value()`, `value_or(fallback)`, `is_set` |
-| `positionals(name, help, required)` | `ArgumentList` | `values()`, `is_set` |
+| `option<T>(name, short_name, help, value_name, default_value, required)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
+| `multiple<T>(name, short_name, help, value_name, required)` | `ArgumentList<T>` | `values()`, `is_set` |
+| `positional<T>(name, help, required, default_value)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
+| `positionals<T>(name, help, required)` | `ArgumentList<T>` | `values()`, `is_set` |
+
+`T` is the type of the value (see [Typed values](#typed-values)); leave it
+out for a `String`: `option("output")` is `option<String>("output")`.
 
 - An option's `name` is its long name without `--`; `short_name` is one
   character without `-`, or empty for none. Pass the rest by
@@ -73,8 +76,31 @@ receives them, program name first.
   options, so `rm -- -file` removes a file named `-file`, and `-` alone is
   a positional argument (by custom, standard input).
 - An option that takes one value keeps the last one given.
-- Values are Strings; parse numbers yourself (`int.parse`) and report a bad
-  one, as the example does.
+
+## Typed values
+
+A declaration with a type argument reads its values as that type, and a
+value that is not one fails the parse:
+
+```text
+greet: error: invalid value 'x' for '--times': expected an integer
+```
+
+| `T` | A value is | An error expects |
+|-----|------------|------------------|
+| `String` | any text | |
+| `int`, `long` | an integer, as `int.parse` reads it | `an integer` |
+| `uint`, `ulong` | an integer that is not negative | `a non-negative integer` |
+| `byte`, `short`, `ushort` | an integer in the type's range | `an integer from 0 to 255` |
+| `float`, `double` | a number, as `double.parse` reads it | `a number` |
+| `io.Path` | any text, as a path | |
+| an enum whose cases carry no values | a case's name in kebab case: `DebugInfo` is `debug-info` | `'fast' or 'debug-info'` |
+
+- An enum's help lists its cases: `[possible values: fast, debug-info]`.
+- `default_value` is written as on the command line, so the help shows it
+  as it is: `option<int>("jobs", default_value = "4")`. A default that is
+  not a value of the type panics.
+- Any other type is a compile error at the call.
 
 ## Errors
 
@@ -93,6 +119,7 @@ The messages:
   `unknown option '-x'`
 - `missing value for '-o'`
 - `option '--loud' takes no value` (for `--loud=yes`)
+- `invalid value 'x' for '--times': expected an integer`
 - `missing required option '--target'`, `missing required argument '<source>'`
 - `unexpected argument 'x'` when there is no positional argument left for it
 - `unknown command 'x'` and `missing command: expected 'add' or 'update'`
@@ -120,24 +147,28 @@ declarations are the same ones.
 | Field type | Declares | After a parse |
 |------------|----------|---------------|
 | `bool` | `flag` | whether it was given |
-| `String` | `option` | the value given, else the field's starting value |
-| `String?` | `option` | the value given, or Empty |
-| `String[]` | `multiple` | the values given, in order |
+| `T` | `option<T>` | the value given, else the field's starting value |
+| `T?` | `option<T>` | the value given, or Empty |
+| `T[]` | `multiple<T>` | the values given, in order |
 
+- `T` is any type of [Typed values](#typed-values): `String`, a number
+  type, `io.Path` or an enum. A field's starting value is the default the
+  help shows, except an empty `String` or a null `io.Path`, which means
+  none.
 - An option is named after its field, with each `_` written `-`:
   `import_path` is `--import-path`. Any other field type is a compile
-  error at the call: `'add_options' cannot declare field 'count' of type
-  'int'; use bool, String, String? or String[]`.
+  error at the call: `'add_options' cannot declare field 'table' of type
+  'Map<String, int>'; use bool, String, a number type, io.Path or an enum,
+  or one of those as T? or T[]`.
 - `[cli.Option(short_name, help, name, value_name, required)]` sets the
   rest, every argument optional: `[cli.Option("o", "the executable to
   write")]`, `[cli.Option(required = true)]`.
 - `[cli.Positional(help, name, required)]` makes the field the next
-  positional argument. A `String` one is required unless the field starts
-  with a value; a `String?` one may be left out; a `String[]` one takes
-  every value left (`positionals`), and `required` asks for at least one.
-- A `String` field's starting value is the default the help shows; an
-  empty one means none. Each parse sets every field again, so a flag left
-  out is false even if the field started true.
+  positional argument. A `T` one is required when it has no default or
+  `required` is set; a `T?` one may be left out; a `T[]` one takes every
+  value left (`positionals`), and `required` asks for at least one.
+- Each parse sets every field again, so a flag left out is false even if
+  the field started true.
 - A parse that fails, or that asks for `--help` or `--version`, leaves the
   fields as they were.
 - The two styles mix: call `flag` and `option` on the same parser, and
@@ -166,8 +197,6 @@ command; after `parse`, `is_selected` tells which command was given.
 
 ## Not yet
 
-- Typed values (integers, `io.Path`): values are Strings, and a struct's
-  fields are `bool`, `String`, `String?` or `String[]`.
 - Options that apply after a subcommand's name (clap's global options).
 - Windows-style `/option` forms: every platform uses `-` and `--`.
 - Generating shell completions.

@@ -7,7 +7,7 @@ struct Options {
     [cli.Option("l", "shout it")]
     var loud: bool;
     [cli.Option("n", "how many times to say it", value_name = "COUNT")]
-    var times: String?;
+    var times: int = 1;
     [cli.Positional("who to greet")]
     var names: String[];
 }
@@ -21,14 +21,9 @@ main(args: String[]): int {
     }
 
     var people = options.names.is_empty ? ["world"] : options.names;
-    var count = int.parse(options.times.value_or("1"));
-    if (!count) {
-        print("greet: error: '--times' needs a number");
-        return 2;
-    }
     for (var person in people) {
         var line = $"{options.greeting}, {person}";
-        for (var _ in 0..count.value()) {
+        for (var _ in 0..options.times) {
             print(options.loud ? line.upper() : line);
         }
     }

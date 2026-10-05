@@ -1,7 +1,7 @@
 ## Parser and the handles its declarations return: Flag, Argument and
 ## ArgumentList.
 
-import [File] from io;
+import [File, Path] from io;
 import process;
 import "options";
 
@@ -24,6 +24,12 @@ struct _CliArgument {
     var default_value: String = "";
     var values: Array<String> = __null;
     var occurrences: int = 0;
+    # For a typed value (`option<int>`): whether a text reads as one, what
+    # an error says it expects, and an enum's choices. `check` is null for
+    # a String, which takes any text.
+    var check: (String) => bool = __null;
+    var expected: String = "";
+    var choices = Array<String>();
 
     construct(name: String, short_name: String, help: String, kind: int, positional: bool) {
         this.name = name;
@@ -32,6 +38,11 @@ struct _CliArgument {
         this.kind = kind;
         this.positional = positional;
         values = Array<String>();
+    }
+
+    # Whether `text` is a value of its type.
+    reads(text: String): bool {
+        return check === __null or check(text);
     }
 
     # How the help and errors name it: `--output`, or `<source>`.
@@ -68,6 +79,9 @@ struct _CliArgument {
         var text = help;
         if (!default_value.is_empty) {
             text = _cli_join_words(text, "[default: " + default_value + "]");
+        }
+        if (!choices.is_empty) {
+            text = _cli_join_words(text, "[possible values: " + ", ".join(choices) + "]");
         }
         if (required and !positional) {
             text = _cli_join_words(text, "[required]");
@@ -162,7 +176,9 @@ export struct Parser {
         return Flag(_declare_option(name, short_name, help, FLAG_KIND));
     }
 
-    ## Declares an option that takes one value, such as `--output a.out`.
+    ## Declares an option that takes one String value, such as
+    ## `--output a.out`. `option<T>` declares one whose value is a number,
+    ## a path or an enum case.
     ##
     ## @param name the long name, without `--`
     ## @param short_name the one-letter short name, without `-`, or empty for none
@@ -180,16 +196,52 @@ export struct Parser {
         value_name: String = "",
         default_value: String = "",
         required: bool = false
-    ): Argument {
+    ): Argument<String> {
+        return this.option<String>(name, short_name, help, value_name, default_value, required);
+    }
+
+    ## Declares an option that takes one value of type `T`, such as
+    ## `--jobs 4` for `option<int>`. A value that does not read as a `T`
+    ## fails the parse: `invalid value 'x' for '--jobs': expected an
+    ## integer`.
+    ##
+    ## `T` may be `String`, an integer type, `float`, `double`, `io.Path`,
+    ## or an enum whose cases carry no values; a case is written in kebab
+    ## case (`DebugInfo` is `debug-info`), and the help lists them.
+    ##
+    ## @typeParam T the type of the value
+    ## @param name the long name, without `--`
+    ## @param short_name the one-letter short name, without `-`, or empty for none
+    ## @param help what the option sets, for the help
+    ## @param value_name what the help calls the value; empty for the long
+    ##   name in capitals (`JOBS`)
+    ## @param default_value the value when the option is not given, written
+    ##   as on the command line (`"4"`); empty for none
+    ## @param required whether leaving the option out is an error
+    ## @returns the handle that reads the value
+    ## @panics if `name` or `short_name` is invalid or already declared, or
+    ##   if `default_value` does not read as a `T`
+    ## @example
+    ##     var jobs = parser.option<int>("jobs", "j", "how many at once", default_value = "4");
+    option<T>(
+        name: String,
+        short_name: String = "",
+        help: String = "",
+        value_name: String = "",
+        default_value: String = "",
+        required: bool = false
+    ): Argument<T> {
         var declared = _declare_option(name, short_name, help, SINGLE_KIND);
         declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
         declared.default_value = default_value;
         declared.required = required;
-        return Argument(declared);
+        _cli_type<T>(declared);
+        return Argument<T>(declared);
     }
 
     ## Declares an option that may be given any number of times, each with a
-    ## value, such as `-I src -I lib`.
+    ## String value, such as `-I src -I lib`. `multiple<T>` declares one
+    ## whose values are numbers, paths or enum cases.
     ##
     ## @param name the long name, without `--`
     ## @param short_name the one-letter short name, without `-`, or empty for none
@@ -201,15 +253,37 @@ export struct Parser {
     ## @panics if `name` or `short_name` is invalid or already declared
     multiple(
         name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false
-    ): ArgumentList {
+    ): ArgumentList<String> {
+        return this.multiple<String>(name, short_name, help, value_name, required);
+    }
+
+    ## Declares an option that may be given any number of times, each with a
+    ## value of type `T`, such as `-I src -I lib` for `multiple<io.Path>`.
+    ## `T` is one of the types `option<T>` takes.
+    ##
+    ## @typeParam T the type of each value
+    ## @param name the long name, without `--`
+    ## @param short_name the one-letter short name, without `-`, or empty for none
+    ## @param help what the option adds, for the help
+    ## @param value_name what the help calls the value; empty for the long
+    ##   name in capitals (`IMPORT_PATH`)
+    ## @param required whether leaving the option out is an error
+    ## @returns the handle that reads the values, in the order given
+    ## @panics if `name` or `short_name` is invalid or already declared
+    multiple<T>(
+        name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false
+    ): ArgumentList<T> {
         var declared = _declare_option(name, short_name, help, LIST_KIND);
         declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
         declared.required = required;
-        return ArgumentList(declared);
+        _cli_type<T>(declared);
+        return ArgumentList<T>(declared);
     }
 
-    ## Declares the next positional argument. Positional arguments are
-    ## filled in the order they are declared.
+    ## Declares the next positional argument, with a String value.
+    ## Positional arguments are filled in the order they are declared.
+    ## `positional<T>` declares one whose value is a number, a path or an
+    ## enum case.
     ##
     ## @param name what the help and errors call it
     ## @param help what it is, for the help
@@ -219,14 +293,34 @@ export struct Parser {
     ## @panics if `name` is empty or already declared, if a required argument
     ##   follows an optional one, if it follows `positionals`, or if the
     ##   parser has commands
-    positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument {
+    positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument<String> {
+        return this.positional<String>(name, help, required, default_value);
+    }
+
+    ## Declares the next positional argument, with a value of type `T`.
+    ## `T` is one of the types `option<T>` takes.
+    ##
+    ## @typeParam T the type of the value
+    ## @param name what the help and errors call it
+    ## @param help what it is, for the help
+    ## @param required whether leaving it out is an error
+    ## @param default_value the value when it is left out, written as on the
+    ##   command line; empty for none
+    ## @returns the handle that reads the value
+    ## @panics if `name` is empty or already declared, if a required argument
+    ##   follows an optional one, if it follows `positionals`, if the parser
+    ##   has commands, or if `default_value` does not read as a `T`
+    positional<T>(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument<T> {
         var declared = _declare_positional(name, help, SINGLE_KIND, required);
         declared.default_value = default_value;
-        return Argument(declared);
+        _cli_type<T>(declared);
+        return Argument<T>(declared);
     }
 
     ## Declares a positional argument that takes every remaining value, such
     ## as a list of files. It must be the last positional argument.
+    ## `positionals<T>` declares one whose values are numbers, paths or enum
+    ## cases.
     ##
     ## @param name what the help and errors call it
     ## @param help what the values are, for the help
@@ -234,8 +328,26 @@ export struct Parser {
     ## @returns the handle that reads the values, in the order given
     ## @panics if `name` is empty or already declared, if it follows
     ##   `positionals`, or if the parser has commands
-    positionals(name: String, help: String = "", required: bool = false): ArgumentList {
-        return ArgumentList(_declare_positional(name, help, LIST_KIND, required));
+    positionals(name: String, help: String = "", required: bool = false): ArgumentList<String> {
+        return this.positionals<String>(name, help, required);
+    }
+
+    ## Declares a positional argument that takes every remaining value, each
+    ## of type `T`, such as a list of files for `positionals<io.Path>`. It
+    ## must be the last positional argument. `T` is one of the types
+    ## `option<T>` takes.
+    ##
+    ## @typeParam T the type of each value
+    ## @param name what the help and errors call it
+    ## @param help what the values are, for the help
+    ## @param required whether at least one value must be given
+    ## @returns the handle that reads the values, in the order given
+    ## @panics if `name` is empty or already declared, if it follows
+    ##   `positionals`, or if the parser has commands
+    positionals<T>(name: String, help: String = "", required: bool = false): ArgumentList<T> {
+        var declared = _declare_positional(name, help, LIST_KIND, required);
+        _cli_type<T>(declared);
+        return ArgumentList<T>(declared);
     }
 
     ## Declares a subcommand, such as `add` in `pep-package add NAME`, and
@@ -314,28 +426,26 @@ export struct Parser {
         static (this, options, declared) {
             reflect.assert(reflect.is_struct<T>(), $"'add_options' needs a struct, not '{reflect.name<T>()}'");
             for (var field in reflect.properties<T>()) {
-                var flag = reflect.is_same<field.Type, bool>();
-                var single = reflect.is_same<field.Type, String>();
-                var maybe = reflect.is_same<field.Type, Optional<String>>();
-                var list = reflect.is_same<field.Type, Array<String>>();
-                if (!flag and !single and !maybe and !list) {
-                    reflect.error(
-                        $"'add_options' cannot declare field '{field.name}' of type '{field.type_name}'; use bool, String, String? or String[]"
-                    );
-                }
+                # A shallow check, to name the field; the type inside a
+                # `T?` or `T[]` is checked when it is declared.
+                var list = field.type_name.starts_with("Array<") or field.type_name.ends_with("[]");
+                var other_struct = reflect.is_struct<field.Type>()
+                    and !list
+                    and !reflect.is_same<field.Type, String>()
+                    and !reflect.is_same<field.Type, Path>();
+                reflect.assert(
+                    !other_struct and !reflect.is_trait<field.Type>(),
+                    $"'add_options' cannot declare field '{field.name}' of type '{field.type_name}'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]"
+                );
                 if (field.has_attribute<Positional>()) {
                     var positional = field.attribute<Positional>();
-                    reflect.assert(!flag, $"positional argument '{field.name}' cannot be a bool");
+                    reflect.assert(
+                        !reflect.is_same<field.Type, bool>(), $"positional argument '{field.name}' cannot be a bool"
+                    );
                     var name = positional.name.is_empty ? field.name : positional.name;
-                    if (list) {
-                        declared.append(
-                            this._declare_positional(name, positional.help, LIST_KIND, positional.required)
-                        );
-                    } else if (maybe) {
-                        declared.append(this._declare_positional(name, positional.help, SINGLE_KIND, false));
-                    } else {
-                        declared.append(this._declare_field_positional(name, positional.help, field.get(options)));
-                    }
+                    declared.append(
+                        _cli_field_positional(this, name, positional.help, positional.required, field.get(options))
+                    );
                 } else {
                     var short_name = "";
                     var help = "";
@@ -350,36 +460,17 @@ export struct Parser {
                         value_name = option.value_name;
                         required = option.required;
                     }
-                    if (flag) {
-                        declared.append(
-                            this._declare_field_option(field.name, name, short_name, help, FLAG_KIND, "", false, "")
-                        );
-                    } else if (single) {
-                        declared.append(
-                            this._declare_field_option(
-                                field.name,
-                                name,
-                                short_name,
-                                help,
-                                SINGLE_KIND,
-                                value_name,
-                                required,
-                                field.get(options)
-                            )
-                        );
-                    } else if (maybe) {
-                        declared.append(
-                            this._declare_field_option(
-                                field.name, name, short_name, help, SINGLE_KIND, value_name, required, ""
-                            )
-                        );
-                    } else {
-                        declared.append(
-                            this._declare_field_option(
-                                field.name, name, short_name, help, LIST_KIND, value_name, required, ""
-                            )
-                        );
-                    }
+                    declared.append(
+                        _cli_field_option(
+                            this,
+                            _cli_long_name(field.name, name),
+                            short_name,
+                            help,
+                            value_name,
+                            required,
+                            field.get(options)
+                        )
+                    );
                 }
             }
         }
@@ -515,38 +606,6 @@ export struct Parser {
         return true;
     }
 
-    # Declares an option for a field of an options struct: named `name`, or
-    # after the field when that is empty.
-    _declare_field_option(
-        field_name: String,
-        name: String,
-        short_name: String,
-        help: String,
-        kind: int,
-        value_name: String,
-        required: bool,
-        default_value: String
-    ): _CliArgument {
-        var long_name = name.is_empty ? field_name.replace("_", "-") : name;
-        var declared = _declare_option(long_name, short_name, help, kind);
-        if (kind != FLAG_KIND) {
-            declared.value_name = value_name.is_empty ? long_name.upper().replace("-", "_") : value_name;
-            declared.required = required;
-            # A `String` field declared without a value holds none.
-            declared.default_value = default_value === __null ? "" : default_value;
-        }
-        return declared;
-    }
-
-    # Declares a positional `String` field, which is optional when it holds
-    # a default.
-    _declare_field_positional(name: String, help: String, default_value: String): _CliArgument {
-        var fallback = default_value === __null ? "" : default_value;
-        var declared = _declare_positional(name, help, SINGLE_KIND, fallback.is_empty);
-        declared.default_value = fallback;
-        return declared;
-    }
-
     # Stores what the last parse found in the options structs given to
     # `add_options`, here and in the command that was selected.
     _bind() {
@@ -673,13 +732,17 @@ export struct Parser {
                         return _fail(root, "option '--" + name + "' takes no value");
                     }
                     option.occurrences += 1;
-                } else if (attached) {
-                    _store(option, attached.value());
-                } else if (index < args.count) {
-                    _store(option, args[index]);
-                    index += 1;
                 } else {
-                    return _fail(root, "missing value for '--" + name + "'");
+                    if (!attached and index >= args.count) {
+                        return _fail(root, "missing value for '--" + name + "'");
+                    }
+                    var value = attached ? attached.value() : args[index];
+                    if (!attached) {
+                        index += 1;
+                    }
+                    if (!_store(option, value)) {
+                        return _fail(root, _invalid_value(option, value, "--" + name));
+                    }
                 }
             } else if (!only_positionals and argument.starts_with("-") and argument.size > 1) {
                 ulong at = 1;
@@ -702,17 +765,18 @@ export struct Parser {
                     }
                     # The rest of the argument is the value (`-oa.out`, or
                     # `-o=a.out`), else the next argument is.
-                    var rest = argument.substr_bytes(at, argument.size - at);
-                    if (rest.starts_with("=")) {
-                        rest = rest.substr_bytes(1, rest.size - 1);
-                        _store(option, rest);
-                    } else if (!rest.is_empty) {
-                        _store(option, rest);
-                    } else if (index < args.count) {
-                        _store(option, args[index]);
+                    var value = argument.substr_bytes(at, argument.size - at);
+                    if (value.starts_with("=")) {
+                        value = value.substr_bytes(1, value.size - 1);
+                    } else if (value.is_empty) {
+                        if (index >= args.count) {
+                            return _fail(root, "missing value for '-" + letter + "'");
+                        }
+                        value = args[index];
                         index += 1;
-                    } else {
-                        return _fail(root, "missing value for '-" + letter + "'");
+                    }
+                    if (!_store(option, value)) {
+                        return _fail(root, _invalid_value(option, value, "-" + letter));
                     }
                     break;
                 }
@@ -728,7 +792,9 @@ export struct Parser {
                 return command._parse(args, index, root);
             } else if (position < _positionals.count) {
                 var positional = _positionals[position];
-                positional.values.append(argument);
+                if (!_store(positional, argument)) {
+                    return _fail(root, _invalid_value(positional, argument, positional.display()));
+                }
                 if (positional.kind != LIST_KIND) {
                     position += 1;
                 }
@@ -761,12 +827,23 @@ export struct Parser {
         return Result<String?>.ok(Optional<String>.Empty);
     }
 
-    # A value for `option`: the last one wins unless it is repeatable.
-    _store(option: _CliArgument, value: String) {
-        if (option.kind == SINGLE_KIND) {
+    # Stores a value for `option`, where the last one wins unless it is
+    # repeatable, or returns false when it is not a value of its type.
+    _store(option: _CliArgument, value: String): bool {
+        if (!option.reads(value)) {
+            return false;
+        }
+        if (option.kind == SINGLE_KIND and !option.positional) {
             option.values.clear();
         }
         option.values.append(value);
+        return true;
+    }
+
+    # "invalid value 'x' for '--jobs': expected an integer", for a value
+    # given as `spelling`.
+    _invalid_value(option: _CliArgument, value: String, spelling: String): String {
+        return "invalid value '" + value + "' for '" + spelling + "': expected " + option.expected;
     }
 
     # The error `message`, noting this parser's usage for `parse` to print.
@@ -787,16 +864,11 @@ export struct Parser {
 
     # `'add', 'remove' or 'update'`.
     _command_names(): String {
-        var text = "";
-        ulong index = 0;
-        while (index < _commands.count) {
-            if (index > 0) {
-                text = text + (index + 1 == _commands.count ? " or " : ", ");
-            }
-            text = text + "'" + _commands[index]._name + "'";
-            index += 1;
+        var names = Array<String>();
+        for (var command in _commands) {
+            names.append(command._name);
         }
-        return text;
+        return _cli_quoted_list(names);
     }
 
     # "unknown option '--outptu'; did you mean '--output'?"
@@ -918,28 +990,278 @@ _cli_edit_distance(a: String, b: String): int {
     return previous[b.size];
 }
 
+# Declares the flag for a `bool` field of an options struct.
+_cli_field_option(
+    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: bool
+): _CliArgument {
+    return parser._declare_option(name, short_name, help, FLAG_KIND);
+}
+
+# Declares the option for a `T` field of an options struct, whose
+# starting value is the default (none for an empty String or a null).
+_cli_field_option<T>(
+    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: T
+): _CliArgument {
+    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, SINGLE_KIND);
+    declared.default_value = _cli_text<T>(current);
+    _cli_type<T>(declared);
+    return declared;
+}
+
+# Declares the option for a `T?` field of an options struct.
+_cli_field_option<T>(
+    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: T?
+): _CliArgument {
+    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, SINGLE_KIND);
+    _cli_type<T>(declared);
+    return declared;
+}
+
+# Declares the repeatable option for a `T[]` field of an options struct.
+_cli_field_option<T>(
+    parser: Parser,
+    name: String,
+    short_name: String,
+    help: String,
+    value_name: String,
+    required: bool,
+    current: Array<T>
+): _CliArgument {
+    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, LIST_KIND);
+    _cli_type<T>(declared);
+    return declared;
+}
+
+# Declares an option that takes a value, for a field of an options struct.
+_cli_field_value_option(
+    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, kind: int
+): _CliArgument {
+    var declared = parser._declare_option(name, short_name, help, kind);
+    declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
+    declared.required = required;
+    return declared;
+}
+
+# Declares a positional `T` field of an options struct. Its starting
+# value is the default, so it is required only when it has none or
+# `required` is set.
+_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: T): _CliArgument {
+    var fallback = _cli_text<T>(current);
+    var declared = parser._declare_positional(name, help, SINGLE_KIND, required or fallback.is_empty);
+    declared.default_value = fallback;
+    _cli_type<T>(declared);
+    return declared;
+}
+
+# Declares a positional `T?` field of an options struct, which may be
+# left out.
+_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: T?): _CliArgument {
+    var declared = parser._declare_positional(name, help, SINGLE_KIND, false);
+    _cli_type<T>(declared);
+    return declared;
+}
+
+# Declares a positional `T[]` field of an options struct, which takes
+# every value left.
+_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: Array<T>): _CliArgument {
+    var declared = parser._declare_positional(name, help, LIST_KIND, required);
+    _cli_type<T>(declared);
+    return declared;
+}
+
 # Stores each declaration's parsed value in its field of `options`, in the
 # order `add_options` declared them.
 _cli_store<T>(options: T, declared: Array<_CliArgument>) {
     static (options, declared) {
         var index = 0;
         for (var field in reflect.properties<T>()) {
-            if (reflect.is_same<field.Type, bool>()) {
-                field.set(options, declared[index].occurrences > 0);
-            } else if (reflect.is_same<field.Type, String>()) {
-                field.set(options, Argument(declared[index]).value_or(""));
-            } else if (reflect.is_same<field.Type, Optional<String>>()) {
-                if (declared[index].values.is_empty) {
-                    field.set(options, Optional<String>.Empty);
-                } else {
-                    field.set(options, Optional<String>.Value(declared[index].values.last()));
-                }
-            } else {
-                field.set(options, declared[index].values.clone());
-            }
+            field.set(options, _cli_field_value(declared[index], field.get(options)));
             index += 1;
         }
     }
+}
+
+# What a parse leaves in a `bool` field: whether the flag was given.
+_cli_field_value(declared: _CliArgument, current: bool): bool {
+    return declared.occurrences > 0;
+}
+
+# What a parse leaves in a `T` field: the value given, else the default,
+# else an empty String or the field's value.
+_cli_field_value<T>(declared: _CliArgument, current: T): T {
+    var fallback = current;
+    static (fallback) {
+        # A String field with no default is emptied, not kept.
+        if (reflect.is_same<T, String>()) {
+            fallback = "";
+        }
+    }
+    return Argument<T>(declared).value_or(fallback);
+}
+
+# What a parse leaves in a `T?` field: the value given, or Empty.
+_cli_field_value<T>(declared: _CliArgument, current: T?): T? {
+    if (declared.values.is_empty) {
+        return Optional<T>.Empty;
+    }
+    return Optional<T>.Value(Argument<T>(declared).value());
+}
+
+# What a parse leaves in a `T[]` field: the values given, in order.
+_cli_field_value<T>(declared: _CliArgument, current: Array<T>): Array<T> {
+    return ArgumentList<T>(declared).values();
+}
+
+# Makes `declared` take values of type `T`: sets what checks them, what an
+# error expects, and an enum's choices, and checks its default.
+_cli_type<T>(declared: _CliArgument) {
+    declared.expected = _cli_expected<T>();
+    var any_text = false;
+    static (declared, any_text) {
+        any_text = reflect.is_same<T, String>();
+        if (reflect.is_enum<T>()) {
+            for (var case in reflect.cases<T>()) {
+                declared.choices.append(_cli_kebab(case.name));
+            }
+        }
+    }
+    if (!any_text) {
+        declared.check = (text: String) => _cli_convert<T>(text).is_value();
+    }
+    assert(
+        declared.default_value.is_empty or declared.reads(declared.default_value),
+        "cli: the default '" + declared.default_value + "' of '" + declared.display() + "' is not " + declared.expected
+    );
+}
+
+# `text` as a `T`, or Empty when it is not one.
+_cli_convert<T>(text: String): T? {
+    var out = Optional<T>.Empty;
+    static (text, out) {
+        if (reflect.is_same<T, String>()) {
+            out = Optional<T>.Value(text);
+        } else if (reflect.is_same<T, Path>()) {
+            out = Optional<T>.Value(Path(text));
+        } else if (reflect.is_same<T, byte>()) {
+            out = byte.parse(text);
+        } else if (reflect.is_same<T, short>()) {
+            out = short.parse(text);
+        } else if (reflect.is_same<T, ushort>()) {
+            out = ushort.parse(text);
+        } else if (reflect.is_same<T, int>()) {
+            out = int.parse(text);
+        } else if (reflect.is_same<T, uint>()) {
+            out = uint.parse(text);
+        } else if (reflect.is_same<T, long>()) {
+            out = long.parse(text);
+        } else if (reflect.is_same<T, ulong>()) {
+            out = ulong.parse(text);
+        } else if (reflect.is_same<T, float>()) {
+            out = float.parse(text);
+        } else if (reflect.is_same<T, double>()) {
+            out = double.parse(text);
+        } else if (reflect.is_enum<T>()) {
+            for (var case in reflect.cases<T>()) {
+                reflect.assert(
+                    case.values.is_empty,
+                    $"cli cannot read '{reflect.name<T>()}': its case '{case.name}' carries values"
+                );
+                if (text == _cli_kebab(case.name)) {
+                    out = Optional<T>.Value(case.get());
+                }
+            }
+        } else {
+            reflect.error(
+                $"cli cannot read values of type '{reflect.name<T>()}'; use String, a number type, io.Path or an enum"
+            );
+        }
+    }
+    return out;
+}
+
+# What an error says a value of type `T` must be: "an integer".
+_cli_expected<T>(): String {
+    var expected = "a value";
+    var names = Array<String>();
+    static (expected, names) {
+        if (reflect.is_same<T, byte>()) {
+            expected = "an integer from 0 to 255";
+        } else if (reflect.is_same<T, short>()) {
+            expected = "an integer from -32768 to 32767";
+        } else if (reflect.is_same<T, ushort>()) {
+            expected = "an integer from 0 to 65535";
+        } else if (reflect.is_same<T, int>() or reflect.is_same<T, long>()) {
+            expected = "an integer";
+        } else if (reflect.is_same<T, uint>() or reflect.is_same<T, ulong>()) {
+            expected = "a non-negative integer";
+        } else if (reflect.is_same<T, float>() or reflect.is_same<T, double>()) {
+            expected = "a number";
+        } else if (reflect.is_enum<T>()) {
+            for (var case in reflect.cases<T>()) {
+                names.append(_cli_kebab(case.name));
+            }
+            expected = _cli_quoted_list(names);
+        }
+    }
+    return expected;
+}
+
+# `value` written as on the command line, or empty for an empty String or
+# a null.
+_cli_text<T>(value: T): String {
+    var text = "";
+    static (value, text) {
+        if (reflect.is_same<T, String>()) {
+            text = value === __null ? "" : value;
+        } else if (reflect.is_same<T, Path>()) {
+            text = value === __null ? "" : value.to_string();
+        } else if (reflect.is_enum<T>()) {
+            for (var case in reflect.cases<T>()) {
+                if (value == case.get()) {
+                    text = _cli_kebab(case.name);
+                }
+            }
+        } else {
+            text = $"{value}";
+        }
+    }
+    return text;
+}
+
+# A case name in kebab case, as the command line writes it: `DebugInfo`
+# is `debug-info`.
+_cli_kebab(name: String): String {
+    var text = StringBuilder();
+    ulong index = 0;
+    while (index < name.size) {
+        var letter = name.substr_bytes(index, 1);
+        if (letter != letter.lower() and index > 0) {
+            text.append("-");
+        }
+        text.append(letter.lower());
+        index += 1;
+    }
+    return text.to_string();
+}
+
+# The long name of the option for field `field_name`: `name`, or when
+# that is empty the field's name with each `_` written `-`.
+_cli_long_name(field_name: String, name: String): String {
+    return name.is_empty ? field_name.replace("_", "-") : name;
+}
+
+# `'a', 'b' or 'c'`.
+_cli_quoted_list(names: Array<String>): String {
+    var text = StringBuilder();
+    ulong index = 0;
+    while (index < names.count) {
+        if (index > 0) {
+            text.append(index + 1 == names.count ? " or " : ", ");
+        }
+        text.append("'").append(names[index]).append("'");
+        index += 1;
+    }
+    return text.to_string();
 }
 
 ## An option that takes no value, from `Parser.flag`.
@@ -971,7 +1293,10 @@ export struct Flag {
 
 ## An option or positional argument that takes one value, from
 ## `Parser.option` or `Parser.positional`.
-export struct Argument {
+##
+## @typeParam T the type of the value: `String`, or what `option<T>` or
+##   `positional<T>` declared
+export struct Argument<T> {
     var _argument: _CliArgument = __null;
 
     ## Wraps a declaration. `Parser.option` and `Parser.positional` make
@@ -995,35 +1320,35 @@ export struct Argument {
     ## @returns the value
     ## @panics if the argument was left out and has no default; check
     ##   `is_set` or use `value_or` for an optional argument
-    value(): String {
+    value(): T {
         if (!_argument.values.is_empty) {
-            return _argument.values.last();
+            return _cli_convert<T>(_argument.values.last()).value();
         }
         assert(
             !_argument.default_value.is_empty, "cli: '" + _argument.display() + "' was not given and has no default"
         );
-        return _argument.default_value;
+        return _cli_convert<T>(_argument.default_value).value();
     }
 
     ## Returns the value given, or `fallback` when it was left out.
     ##
     ## @param fallback the value to use when the argument was left out
     ## @returns the value given, else the declared default, else `fallback`
-    value_or(fallback: String): String {
-        if (!_argument.values.is_empty) {
-            return _argument.values.last();
+    value_or(fallback: T): T {
+        if (_argument.values.is_empty and _argument.default_value.is_empty) {
+            return fallback;
         }
-        if (!_argument.default_value.is_empty) {
-            return _argument.default_value;
-        }
-        return fallback;
+        return value();
     }
 }
 
 ## An option that may be given many times, or a positional argument that
 ## takes every remaining value, from `Parser.multiple` or
 ## `Parser.positionals`.
-export struct ArgumentList {
+##
+## @typeParam T the type of each value: `String`, or what `multiple<T>`
+##   or `positionals<T>` declared
+export struct ArgumentList<T> {
     var _argument: _CliArgument = __null;
 
     ## Wraps a declaration. `Parser.multiple` and `Parser.positionals` make
@@ -1044,7 +1369,11 @@ export struct ArgumentList {
     ## Returns the values given, in command-line order.
     ##
     ## @returns a new array of the values, empty when none was given
-    values(): Array<String> {
-        return _argument.values.clone();
+    values(): Array<T> {
+        var values = Array<T>(_argument.values.count);
+        for (var text in _argument.values) {
+            values.append(_cli_convert<T>(text).value());
+        }
+        return values;
     }
 }
