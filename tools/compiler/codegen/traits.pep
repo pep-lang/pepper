@@ -16,6 +16,7 @@ import "functions";
 import [Generator, TraitDesc] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";
@@ -280,6 +281,10 @@ extend Generator {
             var item = codegen_expr(arg)?;
             if (is_reference_name(element) and is_lvalue_read(arg)) {
                 acquire_ref(element, item)?;
+            } else if (is_lazy(element)) {
+                # Copies of the tuple share its elements, so an empty lazy
+                # temporary gets its object now (see `codegen_assignment`).
+                item = filled(item, element)?;
             }
             if ((_is_int(item) or _is_float(item)) and sema.is_numeric_type(state, element)) {
                 var source = numeric_source_name(arg, item);

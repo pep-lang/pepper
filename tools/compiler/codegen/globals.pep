@@ -18,6 +18,7 @@ import "expressions";
 import "functions";
 import [Generator] from "generator";
 import "generator";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";

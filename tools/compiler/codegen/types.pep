@@ -10,6 +10,7 @@ import "expressions";
 import "functions";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";

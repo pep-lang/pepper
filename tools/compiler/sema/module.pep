@@ -14,6 +14,7 @@ export [
 export [cast_spelled, check_cast] from "casts";
 export [error_at] from "common";
 export [takes_over] from "confinement";
+export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";
 export [is_enum, is_trait, method_of] from "enums";
 export [HASH_METHOD] from "equatable";
 export [STRING_FREE, is_export_string] from "exports";

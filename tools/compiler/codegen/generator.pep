@@ -10,7 +10,17 @@ import compiler.link;
 import llvm;
 import compiler.sema;
 import [
-    DefaultArgumentExpression, error_at, Expression, FunctionDef, Loc, Module, PassState, set_name, StructDef, TypeName
+    DefaultArgumentExpression,
+    error_at,
+    Expression,
+    FunctionDef,
+    Loc,
+    Module,
+    PassState,
+    set_name,
+    StructDef,
+    SymbolRefExpression,
+    TypeName
 ] from compiler.sema;
 import [Address, Frame] from "address";
 import "address";
@@ -21,6 +31,7 @@ import "expressions";
 import "functions";
 import [annotate_facts, stamp_cpu] from "globals";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";
@@ -66,6 +77,10 @@ export struct StructDesc {
     ## atomically: none for a struct whose `__acquire`/`__release` are not
     ## the standard ones.
     var inline_counts: bool? = Optional<bool>.Empty;
+    ## Declared `[__Lazy]`: the zero-argument constructor is null, and a
+    ## place holding null gets its object when first read for anything but
+    ## a `[__Reads]` call or a field read (see `materialize`).
+    var lazy: bool = false;
 
     construct(name: String, llvm_type: llvm.Type, loc: Loc) {
         this.name = name;
@@ -131,6 +146,25 @@ export struct Generator {
     var hash_overrides: HashSet<String> = HashSet<String>();
     ## Each struct's `==` taking its own type, by struct name.
     var equality_methods: HashMap<String, String> = HashMap<String, String>();
+    ## The `[__Reads]` methods of `[__Lazy]` structs, mangled
+    ## (`Array<int>.__get_count`): they run on a null `this`.
+    var reads_methods: HashSet<String> = HashSet<String>();
+    ## Whether any struct is `[__Lazy]`.
+    var any_lazy: bool = false;
+    ## Set just before reading a place of a `[__Lazy]` type that must stay
+    ## null (a `[__Reads]` receiver, a field read's object): the next
+    ## `codegen_expr` takes it.
+    var keep_lazy: bool = false;
+    ## The function being generated is a `[__Reads]` method, so its `this`
+    ## may be null and its field reads go through `lazy_base`.
+    var this_may_be_null: bool = false;
+    ## Set while `materialize` calls a `[__Lazy]` constructor, which then
+    ## allocates instead of yielding null.
+    var making_lazy: bool = false;
+    ## The reads of `[__Lazy]` locals in the function being generated that
+    ## nothing can follow (`final_reads_of`), by node identity: copying one
+    ## moves the value out, so an empty one is passed on as null.
+    var final_reads: HashSet<SymbolRefExpression> = HashSet<SymbolRefExpression>();
     ## Function name (methods as `Struct.name`) to its LLVM function.
     var functions: HashMap<String, llvm.Value> = HashMap<String, llvm.Value>();
     ## Free function name to its return sema type.
@@ -144,6 +178,9 @@ export struct Generator {
     var fn_param_types: HashMap<String, String[]> = HashMap<String, String[]>();
     ## Per function, which parameters are `[Move]`.
     var sending_params: HashMap<String, bool[]> = HashMap<String, bool[]>();
+    ## `[__Reads]` parameters, by callee: an empty `[__Lazy]` argument
+    ## reaches them as null instead of being allocated.
+    var reads_params: HashMap<String, bool[]> = HashMap<String, bool[]>();
     ## Identical string literals share one global constant.
     var global_strings: HashMap<String, llvm.Value> = HashMap<String, llvm.Value>();
     ## The immortal `String` object of each shared literal, by value.

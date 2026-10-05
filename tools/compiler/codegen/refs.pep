@@ -16,6 +16,7 @@ import "functions";
 import [Generator, ScopeSlot, Temporary] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "simd";

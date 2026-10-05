@@ -15,6 +15,7 @@ import "functions";
 import [Generator, Temporary] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";
@@ -68,6 +69,8 @@ extend Generator {
     ## The value of `expr`, its location remembered for errors and for
     ## `__caller_location()`.
     codegen_expr(expr: Expression): Result<llvm.Value> {
+        var keep = keep_lazy;
+        keep_lazy = false;
         if (expr is FunctionCall(call)) {
             if (call.function == _CALLER_LOCATION) {
                 var at = in_default_argument ? call_loc : call.loc;
@@ -90,7 +93,10 @@ extend Generator {
         }
         var outer_default = in_default_argument;
         in_default_argument = false;
-        var result = codegen_expr_unlocated(expr);
+        # A read of a `[__Lazy]` place that writes or shares it gets the
+        # place an object first (`materialize`).
+        var lazy = keep ? Optional<String>.Empty : lazy_place(expr);
+        var result = lazy.is_value() ? materialize(expr, lazy.value()) : codegen_expr_unlocated(expr);
         in_default_argument = outer_default;
         if (outer_call.is_value()) {
             call_loc = outer_call.value();
@@ -411,11 +417,18 @@ extend Generator {
         # is released at the end of the full expression, which may still
         # read the field (`f().s == "x"`).
         var lhs_temp = owned_temp_type(lhs);
+        # Reading a field neither writes nor shares the object, so an empty
+        # `[__Lazy]` one stays null and reads as zeroed (`this` is never null
+        # outside a `[__Reads]` method).
+        var lazy = is_lazy(struct_name);
+        keep_lazy = lazy;
         var this_ptr = codegen_expr(lhs)?;
         llvm.Value base_ptr;
         if (_is_kind(this_ptr, llvm.TypeKind.Struct)) {
             var place = codegen_lvalue(lhs)?;
             base_ptr = place.ptr;
+        } else if (lazy and (this_may_be_null or !(lhs is ThisRef))) {
+            base_ptr = lazy_base(struct_name, this_ptr)?;
         } else {
             base_ptr = this_ptr;
         }
@@ -925,6 +938,7 @@ extend Generator {
                 arg_vals.append(v);
                 continue;
             }
+            keep_lazy = reads_param(mangled, index) or is_final_read(arg);
             var v = codegen_expr(arg)?;
             pass_argument(mangled, index, arg, v, owned_arg_temps)?;
             arg_names.append(numeric_source_name(arg, v));
@@ -963,6 +977,9 @@ extend Generator {
                     return Result<llvm.Value>.ok(none);
                 }
                 if (this_expr is Index(_) or this_expr is ArrayIndex(_)) {
+                    # Counting skips null, so an empty `[__Lazy]` slot stays
+                    # empty.
+                    keep_lazy = true;
                     var value = codegen_expr(this_expr)?;
                     if (method == "__acquire") {
                         acquire_ref(ty.value(), value)?;
@@ -1033,7 +1050,17 @@ extend Generator {
             arg_vals.append(address);
             arg_names.append("");
         } else if (!is_static) {
+            # A `[__Reads]` method (or a count step) runs on an empty
+            # `[__Lazy]` object as null; any other method gets an object,
+            # made in the receiver's place if it has one (`materialize`),
+            # else for this call alone.
+            var lazy = is_lazy(struct_name);
+            var reads = thunk or reads_methods.contains(mangled);
+            keep_lazy = lazy and reads;
             var this_val = codegen_expr(this_expr)?;
+            if (lazy and !reads and this_temp.is_value()) {
+                this_val = filled(this_val, struct_name)?;
+            }
             this_val_opt = Optional<llvm.Value>.Value(this_val);
             arg_vals.append(this_val);
             arg_names.append("");
@@ -1085,11 +1112,12 @@ extend Generator {
         if (method.starts_with("__index_") or !pointee_declares) {
             return codegen_index_method(this_expr, method, args);
         }
+        var mangled = $"{pointee_struct}.{method}";
         # Load the slot value with the correct element type: the Index arm
         # GEPs + loads using the receiver's pointee.
+        keep_lazy = reads_methods.contains(mangled);
         var elem_val = codegen_expr(this_expr)?;
         bool is_static = pointee_desc.is_value() and pointee_desc.value().static_methods.contains(method);
-        var mangled = $"{pointee_struct}.{method}";
         var arg_vals = Array<llvm.Value>();
         var arg_names = Array<String>();
         if (!is_static) {

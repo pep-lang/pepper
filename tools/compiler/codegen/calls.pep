@@ -13,6 +13,7 @@ import "functions";
 import [Generator, Temporary] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";
@@ -155,6 +156,11 @@ extend Generator {
         if (tuples.contains(name)) {
             return codegen_tuple(name, args);
         }
+        # An empty `[__Lazy]` object is null until it is written or shared
+        # (see `materialize`).
+        if (!making_lazy and is_lazy(name) and _all_defaults(args)) {
+            return Result<llvm.Value>.ok(context.pointer_type().zero());
+        }
         # Constructor call `Name<...>(ctor_args)`: specializations are
         # registered under their full name (`Array<int>`); fall back to the
         # base name for non-generic ctors.
@@ -191,6 +197,7 @@ extend Generator {
             if (is_extern) {
                 check_extern_struct_arg(target, arg_names.count, arg)?;
             }
+            keep_lazy = reads_param(target, arg_names.count) or is_final_read(arg);
             var v = codegen_expr(arg)?;
             var index = arg_names.count;
             if (is_extern) {
@@ -685,6 +692,12 @@ extend Generator {
     with_subject(subject_with: WithSubject): Result<llvm.Value> {
         var temp = owned_temp_type(subject_with.subject);
         var value = codegen_expr(subject_with.subject)?;
+        # The body may read the subject several times (a long literal's
+        # chains all append to it), so an empty `[__Lazy]` temporary gets its
+        # object now; a place read already has one (`materialize`).
+        if (temp.is_value() and is_lazy(temp.value())) {
+            value = filled(value, temp.value())?;
+        }
         if (subject_with.null_message.is_value() and runtime_checks.null and functions.contains("_pep_assert")) {
             var is_set = builder.is_not_null(value, "subject_set");
             located_assert(is_set, subject_with.null_message.value(), sema.expression_loc(subject_with.subject))?;
@@ -1249,4 +1262,15 @@ _first_argument(arg: Expression): Expression {
         return call.args[0];
     }
     return arg;
+}
+
+## Whether every one of `args` is a default the call leaves out: a
+## zero-argument constructor call.
+_all_defaults(args: Expression[]): bool {
+    for (var arg in args) {
+        if (!(arg is DefaultArgument(_))) {
+            return false;
+        }
+    }
+    return true;
 }

@@ -17,6 +17,7 @@ import [
     Loc,
     Statement,
     StructDef,
+    SymbolRefExpression,
     TypeName,
     VariableDef,
     While
@@ -30,6 +31,7 @@ import "expressions";
 import [Generator, ScopeSlot, StructDesc] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "operators";
 import "ops";
 import "refs";
@@ -130,6 +132,8 @@ extend Generator {
         if (standard_counts(st)) {
             desc.inline_counts = Optional<bool>.Value(atomic_counts(st));
         }
+        desc.lazy = ast.has_attribute(st.attributes, sema.LAZY_ATTRIBUTE);
+        any_lazy = any_lazy or desc.lazy;
         structs[st.name] = desc;
         return Result<void>.ok();
     }
@@ -151,6 +155,7 @@ extend Generator {
         var method_returns = HashMap<String, String>();
         var method_params = HashMap<String, String[]>();
         var static_names = HashSet<String>();
+        bool lazy = ast.has_attribute(st.attributes, sema.LAZY_ATTRIBUTE);
         for (var method in st.method_members) {
             var param_types = Array<llvm.Type>();
             if (!method.is_static) {
@@ -206,8 +211,12 @@ extend Generator {
             if (any_sending) {
                 sending_params[mangled] = sending;
             }
+            record_reads_params(mangled, method.parameters);
             if (method.is_static) {
                 static_names.insert(method.name);
+            }
+            if (lazy and ast.has_attribute(method.attributes, sema.READS_ATTRIBUTE)) {
+                reads_methods.insert(mangled);
             }
             methods[method.name] = mangled;
             method_returns[method.name] = method.ty.to_string();
@@ -382,6 +391,7 @@ extend Generator {
         if (any_sending) {
             sending_params[function.name] = sending;
         }
+        record_reads_params(function.name, function.parameters);
         return Result<void>.ok();
     }
 
@@ -453,7 +463,13 @@ extend Generator {
         # `[Unsafe("...")]` turns checks off in this body only.
         var build_checks = runtime_checks;
         runtime_checks = build_checks.both(function_checks(function.attributes));
+        var outer_reads = this_may_be_null;
+        this_may_be_null = ast.has_attribute(function.attributes, sema.READS_ATTRIBUTE);
+        var outer_finals = final_reads;
+        final_reads = HashSet<SymbolRefExpression>();
         var result = codegen_function_unlocated(function);
+        final_reads = outer_finals;
+        this_may_be_null = outer_reads;
         runtime_checks = build_checks;
         locate(result, function.loc);
         return result;
@@ -570,6 +586,8 @@ extend Generator {
             }
         }
         var body = function.body.is_value() ? function.body.value() : sema.Block();
+        # The `SymbolRef` nodes of this body, which codegen reads.
+        final_reads = final_reads_of(function, body);
         codegen_block(body)?;
         # The function's end: release every tracked slot on the fall-through
         # path.
@@ -705,6 +723,13 @@ extend Generator {
         String value_name = "";
         if (ret.expr.is_value()) {
             var expr = ret.expr.value();
+            # Returning a local moves it out, so an empty `[__Lazy]` one has
+            # no other name to share it with and stays null.
+            bool returns_local = false;
+            if (expr is SymbolRef(node)) {
+                returns_local = frame.find_local(node.id).is_value();
+            }
+            keep_lazy = returns_local;
             var v = codegen_expr(expr)?;
             value_name = numeric_source_name(expr, v);
             # Returning a read of a struct reference copies it: acquire before
@@ -815,6 +840,7 @@ extend Generator {
         var slot = entry_alloca(ty, var_def.name);
         if (var_def.default.is_value()) {
             var default = var_def.default.value();
+            keep_lazy = is_final_read(default);
             var value = codegen_expr(default)?;
             # Copying a struct reference into a fresh slot acquires; call
             # results carry their own reference. A destructuring binding moves

@@ -2265,6 +2265,8 @@ one object. The divergence is `iterate`, which is `[__Reads]` and copies
 `this`: an iterator over an empty Array holds null and does not see later
 appends. `passes/check_lazy.rs` keeps a `[__Reads]` method from writing a
 field of `this` or calling a method of `this` that is not `[__Reads]`.
+`pepc` mirrors all of this (`tools/compiler/codegen/lazy.pep` and the same
+call sites, §8).
 
 Debugging aids: set `PEP_CHECK_SYNC` to make every `MutexGuard.exit`
 check, before it unlocks, that nothing outside the locked value refers into
@@ -2979,7 +2981,10 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   unary, cast and ternary operators, `refs.pep` reference counting,
   scopes and type queries, `traits.pep` tuples, equality, hashing,
   vtables and boxing, `checks.pep` runtime checks, `ops.pep` numeric
-  conversions, `simd.pep` vectors, and `globals.pep` globals,
+  conversions, `simd.pep` vectors, `lazy.pep` the `[__Lazy]` reads of
+  §5's "Empty Arrays are null" (`final_reads_of` keys a final read by its
+  `SymbolRef` node's identity, a `HashSet` of the nodes, where Rust keys
+  it by the expression's address), and `globals.pep` globals,
   thread-locals, exports, context switching, intrinsics, TBAA facts and
   the CPU attributes. Errors are `Result`s whose location `locate` records,
   as `error_loc` does in Rust. Debug info, the JIT and the build cache's

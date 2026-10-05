@@ -15,6 +15,7 @@ import "functions";
 import [Generator, Temporary] from "generator";
 import "generator";
 import "globals";
+import "lazy";
 import "ops";
 import [binary_result_type] from "refs";
 import "refs";
@@ -140,7 +141,16 @@ extend Generator {
         # store acquires its own ref for the new occupant, so the temp's
         # creation ref is released after the store.
         var rhs_temp = owned_temp_type(rhs);
+        # A tuple or `[Value]` struct (value enums included) is copied field
+        # by field, so an empty lazy object stored in one must exist:
+        # otherwise each copy would make its own on first write. A place
+        # read materializes as usual; a null temporary is filled here.
+        var into_value = stores_into_value(lhs);
+        keep_lazy = is_final_read(rhs) and !into_value;
         var rhs_val = codegen_expr(rhs)?;
+        if (into_value and rhs_temp.is_value() and is_lazy(rhs_temp.value())) {
+            rhs_val = filled(rhs_val, rhs_temp.value())?;
+        }
         var lhs_addr = codegen_lvalue(lhs)?;
         var lhs_ty = lhs_addr.ty;
         # The sema names carry signedness (`u8` vs `i8`).
@@ -249,7 +259,12 @@ extend Generator {
         var op = _identity_as_equality(op_in);
         var lhs_temp = owned_temp_type(lhs);
         var rhs_temp = owned_temp_type(rhs);
+        # A test against null (`x === __null`) neither writes nor shares
+        # `x`, so an empty `[__Lazy]` one stays null.
+        bool null_test = lhs is PointerLiteral or rhs is PointerLiteral;
+        keep_lazy = null_test;
         var lhs_val = codegen_expr(lhs)?;
+        keep_lazy = null_test;
         var rhs_val = codegen_expr(rhs)?;
         # Tuples compare element-wise (`===` too: a tuple has no identity).
         if (lhs_val.value_type().kind() == llvm.TypeKind.Struct) {
