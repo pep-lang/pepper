@@ -705,6 +705,68 @@ Waits for the next datagram from the connected peer and appends up to
 **Returns**
 - the number of bytes appended; an error when the socket is closed, or another platform error
 
+#### set_read_timeout
+
+```pepper
+set_read_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a receive waits: when no datagram arrives for
+`milliseconds`, `receive` or `receive_from` fails with
+`is_timed_out()` and the socket stays open for another try. 0, the
+default, waits as long as it takes. It works outside a task and in
+one, where the task's `async.timeout` can end the wait sooner.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the socket is closed
+
+**Example**
+```pepper
+socket.set_read_timeout(5000);   # give up after 5 seconds of silence
+```
+
+#### read_timeout
+
+```pepper
+read_timeout(): ulong
+```
+
+Returns the read timeout `set_read_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
+#### set_write_timeout
+
+```pepper
+set_write_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a send waits for the receiver to take more: when its
+queue stays full for `milliseconds` (it is not receiving), `send` or
+`send_to` fails with `is_timed_out()` and sends nothing. 0, the
+default, waits as long as it takes.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the socket is closed
+
+#### write_timeout
+
+```pepper
+write_timeout(): ulong
+```
+
+Returns the write timeout `set_write_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
 #### close
 
 ```pepper

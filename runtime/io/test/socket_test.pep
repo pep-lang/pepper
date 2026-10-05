@@ -519,6 +519,33 @@ tcp_read_and_write_timeouts_in_a_task() {
 }
 
 [Test]
+unix_datagram_timeouts() {
+    [Target(OS(Linux) || OS(Mac))]
+    {
+        var (a, b) = io.UnixDatagram.pair().value();
+        expect_true(a.set_read_timeout(50).is_ok());
+        expect_equal(a.read_timeout(), 50);
+        var buffer = Array<u8>();
+        expect_true(a.receive(buffer, 16).error().is_timed_out());
+        b.send("hi".bytes());
+        expect_equal(a.receive(buffer, 16).value(), 2);  # still open
+
+        # Nobody receives on `a`, so `b`'s sends fill its queue, then wait.
+        expect_true(b.set_write_timeout(50).is_ok());
+        expect_equal(b.write_timeout(), 50);
+        var datagram = "x".repeat(1024).bytes();
+        var sent = b.send(datagram);
+        while (sent.is_ok()) {
+            sent = b.send(datagram);
+        }
+        expect_true(sent.error().is_timed_out());
+        expect_true(b.set_write_timeout(4294967296).error().is_invalid_input());
+        expect_true(b.close().is_ok());
+        expect_true(b.set_read_timeout(10).is_err());  # closed
+    }
+}
+
+[Test]
 socket_timeouts_on_udp_unix_and_connect() {
     var socket = io.UdpSocket.bind(loopback(0)).value();
     expect_true(socket.set_read_timeout(50).is_ok());

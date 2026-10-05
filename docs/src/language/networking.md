@@ -219,13 +219,13 @@ A socket call waits as long as it takes unless a timeout limits it:
 ```
 
 - `set_read_timeout(milliseconds)` limits how long a read (or a UDP
-  receive) waits for data, and `set_write_timeout(milliseconds)` how long
+  datagram receive) waits for data, and `set_write_timeout(milliseconds)` how long
   a write waits for room to send. A call that waits longer fails with
   `is_timed_out()`, and the socket stays open for another try. Each wait
   counts on its own, so `read_exact` or `write_all` can take longer in all.
   0, the default, means no limit; `read_timeout()` and `write_timeout()`
-  return the current values. `TcpStream`, `UdpSocket` and `UnixStream`
-  have them.
+  return the current values. `TcpStream`, `UdpSocket`, `UnixStream` and
+  `UnixDatagram` have them.
 - `TcpStream.connect_timeout(address, milliseconds)` gives up on a
   connection that is not established in time, instead of after the
   system's own limit, which is often minutes.
