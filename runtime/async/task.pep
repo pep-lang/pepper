@@ -771,47 +771,73 @@ _async_remove_task(tasks: Array<_TaskCore>, core: _TaskCore) {
     }
 }
 
+# Parks the running task until `handle` may be ready for `interest`, or its
+# cancel or deadline comes first (see `_IoWaiter._wait_ready`).
+_async_wait_socket(worker: _Worker, handle: io.SocketHandle, interest: int): io._IoWait {
+    var me = worker._current;
+    if (me._is_cancelled()) {
+        return io._IoWait.Cancelled;
+    }
+    if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
+        return io._IoWait.TimedOut;
+    }
+    var key = handle as ulong;
+    if (!worker._waits.contains(key)) {
+        if (!worker._driver._watch(handle)) {
+            return io._IoWait.Unwatched;
+        }
+        worker._waits.insert(key, _SocketWaits());
+    }
+    var waits = worker._waits.get(key);
+    var queue = waits._readers;
+    if (interest == io._IO_WRITABLE) {
+        queue = waits._writers;
+    }
+    if (!worker._driver._want(handle, interest)) {
+        return io._IoWait.Unwatched;
+    }
+    queue.append(me);
+    worker._io_waiting = worker._io_waiting + 1;
+    worker._park();
+    worker._io_waiting = worker._io_waiting - 1;
+    _async_remove_task(queue, me);
+    if (me._is_cancelled()) {
+        return io._IoWait.Cancelled;
+    }
+    if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
+        return io._IoWait.TimedOut;
+    }
+    return io._IoWait.Ready;
+}
+
+# The deadline (monotonic milliseconds, 0 for none) of a wait that may take
+# `timeout` milliseconds (0 for no limit) in a task whose deadline is
+# `deadline`: the earlier of the two.
+_async_wait_deadline(deadline: ulong, timeout: ulong): ulong {
+    if (timeout == 0) {
+        return deadline;
+    }
+    var until = _async_sys_monotonic_milliseconds() + timeout;
+    if (deadline != 0 && deadline < until) {
+        return deadline;
+    }
+    return until;
+}
+
 # How the sockets in io wait (see io/wait.pep).
 extend _Worker with io._IoWaiter {
     _in_task(): bool {
         return this._running;
     }
 
-    _wait_ready(handle: io.SocketHandle, interest: int): io._IoWait {
+    _wait_ready(handle: io.SocketHandle, interest: int, timeout: ulong): io._IoWait {
+        # The socket's timeout lowers the task's deadline for this wait.
         var me = this._current;
-        if (me._is_cancelled()) {
-            return io._IoWait.Cancelled;
-        }
-        if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
-            return io._IoWait.TimedOut;
-        }
-        var key = handle as ulong;
-        if (!this._waits.contains(key)) {
-            if (!this._driver._watch(handle)) {
-                return io._IoWait.Unwatched;
-            }
-            this._waits.insert(key, _SocketWaits());
-        }
-        var waits = this._waits.get(key);
-        var queue = waits._readers;
-        if (interest == io._IO_WRITABLE) {
-            queue = waits._writers;
-        }
-        if (!this._driver._want(handle, interest)) {
-            return io._IoWait.Unwatched;
-        }
-        queue.append(me);
-        this._io_waiting = this._io_waiting + 1;
-        this._park();
-        this._io_waiting = this._io_waiting - 1;
-        _async_remove_task(queue, me);
-        if (me._is_cancelled()) {
-            return io._IoWait.Cancelled;
-        }
-        if (me._deadline != 0 && _async_sys_monotonic_milliseconds() >= me._deadline) {
-            return io._IoWait.TimedOut;
-        }
-        return io._IoWait.Ready;
+        var saved = me._deadline;
+        me._deadline = _async_wait_deadline(saved, timeout);
+        var result = _async_wait_socket(this, handle, interest);
+        me._deadline = saved;
+        return result;
     }
 
     _forget(handle: io.SocketHandle) {
@@ -860,12 +886,14 @@ extend _Worker with io._IoWaiter {
         return result;
     }
 
-    _socket_transfer(handle: io.SocketHandle, buffer: ulong, count: ulong, write: bool): long {
+    _socket_transfer(handle: io.SocketHandle, buffer: ulong, count: ulong, write: bool, timeout: ulong): long {
         var me = this._current;
         if (me._is_cancelled()) {
             return io._IO_TRANSFER_CANCELLED;
         }
-        var deadline = me._deadline;
+        # The socket's timeout lowers the task's deadline for this wait.
+        var saved = me._deadline;
+        var deadline = _async_wait_deadline(saved, timeout);
         if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
             return io._IO_TRANSFER_TIMED_OUT;
         }
@@ -873,6 +901,7 @@ extend _Worker with io._IoWaiter {
         if (request == 0) {
             return io._IO_TRANSFER_DECLINED;
         }
+        me._deadline = deadline;
         this._file_waits.insert(me._id, me);
         this._io_waiting = this._io_waiting + 1;
         # A cancel or a deadline asks the kernel to stop, then waits for
@@ -896,7 +925,7 @@ extend _Worker with io._IoWaiter {
         this._file_waits.remove(me._id);
         var result = this._file_results.get(me._id);
         this._file_results.remove(me._id);
-        me._deadline = deadline;
+        me._deadline = saved;
         # Cancelled before it moved any bytes: by the task, or because the
         # socket is closing (`_forget`).
         if (result == _ASYNC_CANCELLED_RESULT) {

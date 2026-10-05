@@ -415,6 +415,70 @@ once it has read everything sent before. This side can still read.
 **Returns**
 - an Ok result on success; an error when the stream is closed, or another platform error
 
+#### set_read_timeout
+
+```pepper
+set_read_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a read waits: when no data arrives for
+`milliseconds`, the read fails with `is_timed_out()` and the stream
+stays open for another try. Each wait counts on its own, so a
+`read_exact` may take longer in all. 0, the default, waits as long as
+it takes. It works outside a task and in one, where the task's
+`async.timeout` can end the wait sooner.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the stream is closed
+
+**Example**
+```pepper
+stream.set_read_timeout(5000);   # give up after 5 seconds of silence
+```
+
+#### read_timeout
+
+```pepper
+read_timeout(): ulong
+```
+
+Returns the read timeout `set_read_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
+#### set_write_timeout
+
+```pepper
+set_write_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a write waits for the system to take more data: when
+it can take none for `milliseconds` (the peer is not reading), the
+write fails with `is_timed_out()`, possibly after sending part of the
+data. Each wait counts on its own. 0, the default, waits as long as
+it takes.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the stream is closed
+
+#### write_timeout
+
+```pepper
+write_timeout(): ulong
+```
+
+Returns the write timeout `set_write_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
 #### into_transfer
 
 ```pepper

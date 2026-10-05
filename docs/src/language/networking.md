@@ -210,6 +210,33 @@ which needs nothing installed; a private key (a server's or a client's)
 must be PKCS #8 (`BEGIN PRIVATE KEY`), and TLS 1.3 needs Windows 11 or
 Server 2022.
 
+## Timeouts
+
+A socket call waits as long as it takes unless a timeout limits it:
+
+```pepper
+{{#include ../../examples/networking-timeouts.pep}}
+```
+
+- `set_read_timeout(milliseconds)` limits how long a read (or a UDP
+  receive) waits for data, and `set_write_timeout(milliseconds)` how long
+  a write waits for room to send. A call that waits longer fails with
+  `is_timed_out()`, and the socket stays open for another try. Each wait
+  counts on its own, so `read_exact` or `write_all` can take longer in all.
+  0, the default, means no limit; `read_timeout()` and `write_timeout()`
+  return the current values. `TcpStream`, `UdpSocket` and `UnixStream`
+  have them.
+- `TcpStream.connect_timeout(address, milliseconds)` gives up on a
+  connection that is not established in time, instead of after the
+  system's own limit, which is often minutes.
+- They work the same outside a task, where the thread blocks, and inside
+  one, where only the task parks. In a task,
+  [`async.timeout`](tasks.md#timeouts) also limits every wait in its block,
+  and whichever ends first wins.
+- A `TlsStream` waits through its `TcpStream`, so the TCP stream's
+  timeouts limit its reads, writes and handshake too. Set them before
+  `connect` or `accept`.
+
 ## Errors
 
 Every operation returns an `IoResult`. Besides the file-system predicates,
@@ -221,7 +248,7 @@ Every operation returns an `IoResult`. Besides the file-system predicates,
 | `is_connection_reset()` | the peer reset or closed the connection (writing to a closed connection included) |
 | `is_address_in_use()` | another socket already has the address and port |
 | `is_address_not_available()` | the IP address is not one of this machine's |
-| `is_timed_out()` | the peer never answered |
+| `is_timed_out()` | the peer never answered, or a read, write or connect timeout expired |
 | `is_not_found()` | `resolve` found no address for the name, or `UnixStream.connect` found no socket file |
 
 Writing to a closed connection never raises `SIGPIPE`, so it cannot kill
@@ -241,12 +268,6 @@ listener any thread can accept on (see
 On POSIX a listener sets `SO_REUSEADDR`, so a server can restart right
 away. On Windows it does not, because there that option would let another
 program take over the port.
-
-## Current status
-
-- Outside a task every call blocks its thread, with no timeout. In a task
-  a call parks only the task, and [`async.timeout`](tasks.md#timeouts)
-  limits how long it may wait.
 
 The reference pages for [addresses](../reference/io-address.md),
 [sockets](../reference/io-socket.md) and

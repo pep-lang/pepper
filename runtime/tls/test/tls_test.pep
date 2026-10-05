@@ -135,6 +135,22 @@ tls_reports_bad_certificate_files() {
     expect_true(tls.TlsAcceptor.create(key(), key()).is_err());  # a key is not a certificate
 }
 
+[Test]
+tls_handshake_obeys_the_tcp_read_timeout() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    # A server that accepts the connection but never answers the hello.
+    var listener = io.TcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+    var tcp = io.TcpStream.connect(listener.local_address().value()).value();
+    var (silent, peer) = listener.accept().value();
+    expect_true(tcp.set_read_timeout(100).is_ok());
+    var connector = tls.TlsConnector.create().value();
+    var handshake = connector.connect(tcp, "localhost");
+    expect_true(handshake.is_err());
+    expect_true(handshake.error().is_timed_out());
+}
+
 # Accepts one connection on `listener` with `acceptor` and echoes one
 # message; whether the handshake and the echo succeeded.
 serve_once(listener: io.TcpListener, acceptor: tls.TlsAcceptor): bool {

@@ -152,9 +152,9 @@ _io_sys_socket_close(h: SocketHandle): IoResult<void> {
 }
 
 # Blocks the thread until `h` is ready for `interest`, or reports an error
-# (WSAPoll).
+# (WSAPoll); fails when `timeout` milliseconds (0 for none) pass first.
 [Target(OS(Windows))]
-_io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+_io_sys_socket_poll(h: SocketHandle, interest: int, timeout: ulong): IoResult<void> {
     var descriptor = _pep_malloc(16) as __ptr<ulong>;
     var events = unsafe_cast<__ptr<u16>>(descriptor);
     descriptor[0] = h;
@@ -163,10 +163,13 @@ _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
         events[4] = 16;  # POLLWRNORM
     }
     events[5] = 0;
-    var rc = WSAPoll(descriptor, 1, -1);
+    var rc = WSAPoll(descriptor, 1, _io_poll_timeout(timeout));
     _pep_free(descriptor);
     if (rc < 0) {
         return IoResult<void>.err(_io_win_socket_error());
+    }
+    if (rc == 0) {
+        return IoResult<void>.err(_io_timed_out_error());
     }
     return _io_ok_void();
 }

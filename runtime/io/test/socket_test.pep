@@ -1,9 +1,10 @@
 # Sockets over loopback only: TCP on one thread (exchanging data, shutdown,
 # closing, the errors, names, IPv6, incoming(), lines()), UDP, TCP between
-# two threads, and Unix domain sockets.
+# two threads, Unix domain sockets, and read, write and connect timeouts.
 
 import async;
 import io;
+import os;
 import process;
 
 loopback(port: u16): io.SocketAddress {
@@ -458,4 +459,92 @@ unix_socket_echo_server_on_every_worker() {
         }
     );
     expect_true(io.File.remove(echo_socket()).is_ok());
+}
+
+# A connected pair of TCP streams over loopback.
+tcp_pair(): (io.TcpStream, io.TcpStream) {
+    var listener = io.TcpListener.bind(loopback(0)).value();
+    var client = io.TcpStream.connect(listener.local_address().value()).value();
+    var (server, peer) = listener.accept().value();
+    return (client, server);
+}
+
+# Checks the timeouts on a stream whose peer neither reads nor writes: a
+# read and a write each give up after their timeout, and the stream still
+# works afterwards.
+check_stream_timeouts(client: io.TcpStream, server: io.TcpStream) {
+    expect_equal(client.read_timeout(), 0);
+    expect_true(client.set_read_timeout(100).is_ok());
+    expect_equal(client.read_timeout(), 100);
+    var start = os.Instant.now();
+    var buffer = Array<u8>();
+    var silent = client.read(buffer, 16);
+    expect_true(silent.is_err());
+    expect_true(silent.error().is_timed_out());
+    expect_true(start.elapsed().milliseconds() >= 90);
+    expect_true(server.write_all("late").is_ok());
+    expect_true(client.read_exact(buffer, 4).is_ok());  # still open
+    expect_equal(text_of(buffer), "late");
+
+    # The peer never reads, so the buffers fill and a send has to wait.
+    expect_true(client.set_write_timeout(100).is_ok());
+    expect_equal(client.write_timeout(), 100);
+    var chunk = "x".repeat(65536).bytes();
+    var stuck = io.IoResult<void>.ok();
+    var rounds = 0;
+    while (stuck.is_ok() && rounds < 10000) {
+        stuck = client.write_all(chunk);
+        rounds = rounds + 1;
+    }
+    expect_true(stuck.is_err());
+    expect_true(stuck.error().is_timed_out());
+
+    expect_true(client.set_read_timeout(0).is_ok());
+    expect_equal(client.read_timeout(), 0);
+    expect_true(client.set_read_timeout(4294967296).error().is_invalid_input());
+}
+
+[Test]
+tcp_read_and_write_timeouts_outside_a_task() {
+    var (client, server) = tcp_pair();
+    check_stream_timeouts(client, server);
+}
+
+[Test]
+tcp_read_and_write_timeouts_in_a_task() {
+    async.run(() => {
+        var (client, server) = tcp_pair();
+        check_stream_timeouts(client, server);
+    });
+}
+
+[Test]
+socket_timeouts_on_udp_unix_and_connect() {
+    var socket = io.UdpSocket.bind(loopback(0)).value();
+    expect_true(socket.set_read_timeout(50).is_ok());
+    var buffer = Array<u8>();
+    expect_true(socket.receive_from(buffer, 16).error().is_timed_out());
+    var other = io.UdpSocket.bind(loopback(0)).value();
+    other.send_to("hi".bytes(), socket.local_address().value());
+    expect_equal(socket.receive(buffer, 16).value(), 2);  # still open
+
+    var folder = TempFolder("timeouts");
+    var path = folder.path.join("t.sock");
+    var listener = io.UnixListener.bind(path).value();
+    var unix_client = io.UnixStream.connect(path).value();
+    var unix_server = listener.accept().value();
+    expect_true(unix_client.set_read_timeout(50).is_ok());
+    expect_true(unix_client.read(buffer, 16).error().is_timed_out());
+    unix_server.write_all("ok");
+    expect_equal(unix_client.read(buffer, 16).value(), 2);
+    expect_true(listener.close().is_ok());
+    io.File.remove(path);
+
+    # A connection that is accepted in time; the timeout does not stay.
+    var tcp = io.TcpListener.bind(loopback(0)).value();
+    var stream = io.TcpStream.connect_timeout(tcp.local_address().value(), 2000).value();
+    expect_equal(stream.write_timeout(), 0);
+    expect_true(io.TcpStream.connect_timeout(tcp.local_address().value(), 4294967296).error().is_invalid_input());
+    expect_true(stream.close().is_ok());
+    expect_true(stream.set_read_timeout(10).is_err());  # closed
 }

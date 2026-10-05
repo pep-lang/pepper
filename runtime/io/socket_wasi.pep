@@ -127,7 +127,7 @@ _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoR
 }
 
 [Target(OS(Wasi))]
-_io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+_io_sys_socket_poll(h: SocketHandle, interest: int, timeout: ulong): IoResult<void> {
     return IoResult<void>.err(_io_wasi_no_sockets());
 }
 

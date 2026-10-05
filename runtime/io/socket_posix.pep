@@ -414,9 +414,10 @@ _io_sys_socket_connect_raw(h: SocketHandle, buffer: __ptr<u8>, length: int): IoR
     return _io_ok_void();
 }
 
-# Blocks the thread until `h` is ready for `interest` (poll(2)).
+# Blocks the thread until `h` is ready for `interest` (poll(2)), or fails
+# when `timeout` milliseconds (0 for none) pass first.
 [Target(OS(Linux) || OS(Mac))]
-_io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
+_io_sys_socket_poll(h: SocketHandle, interest: int, timeout: ulong): IoResult<void> {
     var buffer = _IoBuffer(8);
     var descriptor = unsafe_cast<__ptr<int>>(buffer._bytes);
     var events = unsafe_cast<__ptr<u16>>(buffer._bytes);
@@ -426,9 +427,18 @@ _io_sys_socket_poll(h: SocketHandle, interest: int): IoResult<void> {
         events[2] = 4;  # POLLOUT
     }
     events[3] = 0;
+    var wait = _io_poll_timeout(timeout);
     while (true) {
-        if (poll(descriptor, 1, -1) >= 0) {
+        var rc = poll(descriptor, 1, wait);
+        if (rc > 0) {
             return _io_ok_void();
+        }
+        if (rc == 0) {
+            # A signal ends the wait early; this starts it over.
+            if (wait >= 0) {
+                return IoResult<void>.err(_io_timed_out_error());
+            }
+            continue;
         }
         var e = IoError.last();
         if (!e.is_interrupted()) {

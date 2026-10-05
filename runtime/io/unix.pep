@@ -411,6 +411,51 @@ export struct UnixStream {
         return _io_stream_shutdown_write(_handle);
     }
 
+    ## Limits how long a read waits: when no data arrives for
+    ## `milliseconds`, the read fails with `is_timed_out()` and the stream
+    ## stays open for another try. Each wait counts on its own, so a
+    ## `read_exact` may take longer in all. 0, the default, waits as long as
+    ## it takes. It works outside a task and in one, where the task's
+    ## `async.timeout` can end the wait sooner.
+    ##
+    ## @param milliseconds the longest wait, at most 4294967295 (about 49
+    ##   days); 0 for none
+    ## @returns an Ok result; an error with `is_invalid_input()` when
+    ##   `milliseconds` is too large, or an error when the stream is closed
+    ## @example
+    ##     stream.set_read_timeout(5000);   # give up after 5 seconds of silence
+    set_read_timeout(milliseconds: ulong): IoResult<void> {
+        return _io_socket_timeout_setter(_handle, _IO_READABLE, milliseconds);
+    }
+
+    ## Returns the read timeout `set_read_timeout` set.
+    ##
+    ## @returns the timeout in milliseconds, 0 for none
+    read_timeout(): ulong {
+        return _io_socket_timeout(_handle, _IO_READABLE);
+    }
+
+    ## Limits how long a write waits for the system to take more data: when
+    ## it can take none for `milliseconds` (the peer is not reading), the
+    ## write fails with `is_timed_out()`, possibly after sending part of the
+    ## data. Each wait counts on its own. 0, the default, waits as long as
+    ## it takes.
+    ##
+    ## @param milliseconds the longest wait, at most 4294967295 (about 49
+    ##   days); 0 for none
+    ## @returns an Ok result; an error with `is_invalid_input()` when
+    ##   `milliseconds` is too large, or an error when the stream is closed
+    set_write_timeout(milliseconds: ulong): IoResult<void> {
+        return _io_socket_timeout_setter(_handle, _IO_WRITABLE, milliseconds);
+    }
+
+    ## Returns the write timeout `set_write_timeout` set.
+    ##
+    ## @returns the timeout in milliseconds, 0 for none
+    write_timeout(): ulong {
+        return _io_socket_timeout(_handle, _IO_WRITABLE);
+    }
+
     ## Moves the connection out of this stream, into a token another thread
     ## can take it from with `UnixStream.adopt`, as
     ## `TcpStream.into_transfer` does. The stream is closed afterwards.

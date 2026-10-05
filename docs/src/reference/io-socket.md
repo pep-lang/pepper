@@ -5,8 +5,10 @@
 TCP and UDP sockets: `TcpListener` accepts connections, `TcpStream` is
 one connection, `UdpSocket` sends and receives datagrams.
 
-Every call blocks the calling thread until it completes. Addresses are
-`SocketAddress` values; `resolve` turns a host name into them.
+Every call blocks the calling thread until it completes (in a task, it
+parks only the task), or until the socket's read or write timeout
+expires. Addresses are `SocketAddress` values; `resolve` turns a host
+name into them.
 
 Source: `runtime/io/socket.pep`
 
@@ -376,6 +378,31 @@ Opens a connection to `address`, waiting until it is established.
 **Returns**
 - the connected stream; an error with `is_connection_refused()` when nothing listens there, `is_timed_out()` when the peer does not answer, or another platform error
 
+#### connect_timeout
+
+```pepper
+static connect_timeout(address: SocketAddress, milliseconds: ulong): IoResult<TcpStream>
+```
+
+Opens a connection to `address` like `connect`, but gives up with
+`is_timed_out()` when it is not established within `milliseconds`,
+instead of after the system's own limit (often minutes).
+
+**Parameters**
+- `address` — the address to connect to
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 waits as long as `connect` does
+
+**Returns**
+- the connected stream, with no read or write timeout; an error with `is_timed_out()` when the time runs out, `is_invalid_input()` when `milliseconds` is too large, or an error as for `connect`
+
+**Example**
+```pepper
+var r = TcpStream.connect_timeout(SocketAddress.parse("192.0.2.1:80").value(), 2000);
+if (r.is_err() && r.error().is_timed_out()) {
+    print("no answer within 2 seconds");
+}
+```
+
 #### connect_host
 
 ```pepper
@@ -566,6 +593,70 @@ request/response traffic, more packets.
 
 **Returns**
 - an Ok result on success; an error when the stream is closed, or another platform error
+
+#### set_read_timeout
+
+```pepper
+set_read_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a read waits: when no data arrives for
+`milliseconds`, the read fails with `is_timed_out()` and the stream
+stays open for another try. Each wait counts on its own, so a
+`read_exact` may take longer in all. 0, the default, waits as long as
+it takes. It works outside a task and in one, where the task's
+`async.timeout` can end the wait sooner.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the stream is closed
+
+**Example**
+```pepper
+stream.set_read_timeout(5000);   # give up after 5 seconds of silence
+```
+
+#### read_timeout
+
+```pepper
+read_timeout(): ulong
+```
+
+Returns the read timeout `set_read_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
+#### set_write_timeout
+
+```pepper
+set_write_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a write waits for the system to take more data: when
+it can take none for `milliseconds` (the peer is not reading), the
+write fails with `is_timed_out()`, possibly after sending part of the
+data. Each wait counts on its own. 0, the default, waits as long as
+it takes.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the stream is closed
+
+#### write_timeout
+
+```pepper
+write_timeout(): ulong
+```
+
+Returns the write timeout `set_write_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
 
 #### local_address
 
@@ -822,6 +913,67 @@ such as `255.255.255.255` (`SO_BROADCAST`).
 
 **Returns**
 - an Ok result on success; an error when the socket is closed, or another platform error
+
+#### set_read_timeout
+
+```pepper
+set_read_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a receive waits: when no datagram arrives for
+`milliseconds`, `receive` or `receive_from` fails with
+`is_timed_out()` and the socket stays open for another try. 0, the
+default, waits as long as it takes. It works outside a task and in
+one, where the task's `async.timeout` can end the wait sooner.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the socket is closed
+
+**Example**
+```pepper
+socket.set_read_timeout(5000);   # give up after 5 seconds of silence
+```
+
+#### read_timeout
+
+```pepper
+read_timeout(): ulong
+```
+
+Returns the read timeout `set_read_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
+
+#### set_write_timeout
+
+```pepper
+set_write_timeout(milliseconds: ulong): IoResult<void>
+```
+
+Limits how long a send waits for room in the system's buffer: when
+there is none for `milliseconds`, the send fails with
+`is_timed_out()`. 0, the default, waits as long as it takes.
+
+**Parameters**
+- `milliseconds` — the longest wait, at most 4294967295 (about 49 days); 0 for none
+
+**Returns**
+- an Ok result; an error with `is_invalid_input()` when `milliseconds` is too large, or an error when the socket is closed
+
+#### write_timeout
+
+```pepper
+write_timeout(): ulong
+```
+
+Returns the write timeout `set_write_timeout` set.
+
+**Returns**
+- the timeout in milliseconds, 0 for none
 
 #### local_address
 

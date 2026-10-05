@@ -20,6 +20,13 @@
 # calling `recv` or `send`. The other backends decline, and the socket
 # waits for readiness as above.
 #
+# A socket may have a read and a write timeout (`set_read_timeout`,
+# `set_write_timeout`): each wait for readiness then ends after that many
+# milliseconds with a timed-out error, in a task (by lowering the task's
+# deadline for the wait) and outside one (poll's timeout). The timeouts are
+# kept by handle in `_io_socket_timeouts`, so every layer that waits on a
+# socket, TLS's included, sees them without passing them down.
+#
 # `async` imports `io` (its sockets and errors), so `io` cannot import
 # `async`. Instead `async.run` registers its worker as this thread's
 # `_IoWaiter`, and the sockets find it through a thread-local key. These
@@ -55,12 +62,12 @@ export trait _IoWaiter {
 
     # Parks the running task until `handle` may be ready for `interest`
     # (`_IO_READABLE` or `_IO_WRITABLE`), and returns `Ready`; or returns
-    # `Cancelled` or `TimedOut` when the task is cancelled or its timeout
-    # expires first, or `Unwatched` when
-    # the runtime cannot watch `handle` (the caller then blocks the thread
-    # instead). Readiness is a hint: the caller tries the call again and
-    # waits again if it would still block.
-    _wait_ready(handle: SocketHandle, interest: int): _IoWait;
+    # `Cancelled` or `TimedOut` when the task is cancelled, or its timeout
+    # or `timeout` milliseconds (0 for none) expire first, or `Unwatched`
+    # when the runtime cannot watch `handle` (the caller then blocks the
+    # thread instead). Readiness is a hint: the caller tries the call again
+    # and waits again if it would still block.
+    _wait_ready(handle: SocketHandle, interest: int, timeout: ulong): _IoWait;
 
     # `handle` is about to be closed: forget it, and wake any task waiting
     # on it.
@@ -86,10 +93,11 @@ export trait _IoWaiter {
     # parking the task until the kernel has done it. Returns the byte count,
     # -1 minus the error code, or one of the `_IO_TRANSFER_*` results; with
     # `_IO_TRANSFER_DECLINED` nothing was done, and the caller makes the
-    # call itself. The buffer stays in use until this returns, even when
+    # call itself. `timeout` milliseconds (0 for none) end the wait like the
+    # task's timeout. The buffer stays in use until this returns, even when
     # the task is cancelled. (The address is a ulong: a `__ptr` parameter in
     # a trait method does not compile yet.)
-    _socket_transfer(handle: SocketHandle, buffer: ulong, count: ulong, write: bool): long;
+    _socket_transfer(handle: SocketHandle, buffer: ulong, count: ulong, write: bool, timeout: ulong): long;
 }
 
 # What `_IoWaiter._socket_transfer` returns besides a count or an error
@@ -140,15 +148,109 @@ export _io_clear_waiter() {
     _pep_free(slot);
 }
 
+# ── Timeouts ─────────────────────────────────────────────────────────────────
+
+# The largest timeout, in milliseconds (about 49.7 days): each is kept in 32
+# bits.
+export const _IO_MAX_TIMEOUT: ulong = 4294967295;
+
+# The timeouts of the sockets that have one, keyed by handle: the read
+# timeout in the high 32 bits, the write timeout in the low 32.
+const _io_socket_timeouts = async.Mutex<HashMap<long, ulong>>(HashMap<long, ulong>());
+
+# How many sockets have a timeout, so that waits skip the lock when none
+# has.
+const _io_socket_timeout_count = async.Atomic<ulong>(0);
+
+# The timeout in milliseconds (0 for none) of a wait on `h` for `interest`:
+# its read timeout for `_IO_READABLE`, its write timeout for
+# `_IO_WRITABLE`.
+_io_socket_timeout(h: SocketHandle, interest: int): ulong {
+    if (_io_socket_timeout_count.load() == 0) {
+        return 0;
+    }
+    ulong packed = 0;
+    with (var timeouts = _io_socket_timeouts.lock()) {
+        var key = h as long;
+        if (timeouts.contains(key)) {
+            packed = timeouts.get(key);
+        }
+    }
+    if (interest == _IO_READABLE) {
+        return packed >> 32;
+    }
+    return packed & _IO_MAX_TIMEOUT;
+}
+
+# Sets the timeout of `h`'s waits for `interest` to `milliseconds` (0 for
+# none, at most `_IO_MAX_TIMEOUT`).
+_io_socket_set_timeout(h: SocketHandle, interest: int, milliseconds: ulong) {
+    with (var timeouts = _io_socket_timeouts.lock()) {
+        var key = h as long;
+        ulong old = 0;
+        var had = timeouts.contains(key);
+        if (had) {
+            old = timeouts.get(key);
+        }
+        var packed = (old & _IO_MAX_TIMEOUT) | (milliseconds << 32);
+        if (interest == _IO_WRITABLE) {
+            packed = (old & (_IO_MAX_TIMEOUT << 32)) | milliseconds;
+        }
+        if (packed != 0) {
+            timeouts.insert(key, packed);
+            if (!had) {
+                _io_socket_timeout_count.fetch_add(1);
+            }
+        } else if (had) {
+            timeouts.remove(key);
+            _io_socket_timeout_count.fetch_sub(1);
+        }
+    }
+}
+
+# Sets one of `h`'s timeouts for a socket method: fails when the socket is
+# closed or `milliseconds` is too large.
+_io_socket_timeout_setter(h: SocketHandle, interest: int, milliseconds: ulong): IoResult<void> {
+    var c = _io_socket_require_open(h);
+    if (c.is_err()) {
+        return c;
+    }
+    if (milliseconds > _IO_MAX_TIMEOUT) {
+        var message = $"a socket timeout must be at most {_IO_MAX_TIMEOUT} milliseconds";
+        return IoResult<void>.err(IoError(_io_sys_code_invalid_input(), message));
+    }
+    _io_socket_set_timeout(h, interest, milliseconds);
+    return _io_ok_void();
+}
+
+# poll's timeout argument for `timeout` milliseconds: -1 (forever) for 0.
+_io_poll_timeout(timeout: ulong): int {
+    if (timeout == 0) {
+        return -1;
+    }
+    if (timeout > 2147483647) {
+        return 2147483647;
+    }
+    return timeout as int;
+}
+
+# The error of a wait that timed out.
+_io_timed_out_error(): IoError {
+    return IoError(_io_sys_code_timed_out(), "the operation timed out");
+}
+
+# ── Waiting ──────────────────────────────────────────────────────────────────
+
 # Waits until `h` may be ready for `interest`: parks the task inside a task,
 # blocks the thread outside one. Fails when the task is cancelled or times
-# out first.
+# out, or the socket's timeout for `interest` expires, first.
 _io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
+    var timeout = _io_socket_timeout(h, interest);
     var slot = _io_waiter_slot();
     if (slot != __null) {
         var waiter = slot[0];
         if (waiter._in_task()) {
-            match (waiter._wait_ready(h, interest)) {
+            match (waiter._wait_ready(h, interest, timeout)) {
                 Ready => {
                     return _io_ok_void();
                 }
@@ -156,14 +258,14 @@ _io_socket_wait(h: SocketHandle, interest: int): IoResult<void> {
                     return IoResult<void>.err(IoError(_io_sys_code_cancelled(), "the task was cancelled"));
                 }
                 TimedOut => {
-                    return IoResult<void>.err(IoError(_io_sys_code_timed_out(), "the operation timed out"));
+                    return IoResult<void>.err(_io_timed_out_error());
                 }
                 # The runtime cannot watch `h`: block the thread instead.
                 Unwatched => {}
             }
         }
     }
-    return _io_sys_socket_poll(h, interest);
+    return _io_sys_socket_poll(h, interest, timeout);
 }
 
 # One file read or write that a task hands to the runtime: `count` bytes
@@ -240,7 +342,11 @@ _io_task_socket_transfer(h: SocketHandle, p: __ptr<u8>, n: ulong, write: bool): 
     if (!waiter._in_task()) {
         return Optional<IoResult<ulong>>.Empty;
     }
-    var raw = waiter._socket_transfer(h, unsafe_cast<ulong>(p), n, write);
+    var interest = _IO_READABLE;
+    if (write) {
+        interest = _IO_WRITABLE;
+    }
+    var raw = waiter._socket_transfer(h, unsafe_cast<ulong>(p), n, write, _io_socket_timeout(h, interest));
     if (raw == _IO_TRANSFER_DECLINED) {
         return Optional<IoResult<ulong>>.Empty;
     }
@@ -250,9 +356,7 @@ _io_task_socket_transfer(h: SocketHandle, p: __ptr<u8>, n: ulong, write: bool): 
         );
     }
     if (raw == _IO_TRANSFER_TIMED_OUT) {
-        return Optional<IoResult<ulong>>.Value(
-            IoResult<ulong>.err(IoError(_io_sys_code_timed_out(), "the operation timed out"))
-        );
+        return Optional<IoResult<ulong>>.Value(IoResult<ulong>.err(_io_timed_out_error()));
     }
     if (raw == _IO_TRANSFER_CLOSED) {
         return Optional<IoResult<ulong>>.Value(IoResult<ulong>.err(_io_socket_closed_error()));
@@ -282,8 +386,13 @@ _io_socket_release_idle(h: SocketHandle) {
     }
 }
 
-# Tells this thread's waiter that `h` is about to be closed.
+# Tells this thread's waiter that `h` is about to be closed, and drops its
+# timeouts.
 _io_socket_forget(h: SocketHandle) {
+    if (_io_socket_timeout_count.load() != 0) {
+        _io_socket_set_timeout(h, _IO_READABLE, 0);
+        _io_socket_set_timeout(h, _IO_WRITABLE, 0);
+    }
     var slot = _io_waiter_slot();
     if (slot != __null) {
         slot[0]._forget(h);
