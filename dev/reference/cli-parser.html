@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c0f3ae9.js";
+            window.path_to_searchindex_js = "../searchindex-c0706407.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -240,7 +240,7 @@ were parsed.</p>
 </ul>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
-<pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = ""): Flag
+<pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
 </code></pre>
 <p>Declares an option that takes no value, such as <code>--verbose</code>.</p>
 <p><strong>Parameters</strong></p>
@@ -248,6 +248,7 @@ were parsed.</p>
 <li><code>name</code> — the long name, without <code>--</code></li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option does, for the help</li>
+<li><code>global</code> — whether the flag may also be given after the name of a command, at any depth (<code>pkg add -v x</code> as well as <code>pkg -v add x</code>)</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -255,10 +256,10 @@ were parsed.</p>
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, here, as a global option of a parser this one is a command of, or (for a global flag) in one of its commands</li>
 </ul>
 <h4 id="option"><a class="header" href="#option">option</a></h4>
-<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument&lt;String&gt;
+<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;String&gt;
 </code></pre>
 <p>Declares an option that takes one String value, such as
 <code>--output a.out</code>. <code>option&lt;T&gt;</code> declares one whose value is a number,
@@ -271,6 +272,7 @@ a path or an enum case.</p>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>OUTPUT</code>)</li>
 <li><code>default_value</code> — the value when the option is not given; empty for none</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -281,7 +283,7 @@ a path or an enum case.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
 <h4 id="option-1"><a class="header" href="#option-1">option</a></h4>
-<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument&lt;T&gt;
+<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;T&gt;
 </code></pre>
 <p>Declares an option that takes one value of type <code>T</code>, such as
 <code>--jobs 4</code> for <code>option&lt;int&gt;</code>. A value that does not read as a <code>T</code>
@@ -301,6 +303,7 @@ case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists the
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>JOBS</code>)</li>
 <li><code>default_value</code> — the value when the option is not given, written as on the command line (<code>"4"</code>); empty for none</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -314,7 +317,7 @@ case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists the
 <pre><code class="language-pepper">var jobs = parser.option&lt;int&gt;("jobs", "j", "how many at once", default_value = "4");
 </code></pre>
 <h4 id="multiple"><a class="header" href="#multiple">multiple</a></h4>
-<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList&lt;String&gt;
+<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList&lt;String&gt;
 </code></pre>
 <p>Declares an option that may be given any number of times, each with a
 String value, such as <code>-I src -I lib</code>. <code>multiple&lt;T&gt;</code> declares one
@@ -326,6 +329,7 @@ whose values are numbers, paths or enum cases.</p>
 <li><code>help</code> — what the option adds, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -336,7 +340,7 @@ whose values are numbers, paths or enum cases.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
 <h4 id="multiple-1"><a class="header" href="#multiple-1">multiple</a></h4>
-<pre><code class="language-pepper">multiple&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList&lt;T&gt;
+<pre><code class="language-pepper">multiple&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList&lt;T&gt;
 </code></pre>
 <p>Declares an option that may be given any number of times, each with a
 value of type <code>T</code>, such as <code>-I src -I lib</code> for <code>multiple&lt;io.Path&gt;</code>.
@@ -352,6 +356,7 @@ value of type <code>T</code>, such as <code>-I src -I lib</code> for <code>multi
 <li><code>help</code> — what the option adds, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>

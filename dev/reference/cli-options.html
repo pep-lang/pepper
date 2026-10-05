@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c0f3ae9.js";
+            window.path_to_searchindex_js = "../searchindex-c0706407.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -190,7 +190,7 @@ from a struct’s fields.</p>
 <pre><code class="language-pepper">[Attribute] struct Option
 </code></pre>
 <p>Sets how a field of an options struct is declared as an option: its
-short name, its help, and whether it is required. A field without it is
+short name, its help, and whether it is required or global. A field without it is
 still an option, named after the field.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import cli;
@@ -224,6 +224,11 @@ struct Options {
 <pre><code class="language-pepper">const required: bool = false
 </code></pre>
 <p>Whether leaving the option out is an error.</p>
+<h4 id="global"><a class="header" href="#global">global</a></h4>
+<pre><code class="language-pepper">const global: bool = false
+</code></pre>
+<p>Whether the option may also be given after the name of a command, at
+any depth.</p>
 <h2 id="positional"><a class="header" href="#positional">Positional</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Positional
 </code></pre>

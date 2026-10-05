@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-5c0f3ae9.js";
+            window.path_to_searchindex_js = "../searchindex-c0706407.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -239,9 +239,9 @@ receives them, program name first.</p>
 <tr><th>Declaration</th><th>Handle</th><th>Reads</th></tr>
 </thead>
 <tbody>
-<tr><td><code>flag(name, short_name, help)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
-<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
-<tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>flag(name, short_name, help, global)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
+<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required, global)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required, global)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 <tr><td><code>positional&lt;T&gt;(name, help, required, default_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
 <tr><td><code>positionals&lt;T&gt;(name, help, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 </tbody>
@@ -391,8 +391,8 @@ none.</li>
 <li>An option is named after its field, with each <code>_</code> written <code>-</code>:
 <code>import_path</code> is <code>--import-path</code>. Any other field type is a compile
 error at the call: <code>'add_options' cannot declare field 'table' of type 'Map&lt;String, int&gt;'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]</code>.</li>
-<li><code>[cli.Option(short_name, help, name, value_name, required)]</code> sets the
-rest, every argument optional: <code>[cli.Option("o", "the executable to write")]</code>, <code>[cli.Option(required = true)]</code>.</li>
+<li><code>[cli.Option(short_name, help, name, value_name, required, global)]</code> sets
+the rest, every argument optional: <code>[cli.Option("o", "the executable to write")]</code>, <code>[cli.Option(required = true)]</code>.</li>
 <li><code>[cli.Positional(help, name, required)]</code> makes the field the next
 positional argument. A <code>T</code> one is required when it has no default or
 <code>required</code> is set; a <code>T?</code> one may be left out; a <code>T[]</code> one takes every
@@ -443,14 +443,18 @@ main(): int {
 of its own.</li>
 <li>Options before the command’s name belong to the parent, and everything
 after it to the command, so <code>pkg -v add x</code> works and <code>pkg add -v x</code> does
-not.</li>
+not, unless <code>-v</code> is global.</li>
+<li>A global option (<code>flag("verbose", "v", global = true)</code>, and the same
+argument on <code>option</code> and <code>multiple</code>) may also be given after the name of
+any command below its parser, at any depth, and each command’s help
+lists it. A command cannot declare an option with a global option’s
+name, and a required global option may be given anywhere on the line.</li>
 <li><code>--help</code> after a command shows that command’s help, and errors show its
 usage.</li>
 <li>Commands nest: a command’s parser can declare commands too.</li>
 </ul>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
-<li>Options that apply after a subcommand’s name (clap’s global options).</li>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
 <li>Generating shell completions.</li>
 </ul>
