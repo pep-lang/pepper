@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a9ee1a60.js";
+            window.path_to_searchindex_js = "searchindex-8165734e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -20371,6 +20371,10 @@ removed by the next <code>update</code>.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
+<h2 id="editors"><a class="header" href="#editors">Editors</a></h2>
+<p>The VS Code extension runs the language server of the toolchain the
+workspace uses, as <code>pepper install which</code> reports it; see
+<a href="#the-language-server-pep-lsp">pep-lsp</a>.</p>
 <h2 id="downloads"><a class="header" href="#downloads">Downloads</a></h2>
 <p><code>add</code> and <code>update</code> find this machine’s archive (<code>linux-x64</code>, <code>macos-arm64</code>,
 <code>macos-x64</code> or <code>windows-x64</code>) among the GitHub releases, as the
@@ -21633,7 +21637,13 @@ code with the compiler’s own front end, and finds the standard library the
 way the compiler does (see
 <a href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
 <p>The <a href="#editor-support">VS Code extension</a> bundles
-it. For another editor, build it with
+it. When <a href="#toolchains-pep-install"><code>pepper install</code></a> manages your Pepper home, the
+extension instead runs the <code>pep-lsp</code> of the toolchain the first workspace
+folder uses, as <code>pepper install which</code> reports it there, so the editor
+checks code with the same compiler and standard library as <code>pepper build</code>.
+If that fails (say the project pins a toolchain that is not installed), a
+warning says why and the bundled server runs. Run <strong>Pepper: Restart
+Language Server</strong> after switching toolchains. For another editor, build it with
 <code>cargo build --release -p pepper-lsp</code> (it is
 <code>target/release/pep-lsp</code>) and configure the editor to run it for <code>.pep</code>
 files.</p>
@@ -21683,7 +21693,7 @@ options above, and restarts the server when one changes:</p>
 <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>pepper.lspPath</code></td><td>empty</td><td>The <code>pep-lsp</code> to run; empty uses the one bundled with the extension. The server restarts whenever that file is rebuilt</td></tr>
+<tr><td><code>pepper.lspPath</code></td><td>empty</td><td>The <code>pep-lsp</code> to run; empty uses the project’s toolchain’s, else the one bundled with the extension. The server restarts whenever that file is rebuilt</td></tr>
 <tr><td><code>pepper.inlayHints.implicitConversions</code></td><td><code>true</code></td><td><code>inlayHints.implicitConversions</code></td></tr>
 <tr><td><code>pepper.inlayHints.parameterNames</code></td><td><code>true</code></td><td><code>inlayHints.parameterNames</code></td></tr>
 <tr><td><code>pepper.buildOptions</code></td><td><code>[]</code></td><td><code>buildOptions</code></td></tr>
