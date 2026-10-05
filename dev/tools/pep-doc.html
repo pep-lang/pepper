@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-382a5987.js";
+            window.path_to_searchindex_js = "../searchindex-7e25b7a7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -187,10 +187,12 @@
 <a href="../language/doc-comments.html">documentation comments</a>, checks the book, and
 renders it with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>, which must be
 on the <code>PATH</code> (<code>cargo install mdbook --locked</code>).</p>
-<p>It works on the repository it was built from, wherever it is run. Build it
-with cargo; <code>pepper doc</code> runs it, and from the repository root
-<code>cargo run -p pepper-docgen -- &lt;command&gt;</code> builds and runs it in one step:</p>
-<pre><code class="language-bash">cargo run -p pepper-docgen -- reference     # the same as: pep-doc reference
+<p>It is a Pepper program (<code>tools/pep-doc</code>), and it works on the Pepper
+checkout that holds the folder it is run in. <code>scripts/pepper-tests.sh</code>
+builds it beside <code>pep-build</code>, with the other Pepper tools, and <code>pepper doc</code>
+runs it. To build it alone, from the repository root:</p>
+<pre><code class="language-bash">target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
+target/release/pep-doc reference
 </code></pre>
 <pre><code class="language-text">pep-doc [&lt;command&gt;] [options]
 </code></pre>
@@ -216,8 +218,9 @@ variable or setting is missing from the tool’s page in this book, naming
 the tool and the page.</li>
 </ul>
 <p>The tools’ options come from their <code>--help</code>: <code>pep-build</code>‘s and the Pepper
-tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-test</code>),
-which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>, so run it first.</p>
+tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
+<code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>, so
+run it first.</p>
 <ul>
 <li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default: the release
 build’s folder under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it holds
