@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-61d99c6f.js";
+            window.path_to_searchindex_js = "../searchindex-1b2d415b.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-8d3ead75.js"></script>
+        <script src="../toc-215b8fb0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -189,6 +189,7 @@ are: <code>pepper &lt;command&gt; [arguments]</code> runs a separate program nam
 pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
+pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -197,7 +198,7 @@ pepper --version                  # pepper's version; -v adds each command's
 is the program <code>pep-build</code>, so <code>pepper build</code> takes exactly the options the
 compiler does (see <a href="pep-build.html">The compiler: pep-build</a>).</p>
 <h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
-<pre><code class="language-text">pepper [-C &lt;dir&gt;]... &lt;command&gt; [arguments]
+<pre><code class="language-text">pepper [+&lt;version&gt;] [-C &lt;dir&gt;]... &lt;command&gt; [arguments]
 pepper help [&lt;command&gt;]
 pepper --version [-v]
 </code></pre>
@@ -208,17 +209,18 @@ pepper --version [-v]
 </thead>
 <tbody>
 <tr><td><code>pepper &lt;command&gt; [arguments]</code></td><td>Runs <code>pep-&lt;command&gt;</code> with the arguments (see <a href="#how-it-finds-a-command">How it finds a command</a>)</td></tr>
+<tr><td><code>+&lt;version&gt;</code></td><td>Runs the command with that installed toolchain, such as <code>+0.3.0</code> or <code>+0.3</code> (see <a href="#toolchains">Toolchains</a>)</td></tr>
 <tr><td><code>-C &lt;dir&gt;</code></td><td>Changes to <code>&lt;dir&gt;</code> before running the command (see <a href="#running-in-another-folder">Running in another folder</a>)</td></tr>
 <tr><td><code>pepper help</code>, <code>-h</code>, <code>--help</code></td><td>Prints the usage, these options, and the commands it can find</td></tr>
 <tr><td><code>pepper help &lt;command&gt;</code></td><td>Runs <code>pep-&lt;command&gt; --help</code></td></tr>
-<tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version</td></tr>
+<tr><td><code>--version</code></td><td>Prints <code>pepper</code> and its version, and in a Pepper home the toolchain the folder uses and why</td></tr>
 <tr><td><code>--version -v</code>, <code>--version --verbose</code></td><td>Also prints the version each command reports (its <code>--version</code>’s first line, or <code>(no version)</code>)</td></tr>
 </tbody>
 </table>
 </div>
 <p>Options go before the command: everything after the command belongs to it,
 so <code>pepper fmt --help</code> is <code>pep-fmt --help</code>. <code>pepper</code> with no arguments, or
-with only <code>-C</code> options, prints the usage to standard error and exits with
+with only <code>-C</code> and <code>+&lt;version&gt;</code> options, prints the usage to standard error and exits with
 status 2; so does a <code>-C</code> with no folder after it; an option other than
 <code>-v</code> or <code>--verbose</code> after <code>--version</code> is an error that exits with 2. An
 unknown command exits with 1. Otherwise the exit status is the command’s.</p>
@@ -230,6 +232,7 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </thead>
 <tbody>
 <tr><td><code>pepper build</code></td><td><code>pep-build</code></td><td>Compiles a program, or with no file the project (<a href="pep-build.html">The compiler: pep-build</a>, <a href="projects.html">Projects: pep.toml</a>)</td></tr>
+<tr><td><code>pepper install</code></td><td><code>pep-install</code></td><td>Installs toolchains side by side and picks the default (<a href="pep-install.html">Toolchains: pep-install</a>)</td></tr>
 <tr><td><code>pepper package</code></td><td><code>pep-package</code></td><td>Adds, removes, updates and fetches a project’s dependencies (<a href="pep-package.html">The package manager: pep-package</a>)</td></tr>
 <tr><td><code>pepper fmt</code></td><td><code>pep-fmt</code></td><td>Formats source (<a href="pep-fmt.html">Formatting with pep-fmt</a>)</td></tr>
 <tr><td><code>pepper profile</code></td><td><code>pep-profile</code></td><td>Profiles a program and draws a flame graph (<a href="pep-profile.html">Profiling with pep-profile</a>)</td></tr>
@@ -240,17 +243,17 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </table>
 </div>
 <p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-test</code> and
-<code>pepper</code> are Pepper programs, built with <code>pep-build</code>.</p>
+<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
+<code>pep-test</code> and <code>pepper</code> are Pepper programs, built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>
 <pre><code class="language-bash">cargo build --release
-target/release/pep-build tools/pepper/main.pep -o target/release/pepper
+target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
 </code></pre>
 <p>On Windows, name the output <code>target\release\pepper.exe</code>.</p>
 <h2 id="how-it-finds-a-command"><a class="header" href="#how-it-finds-a-command">How it finds a command</a></h2>
-<p><code>pepper &lt;command&gt;</code> looks for <code>pep-&lt;command&gt;</code> (<code>pep-&lt;command&gt;.exe</code> on
+<p>Outside a Pepper home, <code>pepper &lt;command&gt;</code> looks for <code>pep-&lt;command&gt;</code> (<code>pep-&lt;command&gt;.exe</code> on
 Windows) in the directory that holds the running <code>pepper</code> first, then in
 each directory on the <code>PATH</code>, and runs the first it finds. So the tools
 installed next to <code>pepper</code> win over others with the same name, and any
@@ -281,8 +284,36 @@ A folder that cannot be entered is an error that exits with status 1:</p>
 <pre><code class="language-text">$ pepper -C nowhere build
 pepper: error: cannot change to 'nowhere': No such file or directory
 </code></pre>
-<p><code>-C</code> is the only option that goes before a command. It works with
-<code>help</code> and the old form too.</p>
+<p><code>-C</code> and <code>+&lt;version&gt;</code> are the only options that go before a command. They
+work with <code>help</code> and the old form too.</p>
+<h2 id="toolchains"><a class="header" href="#toolchains">Toolchains</a></h2>
+<p>Installed by <a href="pep-install.html">pep-install</a>, <code>pepper</code> lives in the Pepper
+home’s <code>bin</code> folder (<code>~/.pepper/bin</code>, <code>%LOCALAPPDATA%\pepper\bin</code> on
+Windows), beside the installed toolchains, and runs the tools of one of
+them. The first of these that names a toolchain picks it:</p>
+<ol>
+<li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.3.0 build</code>;</li>
+<li>the <code>PEPPER_TOOLCHAIN</code> environment variable;</li>
+<li><code>toolchain = "0.3"</code> in <code>[package]</code> of the nearest <code>pep.toml</code> at or above
+the folder the command runs in (after <code>-C</code>), so a project pins the
+compiler it builds with (see <a href="projects.html#package">Projects: pep.toml</a>);</li>
+<li>the default, which <code>pepper install use</code> sets.</li>
+</ol>
+<p>A version is exact (<code>0.3.0</code>), or a prefix that picks the newest installed
+toolchain that starts so (<code>0.3</code>, <code>0</code>), or <code>latest</code> for the newest installed.
+<code>pepper</code> then looks for <code>pep-&lt;command&gt;</code> in that toolchain’s <code>bin</code> folder
+first, then beside <code>pepper</code>, then on the <code>PATH</code>, and runs it with
+<code>PEPPER_TOOLCHAIN</code> set to the exact version, so a <code>pepper</code> that command runs
+uses the same toolchain. <code>pepper install</code> always runs the home’s own
+<code>pep-install</code>, which needs no toolchain.</p>
+<p>When the toolchain picked is not installed, or none is installed, <code>pepper</code>
+says so and how to install it, and exits with status 1:</p>
+<pre><code class="language-text">$ pepper build
+pepper: error: toolchain 0.4 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.4'
+</code></pre>
+<p><code>pepper install which</code> shows which toolchain a folder uses and why.
+Outside a Pepper home, as when it is built from this repository, <code>pepper</code>
+runs the tools beside it, and <code>+&lt;version&gt;</code> is an error.</p>
 <h2 id="the-old-form"><a class="header" href="#the-old-form">The old form</a></h2>
 <p>Before <code>pepper build</code>, <code>pepper</code> was the compiler. A first argument that is a
 <code>.pep</code> file or an option still runs the compiler with the whole command line,
@@ -300,7 +331,7 @@ pepper: warning: 'pepper main.pep ...' is deprecated; use 'pepper build main.pep
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../tools/pep-build.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../tools/pep-install.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -314,7 +345,7 @@ pepper: warning: 'pepper main.pep ...' is deprecated; use 'pepper build main.pep
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../tools/pep-build.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../tools/pep-install.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
