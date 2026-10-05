@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f577a943.js";
+            window.path_to_searchindex_js = "../searchindex-b4099b9b.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -245,15 +245,19 @@ files uses a fresh folder under the system’s temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
 <p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo build --release</code> on
 Linux, macOS and Windows.</p>
-<p>The compiler written in Pepper, <code>tools/compiler</code>, depends on
-<code>justinboswell/pepper-llvm</code>, a private repository. CI clones it over SSH
-with a read-only deploy key of that repository, whose private half is this
-repository’s secret <code>PEPPER_LLVM_DEPLOY_KEY</code>.
-<code>scripts/ci-pepper-llvm-auth.sh</code> writes the key to a temporary file and
-points git at it for that one repository, through <code>GIT_CONFIG_*</code> and
-<code>GIT_SSH_COMMAND</code> variables of the test step only. Without the secret (in a
-fork, say) the step says so in a notice, and the <code>tools/compiler</code> tests
-fail when they fetch the package.</p>
+<p>Two Pepper tools depend on private repositories. The compiler written in
+Pepper, <code>tools/compiler</code>, depends on <code>justinboswell/pepper-llvm</code>, and the
+language server <code>tools/pep-lsp</code> depends on <code>justinboswell/pepper-lsp</code>. CI
+clones each over SSH with a read-only deploy key of that repository, whose
+private half is this repository’s secret <code>PEPPER_LLVM_DEPLOY_KEY</code> or
+<code>PEPPER_LSP_DEPLOY_KEY</code>.</p>
+<p><code>scripts/ci-package-auth.sh</code> writes the keys to temporary files. It gives
+each package a host alias in an SSH config that offers only that package’s
+key, since GitHub takes the first key offered and a deploy key opens only
+its own repository. It points git at the aliases through <code>GIT_CONFIG_*</code> and
+<code>GIT_SSH_COMMAND</code> variables of the test step only. Without a secret (in a
+fork, say) the step says so in a notice, and the tests of the tool that
+uses that package fail when they fetch it.</p>
 <h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
 <p>Each test counts the runtime’s live allocations before and after it runs,
 and fails when they differ:</p>
