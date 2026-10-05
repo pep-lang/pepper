@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1b2d415b.js";
+            window.path_to_searchindex_js = "searchindex-a9ee1a60.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -20024,8 +20024,10 @@ irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.
 <li>picks this machine’s archive (<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or
 <code>windows-x64</code>) from the newest release that has one;</li>
 <li>downloads it and checks it against its <code>.sha256</code>;</li>
-<li>unpacks it into <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code> on Windows), replacing
-an earlier install there;</li>
+<li>unpacks it into <code>~/.pepper/toolchains/&lt;version&gt;</code> (<code>%LOCALAPPDATA%\pepper</code>
+on Windows), makes it the default toolchain, and puts the entry point
+<code>pepper</code> and <code>pep-install</code> in <code>~/.pepper/bin</code>; toolchains installed
+before stay (see <a href="#toolchains-pep-install">Toolchains: pep-install</a>);</li>
 <li>adds that folder’s <code>bin</code> to the <code>PATH</code>: in <code>~/.profile</code>, <code>~/.bashrc</code>,
 <code>~/.bash_profile</code> and <code>~/.zshrc</code> and fish’s <code>conf.d</code>, or in the Windows
 user’s <code>PATH</code>, which it asks about first;</li>
@@ -20039,12 +20041,28 @@ cannot.</li>
 <h2 id="what-it-installs"><a class="header" href="#what-it-installs">What it installs</a></h2>
 <pre><code class="language-text">~/.pepper/
   bin/
-    pepper          the entry point (The pepper command)
-    pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
-    pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc
-  runtime/          the runtime, which pep-build finds from its own folder
-  LICENSE.md
+    pepper              the entry point (The pepper command), which runs a toolchain's tools
+    pep-install         installs and removes toolchains (pepper install)
+  toolchains/
+    0.4.0/
+      bin/
+        pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
+        pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc  pepper  pep-install
+      runtime/          the runtime, which pep-build finds from its own folder
+      LICENSE.md
+  default-toolchain     the default toolchain's version
 </code></pre>
+<p><code>pepper</code> runs the tools of the toolchain a folder uses: the default, unless
+<code>pepper +&lt;version&gt;</code>, <code>PEPPER_TOOLCHAIN</code> or the project’s <code>pep.toml</code> names
+another (see <a href="#toolchains">Toolchains</a>). <code>pepper install add</code>,
+<code>use</code> and <code>update</code> install more and change the default; <code>update</code> also
+updates <code>pepper</code> and <code>pep-install</code> themselves.</p>
+<p>Running the script again installs the newest release beside the others
+and makes it the default. An install from before toolchains, with <code>bin</code>
+and <code>runtime</code> straight in <code>~/.pepper</code>, moves into <code>toolchains/&lt;its version&gt;</code> first, so it stays installed. A release from before toolchains
+(0.3.0 and earlier, which have no <code>pep-install</code>) installs the old way, into
+<code>~/.pepper</code> itself, unless the home already holds toolchains; then it goes
+into <code>toolchains/</code> like any other.</p>
 <p>On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
 18.10 and later); systems that use musl, such as Alpine, are not supported.
 There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
@@ -20095,12 +20113,12 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 </thead>
 <tbody>
 <tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest</td></tr>
-<tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it</td></tr>
+<tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites, and on Windows changes the <code>PATH</code>, without asking</td></tr>
 <tr><td><code>--no-modify-path</code></td><td><code>-NoModifyPath</code></td><td>Leaves the <code>PATH</code> alone</td></tr>
 <tr><td><code>--no-prerequisites</code></td><td><code>-NoPrerequisites</code></td><td>Neither checks for nor installs what linking needs</td></tr>
-<tr><td><code>--uninstall</code></td><td><code>-Uninstall</code></td><td>Removes the install and the <code>PATH</code> entries the script added</td></tr>
+<tr><td><code>--uninstall</code></td><td><code>-Uninstall</code></td><td>Removes the install, every toolchain in it, and the <code>PATH</code> entries the script added</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td><code>Get-Help .\install.ps1</code></td><td>Shows the usage</td></tr>
 </tbody>
 </table>
@@ -20321,7 +20339,7 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 <tr><td><code>list --available</code>, <code>-a</code></td><td>Lists the releases that have an archive for this machine instead, marking those installed</td></tr>
 <tr><td><code>add &lt;version&gt;</code></td><td>Installs the newest release <code>&lt;version&gt;</code> names, unless it is installed; it becomes the default only when there was none</td></tr>
 <tr><td><code>use &lt;version&gt;</code></td><td>Makes the newest installed toolchain <code>&lt;version&gt;</code> names the default</td></tr>
-<tr><td><code>update</code></td><td>Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed</td></tr>
+<tr><td><code>update</code></td><td>Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed. Then updates the home’s <code>pepper</code> and <code>pep-install</code> from it</td></tr>
 <tr><td><code>remove &lt;version&gt;</code></td><td>Removes the installed toolchain <code>&lt;version&gt;</code> names; it must name just one, and not the default</td></tr>
 <tr><td><code>which</code></td><td>Prints the toolchain the current folder uses and why, then the path of its <code>pep-build</code>; fails when that toolchain is not installed</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the commands; after a command, that command’s options</td></tr>
@@ -20342,6 +20360,14 @@ mistake on the command line.</p>
 ~/.pepper/toolchains/0.3.0/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 </code></pre>
+<p>The <a href="#installing-pepper">install scripts</a> set up the home: they install the newest
+release this way, put its <code>pepper</code> and <code>pep-install</code> in <code>bin</code>, and move an
+install from before toolchains into <code>toolchains/</code>.</p>
+<p><code>update</code> replaces the home’s <code>pepper</code> and <code>pep-install</code> with the new
+toolchain’s when they differ. Each is written beside the old one and
+renamed into place, the old one first moved aside to <code>&lt;name&gt;.old</code>; on
+Windows, where a running program cannot be removed, that <code>.old</code> file is
+removed by the next <code>update</code>.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>

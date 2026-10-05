@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1b2d415b.js";
+            window.path_to_searchindex_js = "../searchindex-a9ee1a60.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -212,7 +212,7 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 <tr><td><code>list --available</code>, <code>-a</code></td><td>Lists the releases that have an archive for this machine instead, marking those installed</td></tr>
 <tr><td><code>add &lt;version&gt;</code></td><td>Installs the newest release <code>&lt;version&gt;</code> names, unless it is installed; it becomes the default only when there was none</td></tr>
 <tr><td><code>use &lt;version&gt;</code></td><td>Makes the newest installed toolchain <code>&lt;version&gt;</code> names the default</td></tr>
-<tr><td><code>update</code></td><td>Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed</td></tr>
+<tr><td><code>update</code></td><td>Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed. Then updates the home’s <code>pepper</code> and <code>pep-install</code> from it</td></tr>
 <tr><td><code>remove &lt;version&gt;</code></td><td>Removes the installed toolchain <code>&lt;version&gt;</code> names; it must name just one, and not the default</td></tr>
 <tr><td><code>which</code></td><td>Prints the toolchain the current folder uses and why, then the path of its <code>pep-build</code>; fails when that toolchain is not installed</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the commands; after a command, that command’s options</td></tr>
@@ -233,6 +233,14 @@ mistake on the command line.</p>
 ~/.pepper/toolchains/0.3.0/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 </code></pre>
+<p>The <a href="install.html">install scripts</a> set up the home: they install the newest
+release this way, put its <code>pepper</code> and <code>pep-install</code> in <code>bin</code>, and move an
+install from before toolchains into <code>toolchains/</code>.</p>
+<p><code>update</code> replaces the home’s <code>pepper</code> and <code>pep-install</code> with the new
+toolchain’s when they differ. Each is written beside the old one and
+renamed into place, the old one first moved aside to <code>&lt;name&gt;.old</code>; on
+Windows, where a running program cannot be removed, that <code>.old</code> file is
+removed by the next <code>update</code>.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
