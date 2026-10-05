@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ce6197db.js";
+            window.path_to_searchindex_js = "../searchindex-bb82ff99.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -587,8 +587,10 @@ can take it from with <code>UnixStream.adopt</code>, as
 <code>UdpSocket</code> for processes on the same machine, with a path in place of
 an address. Linux and macOS only; Windows has no Unix datagram sockets.</p>
 <p>Each <code>send_to</code> delivers one whole datagram, in order, and the system
-never drops one silently: a send waits while the receiver’s queue is
-full. <code>UnixDatagram.bind</code> creates a socket file at a path, which closing
+never drops one silently. While the receiver’s queue is full, a send
+waits on Linux; on macOS it fails at once with the platform’s “No buffer
+space available” (<code>ENOBUFS</code>) and sends nothing, so try again later.
+<code>UnixDatagram.bind</code> creates a socket file at a path, which closing
 does not remove (as for <code>UnixListener</code>); <code>UnixDatagram.unbound</code> makes a
 socket that can send but has no path for replies; <code>UnixDatagram.pair</code>
 makes two connected sockets.</p>
@@ -775,7 +777,8 @@ one, where the task’s <code>async.timeout</code> can end the wait sooner.</p>
 <p>Limits how long a send waits for the receiver to take more: when its
 queue stays full for <code>milliseconds</code> (it is not receiving), <code>send</code> or
 <code>send_to</code> fails with <code>is_timed_out()</code> and sends nothing. 0, the
-default, waits as long as it takes.</p>
+default, waits as long as it takes. On macOS a send to a full queue
+fails at once instead (see <code>UnixDatagram</code>).</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>

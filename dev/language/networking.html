@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ce6197db.js";
+            window.path_to_searchindex_js = "../searchindex-bb82ff99.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -491,8 +491,10 @@ same path rules and errors as <code>UnixListener.bind</code>; <code>unbound()</c
 that can only send, and <code>pair()</code> two that are connected to each other.</li>
 <li><code>send_to(data, path)</code> sends one datagram; it fails with <code>is_not_found()</code>
 when there is no socket file and <code>is_connection_refused()</code> when nothing
-is bound to it any more. A datagram is never dropped: a send waits while
-the receiver’s queue is full.</li>
+is bound to it any more. A datagram is never dropped silently. While the
+receiver’s queue is full, a send waits on Linux; on macOS it fails at once
+with “No buffer space available” (<code>ENOBUFS</code>) and sends nothing, so try
+again later.</li>
 <li><code>receive_from(buffer, max)</code> returns the byte count and the sender’s path,
 which is empty for an unbound sender. As with UDP, a datagram longer than
 <code>max</code> is cut.</li>
