@@ -1911,8 +1911,7 @@ parsed.
   checked again, so its warnings print on every build. `--emit-llvm` and
   the JIT compile whole programs, never stripped.
 - **Verifying** (`--verify-cache`, which `build_cache_tests.rs` passes, or
-  `PEPPER_CACHE_VERIFY=1`, which the `llvm-versions` workflow sets;
-  `test-linux` records each failure in the run's summary): a hit generates the unit anyway and fails if its bitcode differs
+  `PEPPER_CACHE_VERIFY=1`, which the `llvm-versions` workflow sets): a hit generates the unit anyway and fails if its bitcode differs
   from the record's, naming the unit; it keeps `<unit>.ll` beside each
   object it stores and writes `<unit>.verify.ll` on a mismatch, to diff.
   A mismatch means a unit's code depends on something its key leaves out:
@@ -2983,7 +2982,7 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
 ## 9. Tests
 
 `cargo test --workspace` runs the Rust tests: the compiler's. Without `--workspace`, only the
-root package's test runs. The Rust suite has roughly 810 `#[test]` functions. The runtime's and the Pepper tools' own tests are Pepper `[Test]` functions that `scripts/pepper-tests.sh` runs with `pepper test` (the Runtime row below); CI runs both.
+root package's test runs. Neither CI nor the pre-merge checks run them any more (#662): the tests that gate a change are the Pepper `[Test]` functions of the runtime and the Pepper tools, which `scripts/pepper-tests.sh` runs with `pepper test` (the Runtime row below).
 
 | Kind | Where | Notes |
 | --- | --- | --- |
@@ -3188,12 +3187,11 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     the ready run is still testing it.
   - `test-windows` runs on the self-hosted **`pepper-windows`** runner:
     provision LLVM (`ci-provision-llvm.sh`, cached), `cargo build
-    --workspace --locked`, `cargo test --workspace --locked`, and
+    --workspace --release --locked`, `scripts/pepper-tests.sh`, and
     `cargo run -p pepper-docgen -- check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
-    run the suite against the default LLVM; `test-linux` first installs a
-    wasi-sdk and wasmtime (`scripts/ci-provision-wasi.sh`, kept in the
-    runner's `wasi-cache`), so its suite also runs the WebAssembly tests.
+    do the same against the default LLVM. The Rust tests (`cargo test`)
+    run in no job (#662).
     `test-linux` is required,
     through `test`; `test-macos` is not for now (it takes about twice as
     long and held up the merge queue), so `test` does not wait for it.
@@ -3216,8 +3214,9 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   `docs.yml` on a release tag, which package and publish nothing unless it
   passes, or by dispatch (`gh
   workflow run llvm-versions.yml --ref main`). `llvm-matrix` discovers every
-  supported LLVM major apt offers and `llvm-versions` runs the suite against
-  each on **`pepper-linux`**.
+  supported LLVM major apt offers and `llvm-versions` builds the compiler
+  against each on **`pepper-linux`** and runs `scripts/pepper-tests.sh`
+  with it.
 - **`platform-test.yml`**: runs on dispatch only, for any script on
   Linux/macOS/Windows (`gh workflow run platform-test.yml -f platforms=…
   -f script=…`). It has a failure/cancel diagnostics step. Read AGENTS.md's

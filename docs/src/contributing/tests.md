@@ -1,20 +1,16 @@
 # Testing the runtime and the compiler
 
-The repository has two kinds of tests, split by what they check.
+The tests are written in Pepper: `[Test]` functions (see
+[Unit tests](../language/testing.md)) that `pepper test`
+([`pep-test`](../tools/pep-test.md)) builds and runs. They cover the
+runtime and the Pepper tools, the compiler written in Pepper
+(`tools/compiler`) among them.
 
-- **The runtime and the Pepper tools** are tested in Pepper: `[Test]`
-  functions (see [Unit tests](../language/testing.md)) that `pepper test`
-  ([`pep-test`](../tools/pep-test.md)) builds and runs.
-- **The compiler** is tested in Rust: diagnostics, codegen and IR facts,
-  reference-count order, optimization, linking, cross-compiling, debug
-  info, the build cache, the documentation checks, and the drivers. These
-  live in `crates/*/tests/` and the root package's `tests/*.rs` (see
-  `INTERNALS.md`, section 9), and `cargo test --workspace` runs them.
-
-The two run separately, and CI runs both on every platform.
-
-A test that checks a library function's result belongs with the runtime; a
-test that checks what the compiler emits or reports stays in Rust.
+The Rust compiler's own tests (`crates/*/tests/`, the root package's
+`tests/*.rs`; see `INTERNALS.md`, section 9) are still in the repository,
+and `cargo test --workspace` runs them, but neither CI nor the pre-merge
+checks do: the Rust compiler is not expected to change much, and new tests
+go in Pepper.
 
 ## Where runtime tests live
 
@@ -71,7 +67,7 @@ The builds go to `runtime/.pep/`, which git ignores. A test that writes
 files uses a fresh folder under the system's temporary folder
 (`TempFolder` in the `testing` module makes and removes one).
 
-CI runs `scripts/pepper-tests.sh` after `cargo test --workspace` on
+CI runs `scripts/pepper-tests.sh` after `cargo build --release` on
 Linux, macOS and Windows.
 
 The compiler written in Pepper, `tools/compiler`, depends on

@@ -218,7 +218,7 @@ gh pr view --json statusCheckRollup,mergeable,mergeStateStatus
 - **No checks configured at all** — this repo may have no CI workflows yet,
   in which case `statusCheckRollup` comes back empty. That's not a green
   light by omission: fall back to running the repo's own verification
-  locally (see the **build** and **test** skills — `cargo test --workspace`)
+  locally (see the **build** and **test** skills — `scripts/pepper-tests.sh`)
   and treat that result as this phase's gate.
 - **Failing** — surface which check failed and why (`gh run view` /
   `gh pr checks` for logs if needed). Don't merge, and don't try to bypass

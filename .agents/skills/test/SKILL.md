@@ -1,42 +1,31 @@
 ---
 name: test
-description: Run the Pepper project's test suites, the compiler's with cargo test and the runtime's and tools' with pepper test. Use when asked to test, run tests, or verify changes to the compiler, parser, sema, codegen, runtime or tools.
+description: Run the Pepper project's tests, Pepper [Test] functions run with pepper test (scripts/pepper-tests.sh). Use when asked to test, run tests, or verify changes to the compiler, parser, sema, codegen, runtime or tools.
 ---
 
 # Testing Pepper
 
 ## Run tests
 
-```bash
-cargo test --workspace
-```
-
-`--workspace` matters: the repo root is itself a package, so a bare `cargo test` runs only the root package's tests (the `.pep` corpus test) and silently skips every crate under `crates/`.
-
-The runtime's and the Pepper tools' own tests are Pepper `[Test]` functions, run separately with `pepper test` (`cargo test` does not run them). After `cargo build`, run them all with:
+The tests are Pepper `[Test]` functions, run with `pepper test`. After `cargo build --release`, run them all with:
 
 ```bash
 scripts/pepper-tests.sh
+scripts/pepper-tests.sh -f parses     # by name
 ```
 
-Run both after a runtime or tools change; see `docs/src/contributing/tests.md`.
+See `docs/src/contributing/tests.md`. The workspace must be built first, which needs LLVM provisioned — see the **build** skill if `llvm-sys` reports it cannot find LLVM.
 
-The workspace must be built first, which needs LLVM provisioned — see the **build** skill if `llvm-sys` reports it cannot find LLVM.
-
-Useful variants:
+The Rust compiler's own tests (`cargo test --workspace`) are still in the repository, but neither CI nor the pre-merge checks run them (#662). Run them only when asked, or when changing the Rust compiler's internals:
 
 ```bash
-cargo test -p pepper-codegen                   # one crate
 cargo test --workspace --test integration compile_tests::  # one driver test module
 cargo test --workspace int_add                 # filter by test name (substring)
-cargo test --workspace -- --ignored            # run #[ignore]d tests
-cargo test --workspace -- --nocapture          # show println!/eprintln! output
-
-# against an LLVM other than the default 20 (must be provisioned first)
-cargo test --workspace --no-default-features --features llvm19-1
 ```
 
-## Test layout
+`--workspace` matters: the repo root is itself a package, so a bare `cargo test` runs only the root package's tests and silently skips every crate under `crates/`.
+
+## Rust test layout
 
 The suite has several hundred tests and grows with nearly every change, so
 no count is kept here: a run is good when every `test result:` line says

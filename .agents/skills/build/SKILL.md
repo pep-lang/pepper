@@ -29,7 +29,7 @@ The workspace builds against **LLVM 18–22**, chosen by a cargo feature on the 
 
 ```bash
 cargo setup --llvm 19                  # or PEPPER_LLVM_MAJOR=19
-cargo test --workspace --no-default-features --features llvm19-1
+cargo build --release --no-default-features --features llvm19-1
 ```
 
 Verified coverage: 18, 19 and 20 pass the suite on Linux — those are what `apt` on `ubuntu-24.04` serves — and all five pass on macOS, where Homebrew has `llvm@18` through `llvm@22`. Only the *Windows* archive install is a full LLVM tree with `clang`, `lld`, `llc`, `lli` and `opt`; the Unix archive path unpacks just `llvm-config`, the libraries and the `llvm-c` headers, so with either that or an apt prefix the driver falls back to `clang` on PATH (`crates/pepper-driver/src/linker.rs`). Homebrew prefixes do carry clang.

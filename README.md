@@ -197,7 +197,7 @@ after a default setup plain `cargo build` works:
 
 ```bash
 cargo setup --llvm 19
-cargo test --workspace --no-default-features --features llvm19-1
+cargo build --release --no-default-features --features llvm19-1
 ```
 
 Setup prints that exact `--features` command whenever it provisions something
@@ -263,28 +263,23 @@ need. Platform notes:
 cargo build                # debug compiler at target/debug/pep-build(.exe)
 cargo build --release
 target/release/pep-build tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
-cargo test --workspace     # the compiler's tests
-scripts/pepper-tests.sh    # the runtime's and tools' tests, with `pepper test`
+scripts/pepper-tests.sh    # the tests, with `pepper test`
 ```
 
-The two suites run separately: `cargo test` runs the compiler's Rust tests,
-and `scripts/pepper-tests.sh` builds `pepper` and `pep-test` beside the
-`pep-build` you built and runs the runtime's and tools' `[Test]` functions
-(see `docs/src/contributing/tests.md`).
-
-`--workspace` is not optional. The repository root is itself a package, so a
-bare `cargo test` runs only its single integration test and **silently skips
-every crate** under `crates/`. A good run has `0 failed` on every
-`test result:` line; nothing is ignored.
+The tests are Pepper `[Test]` functions: `scripts/pepper-tests.sh` builds
+`pepper` and `pep-test` beside the `pep-build` you built and runs the
+runtime's and tools' tests (see `docs/src/contributing/tests.md`). The Rust
+compiler's own tests (`cargo test --workspace`) are still in the repository,
+but neither CI nor the pre-merge checks run them.
 
 Those commands build against the default LLVM 20. For any other version, name
-it — the same count should pass:
+it:
 
 ```bash
-cargo test --workspace --no-default-features --features llvm18-1
+cargo build --release --no-default-features --features llvm18-1
 ```
 
-PR CI tests only the default LLVM. Pushing a release tag runs the suite on
+PR CI tests only the default LLVM. Pushing a release tag runs the tests on
 Linux against every LLVM apt offers (18, 19 and 20 on `ubuntu-24.04`) before
 the extension is packaged and the release's docs are published, and does
 neither unless all pass. To check a commit before tagging it, run the same

@@ -72,7 +72,7 @@ On Windows, name the output `target\release\pepper.exe`. The compiler is
 `target/release/pep-build`; `pepper` is the entry point to every Pepper tool,
 so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
 [The pepper command](../tools/pepper.md)). To check that everything works,
-run the test suite with `cargo test --workspace`. Add `target/release` to
+run the tests with `scripts/pepper-tests.sh`. Add `target/release` to
 your `PATH` to run `pepper` from anywhere; from the repository root, you can
 also run the compiler through cargo: `cargo run --release -- hello.pep -o hello`
 runs `pep-build` directly.

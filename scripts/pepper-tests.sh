@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs the Pepper tests: the `[Test]` functions of the runtime
 # (`runtime/**/test/`, `runtime/test/`) and of the Pepper tools
-# (`tools/<tool>/*_test.pep`), with `pepper test`. The compiler's own tests
-# are Rust, run by `cargo test --workspace`.
+# (`tools/<tool>/*_test.pep`), with `pepper test`. These are the tests CI
+# and the pre-merge checks run; the Rust compiler's own `cargo test` suite
+# no longer runs there (#662).
 #
 #   scripts/pepper-tests.sh [compiler-dir] [pep-test options...]
 #

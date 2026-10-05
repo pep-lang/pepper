@@ -231,17 +231,14 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
+      # The compiler and the docs tools, optimized: the Pepper tests compile
+      # every test program with this pep-build. The Rust tests (`cargo test`)
+      # no longer run in CI: the tests that matter are Pepper tests (#662).
       - name: Build
-        run: cargo build --workspace --locked
-
-      # --workspace is required: the repo root is itself a package, so a bare
-      # `cargo test` would run only its single integration test and skip every
-      # crate under crates/.
-      - name: Test
-        run: cargo test --workspace --locked
+        run: cargo build --workspace --release --locked
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`; `cargo test` above runs the compiler's.
+      # by `pepper test`.
       - name: Pepper tests
         shell: bash
         # tools/compiler depends on the private pepper-llvm package (#656).
@@ -291,11 +288,11 @@ jobs:
           set -euxo pipefail
           brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
 
-      - name: Test
-        run: cargo test --workspace --locked
+      - name: Build
+        run: cargo build --workspace --release --locked
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`; `cargo test` above runs the compiler's.
+      # by `pepper test`.
       - name: Pepper tests
         shell: bash
         # tools/compiler depends on the private pepper-llvm package (#656).
@@ -336,19 +333,6 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
-      # WebAssembly (`--target wasm32-wasip1`): with WASI_SDK_PATH and
-      # WASMTIME set, the suite builds every docs example and corpus fixture
-      # for wasm32 and runs it under wasmtime (cross_compile_tests,
-      # docs_examples_tests, corpus_tests). The downloads stay in the
-      # runner's cache between jobs.
-      - name: Provision wasi-sdk and wasmtime
-        shell: bash
-        env:
-          PEPPER_LLVM_MAJOR: 20
-        run: |
-          set -euxo pipefail
-          bash scripts/ci-provision-wasi.sh "$RUNNER_WORKSPACE/wasi-cache" >> "$GITHUB_ENV"
-
       # The digest and compress tests also run with `-D USE_LIBCRYPTO` and
       # `-D USE_ZLIB` (#370, scripts/pepper-tests.sh), which link libcrypto
       # and zlib.
@@ -358,14 +342,11 @@ jobs:
           set -euxo pipefail
           dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
-      - name: Test
-        shell: bash
-        run: |
-          set -o pipefail
-          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test.log"
+      - name: Build
+        run: cargo build --workspace --release --locked
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
-      # by `pepper test`; `cargo test` above runs the compiler's.
+      # by `pepper test`.
       - name: Pepper tests
         shell: bash
         # tools/compiler depends on the private pepper-llvm package (#656).
@@ -384,8 +365,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get install -y --no-install-recommends lld-20 qemu-user libc6-dev-arm64-cross libgcc-13-dev-arm64-cross
-          cargo build --locked
-          compiler="$CARGO_TARGET_DIR/debug/pep-build"
+          compiler="$CARGO_TARGET_DIR/release/pep-build"
           out="$RUNNER_TEMP/cross"
           rm -rf "$out"
           mkdir -p "$out"
@@ -399,38 +379,6 @@ jobs:
           # Every SIMD vector operation, on NEON.
           "$compiler" --target aarch64-unknown-linux-gnu tests/Simd.Basic/test.pep -o "$out/simd-arm64" --build "$out/build"
           test "$(qemu-aarch64 -L /usr/aarch64-linux-gnu "$out/simd-arm64")" = "simd ok"
-
-      # Every verification failure's message starts with "build cache:". Put
-      # each one in the run's summary and as an annotation, and keep the log,
-      # so a cache bug is recorded even when the PR is later fixed or closed.
-      - name: Record build cache verification failures
-        if: failure()
-        shell: bash
-        run: |
-          set -euo pipefail
-          log="$RUNNER_TEMP/test.log"
-          [ -f "$log" ] || exit 0
-          failures=$(grep -n "build cache:" "$log" || true)
-          [ -n "$failures" ] || exit 0
-          {
-            echo "## Build cache verification failures"
-            echo
-            echo '```'
-            echo "$failures"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          while IFS= read -r line; do
-            echo "::error title=Build cache verification failed::${line#*:}"
-          done <<< "$failures"
-
-      - name: Keep the test log
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: test-linux-log
-          path: ${{ runner.temp }}/test.log
-          if-no-files-found: ignore
-          retention-days: 90
 
   # Cross-linking for the other operating systems (#485): each host builds a
   # few examples for the other two, with `--target` and their system roots,

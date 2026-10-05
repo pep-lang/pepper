@@ -41,10 +41,13 @@ opening a PR, check each of these against the diff:
   (`cargo setup`'s is `docs/src/contributing/setup.md`); update README.md
   and, when it affects writing the docs, `docs/src/contributing/docs.md`.
 
-CI enforces what it can: `runtime_docs_tests` fails on an undocumented
-public runtime declaration, `tool_docs_tests` on a tool option missing from
-its page, `docs_examples_tests` compiles and runs every
-example, and `pep-doc check` fails when the reference is stale. It
+CI enforces what it can: `pep-doc check` fails when the reference is
+stale. The checks that a public runtime declaration is documented, that
+every tool option is on its page, and that every example compiles and runs
+are Rust tests (`runtime_docs_tests`, `tool_docs_tests`,
+`docs_examples_tests`) that CI no longer runs; they are moving to `pep-doc
+check` and the Pepper tests (#662). Until then, run them by hand with
+`cargo test --release --workspace --test integration docs_`. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 

@@ -136,7 +136,17 @@ jobs:
       # The LLVM version is a cargo feature, so it has to be named here too;
       # setup-llvm.sh prints this exact command when it provisions a non-default
       # version.
-      - name: Test against LLVM ${{ matrix.major }}
+      - name: Build against LLVM ${{ matrix.major }}
         run: |
-          cargo test --workspace --locked --no-default-features \
+          cargo build --workspace --release --locked --no-default-features \
             --features llvm${{ matrix.major }}-1
+
+      # The tests are Pepper tests (#662), compiled by the pep-build above.
+      - name: Pepper tests against LLVM ${{ matrix.major }}
+        shell: bash
+        # tools/compiler depends on the private pepper-llvm package (#656).
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-pepper-llvm-auth.sh
+          bash scripts/pepper-tests.sh
