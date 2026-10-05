@@ -17,7 +17,7 @@
 #
 #   bin/pepper        the entry point, and every `pep-<command>` it runs:
 #   bin/pep-build     the compiler, LLVM linked in (Windows: LLVM-C.dll beside it)
-#   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-lsp, pep-doc
+#   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-install, pep-lsp, pep-doc
 #   runtime/          the runtime, which the compiler finds from bin/..
 #   LICENSE.md
 #
@@ -150,7 +150,7 @@ cp -R runtime "$stage/runtime"
 cp LICENSE.md "$stage/"
 
 echo "=== build the Pepper tools"
-for tool in pepper pep-fmt pep-test pep-package pep-profile; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install; do
   "$stage/bin/pep-build$exe" -O -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
 # Windows builds write a .pdb beside each program; the archive does not

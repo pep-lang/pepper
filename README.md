@@ -262,7 +262,7 @@ need. Platform notes:
 ```bash
 cargo build                # debug compiler at target/debug/pep-build(.exe)
 cargo build --release
-target/release/pep-build tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
+target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
 scripts/pepper-tests.sh    # the tests, with `pepper test`
 ```
 
@@ -309,7 +309,7 @@ Every option and environment variable the compiler reads is described in
 the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
 other tools' options are in [The pepper command](docs/src/tools/pepper.md),
 [pep-fmt](docs/src/tools/pep-fmt.md), [pep-profile](docs/src/tools/pep-profile.md),
-[pep-test](docs/src/tools/pep-test.md), [pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
+[pep-install](docs/src/tools/pep-install.md), [pep-test](docs/src/tools/pep-test.md), [pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
 From the repository root, `cargo run --` runs `pep-build`:
 
 ```bash

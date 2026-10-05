@@ -44,7 +44,7 @@ fi
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
 # and `pep-doc check` reads every tool's `--help`.
 pids=()
-for tool in pepper pep-test pep-fmt pep-profile pep-package; do
+for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install; do
   "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done

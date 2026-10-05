@@ -45,6 +45,7 @@ module of the package too.
 | `authors` | An array of names |
 | `license` | Its license, such as `MIT` |
 | `repository` | Where its source lives |
+| `toolchain` | The toolchain it builds with: `0.3.0`, `0.3` for the newest installed 0.3.x, or `latest`. A `pepper` installed by [pep-install](pep-install.md) runs that toolchain's tools in the project (see [Toolchains](pepper.md#toolchains)); the compiler itself only checks that it is a version |
 
 ## `[build]`
 

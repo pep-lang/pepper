@@ -72,6 +72,9 @@ pub struct Package {
     pub authors: Vec<String>,
     pub license: Option<String>,
     pub repository: Option<String>,
+    /// The toolchain the project builds with (`0.3.0`, `0.3`, `0` or
+    /// `latest`), which the `pepper` entry point of a Pepper home runs.
+    pub toolchain: Option<String>,
 }
 
 /// `[build]`: what `pepper build` with no file argument builds.
@@ -424,8 +427,19 @@ pub fn is_identifier(name: &str) -> bool {
     chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_') && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// Whether `text` names toolchain versions: `latest`, or one to three
+/// numbers (`0.3.0`, `0.3`, `0`) without leading zeros.
+fn is_toolchain_version(text: &str) -> bool {
+    if text == "latest" {
+        return true;
+    }
+    let parts: Vec<&str> = text.split('.').collect();
+    parts.len() <= 3
+        && parts.iter().all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()) && (*p == "0" || !p.starts_with('0')))
+}
+
 fn parse_package(header: &Key, table: &DeTable, errors: &mut Vec<ManifestError>) -> Package {
-    const KEYS: [&str; 6] = ["name", "version", "description", "authors", "license", "repository"];
+    const KEYS: [&str; 7] = ["name", "version", "description", "authors", "license", "repository", "toolchain"];
     let mut package = Package::default();
     let mut named = false;
     for (key, value) in table {
@@ -447,6 +461,18 @@ fn parse_package(header: &Key, table: &DeTable, errors: &mut Vec<ManifestError>)
             "authors" => package.authors = strings(key, value, errors),
             "license" => package.license = string(key, value, errors),
             "repository" => package.repository = string(key, value, errors),
+            "toolchain" => {
+                package.toolchain = string(key, value, errors);
+                if package.toolchain.as_deref().is_some_and(|t| !is_toolchain_version(t)) {
+                    errors.push(ManifestError {
+                        message: format!(
+                            "toolchain '{}' is not a version such as 0.3.0, 0.3 or latest",
+                            package.toolchain.as_deref().unwrap_or_default()
+                        ),
+                        span: value.span(),
+                    });
+                }
+            }
             _ => unknown_key(key, "package", &KEYS, errors),
         }
     }
@@ -817,6 +843,11 @@ local = { path = "../local" }
             ["branch: 'tag' and 'branch' both choose a revision; give one of 'version', 'branch', 'tag' or 'commit'"]
         );
         assert_eq!(errors("[package]\nversion = \"1\"\n"), ["package: '[package]' needs a 'name'"]);
+        assert!(errors("[package]\nname = \"a\"\ntoolchain = \"0.3\"\n").is_empty());
+        assert_eq!(
+            errors("[package]\nname = \"a\"\ntoolchain = \"0.03\"\n"),
+            ["\"0.03\": toolchain '0.03' is not a version such as 0.3.0, 0.3 or latest"]
+        );
         assert_eq!(
             errors("[package]\nname = \"a\"\n[bulid]\n"),
             ["bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'"]

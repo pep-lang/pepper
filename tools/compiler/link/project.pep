@@ -286,6 +286,25 @@ export struct Manifest {
     }
 }
 
+## Whether `text` names toolchain versions: `latest`, or one to three
+## numbers (`0.3.0`, `0.3`, `0`) without leading zeros.
+is_toolchain_version(text: String): bool {
+    if (text == "latest") {
+        return true;
+    }
+    var parts = text.split(".");
+    if (parts.count > 3) {
+        return false;
+    }
+    for (var part in parts) {
+        var number = ulong.parse(part);
+        if (number.is_empty() or to_string(number.value()) != part) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ## Whether `name` can be imported: an identifier.
 export is_identifier(name: String): bool {
     if (name.is_empty) {
@@ -542,9 +561,20 @@ struct _Reader {
                 string(path, key, value);
             } else if (key == "authors") {
                 strings(path, key, value);
+            } else if (key == "toolchain") {
+                var toolchain = string(path, key, value);
+                if (toolchain.is_value() and !is_toolchain_version(toolchain.value())) {
+                    error(
+                        $"toolchain '{toolchain.value()}' is not a version such as 0.3.0, 0.3 or latest",
+                        value_span(path)
+                    );
+                }
             } else {
                 unknown_key(
-                    ["package"], key, "package", ["name", "version", "description", "authors", "license", "repository"]
+                    ["package"],
+                    key,
+                    "package",
+                    ["name", "version", "description", "authors", "license", "repository", "toolchain"]
                 );
             }
         }

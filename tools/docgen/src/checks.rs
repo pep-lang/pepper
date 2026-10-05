@@ -10,7 +10,7 @@
 //! | --- | --- | --- |
 //! | `pep-build` | `pep-build --help`, `TRACE_CHANNELS`, the environment variables the compiler reads | `docs/src/tools/pep-build.md` |
 //! | `pepper`, `pep-fmt`, `pep-profile`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
-//! | `pep-package` | `pep-package --help` and each command's `--help` | `docs/src/tools/pep-package.md` |
+//! | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 //! | `pep-doc` | `tools/docgen/src/help.txt`, which it prints | `docs/src/tools/pep-doc.md` |
 //! | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 //! | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
@@ -26,7 +26,10 @@ use std::process::Command;
 
 /// The Pepper tools whose `--help` lists options, built from
 /// `tools/<tool>/main.pep`.
-pub const PEPPER_TOOLS: &[&str] = &["pepper", "pep-fmt", "pep-profile", "pep-package", "pep-test"];
+pub const PEPPER_TOOLS: &[&str] = &["pepper", "pep-fmt", "pep-profile", "pep-package", "pep-install", "pep-test"];
+
+/// The Pepper tools with commands, each with options of its own.
+const TOOLS_WITH_COMMANDS: &[&str] = &["pep-package", "pep-install"];
 
 /// The `.pep` files under `dir`, leaving out tests (`test/` folders, which
 /// are not part of any module) and hidden folders such as `.pep/`.
@@ -283,7 +286,7 @@ pub fn undocumented_tool_options(root: &Path, tools: &Path) -> Result<Vec<String
         let page = format!("docs/src/tools/{tool}.md");
         let help = help_of(tools, tool, &[])?;
         problems.extend(undocumented(root, tool, &page, "option", &help_options(&help), mentions)?);
-        if *tool != "pep-package" {
+        if !TOOLS_WITH_COMMANDS.contains(tool) {
             continue;
         }
         let commands = help_commands(&help);

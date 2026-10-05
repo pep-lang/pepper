@@ -84,6 +84,11 @@ reports_problems_at_the_key() {
         "branch: 'tag' and 'branch' both choose a revision; give one of 'version', 'branch', 'tag' or 'commit'"
     );
     expect_equal(errors("[package]\nversion = \"1\"\n"), "package: '[package]' needs a 'name'");
+    expect_equal(errors("[package]\nname = \"a\"\ntoolchain = \"0.3\"\n"), "");
+    expect_equal(
+        errors("[package]\nname = \"a\"\ntoolchain = \"0.03\"\n"),
+        "\"0.03\": toolchain '0.03' is not a version such as 0.3.0, 0.3 or latest"
+    );
     expect_equal(
         errors("[package]\nname = \"a\"\n[bulid]\n"),
         "bulid: unknown table 'bulid'; a pep.toml has '[package]', '[build]', '[dependencies]' and '[fetch]'"

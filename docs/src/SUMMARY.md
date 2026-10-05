@@ -69,6 +69,7 @@
 
 - [Installing Pepper](tools/install.md)
 - [The pepper command](tools/pepper.md)
+- [Toolchains: pep-install](tools/pep-install.md)
 - [The compiler: pep-build](tools/pep-build.md)
 - [Projects: pep.toml](tools/projects.md)
 - [The package manager: pep-package](tools/pep-package.md)

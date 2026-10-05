@@ -176,7 +176,7 @@ fn pepper_help_lists_every_command_it_finds() {
     let output = pepper(&["help"]);
     assert_eq!(output.status.code(), Some(0));
     let text = stdout_of(&output);
-    assert!(text.starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"), "{}", text);
+    assert!(text.starts_with("usage: pepper [+<version>] [-C <dir>]... <command> [arguments]\n"), "{}", text);
     assert!(text.ends_with("Commands:\n  ask\n  build\n  echo\n  elsewhere\n"), "{}", text);
 }
 
@@ -206,7 +206,7 @@ fn pepper_version_is_the_workspace_version() {
 fn pepper_without_arguments_prints_usage() {
     let output = pepper(&[]);
     assert_eq!(output.status.code(), Some(2));
-    assert!(stderr_of(&output).starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"));
+    assert!(stderr_of(&output).starts_with("usage: pepper [+<version>] [-C <dir>]... <command> [arguments]\n"));
 }
 
 /// The directories `-C` tests change to: `<root>/c/d`, created once.
@@ -261,5 +261,5 @@ fn pepper_dash_c_without_a_directory_or_command_is_a_usage_error() {
     let dir = nested_directory();
     let output = pepper(&["-C", dir.to_str().unwrap()]);
     assert_eq!(output.status.code(), Some(2));
-    assert!(stderr_of(&output).starts_with("usage: pepper [-C <dir>]... <command> [arguments]\n"));
+    assert!(stderr_of(&output).starts_with("usage: pepper [+<version>] [-C <dir>]... <command> [arguments]\n"));
 }

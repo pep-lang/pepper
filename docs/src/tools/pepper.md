@@ -9,6 +9,7 @@ pepper build main.pep -o main     # runs pep-build main.pep -o main
 pepper build                      # builds the project pep.toml describes
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
+pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
 pepper help                       # lists the commands it can find
 pepper help build                 # runs pep-build --help
 pepper --version                  # pepper's version; -v adds each command's
@@ -21,7 +22,7 @@ compiler does (see [The compiler: pep-build](pep-build.md)).
 ## Usage and options
 
 ```text
-pepper [-C <dir>]... <command> [arguments]
+pepper [+<version>] [-C <dir>]... <command> [arguments]
 pepper help [<command>]
 pepper --version [-v]
 ```
@@ -29,15 +30,16 @@ pepper --version [-v]
 | Form | What it does |
 | --- | --- |
 | `pepper <command> [arguments]` | Runs `pep-<command>` with the arguments (see [How it finds a command](#how-it-finds-a-command)) |
+| `+<version>` | Runs the command with that installed toolchain, such as `+0.3.0` or `+0.3` (see [Toolchains](#toolchains)) |
 | `-C <dir>` | Changes to `<dir>` before running the command (see [Running in another folder](#running-in-another-folder)) |
 | `pepper help`, `-h`, `--help` | Prints the usage, these options, and the commands it can find |
 | `pepper help <command>` | Runs `pep-<command> --help` |
-| `--version` | Prints `pepper` and its version |
+| `--version` | Prints `pepper` and its version, and in a Pepper home the toolchain the folder uses and why |
 | `--version -v`, `--version --verbose` | Also prints the version each command reports (its `--version`'s first line, or `(no version)`) |
 
 Options go before the command: everything after the command belongs to it,
 so `pepper fmt --help` is `pep-fmt --help`. `pepper` with no arguments, or
-with only `-C` options, prints the usage to standard error and exits with
+with only `-C` and `+<version>` options, prints the usage to standard error and exits with
 status 2; so does a `-C` with no folder after it; an option other than
 `-v` or `--verbose` after `--version` is an error that exits with 2. An
 unknown command exits with 1. Otherwise the exit status is the command's.
@@ -47,6 +49,7 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | Command | Program | What it does |
 | --- | --- | --- |
 | `pepper build` | `pep-build` | Compiles a program, or with no file the project ([The compiler: pep-build](pep-build.md), [Projects: pep.toml](projects.md)) |
+| `pepper install` | `pep-install` | Installs toolchains side by side and picks the default ([Toolchains: pep-install](pep-install.md)) |
 | `pepper package` | `pep-package` | Adds, removes, updates and fetches a project's dependencies ([The package manager: pep-package](pep-package.md)) |
 | `pepper fmt` | `pep-fmt` | Formats source ([Formatting with pep-fmt](pep-fmt.md)) |
 | `pepper profile` | `pep-profile` | Profiles a program and draws a flame graph ([Profiling with pep-profile](pep-profile.md)) |
@@ -55,8 +58,8 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | `pepper doc` | `pep-doc` | Generates the library reference and builds this book ([The documentation builder: pep-doc](pep-doc.md)) |
 
 `cargo build --release --workspace` builds `pep-build`, `pep-lsp` and `pep-doc` into
-`target/release`; `pep-fmt`, `pep-profile`, `pep-package`, `pep-test` and
-`pepper` are Pepper programs, built with `pep-build`.
+`target/release`; `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,
+`pep-test` and `pepper` are Pepper programs, built with `pep-build`.
 
 ## Building it
 
@@ -65,14 +68,14 @@ it next to it:
 
 ```bash
 cargo build --release
-target/release/pep-build tools/pepper/main.pep -o target/release/pepper
+target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
 ```
 
 On Windows, name the output `target\release\pepper.exe`.
 
 ## How it finds a command
 
-`pepper <command>` looks for `pep-<command>` (`pep-<command>.exe` on
+Outside a Pepper home, `pepper <command>` looks for `pep-<command>` (`pep-<command>.exe` on
 Windows) in the directory that holds the running `pepper` first, then in
 each directory on the `PATH`, and runs the first it finds. So the tools
 installed next to `pepper` win over others with the same name, and any
@@ -112,8 +115,42 @@ $ pepper -C nowhere build
 pepper: error: cannot change to 'nowhere': No such file or directory
 ```
 
-`-C` is the only option that goes before a command. It works with
-`help` and the old form too.
+`-C` and `+<version>` are the only options that go before a command. They
+work with `help` and the old form too.
+
+## Toolchains
+
+Installed by [pep-install](pep-install.md), `pepper` lives in the Pepper
+home's `bin` folder (`~/.pepper/bin`, `%LOCALAPPDATA%\pepper\bin` on
+Windows), beside the installed toolchains, and runs the tools of one of
+them. The first of these that names a toolchain picks it:
+
+1. `+<version>` before the command: `pepper +0.3.0 build`;
+2. the `PEPPER_TOOLCHAIN` environment variable;
+3. `toolchain = "0.3"` in `[package]` of the nearest `pep.toml` at or above
+   the folder the command runs in (after `-C`), so a project pins the
+   compiler it builds with (see [Projects: pep.toml](projects.md#package));
+4. the default, which `pepper install use` sets.
+
+A version is exact (`0.3.0`), or a prefix that picks the newest installed
+toolchain that starts so (`0.3`, `0`), or `latest` for the newest installed.
+`pepper` then looks for `pep-<command>` in that toolchain's `bin` folder
+first, then beside `pepper`, then on the `PATH`, and runs it with
+`PEPPER_TOOLCHAIN` set to the exact version, so a `pepper` that command runs
+uses the same toolchain. `pepper install` always runs the home's own
+`pep-install`, which needs no toolchain.
+
+When the toolchain picked is not installed, or none is installed, `pepper`
+says so and how to install it, and exits with status 1:
+
+```text
+$ pepper build
+pepper: error: toolchain 0.4 (pinned by /work/app/pep.toml) is not installed; install it with 'pepper install add 0.4'
+```
+
+`pepper install which` shows which toolchain a folder uses and why.
+Outside a Pepper home, as when it is built from this repository, `pepper`
+runs the tools beside it, and `+<version>` is an error.
 
 ## The old form
 

@@ -65,7 +65,7 @@ Now build the compiler, then the `pepper` command with it:
 
 ```sh
 cargo build --release
-target/release/pep-build tools/pepper/main.pep -o target/release/pepper
+target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
 ```
 
 On Windows, name the output `target\release\pepper.exe`. The compiler is
