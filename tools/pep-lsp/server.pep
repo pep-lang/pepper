@@ -11,6 +11,7 @@ import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
 import "analysis";
+import "completion";
 import "edits";
 import "symbols";
 
@@ -67,6 +68,9 @@ extend PepperServer with lsp.LanguageServer {
         result.capabilities.document_symbol_provider = Optional<bool>.Value(true);
         result.capabilities.hover_provider = Optional<bool>.Value(true);
         result.capabilities.definition_provider = Optional<bool>.Value(true);
+        var completion = lsp.CompletionOptions();
+        completion.trigger_characters = Optional<Array<String>>.Value([".", "("]);
+        result.capabilities.completion_provider = Optional<lsp.CompletionOptions>.Value(completion);
         var info = lsp.ClientInfo();
         info.name = "pep-lsp";
         info.version = Optional<String>.Value(_version);
@@ -159,6 +163,19 @@ extend PepperServer with lsp.LanguageServer {
         var offset = document.value().offset_at(params.position);
         var found = definition_across_edits(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
         return Result<Array<lsp.Location>, ResponseError>.ok(found);
+    }
+
+    completion(params: lsp.CompletionParams): Result<lsp.CompletionList?, ResponseError> {
+        var uri = params.text_document.uri;
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
+            return Result<lsp.CompletionList?, ResponseError>.ok(Optional<lsp.CompletionList>.Empty);
+        }
+        var offset = document.value().offset_at(params.position);
+        var items = completion_at(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        return Result<lsp.CompletionList?, ResponseError>.ok(
+            Optional<lsp.CompletionList>.Value(lsp.CompletionList(items))
+        );
     }
 
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {

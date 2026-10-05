@@ -5,6 +5,7 @@ import [Directory, File, Path] from io;
 import lsp;
 import compiler.parse;
 import "analysis";
+import "completion";
 import "edits";
 import "navigate";
 import "symbols";
@@ -238,4 +239,83 @@ answers_after_an_edit_read_the_last_passed_analysis() {
     document = lsp.TextDocument(uri, edited);
     found = definition_across_edits(document, some, some, at(edited, "twice(1)", 1));
     expect_equal(document.offset_at(found[0].range.start), at(edited, "twice(x", 0));
+}
+
+# The labels of `items`, in order.
+labels(items: lsp.CompletionItem[]): String[] {
+    var out = Array<String>();
+    for (var item in items) {
+        out.append(item.label);
+    }
+    return out;
+}
+
+# The labels of the items that insert `name = `, in order.
+argument_labels(items: lsp.CompletionItem[]): String[] {
+    var out = Array<String>();
+    for (var item in items) {
+        if (item.insert_text is Value(inserted)) {
+            if (inserted == item.label + " = ") {
+                out.append(item.label);
+            }
+        }
+    }
+    return out;
+}
+
+[Test]
+completion_after_an_enum_name_lists_its_cases() {
+    var text = "## A traffic light color.\nenum Color { Red, Amber = 1, Green }\n"
+        + "enum Shape { Circle(radius: int), Empty }\n"
+        + "main(): int {\n    var c = Color.;\n    return 0;\n}\n";
+    var document = lsp.TextDocument("file:///nowhere/a.pep", text);
+    var none = Optional<Analysis>.Empty;
+    var items = completion_at(document, none, none, at(text, "Color.;", 6));
+    expect_equal(", ".join(labels(items)), "Red, Amber, Green, from_value");
+    expect_equal(items[0].kind.value(), lsp.COMPLETION_ENUM_MEMBER);
+    expect_equal(items[1].detail.value(), "Color.Amber");
+
+    text = text.replace("Color.;", "Shape.;");
+    document = lsp.TextDocument("file:///nowhere/a.pep", text);
+    items = completion_at(document, none, none, at(text, "Shape.;", 6));
+    expect_equal(", ".join(labels(items)), "Circle, Empty");
+    expect_equal(items[0].detail.value(), "Shape.Circle(radius: int)");
+}
+
+[Test]
+completion_offers_keywords_and_names_in_scope() {
+    var text = "struct Box {\n    var size: int;\n    grow(by: int): int {\n        var next = size + by;\n        return n;\n    }\n}\n"
+        + "make(): Box { return Box(); }\n";
+    var document = lsp.TextDocument("file:///nowhere/a.pep", text);
+    var none = Optional<Analysis>.Empty;
+    var found = labels(completion_at(document, none, none, at(text, "n;", 1)));
+    for (var expected in ["return", "next", "by", "size", "grow", "make", "Box"]) {
+        expect_true(found.contains(expected));
+    }
+}
+
+[Test]
+completion_in_an_argument_list_offers_parameter_names() {
+    var resized = "struct Window {\n    var width: int;\n    var height: int;\n\n"
+        + "    construct(this.width = 0, this.height = 0) {}\n\n"
+        + "    [Alias(\"w\", \"width\")]\n    resize(width: int, height: int) {\n        this.width = width;\n        this.height = height;\n    }\n}\n\n"
+        + "[Alias(\"count\", \"times\")]\nrepeat(text: String, times: int): String { return text; }\n\n"
+        + "main(): int {\n    var window = Window(640, 480);\n    window.resize(800, height = 600);\n"
+        + "    var size = 4;\n    var s = repeat(\"ab\", size);\n    return 0;\n}\n";
+    var none = Optional<Analysis>.Empty;
+    var names = (text: String, offset: ulong) => {
+        var document = lsp.TextDocument("file:///nowhere/a.pep", text);
+        return ", ".join(argument_labels(completion_at(document, none, none, offset)));
+    };
+    # A method, after a named argument: its other parameter and the alias.
+    var text = resized.replace("window.resize(800, height = 600)", "window.resize(height = 600, )");
+    expect_equal(names(text, at(text, ", )", 2)), "width, w");
+    # A free function, while its first argument is typed.
+    text = resized.replace("repeat(\"ab\", size)", "repeat(te)");
+    expect_equal(names(text, at(text, "te)", 2)), "text, times, count");
+    # A constructor.
+    text = resized.replace("Window(640, 480)", "Window()");
+    expect_equal(names(text, at(text, "Window()", 7)), "width, height");
+    # Not inside an argument.
+    expect_equal(names(resized, at(resized, "640", 2)), "");
 }

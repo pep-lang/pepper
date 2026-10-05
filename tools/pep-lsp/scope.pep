@@ -957,6 +957,43 @@ export find_expression(module: Module, offset: ulong): Expression? {
     return Optional<Expression>.Empty;
 }
 
+## The outermost expressions of the statement holding `offset`, in the
+## innermost block around it, that hold it: where to search for what
+## surrounds the offset, such as the call whose arguments it is in.
+##
+## @param module the syntax tree
+## @param offset the byte offset
+## @returns the expressions; empty at module scope
+export outer_expressions(module: Module, offset: ulong): Expression[] {
+    var out = Array<Expression>();
+    var enclosing = body_at(module, offset);
+    if (enclosing.is_empty()) {
+        return out;
+    }
+    var block = enclosing.value().body;
+    var searching = true;
+    while (searching) {
+        searching = false;
+        for (var statement in block.statements) {
+            for (var inner in statement_blocks(statement)) {
+                if (contains(inner.span, offset)) {
+                    block = inner;
+                    searching = true;
+                }
+            }
+            if (searching) {
+                break;
+            }
+            for (var e in _statement_expressions(statement)) {
+                if (contains(e.extent(), offset)) {
+                    out.append(e);
+                }
+            }
+        }
+    }
+    return out;
+}
+
 # The innermost expression in `block` holding `offset`.
 _in_block(block: Block, offset: ulong): Expression? {
     for (var statement in block.statements) {

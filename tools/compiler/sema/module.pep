@@ -28,3 +28,4 @@ export [STATIC_REFCOUNT] from "synthesize";
 export [method_is_static] from "value_types";
 ## What the language server asks of a checked model.
 export [field_type, local_type, member_at, member_loc, FoundMember] from "member_lookup";
+export [other_names, OtherName] from "named_arguments";

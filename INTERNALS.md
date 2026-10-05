@@ -2481,7 +2481,7 @@ on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
-diagnostics, the document outline, hover and go to definition:
+diagnostics, the document outline, hover, go to definition and completion:
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
   document's newest text once edits settle (250 ms). It loads the
@@ -2515,6 +2515,15 @@ diagnostics, the document outline, hover and go to definition:
   at once (a hover notes it may be out of date, and a definition in the
   document moves with the edit), and one inside it from the current
   text's parse.
+- `completion.pep`: keywords, the names in scope (`scope_locals`, the
+  members of the struct around, the file's declarations and the other
+  files of its module), the cases and static methods after `Enum.`, and
+  in an argument list the parameter names (and `[Alias]` names, from
+  `sema.other_names`) of the functions the call may call. A method's
+  receiver is typed from its written type, the passed analysis's
+  `sema.local_type`, or a constructor call initializing it. Text that
+  does not parse while a name is typed (`Color.`, `f(a, `) is parsed with
+  a placeholder `_` at the cursor.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
   the runtime, 20 s for pep-doc), so the Rust server stays the one
   editors run until the rewrite does everything and sema is faster.
