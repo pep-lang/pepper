@@ -21,6 +21,8 @@ struct _CliArgument {
     var kind: int = 0;
     var positional: bool = false;
     var required: bool = false;
+    # Whether the option also applies after a command's name.
+    var global: bool = false;
     var default_value: String = "";
     var values: Array<String> = __null;
     var occurrences: int = 0;
@@ -147,6 +149,10 @@ export struct Parser {
     var _failed_usage: String = "";
     var _failed_path: String = "";
     var _binders: Array<() => void> = __null;
+    # The options of the parsers this one is a command of, nearest first,
+    # whose global ones apply here too. Their arrays, not the parsers, so
+    # a command holds no reference back to its parent.
+    var _ancestor_options = Array<Array<_CliArgument>>();
 
     ## Makes a parser for the program `name`.
     ##
@@ -170,10 +176,18 @@ export struct Parser {
     ## @param name the long name, without `--`
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option does, for the help
+    ## @param global whether the flag may also be given after the name of a
+    ##   command, at any depth (`pkg add -v x` as well as `pkg -v add x`)
     ## @returns the handle that tells whether the flag was given
-    ## @panics if `name` or `short_name` is invalid or already declared
-    flag(name: String, short_name: String = "", help: String = ""): Flag {
-        return Flag(_declare_option(name, short_name, help, FLAG_KIND));
+    ## @panics if `name` or `short_name` is invalid or already declared, here,
+    ##   as a global option of a parser this one is a command of, or (for a
+    ##   global flag) in one of its commands
+    flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag {
+        var declared = _declare_option(name, short_name, help, FLAG_KIND);
+        if (global) {
+            _make_global(declared);
+        }
+        return Flag(declared);
     }
 
     ## Declares an option that takes one String value, such as
@@ -187,6 +201,8 @@ export struct Parser {
     ##   name in capitals (`OUTPUT`)
     ## @param default_value the value when the option is not given; empty for none
     ## @param required whether leaving the option out is an error
+    ## @param global whether the option may also be given after the name of
+    ##   a command, at any depth
     ## @returns the handle that reads the value
     ## @panics if `name` or `short_name` is invalid or already declared
     option(
@@ -195,9 +211,10 @@ export struct Parser {
         help: String = "",
         value_name: String = "",
         default_value: String = "",
-        required: bool = false
+        required: bool = false,
+        global: bool = false
     ): Argument<String> {
-        return this.option<String>(name, short_name, help, value_name, default_value, required);
+        return this.option<String>(name, short_name, help, value_name, default_value, required, global);
     }
 
     ## Declares an option that takes one value of type `T`, such as
@@ -218,6 +235,8 @@ export struct Parser {
     ## @param default_value the value when the option is not given, written
     ##   as on the command line (`"4"`); empty for none
     ## @param required whether leaving the option out is an error
+    ## @param global whether the option may also be given after the name of
+    ##   a command, at any depth
     ## @returns the handle that reads the value
     ## @panics if `name` or `short_name` is invalid or already declared, or
     ##   if `default_value` does not read as a `T`
@@ -229,12 +248,16 @@ export struct Parser {
         help: String = "",
         value_name: String = "",
         default_value: String = "",
-        required: bool = false
+        required: bool = false,
+        global: bool = false
     ): Argument<T> {
         var declared = _declare_option(name, short_name, help, SINGLE_KIND);
         declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
         declared.default_value = default_value;
         declared.required = required;
+        if (global) {
+            _make_global(declared);
+        }
         _cli_type<T>(declared);
         return Argument<T>(declared);
     }
@@ -249,12 +272,19 @@ export struct Parser {
     ## @param value_name what the help calls the value; empty for the long
     ##   name in capitals (`IMPORT_PATH`)
     ## @param required whether leaving the option out is an error
+    ## @param global whether the option may also be given after the name of
+    ##   a command, at any depth
     ## @returns the handle that reads the values, in the order given
     ## @panics if `name` or `short_name` is invalid or already declared
     multiple(
-        name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false
+        name: String,
+        short_name: String = "",
+        help: String = "",
+        value_name: String = "",
+        required: bool = false,
+        global: bool = false
     ): ArgumentList<String> {
-        return this.multiple<String>(name, short_name, help, value_name, required);
+        return this.multiple<String>(name, short_name, help, value_name, required, global);
     }
 
     ## Declares an option that may be given any number of times, each with a
@@ -268,14 +298,24 @@ export struct Parser {
     ## @param value_name what the help calls the value; empty for the long
     ##   name in capitals (`IMPORT_PATH`)
     ## @param required whether leaving the option out is an error
+    ## @param global whether the option may also be given after the name of
+    ##   a command, at any depth
     ## @returns the handle that reads the values, in the order given
     ## @panics if `name` or `short_name` is invalid or already declared
     multiple<T>(
-        name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false
+        name: String,
+        short_name: String = "",
+        help: String = "",
+        value_name: String = "",
+        required: bool = false,
+        global: bool = false
     ): ArgumentList<T> {
         var declared = _declare_option(name, short_name, help, LIST_KIND);
         declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
         declared.required = required;
+        if (global) {
+            _make_global(declared);
+        }
         _cli_type<T>(declared);
         return ArgumentList<T>(declared);
     }
@@ -372,6 +412,8 @@ export struct Parser {
         }
         var command = Parser(name, about, _version);
         command._path = _path + " " + name;
+        command._ancestor_options.append(_options);
+        command._ancestor_options.append_all(_ancestor_options);
         _commands.append(command);
         return command;
     }
@@ -452,6 +494,7 @@ export struct Parser {
                     var name = "";
                     var value_name = "";
                     var required = false;
+                    var global = false;
                     if (field.has_attribute<Option>()) {
                         var option = field.attribute<Option>();
                         short_name = option.short_name;
@@ -459,6 +502,7 @@ export struct Parser {
                         name = option.name;
                         value_name = option.value_name;
                         required = option.required;
+                        global = option.global;
                     }
                     declared.append(
                         _cli_field_option(
@@ -471,6 +515,9 @@ export struct Parser {
                             field.get(options)
                         )
                     );
+                    if (global) {
+                        this._make_global(declared.last());
+                    }
                 }
             }
         }
@@ -533,6 +580,10 @@ export struct Parser {
         labels.clear();
         descriptions.clear();
         for (var option in _options) {
+            labels.append(option.label());
+            descriptions.append(option.description());
+        }
+        for (var option in _inherited_options()) {
             labels.append(option.label());
             descriptions.append(option.description());
         }
@@ -660,22 +711,78 @@ export struct Parser {
         return declared;
     }
 
+    # The option named `name` here, or a global one of a parser this one
+    # is a command of; null for none.
     _find_option(name: String): _CliArgument {
         for (var option in _options) {
             if (option.name == name) {
                 return option;
             }
         }
+        for (var options in _ancestor_options) {
+            for (var option in options) {
+                if (option.global and option.name == name) {
+                    return option;
+                }
+            }
+        }
         return __null;
     }
 
+    # The option with short name `short_name`, found as `_find_option`
+    # finds one.
     _find_short(short_name: String): _CliArgument {
         for (var option in _options) {
             if (option.short_name == short_name) {
                 return option;
             }
         }
+        for (var options in _ancestor_options) {
+            for (var option in options) {
+                if (option.global and option.short_name == short_name) {
+                    return option;
+                }
+            }
+        }
         return __null;
+    }
+
+    # Makes `declared`, an option of this parser, global, after checking
+    # that no command below declares its names.
+    _make_global(declared: _CliArgument) {
+        declared.global = true;
+        for (var command in _commands) {
+            command._check_names_free(declared);
+        }
+    }
+
+    # Panics if this parser or a command below it declares a name of the
+    # global option `global`.
+    _check_names_free(global: _CliArgument) {
+        for (var option in _options) {
+            assert(option.name != global.name, "cli: option '--" + global.name + "' declared twice");
+            assert(
+                global.short_name.is_empty or option.short_name != global.short_name,
+                "cli: short name '-" + global.short_name + "' declared twice"
+            );
+        }
+        for (var command in _commands) {
+            command._check_names_free(global);
+        }
+    }
+
+    # The global options of the parsers this one is a command of, nearest
+    # first.
+    _inherited_options(): Array<_CliArgument> {
+        var inherited = Array<_CliArgument>();
+        for (var options in _ancestor_options) {
+            for (var option in options) {
+                if (option.global) {
+                    inherited.append(option);
+                }
+            }
+        }
+        return inherited;
     }
 
     # Clears what the last parse filled in, here and in every command.
@@ -806,6 +913,10 @@ export struct Parser {
         if (missing.is_err()) {
             return missing;
         }
+        missing = _check_required_globals(root);
+        if (missing.is_err()) {
+            return missing;
+        }
         for (var positional in _positionals) {
             if (positional.required and positional.values.is_empty) {
                 return _fail(root, "missing required argument '" + positional.display() + "'");
@@ -817,9 +928,27 @@ export struct Parser {
         return Result<String?>.ok(Optional<String>.Empty);
     }
 
-    # An error for each required option left out.
+    # An error for a required option of this parser left out. A global one
+    # may still come after a command's name, so it is checked by
+    # `_check_required_globals` at the end.
     _check_required(root: Parser): Result<String?> {
         for (var option in _options) {
+            if (option.required and !option.global and option.values.is_empty) {
+                return _fail(root, "missing required option '--" + option.name + "'");
+            }
+        }
+        return Result<String?>.ok(Optional<String>.Empty);
+    }
+
+    # An error for a required global option, here or of a parser this one
+    # is a command of, left out.
+    _check_required_globals(root: Parser): Result<String?> {
+        for (var option in _options) {
+            if (option.required and option.global and option.values.is_empty) {
+                return _fail(root, "missing required option '--" + option.name + "'");
+            }
+        }
+        for (var option in _inherited_options()) {
             if (option.required and option.values.is_empty) {
                 return _fail(root, "missing required option '--" + option.name + "'");
             }
@@ -876,6 +1005,9 @@ export struct Parser {
         var message = "unknown option '--" + name + "'";
         var names = Array<String>();
         for (var option in _options) {
+            names.append(option.name);
+        }
+        for (var option in _inherited_options()) {
             names.append(option.name);
         }
         names.append("help");

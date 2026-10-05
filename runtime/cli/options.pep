@@ -2,7 +2,7 @@
 ## from a struct's fields.
 
 ## Sets how a field of an options struct is declared as an option: its
-## short name, its help, and whether it is required. A field without it is
+## short name, its help, and whether it is required or global. A field without it is
 ## still an option, named after the field.
 ##
 ## @example
@@ -27,6 +27,9 @@ export struct Option {
     const value_name: String = "";
     ## Whether leaving the option out is an error.
     const required: bool = false;
+    ## Whether the option may also be given after the name of a command, at
+    ## any depth.
+    const global: bool = false;
 }
 
 ## Declares a field of an options struct as the next positional argument

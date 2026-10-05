@@ -82,7 +82,7 @@ Makes a parser for the program `name`.
 #### flag
 
 ```pepper
-flag(name: String, short_name: String = "", help: String = ""): Flag
+flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
 ```
 
 Declares an option that takes no value, such as `--verbose`.
@@ -91,17 +91,18 @@ Declares an option that takes no value, such as `--verbose`.
 - `name` — the long name, without `--`
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option does, for the help
+- `global` — whether the flag may also be given after the name of a command, at any depth (`pkg add -v x` as well as `pkg -v add x`)
 
 **Returns**
 - the handle that tells whether the flag was given
 
 **Panics**
-- if `name` or `short_name` is invalid or already declared
+- if `name` or `short_name` is invalid or already declared, here, as a global option of a parser this one is a command of, or (for a global flag) in one of its commands
 
 #### option
 
 ```pepper
-option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument<String>
+option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument<String>
 ```
 
 Declares an option that takes one String value, such as
@@ -115,6 +116,7 @@ a path or an enum case.
 - `value_name` — what the help calls the value; empty for the long name in capitals (`OUTPUT`)
 - `default_value` — the value when the option is not given; empty for none
 - `required` — whether leaving the option out is an error
+- `global` — whether the option may also be given after the name of a command, at any depth
 
 **Returns**
 - the handle that reads the value
@@ -125,7 +127,7 @@ a path or an enum case.
 #### option
 
 ```pepper
-option<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument<T>
+option<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument<T>
 ```
 
 Declares an option that takes one value of type `T`, such as
@@ -147,6 +149,7 @@ case (`DebugInfo` is `debug-info`), and the help lists them.
 - `value_name` — what the help calls the value; empty for the long name in capitals (`JOBS`)
 - `default_value` — the value when the option is not given, written as on the command line (`"4"`); empty for none
 - `required` — whether leaving the option out is an error
+- `global` — whether the option may also be given after the name of a command, at any depth
 
 **Returns**
 - the handle that reads the value
@@ -162,7 +165,7 @@ var jobs = parser.option<int>("jobs", "j", "how many at once", default_value = "
 #### multiple
 
 ```pepper
-multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList<String>
+multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList<String>
 ```
 
 Declares an option that may be given any number of times, each with a
@@ -175,6 +178,7 @@ whose values are numbers, paths or enum cases.
 - `help` — what the option adds, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`IMPORT_PATH`)
 - `required` — whether leaving the option out is an error
+- `global` — whether the option may also be given after the name of a command, at any depth
 
 **Returns**
 - the handle that reads the values, in the order given
@@ -185,7 +189,7 @@ whose values are numbers, paths or enum cases.
 #### multiple
 
 ```pepper
-multiple<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList<T>
+multiple<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList<T>
 ```
 
 Declares an option that may be given any number of times, each with a
@@ -201,6 +205,7 @@ value of type `T`, such as `-I src -I lib` for `multiple<io.Path>`.
 - `help` — what the option adds, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`IMPORT_PATH`)
 - `required` — whether leaving the option out is an error
+- `global` — whether the option may also be given after the name of a command, at any depth
 
 **Returns**
 - the handle that reads the values, in the order given

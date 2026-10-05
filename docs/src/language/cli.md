@@ -37,9 +37,9 @@ receives them, program name first.
 
 | Declaration | Handle | Reads |
 |-------------|--------|-------|
-| `flag(name, short_name, help)` | `Flag` | `is_set` and `occurrences` (properties) |
-| `option<T>(name, short_name, help, value_name, default_value, required)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
-| `multiple<T>(name, short_name, help, value_name, required)` | `ArgumentList<T>` | `values()`, `is_set` |
+| `flag(name, short_name, help, global)` | `Flag` | `is_set` and `occurrences` (properties) |
+| `option<T>(name, short_name, help, value_name, default_value, required, global)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
+| `multiple<T>(name, short_name, help, value_name, required, global)` | `ArgumentList<T>` | `values()`, `is_set` |
 | `positional<T>(name, help, required, default_value)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
 | `positionals<T>(name, help, required)` | `ArgumentList<T>` | `values()`, `is_set` |
 
@@ -160,8 +160,8 @@ declarations are the same ones.
   error at the call: `'add_options' cannot declare field 'table' of type
   'Map<String, int>'; use bool, String, a number type, io.Path or an enum,
   or one of those as T? or T[]`.
-- `[cli.Option(short_name, help, name, value_name, required)]` sets the
-  rest, every argument optional: `[cli.Option("o", "the executable to
+- `[cli.Option(short_name, help, name, value_name, required, global)]` sets
+  the rest, every argument optional: `[cli.Option("o", "the executable to
   write")]`, `[cli.Option(required = true)]`.
 - `[cli.Positional(help, name, required)]` makes the field the next
   positional argument. A `T` one is required when it has no default or
@@ -190,13 +190,17 @@ command; after `parse`, `is_selected` tells which command was given.
   of its own.
 - Options before the command's name belong to the parent, and everything
   after it to the command, so `pkg -v add x` works and `pkg add -v x` does
-  not.
+  not, unless `-v` is global.
+- A global option (`flag("verbose", "v", global = true)`, and the same
+  argument on `option` and `multiple`) may also be given after the name of
+  any command below its parser, at any depth, and each command's help
+  lists it. A command cannot declare an option with a global option's
+  name, and a required global option may be given anywhere on the line.
 - `--help` after a command shows that command's help, and errors show its
   usage.
 - Commands nest: a command's parser can declare commands too.
 
 ## Not yet
 
-- Options that apply after a subcommand's name (clap's global options).
 - Windows-style `/option` forms: every platform uses `-` and `--`.
 - Generating shell completions.
