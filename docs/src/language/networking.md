@@ -160,8 +160,10 @@ macOS only (Windows has no Unix datagram sockets, so it is declared with
   that can only send, and `pair()` two that are connected to each other.
 - `send_to(data, path)` sends one datagram; it fails with `is_not_found()`
   when there is no socket file and `is_connection_refused()` when nothing
-  is bound to it any more. A datagram is never dropped: a send waits while
-  the receiver's queue is full.
+  is bound to it any more. A datagram is never dropped silently. While the
+  receiver's queue is full, a send waits on Linux; on macOS it fails at once
+  with "No buffer space available" (`ENOBUFS`) and sends nothing, so try
+  again later.
 - `receive_from(buffer, max)` returns the byte count and the sender's path,
   which is empty for an unbound sender. As with UDP, a datagram longer than
   `max` is cut.

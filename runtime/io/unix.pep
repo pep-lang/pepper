@@ -531,8 +531,10 @@ _io_sockaddr_unix_read(sockaddr: _SockAddr): Path {
 ## an address. Linux and macOS only; Windows has no Unix datagram sockets.
 ##
 ## Each `send_to` delivers one whole datagram, in order, and the system
-## never drops one silently: a send waits while the receiver's queue is
-## full. `UnixDatagram.bind` creates a socket file at a path, which closing
+## never drops one silently. While the receiver's queue is full, a send
+## waits on Linux; on macOS it fails at once with the platform's "No buffer
+## space available" (`ENOBUFS`) and sends nothing, so try again later.
+## `UnixDatagram.bind` creates a socket file at a path, which closing
 ## does not remove (as for `UnixListener`); `UnixDatagram.unbound` makes a
 ## socket that can send but has no path for replies; `UnixDatagram.pair`
 ## makes two connected sockets.
@@ -768,7 +770,8 @@ export struct UnixDatagram {
     ## Limits how long a send waits for the receiver to take more: when its
     ## queue stays full for `milliseconds` (it is not receiving), `send` or
     ## `send_to` fails with `is_timed_out()` and sends nothing. 0, the
-    ## default, waits as long as it takes.
+    ## default, waits as long as it takes. On macOS a send to a full queue
+    ## fails at once instead (see `UnixDatagram`).
     ##
     ## @param milliseconds the longest wait, at most 4294967295 (about 49
     ##   days); 0 for none

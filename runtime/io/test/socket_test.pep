@@ -530,7 +530,8 @@ unix_datagram_timeouts() {
         b.send("hi".bytes());
         expect_equal(a.receive(buffer, 16).value(), 2);  # still open
 
-        # Nobody receives on `a`, so `b`'s sends fill its queue, then wait.
+        # Nobody receives on `a`, so `b`'s sends fill its queue. Then Linux
+        # waits out the timeout, and macOS fails at once with ENOBUFS.
         expect_true(b.set_write_timeout(50).is_ok());
         expect_equal(b.write_timeout(), 50);
         var datagram = "x".repeat(1024).bytes();
@@ -538,7 +539,14 @@ unix_datagram_timeouts() {
         while (sent.is_ok()) {
             sent = b.send(datagram);
         }
-        expect_true(sent.error().is_timed_out());
+        [Target(OS(Linux))]
+        {
+            expect_true(sent.error().is_timed_out());
+        }
+        [Target(OS(Mac))]
+        {
+            expect_equal(sent.error().code, 55);  # ENOBUFS
+        }
         expect_true(b.set_write_timeout(4294967296).error().is_invalid_input());
         expect_true(b.close().is_ok());
         expect_true(b.set_read_timeout(10).is_err());  # closed
