@@ -11,8 +11,9 @@
 ##   defined only in its file's part, and is external with hidden
 ##   visibility, since code in another part may call it;
 ## - every other definition (instantiations such as `Array<int>.append`,
-##   and code without a source location) becomes `linkonce_odr`, defined in
-##   each part that uses it, so each part can inline it and the linker
+##   and code without a source location) becomes `linkonce_odr`, in a
+##   comdat of its own name except on Apple targets, defined in each part
+##   that uses it, so each part can inline it and the linker
 ##   keeps one copy, the way C++ emits templates; a private constant whose
 ##   address means nothing (`unnamed_addr`, such as a string's bytes) stays
 ##   private, copied into each part that uses it;
@@ -102,6 +103,9 @@ export prepare(
     for (var _ in 0..parts) {
         sizes.append(0);
     }
+    # COFF needs a comdat for the linker to keep one copy of a
+    # `linkonce_odr` definition; Mach-O has no comdats.
+    bool comdats = !ir.target_triple().contains("apple");
     var functions = ir.functions();
     var part_of = HashMap<String, uint>();
     var values = Array<llvm.Value>();
@@ -138,7 +142,10 @@ export prepare(
         }
         value.set_linkage(llvm.Linkage.LinkOnceOdr);
         value.set_visibility(llvm.Visibility.Hidden);
-        _respell(value, name);
+        var spelled = _respell(value, name);
+        if (comdats) {
+            value.set_comdat(spelled);
+        }
     }
     return Partition(part_of, sizes);
 }
