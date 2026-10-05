@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a5e6bb67.js";
+            window.path_to_searchindex_js = "../searchindex-ce6197db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -184,26 +184,32 @@
                         <!-- Generated from runtime/async/select.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="select"><a class="header" href="#select">Select</a></h1>
 <p>Waiting on several channels at once: <code>Select&lt;E&gt;</code> takes the first value
-any of them receives and turns it into a case of your own enum, which a
-<code>match</code> then handles.</p>
+any of them receives, or sends a value to the first that has room, and
+turns what happened into a case of your own enum, which a <code>match</code> then
+handles.</p>
 <p>Source: <code>runtime/async/select.pep</code></p>
 <h2 id="select-1"><a class="header" href="#select-1">Select</a></h2>
 <pre><code class="language-pepper">struct Select&lt;E&gt;
 </code></pre>
 <p>Waits on several channels at once and takes the first value any of them
-receives, like Go’s <code>select</code>.</p>
-<p>Each channel is added with <code>receive(channel, wrap)</code>, where <code>wrap</code> turns
-one of its values into an <code>E</code>, usually a case of an enum of your own that
-carries it. <code>wait()</code> then returns the next value from whichever channel
-has one, as an <code>E</code>, for a <code>match</code> to handle. The channels may carry
-different types.</p>
+receives, or sends to the first that has room, like Go’s <code>select</code>.</p>
+<p>Each channel to receive from is added with <code>receive(channel, wrap)</code>,
+where <code>wrap</code> turns one of its values into an <code>E</code>, usually a case of an
+enum of your own that carries it. A value to send is added with
+<code>send(channel, value, sent)</code>, where <code>sent</code> returns the <code>E</code> that says it
+was sent. <code>wait()</code> then fires whichever arm is ready first and returns
+its <code>E</code>, for a <code>match</code> to handle. The channels may carry different types.</p>
 <ul>
 <li>The value is taken under the channel’s own lock, so no other receiver
 can take it between “ready” and “take”.</li>
+<li>A send arm’s value goes into its channel only when that arm fires;
+until then the select holds it. Once sent, the arm leaves the select,
+so the next <code>wait()</code> does not send it again. A value never sent is
+dropped with the select.</li>
 <li>When several channels have values, each wait starts after the channel
 that fired last, so a busy channel cannot starve the others.</li>
-<li>A channel that is closed and empty is skipped. Once every channel is,
-<code>wait()</code> returns an error.</li>
+<li>A channel that is closed and empty is skipped, and so is a send arm
+whose channel is closed. Once every arm is, <code>wait()</code> returns an error.</li>
 <li>In a task (see <code>run</code>), waiting parks the task and its worker runs other
 tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
 </ul>
@@ -260,14 +266,39 @@ those <code>wait()</code> returns.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">select.receive(lines, (line: String): Event =&gt; Event.Line(line));
 </code></pre>
+<h4 id="send"><a class="header" href="#send">send</a></h4>
+<pre><code class="language-pepper">send&lt;T&gt;(channel: Channel&lt;T&gt;, [Move] value: T, sent: () =&gt; E)
+</code></pre>
+<p>Adds a send arm: <code>wait()</code> sends <code>value</code> to <code>channel</code> once the channel
+has room (a bounded channel that is full waits), and returns what
+<code>sent</code> returns.</p>
+<p><code>value</code> must be a new value, as for <code>Channel.send</code>: the select holds
+it and moves it into the channel only when this arm fires, so it is
+never sent if another arm fires first. Once sent, the arm leaves the
+select. A send arm whose channel is closed never fires, and its value
+is dropped with the select.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the channel’s values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>channel</code> — the channel to send to</li>
+<li><code>value</code> — the value to send; a new value, which the compiler checks</li>
+<li><code>sent</code> — returns the <code>E</code> that <code>wait()</code> returns once the value is sent; it runs on the waiting thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">select.send(results, copy(line), (): Event =&gt; Event.Sent);
+</code></pre>
 <h4 id="wait"><a class="header" href="#wait">wait</a></h4>
 <pre><code class="language-pepper">wait(): Result&lt;E&gt;
 </code></pre>
-<p>Takes the next value any of the channels receives, waiting until one
-arrives.</p>
+<p>Fires the first arm that is ready, waiting until one is: takes the
+next value any of the channels receives, or sends a send arm’s value
+to a channel with room.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error once every channel is closed and empty, when the select has no channels, or when the task’s wait was cancelled or timed out</li>
+<li>the arm’s <code>E</code> (the value received, turned into an <code>E</code>, or what a send arm’s <code>sent</code> returned); or an error once every channel is closed (and empty, for a receive arm), when the select has no arms, or when the task’s wait was cancelled or timed out</li>
 </ul>
 <h4 id="wait_for"><a class="header" href="#wait_for">wait_for</a></h4>
 <pre><code class="language-pepper">wait_for(milliseconds: ulong): Result&lt;E&gt;
@@ -279,15 +310,17 @@ arrives.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error if the time ran out, once every channel is closed and empty, or when the task’s wait was cancelled</li>
+<li>the arm’s <code>E</code>, as for <code>wait()</code>; or an error if the time ran out, once every channel is closed (and empty, for a receive arm), or when the task’s wait was cancelled</li>
 </ul>
 <h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
 <pre><code class="language-pepper">try_wait(): Result&lt;E&gt;
 </code></pre>
-<p>Takes a value if any channel has one waiting, without waiting.</p>
+<p>Fires an arm if one is ready now, without waiting: takes a value if a
+channel has one waiting, or sends a send arm’s value if its channel
+has room.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error if none is waiting, or once every channel is closed and empty</li>
+<li>the arm’s <code>E</code>, as for <code>wait()</code>; or an error if no arm is ready, or once every channel is closed (and empty, for a receive arm)</li>
 </ul>
 
                     </main>

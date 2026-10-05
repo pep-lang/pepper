@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a5e6bb67.js";
+            window.path_to_searchindex_js = "../searchindex-ce6197db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -759,7 +759,8 @@ trait values and values that cannot be copied (an <code>io.File</code>) included
 method.</p>
 <h3 id="waiting-on-several-channels-with-select"><a class="header" href="#waiting-on-several-channels-with-select">Waiting on several channels with Select</a></h3>
 <p>A <code>Select&lt;E&gt;</code> waits on several channels at once and takes the first value
-any of them receives, like Go’s <code>select</code>. Each channel is added with a
+any of them receives (or, with a send arm, sends to the first with room),
+like Go’s <code>select</code>. Each channel is added with a
 function that turns its values into an <code>E</code>, usually a case of an
 <a href="enums.html">enum</a> of your own that carries the value, so the channels may
 carry different types and a <code>match</code> handles the result:</p>
@@ -848,6 +849,78 @@ is <code>the time ran out</code>.</li>
 <li>A <code>Select</code> belongs to the thread (or <a href="tasks.html">task</a>) that made it; it
 is not <code>[Shared]</code>. In a task, waiting parks the task, and a cancel or the
 task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>A <code>Select</code> can also wait to send, like a <code>case ch &lt;- v</code> in Go’s <code>select</code>.
+<code>send(channel, value, sent)</code> adds a send arm: <code>wait()</code> fires it once
+<code>channel</code> has room (a bounded channel that is full waits), and returns what
+<code>sent</code> returns. Here a loop keeps receiving jobs while each result waits for
+room in a bounded channel:</p>
+<pre><code class="language-pepper">import async;
+
+# What one wait did: a job arrived, or a result went out.
+enum Step {
+    Job(value: long),
+    Sent,
+}
+
+const jobs = async.Channel&lt;long&gt;();
+# Holds one result at a time, so sending can wait.
+const results = async.Channel&lt;long&gt;(1);
+
+feed() {
+    var i: long = 1;
+    while (i &lt;= 5) {
+        jobs.send(i);
+        i = i + 1;
+    }
+    jobs.close();
+}
+
+main(): int {
+    var select = async.Select&lt;Step&gt;();
+    select.receive(jobs, (value: long): Step =&gt; Step.Job(value));
+    var feeder = async.Thread.spawn(feed);
+    var received = 0;
+    var waiting = 0;
+    var total: long = 0;
+    while (received &lt; 5 || waiting &gt; 0) {
+        match (select.wait()) {
+            Ok(step) =&gt; {
+                match (step) {
+                    Job(value) =&gt; {
+                        received = received + 1;
+                        # Goes into `results` once it has room; until then
+                        # the select keeps receiving jobs.
+                        select.send(results, value * value, (): Step =&gt; Step.Sent);
+                        waiting = waiting + 1;
+                    }
+                    Sent =&gt; {
+                        waiting = waiting - 1;
+                        # Take the result back out, so the next send has room.
+                        total = total + results.receive().value();
+                    }
+                }
+            }
+            Err(error) =&gt; {
+                panic(error.message);
+            }
+        }
+    }
+    feeder.join();
+    assert(total == 55, "every square was sent once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>value</code> must be a new value, as for <code>Channel.send</code> (<code>move(x)</code>, <code>copy(x)</code>,
+a constructor call, …). The select holds it and moves it into the
+channel only when that arm fires, under the channel’s lock, so it is never
+sent when another arm fires first.</li>
+<li>A send arm fires once: after its value is sent it leaves the select, so
+the next <code>wait()</code> does not send it again. Add another with <code>send</code> for the
+next value.</li>
+<li>A send arm whose channel is closed is skipped like a closed receive
+channel, and its value is dropped with the select.</li>
 </ul>
 <p>The <a href="../reference/async-select.html">Select reference</a> documents every method.</p>
 <h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
@@ -1475,10 +1548,9 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 (<code>list.append(move(job))</code>).</li>
 <li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
 not re-entrant.</li>
-<li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The
-value <code>wait()</code> returns is not a new value for a lock body, since <code>wrap</code>
-is a function value the compiler cannot follow; <code>copy</code> it to move it into
-a locked value.</li>
+<li>The value a <code>Select</code>’s <code>wait()</code> returns is not a new value for a lock
+body, since <code>wrap</code> is a function value the compiler cannot follow; <code>copy</code>
+it to move it into a locked value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>

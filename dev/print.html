@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5e6bb67.js";
+            window.path_to_searchindex_js = "searchindex-ce6197db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -281,7 +281,7 @@ too, for constraints, but are never trait values.</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
-waits on several channels at once, and a <code>Mutex</code> holds any struct, with
+waits to receive from or send to several channels at once, and a <code>Mutex</code> holds any struct, with
 the compiler keeping each locked value apart from the rest of the program
 (see
 <a href="#what-a-lock-body-may-do">threads</a>). An <code>RwLock</code>
@@ -6617,8 +6617,11 @@ error at <code>set</code>, with a note at <code>[Shared]</code>.</li>
 <li>A computed <code>get</code> over the struct’s <code>const</code> fields is allowed, as any method
 is.</li>
 </ul>
-<p>Accessors that store into a thread-safe member (an <code>Atomic&lt;int&gt;</code>, or a
-value behind a <code>Mutex</code>) are not supported yet.</p>
+<p>A <code>[Shared]</code> struct’s properties are <code>get</code> only, by design: an assignment
+<code>x.p = v</code> would read as a write to a struct whose fields cannot change. To
+change what a thread-safe member holds (an <code>Atomic&lt;int&gt;</code>, or a value behind a
+<code>Mutex</code>), declare a method that says what it does, such as
+<code>store_hits(value)</code> or <code>add_name(name)</code>.</p>
 <h2 id="how-properties-compile"><a class="header" href="#how-properties-compile">How properties compile</a></h2>
 <p>The compiler lowers a property to plain members: a field for its storage
 (named after the property when its <code>get</code> is the default, <code>__field_name</code>
@@ -13644,7 +13647,8 @@ trait values and values that cannot be copied (an <code>io.File</code>) included
 method.</p>
 <h3 id="waiting-on-several-channels-with-select"><a class="header" href="#waiting-on-several-channels-with-select">Waiting on several channels with Select</a></h3>
 <p>A <code>Select&lt;E&gt;</code> waits on several channels at once and takes the first value
-any of them receives, like Go’s <code>select</code>. Each channel is added with a
+any of them receives (or, with a send arm, sends to the first with room),
+like Go’s <code>select</code>. Each channel is added with a
 function that turns its values into an <code>E</code>, usually a case of an
 <a href="#enums-and-match">enum</a> of your own that carries the value, so the channels may
 carry different types and a <code>match</code> handles the result:</p>
@@ -13733,6 +13737,78 @@ is <code>the time ran out</code>.</li>
 <li>A <code>Select</code> belongs to the thread (or <a href="#tasks">task</a>) that made it; it
 is not <code>[Shared]</code>. In a task, waiting parks the task, and a cancel or the
 task’s <code>timeout</code> ends the wait.</li>
+</ul>
+<p>A <code>Select</code> can also wait to send, like a <code>case ch &lt;- v</code> in Go’s <code>select</code>.
+<code>send(channel, value, sent)</code> adds a send arm: <code>wait()</code> fires it once
+<code>channel</code> has room (a bounded channel that is full waits), and returns what
+<code>sent</code> returns. Here a loop keeps receiving jobs while each result waits for
+room in a bounded channel:</p>
+<pre><code class="language-pepper">import async;
+
+# What one wait did: a job arrived, or a result went out.
+enum Step {
+    Job(value: long),
+    Sent,
+}
+
+const jobs = async.Channel&lt;long&gt;();
+# Holds one result at a time, so sending can wait.
+const results = async.Channel&lt;long&gt;(1);
+
+feed() {
+    var i: long = 1;
+    while (i &lt;= 5) {
+        jobs.send(i);
+        i = i + 1;
+    }
+    jobs.close();
+}
+
+main(): int {
+    var select = async.Select&lt;Step&gt;();
+    select.receive(jobs, (value: long): Step =&gt; Step.Job(value));
+    var feeder = async.Thread.spawn(feed);
+    var received = 0;
+    var waiting = 0;
+    var total: long = 0;
+    while (received &lt; 5 || waiting &gt; 0) {
+        match (select.wait()) {
+            Ok(step) =&gt; {
+                match (step) {
+                    Job(value) =&gt; {
+                        received = received + 1;
+                        # Goes into `results` once it has room; until then
+                        # the select keeps receiving jobs.
+                        select.send(results, value * value, (): Step =&gt; Step.Sent);
+                        waiting = waiting + 1;
+                    }
+                    Sent =&gt; {
+                        waiting = waiting - 1;
+                        # Take the result back out, so the next send has room.
+                        total = total + results.receive().value();
+                    }
+                }
+            }
+            Err(error) =&gt; {
+                panic(error.message);
+            }
+        }
+    }
+    feeder.join();
+    assert(total == 55, "every square was sent once");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>value</code> must be a new value, as for <code>Channel.send</code> (<code>move(x)</code>, <code>copy(x)</code>,
+a constructor call, …). The select holds it and moves it into the
+channel only when that arm fires, under the channel’s lock, so it is never
+sent when another arm fires first.</li>
+<li>A send arm fires once: after its value is sent it leaves the select, so
+the next <code>wait()</code> does not send it again. Add another with <code>send</code> for the
+next value.</li>
+<li>A send arm whose channel is closed is skipped like a closed receive
+channel, and its value is dropped with the select.</li>
 </ul>
 <p>The <a href="#select">Select reference</a> documents every method.</p>
 <h2 id="mutexes-and-conditions"><a class="header" href="#mutexes-and-conditions">Mutexes and conditions</a></h2>
@@ -14360,10 +14436,9 @@ it holds, so it needs <code>copy</code>, or <code>move</code> when it holds the 
 (<code>list.append(move(job))</code>).</li>
 <li>There is no reader-writer lock, and no barrier or semaphore. A Mutex is
 not re-entrant.</li>
-<li>A <code>Select</code> only receives: it cannot wait to send to a full channel. The
-value <code>wait()</code> returns is not a new value for a lock body, since <code>wrap</code>
-is a function value the compiler cannot follow; <code>copy</code> it to move it into
-a locked value.</li>
+<li>The value a <code>Select</code>’s <code>wait()</code> returns is not a new value for a lock
+body, since <code>wrap</code> is a function value the compiler cannot follow; <code>copy</code>
+it to move it into a locked value.</li>
 <li>Deadlocks are not detected, except locking a Mutex twice on one thread,
 which panics.</li>
 </ul>
@@ -39487,26 +39562,32 @@ does the same.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/select.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="select"><a class="header" href="#select">Select</a></h1>
 <p>Waiting on several channels at once: <code>Select&lt;E&gt;</code> takes the first value
-any of them receives and turns it into a case of your own enum, which a
-<code>match</code> then handles.</p>
+any of them receives, or sends a value to the first that has room, and
+turns what happened into a case of your own enum, which a <code>match</code> then
+handles.</p>
 <p>Source: <code>runtime/async/select.pep</code></p>
 <h2 id="select-1"><a class="header" href="#select-1">Select</a></h2>
 <pre><code class="language-pepper">struct Select&lt;E&gt;
 </code></pre>
 <p>Waits on several channels at once and takes the first value any of them
-receives, like Go’s <code>select</code>.</p>
-<p>Each channel is added with <code>receive(channel, wrap)</code>, where <code>wrap</code> turns
-one of its values into an <code>E</code>, usually a case of an enum of your own that
-carries it. <code>wait()</code> then returns the next value from whichever channel
-has one, as an <code>E</code>, for a <code>match</code> to handle. The channels may carry
-different types.</p>
+receives, or sends to the first that has room, like Go’s <code>select</code>.</p>
+<p>Each channel to receive from is added with <code>receive(channel, wrap)</code>,
+where <code>wrap</code> turns one of its values into an <code>E</code>, usually a case of an
+enum of your own that carries it. A value to send is added with
+<code>send(channel, value, sent)</code>, where <code>sent</code> returns the <code>E</code> that says it
+was sent. <code>wait()</code> then fires whichever arm is ready first and returns
+its <code>E</code>, for a <code>match</code> to handle. The channels may carry different types.</p>
 <ul>
 <li>The value is taken under the channel’s own lock, so no other receiver
 can take it between “ready” and “take”.</li>
+<li>A send arm’s value goes into its channel only when that arm fires;
+until then the select holds it. Once sent, the arm leaves the select,
+so the next <code>wait()</code> does not send it again. A value never sent is
+dropped with the select.</li>
 <li>When several channels have values, each wait starts after the channel
 that fired last, so a busy channel cannot starve the others.</li>
-<li>A channel that is closed and empty is skipped. Once every channel is,
-<code>wait()</code> returns an error.</li>
+<li>A channel that is closed and empty is skipped, and so is a send arm
+whose channel is closed. Once every arm is, <code>wait()</code> returns an error.</li>
 <li>In a task (see <code>run</code>), waiting parks the task and its worker runs other
 tasks; a cancel or the task’s <code>timeout</code> ends the wait.</li>
 </ul>
@@ -39563,14 +39644,39 @@ those <code>wait()</code> returns.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">select.receive(lines, (line: String): Event =&gt; Event.Line(line));
 </code></pre>
+<h4 id="send-3"><a class="header" href="#send-3">send</a></h4>
+<pre><code class="language-pepper">send&lt;T&gt;(channel: Channel&lt;T&gt;, [Move] value: T, sent: () =&gt; E)
+</code></pre>
+<p>Adds a send arm: <code>wait()</code> sends <code>value</code> to <code>channel</code> once the channel
+has room (a bounded channel that is full waits), and returns what
+<code>sent</code> returns.</p>
+<p><code>value</code> must be a new value, as for <code>Channel.send</code>: the select holds
+it and moves it into the channel only when this arm fires, so it is
+never sent if another arm fires first. Once sent, the arm leaves the
+select. A send arm whose channel is closed never fires, and its value
+is dropped with the select.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the channel’s values</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>channel</code> — the channel to send to</li>
+<li><code>value</code> — the value to send; a new value, which the compiler checks</li>
+<li><code>sent</code> — returns the <code>E</code> that <code>wait()</code> returns once the value is sent; it runs on the waiting thread</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">select.send(results, copy(line), (): Event =&gt; Event.Sent);
+</code></pre>
 <h4 id="wait-2"><a class="header" href="#wait-2">wait</a></h4>
 <pre><code class="language-pepper">wait(): Result&lt;E&gt;
 </code></pre>
-<p>Takes the next value any of the channels receives, waiting until one
-arrives.</p>
+<p>Fires the first arm that is ready, waiting until one is: takes the
+next value any of the channels receives, or sends a send arm’s value
+to a channel with room.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error once every channel is closed and empty, when the select has no channels, or when the task’s wait was cancelled or timed out</li>
+<li>the arm’s <code>E</code> (the value received, turned into an <code>E</code>, or what a send arm’s <code>sent</code> returned); or an error once every channel is closed (and empty, for a receive arm), when the select has no arms, or when the task’s wait was cancelled or timed out</li>
 </ul>
 <h4 id="wait_for-1"><a class="header" href="#wait_for-1">wait_for</a></h4>
 <pre><code class="language-pepper">wait_for(milliseconds: ulong): Result&lt;E&gt;
@@ -39582,15 +39688,17 @@ arrives.</p>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error if the time ran out, once every channel is closed and empty, or when the task’s wait was cancelled</li>
+<li>the arm’s <code>E</code>, as for <code>wait()</code>; or an error if the time ran out, once every channel is closed (and empty, for a receive arm), or when the task’s wait was cancelled</li>
 </ul>
 <h4 id="try_wait"><a class="header" href="#try_wait">try_wait</a></h4>
 <pre><code class="language-pepper">try_wait(): Result&lt;E&gt;
 </code></pre>
-<p>Takes a value if any channel has one waiting, without waiting.</p>
+<p>Fires an arm if one is ready now, without waiting: takes a value if a
+channel has one waiting, or sends a send arm’s value if its channel
+has room.</p>
 <p><strong>Returns</strong></p>
 <ul>
-<li>the value, turned into an <code>E</code>; or an error if none is waiting, or once every channel is closed and empty</li>
+<li>the arm’s <code>E</code>, as for <code>wait()</code>; or an error if no arm is ready, or once every channel is closed (and empty, for a receive arm)</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/async/cpus.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="processor-counts-1"><a class="header" href="#processor-counts-1">Processor counts</a></h1>
@@ -49718,7 +49826,7 @@ instance one that trusts a private certificate authority.</p>
 <ul>
 <li>the response; the errors of <code>send</code></li>
 </ul>
-<h4 id="send-3"><a class="header" href="#send-3">send</a></h4>
+<h4 id="send-4"><a class="header" href="#send-4">send</a></h4>
 <pre><code class="language-pepper">send(request: Request): io.IoResult&lt;Response&gt;
 </code></pre>
 <p>Sends <code>request</code> and reads the response, body and all.</p>

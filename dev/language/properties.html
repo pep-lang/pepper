@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a5e6bb67.js";
+            window.path_to_searchindex_js = "../searchindex-ce6197db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -372,8 +372,11 @@ error at <code>set</code>, with a note at <code>[Shared]</code>.</li>
 <li>A computed <code>get</code> over the struct’s <code>const</code> fields is allowed, as any method
 is.</li>
 </ul>
-<p>Accessors that store into a thread-safe member (an <code>Atomic&lt;int&gt;</code>, or a
-value behind a <code>Mutex</code>) are not supported yet.</p>
+<p>A <code>[Shared]</code> struct’s properties are <code>get</code> only, by design: an assignment
+<code>x.p = v</code> would read as a write to a struct whose fields cannot change. To
+change what a thread-safe member holds (an <code>Atomic&lt;int&gt;</code>, or a value behind a
+<code>Mutex</code>), declare a method that says what it does, such as
+<code>store_hits(value)</code> or <code>add_name(name)</code>.</p>
 <h2 id="how-properties-compile"><a class="header" href="#how-properties-compile">How properties compile</a></h2>
 <p>The compiler lowers a property to plain members: a field for its storage
 (named after the property when its <code>get</code> is the default, <code>__field_name</code>

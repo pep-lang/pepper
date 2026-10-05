@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5e6bb67.js";
+            window.path_to_searchindex_js = "searchindex-ce6197db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -283,7 +283,7 @@ too, for constraints, but are never trait values.</li>
 <li>Threads can share only thread-safe values, which the compiler checks,
 closure captures included. A channel hands over what it is sent without
 copying it (<code>send(move(x))</code>, or <code>send(copy(x))</code> to keep <code>x</code>), a <code>Select</code>
-waits on several channels at once, and a <code>Mutex</code> holds any struct, with
+waits to receive from or send to several channels at once, and a <code>Mutex</code> holds any struct, with
 the compiler keeping each locked value apart from the rest of the program
 (see
 <a href="language/threads.html#what-a-lock-body-may-do">threads</a>). An <code>RwLock</code>
