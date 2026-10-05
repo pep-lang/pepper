@@ -184,6 +184,28 @@ fn builds_fetch_what_pep_lock_lists() {
 }
 
 #[test]
+fn builds_side_by_side_fetch_once() {
+    if hosts().is_none() {
+        return;
+    }
+    let dir = project("parallel_fetch", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    let fetched = package(&dir, &["fetch"]);
+    assert!(fetched.status.success(), "{}", stderr(&fetched));
+    std::fs::remove_dir_all(dir.join(".pep")).unwrap();
+    // `pepper test` builds its test programs at once (#653): each build
+    // fetches, and none trips over another's checkout.
+    let entry = dir.join("main.pep");
+    let results: Vec<Result<(), String>> = std::thread::scope(|scope| {
+        let builds: Vec<_> =
+            (0..8).map(|_| scope.spawn(|| pepper_driver::fetch::fetch_dependencies(&entry))).collect();
+        builds.into_iter().map(|b| b.join().unwrap()).collect()
+    });
+    assert!(results.iter().all(Result::is_ok), "{results:?}");
+    assert_eq!(build_and_run(&dir), Ok("1.1.0 1.3.1\n".to_string()));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn the_project_overrides_a_dependency_and_update_says_what_holds_one_back() {
     if hosts().is_none() {
         return;

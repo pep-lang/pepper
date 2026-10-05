@@ -16,18 +16,18 @@ pub fn fetch_dependencies(entry: &Path) -> Result<(), String> {
     let Some(project) = find_project(entry) else { return Ok(()) };
     // A broken pep.toml is reported when the program loads.
     let Ok(manifest) = Manifest::read(&project.join(MANIFEST_FILE)) else { return Ok(()) };
-    let locked = read_lock(&project.join(LOCK_FILE))?;
-    let missing: Vec<&LockedPackage> =
-        locked.iter().filter(|p| !package_directory(&project, p.host, &p.repository).is_dir()).collect();
-    // A Git dependency pep.toml names that pep.lock does not yet list, and
-    // that is not in .pep/deps either.
-    let unlocked = manifest.dependencies.iter().any(|d| {
-        d.locked_source().is_some_and(|source| !locked.iter().any(|p| p.source() == source))
-            && !d.directory(&project, &project).is_dir()
-    });
-    if missing.is_empty() && !unlocked {
+    if !needs_fetch(&project, &manifest)? {
         return Ok(());
     }
+    // Builds run side by side (`pepper test` builds every test program at
+    // once), and each would fetch into the same `.partial` folders: one at
+    // a time fetches, and the rest find the packages there afterwards.
+    let lock = lock_file(&project.join(".pep").join("fetch.lock"))?;
+    lock.lock().map_err(|e| format!("cannot lock {}: {}", project.join(".pep").display(), e))?;
+    if !needs_fetch(&project, &manifest)? {
+        return Ok(());
+    }
+    let locked = read_lock(&project.join(LOCK_FILE))?;
     if let Some(tool) = find_tool("pep-package") {
         let status = Command::new(&tool)
             .arg("-C")
@@ -37,16 +37,46 @@ pub fn fetch_dependencies(entry: &Path) -> Result<(), String> {
             .map_err(|e| format!("cannot run {}: {}", tool.display(), e))?;
         return if status.success() { Ok(()) } else { Err("fetching the project's dependencies failed".to_string()) };
     }
-    if unlocked {
+    if unlocked(&project, &manifest, &locked) {
         return Err(format!(
             "the dependencies in {} are not fetched; run 'pepper package fetch'",
             project.join(MANIFEST_FILE).display()
         ));
     }
-    for package in missing {
+    for package in locked.iter().filter(|p| !package_directory(&project, p.host, &p.repository).is_dir()) {
         check_out(&project, package)?;
     }
     Ok(())
+}
+
+/// Whether a package pep.lock lists is missing from `.pep/deps`, or
+/// pep.toml names one pep.lock does not list yet.
+fn needs_fetch(project: &Path, manifest: &Manifest) -> Result<bool, String> {
+    let locked = read_lock(&project.join(LOCK_FILE))?;
+    let missing = locked.iter().any(|p| !package_directory(project, p.host, &p.repository).is_dir());
+    Ok(missing || unlocked(project, manifest, &locked))
+}
+
+/// Whether pep.toml names a Git dependency that pep.lock does not yet list
+/// and that is not in `.pep/deps` either.
+fn unlocked(project: &Path, manifest: &Manifest, locked: &[LockedPackage]) -> bool {
+    manifest.dependencies.iter().any(|d| {
+        d.locked_source().is_some_and(|source| !locked.iter().any(|p| p.source() == source))
+            && !d.directory(project, project).is_dir()
+    })
+}
+
+/// Opens (creating it and its folder) the file at `path` that fetches lock.
+fn lock_file(path: &Path) -> Result<std::fs::File, String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {}", parent.display(), e))?;
+    }
+    std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+        .map_err(|e| format!("cannot open {}: {}", path.display(), e))
 }
 
 /// `name` (`name.exe` on Windows) beside the running compiler, else on the
