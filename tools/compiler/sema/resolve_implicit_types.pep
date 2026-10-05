@@ -42,7 +42,7 @@ import [is_comparison, op_name, simd_result, weak_result] from "operators";
 import [apply_choice, arg_info, ArgInfo, bind_function_values, Choice, method_target, Overloads] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
 import [PassState] from "state";
-import [instance, trait_def, used_trait_types] from "traits";
+import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
 import [FUNCTION, parse_type_string, replace_map, VOID] from "type_name";
@@ -279,8 +279,8 @@ struct _ImplicitTables {
     ## change: `_type_read`, `_function_read` and `g:<global>` keys.
     var reads: HashSet<String> = HashSet<String>();
 
-    construct(module: Module, state: PassState) {
-        callees = Callees(module);
+    construct(module: Module, state: PassState, trait_types: TypeName[]) {
+        callees = Callees(module, Optional<TypeName[]>.Value(trait_types));
         properties = Properties(module);
         for (var st in module.structs) {
             var key = st.ty.to_string();
@@ -308,7 +308,7 @@ struct _ImplicitTables {
             }
         }
         # Trait types used as values: what `var x = s.take()` returns.
-        for (var ty in used_trait_types(module)) {
+        for (var ty in trait_types_of(module, Optional<TypeName[]>.Value(trait_types))) {
             var def = trait_def(module.traits, ty);
             if (def.is_value()) {
                 var own = Array<(String, TypeName)>();
@@ -1803,10 +1803,10 @@ _resolve_body(function: FunctionDef, scopes: _TypeScopes, current: TypeName?) {
 
 ## One run of the pass over the callables `work` needs; returns whether a
 ## function's return type was inferred or a call resolved.
-_resolve_once(module: Module, state: PassState, work: _Worklist): bool {
+_resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: TypeName[]): bool {
     bool inferred = false;
-    var tables = _ImplicitTables(module, state);
-    var overloads = Overloads(module, state);
+    var tables = _ImplicitTables(module, state, trait_types);
+    var overloads = Overloads(module, state, Optional<TypeName[]>.Value(trait_types));
     var resolved = Array<(Loc, String)>();
     # Structs first: methods see field types.
     ulong s = 0;
@@ -1991,22 +1991,29 @@ export resolve_implicit_types(module: Module, state: PassState) {
         var size = _size(module);
         bool synced = sync_closures(module, state);
         # The binding passes share tables while none of them changes the
-        # module.
-        var tables = ModuleTables(module, state);
+        # module, and the round's tables share its trait types: one walk
+        # over every function finds them.
+        var trait_types = used_trait_types(module);
+        var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(trait_types));
         bool bound = bind_function_values(module, state, tables);
         if (bound) {
-            tables.reset();
+            trait_types = used_trait_types(module);
+            tables.reset(Optional<TypeName[]>.Value(trait_types));
         }
         bool specialized = bind_generic_function_values(module, state, tables);
         if (specialized) {
-            tables.reset();
+            trait_types = used_trait_types(module);
+            tables.reset(Optional<TypeName[]>.Value(trait_types));
         }
         bool methods = bind_generic_method_values(module, state, tables);
+        if (methods) {
+            trait_types = used_trait_types(module);
+        }
         # Code the pass did not write changed: walk everything.
         if (synced or bound or specialized or methods or _size(module) != size) {
             work.all = true;
         }
-        bool inferred = _resolve_once(module, state, work);
+        bool inferred = _resolve_once(module, state, work, trait_types);
         if (!inferred and !synced and !bound and !specialized and !methods) {
             break;
         }

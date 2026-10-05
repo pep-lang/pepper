@@ -298,6 +298,11 @@ struct _FunctionTypes {
     var struct_names: HashSet<String> = HashSet<String>();
     var functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
     var externs: HashMap<String, Array<TypeName>> = HashMap<String, Array<TypeName>>();
+    ## The first struct whose name or type spelling is the key, as a search
+    ## in order finds it.
+    var spelled_structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    ## The first struct of each name.
+    var named_structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -306,6 +311,16 @@ struct _FunctionTypes {
         defaults = defaulted_params(module);
         for (var st in module.structs) {
             struct_names.insert(st.name);
+            if (!named_structs.contains(st.name)) {
+                named_structs[st.name] = st;
+            }
+            if (!spelled_structs.contains(st.name)) {
+                spelled_structs[st.name] = st;
+            }
+            var spelling = st.ty.to_string();
+            if (!spelled_structs.contains(spelling)) {
+                spelled_structs[spelling] = st;
+            }
         }
         # The first of a name, as a search in order finds it.
         for (var f in module.functions) {
@@ -703,7 +718,7 @@ struct _FunctionTypes {
         if (e.is_value()) {
             return Optional<(String, Array<TypeName>)>.Value(($"argument {{}} of '{function}'", e.value()));
         }
-        var owner = _constructor_owner(module, function);
+        var owner = _constructor_owner(spelled_structs, function);
         if (!owner.is_value()) {
             return Optional<(String, Array<TypeName>)>.Empty;
         }
@@ -714,17 +729,14 @@ struct _FunctionTypes {
     }
 
     parameters_of_method(this_type: TypeName, method: String): Array<TypeName>? {
-        var key = this_type.to_string();
-        for (var st in module.structs) {
-            if (st.name != key) {
-                continue;
-            }
-            for (var m in st.method_members) {
-                if (m.name == method) {
-                    return Optional<Array<TypeName>>.Value(_parameter_types(m.parameters));
-                }
-            }
+        var st = named_structs.try_get(this_type.to_string());
+        if (!st.is_value()) {
             return Optional<Array<TypeName>>.Empty;
+        }
+        for (var m in st.value().method_members) {
+            if (m.name == method) {
+                return Optional<Array<TypeName>>.Value(_parameter_types(m.parameters));
+            }
         }
         return Optional<Array<TypeName>>.Empty;
     }
@@ -1038,22 +1050,21 @@ struct _FunctionTypes {
 }
 
 ## The struct and constructor a call of `function` names:
-## `Module::constructor_of`.
-_constructor_owner(module: Module, function: String): (StructDef, FunctionDef)? {
-    var ty = set_name(function);
-    for (var st in module.structs) {
-        if (st.name != ty and st.ty.to_string() != ty) {
-            continue;
-        }
-        for (var c in st.constructors) {
-            if (c.name == function) {
-                return Optional<(StructDef, FunctionDef)>.Value((st, c));
-            }
-        }
-        if (st.constructors.count == 1) {
-            return Optional<(StructDef, FunctionDef)>.Value((st, st.constructors[0]));
-        }
+## `Module::constructor_of`, through `structs`, the first struct of each
+## name or type spelling.
+_constructor_owner(structs: HashMap<String, StructDef>, function: String): (StructDef, FunctionDef)? {
+    var found = structs.try_get(set_name(function));
+    if (!found.is_value()) {
         return Optional<(StructDef, FunctionDef)>.Empty;
+    }
+    var st = found.value();
+    for (var c in st.constructors) {
+        if (c.name == function) {
+            return Optional<(StructDef, FunctionDef)>.Value((st, c));
+        }
+    }
+    if (st.constructors.count == 1) {
+        return Optional<(StructDef, FunctionDef)>.Value((st, st.constructors[0]));
     }
     return Optional<(StructDef, FunctionDef)>.Empty;
 }

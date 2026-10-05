@@ -140,6 +140,23 @@ export used_trait_types(module: Module): TypeName[] {
     return found.types;
 }
 
+## `used_trait_types(module)`, or a copy of `known` when the caller already
+## found them and the module's declared types have not changed since.
+##
+## @param module the model
+## @param known the trait types found before, if any
+## @returns the trait types
+export trait_types_of(module: Module, known: TypeName[]?): TypeName[] {
+    if (!known.is_value()) {
+        return used_trait_types(module);
+    }
+    var out = Array<TypeName>();
+    for (var ty in known.value()) {
+        out.append(ty.copy());
+    }
+    return out;
+}
+
 ## The trait types found so far.
 struct _TraitTypes {
     var traits: TraitDef[];

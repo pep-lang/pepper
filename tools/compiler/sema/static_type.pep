@@ -9,7 +9,7 @@ import [BinaryOp, Expression, FunctionDef, Module, StructDef, TraitType, TypeNam
 import [set_name] from "names";
 import [is_comparison, is_overflow_test, op_name, weak_result] from "operators";
 import [PassState] from "state";
-import [instance, trait_def, used_trait_types] from "traits";
+import [instance, trait_def, trait_types_of] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels] from "tuple_literals";
 import [parse_type_string] from "type_name";
 
@@ -79,7 +79,8 @@ export struct StructTable {
     ## Returns the table of `module`.
     ##
     ## @param module the model
-    construct(module: Module) {
+    ## @param trait_types the module's trait types, when already found
+    construct(module: Module, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
         for (var st in module.structs) {
             var name = st.ty.to_string();
             var info = _struct_info(st);
@@ -92,7 +93,7 @@ export struct StructTable {
         }
         # Traits used as types: the specialized instances first, then each
         # base.
-        for (var ty in used_trait_types(module)) {
+        for (var ty in trait_types_of(module, trait_types)) {
             var def = trait_def(module.traits, ty);
             if (def.is_value() and !structs.contains(ty.to_string())) {
                 structs[ty.to_string()] = _trait_info(instance(def.value(), ty));

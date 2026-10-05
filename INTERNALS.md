@@ -2836,7 +2836,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   (`closure_sites.pep`, `generic_values.pep`) and named arguments of
   method calls, repeated while anything changes (the value-binding passes
   walk only the code holding a candidate, `select_sites`, and share one
-  `ModuleTables` per round while none of them changes the module; a
+  `ModuleTables` per round while none of them changes the module; every
+  table of a round shares one search for the trait types the module uses,
+  `used_trait_types`, a walk over every function; a
   repeat round walks a callable again only when its last walk changed it
   or something it looked up changed since, `_Worklist`: each walk notes
   the field tables, methods, overload sets, functions and globals it

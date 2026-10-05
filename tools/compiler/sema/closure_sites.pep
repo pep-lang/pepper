@@ -345,14 +345,18 @@ export struct ModuleTables {
     var state: PassState;
     var built_statics: StructTable? = Optional<StructTable>.Empty;
     var built_sites: SiteTable? = Optional<SiteTable>.Empty;
+    ## The module's trait types, when the caller found them.
+    var trait_types: TypeName[]?;
 
     ## Tables of `module`, none built yet.
     ##
     ## @param module the model
     ## @param state the passes' state
-    construct(module: Module, state: PassState) {
+    ## @param trait_types the module's trait types, when already found
+    construct(module: Module, state: PassState, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
         this.module = module;
         this.state = state;
+        this.trait_types = trait_types;
     }
 
     ## The module's struct table. Not to be first asked for in the middle
@@ -361,7 +365,7 @@ export struct ModuleTables {
     ## @returns the table
     statics(): StructTable {
         if (!built_statics.is_value()) {
-            built_statics = Optional<StructTable>.Value(StructTable(module));
+            built_statics = Optional<StructTable>.Value(StructTable(module, trait_types));
         }
         return built_statics.value();
     }
@@ -376,8 +380,12 @@ export struct ModuleTables {
         return built_sites.value();
     }
 
-    ## Drops the tables, after a pass changed the module.
-    reset() {
+    ## Drops the tables, after a pass changed the module, which may use
+    ## other trait types now.
+    ##
+    ## @param trait_types the module's trait types, when already found again
+    reset(trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
+        this.trait_types = trait_types;
         built_statics = Optional<StructTable>.Empty;
         built_sites = Optional<SiteTable>.Empty;
     }

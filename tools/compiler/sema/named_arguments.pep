@@ -25,7 +25,7 @@ import [
 import [set_name] from "names";
 import [PassState] from "state";
 import [attribute_arguments] from "static_blocks";
-import [instance, trait_def, used_trait_types] from "traits";
+import [instance, trait_def, trait_types_of] from "traits";
 import [method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
@@ -890,7 +890,7 @@ export struct Callees {
     ## `Module.literal_args`.
     var literals: Array<(Loc, ulong, Loc)>;
 
-    construct(module: Module) {
+    construct(module: Module, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
         literals = module.literal_args;
         for (var function in module.functions) {
             var display = _before_type_arguments(function.name);
@@ -947,7 +947,7 @@ export struct Callees {
             externs.insert(e.name);
         }
         # A value of trait type calls the trait's methods, by name.
-        for (var ty in used_trait_types(module)) {
+        for (var ty in trait_types_of(module, trait_types)) {
             var def = trait_def(module.traits, ty);
             if (!def.is_value()) {
                 continue;

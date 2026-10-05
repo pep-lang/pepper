@@ -19,7 +19,7 @@ import [Expression, ExtensionScopes, FunctionDef, FunctionRefExpression, Module,
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
-import [instance, trait_def, used_trait_types] from "traits";
+import [instance, trait_def, trait_types_of] from "traits";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
 import [AUTO, parse_type_string, replace_map] from "type_name";
 import [Rewriter] from "walk";
@@ -330,15 +330,16 @@ export struct Overloads {
     ##
     ## @param module the model
     ## @param state the passes' state
-    construct(module: Module, state: PassState) {
+    ## @param trait_types the module's trait types, when already found
+    construct(module: Module, state: PassState, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
         this.state = state;
         record_conformances(module, state);
         if (has_overloads(module)) {
-            _build(module);
+            _build(module, trait_types);
         }
     }
 
-    _build(module: Module) {
+    _build(module: Module, known_trait_types: TypeName[]?) {
         if (has_constraints(module)) {
             conformance = Optional<Conformance>.Value(Conformance(module, state));
         }
@@ -355,7 +356,7 @@ export struct Overloads {
         }
         # A value of trait type calls the trait's members: every instance
         # the module uses, and each trait's base.
-        var trait_types = used_trait_types(module);
+        var trait_types = trait_types_of(module, known_trait_types);
         for (var t in module.traits) {
             trait_types.append(TypeName.named(t.name));
         }
