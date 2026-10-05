@@ -181,6 +181,23 @@ extern int NCryptDeleteKey(ulong key, uint flags);
 [Target(OS(Windows))]
 [Link("ncrypt")]
 extern int NCryptFreeObject(ulong handle);
+[Target(OS(Windows))]
+[Link("ncrypt")]
+extern int NCryptExportKey(
+    ulong key, ulong export_key, void* blob_type, void* parameters, void* output, uint size, void* result, uint flags
+);
+
+[Target(OS(Windows))]
+[Link("crypt32")]
+extern int CryptImportPublicKeyInfoEx2(uint encoding, void* info, uint flags, void* auxiliary, void* key);
+[Target(OS(Windows))]
+[Link("bcrypt")]
+extern int BCryptExportKey(
+    void* key, void* export_key, void* blob_type, void* output, uint size, void* result, uint flags
+);
+[Target(OS(Windows))]
+[Link("bcrypt")]
+extern int BCryptDestroyKey(void* key);
 
 [Target(OS(Windows))]
 extern uint GetCurrentProcessId();
@@ -209,9 +226,12 @@ const _TLS_BUFFER_EXTRA: uint = 5;
 const _TLS_BUFFER_TRAILER: uint = 6;
 const _TLS_BUFFER_HEADER: uint = 7;
 
-# ISC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY | ALLOCATE_MEMORY
-# | EXTENDED_ERROR | STREAM | MANUAL_CRED_VALIDATION.
-const _TLS_CLIENT_REQUEST: uint = 573724;
+# ISC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY |
+# USE_SUPPLIED_CREDS | ALLOCATE_MEMORY | EXTENDED_ERROR | STREAM |
+# MANUAL_CRED_VALIDATION. USE_SUPPLIED_CREDS: when a server asks for a
+# certificate, send the one `set_identity` gave, or none, instead of
+# returning SEC_I_INCOMPLETE_CREDENTIALS to ask for one.
+const _TLS_CLIENT_REQUEST: uint = 573852;
 # ASC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY | ALLOCATE_MEMORY
 # | EXTENDED_ERROR | STREAM.
 const _TLS_SERVER_REQUEST: uint = 98588;
@@ -512,6 +532,78 @@ _tls_delete_key(name: __ptr<u16>) {
     NCryptFreeObject(provider);
 }
 
+# The public key of `certificate` (a CERT_CONTEXT) as a BCRYPT public key
+# blob, or an empty array when it cannot be read.
+[Target(OS(Windows))]
+_tls_certificate_public_key(certificate: __ptr<void>): u8[] {
+    var blob = Array<u8>();
+    # CERT_CONTEXT.pCertInfo at 24; CERT_INFO.SubjectPublicKeyInfo at 96.
+    var info = _tls_pointer(certificate as __ptr<u8>, 24) + 96;
+    __ptr<__ptr<void>> key = _pep_malloc(8);
+    key[0] = __null;
+    if (CryptImportPublicKeyInfoEx2(_TLS_ENCODING, info, 0, __null, key) != 0) {
+        var kind = io._io_win_wide("PUBLICBLOB");
+        __ptr<uint> size = _pep_malloc(4);
+        size[0] = 0;
+        if (BCryptExportKey(key[0], __null, kind, __null, 0, size, 0) == 0) {
+            blob.reserve(size[0] as ulong);
+            if (BCryptExportKey(key[0], __null, kind, blob._data, size[0], size, 0) == 0) {
+                blob._size = size[0] as ulong;
+            }
+        }
+        _pep_free(size);
+        _pep_free(kind);
+        BCryptDestroyKey(key[0]);
+    }
+    _pep_free(key);
+    return blob;
+}
+
+# Whether the imported key `name` is the private key of `certificate`: the
+# public halves match. The blobs' first four bytes name the algorithm,
+# which can differ (ECDSA or ECDH) for the same key.
+[Target(OS(Windows))]
+_tls_key_matches(certificate: __ptr<void>, name: __ptr<u16>): bool {
+    var expected = _tls_certificate_public_key(certificate);
+    var provider = _tls_key_provider();
+    if (expected.count < 8 || provider == 0) {
+        if (provider != 0) {
+            NCryptFreeObject(provider);
+        }
+        return false;
+    }
+    var actual = Array<u8>();
+    __ptr<ulong> key = _pep_malloc(8);
+    key[0] = 0;
+    if (NCryptOpenKey(provider, key, name, 0, 0) == 0) {
+        var kind = io._io_win_wide("PUBLICBLOB");
+        __ptr<uint> size = _pep_malloc(4);
+        size[0] = 0;
+        if (NCryptExportKey(key[0], 0, kind, __null, __null, 0, size, 0) == 0) {
+            actual.reserve(size[0] as ulong);
+            if (NCryptExportKey(key[0], 0, kind, __null, actual._data, size[0], size, 0) == 0) {
+                actual._size = size[0] as ulong;
+            }
+        }
+        _pep_free(size);
+        _pep_free(kind);
+        NCryptFreeObject(key[0]);
+    }
+    _pep_free(key);
+    NCryptFreeObject(provider);
+    if (actual.count != expected.count) {
+        return false;
+    }
+    ulong i = 4;
+    while (i < expected.count) {
+        if (actual[i] != expected[i]) {
+            return false;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
 # The certificate chain and private key in PEM files, loaded for SChannel:
 # a store holding the chain, the first certificate's context, with its key
 # imported under the returned name and linked to it.
@@ -564,6 +656,12 @@ _tls_load_identity(chain: io.Path, key: io.Path): io.IoResult<(__ptr<void>, __pt
         return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(imported.error());
     }
     var name = imported.value();
+    if (!_tls_key_matches(certificate, name)) {
+        _tls_free_identity(store, certificate, name);
+        return io.IoResult<(__ptr<void>, __ptr<void>, __ptr<u16>)>.err(
+            _tls_error($"cannot load the private key '{key}': it is not the key of the certificate in '{chain}'")
+        );
+    }
     # CRYPT_KEY_PROV_INFO { container, provider, type, flags, cProvParam,
     # rgProvParam, dwKeySpec }: 48 bytes.
     __ptr<u8> info = _pep_malloc(48);
@@ -848,7 +946,9 @@ _tls_step(session: __ptr<u8>): io.IoResult<int> {
     if (sent.is_err()) {
         result = io.IoResult<int>.err(sent.error());
     }
-    if (consumed && status != _TLS_SEC_E_INCOMPLETE_MESSAGE) {
+    # INCOMPLETE_MESSAGE needs more bytes, and INCOMPLETE_CREDENTIALS the same
+    # bytes again: both leave the waiting bytes as they are.
+    if (consumed && status != _TLS_SEC_E_INCOMPLETE_MESSAGE && status != _TLS_SEC_I_INCOMPLETE_CREDENTIALS) {
         var extra = _tls_buffer_at(input, 1);
         if (_tls_u32(extra, 4) == _TLS_BUFFER_EXTRA) {
             _tls_keep_extra(session, _tls_u32(extra, 0) as ulong);
@@ -867,6 +967,7 @@ _tls_handshake(session: __ptr<u8>): io.IoResult<void> {
     # A server, and a client continuing (after SEC_I_RENEGOTIATE), start
     # from received bytes; a client's first step sends its hello.
     var need = _tls_session_server(session) && _tls_word(session, 40) == 0;
+    var retried = false;
     while (true) {
         if (need) {
             var got = _tls_receive(session);
@@ -887,8 +988,14 @@ _tls_handshake(session: __ptr<u8>): io.IoResult<void> {
         }
         if (status == _TLS_SEC_E_INCOMPLETE_MESSAGE) {
             need = true;
-        } else if (status == _TLS_SEC_I_CONTINUE_NEEDED || status == _TLS_SEC_I_INCOMPLETE_CREDENTIALS) {
+        } else if (status == _TLS_SEC_I_CONTINUE_NEEDED) {
             need = _tls_word(session, 40) == 0;
+        } else if (status == _TLS_SEC_I_INCOMPLETE_CREDENTIALS && !retried) {
+            # The server asked for a certificate. USE_SUPPLIED_CREDS should
+            # keep SChannel from asking; if it does, run the same bytes once
+            # more rather than wait for bytes the server will not send.
+            retried = true;
+            need = false;
         } else {
             return io.IoResult<void>.err(_tls_status_error("TLS handshake failed", status));
         }
