@@ -39,11 +39,20 @@ reads_a_manifest() {
     expect_equal(", ".join(names), "geometry, json, http, local");
     expect_true(m.dependencies[1].host.value() == link.Host.GitLab);
     expect_equal(m.dependencies[1].location, "group/sub/pepper-json");
+    # Joined part by part, so the separators are the platform's (`\` on
+    # Windows).
+    var root = Path("/p");
     expect_equal(
-        m.dependencies[0].directory(Path("/p"), Path("/p")).to_string(),
-        Path("/p/.pep/deps/github.com/someone/geometry").to_string()
+        m.dependencies[0].directory(root, root).to_string(),
+        root
+            .join(Path(".pep"))
+            .join(Path("deps"))
+            .join(Path("github.com"))
+            .join(Path("someone"))
+            .join(Path("geometry"))
+            .to_string()
     );
-    expect_equal(m.dependencies[3].directory(Path("/p"), Path("/p")).to_string(), Path("/p/../local").to_string());
+    expect_equal(m.dependencies[3].directory(root, root).to_string(), root.join(Path("../local")).to_string());
     expect_equal(m.dependencies[0].locked_source().value(), "github:someone/geometry");
     expect_false(m.dependencies[3].locked_source().is_value());
 }
