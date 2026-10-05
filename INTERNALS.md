@@ -33,6 +33,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), the test `main` of `--test` (`test_main.rs`, see [2.1](#21-cli-options-cratespepper-driversrcoptionsrs)), `--emit-static` (`emit_static.rs`, see [2.8](#28-static-blocks-and-reflection-builderstatic_itemsrs-passesstatic_blocksrs)). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
+| `tools/pep-lsp` | The Pepper rewrite of `pep-lsp` (#225), on the `lsp` package (justinboswell/pepper-lsp) and the Pepper front end (`tools/compiler`). It replaces `tools/lsp` once it does all that one does. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
 | `tools/pep-doc` | `pep-doc`, written in Pepper on the compiler's parser (`tools/compiler`): generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `doc.pep`), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
@@ -2471,6 +2472,27 @@ diagnostics"). The mechanics:
 ---
 
 ## 8. Language server and VS Code extension
+
+**`tools/pep-lsp`** is the server's rewrite in Pepper (#225). It's built
+on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
+framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
+in message order. It checks code with the Pepper front end
+(`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
+diagnostics and the document outline:
+
+- `analysis.pep`: one analysis thread (`analyze_documents`) takes each
+  document's newest text once edits settle (250 ms). It loads the
+  program rooted at the document, with the editor's text in
+  `Setup.sources`, and publishes the diagnostics through the `[Shared]`
+  `lsp.Client`. A document edited again while it was analyzed is analyzed
+  once more instead of publishing stale diagnostics. The diagnostics come
+  from the parse error, `Program.warnings`, unresolved imports (as
+  warnings), `Program.check_diagnostics`, `sema.build`, then
+  `sema.run_passes`.
+- `symbols.pep`: the outline, as `tools/lsp` builds it.
+- Pepper sema takes seconds per analysis (1.5 s for a program that is only
+  the runtime, 20 s for pep-doc), so the Rust server stays the one
+  editors run until the rewrite does everything and sema is faster.
 
 **`tools/lsp/src/main.rs`** (`pep-lsp`, stdio, tower-lsp):
 

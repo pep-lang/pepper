@@ -1,0 +1,9 @@
+# Written by `pepper package`: the exact revision of every dependency.
+# Commit it with pep.toml; do not edit it by hand.
+version = 1
+
+[[package]]
+name = "lsp"
+source = "github:justinboswell/pepper-lsp"
+commit = "625527a2e0cc93456cc93f6ed6f4d4c5956d4992"
+sha256 = "7c715adabcd53182ca665967202c737ac27f08c6aaa9122c7b4d342d5d993ab4"

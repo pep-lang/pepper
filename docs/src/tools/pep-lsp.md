@@ -21,6 +21,12 @@ Language Server** after switching toolchains. For another editor, build it with
 `target/release/pep-lsp`) and configure the editor to run it for `.pep`
 files.
 
+A rewrite of the server in Pepper is under way in `tools/pep-lsp` (#225).
+It's built on the [`lsp` package](https://github.com/justinboswell/pepper-lsp),
+a framework for writing a language server for any language in Pepper.
+So far it reports diagnostics and the document outline. The server
+described here is still the Rust one until the rewrite does all it does.
+
 ## Command-line options
 
 ```text

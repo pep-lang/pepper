@@ -242,11 +242,13 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler depends on the private pepper-llvm package (#656).
+        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
+        # (#656) and pepper-lsp packages.
         env:
           PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-pepper-llvm-auth.sh
+          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
@@ -299,11 +301,13 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler depends on the private pepper-llvm package (#656).
+        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
+        # (#656) and pepper-lsp packages.
         env:
           PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-pepper-llvm-auth.sh
+          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh
 
   # The suite on Linux against the default LLVM. Required: `test` gates on it.
@@ -353,11 +357,13 @@ jobs:
       # by `pepper test`.
       - name: Pepper tests
         shell: bash
-        # tools/compiler depends on the private pepper-llvm package (#656).
+        # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
+        # (#656) and pepper-lsp packages.
         env:
           PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
-          source scripts/ci-pepper-llvm-auth.sh
+          source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,

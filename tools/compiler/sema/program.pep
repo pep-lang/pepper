@@ -21,6 +21,20 @@ export merge(program: Program): Result<Module, String> {
     if (errors.is_value()) {
         return Result<Module, String>.Err(errors.value());
     }
+    var built = build(program);
+    if (built.is_err()) {
+        return Result<Module, String>.Err(render_all([built.error()], program.sources()));
+    }
+    return Result<Module, String>.Ok(built.value());
+}
+
+## Builds the model of each file of `program` and joins them, as `merge`
+## does, without checking the program first: for a caller that checks it
+## itself (`Program.check_diagnostics`) and wants the errors unrendered.
+##
+## @param program the linked program
+## @returns the model, or the first file's error
+export build(program: Program): Result<Module, Diagnostic> {
     var out = Module(linked = true, extension_scopes = _extension_scopes(program));
     for (var (name, groups) in program.overload_unions) {
         out.overload_unions[name] = groups;
@@ -32,7 +46,7 @@ export merge(program: Program): Result<Module, String> {
     while (i < program.files.count) {
         var built = build_file(program.files[i].module, i as uint);
         if (built.is_err()) {
-            return Result<Module, String>.Err(render_all([built.error()], program.sources()));
+            return Result<Module, Diagnostic>.Err(built.error());
         }
         _join(out, built.value());
         i += 1;
@@ -53,7 +67,7 @@ export merge(program: Program): Result<Module, String> {
         var right = _rank_of(rank, b);
         return left < right ? -1 : (left > right ? 1 : 0);
     });
-    return Result<Module, String>.Ok(out);
+    return Result<Module, Diagnostic>.Ok(out);
 }
 
 ## Returns the order the files' globals are initialized in: each file after

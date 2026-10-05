@@ -70,15 +70,20 @@ files uses a fresh folder under the system's temporary folder
 CI runs `scripts/pepper-tests.sh` after `cargo build --release` on
 Linux, macOS and Windows.
 
-The compiler written in Pepper, `tools/compiler`, depends on
-`justinboswell/pepper-llvm`, a private repository. CI clones it over SSH
-with a read-only deploy key of that repository, whose private half is this
-repository's secret `PEPPER_LLVM_DEPLOY_KEY`.
-`scripts/ci-pepper-llvm-auth.sh` writes the key to a temporary file and
-points git at it for that one repository, through `GIT_CONFIG_*` and
-`GIT_SSH_COMMAND` variables of the test step only. Without the secret (in a
-fork, say) the step says so in a notice, and the `tools/compiler` tests
-fail when they fetch the package.
+Two Pepper tools depend on private repositories. The compiler written in
+Pepper, `tools/compiler`, depends on `justinboswell/pepper-llvm`, and the
+language server `tools/pep-lsp` depends on `justinboswell/pepper-lsp`. CI
+clones each over SSH with a read-only deploy key of that repository, whose
+private half is this repository's secret `PEPPER_LLVM_DEPLOY_KEY` or
+`PEPPER_LSP_DEPLOY_KEY`.
+
+`scripts/ci-package-auth.sh` writes the keys to temporary files. It gives
+each package a host alias in an SSH config that offers only that package's
+key, since GitHub takes the first key offered and a deploy key opens only
+its own repository. It points git at the aliases through `GIT_CONFIG_*` and
+`GIT_SSH_COMMAND` variables of the test step only. Without a secret (in a
+fork, say) the step says so in a notice, and the tests of the tool that
+uses that package fail when they fetch it.
 
 ## Leaks fail a test
 

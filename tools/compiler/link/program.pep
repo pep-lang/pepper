@@ -76,6 +76,20 @@ export struct Program {
     ##
     ## @returns the rendered errors, or none when the program is well-formed
     check(): String? {
+        var errors = check_diagnostics();
+        if (errors.count == 0) {
+            return Optional<String>.Empty;
+        }
+        return Optional<String>.Value(render_all(errors, sources()));
+    }
+
+    ## Returns what is wrong with the program before type checking, as
+    ## `check` finds it: the linking errors; when there are none, any
+    ## `[__BuiltIn]` declaration outside the runtime; when there is none of
+    ## those either, the visibility errors.
+    ##
+    ## @returns the errors; empty when the program is well-formed
+    check_diagnostics(): Diagnostic[] {
         var errors = Array<Diagnostic>();
         for (var e in this.errors) {
             errors.append(e.to_diagnostic());
@@ -88,10 +102,7 @@ export struct Program {
                 errors.append(e.to_diagnostic(files));
             }
         }
-        if (errors.count == 0) {
-            return Optional<String>.Empty;
-        }
-        return Optional<String>.Value(render_all(errors, sources()));
+        return errors;
     }
 
     ## Returns every `[__BuiltIn]` declaration outside the runtime: only the
