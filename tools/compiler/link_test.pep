@@ -204,9 +204,13 @@ reports_check_errors_and_warnings_as_the_rust_compiler_does() {
             "main.pep",
             "import \"a\";\nimport \"b\";\nstruct P {}\nstruct P {}\nvar q = 1;\nvar q = 2;\nmain(): int { return 0; }\n",
             "a.pep",
-            "export helper(): int { return 1; }\nexport hash<T>(v: T): ulong { return 0; }\nhash<int>(v: int): ulong { return 1; }\n",
+            "import keys;\nexport helper(): int { return 1; }\n",
             "b.pep",
-            "export helper(): int { return 2; }\nhash<int>(v: int): ulong { return 2; }\n"
+            "export helper(): int { return 2; }\n",
+            "deps/keys/module.pep",
+            "export struct Key { var n: int; }\nhash<Key>(v: Key): ulong { return 1; }\n",
+            "deps/keys/more.pep",
+            "hash<Key>(v: Key): ulong { return 2; }\n"
         ],
         # Members of private extensions, through a trait default and generic
         # receivers, and private functions.
@@ -344,4 +348,50 @@ symbols_get_their_linker_spelling() {
     expect_equal(link.symbol_name("exit"), "_Pexit");
     expect_equal(link.symbol_name("_pep_malloc"), "_P__pep__malloc");
     expect_not_equal(link.symbol_name("a_40"), link.symbol_name("a@"));
+}
+
+# The orphan rule, which only this compiler checks: an override goes in
+# the file or module that declares the generic or one of its type
+# arguments.
+[Test]
+overrides_go_beside_their_generic_or_type() {
+    var folder = TempFolder("orphan");
+    var files = [
+        "main.pep",
+        "import \"lib\";\nimport [Spot] from geo;\nstruct Mine { var n: int; }\nhash<Mine>(v: Mine): ulong { return 1; }\ndescribe<Mine>(v: Mine): int { return 2; }\nhash<bool>(v: bool): ulong { return 3; }\ndescribe<Spot>(v: Spot): int { return 4; }\nmain(): int { return 0; }\n",
+        "lib.pep",
+        "export describe<T>(v: T): int { return 0; }\ndescribe<int>(v: int): int { return 5; }\n",
+        "deps/geo/module.pep",
+        "import \"hashing\";\nexport struct Spot { var n: int; }\n",
+        "deps/geo/hashing.pep",
+        "hash<Spot>(v: Spot): ulong { return 6; }\n"
+    ];
+    ulong at = 0;
+    while (at + 1 < files.count) {
+        var path = folder.path.join(files[at]);
+        Directory.create_all(path.parent().value());
+        File.write_text(path, files[at + 1]);
+        at += 2;
+    }
+    var setup = link.Setup();
+    setup.import_dirs.append(folder.path.join("deps"));
+    var program = link.load_program(folder.path.join("main.pep"), setup);
+    expect_true(program.is_ok(), "the program loads");
+    if (program.is_err()) {
+        return;
+    }
+    var messages = Array<String>();
+    for (var e in program.value().errors) {
+        messages.append(e.message);
+    }
+    var expected = [
+        "cannot override 'hash' for 'bool' here: an override must be in the file or module that declares 'hash' or one of its type arguments",
+        "cannot override 'describe' for 'Spot' here: an override must be in the file or module that declares 'describe' or one of its type arguments"
+    ];
+    expect_equal(messages.count, expected.count);
+    for (var i in 0..messages.count) {
+        if (i < expected.count) {
+            expect_equal(messages[i], expected[i]);
+        }
+    }
 }

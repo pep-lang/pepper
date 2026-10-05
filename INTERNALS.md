@@ -253,7 +253,12 @@ with no extension (with `--lib`, the library's file name for the stem,
   override's parameters (`GenericParam::is_argument`) and resolves them
   like type references to the structs they denote, mangled or imported,
   binding no names (`visit_function_generics`); a type alias there is an
-  error. Sema (`concrete_overrides`) and the visibility check follow the
+  error. pepc then applies the orphan rule (`_check_orphan`, not in the
+  Rust compiler): the override's file must share a home (`_Linker.home`:
+  its module, the prelude for the runtime's top-level files and built-in
+  types, else itself) with the generic or one of its type arguments
+  (`declared_in`), so a unit's inputs never need another unit's
+  overrides. Sema (`concrete_overrides`) and the visibility check follow the
   mark; sema's own program-wide rule applies only to an unlinked module
   (`Module::linked`). A file's own function of a name hides the imported
   generics of that name. Several functions of one name in one file are an

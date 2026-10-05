@@ -327,10 +327,11 @@ struct keyed by its content overrides `hash<T>` the same way (see
 [Hashing and equality](hashing.md)).
 
 An override can name a built-in type (`int`, `bool`, `String`, and so on) or
-a struct, such as `describe<Point>`. It may be declared in any file that can
-see both the generic function and the struct: here `main.pep` overrides
-`shapes.pep`'s `describe<T>` for its own `Point`, and the generic code in
-`shapes.pep` uses the override too:
+a struct, such as `describe<Point>`. It must be declared next to the generic
+function or next to one of its type arguments: in the file that declares
+either, or in another file of the same [module](modules.md). Here
+`main.pep` overrides `shapes.pep`'s `describe<T>` for its own `Point`, and
+the generic code in `shapes.pep` uses the override too:
 
 ```pepper
 {{#include ../../examples/generics-struct-override/shapes.pep}}
@@ -354,6 +355,22 @@ same parameters, or the generic's type parameters all name structs the file
 can see without a generic of that name to override: either is an error,
 since it usually means an override whose type argument the file cannot see,
 or of a generic the file's own function of that name hides.
+
+This placement rule (Rust calls it the orphan rule) means a file that
+can see both the generic and the type can also see every override that
+applies to them, so the compiler can check each file on its own. An
+override that neither of them is declared beside is an error:
+
+```text
+main.pep:2:1: error: cannot override 'hash' for 'int' here: an override must be in the file or module that declares 'hash' or one of its type arguments
+    2 | hash<int>(value: int): ulong {
+      | ^~~~
+```
+
+The standard library's generics, such as `hash<T>` and `to_string<T>`,
+can be overridden for your own structs, but not for built-in types: the
+standard library declares both. Wrap the built-in type in a struct of your
+own instead.
 
 To add methods to a generic struct from outside its declaration, use an
 [extension](traits-and-extensions.md#extending-generic-structs).

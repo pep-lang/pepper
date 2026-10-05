@@ -109,7 +109,8 @@ Keep these rules in mind:
   both miss it. Remove it, change it, then insert it again.
 - **One override per program.** `hash<Point>` replaces `hash<T>` for
   `Point` everywhere, including inside `HashMap`, so it may be declared in
-  only one file. Declare it next to the struct.
+  only one file, and that file must declare `Point` or be in its module
+  (see [overriding a generic function](generics.md#overriding-a-generic-function-for-one-type)).
 - The hash is not keyed, so it does not resist keys chosen by an attacker to
   collide.
 

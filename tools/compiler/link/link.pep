@@ -29,6 +29,10 @@ import "names" as names;
 import [Target] from "platform";
 import [Scope, ScopeKind, ScopeWalk, Scopes] from "walk";
 
+# The home (`_Linker.home`) of the runtime's top-level files, and of the
+# built-in types.
+const _PRELUDE_HOME = "<prelude>";
+
 ## One parsed file of a program, with its imports resolved to other files.
 export struct ProgramFile {
     ## The name diagnostics use: the path as the program reached it.
@@ -588,10 +592,41 @@ struct _Linker {
     var constants: HashSet<String> = HashSet<String>();
     # Every file's name, for diagnostics.
     var file_names: String[] = Array<String>();
+    # Every top-level declaration's linked name -> the files that declare
+    # it.
+    var declared_in: HashMap<String, ulong[]> = HashMap<String, ulong[]>();
 
     construct(files: ProgramFile[], target: Target) {
         this.files = files;
         this.target = target;
+    }
+
+    # Where an override may go: a module's files share their module, the
+    # runtime's top-level files share the prelude, and any other file is
+    # its own.
+    home(file: ulong): String {
+        var f = files[file];
+        if (f.module_root.is_value()) {
+            return f.module_root.value().to_string();
+        }
+        if (f.prelude) {
+            return _PRELUDE_HOME;
+        }
+        return $"<file {file}>";
+    }
+
+    # Whether a file with this home declares the linked name `name`.
+    declared_at(name: String, home: String): bool {
+        var found = declared_in.try_get(name);
+        if (!found.is_value()) {
+            return false;
+        }
+        for (var file in found.value()) {
+            if (this.home(file) == home) {
+                return true;
+            }
+        }
+        return false;
     }
 
     _error(file: ulong, span: Span, message: String) {
@@ -1133,6 +1168,11 @@ struct _Linker {
                 var name = d.declared_name();
                 bool mangled = !kept_here.contains(name) and (i > 0 or kept.contains(name));
                 names_here[name] = mangled ? names.mangle(name, f.namespace) : name;
+                var linked = names_here[name];
+                if (!declared_in.contains(linked)) {
+                    declared_in[linked] = Array<ulong>();
+                }
+                declared_in[linked].append(i);
             }
             own.append(names_here);
             i += 1;
@@ -2324,7 +2364,33 @@ extend _Rewriter with ScopeWalk {
                 _error(p.name_span, $"unknown type name '{p.name}'");
             }
         }
+        _check_orphan(function);
         return true;
+    }
+
+    # The orphan rule: an override goes where its generic or one of its
+    # type arguments is declared, so every file that reaches both sees it.
+    _check_orphan(function: FunctionDecl) {
+        var home = linker.home(file);
+        if (linker.declared_at(function.name, home)) {
+            return;
+        }
+        var arguments = Array<String>();
+        for (var p in function.generic_params) {
+            bool built_in = names.is_concrete_override([p.name]);
+            if (built_in and home == _PRELUDE_HOME) {
+                return;
+            }
+            if (!built_in and linker.declared_at(p.name, home)) {
+                return;
+            }
+            arguments.append($"'{names.demangle_name(p.name)}'");
+        }
+        var generic = names.demangle_name(function.name);
+        _error(
+            function.name_span,
+            $"cannot override '{generic}' for {", ".join(arguments)} here: an override must be in the file or module that declares '{generic}' or one of its type arguments"
+        );
     }
 
     visit_expression(e: Expression): Expression {

@@ -355,8 +355,9 @@ A few kinds of declaration are not private in this sense:
   one the runtime already provides, such as `hash<String>`, is also an error.
   An override must be for a generic function you can see: overriding another
   file's private generic function reports that it is private. An override
-  may be for a struct, such as `hash<Point>` (see
-  [Generics](generics.md)).
+  may be for a struct, such as `hash<Point>`, and must be declared in the
+  file or module that declares the generic or one of its type arguments
+  (see [Generics](generics.md#overriding-a-generic-function-for-one-type)).
 - **Declarations that a `[Target(...)]` attribute drops** for the platform
   being compiled (see [Platform selection](platform-selection.md)) are never
   compiled. This is why the first `lib.pep` above can declare `platform_name`
