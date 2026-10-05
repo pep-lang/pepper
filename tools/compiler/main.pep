@@ -7,7 +7,7 @@
 #
 #     pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #     pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
-#     pepc [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#     pepc [--test] [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
 # print the file's syntax tree, or the whole program after linking, as the
 # JSON that `pep-build` prints with the same options, or what the checks
@@ -17,6 +17,8 @@
 # `pep-build --emit-llvm -O0` writes it, so the two can be compared. With
 # no `--emit-*` option it builds the program into an executable, as
 # `pep-build` does: `out`, else the file's stem in the current directory.
+# `--test` builds the test program of the file (or of several files of one
+# folder) instead, as `pep-build --test` does (`driver/test_main.pep`).
 
 import compiler.codegen;
 import [render_all] from compiler.diagnostic;
@@ -24,6 +26,7 @@ import compiler.driver;
 import io;
 import [File, Path] from io;
 import compiler.link;
+import os;
 import compiler.parse;
 import process;
 import compiler.sema;
@@ -49,7 +52,9 @@ main(args: String[]): int {
     bool model = false;
     bool ir = false;
     bool ast = false;
-    uint opt_level = 0;
+    bool test = false;
+    var paths = Array<String>();
+    uint? opt_level;
     String? output;
     var libraries = Array<String>();
     var library_dirs = Array<Path>();
@@ -66,15 +71,19 @@ main(args: String[]): int {
             model = true;
         } else if (arg == "--emit-llvm") {
             ir = true;
+        } else if (arg == "--test") {
+            test = true;
         } else if (arg == "--emit-ast=json") {
             ast = true;
         } else if (arg == "-O" or arg == "-O0" or arg == "-O1" or arg == "-O2" or arg == "-O3") {
             # `-O` alone is `-O2`, as in pep-build.
-            opt_level = arg == "-O" ?
-                2 :
-                arg.substr_bytes(2, 1) == "0" ?
-                    0 :
-                    arg.substr_bytes(2, 1) == "1" ? 1 : arg.substr_bytes(2, 1) == "2" ? 2 : 3;
+            opt_level = Optional<uint>.Value(
+                arg == "-O" ?
+                    2 :
+                    arg.substr_bytes(2, 1) == "0" ?
+                        0 :
+                        arg.substr_bytes(2, 1) == "1" ? 1 : arg.substr_bytes(2, 1) == "2" ? 2 : 3
+            );
         } else if (arg == "-o" or arg == "-l" or arg == "-L") {
             if (i + 1 >= args.count) {
                 print($"pepc: {arg} needs a value");
@@ -127,7 +136,10 @@ main(args: String[]): int {
                 }
             }
         } else {
-            path = Optional<String>.Value(arg);
+            if (!path.is_value()) {
+                path = Optional<String>.Value(arg);
+            }
+            paths.append(arg);
         }
         i += 1;
     }
@@ -144,6 +156,16 @@ main(args: String[]): int {
         );
         return 2;
     }
+    # Without `-O`, `PEPPER_OPT_LEVEL` picks the level, as in pep-build, so a
+    # whole test suite can run optimized.
+    if (!opt_level.is_value()) {
+        var level = _env_opt_level();
+        if (level.is_err()) {
+            File.stderr().write_all($"pepc: {level.error()}\n");
+            return 2;
+        }
+        opt_level = Optional<uint>.Value(level.value());
+    }
     # In a project, the build takes what its `pep.toml` gives: with no file,
     # the entry and output; and `[build]`'s libraries.
     var project = driver.apply_project(
@@ -154,6 +176,35 @@ main(args: String[]): int {
         return 1;
     }
     var entry = project.value().entry;
+    if (test) {
+        # A test build keeps the `[Test]` functions, loads `testing` into
+        # every file, and adds the `main` that runs them.
+        setup.target.build_options[link.TEST_BUILD_OPTION] = "1";
+        if (!setup.forced_imports.contains(driver.TESTING_MODULE)) {
+            setup.forced_imports.append(driver.TESTING_MODULE);
+        }
+        if (paths.count > 1) {
+            var files = Array<Path>();
+            for (var p in paths) {
+                files.append(Path(p));
+            }
+            var made = driver.test_program(files);
+            if (made.is_err()) {
+                File.stderr().write_all(made.error() + "\n");
+                return 1;
+            }
+            var (generated, sources) = made.value();
+            entry = generated;
+            setup.sources = sources;
+        } else {
+            var read = File.read_to_string(entry);
+            if (read.is_err()) {
+                File.stderr().write_all($"cannot read {entry}: {read.error().message}\n");
+                return 1;
+            }
+            setup.sources[link.path_key(entry)] = driver.add_test_main(entry, read.value());
+        }
+    }
     if (!ast) {
         if (!(linked or checked or model or ir)) {
             # A project builds with what pep.lock lists: fetch what is missing.
@@ -223,7 +274,7 @@ main(args: String[]): int {
             }
             var work = project.value().dir.is_value() ? project.value().dir.value() : here;
             var options = driver.BuildOptions(out, work.join(Path(".pep")).join(Path("build")));
-            options.opt_level = opt_level;
+            options.opt_level = opt_level.value();
             for (var library in project.value().libraries) {
                 if (!libraries.contains(library)) {
                     libraries.append(library);
@@ -252,4 +303,18 @@ main(args: String[]): int {
     }
     print(module.value().to_json().to_string());
     return 0;
+}
+
+## The level `PEPPER_OPT_LEVEL` names (`0` to `3`), or 0 when it is unset
+## or empty.
+_env_opt_level(): Result<uint, String> {
+    var value = os.environment("PEPPER_OPT_LEVEL");
+    if (!value.is_value() or value.value().is_empty) {
+        return Result<uint, String>.ok(0);
+    }
+    var level = uint.parse(value.value());
+    if (!level.is_value() or level.value() > 3) {
+        return Result<uint, String>.err($"PEPPER_OPT_LEVEL is '{value.value()}'; expected 0, 1, 2 or 3");
+    }
+    return Result<uint, String>.ok(level.value());
 }

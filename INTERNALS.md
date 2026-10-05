@@ -3017,7 +3017,12 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `pepc --emit-checked ...`, `pepc --emit-model ...` and
   `pepc --emit-llvm ...` print the same output as `pep-build`, to diff a
   program by hand. With no `--emit-*` option, `pepc [-O0..3] [-o out]
-  [-l lib] [-L dir] ... file` builds the program into an executable.
+  [-l lib] [-L dir] ... file` builds the program into an executable
+  (without `-O`, at `PEPPER_OPT_LEVEL`'s level, as `pep-build`), and
+  `pepc --test file...` builds the test program of one file or of several
+  files of a folder, as `pep-build --test` does: `driver/test_main.pep`
+  adds the `main` that registers the `[Test]` functions, and the loader
+  takes the changed texts from `Setup.sources` instead of the disk.
 - `compiler.driver` (`compiler/driver/`) builds a program as
   `crates/pepper-driver` does, with no build cache: `build.pep` runs
   merge and the sema passes (printing their warnings on standard error,

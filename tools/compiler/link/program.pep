@@ -33,6 +33,10 @@ export struct Setup {
     var runtime: bool = true;
     ## The target platform selection evaluates against.
     var target: Target = Target();
+    ## The text of files to load from here rather than the disk, by
+    ## `files.path_key`: a test build's entry with its `main` added, or its
+    ## generated entry and test files.
+    var sources: HashMap<String, String> = HashMap<String, String>();
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -297,7 +301,7 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         prelude.append(path.value());
     }
     prelude.append_all(runtime.sources);
-    return load(root, prelude, search_paths, setup.target);
+    return load(root, prelude, search_paths, setup.target, setup.sources);
 }
 
 # One file waiting to be loaded.
@@ -320,8 +324,15 @@ struct _Queued {
 ## @param prelude the prelude files, forced imports first
 ## @param search_paths where module imports look, in order
 ## @param target the target platform selection evaluates against
+## @param sources the text of files to take from here rather than the disk, by `files.path_key`
 ## @returns the program, or why a file cannot be read or parsed
-export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): Result<Program, String> {
+export load(
+    root: Path,
+    prelude: Path[],
+    search_paths: Path[],
+    target: Target,
+    sources: HashMap<String, String> = HashMap<String, String>()
+): Result<Program, String> {
     var program = Program();
     var index = HashMap<String, ulong>();
     # Resolved import keys per file, mapped to indices once all are loaded.
@@ -367,7 +378,9 @@ export load(root: Path, prelude: Path[], search_paths: Path[], target: Target): 
         }
         root_pending = false;
         var path = next.path;
-        var source = File.read_to_string(path);
+        var source = sources.contains(next.key) ?
+            Result<String, io.IoError>.ok(sources[next.key]) :
+            File.read_to_string(path);
         if (source.is_err()) {
             return Result<Program, String>.err($"cannot read {path}: {source.error().message}");
         }

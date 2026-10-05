@@ -6,3 +6,4 @@ export * from "build";
 export * from "linker";
 export * from "parts";
 export * from "project";
+export * from "test_main";
