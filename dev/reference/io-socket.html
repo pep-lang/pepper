@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-db837e4e.js";
+            window.path_to_searchindex_js = "../searchindex-e559e9be.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -185,8 +185,10 @@
 <h1 id="sockets"><a class="header" href="#sockets">Sockets</a></h1>
 <p>TCP and UDP sockets: <code>TcpListener</code> accepts connections, <code>TcpStream</code> is
 one connection, <code>UdpSocket</code> sends and receives datagrams.</p>
-<p>Every call blocks the calling thread until it completes. Addresses are
-<code>SocketAddress</code> values; <code>resolve</code> turns a host name into them.</p>
+<p>Every call blocks the calling thread until it completes (in a task, it
+parks only the task), or until the socket’s read or write timeout
+expires. Addresses are <code>SocketAddress</code> values; <code>resolve</code> turns a host
+name into them.</p>
 <p>Source: <code>runtime/io/socket.pep</code></p>
 <h2 id="tcplistener"><a class="header" href="#tcplistener">TcpListener</a></h2>
 <pre><code class="language-pepper">[NotCopyable("owns an operating-system socket and cannot be copied")] struct TcpListener
@@ -468,6 +470,27 @@ one.</p>
 <ul>
 <li>the connected stream; an error with <code>is_connection_refused()</code> when nothing listens there, <code>is_timed_out()</code> when the peer does not answer, or another platform error</li>
 </ul>
+<h4 id="connect_timeout"><a class="header" href="#connect_timeout">connect_timeout</a></h4>
+<pre><code class="language-pepper">static connect_timeout(address: SocketAddress, milliseconds: ulong): IoResult&lt;TcpStream&gt;
+</code></pre>
+<p>Opens a connection to <code>address</code> like <code>connect</code>, but gives up with
+<code>is_timed_out()</code> when it is not established within <code>milliseconds</code>,
+instead of after the system’s own limit (often minutes).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>address</code> — the address to connect to</li>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 waits as long as <code>connect</code> does</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the connected stream, with no read or write timeout; an error with <code>is_timed_out()</code> when the time runs out, <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error as for <code>connect</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var r = TcpStream.connect_timeout(SocketAddress.parse("192.0.2.1:80").value(), 2000);
+if (r.is_err() &amp;&amp; r.error().is_timed_out()) {
+    print("no answer within 2 seconds");
+}
+</code></pre>
 <h4 id="connect_host"><a class="header" href="#connect_host">connect_host</a></h4>
 <pre><code class="language-pepper">static connect_host(host: String, port: u16): IoResult&lt;TcpStream&gt;
 </code></pre>
@@ -626,6 +649,58 @@ request/response traffic, more packets.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success; an error when the stream is closed, or another platform error</li>
+</ul>
+<h4 id="set_read_timeout"><a class="header" href="#set_read_timeout">set_read_timeout</a></h4>
+<pre><code class="language-pepper">set_read_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a read waits: when no data arrives for
+<code>milliseconds</code>, the read fails with <code>is_timed_out()</code> and the stream
+stays open for another try. Each wait counts on its own, so a
+<code>read_exact</code> may take longer in all. 0, the default, waits as long as
+it takes. It works outside a task and in one, where the task’s
+<code>async.timeout</code> can end the wait sooner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the stream is closed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">stream.set_read_timeout(5000);   # give up after 5 seconds of silence
+</code></pre>
+<h4 id="read_timeout"><a class="header" href="#read_timeout">read_timeout</a></h4>
+<pre><code class="language-pepper">read_timeout(): ulong
+</code></pre>
+<p>Returns the read timeout <code>set_read_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="set_write_timeout"><a class="header" href="#set_write_timeout">set_write_timeout</a></h4>
+<pre><code class="language-pepper">set_write_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a write waits for the system to take more data: when
+it can take none for <code>milliseconds</code> (the peer is not reading), the
+write fails with <code>is_timed_out()</code>, possibly after sending part of the
+data. Each wait counts on its own. 0, the default, waits as long as
+it takes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the stream is closed</li>
+</ul>
+<h4 id="write_timeout"><a class="header" href="#write_timeout">write_timeout</a></h4>
+<pre><code class="language-pepper">write_timeout(): ulong
+</code></pre>
+<p>Returns the write timeout <code>set_write_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
 </ul>
 <h4 id="local_address-2"><a class="header" href="#local_address-2">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
@@ -826,6 +901,55 @@ such as <code>255.255.255.255</code> (<code>SO_BROADCAST</code>).</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>an Ok result on success; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="set_read_timeout-1"><a class="header" href="#set_read_timeout-1">set_read_timeout</a></h4>
+<pre><code class="language-pepper">set_read_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a receive waits: when no datagram arrives for
+<code>milliseconds</code>, <code>receive</code> or <code>receive_from</code> fails with
+<code>is_timed_out()</code> and the socket stays open for another try. 0, the
+default, waits as long as it takes. It works outside a task and in
+one, where the task’s <code>async.timeout</code> can end the wait sooner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">socket.set_read_timeout(5000);   # give up after 5 seconds of silence
+</code></pre>
+<h4 id="read_timeout-1"><a class="header" href="#read_timeout-1">read_timeout</a></h4>
+<pre><code class="language-pepper">read_timeout(): ulong
+</code></pre>
+<p>Returns the read timeout <code>set_read_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="set_write_timeout-1"><a class="header" href="#set_write_timeout-1">set_write_timeout</a></h4>
+<pre><code class="language-pepper">set_write_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a send waits for room in the system’s buffer: when
+there is none for <code>milliseconds</code>, the send fails with
+<code>is_timed_out()</code>. 0, the default, waits as long as it takes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<h4 id="write_timeout-1"><a class="header" href="#write_timeout-1">write_timeout</a></h4>
+<pre><code class="language-pepper">write_timeout(): ulong
+</code></pre>
+<p>Returns the write timeout <code>set_write_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
 </ul>
 <h4 id="local_address-3"><a class="header" href="#local_address-3">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): IoResult&lt;SocketAddress&gt;
