@@ -140,7 +140,11 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                 // `this` there). A converted string literal constructs the
                 // `String` type even beside a method (or enum case) named
                 // `String`.
-                if methods.calls_method(function, args.len()) && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) {
+                // A call with explicit type arguments (`make<String>(n)`)
+                // names its method by the name before them, as
+                // `this.make<String>(n)` does.
+                let name = function.split('<').next().unwrap_or(function).to_string();
+                if methods.calls_method(&name, args.len()) && !crate::passes::convert_string_literals::is_converted_literal(function, args, *loc) {
                     let method = function.clone();
                     let call_args = args.clone();
                     // A sibling static is called on the struct's name; any
@@ -149,7 +153,7 @@ fn convert_expression(expr: &mut Expression, struct_name: &str, fields: &[Variab
                     // `this` symbol left the call's type unknown, and an
                     // operator on it (`label() + label()`) never resolved to
                     // its overload.
-                    let receiver = if methods.contains(&format!("{}{}", STATIC_MARK, function)) {
+                    let receiver = if methods.contains(&format!("{}{}", STATIC_MARK, name)) {
                         // A generic base has no name to call on; its
                         // specializations, copied from it, convert the call.
                         if methods.contains(&GENERIC_BASE.to_string()) {
@@ -206,15 +210,19 @@ pub fn convert_member_refs(module: &mut Module) {
                 .cloned()
                 .collect();
             // An overloaded method is also called by its set's name. A static
-            // method's names are listed again behind `STATIC_MARK`.
+            // method's names are listed again behind `STATIC_MARK`. Generic
+            // methods count too: a bare `make<T>(n)` calls one before any
+            // specialization of it exists.
             let mut methods: Vec<String> = st
                 .method_members
                 .iter()
+                .chain(&st.generic_methods)
                 .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
                 .collect();
             let statics: Vec<String> = st
                 .method_members
                 .iter()
+                .chain(&st.generic_methods)
                 .filter(|m| m.is_static)
                 .flat_map(|m| [m.name.clone(), crate::passes::overloads::set_name(&m.name).to_string()])
                 .map(|name| format!("{}{}", STATIC_MARK, name))

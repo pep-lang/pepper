@@ -309,6 +309,9 @@ impl<'a> Lifter<'a> {
             }
             Expression::FunctionCall { function, args, loc } => {
                 let loc = *loc;
+                // A call with explicit type arguments (`make<int>(n)`) names
+                // its method by the name before them.
+                let name = function.split('<').next().unwrap_or(function).to_string();
                 if crate::passes::convert_string_literals::is_converted_literal(function, args, loc) {
                     // A converted string literal constructs the `String`
                     // type, whatever the enclosing struct names `String`.
@@ -317,8 +320,8 @@ impl<'a> Lifter<'a> {
                     self.use_var(v, loc);
                 } else if inside
                     && self.ctx.this_ty.is_some()
-                    && self.ctx.statics.contains(function.as_str())
-                    && !self.ctx.fields.contains(function.as_str())
+                    && self.ctx.statics.contains(name.as_str())
+                    && !self.ctx.fields.contains(name.as_str())
                 {
                     // A bare static method of the enclosing struct:
                     // `S.m(...)` (`C<T>.m(...)` in a generic one), which
@@ -335,7 +338,7 @@ impl<'a> Lifter<'a> {
                     };
                 } else if inside
                     && self.ctx.this_ty.is_some()
-                    && (self.ctx.methods.contains(function.as_str()) || self.ctx.fields.contains(function.as_str()))
+                    && (self.ctx.methods.contains(name.as_str()) || self.ctx.fields.contains(function.as_str()))
                 {
                     // A bare method of the enclosing struct (or a call
                     // through one of its fields): `__this.m(...)`.
@@ -672,7 +675,7 @@ pub fn lift_closures(module: &mut Module) {
         .structs
         .iter()
         .map(|st| {
-            let mut methods: HashSet<String> = st.method_members.iter().map(|m| m.name.clone()).collect();
+            let mut methods: HashSet<String> = st.method_members.iter().chain(&st.generic_methods).map(|m| m.name.clone()).collect();
             methods.extend(extension_methods(&st.ty.name, module));
             Context {
                 generics: st.generic_params.clone(),
@@ -696,7 +699,8 @@ pub fn lift_closures(module: &mut Module) {
                 .map(|t| GenericParam::named(&t.name))
                 .collect();
             let target = module.structs.iter().find(|s| s.ty.name == ext.target.name);
-            let mut methods: HashSet<String> = target.map(|s| s.method_members.iter().map(|m| m.name.clone()).collect()).unwrap_or_default();
+            let mut methods: HashSet<String> =
+                target.map(|s| s.method_members.iter().chain(&s.generic_methods).map(|m| m.name.clone()).collect()).unwrap_or_default();
             methods.extend(extension_methods(&ext.target.name, module));
             Context {
                 generics,

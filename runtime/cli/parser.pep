@@ -218,7 +218,7 @@ export struct Parser {
         required: bool = false,
         global: bool = false
     ): Argument<String> {
-        return this.option<String>(name, short_name, help, value_name, default_value, required, global);
+        return option<String>(name, short_name, help, value_name, default_value, required, global);
     }
 
     ## Declares an option that takes one value of type `T`, such as
@@ -288,7 +288,7 @@ export struct Parser {
         required: bool = false,
         global: bool = false
     ): ArgumentList<String> {
-        return this.multiple<String>(name, short_name, help, value_name, required, global);
+        return multiple<String>(name, short_name, help, value_name, required, global);
     }
 
     ## Declares an option that may be given any number of times, each with a
@@ -338,7 +338,7 @@ export struct Parser {
     ##   follows an optional one, if it follows `positionals`, or if the
     ##   parser has commands
     positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument<String> {
-        return this.positional<String>(name, help, required, default_value);
+        return positional<String>(name, help, required, default_value);
     }
 
     ## Declares the next positional argument, with a value of type `T`.
@@ -373,7 +373,7 @@ export struct Parser {
     ## @panics if `name` is empty or already declared, if it follows
     ##   `positionals`, or if the parser has commands
     positionals(name: String, help: String = "", required: bool = false): ArgumentList<String> {
-        return this.positionals<String>(name, help, required);
+        return positionals<String>(name, help, required);
     }
 
     ## Declares a positional argument that takes every remaining value, each

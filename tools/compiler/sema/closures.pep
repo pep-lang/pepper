@@ -30,7 +30,7 @@ import [
     UnaryOp,
     VariableDef
 ] from "model";
-import [set_name] from "names";
+import [set_name, without_type_arguments] from "names";
 import [PassState] from "state";
 import [FUNCTION] from "type_name";
 import [Rewriter, rewrite_children] from "walk";
@@ -364,6 +364,9 @@ struct _ClosureLifter {
             }
             FunctionCall(node) => {
                 var loc = node.loc;
+                # A call with explicit type arguments (`make<int>(n)`)
+                # names its method by the name before them.
+                var name = without_type_arguments(node.function);
                 if (_is_converted_literal(node)) {
                     # A converted string literal constructs `String`,
                     # whatever the enclosing struct names `String`.
@@ -372,8 +375,8 @@ struct _ClosureLifter {
                     use_var(resolve(node.function).value(), loc);
                 } else if (inside
                     and ctx.this_ty.is_value()
-                    and ctx.statics.contains(node.function)
-                    and !ctx.fields.contains(node.function)) {
+                    and ctx.statics.contains(name)
+                    and !ctx.fields.contains(name)) {
                     # A bare static method of the enclosing struct:
                     # `S.m(...)`, which needs no `this`.
                     expr = Expression.MethodCall(
@@ -381,7 +384,7 @@ struct _ClosureLifter {
                     );
                 } else if (inside
                     and ctx.this_ty.is_value()
-                    and (ctx.methods.contains(node.function) or ctx.fields.contains(node.function))) {
+                    and (ctx.methods.contains(name) or ctx.fields.contains(node.function))) {
                     # A bare method of the enclosing struct (or a call
                     # through one of its fields): `__this.m(...)`.
                     use_this(loc);
@@ -783,6 +786,9 @@ export lift_closures(module: Module, state: PassState) {
         for (var m in st.method_members) {
             ctx.methods.insert(m.name);
         }
+        for (var m in st.generic_methods) {
+            ctx.methods.insert(m.name);
+        }
         _add_extension_methods(module, st.ty.name, ctx.methods);
         ctx.statics = _static_methods(st, module);
         struct_contexts.append(ctx);
@@ -799,6 +805,9 @@ export lift_closures(module: Module, state: PassState) {
         for (var s in module.structs) {
             if (s.ty.name == ext.target.name) {
                 for (var m in s.method_members) {
+                    ctx.methods.insert(m.name);
+                }
+                for (var m in s.generic_methods) {
                     ctx.methods.insert(m.name);
                 }
                 for (var f in s.field_members) {

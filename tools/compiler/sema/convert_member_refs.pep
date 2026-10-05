@@ -20,7 +20,7 @@ import [
     SymbolRefExpression,
     TypeName
 ] from "model";
-import [set_name] from "names";
+import [set_name, without_type_arguments] from "names";
 import [PassState] from "state";
 import [Rewriter, rewrite_expression] from "walk";
 
@@ -189,13 +189,15 @@ struct _MemberRefs {
     }
 
     _call(e: Expression, node: FunctionCallExpression): Expression {
-        # A converted string literal constructs `String` even beside a
-        # method named `String`.
-        if (!methods.calls_method(node.function, node.args.count) or _is_converted_literal(node)) {
+        # A call with explicit type arguments (`make<String>(n)`) names its
+        # method by the name before them. A converted string literal
+        # constructs `String` even beside a method named `String`.
+        var name = without_type_arguments(node.function);
+        if (!methods.calls_method(name, node.args.count) or _is_converted_literal(node)) {
             return e;
         }
         var receiver = Expression.ThisRef;
-        if (methods.contains(_STATIC_MARK + node.function)) {
+        if (methods.contains(_STATIC_MARK + name)) {
             # A generic base has no name to call on; its specializations,
             # copied from it, convert the call.
             if (methods.contains(_GENERIC_BASE)) {
@@ -243,9 +245,14 @@ export convert_member_refs(module: Module, state: PassState) {
             }
         }
         # An overloaded method is also called by its set's name; a static
-        # method's names are listed again behind `_STATIC_MARK`.
+        # method's names are listed again behind `_STATIC_MARK`. Generic
+        # methods count too: a bare `make<T>(n)` calls one before any
+        # specialization of it exists.
         var names = HashSet<String>();
-        for (var m in st.method_members) {
+        var members = Array<FunctionDef>();
+        members.append_all(st.method_members);
+        members.append_all(st.generic_methods);
+        for (var m in members) {
             names.insert(m.name);
             names.insert(set_name(m.name));
             if (m.is_static) {

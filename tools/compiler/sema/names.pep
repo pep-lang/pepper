@@ -39,3 +39,16 @@ export set_name(member: String): String {
     }
     return member.substr_bytes(0, at as ulong);
 }
+
+## Returns a call's function name without its explicit type arguments:
+## `make` for `make<String>`, and any other name itself.
+##
+## @param function the called name
+## @returns the name before its type arguments
+export without_type_arguments(function: String): String {
+    var at = function.find("<");
+    if (at < 0) {
+        return function;
+    }
+    return function.substr_bytes(0, at as ulong);
+}
