@@ -10,7 +10,13 @@ way the compiler does (see
 [Where the compiler finds the standard library](../tutorial/getting-started.md#where-the-compiler-finds-the-standard-library)).
 
 The [VS Code extension](../tutorial/getting-started.md#editor-support) bundles
-it. For another editor, build it with
+it. When [`pepper install`](pep-install.md) manages your Pepper home, the
+extension instead runs the `pep-lsp` of the toolchain the first workspace
+folder uses, as `pepper install which` reports it there, so the editor
+checks code with the same compiler and standard library as `pepper build`.
+If that fails (say the project pins a toolchain that is not installed), a
+warning says why and the bundled server runs. Run **Pepper: Restart
+Language Server** after switching toolchains. For another editor, build it with
 `cargo build --release -p pepper-lsp` (it is
 `target/release/pep-lsp`) and configure the editor to run it for `.pep`
 files.
@@ -55,7 +61,7 @@ options above, and restarts the server when one changes:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `pepper.lspPath` | empty | The `pep-lsp` to run; empty uses the one bundled with the extension. The server restarts whenever that file is rebuilt |
+| `pepper.lspPath` | empty | The `pep-lsp` to run; empty uses the project's toolchain's, else the one bundled with the extension. The server restarts whenever that file is rebuilt |
 | `pepper.inlayHints.implicitConversions` | `true` | `inlayHints.implicitConversions` |
 | `pepper.inlayHints.parameterNames` | `true` | `inlayHints.parameterNames` |
 | `pepper.buildOptions` | `[]` | `buildOptions` |

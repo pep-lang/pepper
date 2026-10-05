@@ -72,6 +72,12 @@ The home is the folder above the running `pep-install` when that is a home
 (it has a `toolchains` folder), else `PEPPER_HOME`, else
 `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere.
 
+## Editors
+
+The VS Code extension runs the language server of the toolchain the
+workspace uses, as `pepper install which` reports it; see
+[pep-lsp](pep-lsp.md).
+
 ## Downloads
 
 `add` and `update` find this machine's archive (`linux-x64`, `macos-arm64`,
