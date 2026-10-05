@@ -2507,6 +2507,14 @@ diagnostics, the document outline, hover and go to definition:
   (`sema/member_lookup.pep`) type a member access's owner and an inferred
   local in the checked model. Hover heads spell a type as written:
   linking's `@namespace` suffixes are stripped.
+- `edits.pep`: requests never wait for sema. The server keeps each
+  document's last analysis and the newest one whose sema passed. When the
+  text changed since that one, an `EditMap` (the one region where the two
+  texts differ, from whole lines) carries the offset to the older text: a
+  name on a line the edit left alone is answered from the passed analysis
+  at once (a hover notes it may be out of date, and a definition in the
+  document moves with the edit), and one inside it from the current
+  text's parse.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
   the runtime, 20 s for pep-doc), so the Rust server stays the one
   editors run until the rewrite does everything and sema is faster.

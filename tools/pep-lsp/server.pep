@@ -1,7 +1,7 @@
 # The Pepper language server: the `lsp.LanguageServer` the editor talks to.
 # It keeps the open documents' text, hands each new text to the analysis
 # thread (`analysis.pep`), keeps the analyses it hands back, and answers
-# requests from the text and the analysis it holds.
+# requests from the text and those analyses (`edits.pep`).
 
 import async;
 import [Channel] from async;
@@ -11,7 +11,7 @@ import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
 import "analysis";
-import "navigate";
+import "edits";
 import "symbols";
 
 ## The server: the open documents, and the analysis thread's queue.
@@ -27,6 +27,8 @@ export struct PepperServer {
     var _results: Channel<Analysis>;
     # The last analysis of each open document, by URI.
     var _analyses: HashMap<String, Analysis>;
+    # The newest analysis of each open document whose sema passed.
+    var _ready: HashMap<String, Analysis>;
     var _version: String;
 
     ## Creates the server and starts its analysis thread.
@@ -39,6 +41,7 @@ export struct PepperServer {
         this.watches_files = false;
         this._version = version;
         this._analyses = HashMap<String, Analysis>();
+        this._ready = HashMap<String, Analysis>();
         var jobs = Channel<Job>();
         var results = Channel<Analysis>();
         this._jobs = jobs;
@@ -51,30 +54,6 @@ export struct PepperServer {
     # Queues the document's current text for analysis.
     _analyze(document: lsp.TextDocument) {
         _jobs.send(copy(Job.Analyze(document.uri, document.text)));
-    }
-
-    # What answers about the document `uri` are computed from: its current
-    # text, parsed, with the program and model of its last analysis when
-    # that analysis is of the same text.
-    _context(uri: String): Context? {
-        var document = documents.try_get(uri);
-        if (document.is_empty()) {
-            return Optional<Context>.Empty;
-        }
-        var parsed = parse.parse(document.value().text);
-        if (parsed.is_err()) {
-            return Optional<Context>.Empty;
-        }
-        var context = Context(document.value(), parsed.value());
-        var analysis = _analyses.try_get(uri);
-        if (analysis is Value(last)) {
-            if (last.text == document.value().text) {
-                context.program = last.program;
-                context.model = last.model;
-                context.state = last.state;
-            }
-        }
-        return Optional<Context>.Value(context);
     }
 }
 
@@ -128,6 +107,7 @@ extend PepperServer with lsp.LanguageServer {
         var uri = params.text_document.uri;
         documents.remove(uri);
         _analyses.remove(uri);
+        _ready.remove(uri);
         _jobs.send(copy(Job.Close(uri)));
         client.publish_diagnostics(uri, Array<lsp.Diagnostic>());
     }
@@ -149,28 +129,36 @@ extend PepperServer with lsp.LanguageServer {
                 return;
             }
             var analysis = received.value();
-            if (documents.contains(analysis.uri)) {
-                _analyses[analysis.uri] = analysis;
+            if (!documents.contains(analysis.uri)) {
+                continue;
+            }
+            _analyses[analysis.uri] = analysis;
+            if (analysis.model.is_value()) {
+                _ready[analysis.uri] = analysis;
             }
         }
     }
 
     hover(params: lsp.TextDocumentPositionParams): Result<lsp.Hover?, ResponseError> {
-        var context = _context(params.text_document.uri);
-        if (context.is_empty()) {
+        var uri = params.text_document.uri;
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
             return Result<lsp.Hover?, ResponseError>.ok(Optional<lsp.Hover>.Empty);
         }
-        var offset = context.value().document.offset_at(params.position);
-        return Result<lsp.Hover?, ResponseError>.ok(hover_at(context.value(), offset));
+        var offset = document.value().offset_at(params.position);
+        var hover = hover_across_edits(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        return Result<lsp.Hover?, ResponseError>.ok(hover);
     }
 
     definition(params: lsp.TextDocumentPositionParams): Result<Array<lsp.Location>, ResponseError> {
-        var context = _context(params.text_document.uri);
-        if (context.is_empty()) {
+        var uri = params.text_document.uri;
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
             return Result<Array<lsp.Location>, ResponseError>.ok(Array<lsp.Location>());
         }
-        var offset = context.value().document.offset_at(params.position);
-        return Result<Array<lsp.Location>, ResponseError>.ok(definition_at(context.value(), offset));
+        var offset = document.value().offset_at(params.position);
+        var found = definition_across_edits(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        return Result<Array<lsp.Location>, ResponseError>.ok(found);
     }
 
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {

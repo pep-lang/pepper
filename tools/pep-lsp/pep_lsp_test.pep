@@ -5,6 +5,7 @@ import [Directory, File, Path] from io;
 import lsp;
 import compiler.parse;
 import "analysis";
+import "edits";
 import "navigate";
 import "symbols";
 
@@ -177,4 +178,64 @@ definition_without_an_analysis_reads_the_text() {
     expect_equal(definition_text(context, at(text, "total;", 1)), "a.pep: total = x * 3;");
     expect_equal(definition_text(context, at(text, "x * 3", 0)), "a.pep: x: int): int {");
     expect_true(hover_text(context, at(text, "x * 3", 0)).contains("`x` — `int`"));
+}
+
+[Test]
+edit_map_carries_offsets_around_the_edit() {
+    var earlier = "var alpha = 1;\nvar beta = 2;\n";
+    var current = "var alpha = 1;\nvar gamma = 3;\nvar beta = 2;\n";
+    var edits = EditMap(earlier, current);
+    # Before the edit, and after it.
+    expect_equal(edits.to_earlier(current, at(current, "alpha", 2)).value(), at(earlier, "alpha", 2));
+    expect_equal(edits.to_earlier(current, at(current, "beta", 1)).value(), at(earlier, "beta", 1));
+    # Inside it.
+    expect_true(edits.to_earlier(current, at(current, "gamma", 1)).is_empty());
+    var before = lsp.TextDocument("", earlier);
+    var after = lsp.TextDocument("", current);
+    var beta = before.range_of(at(earlier, "beta", 0), at(earlier, "beta", 4));
+    var moved = edits.range_to_current(earlier, current, beta).value();
+    expect_equal(after.offset_at(moved.start), at(current, "beta", 0));
+    expect_equal(after.offset_at(moved.end), at(current, "beta", 4));
+    # An empty range at the start of the line a new line went above moves
+    # down with it.
+    var start = lsp.Range(lsp.Position(1, 0), lsp.Position(1, 0));
+    expect_equal(edits.range_to_current(earlier, current, start).value().start.line, 2);
+
+    # A name on an edited line does not map: editing `p.x` to `q.x`
+    # changes what `x` is.
+    expect_true(EditMap("f(ab);", "f(abc);").to_earlier("f(abc);", 3).is_empty());
+    var p = "var a = p.x;\nb;\n";
+    var q = "var a = q.x;\nb;\n";
+    edits = EditMap(p, q);
+    expect_true(edits.to_earlier(q, at(q, "x;", 0)).is_empty());
+    expect_equal(edits.to_earlier(q, at(q, "b;", 0)).value(), at(p, "b;", 0));
+
+    # An edit inside a multi-byte character splits at a character boundary.
+    var acute = "a = \"é\";\nb";
+    var grave = "a = \"è\";\nb";
+    expect_equal(EditMap(acute, grave).to_earlier(grave, grave.size - 1).value(), acute.size - 1);
+}
+
+[Test]
+answers_after_an_edit_read_the_last_passed_analysis() {
+    var text = "## Triples `x`.\nthrice(x: int): int { return x * 3; }\nmain(): int {\n    return thrice(1);\n}\n";
+    var uri = temp_file("edited.pep", text);
+    var ready = analyze(uri, text);
+    expect_equal(ready.outcome, "passed");
+    var some = Optional<Analysis>.Value(ready);
+
+    # A line above: the name moved, the old analysis answers.
+    var edited = "# A note.\n" + text;
+    var document = lsp.TextDocument(uri, edited);
+    var hover = hover_across_edits(document, some, some, at(edited, "thrice(1)", 1)).value().contents.value;
+    expect_true(hover.contains("Triples `x`."));
+    expect_true(hover.contains("Checking your latest edit"));
+    var found = definition_across_edits(document, some, some, at(edited, "thrice(1)", 1));
+    expect_equal(document.offset_at(found[0].range.start), at(edited, "thrice(x", 0));
+
+    # Inside the edit: the current text answers, without sema.
+    edited = text.replace("return thrice(1);", "return twice(1);") + "twice(x: int): int { return x * 2; }\n";
+    document = lsp.TextDocument(uri, edited);
+    found = definition_across_edits(document, some, some, at(edited, "twice(1)", 1));
+    expect_equal(document.offset_at(found[0].range.start), at(edited, "twice(x", 0));
 }
