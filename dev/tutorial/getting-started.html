@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bb82ff99.js";
+            window.path_to_searchindex_js = "../searchindex-4f4fdfdc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -244,7 +244,7 @@ target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 <code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
 so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
 <a href="../tools/pepper.html">The pepper command</a>). To check that everything works,
-run the test suite with <code>cargo test --workspace</code>. Add <code>target/release</code> to
+run the tests with <code>scripts/pepper-tests.sh</code>. Add <code>target/release</code> to
 your <code>PATH</code> to run <code>pepper</code> from anywhere; from the repository root, you can
 also run the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
 runs <code>pep-build</code> directly.</p>

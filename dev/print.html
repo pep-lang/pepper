@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bb82ff99.js";
+            window.path_to_searchindex_js = "searchindex-4f4fdfdc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -392,7 +392,7 @@ target/release/pep-build tools/pepper/main.pep -o target/release/pepper
 <code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
 so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
 <a href="#the-pepper-command">The pepper command</a>). To check that everything works,
-run the test suite with <code>cargo test --workspace</code>. Add <code>target/release</code> to
+run the tests with <code>scripts/pepper-tests.sh</code>. Add <code>target/release</code> to
 your <code>PATH</code> to run <code>pepper</code> from anywhere; from the repository root, you can
 also run the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
 runs <code>pep-build</code> directly.</p>
@@ -50847,20 +50847,16 @@ and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
 <code>help.txt</code> / <code>usage.txt</code>) and on its page in the same PR.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="testing-the-runtime-and-the-compiler"><a class="header" href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a></h1>
-<p>The repository has two kinds of tests, split by what they check.</p>
-<ul>
-<li><strong>The runtime and the Pepper tools</strong> are tested in Pepper: <code>[Test]</code>
-functions (see <a href="#unit-tests">Unit tests</a>) that <code>pepper test</code>
-(<a href="#testing-with-pep-test"><code>pep-test</code></a>) builds and runs.</li>
-<li><strong>The compiler</strong> is tested in Rust: diagnostics, codegen and IR facts,
-reference-count order, optimization, linking, cross-compiling, debug
-info, the build cache, the documentation checks, and the drivers. These
-live in <code>crates/*/tests/</code> and the root package’s <code>tests/*.rs</code> (see
-<code>INTERNALS.md</code>, section 9), and <code>cargo test --workspace</code> runs them.</li>
-</ul>
-<p>The two run separately, and CI runs both on every platform.</p>
-<p>A test that checks a library function’s result belongs with the runtime; a
-test that checks what the compiler emits or reports stays in Rust.</p>
+<p>The tests are written in Pepper: <code>[Test]</code> functions (see
+<a href="#unit-tests">Unit tests</a>) that <code>pepper test</code>
+(<a href="#testing-with-pep-test"><code>pep-test</code></a>) builds and runs. They cover the
+runtime and the Pepper tools, the compiler written in Pepper
+(<code>tools/compiler</code>) among them.</p>
+<p>The Rust compiler’s own tests (<code>crates/*/tests/</code>, the root package’s
+<code>tests/*.rs</code>; see <code>INTERNALS.md</code>, section 9) are still in the repository,
+and <code>cargo test --workspace</code> runs them, but neither CI nor the pre-merge
+checks do: the Rust compiler is not expected to change much, and new tests
+go in Pepper.</p>
 <h2 id="where-runtime-tests-live"><a class="header" href="#where-runtime-tests-live">Where runtime tests live</a></h2>
 <div class="table-wrapper">
 <table>
@@ -50912,7 +50908,7 @@ files kept beside it by a path from there (<code>archive/test/gnu.tar.gz</code>)
 The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writes
 files uses a fresh folder under the system’s temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
-<p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo test --workspace</code> on
+<p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo build --release</code> on
 Linux, macOS and Windows.</p>
 <p>The compiler written in Pepper, <code>tools/compiler</code>, depends on
 <code>justinboswell/pepper-llvm</code>, a private repository. CI clones it over SSH
