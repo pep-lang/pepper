@@ -2481,7 +2481,7 @@ on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
-diagnostics and the document outline:
+diagnostics, the document outline, hover and go to definition:
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
   document's newest text once edits settle (250 ms). It loads the
@@ -2491,8 +2491,22 @@ diagnostics and the document outline:
   once more instead of publishing stale diagnostics. The diagnostics come
   from the parse error, `Program.warnings`, unresolved imports (as
   warnings), `Program.check_diagnostics`, `sema.build`, then
-  `sema.run_passes`.
+  `sema.run_passes`. It then hands a `copy` of the `Analysis` (the text
+  it analyzed, the linked `Program`, and the checked `sema.Module` and
+  `PassState` when the passes passed) to the server thread through a
+  channel and `Client.wake`s it; `woken` keeps the last one per document.
 - `symbols.pep`: the outline, as `tools/lsp` builds it.
+- `navigate.pep`: hover and definition, ported from `tools/lsp`'s
+  `main.rs`. A `Context` is the current text's parse, plus the last
+  analysis's program and model when that analysis is of the same text;
+  without them, only what the parse says answers (locals, parameters,
+  the file's own declarations). `scope.pep` finds names in the syntax
+  tree (scopes, the expression or type under the cursor); `imports.pep`
+  follows names through imports with `link.FileScope`'s `imported` and
+  `named`; `compiler.sema`'s `member_at` and `local_type`
+  (`sema/member_lookup.pep`) type a member access's owner and an inferred
+  local in the checked model. Hover heads spell a type as written:
+  linking's `@namespace` suffixes are stripped.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
   the runtime, 20 s for pep-doc), so the Rust server stays the one
   editors run until the rewrite does everything and sema is faster.

@@ -1,6 +1,7 @@
 # The Pepper language server: the `lsp.LanguageServer` the editor talks to.
 # It keeps the open documents' text, hands each new text to the analysis
-# thread (`analysis.pep`), and answers requests from the text it holds.
+# thread (`analysis.pep`), keeps the analyses it hands back, and answers
+# requests from the text and the analysis it holds.
 
 import async;
 import [Channel] from async;
@@ -10,6 +11,7 @@ import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
 import "analysis";
+import "navigate";
 import "symbols";
 
 ## The server: the open documents, and the analysis thread's queue.
@@ -21,6 +23,10 @@ export struct PepperServer {
     var watches_files: bool;
     # The analysis thread's work.
     var _jobs: Channel<Job>;
+    # The analyses the analysis thread finished, not yet taken in.
+    var _results: Channel<Analysis>;
+    # The last analysis of each open document, by URI.
+    var _analyses: HashMap<String, Analysis>;
     var _version: String;
 
     ## Creates the server and starts its analysis thread.
@@ -32,16 +38,43 @@ export struct PepperServer {
         this.documents = HashMap<String, lsp.TextDocument>();
         this.watches_files = false;
         this._version = version;
+        this._analyses = HashMap<String, Analysis>();
         var jobs = Channel<Job>();
+        var results = Channel<Analysis>();
         this._jobs = jobs;
+        this._results = results;
         async.Thread.spawn(() => {
-            analyze_documents(jobs, client);
+            analyze_documents(jobs, results, client);
         }, "pep-lsp-analysis");
     }
 
     # Queues the document's current text for analysis.
     _analyze(document: lsp.TextDocument) {
         _jobs.send(copy(Job.Analyze(document.uri, document.text)));
+    }
+
+    # What answers about the document `uri` are computed from: its current
+    # text, parsed, with the program and model of its last analysis when
+    # that analysis is of the same text.
+    _context(uri: String): Context? {
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
+            return Optional<Context>.Empty;
+        }
+        var parsed = parse.parse(document.value().text);
+        if (parsed.is_err()) {
+            return Optional<Context>.Empty;
+        }
+        var context = Context(document.value(), parsed.value());
+        var analysis = _analyses.try_get(uri);
+        if (analysis is Value(last)) {
+            if (last.text == document.value().text) {
+                context.program = last.program;
+                context.model = last.model;
+                context.state = last.state;
+            }
+        }
+        return Optional<Context>.Value(context);
     }
 }
 
@@ -53,6 +86,8 @@ extend PepperServer with lsp.LanguageServer {
             lsp.TextDocumentSyncOptions(lsp.SYNC_FULL)
         );
         result.capabilities.document_symbol_provider = Optional<bool>.Value(true);
+        result.capabilities.hover_provider = Optional<bool>.Value(true);
+        result.capabilities.definition_provider = Optional<bool>.Value(true);
         var info = lsp.ClientInfo();
         info.name = "pep-lsp";
         info.version = Optional<String>.Value(_version);
@@ -92,6 +127,7 @@ extend PepperServer with lsp.LanguageServer {
     did_close(params: lsp.DidCloseTextDocumentParams) {
         var uri = params.text_document.uri;
         documents.remove(uri);
+        _analyses.remove(uri);
         _jobs.send(copy(Job.Close(uri)));
         client.publish_diagnostics(uri, Array<lsp.Diagnostic>());
     }
@@ -102,6 +138,39 @@ extend PepperServer with lsp.LanguageServer {
         for (var (_, document) in documents) {
             _analyze(document);
         }
+    }
+
+    # Takes in the analyses the analysis thread finished, for documents
+    # still open.
+    woken() {
+        while (true) {
+            var received = _results.try_receive();
+            if (received.is_err()) {
+                return;
+            }
+            var analysis = received.value();
+            if (documents.contains(analysis.uri)) {
+                _analyses[analysis.uri] = analysis;
+            }
+        }
+    }
+
+    hover(params: lsp.TextDocumentPositionParams): Result<lsp.Hover?, ResponseError> {
+        var context = _context(params.text_document.uri);
+        if (context.is_empty()) {
+            return Result<lsp.Hover?, ResponseError>.ok(Optional<lsp.Hover>.Empty);
+        }
+        var offset = context.value().document.offset_at(params.position);
+        return Result<lsp.Hover?, ResponseError>.ok(hover_at(context.value(), offset));
+    }
+
+    definition(params: lsp.TextDocumentPositionParams): Result<Array<lsp.Location>, ResponseError> {
+        var context = _context(params.text_document.uri);
+        if (context.is_empty()) {
+            return Result<Array<lsp.Location>, ResponseError>.ok(Array<lsp.Location>());
+        }
+        var offset = context.value().document.offset_at(params.position);
+        return Result<Array<lsp.Location>, ResponseError>.ok(definition_at(context.value(), offset));
     }
 
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {

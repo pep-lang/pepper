@@ -5,7 +5,9 @@
 #
 # Analysis takes from a fraction of a second to seconds, so it runs on a
 # thread of its own (`analyze_documents`): edits keep arriving, and requests
-# keep being answered, while it runs.
+# keep being answered, while it runs. Each finished analysis goes back to
+# the server's thread, which answers hover and go-to-definition from the
+# program and model it holds.
 
 import compiler.ast;
 import async;
@@ -35,14 +37,16 @@ export enum Job {
 }
 
 ## Runs on the analysis thread: takes jobs from `jobs` until `Stop` or the
-## channel closes, and publishes each analyzed document's diagnostics
-## through `client`. A document edited again before its turn, or while it
-## was analyzed, is analyzed once more instead of publishing stale
+## channel closes, publishes each analyzed document's diagnostics through
+## `client`, and hands the analysis to the server's thread through
+## `results`, waking it. A document edited again before its turn, or while
+## it was analyzed, is analyzed once more instead of publishing stale
 ## diagnostics.
 ##
 ## @param jobs the documents to analyze, newest text last
+## @param results where finished analyses go
 ## @param client where the diagnostics go
-export analyze_documents(jobs: Channel<Job>, client: lsp.Client) {
+export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client) {
     # The newest text of each document waiting for analysis, by URI.
     var pending = HashMap<String, String>();
     var order = Array<String>();
@@ -78,7 +82,9 @@ export analyze_documents(jobs: Channel<Job>, client: lsp.Client) {
         }
         pending.remove(uri);
         var start = os.Instant.now();
-        var analysis = analyze(uri, text.value());
+        # Copies, so the analysis shares nothing with `pending` and can move
+        # to the server's thread.
+        var analysis = analyze(copy(uri), copy(text.value()));
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
         var newer = _take_jobs(jobs, pending, order);
@@ -91,7 +97,9 @@ export analyze_documents(jobs: Channel<Job>, client: lsp.Client) {
         client.log_message(
             lsp.MESSAGE_LOG, $"analyzed {_file_name(uri)} ({analysis.files} files): {analysis.outcome} in {took} ms"
         );
-        client.publish_diagnostics(uri, analysis.diagnostics);
+        client.publish_diagnostics(analysis.uri, analysis.diagnostics);
+        results.send(copy(analysis));
+        client.wake();
     }
 }
 
@@ -129,6 +137,16 @@ _file_name(uri: String): String {
 
 ## What analyzing a document found.
 export struct Analysis {
+    ## The document.
+    var uri: String;
+    ## The text analyzed.
+    var text: String;
+    ## The program rooted at the document, when it loaded.
+    var program: link.Program?;
+    ## The checked model, when the program passed sema.
+    var model: sema.Module?;
+    ## What sema's passes recorded, with `model`.
+    var state: sema.PassState?;
     ## The document's diagnostics, for `publishDiagnostics`.
     var diagnostics: Array<lsp.Diagnostic>;
     ## How many files its program has; 0 when it did not load.
@@ -137,7 +155,12 @@ export struct Analysis {
     ## load" or "did not parse".
     var outcome: String;
 
-    construct() {
+    construct(uri: String, text: String) {
+        this.uri = uri;
+        this.text = text;
+        this.program = Optional<link.Program>.Empty;
+        this.model = Optional<sema.Module>.Empty;
+        this.state = Optional<sema.PassState>.Empty;
         this.diagnostics = Array<lsp.Diagnostic>();
         this.files = 0;
         this.outcome = "did not load";
@@ -154,7 +177,7 @@ export struct Analysis {
 ## @param text its current text, which may differ from the file on disk
 ## @returns the diagnostics and how the analysis went
 export analyze(uri: String, text: String): Analysis {
-    var out = Analysis();
+    var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
     var parsed = parse.parse(text);
     if (parsed.is_err()) {
@@ -175,6 +198,7 @@ export analyze(uri: String, text: String): Analysis {
         return out;
     }
     var program = loaded.value();
+    out.program = Optional<link.Program>.Value(program);
     out.files = program.files.count;
     var reporter = _Reporter(document, program);
     for (var warning in program.warnings()) {
@@ -213,7 +237,8 @@ export analyze(uri: String, text: String): Analysis {
         out.outcome = "found an error";
         return out;
     }
-    var ran = sema.run_passes(built.value(), program.target, program.sources());
+    var model = built.value();
+    var ran = sema.run_passes(model, program.target, program.sources());
     if (ran.is_err()) {
         reporter.add(ran.error());
         out.outcome = "found an error";
@@ -221,6 +246,8 @@ export analyze(uri: String, text: String): Analysis {
         for (var note in ran.value().notes) {
             reporter.add_if_in_document(note);
         }
+        out.model = Optional<sema.Module>.Value(model);
+        out.state = Optional<sema.PassState>.Value(ran.value());
         out.outcome = "passed";
     }
     out.diagnostics = reporter.out;

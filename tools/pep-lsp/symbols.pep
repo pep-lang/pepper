@@ -149,13 +149,16 @@ export variable_type(v: VariableDecl): String {
     }
     var value = v.default_value.value();
     if (value is Literal(literal, _)) {
-        return _literal_type(literal);
+        return literal_type(literal);
     }
     return "unknown";
 }
 
-# The type a literal has where nothing else decides it.
-_literal_type(literal: ast.Literal): String {
+## The type a literal has where nothing else decides it.
+##
+## @param literal the literal
+## @returns its type's name
+export literal_type(literal: ast.Literal): String {
     match (literal) {
         String(_) => {
             return "String";

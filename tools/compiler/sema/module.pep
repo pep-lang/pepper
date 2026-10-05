@@ -26,3 +26,5 @@ export [PassState] from "state";
 export [attribute_arguments, attribute_name, expression_loc] from "static_blocks";
 export [STATIC_REFCOUNT] from "synthesize";
 export [method_is_static] from "value_types";
+## What the language server asks of a checked model.
+export [field_type, local_type, member_at, member_loc, FoundMember] from "member_lookup";
