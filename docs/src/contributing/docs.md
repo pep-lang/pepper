@@ -34,9 +34,11 @@ mdBook's include syntax, so the text on the page is the file that was tested:
 ```
 ````
 
-`crates/pepper-driver/tests/integration/docs_examples_tests.rs` compiles and runs every
-example; each must return 0 from `main` and uses `assert` to check what it
-shows. Short fragments that are not whole programs can stay inline in the
+`tools/docgen/examples_test.pep`, which `scripts/pepper-tests.sh` runs,
+builds and runs every example; each must return 0 from `main` and uses
+`assert` to check what it shows. `PEPPER_DOCS_EXAMPLE=structs` limits it to
+the examples whose name starts with `structs`. A sample of the examples is
+also built at `-O2 -g`, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.
 
 ## Versions

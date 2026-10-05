@@ -7,7 +7,8 @@
 # <compiler> is a built pep-build. Each documentation example (docs/examples/,
 # a `name.pep` or a folder with `main.pep`) whose name starts with one of the
 # prefixes (all of them when none is given) is built for each platform, run
-# there, and must exit 0, as `docs_examples_tests` requires on the desktop.
+# there, and must exit 0, as tools/docgen/examples_test.pep requires on the
+# desktop.
 # Then the prototype apps in docs/examples/mobile/ are built and run: an iOS
 # app calling a Pepper library from Swift in the simulator, and an Android app
 # calling it through JNI in the emulator.

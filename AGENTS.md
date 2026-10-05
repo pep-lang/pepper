@@ -44,10 +44,8 @@ opening a PR, check each of these against the diff:
 CI enforces what it can: `pep-doc check` fails on an undocumented public
 runtime declaration, on a tool option missing from its page (it reads the
 tools that `scripts/pepper-tests.sh` builds, so run that first), and when
-the reference is stale. The check that every example compiles and runs is a
-Rust test (`docs_examples_tests`) that CI no longer runs; it is moving to
-the Pepper tests (#662). Until then, run it by hand with
-`cargo test --release --workspace --test integration docs_examples`. It
+the reference is stale, and `tools/docgen/examples_test.pep` builds and
+runs every example. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 

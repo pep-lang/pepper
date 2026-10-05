@@ -33,7 +33,6 @@ mod debug_info_tests;
 mod debug_module_tests;
 mod determinism_tests;
 mod diagnostic_tests;
-mod docs_examples_tests;
 mod edge_case_tests;
 mod emit_static_tests;
 mod enum_tests;
