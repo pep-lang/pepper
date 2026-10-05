@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9b47d345.js";
+            window.path_to_searchindex_js = "../searchindex-61d99c6f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8d3ead75.js"></script>
@@ -256,6 +256,17 @@ error at that name:</p>
 </code></pre>
 <p>Each pass of an unrolled <code>for</code> or <code>while</code>, and the branch an <code>if</code> keeps, is
 its own block, like the body of a real loop.</p>
+<p>A closure in an emitted statement is an ordinary closure: it captures
+runtime locals as any closure does. Its body cannot use a compile-time value
+such as <code>field.name</code>, since the closure outlives the block’s expansion; copy
+the value into a runtime local first, and the closure captures that local:</p>
+<pre><code class="language-pepper">static (options, calls) {
+    for (var field in reflect.fields&lt;Options&gt;()) {
+        var text = $"{field.get(options)}";
+        calls.append(() =&gt; text);
+    }
+}
+</code></pre>
 <h3 id="compile-time-loops"><a class="header" href="#compile-time-loops">Compile-time loops</a></h3>
 <p><code>break</code> and <code>continue</code> in a compile-time <code>for</code> or <code>while</code> run in the
 compiler: <code>continue</code> drops the rest of the pass, and <code>break</code> ends the
