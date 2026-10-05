@@ -51,9 +51,10 @@ converts_enums_whose_cases_carry_values() {
         panic("decoded the wrong case");
     }
 
-    # A reference enum's empty slot is null, both ways.
+    # A reference enum's empty slot is null, both ways; an empty Array is
+    # written as `[]`.
     var empty = json.encode(Drawing());
-    expect_equal(empty, "{\"shapes\":null,\"tree\":null,\"sizes\":null}");
+    expect_equal(empty, "{\"shapes\":[],\"tree\":null,\"sizes\":[]}");
     expect_true(json.decode<Drawing>(empty).value().tree === __null);
 
     expect_equal(

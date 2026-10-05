@@ -344,7 +344,9 @@ struct Parser {
         merged.newlines_before = first.newlines_before;
         merged.newlines_after_comments = first.newlines_after_comments;
         merged.space_before = first.space_before;
-        merged._leading_comments = first._leading_comments;
+        if (first.has_leading_comments()) {
+            merged._leading_comments = first._leading_comments;
+        }
         ulong i = 0;
         var last = first;
         while (i < size) {

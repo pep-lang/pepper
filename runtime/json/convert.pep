@@ -26,7 +26,8 @@ export enum UnknownKeys {
 ## A struct property takes its key from `[Name("key")]` when it has one,
 ## and is left out when marked `[Ignore]` (the attributes of the `serialize`
 ## module, which `json` exports). A property of a struct type that holds no
-## object (a struct field never assigned) is written as `null`.
+## object (a struct field never assigned) is written as `null`. An empty
+## `Array`, even one never assigned, is written as `[]`.
 ##
 ## The conversion is generated while compiling, by a `static` block per
 ## type. A type it cannot convert, such as a `Result` or an `io.File`, is a
@@ -218,9 +219,6 @@ _to_json<T>(value: T?): JsonValue {
 }
 
 _to_json<T>(value: Array<T>): JsonValue {
-    if (value === __null) {
-        return JsonValue.Null;
-    }
     var items = Array<JsonValue>(value.count);
     for (var element in value) {
         items.append(_to_json(element));

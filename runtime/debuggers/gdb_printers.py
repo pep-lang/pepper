@@ -59,8 +59,9 @@ class ArrayPrinter:
         self.name = name
 
     def to_string(self):
+        # An empty Array is null until something is added to it.
         if self.object is None:
-            return "null"
+            return "%s of count 0" % self.name
         return "%s of count %d" % (self.name, int(self.object["_size"]))
 
     def children(self):

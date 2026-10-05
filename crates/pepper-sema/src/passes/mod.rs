@@ -65,6 +65,7 @@ pub mod check_bindings;
 pub mod check_casts;
 pub mod check_deprecated_members;
 pub mod check_hash_keys;
+pub mod check_lazy;
 pub mod lower_with_blocks;
 pub mod weak_types;
 pub mod closures;
@@ -308,6 +309,8 @@ pub fn transform_steps(module: &mut Module, limit: Option<usize>) -> Result<Vec<
     step!(check_deprecated_members::check_deprecated_members(module));
     // Struct keys whose `==` and `hash<T>` disagree.
     step!(check_hash_keys::check_hash_keys(module));
+    // `[__Reads]` methods of `[__Lazy]` structs, which run on a null `this`.
+    step!(check_lazy::check_lazy(module));
     // `[Export]`ed functions C can call, once every type is final.
     step!(exports::collect_exports(module));
     crate::checked::restore_bodies(module);

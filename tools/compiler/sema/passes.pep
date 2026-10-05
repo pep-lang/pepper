@@ -36,6 +36,7 @@ import [gather_generics] from "generics";
 import [check_hash_keys] from "hash_keys";
 import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
+import [check_lazy] from "lazy";
 import [convert_string_literals, resolve_literals] from "literals";
 import [lower_matches] from "matches";
 import [Module] from "model";
@@ -398,6 +399,11 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     }
     # Struct keys whose `==` and `hash<T>` disagree.
     check_hash_keys(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # `[__Reads]` methods of `[__Lazy]` structs, which run on a null `this`.
+    check_lazy(module, state);
     if (steps.stepped()) {
         return;
     }

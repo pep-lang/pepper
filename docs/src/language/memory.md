@@ -307,6 +307,20 @@ back to its span with one atomic step. Larger blocks come from the C
 library's `calloc` and go back with `free`. A small block's size is
 rounded up to its class, so a 40-byte object takes 48 bytes.
 
+An empty `Array` allocates nothing. `Array<T>()` makes no object until the
+Array is written (`append`, `insert`, `reserve`, ...) or shared (assigned to
+a second variable, stored in a field or element, passed or returned):
+reading it (`count`, `is_empty`, `contains`, a `for` loop over it)
+allocates nothing. The first write or share allocates the object, so every
+name for the Array still sees the same appends:
+
+```pepper
+{{#include ../../examples/memory-empty-array.pep}}
+```
+
+Structs that hold an Array which usually stays empty (a tree node's
+children, a list of comments) cost nothing extra for it.
+
 The environment variable `PEPPER_SMALL_BLOCK_LIMIT`, read when the program
 starts, sets the largest size the small block allocator serves, in bytes,
 up to 4096 (a larger value counts as 4096). `0` turns it off, and then

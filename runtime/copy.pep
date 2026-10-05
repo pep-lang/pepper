@@ -322,7 +322,7 @@ export struct _Copies {
     # already made when the same object was copied before, and a new copy
     # otherwise. (A deprecated `copy(copies: Copies)` implementation calls
     # it as `copies.copy(value)`.)
-    copy<T>(value: T): T {
+    copy<T>([__Reads] value: T): T {
         return __copy<T>(value, this);
     }
 
@@ -338,8 +338,10 @@ export struct _Copies {
     }
 
     # The copy of struct `value`: null for null, the copy already made of
-    # the same object, or a new one from its `__copy()` method.
-    _copy_object<T>(value: T): T {
+    # the same object, or a new one from its `__copy()` method. An empty
+    # Array arrives as null (`[__Reads]`), so it is copied as null and not
+    # allocated in the original.
+    _copy_object<T>([__Reads] value: T): T {
         if (value === __null) {
             return value;
         }

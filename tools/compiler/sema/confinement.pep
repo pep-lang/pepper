@@ -20,6 +20,7 @@ import [demangle_name, Runtime] from compiler.link;
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import [location_of] from "common";
+import [READS_ATTRIBUTE] from "lazy";
 import [Loc] from "loc";
 import [
     BinaryOp,
@@ -1337,6 +1338,11 @@ _check_parameter_attributes(program: _Confinement): bool {
                     name = id;
                 }
                 if (name == MOVE_ATTRIBUTE) {
+                    continue;
+                }
+                # An empty `[__Lazy]` argument arrives at a `[__Reads]`
+                # parameter as null (an internal of the runtime's copies).
+                if (name == READS_ATTRIBUTE) {
                     continue;
                 }
                 if (name == LOCKED_ATTRIBUTE) {

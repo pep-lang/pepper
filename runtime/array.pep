@@ -19,6 +19,15 @@ import "internals";
 # truncate, swap) bumps _version; an ArrayIterator panics when it sees a
 # _version other than the one it started with, so modifying an Array while a
 # `for` loop iterates it is a panic rather than skipped or repeated elements.
+#
+# `[__Lazy]` (#652): an empty Array is a null reference until it is written
+# or shared. `Array<T>()` is null; codegen allocates the object (this
+# constructor with capacity 0) when a place holding null is read for anything
+# but a `[__Reads]` method's receiver or a field read, and a field read
+# through null reads a zeroed constant. So the `[__Reads]` methods below run
+# with a null `this`, and `check_lazy` keeps them from writing to it. An
+# iterator made from an empty Array holds null, so appending to the Array
+# while it runs is not detected; it simply ends.
 
 ## A growable, contiguous, zero-indexed sequence of `T` values.
 ##
@@ -34,6 +43,13 @@ import "internals";
 ## `Array` is itself a struct, so assigning it or passing it to a function
 ## shares the same Array rather than copying its elements; use `clone()` for
 ## an independent copy.
+##
+## An empty Array allocates nothing: `Array<T>()` makes no object until the
+## Array is first written (`append`, `insert`, `reserve`, ...) or shared
+## (assigned, stored, passed or returned), and reading it (`count`,
+## `is_empty`, `capacity`, `find`, `contains`, iterating) allocates nothing.
+## Sharing allocates first, so every name for an Array sees the same
+## elements.
 ##
 ## An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 ## order. Every mutating operation (an element store through `[]`, `append`,
@@ -55,6 +71,7 @@ import "internals";
 ##         return total;   # 7
 ##     }
 ## @see ArrayIterator
+[__Lazy]
 export struct Array<T> {
     ## The element buffer: `_capacity` slots, of which the first `_size` hold
     ## live elements. When `T` holds references the rest are zeroed (null for
@@ -79,8 +96,9 @@ export struct Array<T> {
     ## Creates an empty Array, optionally preallocating room for `capacity`
     ## elements.
     ##
-    ## With the default `capacity` of 0, nothing is allocated until the first
-    ## element is added. Preallocating avoids the reallocations `append`
+    ## With the default `capacity` of 0, nothing is allocated, not even the
+    ## Array itself, until the Array is first written or shared (see `Array`).
+    ## Preallocating avoids the reallocations `append`
     ## would otherwise perform while the Array grows to a known size.
     ##
     ## @param capacity the number of element slots to allocate up front; `count` is still 0
@@ -157,13 +175,15 @@ export struct Array<T> {
     ## The iterator holds a reference to the Array, so iterating a temporary
     ## keeps it alive for the whole loop. Modifying the Array while the
     ## iterator is in use makes the iterator's next `next()` or `current()`
-    ## panic.
+    ## panic, except when the Array was empty when the iterator was made:
+    ## the iterator then sees no elements and ends.
     ##
     ## @returns a new iterator positioned before the first element
     ## @example
     ##     for (var x in a) {
     ##         total = total + x;
     ##     }
+    [__Reads]
     iterate(): ArrayIterator<T> {
         var it = ArrayIterator<T>();
         it._source = this;
@@ -172,6 +192,7 @@ export struct Array<T> {
     }
 
     ## The number of elements in the Array.
+    [__Reads]
     var count: ulong {
         get {
             return _size;
@@ -180,6 +201,7 @@ export struct Array<T> {
 
     ## The number of elements the Array can hold before its buffer
     ## must be reallocated.
+    [__Reads]
     var capacity: ulong {
         get {
             return _capacity;
@@ -187,6 +209,7 @@ export struct Array<T> {
     }
 
     ## Whether the Array has no elements.
+    [__Reads]
     var is_empty: bool {
         get {
             return _size == 0;
@@ -242,6 +265,7 @@ export struct Array<T> {
     ## @panics if `idx < count` does not hold ("Array index read out of bounds")
     ## @example
     ##     var first = a[0];
+    [__Reads]
     [](idx: ulong, location: __ptr<char> = __caller_location()): T {
         _pep_check_bounds(idx < _size, "Array index read out of bounds", location);
         return _data[idx];
@@ -387,6 +411,7 @@ export struct Array<T> {
     ##
     ## @returns the element at index 0
     ## @panics if the Array is empty ("Array first on empty Array")
+    [__Reads]
     first(location: __ptr<char> = __caller_location()): T {
         assert(_size > 0, "Array first on empty Array", location);
         return _data[0];
@@ -397,6 +422,7 @@ export struct Array<T> {
     ##
     ## @returns the element at index `count - 1`
     ## @panics if the Array is empty ("Array last on empty Array")
+    [__Reads]
     last(location: __ptr<char> = __caller_location()): T {
         assert(_size > 0, "Array last on empty Array", location);
         return _data[_size - 1];
@@ -600,6 +626,7 @@ export struct Array<T> {
     ##     var a = [3, 9, 4];
     ##     var i = a.find(9);         # i.value() == 1
     ##     var missing = a.find(7);   # missing.is_empty() == true
+    [__Reads]
     find(item: T): ulong? {
         ulong index = 0;
         while (index < _size) {
@@ -617,6 +644,7 @@ export struct Array<T> {
     ##
     ## @param item the value to look for
     ## @returns true when `find(item)` finds a match
+    [__Reads]
     contains(item: T): bool {
         return find(item).is_value();
     }
@@ -664,6 +692,7 @@ export struct Array<T> {
     ## @example
     ##     var b = a.clone();
     ##     b.append(7);   # a is unchanged
+    [__Reads]
     clone(): Array<T> {
         Array<T> result = Array<T>(_size);
         result.append_all(this);
@@ -710,6 +739,7 @@ export struct Array<T> {
     ##
     ## @param rhs the Array to compare with
     ## @returns true when the Arrays are element-wise equal
+    [__Reads]
     ==(rhs: Array<T>): bool {
         if (_size != rhs._size) {
             return false;
@@ -729,6 +759,7 @@ export struct Array<T> {
     ##
     ## @param rhs the Array to compare with
     ## @returns true when the Arrays are not element-wise equal
+    [__Reads]
     !=(rhs: Array<T>): bool {
         return !(this == rhs);
     }
@@ -758,6 +789,7 @@ export struct Array<T> {
     ## @returns the concatenation of this Array and `rhs`
     ## @example
     ##     var c = a + b;
+    [__Reads]
     +(rhs: Array<T>): Array<T> {
         Array<T> result = Array<T>(_size + rhs._size);
         result.append_all(this);
@@ -772,7 +804,8 @@ export struct Array<T> {
 ## Holds a reference to the Array, so iterating a temporary keeps it alive for
 ## the whole loop. The iterator is fail-fast: if the Array is modified after
 ## the iterator was created (see `Array` for which operations count), its next
-## `next()` or `current()` panics instead of skipping or repeating elements.
+## `next()` or `current()` panics instead of skipping or repeating elements
+## (an iterator over an Array that was empty when it was made just ends).
 ##
 ## @typeParam T the element type of the source Array
 ## @example

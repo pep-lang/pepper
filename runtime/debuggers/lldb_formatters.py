@@ -125,8 +125,9 @@ class ArrayChildren(_Children):
 def array_summary(value, internal_dict):
     """An Array as its count."""
     array = _object(value)
+    # An empty Array is null until something is added to it.
     if array is None:
-        return "null"
+        return "count=0"
     return "count=%d" % array.GetChildMemberWithName("_size").GetValueAsUnsigned()
 
 

@@ -7,7 +7,7 @@ Source: `runtime/array.pep`
 ## Array
 
 ```pepper
-struct Array<T>
+[__Lazy] struct Array<T>
 ```
 
 A growable, contiguous, zero-indexed sequence of `T` values.
@@ -24,6 +24,13 @@ reference counts.
 `Array` is itself a struct, so assigning it or passing it to a function
 shares the same Array rather than copying its elements; use `clone()` for
 an independent copy.
+
+An empty Array allocates nothing: `Array<T>()` makes no object until the
+Array is first written (`append`, `insert`, `reserve`, ...) or shared
+(assigned, stored, passed or returned), and reading it (`count`,
+`is_empty`, `capacity`, `find`, `contains`, iterating) allocates nothing.
+Sharing allocates first, so every name for an Array sees the same
+elements.
 
 An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 order. Every mutating operation (an element store through `[]`, `append`,
@@ -90,8 +97,9 @@ construct(capacity: ulong = 0)
 Creates an empty Array, optionally preallocating room for `capacity`
 elements.
 
-With the default `capacity` of 0, nothing is allocated until the first
-element is added. Preallocating avoids the reallocations `append`
+With the default `capacity` of 0, nothing is allocated, not even the
+Array itself, until the Array is first written or shared (see `Array`).
+Preallocating avoids the reallocations `append`
 would otherwise perform while the Array grows to a known size.
 
 **Parameters**
@@ -107,7 +115,7 @@ var a = Array<int>(16);   # a.count == 0, a.capacity == 16
 #### iterate
 
 ```pepper
-iterate(): ArrayIterator<T>
+[__Reads] iterate(): ArrayIterator<T>
 ```
 
 Returns an iterator over the elements in index order; this is what
@@ -116,7 +124,8 @@ Returns an iterator over the elements in index order; this is what
 The iterator holds a reference to the Array, so iterating a temporary
 keeps it alive for the whole loop. Modifying the Array while the
 iterator is in use makes the iterator's next `next()` or `current()`
-panic.
+panic, except when the Array was empty when the iterator was made:
+the iterator then sees no elements and ends.
 
 **Returns**
 - a new iterator positioned before the first element
@@ -173,7 +182,7 @@ Does not change the elements or invalidate iterators.
 #### operator []
 
 ```pepper
-[](idx: ulong): T
+[__Reads] [](idx: ulong): T
 ```
 
 Returns the element at `idx`; this is the indexer read `a[idx]`.
@@ -336,7 +345,7 @@ var top = a.pop();
 #### first
 
 ```pepper
-first(): T
+[__Reads] first(): T
 ```
 
 Returns the first element without removing it; the same as `a[0]`.
@@ -350,7 +359,7 @@ Returns the first element without removing it; the same as `a[0]`.
 #### last
 
 ```pepper
-last(): T
+[__Reads] last(): T
 ```
 
 Returns the last element without removing it; the same as
@@ -478,7 +487,7 @@ numbers.sort((a, b) => b - a);        # descending: [3, 1]
 #### find
 
 ```pepper
-find(item: T): ulong?
+[__Reads] find(item: T): ulong?
 ```
 
 Returns the position of the first element equal to `item`, or none
@@ -509,7 +518,7 @@ var missing = a.find(7);   # missing.is_empty() == true
 #### contains
 
 ```pepper
-contains(item: T): bool
+[__Reads] contains(item: T): bool
 ```
 
 Reports whether any element equals `item`, compared as `find` does.
@@ -548,7 +557,7 @@ Array's running iterators when `rhs` is not empty.
 #### clone
 
 ```pepper
-clone(): Array<T>
+[__Reads] clone(): Array<T>
 ```
 
 Returns a new Array holding the same elements in the same order.
@@ -596,7 +605,7 @@ var copied = copy(names);   # calls this method
 #### operator ==
 
 ```pepper
-==(rhs: Array<T>): bool
+[__Reads] ==(rhs: Array<T>): bool
 ```
 
 Reports whether both Arrays have the same count and pairwise equal
@@ -614,7 +623,7 @@ equal. `capacity` is not compared.
 #### operator !=
 
 ```pepper
-!=(rhs: Array<T>): bool
+[__Reads] !=(rhs: Array<T>): bool
 ```
 
 Reports whether the Arrays differ in count or in any element; the
@@ -654,7 +663,7 @@ a += b;   # a now ends with b's elements
 #### operator +
 
 ```pepper
-+(rhs: Array<T>): Array<T>
+[__Reads] +(rhs: Array<T>): Array<T>
 ```
 
 Returns a new Array holding this Array's elements followed by those of
@@ -686,7 +695,8 @@ An `Iterator<T>` over the elements of an Array, in index order; returned by
 Holds a reference to the Array, so iterating a temporary keeps it alive for
 the whole loop. The iterator is fail-fast: if the Array is modified after
 the iterator was created (see `Array` for which operations count), its next
-`next()` or `current()` panics instead of skipping or repeating elements.
+`next()` or `current()` panics instead of skipping or repeating elements
+(an iterator over an Array that was empty when it was made just ends).
 
 **Type parameters**
 - `T` — the element type of the source Array

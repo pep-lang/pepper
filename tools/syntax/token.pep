@@ -154,7 +154,7 @@ export struct Token {
     ##
     ## @returns true when `leading_comments` is not empty
     has_leading_comments(): bool {
-        return _leading_comments !== __null;
+        return !_leading_comments.is_empty;
     }
 
     ## Returns whether a comment follows this token on its line.
@@ -168,7 +168,7 @@ export struct Token {
     ##
     ## @returns true when the token has leading or trailing comments
     has_comments(): bool {
-        return _leading_comments !== __null or _trailing_comment !== __null;
+        return !_leading_comments.is_empty or _trailing_comment !== __null;
     }
 }
 

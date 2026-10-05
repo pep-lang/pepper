@@ -1464,6 +1464,19 @@ pub const SHARED_ATTRIBUTE: &str = "Shared";
 /// (see `crate::value_structs`).
 pub const VALUE_ATTRIBUTE: &str = "Value";
 
+/// The attribute that lets an empty object of a runtime struct be a null
+/// reference until something writes to or shares it (`Array<T>`): codegen
+/// makes the zero-argument constructor null and allocates the object the
+/// first time a place holding null is read for anything but a
+/// `[__Reads]` call or a field read. The struct's all-zero fields must be
+/// its empty state. Internal to the runtime.
+pub const LAZY_ATTRIBUTE: &str = "__Lazy";
+
+/// The attribute that marks a method of a `[__Lazy]` struct as reading
+/// only: it runs on a null `this` (whose fields read as zero) instead of
+/// allocating the object first. `check_lazy` checks it writes nothing.
+pub const READS_ATTRIBUTE: &str = "__Reads";
+
 /// A value converted by an `[Implicit]` constructor: `to(value)` where the
 /// value was a `from`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -1502,6 +1515,12 @@ impl StructDef {
     /// `crate::value_structs`).
     pub fn is_value(&self) -> bool {
         has_attribute(&self.attributes, VALUE_ATTRIBUTE)
+    }
+
+    /// Declared `[__Lazy]`: an empty object is null until first written or
+    /// shared (see [`LAZY_ATTRIBUTE`]).
+    pub fn is_lazy(&self) -> bool {
+        has_attribute(&self.attributes, LAZY_ATTRIBUTE)
     }
 
     /// The type an `[Implicit]` constructor converts from: its first

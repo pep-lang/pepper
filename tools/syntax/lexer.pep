@@ -226,7 +226,7 @@ export lex(source: String): Result<Token[], SyntaxError> {
     ulong size = source.size;
     ulong i = 0;
     # The comments waiting for the next token; null while there are none.
-    Comment[] pending = __null;
+    var pending = Array<Comment>();
     int newlines = 0;
     int newlines_since_comment = 0;
     bool space = false;
@@ -260,9 +260,6 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 last.trailing_comment = text;
                 tokens[tokens.count - 1] = last;
             } else {
-                if (pending === __null) {
-                    pending = Array<Comment>();
-                }
                 pending.append(Comment(text, newlines_since_comment, start));
                 newlines_since_comment = 0;
             }
@@ -389,9 +386,12 @@ export lex(source: String): Result<Token[], SyntaxError> {
         token.newlines_before = newlines;
         token.newlines_after_comments = newlines_since_comment;
         token.space_before = space;
-        token._leading_comments = pending;
+        # Storing an empty list in a token would give it an object.
+        if (!pending.is_empty) {
+            token._leading_comments = pending;
+            pending = __null;
+        }
         tokens.append(token);
-        pending = __null;
         newlines = 0;
         newlines_since_comment = 0;
         space = false;
@@ -400,7 +400,9 @@ export lex(source: String): Result<Token[], SyntaxError> {
     end.newlines_before = newlines;
     end.newlines_after_comments = newlines_since_comment;
     end.space_before = space;
-    end._leading_comments = pending;
+    if (!pending.is_empty) {
+        end._leading_comments = pending;
+    }
     tokens.append(end);
     return Result<Token[], SyntaxError>.ok(tokens);
 }

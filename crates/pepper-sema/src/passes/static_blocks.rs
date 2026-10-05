@@ -52,6 +52,8 @@ pub const BUILT_IN_ATTRIBUTES: &[&str] = &[
     "ThreadLocal",
     "Value",
     "__BuiltIn",
+    "__Lazy",
+    "__Reads",
 ];
 
 /// The attribute that makes a struct an attribute.

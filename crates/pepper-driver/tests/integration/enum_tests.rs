@@ -899,8 +899,9 @@ test(): int {
     var w = __weak_from<Doc>(a);
     if (__weak_upgrade<Doc>(w) === a) { total += 100; }
     many = Array<Doc>();
-    # Only the arrays allocated; the cases did not.
-    if (_pep_live_allocs() - before != 1) { return -1; }
+    # Only the arrays allocated, and the empty one now holds nothing
+    # (#652); the cases did not.
+    if (_pep_live_allocs() - before != 0) { return -1; }
     return total;
 }
 "#

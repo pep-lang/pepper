@@ -1792,6 +1792,11 @@ fn check_parameter_attributes(program: &Program) -> bool {
             if name == MOVE_ATTRIBUTE {
                 continue;
             }
+            // An empty `[__Lazy]` argument arrives at a `[__Reads]`
+            // parameter as null (an internal of the runtime's copies).
+            if name == crate::model::READS_ATTRIBUTE {
+                continue;
+            }
             if name == LOCKED_ATTRIBUTE {
                 if program.is_runtime_file(function.loc.file) {
                     continue;

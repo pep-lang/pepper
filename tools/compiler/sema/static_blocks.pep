@@ -66,7 +66,7 @@ const _MAX_SPECIALIZATION_DEPTH: ulong = 64;
 ## attribute must name an `[Attribute]` struct.
 _is_built_in_name(name: String): bool {
     match (name) {
-        "Alias", "Attribute", "BuildOption", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "ThreadLocal", "Value", "__BuiltIn" => {
+        "Alias", "Attribute", "BuildOption", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "ThreadLocal", "Value", "__BuiltIn", "__Lazy", "__Reads" => {
             return true;
         }
         else => {

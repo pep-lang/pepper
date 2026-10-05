@@ -69,6 +69,10 @@ pub struct StructDesc<'ctx> {
     /// (a weak view, a function type's object, a reference enum whose
     /// cases include immortal static objects), which are called.
     pub inline_counts: Option<bool>,
+    /// Declared `[__Lazy]`: the zero-argument constructor is null, and a
+    /// place holding null gets its object when first read for anything
+    /// but a `[__Reads]` call or a field read (see [`CodeGenerator::materialize`]).
+    pub lazy: bool,
 }
 
 /// A trait used as a type (`Shape`, `Iterator<int>`): its dispatchable
@@ -100,6 +104,87 @@ fn type_id_value<'ctx>(context: &'ctx Context, struct_name: &str) -> inkwell::va
     } else {
         context.i64_type().const_int(id, false)
     }
+}
+
+/// Adds to `finals` each read of a variable in `names` that the variable's
+/// next use overwrites: within one block, the read's statement (an
+/// expression or a declaration) holds the variable's last occurrence in it,
+/// and a later statement `name = value` (with no `name` in `value`) comes
+/// before any other use of it and any `break`, `continue` or `return`
+/// (`pending` in `t.comments = pending; pending = Array<Comment>();`).
+fn killed_reads(block: &Block, names: &HashSet<&String>, finals: &mut HashSet<*const Expression>) {
+    for (index, statement) in block.items.iter().enumerate() {
+        match statement {
+            Statement::Block(inner) => killed_reads(inner, names, finals),
+            Statement::Branch(branch) => {
+                killed_reads(&branch.if_block, names, finals);
+                if let Some(other) = &branch.else_block {
+                    killed_reads(other, names, finals);
+                }
+            }
+            Statement::While(wh) => killed_reads(&wh.block, names, finals),
+            Statement::Expression(_) | Statement::Declaration(Declaration::Variable(_)) => {
+                let mut last: HashMap<&String, &Expression> = HashMap::new();
+                pepper_sema::passes::visit_statement(statement, &mut |e| {
+                    if let Expression::SymbolRef { id, .. } = e
+                        && let Some(name) = names.get(id)
+                    {
+                        last.insert(*name, e);
+                    }
+                });
+                for (name, read) in last {
+                    for later in &block.items[index + 1..] {
+                        if let Statement::Expression(Expression::Binary { op: BinaryOp::Assign, lhs, rhs, .. }) = later
+                            && matches!(lhs.as_ref(), Expression::SymbolRef { id, .. } if id == name)
+                            && !mentions(name, rhs)
+                        {
+                            finals.insert(read as *const Expression);
+                            break;
+                        }
+                        if mentions_statement(later, name) || jumps(later) {
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Whether `expr` mentions `name`.
+fn mentions(name: &str, expr: &Expression) -> bool {
+    let mut found = false;
+    pepper_sema::passes::visit_expression(expr, &mut |e| found |= matches!(e, Expression::SymbolRef { id, .. } if id == name));
+    found
+}
+
+/// Whether `statement` mentions `name` anywhere.
+fn mentions_statement(statement: &Statement, name: &str) -> bool {
+    let mut found = false;
+    pepper_sema::passes::visit_statement(statement, &mut |e| found |= matches!(e, Expression::SymbolRef { id, .. } if id == name));
+    found
+}
+
+/// Whether `statement` holds a `break`, `continue` or `return`.
+fn jumps(statement: &Statement) -> bool {
+    let block_jumps = |b: &Block| b.items.iter().any(jumps);
+    match statement {
+        Statement::LoopBreak(_) | Statement::Return(_) | Statement::Static(_) => true,
+        Statement::Block(inner) => block_jumps(inner),
+        Statement::Branch(branch) => block_jumps(&branch.if_block) || branch.else_block.as_ref().is_some_and(block_jumps),
+        Statement::While(wh) => block_jumps(&wh.block),
+        _ => false,
+    }
+}
+
+/// The two sides of a null check on a `[__Lazy]` reference
+/// ([`CodeGenerator::fill_lazy`]): the block that branched, the join
+/// block, and the object made on the null side.
+struct LazyFill<'ctx> {
+    from: inkwell::basic_block::BasicBlock<'ctx>,
+    done: inkwell::basic_block::BasicBlock<'ctx>,
+    made: PointerValue<'ctx>,
 }
 
 /// Result of generation.
@@ -138,6 +223,23 @@ pub struct CodeGenerator<'ctx> {
     /// or the member of an overloaded `==` set that takes it
     /// (`String.==$1` beside `==(rhs: StringConstant)`).
     equality_methods: HashMap<String, String>,
+    /// The `[__Reads]` methods of `[__Lazy]` structs, mangled
+    /// (`Array<int>.__get_count`): they run on a null `this`.
+    reads_methods: HashSet<String>,
+    /// Set just before reading a place of a `[__Lazy]` type that must stay
+    /// null (a `[__Reads]` receiver, a field read's object): the next
+    /// [`Self::codegen_expr`] takes it.
+    keep_lazy: bool,
+    /// The function being generated is a `[__Reads]` method, so its `this`
+    /// may be null and its field reads go through [`Self::lazy_base`].
+    this_may_be_null: bool,
+    /// Set while [`Self::materialize`] calls a `[__Lazy]` constructor, which
+    /// then allocates instead of yielding null.
+    making_lazy: bool,
+    /// The reads of `[__Lazy]` locals in the function being generated that
+    /// nothing can follow (`final_reads`): copying one moves the value out,
+    /// so an empty one is passed on as null.
+    final_reads: HashSet<*const Expression>,
     /// A unit's value struct `__acquire`/`__release` thunks, declared but
     /// not yet defined: `codegen_unit` defines the ones its code calls, so
     /// the program's other instantiations do not reach the unit's code.
@@ -161,6 +263,9 @@ pub struct CodeGenerator<'ctx> {
     /// Per function, which parameters are `[Move]`: the caller hands its
     /// reference over instead of the callee acquiring one (zero-copy send).
     sending_params: HashMap<String, Vec<bool>>,
+    /// `[__Reads]` parameters, by callee: an empty `[__Lazy]` argument
+    /// reaches them as null instead of being allocated.
+    reads_params: HashMap<String, Vec<bool>>,
     /// Identical string literals share one global constant.
     global_strings: HashMap<String, PointerValue<'ctx>>,
     /// The immortal `String` object of each shared literal
@@ -297,6 +402,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             values: HashMap::new(),
             hash_overrides: HashSet::new(),
             equality_methods: HashMap::new(),
+            reads_methods: HashSet::new(),
+            keep_lazy: false,
+            this_may_be_null: false,
+            making_lazy: false,
+            final_reads: HashSet::new(),
             pending_value_thunks: Vec::new(),
             functions: HashMap::new(),
             fn_returns: HashMap::new(),
@@ -304,6 +414,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             fn_signatures: HashMap::new(),
             fn_param_types: HashMap::new(),
             sending_params: HashMap::new(),
+            reads_params: HashMap::new(),
             global_strings: HashMap::new(),
             static_strings: HashMap::new(),
             caller_copies: HashMap::new(),
@@ -1105,6 +1216,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             method_returns: HashMap::new(),
             method_params: HashMap::new(),
             inline_counts: standard_counts(st).then(|| st.atomic_counts()),
+            lazy: st.is_lazy(),
         };
         self.structs.insert(st.name.clone(), desc);
 
@@ -1215,8 +1327,12 @@ impl<'ctx> CodeGenerator<'ctx> {
             if sending.iter().any(|s| *s) {
                 self.sending_params.insert(mangled.clone(), sending);
             }
+            self.record_reads_params(&mangled, &method.parameters);
             if method.is_static {
                 static_names.insert(method.name.clone());
+            }
+            if st.is_lazy() && pepper_sema::model::has_attribute(&method.attributes, pepper_sema::model::READS_ATTRIBUTE) {
+                self.reads_methods.insert(mangled.clone());
             }
             methods.insert(method.name.clone(), mangled);
             method_returns.insert(method.name.clone(), method.ty.to_string());
@@ -1408,7 +1524,21 @@ impl<'ctx> CodeGenerator<'ctx> {
         if sending.iter().any(|s| *s) {
             self.sending_params.insert(function.name.clone(), sending);
         }
+        self.record_reads_params(&function.name, &function.parameters);
         Ok(())
+    }
+
+    /// Records which of `callee`'s `parameters` are `[__Reads]`.
+    fn record_reads_params(&mut self, callee: &str, parameters: &[VariableDef]) {
+        let reads: Vec<bool> = parameters.iter().map(|p| sema::has_attribute(&p.attributes, sema::READS_ATTRIBUTE)).collect();
+        if reads.iter().any(|r| *r) {
+            self.reads_params.insert(callee.to_string(), reads);
+        }
+    }
+
+    /// Whether parameter `index` of `callee` is `[__Reads]`.
+    fn reads_param(&self, callee: &str, index: usize) -> bool {
+        self.reads_params.get(callee).and_then(|r| r.get(index)).copied().unwrap_or(false)
     }
 
     /// The ctors (several when overloaded) with their `__alloc_size` literal
@@ -1672,9 +1802,15 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
         let mut value = ty.get_undef();
         for (index, (arg, element)) in args.iter().zip(&elements).enumerate() {
-            let item = self.codegen_expr(arg)?;
+            let mut item = self.codegen_expr(arg)?;
             if self.is_reference_name(element) && self.is_lvalue_read(arg) {
                 self.acquire_ref(element, item)?;
+            } else if self.is_lazy(element) {
+                // Copies of the tuple share its elements, so an empty lazy
+                // temporary gets its object now (see `codegen_assignment`).
+                let held = item.into_pointer_value();
+                let fill = self.fill_lazy(held, element)?;
+                item = self.join_lazy(held, fill)?;
             }
             let item = if matches!(item, BasicValueEnum::IntValue(_) | BasicValueEnum::FloatValue(_)) && llvm_ops::is_numeric_type(element) {
                 let source = self.numeric_source_name(arg, &item);
@@ -1810,6 +1946,190 @@ impl<'ctx> CodeGenerator<'ctx> {
         let phi = self.builder.build_phi(if_null.get_type(), "result").map_err(|e| e.to_string())?;
         phi.add_incoming(&[(&if_null, from), (&computed, computed_in)]);
         Ok(phi.as_basic_value().into_int_value())
+    }
+
+    /// The reads of `function`'s `[__Lazy]` locals and parameters that no
+    /// other use can follow: each one's last occurrence in the body, when it
+    /// is in no loop the variable's declaration is outside of. A name
+    /// declared twice is left out. Copying such a read (an argument, an
+    /// assignment's or a variable's value) is a move: no other name for
+    /// the value remains, so an empty one need not be allocated.
+    fn final_reads_of(&self, function: &FunctionDef, body: &Block) -> HashSet<*const Expression> {
+        struct Walk<'e> {
+            depth: usize,
+            /// Name → loop depth of its declaration, or `None` when declared twice.
+            declared: HashMap<String, Option<usize>>,
+            /// Name → its last occurrence and that occurrence's loop depth.
+            last: HashMap<String, (&'e Expression, usize)>,
+        }
+        impl<'e> Walk<'e> {
+            fn declare(&mut self, name: &str) {
+                let depth = self.depth;
+                self.declared.entry(name.to_string()).and_modify(|d| *d = None).or_insert(Some(depth));
+            }
+            fn expression(&mut self, expr: &'e Expression) {
+                let depth = self.depth;
+                pepper_sema::passes::visit_expression(expr, &mut |e| {
+                    if let Expression::SymbolRef { id, .. } = e {
+                        self.last.insert(id.clone(), (e, depth));
+                    }
+                });
+            }
+            fn block(&mut self, block: &'e Block, lazy: &dyn Fn(&VariableDef) -> bool) {
+                for statement in &block.items {
+                    match statement {
+                        Statement::Expression(e) => self.expression(e),
+                        Statement::Block(inner) => self.block(inner, lazy),
+                        Statement::Declaration(Declaration::Variable(var)) => {
+                            if let Some(default) = &var.default {
+                                self.expression(default);
+                            }
+                            if lazy(var) {
+                                self.declare(&var.name);
+                            }
+                        }
+                        Statement::Declaration(_) | Statement::LoopBreak(_) | Statement::StaticPass(_) | Statement::Static(_) => {}
+                        Statement::Branch(branch) => {
+                            self.expression(&branch.condition);
+                            self.block(&branch.if_block, lazy);
+                            if let Some(other) = &branch.else_block {
+                                self.block(other, lazy);
+                            }
+                        }
+                        Statement::While(wh) => {
+                            self.depth += 1;
+                            self.expression(&wh.condition);
+                            self.block(&wh.block, lazy);
+                            self.depth -= 1;
+                        }
+                        Statement::Return(ret) => {
+                            if let Some(e) = &ret.expr {
+                                self.expression(e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let lazy = |var: &VariableDef| self.is_lazy(&var.ty.to_string());
+        if !function.parameters.iter().any(lazy) && !self.structs.values().any(|d| d.lazy) {
+            return HashSet::new();
+        }
+        let mut walk = Walk { depth: 0, declared: HashMap::new(), last: HashMap::new() };
+        for parameter in function.parameters.iter().filter(|p| lazy(p)) {
+            walk.declare(&parameter.name);
+        }
+        walk.block(body, &lazy);
+        let names: HashSet<&String> = walk.declared.iter().filter(|(_, d)| d.is_some()).map(|(n, _)| n).collect();
+        let mut finals: HashSet<*const Expression> = walk
+            .last
+            .iter()
+            .filter(|(name, (_, depth))| walk.declared.get(*name).is_some_and(|d| *d == Some(*depth)))
+            .map(|(_, (e, _))| *e as *const Expression)
+            .collect();
+        killed_reads(body, &names, &mut finals);
+        finals
+    }
+
+    /// Whether `expr` is a read of a `[__Lazy]` local that nothing follows
+    /// (`final_reads_of`).
+    fn is_final_read(&self, expr: &Expression) -> bool {
+        matches!(expr, Expression::SymbolRef { .. }) && self.final_reads.contains(&(expr as *const Expression))
+    }
+
+    /// Whether `ty` is a `[__Lazy]` struct (`Array<int>`).
+    fn is_lazy(&self, ty: &str) -> bool {
+        self.structs.get(ty).is_some_and(|d| d.lazy)
+    }
+
+    /// The type of `expr` when it is a place (a variable, a field, a buffer
+    /// slot) of a `[__Lazy]` struct type, which a read may have to fill.
+    #[inline(never)]
+    fn lazy_place(&self, expr: &Expression) -> Option<String> {
+        let place = match expr {
+            // A variable, not a type literal (`File` in `File.open(p)`).
+            Expression::SymbolRef { id, .. } => self.frame.find_local(id).is_some() || self.global_addrs.contains_key(id),
+            Expression::Index { .. } | Expression::ArrayIndex { .. } => true,
+            Expression::MemberRef { lhs, .. } => match self.struct_name_of(lhs) {
+                Some(owner) if self.tuples.contains_key(&owner) => false,
+                Some(owner) if self.values.contains_key(&owner) => self.is_value_place(lhs),
+                _ => true,
+            },
+            _ => false,
+        };
+        if !place {
+            return None;
+        }
+        let ty = self.value_sema_type(expr)?;
+        self.is_lazy(&ty).then_some(ty)
+    }
+
+    /// Reads the place `expr` of `[__Lazy]` type `ty`, first storing a new
+    /// empty object into it when it holds null. A read that reaches here
+    /// writes through the reference or shares it, so every name for the
+    /// place must see one object from now on.
+    #[inline(never)]
+    fn materialize(&mut self, expr: &Expression, ty: &str) -> Result<BasicValueEnum<'ctx>, String> {
+        let address = self.codegen_lvalue(expr)?;
+        let pointer = self.context.ptr_type(inkwell::AddressSpace::default());
+        let held = self.builder.build_load(pointer, address.ptr, "lazy").map_err(|e| e.to_string())?.into_pointer_value();
+        let fill = self.fill_lazy(held, ty)?;
+        self.builder.build_store(address.ptr, fill.made).map_err(|e| e.to_string())?;
+        self.join_lazy(held, fill)
+    }
+
+    /// Branches on whether `held` (of `[__Lazy]` type `ty`) is null and, on
+    /// the null side, constructs an empty `ty`, leaving the builder there so
+    /// the caller can store it; [`Self::join_lazy`] joins the two sides.
+    #[inline(never)]
+    fn fill_lazy(&mut self, held: PointerValue<'ctx>, ty: &str) -> Result<LazyFill<'ctx>, String> {
+        let function = self.frame.function.ok_or_else(|| "no function".to_string())?;
+        let from = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+        let make = self.context.append_basic_block(function, "lazy_make");
+        let done = self.context.append_basic_block(function, "lazy_done");
+        let is_null = self.builder.build_is_null(held, "lazy_null").map_err(|e| e.to_string())?;
+        self.builder.build_conditional_branch(is_null, make, done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(make);
+        let outer = std::mem::replace(&mut self.making_lazy, true);
+        let made = self.codegen_call(ty, &[]);
+        self.making_lazy = outer;
+        Ok(LazyFill { from, done, made: made?.into_pointer_value() })
+    }
+
+    /// Joins the sides [`Self::fill_lazy`] opened: the object `held` was,
+    /// or the one made in its place.
+    #[inline(never)]
+    fn join_lazy(&mut self, held: PointerValue<'ctx>, fill: LazyFill<'ctx>) -> Result<BasicValueEnum<'ctx>, String> {
+        let made_in = self.builder.get_insert_block().ok_or_else(|| "no block".to_string())?;
+        self.builder.build_unconditional_branch(fill.done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(fill.done);
+        let pointer = self.context.ptr_type(inkwell::AddressSpace::default());
+        let phi = self.builder.build_phi(pointer, "lazy_object").map_err(|e| e.to_string())?;
+        phi.add_incoming(&[(&held, fill.from), (&fill.made, made_in)]);
+        Ok(phi.as_basic_value())
+    }
+
+    /// The object a field read through `object` (of `[__Lazy]` type `ty`)
+    /// reads: `object`, or when it is null a zeroed constant of the
+    /// struct's layout, whose fields read as an empty object's.
+    #[inline(never)]
+    fn lazy_base(&mut self, ty: &str, object: PointerValue<'ctx>) -> Result<PointerValue<'ctx>, String> {
+        let layout = self.structs.get(ty).map(|d| d.llvm_type).ok_or_else(|| format!("not a struct: {}", ty))?;
+        let name = format!("{}.__empty", ty);
+        let empty = match self.module.get_global(&name) {
+            Some(global) => global,
+            None => {
+                let global = self.module.add_global(layout, None, &name);
+                global.set_initializer(&layout.const_zero());
+                global.set_constant(true);
+                global.set_linkage(inkwell::module::Linkage::Private);
+                global.set_unnamed_addr(true);
+                global
+            }
+        };
+        let is_null = self.builder.build_is_null(object, "lazy_null").map_err(|e| e.to_string())?;
+        let base = self.builder.build_select(is_null, empty.as_pointer_value(), object, "lazy_base").map_err(|e| e.to_string())?;
+        Ok(base.into_pointer_value())
     }
 
     /// `hash<T>` of a tuple value: each element's hash folded through
@@ -2520,7 +2840,14 @@ impl<'ctx> CodeGenerator<'ctx> {
         // `[Unsafe("...")]` turns checks off in this body only.
         let build_checks = self.runtime_checks;
         self.runtime_checks = build_checks.and(pepper_sema::runtime_checks::function_checks(&function.attributes));
+        let outer_reads = std::mem::replace(
+            &mut self.this_may_be_null,
+            pepper_sema::model::has_attribute(&function.attributes, pepper_sema::model::READS_ATTRIBUTE),
+        );
+        let outer_finals = std::mem::take(&mut self.final_reads);
         let result = self.codegen_function_unlocated(function);
+        self.final_reads = outer_finals;
+        self.this_may_be_null = outer_reads;
         self.runtime_checks = build_checks;
         if let Some(debug) = self.debug.as_mut() {
             debug.end_function();
@@ -2687,6 +3014,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             items: vec![],
             attributes: vec![],
         });
+        // Pointers into this copy of the body, which codegen reads.
+        self.final_reads = self.final_reads_of(function, &body);
         self.codegen_block(&body)?;
 
         // Function end: release every tracked slot (fall-through path only —
@@ -2874,6 +3203,9 @@ impl<'ctx> CodeGenerator<'ctx> {
                 let mut value: Option<BasicValueEnum<'ctx>> = None;
                 let mut value_name: Option<String> = None;
                 if let Some(expr) = &ret.expr {
+                    // Returning a local moves it out, so an empty `[__Lazy]`
+                    // one has no other name to share it with and stays null.
+                    self.keep_lazy = matches!(expr, Expression::SymbolRef { id, .. } if self.frame.find_local(id).is_some());
                     let v = self.codegen_expr(expr)?;
                     value_name = Some(self.numeric_source_name(expr, &v));
                     // shared_ptr-by-value: returning a struct reference is a
@@ -3017,6 +3349,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             self.debug_declare(alloca, &var.name, &var.ty.to_string(), var.loc, None);
         }
         if let Some(default) = &var.default {
+            self.keep_lazy = self.is_final_read(default);
             let value = self.codegen_expr(default)?;
             // Copying an existing struct reference into a fresh slot acquires
             // (shared_ptr::operator=). Ctor and function/method results are
@@ -4347,6 +4680,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         Ok(())
     }
     fn codegen_expr(&mut self, expr: &Expression) -> Result<BasicValueEnum<'ctx>, String> {
+        let keep_lazy = std::mem::take(&mut self.keep_lazy);
         if let Expression::FunctionCall { function, loc, .. } = expr
             && function == CALLER_LOCATION
         {
@@ -4364,7 +4698,10 @@ impl<'ctx> CodeGenerator<'ctx> {
         let is_call = matches!(expr, Expression::FunctionCall { .. } | Expression::MethodCall { .. });
         let outer_call = is_call.then(|| std::mem::replace(&mut self.call_loc, expr.loc()));
         let outer_default = std::mem::replace(&mut self.in_default_argument, false);
-        let result = self.codegen_expr_unlocated(expr);
+        let result = match self.lazy_place(expr).filter(|_| !keep_lazy) {
+            Some(ty) => self.materialize(expr, &ty),
+            None => self.codegen_expr_unlocated(expr),
+        };
         self.in_default_argument = outer_default;
         if let Some(outer) = outer_call {
             self.call_loc = outer;
@@ -4484,9 +4821,17 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // creation ref is released at the end of the full expression,
                 // which may still read the field (`f().s == "x"`).
                 let lhs_temp = self.owned_temp_type(lhs);
+                // Reading a field neither writes nor shares the object, so
+                // an empty `[__Lazy]` one stays null and reads as zeroed
+                // (`this` is never null outside a `[__Reads]` method).
+                let lazy = self.is_lazy(&struct_name);
+                self.keep_lazy = lazy;
                 let this_ptr = self.codegen_expr(lhs)?;
                 let base_ptr = match this_ptr {
                     BasicValueEnum::StructValue(_) => self.codegen_lvalue(lhs)?.ptr,
+                    _ if lazy && (self.this_may_be_null || !matches!(lhs.as_ref(), Expression::ThisRef)) => {
+                        self.lazy_base(&struct_name, this_ptr.into_pointer_value())?
+                    }
                     _ => this_ptr.into_pointer_value(),
                 };
                 let desc = self
@@ -5063,6 +5408,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                             return Ok(none);
                         }
                         if matches!(this.as_ref(), Expression::Index { .. } | Expression::ArrayIndex { .. }) {
+                            // Counting skips null, so an empty `[__Lazy]` slot stays empty.
+                            self.keep_lazy = true;
                             let value = self.codegen_expr(this)?;
                             if method == "__acquire" {
                                 self.acquire_ref(&ty, value)?;
@@ -5123,15 +5470,16 @@ impl<'ctx> CodeGenerator<'ctx> {
                     if method.starts_with("__index_") || !pointee_declares {
                         return self.codegen_index_method(this, method, args);
                     }
+                    let mangled = format!("{}.{}", pointee_struct, method);
                     // Load the slot value with the correct element type —
                     // the Index arm GEPs + loads using the receiver's pointee.
+                    self.keep_lazy = self.reads_methods.contains(&mangled);
                     let elem_val = self.codegen_expr(this)?;
                     let is_static = self
                         .structs
                         .get(&pointee_struct)
                         .map(|d| d.static_methods.contains(method.as_str()))
                         .unwrap_or(false);
-                    let mangled = format!("{}.{}", pointee_struct, method);
                     let mut arg_vals = if is_static { vec![] } else { vec![elem_val] };
                     let mut arg_names: Vec<String> = if is_static { vec![] } else { vec![String::new()] };
                     // Owned-rvalue arguments are temporaries (shared_ptr): their
@@ -5146,6 +5494,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                             arg_vals.push(v);
                             continue;
                         }
+                        self.keep_lazy = self.reads_param(&mangled, index) || self.is_final_read(arg);
                         let v = self.codegen_expr(arg)?;
                         self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                         arg_names.push(self.numeric_source_name(arg, &v));
@@ -5217,7 +5566,19 @@ impl<'ctx> CodeGenerator<'ctx> {
                     arg_vals.push(address.into());
                     arg_names.push(String::new());
                 } else if !is_static {
-                    let this_val = self.codegen_expr(this)?;
+                    // A `[__Reads]` method (or a count step) runs on an empty
+                    // `[__Lazy]` object as null; any other method gets an
+                    // object, made in the receiver's place if it has one
+                    // (`materialize`), else for this call alone.
+                    let lazy = self.is_lazy(&struct_name);
+                    let reads = thunk || self.reads_methods.contains(&mangled);
+                    self.keep_lazy = lazy && reads;
+                    let mut this_val = self.codegen_expr(this)?;
+                    if lazy && !reads && this_temp.is_some() {
+                        let held = this_val.into_pointer_value();
+                        let fill = self.fill_lazy(held, &struct_name)?;
+                        this_val = self.join_lazy(held, fill)?;
+                    }
                     this_val_opt = Some(this_val);
                     arg_vals.push(this_val);
                     arg_names.push(String::new());
@@ -5234,6 +5595,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                         arg_vals.push(v);
                         continue;
                     }
+                    self.keep_lazy = self.reads_param(&mangled, index) || self.is_final_read(arg);
                     let v = self.codegen_expr(arg)?;
                     self.pass_argument(&mangled, index, arg, v, &mut owned_arg_temps)?;
                     arg_names.push(self.numeric_source_name(arg, &v));
@@ -5428,6 +5790,11 @@ impl<'ctx> CodeGenerator<'ctx> {
         if self.tuples.contains_key(name) {
             return self.codegen_tuple(name, args);
         }
+        // An empty `[__Lazy]` object is null until it is written or shared
+        // (see `materialize`).
+        if !self.making_lazy && self.is_lazy(name) && args.iter().all(|a| matches!(a, Expression::DefaultArgument { .. })) {
+            return Ok(self.context.ptr_type(inkwell::AddressSpace::default()).const_null().into());
+        }
         // Constructor call `Name<...>(ctor_args)`: specializations are
         // registered under their full name (`Array<int>`); fall back to the
         // base name for non-generic ctors.
@@ -5470,6 +5837,7 @@ impl<'ctx> CodeGenerator<'ctx> {
             if is_extern {
                 self.check_extern_struct_arg(&target, arg_names.len(), arg)?;
             }
+            self.keep_lazy = self.reads_param(&target, arg_names.len()) || self.is_final_read(arg);
             let v = self.codegen_expr(arg)?;
             let index = arg_names.len();
             if is_extern {
@@ -5995,7 +6363,15 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// full expression: the body's value may be one of its fields.
     fn with_subject(&mut self, with: &pepper_sema::model::WithSubject) -> Result<BasicValueEnum<'ctx>, String> {
         let temp = self.owned_temp_type(&with.subject);
-        let value = self.codegen_expr(&with.subject)?;
+        let mut value = self.codegen_expr(&with.subject)?;
+        // The body may read the subject several times (a long literal's
+        // chains all append to it), so an empty `[__Lazy]` temporary gets
+        // its object now; a place read already has one (`materialize`).
+        if let Some(ty) = temp.as_ref().filter(|ty| self.is_lazy(ty)) {
+            let held = value.into_pointer_value();
+            let fill = self.fill_lazy(held, &ty.clone())?;
+            value = self.join_lazy(held, fill)?;
+        }
         if let Some(message) = &with.null_message
             && self.runtime_checks.null
             && self.functions.contains_key("_pep_assert")
@@ -6584,7 +6960,19 @@ impl<'ctx> CodeGenerator<'ctx> {
         // slot store acquires its own ref for the new occupant, so the
         // temp's creation ref is released after the store.
         let rhs_temp = self.owned_temp_type(rhs);
-        let rhs_val = self.codegen_expr(rhs)?;
+        // A tuple or `[Value]` struct (value enums included) is copied
+        // field by field, so an empty lazy object stored in one must exist:
+        // otherwise each copy would make its own on first write. A place
+        // read materializes as usual; a null temporary is filled here.
+        let into_value = matches!(lhs, Expression::MemberRef { lhs: owner, .. }
+            if self.struct_name_of(owner).is_some_and(|t| self.tuples.contains_key(&t) || self.values.contains_key(&t)));
+        self.keep_lazy = self.is_final_read(rhs) && !into_value;
+        let mut rhs_val = self.codegen_expr(rhs)?;
+        if into_value && let Some(ty) = rhs_temp.as_ref().filter(|ty| self.is_lazy(ty)) {
+            let held = rhs_val.into_pointer_value();
+            let fill = self.fill_lazy(held, &ty.clone())?;
+            rhs_val = self.join_lazy(held, fill)?;
+        }
         let lhs_addr = self.codegen_lvalue(lhs)?;
         let lhs_ty = lhs_addr.ty.clone();
         // The sema names carry signedness (`u8` vs `i8`) — LLVM value
@@ -6724,7 +7112,12 @@ impl<'ctx> CodeGenerator<'ctx> {
         let op = &op.identity_as_equality();
         let lhs_temp = self.owned_temp_type(lhs);
         let rhs_temp = self.owned_temp_type(rhs);
+        // A test against null (`x === __null`) neither writes nor shares
+        // `x`, so an empty `[__Lazy]` one stays null.
+        let null_test = [lhs, rhs].iter().any(|e| matches!(e, Expression::PointerLiteral));
+        self.keep_lazy = null_test;
         let lhs_val = self.codegen_expr(lhs)?;
+        self.keep_lazy = null_test;
         let rhs_val = self.codegen_expr(rhs)?;
         // Tuples compare element-wise (`===` too: a tuple has no identity).
         if let (BasicValueEnum::StructValue(_), Some(tuple)) =

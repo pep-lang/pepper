@@ -516,3 +516,80 @@ sort_and_destroy_elements_with_their_own_comparison() {
     nested.sort((a, b) => (a.count as int) - (b.count as int));
     expect_equal(nested[0][0], 1);
 }
+
+# An empty Array is not allocated until it is written or shared (#652):
+# creating one, reading it and iterating it allocate nothing.
+[Test]
+empty_array_allocates_nothing() {
+    var before = _pep_live_allocs();
+    var a = Array<int>();
+    var b = Array<String>();
+    expect_equal(a.count, 0);
+    expect_true(a.is_empty);
+    expect_equal(a.capacity, 0);
+    expect_false(a.contains(3));
+    expect_true(a == Array<int>());
+    for (var x in b) {
+        expect_true(false);
+    }
+    expect_equal(_pep_live_allocs(), before);
+}
+
+[Test]
+first_append_allocates() {
+    var a = Array<int>();
+    var before = _pep_live_allocs();
+    a.append(1);
+    # The Array object and its buffer.
+    expect_equal(_pep_live_allocs(), before + 2);
+    expect_equal(a.count, 1);
+    expect_equal(a[0], 1);
+}
+
+struct Holder {
+    Array<int> items = Array<int>();
+    construct() {}
+}
+
+# A second name for an empty Array shares one object with the first, so
+# each sees what the other appends.
+[Test]
+empty_array_shares_when_copied() {
+    var a = Array<int>();
+    var b = a;
+    b.append(4);
+    expect_equal(a.count, 1);
+    var holder = Holder();
+    expect_equal(holder.items.count, 0);
+    var items = holder.items;
+    items.append(5);
+    expect_equal(holder.items[0], 5);
+    holder.items.append(6);
+    expect_equal(items.count, 2);
+    var nested = Array<Array<int>>();
+    nested.append(Array<int>());
+    nested[0].append(7);
+    expect_equal(nested[0][0], 7);
+}
+
+[Value]
+struct ValueHolder {
+    var items: Array<int>;
+
+    construct(this.items = Array<int>()) {}
+}
+
+[Test]
+empty_array_in_a_value_is_shared_by_its_copies() {
+    var pair = (1, Array<int>());
+    var pair_copy = pair;
+    pair_copy.1.append(2);
+    expect_equal(pair.1.count, 1);
+    var holder = ValueHolder();
+    var holder_copy = holder;
+    holder_copy.items.append(3);
+    expect_equal(holder.items.count, 1);
+    int[]? found = Optional<int[]>.Value(Array<int>());
+    found.value().append(4);
+    expect_equal(found.value().count, 1);
+}
