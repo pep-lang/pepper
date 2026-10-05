@@ -225,7 +225,8 @@ export lex(source: String): Result<Token[], SyntaxError> {
     var data = source.c_str();
     ulong size = source.size;
     ulong i = 0;
-    var pending = Array<Comment>();
+    # The comments waiting for the next token; null while there are none.
+    Comment[] pending = __null;
     int newlines = 0;
     int newlines_since_comment = 0;
     bool space = false;
@@ -253,9 +254,15 @@ export lex(source: String): Result<Token[], SyntaxError> {
                 end -= 1;
             }
             var text = slice(data, start, end);
-            if (tokens.count > 0 and newlines == 0 and tokens.last().trailing_comment.is_empty) {
-                tokens.last().trailing_comment = text;
+            if (tokens.count > 0 and newlines == 0 and tokens.last()._trailing_comment === __null) {
+                # A token is a value: change the stored one in place.
+                var last = tokens.last();
+                last.trailing_comment = text;
+                tokens[tokens.count - 1] = last;
             } else {
+                if (pending === __null) {
+                    pending = Array<Comment>();
+                }
                 pending.append(Comment(text, newlines_since_comment, start));
                 newlines_since_comment = 0;
             }
@@ -378,22 +385,22 @@ export lex(source: String): Result<Token[], SyntaxError> {
         if (i > size) {
             i = size;
         }
-        var token = Token(kind, slice(data, start, i), start);
+        var token = Token(kind, start, i - start);
         token.newlines_before = newlines;
         token.newlines_after_comments = newlines_since_comment;
         token.space_before = space;
-        token.leading_comments = pending;
+        token._leading_comments = pending;
         tokens.append(token);
-        pending = Array<Comment>();
+        pending = __null;
         newlines = 0;
         newlines_since_comment = 0;
         space = false;
     }
-    var end = Token(TokenKind.End, "", size);
+    var end = Token(TokenKind.End, size, 0);
     end.newlines_before = newlines;
     end.newlines_after_comments = newlines_since_comment;
     end.space_before = space;
-    end.leading_comments = pending;
+    end._leading_comments = pending;
     tokens.append(end);
     return Result<Token[], SyntaxError>.ok(tokens);
 }

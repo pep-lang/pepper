@@ -168,15 +168,22 @@ export enum NodeKind {
 export struct Node {
     ## What construct this is.
     NodeKind kind;
-    ## The token, for a `NodeKind.Token` leaf; null otherwise.
+    ## The token, for a `NodeKind.Token` leaf; a zero `Token` otherwise.
+    ## A token is a value, so `leaf.trailing_comment = ...` changes this
+    ## node's copy, while a token read out of it is a separate copy.
     Token leaf;
-    ## The construct's tokens and sub-nodes, in source order.
-    Node[] children = Array<Node>();
+    # The construct's tokens and sub-nodes, in source order; null for a
+    # token leaf, so the tree's most common node allocates no array.
+    Node[] _children;
 
     ## Creates a node with no children.
     ##
     ## @param this.kind which construct it is
-    construct(this.kind = NodeKind.Token) {}
+    construct(this.kind = NodeKind.Token) {
+        if (kind != NodeKind.Token) {
+            _children = Array<Node>();
+        }
+    }
 
     ## Creates a `NodeKind.Token` leaf holding `token`.
     ##
@@ -192,20 +199,35 @@ export struct Node {
     ##
     ## @param child the token leaf or node to append
     add(child: Node) {
-        children.append(child);
+        _children.append(child);
     }
 
     ## Appends a leaf holding `token` to this node's children.
     ##
     ## @param token the token to append
     add_token(token: Token) {
-        children.append(Node.of_token(token));
+        _children.append(Node.of_token(token));
+    }
+
+    ## The construct's tokens and sub-nodes, in source order: the node's own
+    ## array, which a parser may append to or truncate. A token leaf has no
+    ## children, and gets a new empty array.
+    var children: Node[] {
+        get {
+            if (_children === __null) {
+                return Array<Node>();
+            }
+            return _children;
+        }
     }
 
     ## The number of children.
     var count: ulong {
         get {
-            return children.count;
+            if (_children === __null) {
+                return 0;
+            }
+            return _children.count;
         }
     }
 
@@ -215,16 +237,41 @@ export struct Node {
     ## @returns the child
     ## @panics if `index` is not less than `count`
     child(index: ulong): Node {
-        return children[index];
+        return _children[index];
     }
 
     ## Returns whether this node is a token leaf holding the punctuation or
     ## keyword `text`.
     ##
+    ## @param source the text the tree was parsed from
     ## @param text the token text to compare with
     ## @returns true for a leaf whose token is spelled `text`
-    is_token(text: String): bool {
-        return kind == NodeKind.Token and leaf.text == text;
+    is_token(source: String, text: String): bool {
+        return kind == NodeKind.Token and leaf.spells(source, text);
+    }
+
+    ## Returns the first token leaf under this node, in source order: the
+    ## node whose `leaf` is `first_token()`, to change that token in place.
+    ##
+    ## @returns the first leaf
+    ## @panics if the node has no tokens
+    first_leaf(): Node {
+        if (kind == NodeKind.Token) {
+            return this;
+        }
+        return _children[0].first_leaf();
+    }
+
+    ## Returns the last token leaf under this node, in source order: the
+    ## node whose `leaf` is `last_token()`, to change that token in place.
+    ##
+    ## @returns the last leaf
+    ## @panics if the node has no tokens
+    last_leaf(): Node {
+        if (kind == NodeKind.Token) {
+            return this;
+        }
+        return _children[_children.count - 1].last_leaf();
     }
 
     ## Returns the first token under this node, in source order.
@@ -235,7 +282,7 @@ export struct Node {
         if (kind == NodeKind.Token) {
             return leaf;
         }
-        return children[0].first_token();
+        return _children[0].first_token();
     }
 
     ## Returns the last token under this node, in source order.
@@ -246,7 +293,7 @@ export struct Node {
         if (kind == NodeKind.Token) {
             return leaf;
         }
-        return children[children.count - 1].last_token();
+        return _children[_children.count - 1].last_token();
     }
 
     ## Returns whether any token under this node carries a comment.
@@ -256,7 +303,7 @@ export struct Node {
         if (kind == NodeKind.Token) {
             return leaf.has_comments();
         }
-        for (var child in children) {
+        for (var child in _children) {
             if (child.has_comments()) {
                 return true;
             }

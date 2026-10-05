@@ -110,6 +110,9 @@ struct FormatSpec {
 # One `{...}` of an interpolated or format string: its parts so far.
 struct Lowerer {
     var source: String;
+    # The text the tokens being lowered point into: `source`, or inside an
+    # interpolated string's braces the expression's own text.
+    var token_source: String;
     # Added to every token offset: the offset in the file of the text being
     # lowered, which is not 0 inside an interpolated string's braces.
     var base: ulong;
@@ -132,6 +135,7 @@ struct Lowerer {
 
     construct(source: String) {
         this.source = source;
+        this.token_source = source;
     }
 
     # ── Errors and positions ────────────────────────────────────────────
@@ -142,8 +146,18 @@ struct Lowerer {
         }
     }
 
+    # The text of `token`, from the source its offset points into.
+    token_text(token: Token): String {
+        return token.text(token_source);
+    }
+
+    # Whether `token` is spelled `text`, compared in place.
+    token_spells(token: Token, text: String): bool {
+        return token.spells(token_source, text);
+    }
+
     span_of(token: Token): Span {
-        return Span(base + token.offset, base + token.offset + token.text.size);
+        return Span(base + token.offset, base + token.offset + token.size);
     }
 
     start(node: Node): ulong {
@@ -152,7 +166,7 @@ struct Lowerer {
 
     end(node: Node): ulong {
         var last = node.last_token();
-        return base + last.offset + last.text.size;
+        return base + last.offset + last.size;
     }
 
     whole(node: Node): Span {
@@ -182,12 +196,8 @@ struct Lowerer {
     }
 
     record_tokens(root: Node) {
-        var tokens = Array<Token>();
-        collect_tokens(root, tokens);
-        token_offsets = Array<ulong>(tokens.count);
-        for (var token in tokens) {
-            token_offsets.append(token.offset);
-        }
+        token_offsets = Array<ulong>();
+        collect_token_offsets(root, token_offsets);
     }
 
     # ── Module ──────────────────────────────────────────────────────────
@@ -268,11 +278,11 @@ struct Lowerer {
     }
 
     is_exported(node: Node, index: ulong): bool {
-        return index < node.count and node.child(index).is_token("export");
+        return index < node.count and node.child(index).is_token(token_source, "export");
     }
 
     is_private(node: Node, index: ulong): bool {
-        return index < node.count and node.child(index).is_token("private");
+        return index < node.count and node.child(index).is_token(token_source, "private");
     }
 
     declaration(node: Node): Declaration? {
@@ -392,10 +402,10 @@ struct Lowerer {
         ulong index = prefix(node, attributes);
         out.attributes = attributes;
         var keyword = node.child(index);
-        out.reexport = keyword.is_token("export");
+        out.reexport = keyword.is_token(token_source, "export");
         index += 1;
         out.span = Span(attributes.count > 0 ? attributes[0].span.start : start(keyword), 0);
-        if (node.child(index).is_token("*")) {
+        if (node.child(index).is_token(token_source, "*")) {
             index += 2;
         }
         if (node.child(index).kind == NodeKind.ImportList) {
@@ -406,11 +416,11 @@ struct Lowerer {
                 }
                 var symbol = ImportedSymbol();
                 var name = item.child(0).leaf;
-                symbol.name = name.text;
+                symbol.name = token_text(name);
                 symbol.name_span = span_of(name);
                 if (item.count > 2) {
                     var alias = item.child(2).leaf;
-                    symbol.alias = Optional<String>.Value(alias.text);
+                    symbol.alias = Optional<String>.Value(token_text(alias));
                     symbol.span = Span(symbol.name_span.start, span_of(alias).end);
                 } else {
                     symbol.span = Span(symbol.name_span.start, after(item));
@@ -429,11 +439,11 @@ struct Lowerer {
             index += 1;
         } else {
             var name = StringBuilder();
-            name.append(first.text);
+            name.append(token_text(first));
             index += 1;
-            while (index + 1 < node.count and node.child(index).is_token(".")) {
+            while (index + 1 < node.count and node.child(index).is_token(token_source, ".")) {
                 var segment = node.child(index + 1).leaf;
-                name.append(".").append(segment.text);
+                name.append(".").append(token_text(segment));
                 name_end = span_of(segment).end;
                 index += 2;
             }
@@ -441,9 +451,9 @@ struct Lowerer {
         }
         out.name_span = Span(name_start, name_end);
         ulong end = name_end;
-        if (index + 1 < node.count and node.child(index).is_token("as")) {
+        if (index + 1 < node.count and node.child(index).is_token(token_source, "as")) {
             var alias = node.child(index + 1).leaf;
-            out.alias = Optional<String>.Value(alias.text);
+            out.alias = Optional<String>.Value(token_text(alias));
             end = span_of(alias).end;
         }
         out.span = Span(out.span.start, end);
@@ -459,21 +469,21 @@ struct Lowerer {
         index += 1;
         var first = node.child(index).leaf;
         var symbol = StringBuilder();
-        symbol.append(first.text);
+        symbol.append(token_text(first));
         ulong symbol_end = span_of(first).end;
         index += 1;
-        while (index + 1 < node.count and node.child(index).is_token(".")) {
+        while (index + 1 < node.count and node.child(index).is_token(token_source, ".")) {
             var segment = node.child(index + 1).leaf;
-            symbol.append(".").append(segment.text);
+            symbol.append(".").append(token_text(segment));
             symbol_end = span_of(segment).end;
             index += 2;
         }
         out.symbol = symbol.to_string();
         out.symbol_span = Span(span_of(first).start, symbol_end);
         ulong end = symbol_end;
-        if (index + 1 < node.count and node.child(index).is_token("as")) {
+        if (index + 1 < node.count and node.child(index).is_token(token_source, "as")) {
             var alias = node.child(index + 1).leaf;
-            out.alias = Optional<String>.Value(alias.text);
+            out.alias = Optional<String>.Value(token_text(alias));
             end = span_of(alias).end;
         }
         out.span = Span(attributes.count > 0 ? attributes[0].span.start : start(keyword), end);
@@ -499,22 +509,22 @@ struct Lowerer {
     type_name(node: Node): TypeName {
         var first = node.child(0);
         if (first.kind == NodeKind.Token and first.leaf.kind == TokenKind.Number) {
-            return TypeName(first.leaf.text, span_of(first.leaf));
+            return TypeName(token_text(first.leaf), span_of(first.leaf));
         }
-        if (first.is_token("(")
-            or ((first.is_token("shared") or first.is_token("extern"))
+        if (first.is_token(token_source, "(")
+            or ((first.is_token(token_source, "shared") or first.is_token(token_source, "extern"))
                 and node.count > 1
-                and node.child(1).is_token("("))) {
+                and node.child(1).is_token(token_source, "("))) {
             return parenthesized_type(node);
         }
         # A name, qualified by `.name`s, then type arguments.
         var name = StringBuilder();
-        name.append(first.leaf.text);
+        name.append(token_text(first.leaf));
         ulong type_start = span_of(first.leaf).start;
         ulong end = span_of(first.leaf).end;
         ulong index = 1;
-        while (index + 1 < node.count and node.child(index).is_token(".")) {
-            name.append(".").append(node.child(index + 1).leaf.text);
+        while (index + 1 < node.count and node.child(index).is_token(token_source, ".")) {
+            name.append(".").append(token_text(node.child(index + 1).leaf));
             end = span_of(node.child(index + 1).leaf).end;
             index += 2;
         }
@@ -529,7 +539,9 @@ struct Lowerer {
         # `[]` suffixes extend the name; `?` wraps the type in Optional;
         # `*` suffixes extend the name of the outermost type.
         var array_suffix = StringBuilder();
-        while (index + 1 < node.count and node.child(index).is_token("[") and node.child(index + 1).is_token("]")) {
+        while (index + 1 < node.count
+            and node.child(index).is_token(token_source, "[")
+            and node.child(index + 1).is_token(token_source, "]")) {
             array_suffix.append("[]");
             end = end(node.child(index + 1));
             index += 2;
@@ -537,7 +549,7 @@ struct Lowerer {
         if (!array_suffix.is_empty) {
             out.name = out.name + array_suffix.to_string();
         }
-        while (index < node.count and node.child(index).is_token("?")) {
+        while (index < node.count and node.child(index).is_token(token_source, "?")) {
             ulong question_end = end(node.child(index));
             var wrapped = TypeName(ast.OPTIONAL_TYPE, Span(out.span.start, question_end));
             wrapped.generic_types.append(out);
@@ -545,8 +557,9 @@ struct Lowerer {
             end = end.max(question_end);
             index += 1;
         }
-        while (index < node.count and (node.child(index).is_token("*") or node.child(index).is_token("**"))) {
-            var stars = node.child(index).leaf.text;
+        while (index < node.count
+            and (node.child(index).is_token(token_source, "*") or node.child(index).is_token(token_source, "**"))) {
+            var stars = token_text(node.child(index).leaf);
             out.name = out.name + stars;
             end = end(node.child(index));
             index += 1;
@@ -560,10 +573,10 @@ struct Lowerer {
     parenthesized_type(node: Node): TypeName {
         ulong index = 0;
         var name = ast.FUNCTION_TYPE;
-        if (node.child(0).is_token("shared")) {
+        if (node.child(0).is_token(token_source, "shared")) {
             name = ast.SHARED_FUNCTION_TYPE;
             index = 1;
-        } else if (node.child(0).is_token("extern")) {
+        } else if (node.child(0).is_token(token_source, "extern")) {
             name = ast.EXTERN_FUNCTION_TYPE;
             index = 1;
         }
@@ -575,15 +588,15 @@ struct Lowerer {
         String label = "";
         while (index < node.count) {
             var child = node.child(index);
-            if (child.is_token(")")) {
+            if (child.is_token(token_source, ")")) {
                 index += 1;
                 break;
             }
             if (child.kind == NodeKind.Token
                 and child.leaf.kind == TokenKind.Identifier
                 and index + 1 < node.count
-                and node.child(index + 1).is_token(":")) {
-                label = child.leaf.text;
+                and node.child(index + 1).is_token(token_source, ":")) {
+                label = token_text(child.leaf);
                 any_label = true;
                 index += 2;
                 continue;
@@ -595,7 +608,7 @@ struct Lowerer {
             }
             index += 1;
         }
-        if (index < node.count and node.child(index).is_token("=>")) {
+        if (index < node.count and node.child(index).is_token(token_source, "=>")) {
             var result = type_name(node.child(index + 1));
             var out = TypeName(name, Span(type_start, result.span.end));
             out.generic_types.append(result);
@@ -613,13 +626,13 @@ struct Lowerer {
         ulong close_end = 0;
         ulong i = 0;
         while (i < node.count) {
-            if (node.child(i).is_token(")")) {
+            if (node.child(i).is_token(token_source, ")")) {
                 close_end = end(node.child(i));
             }
             i += 1;
         }
         out.span = Span(type_start, close_end);
-        while (index < node.count and node.child(index).is_token("?")) {
+        while (index < node.count and node.child(index).is_token(token_source, "?")) {
             var wrapped = TypeName(ast.OPTIONAL_TYPE, Span(type_start, end(node.child(index))));
             wrapped.generic_types.append(out);
             out = wrapped;
@@ -633,9 +646,9 @@ struct Lowerer {
     type_arguments(arguments: Node, out: TypeName[]) {
         bool in_bounds = false;
         for (var argument in arguments.children) {
-            if (argument.is_token(":")) {
+            if (argument.is_token(token_source, ":")) {
                 in_bounds = true;
-            } else if (argument.is_token(",")) {
+            } else if (argument.is_token(token_source, ",")) {
                 in_bounds = false;
             } else if (argument.kind == NodeKind.Type and !in_bounds) {
                 out.append(type_name(argument));
@@ -667,13 +680,13 @@ struct Lowerer {
             }
             Postfix => {
                 var operand = expression(node.child(0));
-                var op = node.child(1).leaf.text;
+                var op = token_text(node.child(1).leaf);
                 return Expression.Unary(op, false, operand, Span(operand.span().start, end(node)));
             }
             Cast => {
                 var value = expression(node.child(0));
                 var keyword = span_of(node.child(1).leaf);
-                bool optional = node.count > 3 and node.child(2).is_token("?");
+                bool optional = node.count > 3 and node.child(2).is_token(token_source, "?");
                 var type_node = node.child(node.count - 1);
                 if (optional) {
                     keyword = Span(keyword.start, keyword.end + 1);
@@ -708,7 +721,9 @@ struct Lowerer {
                 var elements = Array<Expression>();
                 for (var child in node.children) {
                     if (child.kind != NodeKind.Token
-                        or !(child.is_token("[") or child.is_token("]") or child.is_token(","))) {
+                        or !(child.is_token(token_source, "[")
+                            or child.is_token(token_source, "]")
+                            or child.is_token(token_source, ","))) {
                         elements.append(expression(child));
                     }
                 }
@@ -736,10 +751,10 @@ struct Lowerer {
         var span = span_of(token);
         match (token.kind) {
             Number => {
-                return Expression.Literal(number(token.text, span, false), span);
+                return Expression.Literal(number(token_text(token), span, false), span);
             }
             String => {
-                if (token.text.starts_with("$")) {
+                if (token_text(token).starts_with("$")) {
                     return interpolated_string(token);
                 }
                 return Expression.Literal(Literal.String(string_text(token)), span);
@@ -748,20 +763,20 @@ struct Lowerer {
                 return Expression.Literal(character(token), span);
             }
             Identifier => {
-                if (token.text == "true") {
+                if (token_spells(token, "true")) {
                     return Expression.Literal(Literal.Bool(true), span);
                 }
-                if (token.text == "false") {
+                if (token_spells(token, "false")) {
                     return Expression.Literal(Literal.Bool(false), span);
                 }
-                if (token.text == "__null") {
+                if (token_spells(token, "__null")) {
                     return Expression.Literal(Literal.Null, span);
                 }
-                return Expression.SymbolRef(token.text, span);
+                return Expression.SymbolRef(token_text(token), span);
             }
             else => {}
         }
-        fail($"unexpected '{token.text}'", span);
+        fail($"unexpected '{token_text(token)}'", span);
         return Expression.Literal(Literal.Null, span);
     }
 
@@ -769,7 +784,7 @@ struct Lowerer {
     is_negative_literal(node: Node): bool {
         return node.kind == NodeKind.Prefix
             and node.count == 2
-            and node.child(0).is_token("-")
+            and node.child(0).is_token(token_source, "-")
             and node.child(1).kind == NodeKind.Token
             and node.child(1).leaf.kind == TokenKind.Number
             and !node.child(1).leaf.space_before;
@@ -777,14 +792,14 @@ struct Lowerer {
 
     negative_literal(node: Node): Expression {
         var span = whole(node);
-        return Expression.Literal(number("-" + node.child(1).leaf.text, span, true), span);
+        return Expression.Literal(number("-" + token_text(node.child(1).leaf), span, true), span);
     }
 
     prefix_expression(node: Node, literal_allowed: bool): Expression {
         if (literal_allowed and is_negative_literal(node)) {
             return negative_literal(node);
         }
-        var op = node.child(0).leaf.text;
+        var op = token_text(node.child(0).leaf);
         var operand = expression(node.child(1));
         return Expression.Unary(op, true, operand, Span(start(node), end(node)));
     }
@@ -794,7 +809,7 @@ struct Lowerer {
         if (is_negative_literal(node)) {
             return negative_literal(node);
         }
-        if (node.kind == NodeKind.Binary and node.child(1).is_token("**")) {
+        if (node.kind == NodeKind.Binary and node.child(1).is_token(token_source, "**")) {
             return binary(node);
         }
         return expression(node);
@@ -802,7 +817,7 @@ struct Lowerer {
 
     binary(node: Node): Expression {
         var op_token = node.child(1).leaf;
-        var op = op_token.text;
+        var op = token_text(op_token);
         if (op == "is") {
             var value = expression(node.child(0));
             var tested = pattern(node.child(2));
@@ -824,7 +839,7 @@ struct Lowerer {
         var lhs = expression(node.child(0));
         var name_token = node.child(2).leaf;
         var name_span = span_of(name_token);
-        var name = name_token.text;
+        var name = token_text(name_token);
         ulong member_end = name_span.end;
         if (node.count > 3 and node.child(3).kind == NodeKind.TypeArguments) {
             var arguments = node.child(3);
@@ -847,7 +862,9 @@ struct Lowerer {
         var values = Array<Expression>();
         for (var argument in arguments.children) {
             if (argument.kind == NodeKind.Token
-                and (argument.is_token("(") or argument.is_token(")") or argument.is_token(","))) {
+                and (argument.is_token(token_source, "(")
+                    or argument.is_token(token_source, ")")
+                    or argument.is_token(token_source, ","))) {
                 continue;
             }
             values.append(argument_expression(argument));
@@ -857,13 +874,13 @@ struct Lowerer {
 
     # An argument, `name = value` being a named one.
     argument_expression(node: Node): Expression {
-        if (node.kind == NodeKind.Binary and node.child(1).is_token("=")) {
+        if (node.kind == NodeKind.Binary and node.child(1).is_token(token_source, "=")) {
             var name = node.child(0);
             if (name.kind == NodeKind.Token and name.leaf.kind == TokenKind.Identifier) {
                 var value = expression(node.child(2));
                 var name_span = span_of(name.leaf);
                 return Expression.NamedArgument(
-                    name.leaf.text, name_span, value, Span(name_span.start, value.span().end)
+                    token_text(name.leaf), name_span, value, Span(name_span.start, value.span().end)
                 );
             }
         }
@@ -876,10 +893,12 @@ struct Lowerer {
         for (var child in node.children) {
             if (child.kind == NodeKind.TupleElement) {
                 var label = child.child(0).leaf;
-                labels.append(Label(label.text, span_of(label)));
+                labels.append(Label(token_text(label), span_of(label)));
                 elements.append(expression(child.child(2)));
             } else if (child.kind != NodeKind.Token
-                or !(child.is_token("(") or child.is_token(")") or child.is_token(","))) {
+                or !(child.is_token(token_source, "(")
+                    or child.is_token(token_source, ")")
+                    or child.is_token(token_source, ","))) {
                 elements.append(expression(child));
             }
         }
@@ -894,7 +913,7 @@ struct Lowerer {
                 continue;
             }
             var name = parameter.child(0).leaf;
-            var decl = VariableDecl(name.text);
+            var decl = VariableDecl(token_text(name));
             decl.name_span = span_of(name);
             if (parameter.count > 2) {
                 decl.type_name = type_name(parameter.child(2));
@@ -903,7 +922,7 @@ struct Lowerer {
             out.parameters.append(decl);
         }
         ulong index = 1;
-        if (node.child(index).is_token(":")) {
+        if (node.child(index).is_token(token_source, ":")) {
             out.return_type = type_name(node.child(index + 1));
             index += 2;
         }
@@ -930,7 +949,7 @@ struct Lowerer {
             if (arm.kind != NodeKind.MatchArm) {
                 continue;
             }
-            if (arm.child(0).is_token("else")) {
+            if (arm.child(0).is_token(token_source, "else")) {
                 out.else_span = span_of(arm.child(0).leaf);
                 out.else_value = Optional<Expression>.Value(expression(arm.child(2)));
                 continue;
@@ -941,10 +960,10 @@ struct Lowerer {
                 var child = arm.child(index);
                 if (child.kind == NodeKind.Pattern) {
                     value_arm.patterns.append(pattern(child));
-                } else if (child.is_token("if")) {
+                } else if (child.is_token(token_source, "if")) {
                     value_arm.guard = Optional<Expression>.Value(expression(arm.child(index + 1)));
                     index += 1;
-                } else if (child.is_token("=>")) {
+                } else if (child.is_token(token_source, "=>")) {
                     value_arm.value = expression(arm.child(index + 1));
                     break;
                 }
@@ -961,7 +980,7 @@ struct Lowerer {
     pattern(node: Node): Pattern {
         var out = Pattern();
         var first = node.child(0);
-        if (first.is_token("(")) {
+        if (first.is_token(token_source, "(")) {
             var elements = Array<Pattern>();
             for (var child in node.children) {
                 if (child.kind == NodeKind.Pattern) {
@@ -975,8 +994,8 @@ struct Lowerer {
         }
         if (first.kind != NodeKind.Token
             or first.leaf.kind != TokenKind.Identifier
-            or first.is_token("true")
-            or first.is_token("false")) {
+            or first.is_token(token_source, "true")
+            or first.is_token(token_source, "false")) {
             # A literal, perhaps the start of a range.
             Expression literal;
             if (is_negative_literal(first)) {
@@ -989,7 +1008,7 @@ struct Lowerer {
             if (node.count > 2) {
                 var range_end = expression(node.child(2));
                 out.range_end = Optional<Expression>.Value(range_end);
-                out.range_inclusive = node.child(1).is_token("..>");
+                out.range_inclusive = node.child(1).is_token(token_source, "..>");
                 span = Span(span.start, range_end.span().end);
             }
             out.span = span;
@@ -1000,26 +1019,27 @@ struct Lowerer {
         var segments = Array<Token>();
         segments.append(first.leaf);
         ulong index = 1;
-        while (index + 1 < node.count and node.child(index).is_token(".")) {
+        while (index + 1 < node.count and node.child(index).is_token(token_source, ".")) {
             segments.append(node.child(index + 1).leaf);
             index += 2;
         }
         ulong pattern_start = span_of(first.leaf).start;
-        if (index < node.count and (node.child(index).is_token("..") or node.child(index).is_token("..>"))) {
+        if (index < node.count
+            and (node.child(index).is_token(token_source, "..") or node.child(index).is_token(token_source, "..>"))) {
             # A range from a named constant: `MIN..MAX`.
-            Expression low = Expression.SymbolRef(first.leaf.text, span_of(first.leaf));
+            Expression low = Expression.SymbolRef(token_text(first.leaf), span_of(first.leaf));
             ulong i = 1;
             while (i < segments.count) {
                 var segment = segments[i];
                 low = Expression.MemberAccess(
-                    low, segment.text, span_of(segment), Span(pattern_start, span_of(segment).end)
+                    low, token_text(segment), span_of(segment), Span(pattern_start, span_of(segment).end)
                 );
                 i += 1;
             }
             out.literal = Optional<Expression>.Value(low);
             var range_end = expression(node.child(index + 1));
             out.range_end = Optional<Expression>.Value(range_end);
-            out.range_inclusive = node.child(index).is_token("..>");
+            out.range_inclusive = node.child(index).is_token(token_source, "..>");
             out.span = Span(pattern_start, end(node));
             out.case_span = out.span;
             return out;
@@ -1030,7 +1050,7 @@ struct Lowerer {
             if (i > 0) {
                 names.append(".");
             }
-            names.append(segments[i].text);
+            names.append(token_text(segments[i]));
             i += 1;
         }
         var names_end = span_of(segments.last()).end;
@@ -1042,7 +1062,7 @@ struct Lowerer {
             index += 1;
         }
         var case_token = segments.last();
-        out.case_name = case_token.text;
+        out.case_name = token_text(case_token);
         out.case_span = span_of(case_token);
         if (segments.count > 1) {
             var qualifier = StringBuilder();
@@ -1051,14 +1071,14 @@ struct Lowerer {
                 if (q > 0) {
                     qualifier.append(".");
                 }
-                qualifier.append(segments[q].text);
+                qualifier.append(token_text(segments[q]));
                 q += 1;
             }
             out.qualifier = Optional<TypeName>.Value(
                 TypeName(qualifier.to_string(), Span(pattern_start, span_of(segments[segments.count - 2]).end))
             );
         }
-        if (index < node.count and node.child(index).is_token("(")) {
+        if (index < node.count and node.child(index).is_token(token_source, "(")) {
             var bindings = Array<Pattern>();
             while (index < node.count) {
                 var child = node.child(index);
@@ -1127,7 +1147,7 @@ struct Lowerer {
             Return => {
                 var keyword = span_of(node.child(0).leaf);
                 if (node.count > 1 and node.child(1).kind != NodeKind.Token
-                    or (node.count > 1 and !node.child(1).is_token(";"))) {
+                    or (node.count > 1 and !node.child(1).is_token(token_source, ";"))) {
                     var value = expression(node.child(1));
                     return Optional<Statement>.Value(
                         Statement.Return(Optional<Expression>.Value(value), Span(keyword.start, value.span().end))
@@ -1137,10 +1157,12 @@ struct Lowerer {
             }
             Jump => {
                 var keyword = node.child(0).leaf;
-                return Optional<Statement>.Value(Statement.LoopBreak(keyword.text == "continue", span_of(keyword)));
+                return Optional<Statement>.Value(
+                    Statement.LoopBreak(token_spells(keyword, "continue"), span_of(keyword))
+                );
             }
             Destructure => {
-                bool is_const = node.child(0).is_token("const");
+                bool is_const = node.child(0).is_token(token_source, "const");
                 var bindings = destructure_bindings(node.child(1));
                 var value = expression(node.child(3));
                 return Optional<Statement>.Value(
@@ -1199,7 +1221,7 @@ struct Lowerer {
 
     for_statement(node: Node): Statement {
         ulong index = 1;
-        if (node.child(index).is_token("(")) {
+        if (node.child(index).is_token(token_source, "(")) {
             index += 1;
         }
         var header = node.child(index);
@@ -1224,7 +1246,7 @@ struct Lowerer {
 
     with_statement(node: Node): Statement {
         ulong index = 1;
-        if (node.child(index).is_token("(")) {
+        if (node.child(index).is_token(token_source, "(")) {
             index += 1;
         }
         var header = node.child(index);
@@ -1268,7 +1290,7 @@ struct Lowerer {
             }
             var attributes = Array<Attribute>();
             ulong index = prefix(arm, attributes);
-            if (arm.child(index).is_token("else")) {
+            if (arm.child(index).is_token(token_source, "else")) {
                 out.else_span = span_of(arm.child(index).leaf);
                 var body = block(arm.child(arm.count - 1));
                 body.attributes = attributes;
@@ -1280,7 +1302,7 @@ struct Lowerer {
                 var child = arm.child(index);
                 if (child.kind == NodeKind.Pattern) {
                     match_arm.patterns.append(pattern(child));
-                } else if (child.is_token("if")) {
+                } else if (child.is_token(token_source, "if")) {
                     match_arm.guard = Optional<Expression>.Value(expression(arm.child(index + 1)));
                     index += 1;
                 } else if (child.kind == NodeKind.Block) {
@@ -1303,7 +1325,7 @@ struct Lowerer {
         if (node.child(index).kind == NodeKind.Arguments) {
             for (var capture in node.child(index).children) {
                 if (capture.kind == NodeKind.Token and capture.leaf.kind == TokenKind.Identifier) {
-                    out.captures.append(Label(capture.leaf.text, span_of(capture.leaf)));
+                    out.captures.append(Label(token_text(capture.leaf), span_of(capture.leaf)));
                 }
             }
             index += 1;
@@ -1327,7 +1349,7 @@ struct Lowerer {
                 out.append(nested);
             } else if (child.kind == NodeKind.ClosureParameter) {
                 var binding = DestructureBinding();
-                binding.name = child.child(0).leaf.text;
+                binding.name = token_text(child.child(0).leaf);
                 binding.name_span = span_of(child.child(0).leaf);
                 if (child.count > 2) {
                     binding.type_name = type_name(child.child(2));
@@ -1349,26 +1371,26 @@ struct Lowerer {
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var first = node.child(index);
         ulong last_end = 0;
-        if (first.is_token("var") or first.is_token("const")) {
-            out.is_const = first.is_token("const");
+        if (first.is_token(token_source, "var") or first.is_token(token_source, "const")) {
+            out.is_const = first.is_token(token_source, "const");
         } else {
             out.type_name = type_name(first);
         }
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         last_end = out.name_span.end;
         index += 2;
         while (index < node.count) {
             var child = node.child(index);
-            if (child.is_token(":")) {
+            if (child.is_token(token_source, ":")) {
                 var annotation = node.child(index + 1);
                 out.type_name = type_name(annotation);
                 last_end = end(annotation);
                 index += 2;
                 continue;
             }
-            if (child.is_token("=")) {
+            if (child.is_token(token_source, "=")) {
                 var value = node.child(index + 1);
                 out.default_value = Optional<Expression>.Value(expression(value));
                 last_end = end(value);
@@ -1386,7 +1408,7 @@ struct Lowerer {
         out.attributes = attributes;
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         index += 2;
         if (node.child(index).kind == NodeKind.GenericParameters) {
@@ -1406,12 +1428,12 @@ struct Lowerer {
                 continue;
             }
             var name = child.child(0).leaf;
-            var param = GenericParam(name.text, span_of(name));
+            var param = GenericParam(token_text(name), span_of(name));
             ulong index = 1;
             bool defaulted = false;
             while (index < child.count) {
                 var item = child.child(index);
-                if (item.is_token("=")) {
+                if (item.is_token(token_source, "=")) {
                     defaulted = true;
                 } else if (item.kind == NodeKind.Type) {
                     if (defaulted) {
@@ -1433,17 +1455,19 @@ struct Lowerer {
         ulong index = prefix(node, attributes);
         VariableDecl out;
         var first = node.child(index);
-        if (first.is_token("this")) {
+        if (first.is_token(token_source, "this")) {
             var field = node.child(index + 2).leaf;
-            out = VariableDecl("this." + field.text);
+            out = VariableDecl("this." + token_text(field));
             out.name_span = span_of(field);
             out.default_value = Optional<Expression>.Value(expression(node.child(index + 4)));
             out.span = Span(start(first), after(node));
-        } else if (first.is_token("var") or first.is_token("const")) {
+        } else if (first.is_token(token_source, "var") or first.is_token(token_source, "const")) {
             out = variable_declaration(node, index, Array<Attribute>());
-        } else if (first.kind == NodeKind.Token and index + 1 < node.count and node.child(index + 1).is_token(":")) {
+        } else if (first.kind == NodeKind.Token
+            and index + 1 < node.count
+            and node.child(index + 1).is_token(token_source, ":")) {
             # `name: Type [= value]`
-            out = VariableDecl(first.leaf.text);
+            out = VariableDecl(token_text(first.leaf));
             out.name_span = span_of(first.leaf);
             var type_node = node.child(index + 2);
             out.type_name = type_name(type_node);
@@ -1452,7 +1476,7 @@ struct Lowerer {
         } else {
             # `Type name [= value]`
             var name = node.child(index + 1).leaf;
-            out = VariableDecl(name.text);
+            out = VariableDecl(token_text(name));
             out.name_span = span_of(name);
             out.type_name = type_name(first);
             parameter_default(out, node, index + 2, node.child(index + 1));
@@ -1468,7 +1492,7 @@ struct Lowerer {
     # A parameter's `= value`; its span ends at the value, else at the
     # token after `last`.
     parameter_default(out: VariableDecl, node: Node, index: ulong, last: Node) {
-        if (index + 1 < node.count and node.child(index).is_token("=")) {
+        if (index + 1 < node.count and node.child(index).is_token(token_source, "=")) {
             var value = node.child(index + 1);
             out.default_value = Optional<Expression>.Value(expression(value));
             out.span = Span(0, end(value));
@@ -1494,12 +1518,14 @@ struct Lowerer {
         out.attributes = attributes;
         out.return_type = TypeName.auto();
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
-        if (node.child(index).is_token("static")) {
+        if (node.child(index).is_token(token_source, "static")) {
             out.is_static = true;
             index += 1;
         }
         var first = node.child(index);
-        if (first.is_token("[") and index + 1 < node.count and node.child(index + 1).is_token("]")) {
+        if (first.is_token(token_source, "[")
+            and index + 1 < node.count
+            and node.child(index + 1).is_token(token_source, "]")) {
             # `[](params)`: an indexer.
             out.name = "[]";
             out.name_span = Span(start(first), end(node.child(index + 1)));
@@ -1507,12 +1533,12 @@ struct Lowerer {
             index += 2;
         } else if (first.kind == NodeKind.Token and first.leaf.kind == TokenKind.Punctuation) {
             # `==(params)`: an operator.
-            out.name = first.leaf.text;
+            out.name = token_text(first.leaf);
             out.name_span = span_of(first.leaf);
             index += 1;
         } else if (first.kind == NodeKind.Type) {
             # `Type name(params)`, or the indexer `Type [](params)`.
-            if (node.child(index + 1).is_token("[")) {
+            if (node.child(index + 1).is_token(token_source, "[")) {
                 out.return_type = type_name(first);
                 out.name_span = out.return_type.span;
                 out.is_indexer = true;
@@ -1520,13 +1546,13 @@ struct Lowerer {
             } else {
                 out.return_type = return_type_prefix(first);
                 var name = node.child(index + 1).leaf;
-                out.name = name.text;
+                out.name = token_text(name);
                 out.name_span = span_of(name);
                 index += 2;
             }
         } else {
             var name = first.leaf;
-            out.name = name.text;
+            out.name = token_text(name);
             out.name_span = span_of(name);
             index += 1;
         }
@@ -1536,7 +1562,7 @@ struct Lowerer {
                 out.generic_params = generic_parameters(child);
             } else if (child.kind == NodeKind.Parameters) {
                 out.parameters = parameters(child);
-            } else if (child.is_token(":")) {
+            } else if (child.is_token(token_source, ":")) {
                 out.return_type = type_name(node.child(index + 1));
                 index += 1;
             } else if (child.kind == NodeKind.Block) {
@@ -1556,15 +1582,15 @@ struct Lowerer {
     return_type_prefix(node: Node): TypeName {
         var name = StringBuilder();
         ulong index = 0;
-        name.append(node.child(0).leaf.text);
+        name.append(token_text(node.child(0).leaf));
         index = 1;
-        while (index + 1 < node.count and node.child(index).is_token(".")) {
-            name.append(".").append(node.child(index + 1).leaf.text);
+        while (index + 1 < node.count and node.child(index).is_token(token_source, ".")) {
+            name.append(".").append(token_text(node.child(index + 1).leaf));
             index += 2;
         }
         var last_name = node.child(index - 1);
         var suffix = StringBuilder();
-        while (index + 1 < node.count and node.child(index).is_token("[")) {
+        while (index + 1 < node.count and node.child(index).is_token(token_source, "[")) {
             suffix.append("[]");
             index += 2;
         }
@@ -1593,19 +1619,19 @@ struct Lowerer {
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         out.return_type = type_name(node.child(index + 1));
         var name = node.child(index + 2).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         var parameters = node.child(index + 3);
         for (var parameter in parameters.children) {
             if (parameter.kind != NodeKind.Parameter) {
                 continue;
             }
-            if (parameter.child(0).is_token("...")) {
+            if (parameter.child(0).is_token(token_source, "...")) {
                 out.is_variadic = true;
                 continue;
             }
             var parameter_name = parameter.child(1).leaf;
-            var decl = VariableDecl(parameter_name.text);
+            var decl = VariableDecl(token_text(parameter_name));
             decl.name_span = span_of(parameter_name);
             decl.type_name = type_name(parameter.child(0));
             decl.span = Span(decl.type_name.span.start, after(parameter));
@@ -1623,7 +1649,7 @@ struct Lowerer {
         out.return_type = TypeName.auto();
         var keyword = node.child(index);
         out.name_span = Span(start(keyword), after(keyword));
-        if (keyword.first_token().text == "new") {
+        if (token_spells(keyword.first_token(), "new")) {
             warnings.append(
                 SyntaxWarning(
                     span_of(keyword.first_token()),
@@ -1646,20 +1672,20 @@ struct Lowerer {
         out.attributes = attributes;
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         index += 2;
         Node? accessors;
         ulong end = 0;
         while (index < node.count) {
             var child = node.child(index);
-            if (child.is_token(":")) {
+            if (child.is_token(token_source, ":")) {
                 out.type_name = type_name(node.child(index + 1));
                 index += 1;
             } else if (child.kind == NodeKind.Accessors) {
                 accessors = Optional<Node>.Value(child);
                 end = end(child);
-            } else if (child.is_token("=")) {
+            } else if (child.is_token(token_source, "=")) {
                 var value = node.child(index + 1);
                 out.default_value = Optional<Expression>.Value(expression(value));
                 end = end(value);
@@ -1673,7 +1699,7 @@ struct Lowerer {
             }
             var keyword = accessor.child(0).leaf;
             var span = span_of(keyword);
-            bool is_get = keyword.text == "get";
+            bool is_get = token_spells(keyword, "get");
             var function = FunctionDecl(is_get ? "__get_" + out.name : "__set_" + out.name);
             function.attributes = attributes;
             if (is_get) {
@@ -1710,7 +1736,7 @@ struct Lowerer {
         out.attributes = attributes;
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         index += 2;
         if (node.child(index).kind == NodeKind.GenericParameters) {
@@ -1766,14 +1792,14 @@ struct Lowerer {
         out.attributes = attributes;
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         index += 2;
         if (node.child(index).kind == NodeKind.GenericParameters) {
             out.generic_params = generic_parameters(node.child(index));
             index += 1;
         }
-        if (node.child(index).is_token(":")) {
+        if (node.child(index).is_token(token_source, ":")) {
             body.representation = Optional<TypeName>.Value(type_name(node.child(index + 1)));
             index += 2;
         }
@@ -1806,7 +1832,7 @@ struct Lowerer {
         ulong index = prefix(node, attributes);
         out.attributes = attributes;
         var name = node.child(index).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         Node last = node.child(index);
         index += 1;
@@ -1815,7 +1841,7 @@ struct Lowerer {
             if (child.kind == NodeKind.Parameters) {
                 out.payload = Optional<VariableDecl[]>.Value(parameters(child));
                 last = child;
-            } else if (child.is_token("=")) {
+            } else if (child.is_token(token_source, "=")) {
                 last = node.child(index + 1);
                 out.value = Optional<Expression>.Value(expression(last));
                 index += 1;
@@ -1831,7 +1857,7 @@ struct Lowerer {
         out.attributes = attributes;
         ulong decl_start = attributes.count > 0 ? attributes[0].span.start : start(node.child(index));
         var name = node.child(index + 1).leaf;
-        out.name = name.text;
+        out.name = token_text(name);
         out.name_span = span_of(name);
         index += 2;
         if (node.child(index).kind == NodeKind.GenericParameters) {
@@ -1856,15 +1882,15 @@ struct Lowerer {
     trait_method(node: Node, index: ulong, attributes: Attribute[]): FunctionDecl {
         var out = function_declaration(node, index, attributes);
         ulong at = index;
-        if (node.child(at).is_token("static")) {
+        if (node.child(at).is_token(token_source, "static")) {
             at += 1;
         }
         var first = node.child(at);
-        if (first.kind == NodeKind.Type and !node.child(at + 1).is_token("[")) {
-            var return_type = TypeName(first.child(0).leaf.text, span_of(first.child(0).leaf));
+        if (first.kind == NodeKind.Type and !node.child(at + 1).is_token(token_source, "[")) {
+            var return_type = TypeName(token_text(first.child(0).leaf), span_of(first.child(0).leaf));
             bool annotated = false;
             for (var child in node.children) {
-                if (child.is_token(":")) {
+                if (child.is_token(token_source, ":")) {
                     annotated = true;
                 }
             }
@@ -1917,10 +1943,10 @@ struct Lowerer {
             TypeName[]? current;
             bool in_bounds = false;
             for (var item in child.children) {
-                if (item.is_token(":")) {
+                if (item.is_token(token_source, ":")) {
                     restated = true;
                     in_bounds = true;
-                } else if (item.is_token(",") or item.is_token(">")) {
+                } else if (item.is_token(token_source, ",") or item.is_token(token_source, ">")) {
                     if (current.is_value()) {
                         out.append(current.value());
                     }
@@ -1973,7 +1999,7 @@ struct Lowerer {
     }
 
     character(token: Token): Literal {
-        var text = token.text;
+        var text = token_text(token);
         var span = span_of(token);
         if (text.byte_at(1) == '\\') {
             var bytes = Array<u8>();
@@ -1990,7 +2016,7 @@ struct Lowerer {
 
     # The text of a string literal token, escapes decoded.
     string_text(token: Token): String {
-        var text = token.text;
+        var text = token_text(token);
         var bytes = Array<u8>();
         ulong offset = 1;
         while (offset + 1 < text.size) {
@@ -2056,7 +2082,7 @@ struct Lowerer {
     # `$"sum is {a + b}"`: the concatenation of its text and the calls
     # that convert each value in braces.
     interpolated_string(token: Token): Expression {
-        var text = token.text;
+        var text = token_text(token);
         ulong literal_start = base + token.offset;
         var parts = Array<Expression>();
         var bytes = Array<u8>();
@@ -2113,14 +2139,18 @@ struct Lowerer {
         long choice = cuts.count as long - 1;
         while (choice >= 0) {
             var cut = cuts[choice as ulong];
-            var parsed = syntax.parse_expression(inner.substr_bytes(0, cut), name_list(qualifiers));
+            var expression_text = inner.substr_bytes(0, cut);
+            var parsed = syntax.parse_expression(expression_text, name_list(qualifiers));
             if (parsed.is_ok()) {
                 var outer_base = base;
                 base = at + open + 1;
+                var outer_source = token_source;
+                token_source = expression_text;
                 var saved = token_offsets;
                 token_offsets = Array<ulong>();
                 var value = expression(parsed.value());
                 base = outer_base;
+                token_source = outer_source;
                 token_offsets = saved;
                 if (cut == inner.size) {
                     return interpolation_call(value, braces, Optional<FormatSpec>.Empty);
@@ -2385,9 +2415,9 @@ struct Lowerer {
         var first = arguments.child(1);
         bool literal = first.kind == NodeKind.Token
             and first.leaf.kind == TokenKind.String
-            and !first.leaf.text.starts_with("$");
-        if (callee.kind == NodeKind.Token and callee.leaf.text == "print") {
-            if (!literal or !arguments.child(2).is_token(",")) {
+            and !token_text(first.leaf).starts_with("$");
+        if (callee.kind == NodeKind.Token and token_spells(callee.leaf, "print")) {
+            if (!literal or !arguments.child(2).is_token(token_source, ",")) {
                 return Optional<Expression>.Empty;
             }
             var name_span = span_of(callee.leaf);
@@ -2399,8 +2429,8 @@ struct Lowerer {
         }
         bool string_format = callee.kind == NodeKind.Member
             and callee.count == 3
-            and callee.child(0).is_token("String")
-            and callee.child(2).is_token("format");
+            and callee.child(0).is_token(token_source, "String")
+            and callee.child(2).is_token(token_source, "format");
         if (!string_format) {
             return Optional<Expression>.Empty;
         }
@@ -2417,7 +2447,7 @@ struct Lowerer {
     # arguments when the braces do not name each once, in order.
     format_arguments(arguments: Node, call_start: ulong, name_span: Span, callee: String): Expression {
         var format = arguments.child(1).leaf;
-        var text = format.text;
+        var text = token_text(format);
         ulong literal_start = base + format.offset;
         ulong paren = start(arguments);
         var span = Span(call_start, end(arguments));
@@ -2480,7 +2510,8 @@ struct Lowerer {
         ulong i = 2;
         while (i < arguments.count) {
             var child = arguments.child(i);
-            if (child.kind != NodeKind.Token or !(child.is_token(",") or child.is_token(")"))) {
+            if (child.kind != NodeKind.Token
+                or !(child.is_token(token_source, ",") or child.is_token(token_source, ")"))) {
                 values.append(expression(child));
                 value_spans.append(whole(child));
             }
@@ -2589,13 +2620,13 @@ name_list(names: HashSet<String>): String[] {
     return out;
 }
 
-collect_tokens(node: Node, out: Token[]) {
+collect_token_offsets(node: Node, out: ulong[]) {
     if (node.kind == NodeKind.Token) {
-        out.append(node.leaf);
+        out.append(node.leaf.offset);
         return;
     }
     for (var child in node.children) {
-        collect_tokens(child, out);
+        collect_token_offsets(child, out);
     }
 }
 

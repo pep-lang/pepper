@@ -2649,8 +2649,16 @@ dogfooding of the language.
   that builds a *lossless* tree (`tree.pep`): every token is a leaf, in
   source order, and each comment hangs off the token next to it (a comment
   on the same line after a token is its `trailing_comment`, any other is an
-  entry in `leading_comments` of the next token). Nodes are uniform (`kind`, `leaf`,
-  `children`): `kind` is a `NodeKind` (a token's is a `TokenKind`), and
+  entry in `leading_comments` of the next token). A `Token` is a `[Value]`
+  struct that points into the source (`offset`, `size`): `text(source)`
+  copies its text out, and `is`, `is_word` and `spells` compare in place,
+  so the lexer allocates nothing for a token without comments, and the
+  parser's keyword and operator checks (`is_reserved_word`,
+  `_operator_size`) allocate nothing either. Code that changes a token in
+  the tree (pep-fmt moving comments) changes the leaf's own copy,
+  `node.leaf`, reached with `first_leaf()`/`last_leaf()`. Nodes are uniform (`kind`, `leaf`,
+  `children`; a token leaf allocates no children array, and its `children`
+  reads as a new empty one): `kind` is a `NodeKind` (a token's is a `TokenKind`), and
   the formatter dispatches on it with `match` (`_node`, then `_expression`,
   whose `else` prints any other node's parts in order).
 - The parser mirrors `parsers.rs` decision for decision; like it, it
@@ -2694,7 +2702,10 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   desugars while parsing: interpolated strings (`interpolated_string`, each
   hole parsed with `syntax.parse_expression`), `print` and `String.format`
   formats (`format_arguments`), property accessors, a module `static`
-  block's `static_constants`, and `build_option_tests`. Spans that
+  block's `static_constants`, and `build_option_tests`. Token text comes
+  from `Lowerer.token_source` (`token_text`, `token_spells`): the file, or
+  inside an interpolated string's braces the hole's own text, which
+  `syntax.parse_expression` read. Spans that
   `parsers.rs` ends after the whitespace following a construct (a
   function, a parameter without a default) end at the next token's offset
   (`Lowerer.after`).
@@ -2703,6 +2714,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   requires `compiler.parse`'s JSON to match byte for byte, so a parser
   change that `tools/compiler` does not follow fails there.
   `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
+- `compiler/parse_bench.pep` times the same files through `syntax.lex`,
+  `syntax.parse` and `compiler.parse`, the best of several passes each:
+  the benchmark for parser speed work (#601).
 - `compiler.parse` also enforces what `parsers.rs` checks on the finished
   tree (`parse/checks.pep`): `T*` only in `extern` declarations, and imports
   before every declaration.

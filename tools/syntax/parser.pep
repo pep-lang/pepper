@@ -11,65 +11,91 @@ import "token";
 import "tree";
 
 # The words `identifier()` in the compiler refuses as names.
-reserved_words(): HashSet<String> {
-    return [
-        "import",
-        "struct",
-        "var",
-        "const",
-        "if",
-        "else",
-        "while",
-        "for",
-        "return",
-        "extern",
-        "and",
-        "or",
-        "new",
-        "construct",
-        "destruct",
-        "static",
-        "sizeof",
-        "true",
-        "false",
-        "trait",
-        "extend",
-        "type",
-        "export",
-        "private",
-        "with",
-        "enum",
-        "match"
-    ];
+# Whether `token` is one of the words `identifier()` in the compiler refuses
+# as names, compared in place.
+is_reserved_word(source: String, token: Token): bool {
+    if (token.kind != TokenKind.Identifier) {
+        return false;
+    }
+    int first = source.byte_at(token.offset);
+    if (first == 'a') {
+        return token.spells(source, "and");
+    } else if (first == 'c') {
+        return token.spells(source, "const") or token.spells(source, "construct");
+    } else if (first == 'd') {
+        return token.spells(source, "destruct");
+    } else if (first == 'e') {
+        return token.spells(source, "else")
+            or token.spells(source, "extern")
+            or token.spells(source, "extend")
+            or token.spells(source, "export")
+            or token.spells(source, "enum");
+    } else if (first == 'f') {
+        return token.spells(source, "for") or token.spells(source, "false");
+    } else if (first == 'i') {
+        return token.spells(source, "import") or token.spells(source, "if");
+    } else if (first == 'm') {
+        return token.spells(source, "match");
+    } else if (first == 'n') {
+        return token.spells(source, "new");
+    } else if (first == 'o') {
+        return token.spells(source, "or");
+    } else if (first == 'p') {
+        return token.spells(source, "private");
+    } else if (first == 'r') {
+        return token.spells(source, "return");
+    } else if (first == 's') {
+        return token.spells(source, "struct") or token.spells(source, "static") or token.spells(source, "sizeof");
+    } else if (first == 't') {
+        return token.spells(source, "true") or token.spells(source, "trait") or token.spells(source, "type");
+    } else if (first == 'v') {
+        return token.spells(source, "var");
+    } else if (first == 'w') {
+        return token.spells(source, "while") or token.spells(source, "with");
+    }
+    return false;
 }
 
 # The words that stop a statement from being read as a `Type name`
 # declaration (the list in the compiler's `statement()`).
-statement_keywords(): HashSet<String> {
-    return [
-        "if",
-        "while",
-        "return",
-        "break",
-        "continue",
-        "struct",
-        "extern",
-        "import",
-        "true",
-        "false",
-        "sizeof",
-        "and",
-        "or",
-        "new",
-        "construct",
-        "destruct",
-        "static",
-        "trait",
-        "extend",
-        "with",
-        "enum",
-        "match"
-    ];
+# Whether `token` is one of the words that stop a statement from being read
+# as a `Type name` declaration (the list in the compiler's `statement()`),
+# compared in place.
+is_statement_keyword(source: String, token: Token): bool {
+    if (token.kind != TokenKind.Identifier) {
+        return false;
+    }
+    int first = source.byte_at(token.offset);
+    if (first == 'a') {
+        return token.spells(source, "and");
+    } else if (first == 'b') {
+        return token.spells(source, "break");
+    } else if (first == 'c') {
+        return token.spells(source, "continue") or token.spells(source, "construct");
+    } else if (first == 'd') {
+        return token.spells(source, "destruct");
+    } else if (first == 'e') {
+        return token.spells(source, "extern") or token.spells(source, "extend") or token.spells(source, "enum");
+    } else if (first == 'f') {
+        return token.spells(source, "false");
+    } else if (first == 'i') {
+        return token.spells(source, "if") or token.spells(source, "import");
+    } else if (first == 'm') {
+        return token.spells(source, "match");
+    } else if (first == 'n') {
+        return token.spells(source, "new");
+    } else if (first == 'o') {
+        return token.spells(source, "or");
+    } else if (first == 'r') {
+        return token.spells(source, "return");
+    } else if (first == 's') {
+        return token.spells(source, "struct") or token.spells(source, "sizeof") or token.spells(source, "static");
+    } else if (first == 't') {
+        return token.spells(source, "true") or token.spells(source, "trait");
+    } else if (first == 'w') {
+        return token.spells(source, "while") or token.spells(source, "with");
+    }
+    return false;
 }
 
 # The operators a method may be named after, as `bool ==(T other)`.
@@ -149,11 +175,12 @@ struct Parser {
     # `for` or `var` binds qualify types too (`case.Type`), as in the
     # compiler.
     int _static_depth;
-    HashSet<String> _reserved = reserved_words();
-    HashSet<String> _statement_keywords = statement_keywords();
-    HashSet<String> _operator_names = operator_method_names();
+    # The operators a method may be named after; made when first needed.
+    HashSet<String> _operator_names;
+    # The text the tokens point into.
+    String _source;
 
-    construct(this._tokens = Array<Token>()) {}
+    construct(this._source = "", this._tokens = Array<Token>()) {}
 
     # ── Token access ─────────────────────────────────────────────────────────
 
@@ -183,11 +210,11 @@ struct Parser {
     }
 
     _at(punctuation: String): bool {
-        return _peek().is(punctuation);
+        return _peek().is(_source, punctuation);
     }
 
     _at_word(word: String): bool {
-        return _peek().is_word(word);
+        return _peek().is_word(_source, word);
     }
 
     _at_end(): bool {
@@ -197,7 +224,7 @@ struct Parser {
     # Whether the next token is a name: an identifier that is not reserved.
     _at_name(): bool {
         var token = _peek();
-        return token.kind == TokenKind.Identifier and !_reserved.contains(token.text);
+        return token.kind == TokenKind.Identifier and !is_reserved_word(_source, token);
     }
 
     # Whether the token at `offset` follows the one before it with no space.
@@ -245,58 +272,86 @@ struct Parser {
             return;
         }
         var last = _tokens[_position - 1];
-        _error = Optional<SyntaxError>.Value(SyntaxError("expected ';'", last.offset + last.text.size));
+        _error = Optional<SyntaxError>.Value(SyntaxError("expected ';'", last.offset + last.size));
         _missing_semicolon = true;
         _failed = true;
     }
 
-    # The operator at the input, joining the adjacent tokens that the lexer
-    # keeps apart: `>` into `>>`, `>=` and `>>=`, and `!` into the truth
-    # test `!!`. Expressions never ask for `!!`: `!!x` is two prefix `!`.
-    _operator_text(): String {
+    # The byte length of the operator at the input, or 0 when the input is
+    # not punctuation. It joins the adjacent tokens that the lexer keeps
+    # apart: `>` into `>>`, `>=` and `>>=`, and `!` into the truth test
+    # `!!`; since they are adjacent, the operator's text is that many bytes
+    # of the source from the next token. Expressions never ask for `!!`:
+    # `!!x` is two prefix `!`.
+    _operator_size(): ulong {
         var token = _peek();
         if (token.kind != TokenKind.Punctuation) {
-            return "";
+            return 0;
         }
-        if (token.text == "!" and _peek_at(1).is("!") and _adjacent(1)) {
-            return "!!";
+        if (token.spells(_source, "!") and _peek_at(1).is(_source, "!") and _adjacent(1)) {
+            return 2;
         }
-        if (token.text != ">") {
-            return token.text;
+        if (!token.spells(_source, ">")) {
+            return token.size;
         }
-        if (_peek_at(1).is(">") and _adjacent(1)) {
-            if (_peek_at(2).is("=") and _adjacent(2)) {
-                return ">>=";
+        if (_peek_at(1).is(_source, ">") and _adjacent(1)) {
+            if (_peek_at(2).is(_source, "=") and _adjacent(2)) {
+                return 3;
             }
-            return ">>";
+            return 2;
         }
-        if (_peek_at(1).is("=") and _adjacent(1)) {
-            return ">=";
+        if (_peek_at(1).is(_source, "=") and _adjacent(1)) {
+            return 2;
         }
-        return ">";
+        return 1;
     }
 
-    # Takes the operator `text` (as `operator_text()` spelled it) into `node`
-    # as one token.
-    _take_operator(node: Node, text: String) {
+    # Whether the operator at the input, `size` bytes long (from
+    # `_operator_size()`), is `text`.
+    _operator_is(size: ulong, text: String): bool {
+        return size == text.size and spells_at(_source, _peek().offset, size, text);
+    }
+
+    # The operator at the input, `size` bytes long, as a new String.
+    _operator_text(size: ulong): String {
+        return _source.substr_bytes(_peek().offset, size);
+    }
+
+    # Whether the operator at the input, `size` bytes long, can name a
+    # method, as `bool ==(T other)`.
+    _at_operator_name(size: ulong): bool {
+        if (size == 0) {
+            return false;
+        }
+        if (_operator_names === __null) {
+            _operator_names = operator_method_names();
+        }
+        return _operator_names.contains(_operator_text(size));
+    }
+
+    # Takes the operator at the input, `size` bytes long (from
+    # `_operator_size()` or a word operator's token), into `node` as one
+    # token.
+    _take_operator(node: Node, size: ulong) {
         var first = _peek();
-        if (first.text == text) {
+        if (first.size == size) {
             _take(node);
             return;
         }
-        var merged = Token(TokenKind.Punctuation, text, first.offset);
+        # The joined tokens are adjacent, one byte each, so the merged
+        # token's bytes in the source are its text.
+        var merged = Token(TokenKind.Punctuation, first.offset, size);
         merged.newlines_before = first.newlines_before;
         merged.newlines_after_comments = first.newlines_after_comments;
         merged.space_before = first.space_before;
-        merged.leading_comments = first.leading_comments;
-        ulong count = text.size;
+        merged._leading_comments = first._leading_comments;
         ulong i = 0;
         var last = first;
-        while (i < count) {
+        while (i < size) {
             last = _advance();
             i += 1;
         }
-        merged.trailing_comment = last.trailing_comment;
+        merged._trailing_comment = last._trailing_comment;
         node.add_token(merged);
     }
 
@@ -310,7 +365,7 @@ struct Parser {
             _function_type(node);
             return node;
         }
-        if ((_at_word("shared") or _at_word("extern")) and _peek_at(1).is("(")) {
+        if ((_at_word("shared") or _at_word("extern")) and _peek_at(1).is(_source, "(")) {
             ulong position = _position;
             _take(node);
             _function_type(node);
@@ -331,7 +386,7 @@ struct Parser {
     # `[]` array suffixes, `?` optional suffixes, then `*` pointer suffixes.
     _type_suffixes(node: Node) {
         while (true) {
-            if (_at("[") and _peek_at(1).is("]")) {
+            if (_at("[") and _peek_at(1).is(_source, "]")) {
                 _take(node);
                 _take(node);
                 continue;
@@ -362,19 +417,19 @@ struct Parser {
     # (`Node? x;`, `Node? x = y`, `Node? x` at the end of the line).
     _optional_suffix_in_probe(): bool {
         var next = _peek_at(1);
-        if (next.is(">") or next.is(",")) {
+        if (next.is(_source, ">") or next.is(_source, ",")) {
             return true;
         }
-        if (next.kind != TokenKind.Identifier or _reserved.contains(next.text)) {
+        if (next.kind != TokenKind.Identifier or is_reserved_word(_source, next)) {
             return false;
         }
         var after = _peek_at(2);
         return after.kind == TokenKind.End
             or after.newlines_before > 0
-            or !next.trailing_comment.is_empty
-            or after.is(";")
-            or after.is("}")
-            or after.is("=");
+            or next._trailing_comment !== __null
+            or after.is(_source, ";")
+            or after.is(_source, "}")
+            or after.is(_source, "=");
     }
 
     # `( TYPE, ... ) => TYPE`, added to `node`, or a tuple type
@@ -389,7 +444,7 @@ struct Parser {
                 break;
             }
             # A tuple element's label, `line:` in `(line: int, column: int)`.
-            if (_at_name() and _peek_at(1).is(":")) {
+            if (_at_name() and _peek_at(1).is(_source, ":")) {
                 _take(node);
                 _take(node);
             }
@@ -433,7 +488,7 @@ struct Parser {
         }
         var first = _advance();
         node.add_token(first);
-        _qualified_tail(node, first.text);
+        _qualified_tail(node, first);
         if (_at("<")) {
             node.add(_type_arguments());
         }
@@ -441,15 +496,15 @@ struct Parser {
 
     # `.name` segments after `first`: always in a declaration, and while
     # probing only after an import's qualifier.
-    _qualified_tail(node: Node, first: String) {
-        if (_probing and !_qualifiers.contains(first)) {
+    _qualified_tail(node: Node, first: Token) {
+        if (_probing and !_qualifiers.contains(first.text(_source))) {
             return;
         }
         while (_at(".")
             and _adjacent(0)
             and _adjacent(1)
             and _peek_at(1).kind == TokenKind.Identifier
-            and !_reserved.contains(_peek_at(1).text)) {
+            and !is_reserved_word(_source, _peek_at(1))) {
             _take(node);
             _take(node);
         }
@@ -518,18 +573,19 @@ struct Parser {
         if (_failed) {
             return lhs;
         }
-        var op = _operator_text();
-        if (op == "*="
-            or op == "/="
-            or op == "%="
-            or op == "+="
-            or op == "-="
-            or op == "<<="
-            or op == ">>="
-            or op == "&="
-            or op == "^="
-            or op == "|="
-            or op == "=") {
+        var op = _operator_size();
+        if (op > 0
+            and (_operator_is(op, "*=")
+                or _operator_is(op, "/=")
+                or _operator_is(op, "%=")
+                or _operator_is(op, "+=")
+                or _operator_is(op, "-=")
+                or _operator_is(op, "<<=")
+                or _operator_is(op, ">>=")
+                or _operator_is(op, "&=")
+                or _operator_is(op, "^=")
+                or _operator_is(op, "|=")
+                or _operator_is(op, "="))) {
             var node = Node(NodeKind.Binary);
             node.add(lhs);
             _take_operator(node, op);
@@ -562,49 +618,59 @@ struct Parser {
         return node;
     }
 
-    # The binary operator at the input for precedence `level` (1 is `||`,
-    # 9 is `*`), or "" when there is none.
-    _binary_operator(level: int): String {
-        var op = _operator_text();
-        var token = _peek();
+    # The byte length of the binary operator at the input for precedence
+    # `level` (1 is `||`, 9 is `*`), or 0 when there is none.
+    _binary_operator(level: int): ulong {
+        var op = _operator_size();
         if (level == 1) {
-            if (op == "||" or token.is_word("or")) {
-                return token.text;
+            if (_operator_is(op, "||") or _at_word("or")) {
+                return _operator_size_or_word(op);
             }
         } else if (level == 2) {
-            if (op == "&&" or token.is_word("and")) {
-                return token.text;
+            if (_operator_is(op, "&&") or _at_word("and")) {
+                return _operator_size_or_word(op);
             }
         } else if (level == 3) {
-            if (op == "|" or op == "^") {
+            if (_operator_is(op, "|") or _operator_is(op, "^")) {
                 return op;
             }
         } else if (level == 4) {
-            if (op == "&") {
+            if (_operator_is(op, "&")) {
                 return op;
             }
         } else if (level == 5) {
-            if (op == "===" or op == "!==" or op == "==" or op == "!=") {
+            if (_operator_is(op, "===")
+                or _operator_is(op, "!==")
+                or _operator_is(op, "==")
+                or _operator_is(op, "!=")) {
                 return op;
             }
         } else if (level == 6) {
-            if (op == "<=" or op == ">=" or op == "<" or op == ">") {
+            if (_operator_is(op, "<=") or _operator_is(op, ">=") or _operator_is(op, "<") or _operator_is(op, ">")) {
                 return op;
             }
         } else if (level == 7) {
-            if (op == "<<" or op == ">>") {
+            if (_operator_is(op, "<<") or _operator_is(op, ">>")) {
                 return op;
             }
         } else if (level == 8) {
-            if (op == "+" or op == "-") {
+            if (_operator_is(op, "+") or _operator_is(op, "-")) {
                 return op;
             }
         } else if (level == 9) {
-            if (op == "*" or op == "/" or op == "%") {
+            if (_operator_is(op, "*") or _operator_is(op, "/") or _operator_is(op, "%")) {
                 return op;
             }
         }
-        return "";
+        return 0;
+    }
+
+    # `op`, or for a word operator (`and`, `or`), the word's length.
+    _operator_size_or_word(op: ulong): ulong {
+        if (op > 0) {
+            return op;
+        }
+        return _peek().size;
     }
 
     _binary_operand(level: int): Node {
@@ -657,7 +723,7 @@ struct Parser {
         }
         while (true) {
             var op = _binary_operator(level);
-            if (op.is_empty) {
+            if (op == 0) {
                 break;
             }
             var node = Node(NodeKind.Binary);
@@ -815,22 +881,25 @@ struct Parser {
             return true;
         }
         if (next.kind == TokenKind.Identifier) {
-            return next.is_word("and") or next.is_word("or") or next.is_word("is") or next.is_word("as");
+            return next.is_word(_source, "and")
+                or next.is_word(_source, "or")
+                or next.is_word(_source, "is")
+                or next.is_word(_source, "as");
         }
         if (next.kind != TokenKind.Punctuation) {
             return false;
         }
-        var text = next.text;
-        if (text == "&&" or text == "!=") {
+        if (next.spells(_source, "&&") or next.spells(_source, "!=")) {
             return true;
         }
-        if (!(text.starts_with("-")
-            or text.starts_with("+")
-            or text.starts_with("*")
-            or text.starts_with("&")
-            or text.starts_with("!")
-            or text == "("
-            or text == "[")) {
+        int first = _source.byte_at(next.offset);
+        if (!(first == '-'
+            or first == '+'
+            or first == '*'
+            or first == '&'
+            or first == '!'
+            or next.spells(_source, "(")
+            or next.spells(_source, "["))) {
             return true;
         }
         # Probe for `? expression :`, leaving no error behind.
@@ -954,7 +1023,7 @@ struct Parser {
     }
 
     _at_tuple_label(): bool {
-        return _at_name() and _peek_at(1).is(":");
+        return _at_name() and _peek_at(1).is(_source, ":");
     }
 
     # One element of a tuple literal: `label: expression` when `labeled`,
@@ -976,25 +1045,25 @@ struct Parser {
 
     _primary(): Node {
         var token = _peek();
-        if (token.is_word("match")) {
+        if (token.is_word(_source, "match")) {
             return _match_expression();
         }
-        if (token.is_word("true")
-            or token.is_word("false")
-            or token.is_word("__null")
+        if (token.is_word(_source, "true")
+            or token.is_word(_source, "false")
+            or token.is_word(_source, "__null")
             or token.kind == TokenKind.Number
             or token.kind == TokenKind.String
             or token.kind == TokenKind.Character) {
             return Node.of_token(_advance());
         }
         # A `-` written directly before a number is part of the literal.
-        if (token.is("-") and _peek_at(1).kind == TokenKind.Number and _adjacent(1)) {
+        if (token.is(_source, "-") and _peek_at(1).kind == TokenKind.Number and _adjacent(1)) {
             var node = Node(NodeKind.Prefix);
             _take(node);
             _take(node);
             return node;
         }
-        if (token.is_word("sizeof")) {
+        if (token.is_word(_source, "sizeof")) {
             var node = Node(NodeKind.Sizeof);
             _take(node);
             _expect(node, "<");
@@ -1021,7 +1090,7 @@ struct Parser {
         }
         ulong position = _position;
         # `m.Box<int>()`: a generic type of an imported module.
-        if (_qualifiers.contains(token.text) and _peek_at(1).is(".") and _adjacent(1)) {
+        if (_peek_at(1).is(_source, ".") and _adjacent(1) and _qualifiers.contains(token.text(_source))) {
             var probe = _probe_type();
             if (!_failed and _qualified_generic(probe) and (_at("(") or _at("."))) {
                 var literal = Node(NodeKind.TypeLiteral);
@@ -1050,7 +1119,7 @@ struct Parser {
         bool qualified = false;
         bool generic = false;
         for (var child in candidate.children) {
-            if (child.is_token(".")) {
+            if (child.is_token(_source, ".")) {
                 qualified = true;
             }
             if (child.kind == NodeKind.TypeArguments) {
@@ -1120,7 +1189,7 @@ struct Parser {
     _attributes(): Node[] {
         var list = Array<Node>();
         # `[]` starts a Pepper-style indexer (`[](index: ulong): T`).
-        while (_at("[") and !_peek_at(1).is("]")) {
+        while (_at("[") and !_peek_at(1).is(_source, "]")) {
             var node = Node(NodeKind.Attribute);
             _take(node);
             node.add(_expression());
@@ -1202,7 +1271,7 @@ struct Parser {
         if (_at_word("with")) {
             return _with_statement();
         }
-        if (_at_word("static") and (_peek_at(1).is("(") or _peek_at(1).is("{"))) {
+        if (_at_word("static") and (_peek_at(1).is(_source, "(") or _peek_at(1).is(_source, "{"))) {
             return _static_block(Array<Node>());
         }
         if (_at_word("match")) {
@@ -1221,14 +1290,14 @@ struct Parser {
             _take(node);
             return node;
         }
-        if ((_at_word("var") or _at_word("const")) and _peek_at(1).is("(")) {
+        if ((_at_word("var") or _at_word("const")) and _peek_at(1).is(_source, "(")) {
             return _destructure();
         }
         var token = _peek();
-        bool declaration = token.is_word("var")
-            or token.is_word("const")
-            or (token.is_word("extern") and _peek_at(1).is("("))
-            or (token.kind == TokenKind.Identifier and !_statement_keywords.contains(token.text));
+        bool declaration = token.is_word(_source, "var")
+            or token.is_word(_source, "const")
+            or (token.is_word(_source, "extern") and _peek_at(1).is(_source, "("))
+            or (token.kind == TokenKind.Identifier and !is_statement_keyword(_source, token));
         if (declaration) {
             ulong position = _position;
             var variable = _variable_declaration(Array<Node>());
@@ -1280,7 +1349,7 @@ struct Parser {
         if (parenthesized) {
             _take(node);
         }
-        if (_at_word("var") and _peek_at(1).is("(")) {
+        if (_at_word("var") and _peek_at(1).is(_source, "(")) {
             # `for (var (k, v) in pairs)`: a pattern.
             var pattern = Node(NodeKind.Destructure);
             _take(pattern);
@@ -1342,7 +1411,7 @@ struct Parser {
     # Inside a `static` block, makes the name `variable` binds a qualifier.
     _bind_qualifier(variable: Node) {
         if (_static_depth > 0 and variable.count > 1 and variable.child(1).kind == NodeKind.Token) {
-            _qualifiers.insert(variable.child(1).leaf.text);
+            _qualifiers.insert(variable.child(1).leaf.text(_source));
         }
     }
 
@@ -1356,7 +1425,7 @@ struct Parser {
         ulong position = _position;
         bool is_var = _at_word("var") or _at_word("const");
         var binding = _variable_declaration(Array<Node>());
-        if (!_failed and _has_value(binding) and !binding.child(0).is_token("const")) {
+        if (!_failed and _has_value(binding) and !binding.child(0).is_token(_source, "const")) {
             node.add(binding);
         } else if (is_var) {
             if (!_failed) {
@@ -1528,12 +1597,12 @@ struct Parser {
             return node;
         }
         var token = _peek();
-        if (token.is_word("true")
-            or token.is_word("false")
+        if (token.is_word(_source, "true")
+            or token.is_word(_source, "false")
             or token.kind == TokenKind.Number
             or token.kind == TokenKind.String
             or token.kind == TokenKind.Character
-            or (token.is("-") and _peek_at(1).kind == TokenKind.Number and _adjacent(1))) {
+            or (token.is(_source, "-") and _peek_at(1).kind == TokenKind.Number and _adjacent(1))) {
             node.add(_primary());
             _pattern_range(node);
             return node;
@@ -1588,7 +1657,7 @@ struct Parser {
     # Whether a variable node has an `= value`.
     _has_value(variable: Node): bool {
         for (var child in variable.children) {
-            if (child.is_token("=")) {
+            if (child.is_token(_source, "=")) {
                 return true;
             }
         }
@@ -1809,7 +1878,7 @@ struct Parser {
         }
         # `name: Type`
         ulong position = _position;
-        if (_at_name() and _peek_at(1).is(":")) {
+        if (_at_name() and _peek_at(1).is(_source, ":")) {
             _take(node);
             _take(node);
             node.add(_type_name());
@@ -1934,7 +2003,7 @@ struct Parser {
         var first = Node(NodeKind.Type);
         var name = _advance();
         first.add_token(name);
-        _qualified_tail(first, name.text);
+        _qualified_tail(first, name);
         bool qualified = first.count > 1;
         if (_at("(") or _at("<")) {
             if (qualified) {
@@ -1965,7 +2034,7 @@ struct Parser {
             _fail("expected function name");
             return node;
         }
-        while (_at("[") and _peek_at(1).is("]")) {
+        while (_at("[") and _peek_at(1).is(_source, "]")) {
             _take(first);
             _take(first);
         }
@@ -2011,13 +2080,13 @@ struct Parser {
         # Pepper-style indexer or operator method: `[](params)[: Type] { }`,
         # `==(params)[: Type] { }`.
         bool pepper_style = false;
-        if (_at("[") and _peek_at(1).is("]")) {
+        if (_at("[") and _peek_at(1).is(_source, "]")) {
             _take(node);
             _take(node);
             pepper_style = true;
         } else {
-            var leading = _operator_text();
-            if (_operator_names.contains(leading)) {
+            var leading = _operator_size();
+            if (_at_operator_name(leading)) {
                 _take_operator(node, leading);
                 pepper_style = true;
             }
@@ -2043,7 +2112,7 @@ struct Parser {
         var index_type = Node(NodeKind.Type);
         _type_base(index_type);
         if (!_failed) {
-            if (_at("[") and _peek_at(1).is("]") and _peek_at(2).is("(")) {
+            if (_at("[") and _peek_at(1).is(_source, "]") and _peek_at(2).is(_source, "(")) {
                 node.add(index_type);
                 _take(node);
                 _take(node);
@@ -2094,10 +2163,10 @@ struct Parser {
             return node;
         }
         node.add(return_type);
-        var op = _operator_text();
+        var op = _operator_size();
         if (_at_name()) {
             _take(node);
-        } else if (_operator_names.contains(op)) {
+        } else if (_at_operator_name(op)) {
             _take_operator(node, op);
         } else {
             _fail("expected method name");
@@ -2190,7 +2259,7 @@ struct Parser {
                 node.add(destructor);
                 continue;
             }
-            if (_at_word("extern") and !_peek_at(1).is("(")) {
+            if (_at_word("extern") and !_peek_at(1).is(_source, "(")) {
                 node.add(_extern_function(attributes));
                 if (_failed) {
                     return node;
@@ -2493,10 +2562,10 @@ struct Parser {
         if (_at_word("type")) {
             return _type_alias(prefix);
         }
-        if (_at_word("static") and (_peek_at(1).is("(") or _peek_at(1).is("{"))) {
+        if (_at_word("static") and (_peek_at(1).is(_source, "(") or _peek_at(1).is(_source, "{"))) {
             return _static_block(prefix);
         }
-        if (_at_word("extern") and !_peek_at(1).is("(")) {
+        if (_at_word("extern") and !_peek_at(1).is(_source, "(")) {
             return _extern_function(prefix);
         }
         ulong position = _position;
@@ -2597,11 +2666,11 @@ struct Parser {
             if (_failed) {
                 return node;
             }
-            _qualifiers.insert(alias.text);
+            _qualifiers.insert(alias.text(_source));
         } else {
             _restore(position);
             if (!list and !reexport and name.kind != TokenKind.String) {
-                _qualifiers.insert(name.text);
+                _qualifiers.insert(name.text(_source));
             }
         }
         return node;
@@ -2609,7 +2678,7 @@ struct Parser {
 
     # Whether `export` is followed by `*` or `[`: an `export ... from`.
     _at_export_from(): bool {
-        return _at_word("export") and (_peek_at(1).is("*") or _peek_at(1).is("["));
+        return _at_word("export") and (_peek_at(1).is(_source, "*") or _peek_at(1).is(_source, "["));
     }
 
     # `export name[.name] [as alias];`, a re-export. Fails (so the caller
@@ -2628,7 +2697,7 @@ struct Parser {
         node.add_token(name);
         bool outer = _probing;
         _probing = false;
-        _qualified_tail(node, name.text);
+        _qualified_tail(node, name);
         _probing = outer;
         if (_at_word("as")) {
             _take(node);
@@ -2702,7 +2771,7 @@ export parse(source: String): Result<Node, SyntaxError> {
     if (tokens.is_err()) {
         return Result<Node, SyntaxError>.err(tokens.error());
     }
-    var parser = Parser(tokens.value());
+    var parser = Parser(source, tokens.value());
     var root = parser.module();
     if (parser._failed) {
         return Result<Node, SyntaxError>.err(parser._error.value());
@@ -2724,13 +2793,13 @@ export parse_expression(source: String, qualifiers: String[] = Array<String>()):
     if (tokens.is_err()) {
         return Result<Node, SyntaxError>.err(tokens.error());
     }
-    var parser = Parser(tokens.value());
+    var parser = Parser(source, tokens.value());
     for (var name in qualifiers) {
         parser._qualifiers.insert(name);
     }
     var root = parser._expression();
     if (!parser._failed and !parser._at_end()) {
-        parser._fail("unexpected '" + parser._peek().text + "'");
+        parser._fail("unexpected '" + parser._peek().text(source) + "'");
     }
     if (parser._failed) {
         return Result<Node, SyntaxError>.err(parser._error.value());
