@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c0706407.js";
+            window.path_to_searchindex_js = "searchindex-9b47d345.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-04b2b9dd.js"></script>
+        <script src="toc-8d3ead75.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -16885,10 +16885,48 @@ name, and a required global option may be given anywhere on the line.</li>
 usage.</li>
 <li>Commands nest: a command’s parser can declare commands too.</li>
 </ul>
+<h2 id="shell-completions"><a class="header" href="#shell-completions">Shell completions</a></h2>
+<p><code>completions(shell)</code> returns a script that completes the program’s
+command line in Bash, Zsh, fish or PowerShell (<code>cli.Shell</code>), from the
+declarations: options (with the global ones in each command), commands,
+an enum’s cases, and file names for a value that is a <code>String</code> or an
+<code>io.Path</code>. A program prints it on request, often from a command of its
+own, as <code>pkg completions fish</code> does here:</p>
+<pre><code class="language-pepper"># Shell completion scripts, printed by a command of the program's own.
+import cli;
+
+main(): int {
+    var parser = cli.Parser("pkg", "Manages packages");
+    parser.flag("verbose", "v", "say more", global = true);
+    var add = parser.command("add", "Adds a dependency");
+    add.positional("name", "the package");
+    var completions = parser.command("completions", "Prints a shell completion script");
+    var shell = completions.positional&lt;cli.Shell&gt;("shell", "bash, zsh, fish or powershell");
+
+    # The arguments as `main(args: String[])` would receive them.
+    var parsed = parser.try_parse(["pkg", "completions", "fish"]);
+    assert(parsed.is_ok() &amp;&amp; completions.is_selected, "the completions command");
+    print(parser.completions(shell.value()));
+    return 0;
+}
+</code></pre>
+<p>The user installs what it prints where the shell looks for it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Shell</th><th>Install the script as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bash</code></td><td><code>~/.local/share/bash-completion/completions/pkg</code>, or <code>source</code> it from <code>~/.bashrc</code></td></tr>
+<tr><td><code>zsh</code></td><td><code>_pkg</code> in a directory on <code>$fpath</code></td></tr>
+<tr><td><code>fish</code></td><td><code>~/.config/fish/completions/pkg.fish</code></td></tr>
+<tr><td><code>powershell</code></td><td>dot-sourced from <code>$PROFILE</code></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
-<li>Generating shell completions.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cryptographic-hashes"><a class="header" href="#cryptographic-hashes">Cryptographic hashes</a></h1>
@@ -48894,6 +48932,8 @@ in <code>main(args: String[])</code> and <code>process.arguments()</code>.</p>
 <li><a href="#parser">Parser</a>: <code>Parser</code>, and the handles its declarations
 return: <code>Flag</code>, <code>Argument</code>, <code>ArgumentList</code>; and <code>closest</code>, which
 picks the name a misspelled one most likely meant</li>
+<li><a href="#completions-1">Completions</a>: <code>Shell</code>, the shells
+<code>Parser.completions</code> writes a completion script for</li>
 <li><a href="#options-3">Options</a>: <code>Option</code> and <code>Positional</code>, the attributes
 that shape what <code>Parser.add_options</code> declares from a struct’s fields</li>
 </ul>
@@ -49282,6 +49322,33 @@ usage, and a line for each argument, option and command.</p>
 <ul>
 <li>the help text, ending in a line break</li>
 </ul>
+<h4 id="completions"><a class="header" href="#completions">completions</a></h4>
+<pre><code class="language-pepper">completions(shell: Shell): String
+</code></pre>
+<p>Returns a script that completes this program’s command line in
+<code>shell</code>: its options, commands and enum choices, and file names
+where a value is a <code>String</code> or an <code>io.Path</code>. A program usually
+prints it from a command of its own (<code>pkg completions bash</code>), for
+the user to install where <code>Shell</code>’s cases say.</p>
+<p>Call it on the program’s parser, after the declarations.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>shell</code> — the shell the script is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the script, ending in a line break</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var parser = cli.Parser("pkg");
+var shell = parser.option&lt;cli.Shell&gt;("completions", help = "print a completion script");
+if (!parser.parse(args)) {
+    return 2;
+}
+if (shell.is_set) {
+    print(parser.completions(shell.value()));
+}
+</code></pre>
 <h4 id="try_parse"><a class="header" href="#try_parse">try_parse</a></h4>
 <pre><code class="language-pepper">try_parse(args: String[]): Result&lt;String?&gt;
 </code></pre>
@@ -49524,6 +49591,33 @@ struct Options {
 <p>Whether leaving it out is an error, even when the field has a
 default; for a <code>T[]</code> field, whether at least one value must be
 given. A <code>T?</code> field ignores it.</p>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/cli/completions.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<h1 id="completions-1"><a class="header" href="#completions-1">Completions</a></h1>
+<p>Shell completion scripts generated from a <code>Parser</code>: <code>Shell</code> names the
+shells, and <code>Parser.completions</code> writes the script.</p>
+<p>Source: <code>runtime/cli/completions.pep</code></p>
+<h2 id="shell"><a class="header" href="#shell">Shell</a></h2>
+<pre><code class="language-pepper">enum Shell
+</code></pre>
+<p>A shell that <code>Parser.completions</code> writes a completion script for.</p>
+<h3 id="cases-14"><a class="header" href="#cases-14">Cases</a></h3>
+<h4 id="bash"><a class="header" href="#bash">Bash</a></h4>
+<pre><code class="language-pepper">Bash
+</code></pre>
+<p>GNU Bash: source the script, or put it in
+<code>~/.local/share/bash-completion/completions/NAME</code>.</p>
+<h4 id="zsh"><a class="header" href="#zsh">Zsh</a></h4>
+<pre><code class="language-pepper">Zsh
+</code></pre>
+<p>Zsh: put the script in a directory on <code>$fpath</code> as <code>_NAME</code>.</p>
+<h4 id="fish"><a class="header" href="#fish">Fish</a></h4>
+<pre><code class="language-pepper">Fish
+</code></pre>
+<p>fish: put the script in <code>~/.config/fish/completions/NAME.fish</code>.</p>
+<h4 id="powershell"><a class="header" href="#powershell">Powershell</a></h4>
+<pre><code class="language-pepper">Powershell
+</code></pre>
+<p>PowerShell (<code>powershell</code> on a command line): dot-source the script from your profile.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-http-module"><a class="header" href="#the-http-module">The http module</a></h1>
 <p>HTTP/1.1 clients and servers, over TCP or TLS.</p>

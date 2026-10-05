@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c0706407.js";
+            window.path_to_searchindex_js = "../searchindex-9b47d345.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-04b2b9dd.js"></script>
+        <script src="../toc-8d3ead75.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -550,6 +550,33 @@ usage, and a line for each argument, option and command.</p>
 <ul>
 <li>the help text, ending in a line break</li>
 </ul>
+<h4 id="completions"><a class="header" href="#completions">completions</a></h4>
+<pre><code class="language-pepper">completions(shell: Shell): String
+</code></pre>
+<p>Returns a script that completes this program’s command line in
+<code>shell</code>: its options, commands and enum choices, and file names
+where a value is a <code>String</code> or an <code>io.Path</code>. A program usually
+prints it from a command of its own (<code>pkg completions bash</code>), for
+the user to install where <code>Shell</code>’s cases say.</p>
+<p>Call it on the program’s parser, after the declarations.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>shell</code> — the shell the script is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the script, ending in a line break</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var parser = cli.Parser("pkg");
+var shell = parser.option&lt;cli.Shell&gt;("completions", help = "print a completion script");
+if (!parser.parse(args)) {
+    return 2;
+}
+if (shell.is_set) {
+    print(parser.completions(shell.value()));
+}
+</code></pre>
 <h4 id="try_parse"><a class="header" href="#try_parse">try_parse</a></h4>
 <pre><code class="language-pepper">try_parse(args: String[]): Result&lt;String?&gt;
 </code></pre>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c0706407.js";
+            window.path_to_searchindex_js = "../searchindex-9b47d345.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-04b2b9dd.js"></script>
+        <script src="../toc-8d3ead75.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -453,10 +453,48 @@ name, and a required global option may be given anywhere on the line.</li>
 usage.</li>
 <li>Commands nest: a command’s parser can declare commands too.</li>
 </ul>
+<h2 id="shell-completions"><a class="header" href="#shell-completions">Shell completions</a></h2>
+<p><code>completions(shell)</code> returns a script that completes the program’s
+command line in Bash, Zsh, fish or PowerShell (<code>cli.Shell</code>), from the
+declarations: options (with the global ones in each command), commands,
+an enum’s cases, and file names for a value that is a <code>String</code> or an
+<code>io.Path</code>. A program prints it on request, often from a command of its
+own, as <code>pkg completions fish</code> does here:</p>
+<pre><code class="language-pepper"># Shell completion scripts, printed by a command of the program's own.
+import cli;
+
+main(): int {
+    var parser = cli.Parser("pkg", "Manages packages");
+    parser.flag("verbose", "v", "say more", global = true);
+    var add = parser.command("add", "Adds a dependency");
+    add.positional("name", "the package");
+    var completions = parser.command("completions", "Prints a shell completion script");
+    var shell = completions.positional&lt;cli.Shell&gt;("shell", "bash, zsh, fish or powershell");
+
+    # The arguments as `main(args: String[])` would receive them.
+    var parsed = parser.try_parse(["pkg", "completions", "fish"]);
+    assert(parsed.is_ok() &amp;&amp; completions.is_selected, "the completions command");
+    print(parser.completions(shell.value()));
+    return 0;
+}
+</code></pre>
+<p>The user installs what it prints where the shell looks for it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Shell</th><th>Install the script as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>bash</code></td><td><code>~/.local/share/bash-completion/completions/pkg</code>, or <code>source</code> it from <code>~/.bashrc</code></td></tr>
+<tr><td><code>zsh</code></td><td><code>_pkg</code> in a directory on <code>$fpath</code></td></tr>
+<tr><td><code>fish</code></td><td><code>~/.config/fish/completions/pkg.fish</code></td></tr>
+<tr><td><code>powershell</code></td><td>dot-sourced from <code>$PROFILE</code></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
-<li>Generating shell completions.</li>
 </ul>
 
                     </main>
