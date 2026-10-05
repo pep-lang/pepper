@@ -677,6 +677,42 @@ _intrinsic_type(e: Expression, intrinsic: String, count: ulong): TypeName? {
     return none;
 }
 
+## The compiled functions (`_compiled_functions`) holding a call of
+## `__copy<T>`, `__copy_object<T>` or `__census<T>`, in order.
+_intrinsic_holders(module: Module): Array<FunctionDef> {
+    var out = Array<FunctionDef>();
+    var finder = _IntrinsicFinder();
+    for (var function in _compiled_functions(module)) {
+        finder.found = false;
+        _rewrite_function(function, finder);
+        if (finder.found) {
+            out.append(function);
+        }
+    }
+    return out;
+}
+
+## Notes whether a walk met a call of a copy intrinsic.
+struct _IntrinsicFinder {
+    var found: bool = false;
+
+    construct() {}
+
+    rewrite(e: Expression): Expression {
+        if (found) {
+            return e;
+        }
+        if (e is FunctionCall(node)) {
+            var at = node.function.find("<");
+            var base = at < 0 ? node.function : node.function.substr_bytes(0, at as ulong);
+            found = base == _COPY_INTRINSIC or base == _COPY_OBJECT_INTRINSIC or base == _CENSUS_INTRINSIC;
+        }
+        return e;
+    }
+}
+
+extend _IntrinsicFinder with Rewriter;
+
 ## Every function body that is compiled: not a generic base.
 _compiled_functions(module: Module): Array<FunctionDef> {
     var out = Array<FunctionDef>();
@@ -775,11 +811,16 @@ export synthesize_copies(module: Module, state: PassState): bool {
             return false;
         }
     }
-    var censuses_added = _lower_censuses(module, safe);
-    _lower_copy_objects(module);
+    # Few functions hold the intrinsics (the runtime's `_Copies` methods
+    # and their specializations, `MutexGuard.exit`): one walk finds them,
+    # and the lowerings below walk only those. What the lowerings and
+    # `_add_trait_copies` add holds none.
+    var holders = _intrinsic_holders(module);
+    var censuses_added = _lower_censuses(module, safe, holders);
+    _lower_copy_objects(module, holders);
     var traits_added = _add_trait_copies(module, safe);
     var collector = _CopyIntrinsics();
-    for (var function in _compiled_functions(module)) {
+    for (var function in holders) {
         _rewrite_function(function, collector);
     }
     var calls = collector.calls;
@@ -857,7 +898,7 @@ export synthesize_copies(module: Module, state: PassState): bool {
         added = true;
     }
     var lowerer = _CopyLowering(lowered);
-    for (var function in _compiled_functions(module)) {
+    for (var function in holders) {
         _rewrite_function(function, lowerer);
     }
     var failed = false;
@@ -948,14 +989,14 @@ _copy_failed(ty: TypeName, message: String, loc: Loc): Expression {
 }
 
 ## Lowers every `__copy_object<T>(value)` whose `T` is a struct to
-## `value.__copy()`.
-_lower_copy_objects(module: Module) {
+## `value.__copy()`, in `holders`, the functions holding intrinsics.
+_lower_copy_objects(module: Module, holders: FunctionDef[]) {
     var structs = HashSet<String>();
     for (var st in module.structs) {
         structs.insert(st.name);
     }
     var lowering = _CopyObjects(structs);
-    for (var function in _compiled_functions(module)) {
+    for (var function in holders) {
         _rewrite_function(function, lowering);
     }
 }
@@ -985,10 +1026,11 @@ extend _CopyObjects with Rewriter;
 
 ## Lowers every concrete `__census<T>(slot, waiting)`: to a
 ## `_pep_check_sync<T>` call when a `T` can be copied, and to the slot alone
-## otherwise. Returns whether it added a call to specialize.
-_lower_censuses(module: Module, safe: ThreadSafeStructs): bool {
+## otherwise, in `holders`, the functions holding intrinsics. Returns
+## whether it added a call to specialize.
+_lower_censuses(module: Module, safe: ThreadSafeStructs, holders: FunctionDef[]): bool {
     var collector = _Censuses();
-    for (var function in _compiled_functions(module)) {
+    for (var function in holders) {
         _rewrite_function(function, collector);
     }
     var checked = Array<(TypeName, bool)>();
@@ -1003,7 +1045,7 @@ _lower_censuses(module: Module, safe: ThreadSafeStructs): bool {
         checked.append((ty, can));
     }
     var lowering = _CensusLowering(checked);
-    for (var function in _compiled_functions(module)) {
+    for (var function in holders) {
         _rewrite_function(function, lowering);
     }
     return lowering.added;

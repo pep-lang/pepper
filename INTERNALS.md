@@ -2878,7 +2878,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   specialized generic methods, and copies (`copies.pep`: `[Copyable]`
   and `Copy` structs' `__copy` methods, `copy()` calls lowered field by
   field, and a lock's census of the values it shares, with
-  `shared_types.pep` telling which types are thread-safe), repeated
+  `shared_types.pep` telling which types are thread-safe; one walk
+  finds the few functions holding the copy intrinsics, and the lowerings
+  walk only those), repeated
   until a round asks for nothing new. An error inside a specialization
   notes the uses that requested it (`instantiation.pep`). The loop's
   steps are counted as `checked::run_steps` counts them, so
