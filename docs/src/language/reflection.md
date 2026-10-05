@@ -53,6 +53,20 @@ main.pep:9:24: error: 'total' is a runtime value; add it to the static block's c
 Each pass of an unrolled `for` or `while`, and the branch an `if` keeps, is
 its own block, like the body of a real loop.
 
+A closure in an emitted statement is an ordinary closure: it captures
+runtime locals as any closure does. Its body cannot use a compile-time value
+such as `field.name`, since the closure outlives the block's expansion; copy
+the value into a runtime local first, and the closure captures that local:
+
+```pepper
+static (options, calls) {
+    for (var field in reflect.fields<Options>()) {
+        var text = $"{field.get(options)}";
+        calls.append(() => text);
+    }
+}
+```
+
 ### Compile-time loops
 
 `break` and `continue` in a compile-time `for` or `while` run in the

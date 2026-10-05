@@ -1286,18 +1286,16 @@ _cli_field_value<T>(declared: _CliArgument, current: Array<T>): Array<T> {
 # error expects, and an enum's choices, and checks its default.
 _cli_type<T>(declared: _CliArgument) {
     declared.expected = _cli_expected<T>();
-    var any_text = false;
-    static (declared, any_text) {
-        any_text = reflect.is_same<T, String>();
-        declared.names_files = any_text or reflect.is_same<T, Path>();
+    static (declared) {
+        declared.names_files = reflect.is_same<T, String>() or reflect.is_same<T, Path>();
+        if (!reflect.is_same<T, String>()) {
+            declared.check = (text: String) => _cli_convert<T>(text).is_value();
+        }
         if (reflect.is_enum<T>()) {
             for (var case in reflect.cases<T>()) {
                 declared.choices.append(_cli_kebab(case.name));
             }
         }
-    }
-    if (!any_text) {
-        declared.check = (text: String) => _cli_convert<T>(text).is_value();
     }
     assert(
         declared.default_value.is_empty or declared.reads(declared.default_value),

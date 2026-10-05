@@ -24,6 +24,7 @@ import [
     MethodCallExpression,
     Module,
     Statement,
+    StaticItem,
     StructDef,
     SymbolRefExpression,
     TypeName,
@@ -170,6 +171,9 @@ struct _ClosureLifter {
     # Captured locals and where a closure first uses each.
     var captured: HashMap<ulong, Loc> = HashMap<ulong, Loc>();
     var lifted: StructDef[] = Array<StructDef>();
+    # The closure levels at which enclosing `static` blocks begin: a closure
+    # deeper than one is lifted out of that block's expansion.
+    var static_levels: Array<ulong> = Array<ulong>();
 
     construct(state: PassState, ctx: _ClosureContext) {
         this.state = state;
@@ -302,9 +306,69 @@ struct _ClosureLifter {
                     ret.expr = Optional<Expression>.Value(walk_expression(ret.expr.value()));
                 }
             }
+            Static(block) => {
+                static_levels.append(level);
+                walk_static_items(block.items);
+                static_levels.pop();
+            }
             else => {}
         }
         return statement;
+    }
+
+    # The statements a `static` block emits: a closure literal in one is
+    # lifted like any other, before the block is expanded.
+    walk_static_items(items: Array<StaticItem>) {
+        ulong i = 0;
+        while (i < items.count) {
+            match (items[i]) {
+                For(node) => {
+                    _walk_scoped(node.body);
+                }
+                While(node) => {
+                    _walk_scoped(node.body);
+                }
+                Block(value) => {
+                    _walk_scoped(value);
+                }
+                If(node) => {
+                    _walk_scoped(node.then_items);
+                    _walk_scoped(node.else_items);
+                }
+                EmitIf(node) => {
+                    node.condition = walk_expression(node.condition);
+                    _walk_scoped(node.then_items);
+                    _walk_scoped(node.else_items);
+                }
+                Emit(statement, span) => {
+                    items[i] = StaticItem.Emit(walk_statement(statement), span);
+                }
+                else => {}
+            }
+            i += 1;
+        }
+    }
+
+    _walk_scoped(items: Array<StaticItem>) {
+        scopes.append(Array<ulong>());
+        walk_static_items(items);
+        scopes.pop();
+    }
+
+    # A compile-time value used inside a closure that a `static` block
+    # emits: the lifted closure's body is outside the block, where the value
+    # no longer exists.
+    static_value_in_closure(loc: Loc): bool {
+        if (static_levels.count == 0 or level <= static_levels.last()) {
+            return false;
+        }
+        state.report(
+            error_at(
+                "a closure cannot use a compile-time value of its static block; assign the value to a local outside the closure and use the local",
+                loc
+            )
+        );
+        return true;
     }
 
     # The local an assignment target names, and where.
@@ -332,6 +396,16 @@ struct _ClosureLifter {
         match (e) {
             ClosureLiteral(literal) => {
                 return lift(literal);
+            }
+            StaticValue(value) => {
+                if (static_value_in_closure(value.loc)) {
+                    return expr;
+                }
+            }
+            StaticMember(value) => {
+                if (static_value_in_closure(value.loc)) {
+                    return expr;
+                }
             }
             SymbolRef(node) => {
                 var v = resolve(node.id);

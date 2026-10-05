@@ -141,6 +141,9 @@ struct Lifter<'a> {
     /// Captured locals and where a closure first uses each.
     captured: HashMap<usize, Loc>,
     lifted: Vec<StructDef>,
+    /// The closure levels at which enclosing `static` blocks begin: a
+    /// closure deeper than one is lifted out of that block's expansion.
+    static_levels: Vec<usize>,
 }
 
 impl<'a> Lifter<'a> {
@@ -154,6 +157,7 @@ impl<'a> Lifter<'a> {
             assignments: vec![],
             captured: HashMap::new(),
             lifted: vec![],
+            static_levels: vec![],
         }
     }
 
@@ -259,8 +263,64 @@ impl<'a> Lifter<'a> {
                     self.walk_expression(e);
                 }
             }
-            Statement::LoopBreak(_) | Statement::Static(_) | Statement::StaticPass(_) => {}
+            Statement::Static(block) => {
+                self.static_levels.push(self.level);
+                self.walk_static_items(&mut block.items);
+                self.static_levels.pop();
+            }
+            Statement::LoopBreak(_) | Statement::StaticPass(_) => {}
         }
+    }
+
+    /// The statements a `static` block emits: a closure literal in one is
+    /// lifted like any other, before the block is expanded.
+    fn walk_static_items(&mut self, items: &mut [StaticItem]) {
+        for item in items {
+            match item {
+                StaticItem::For { body, .. } | StaticItem::While { body, .. } | StaticItem::Block(body) => {
+                    self.scopes.push(vec![]);
+                    self.walk_static_items(body);
+                    self.scopes.pop();
+                }
+                StaticItem::If { then_items, else_items, .. } => {
+                    self.scopes.push(vec![]);
+                    self.walk_static_items(then_items);
+                    self.scopes.pop();
+                    self.scopes.push(vec![]);
+                    self.walk_static_items(else_items);
+                    self.scopes.pop();
+                }
+                StaticItem::EmitIf { condition, then_items, else_items, .. } => {
+                    self.walk_expression(condition);
+                    self.scopes.push(vec![]);
+                    self.walk_static_items(then_items);
+                    self.scopes.pop();
+                    self.scopes.push(vec![]);
+                    self.walk_static_items(else_items);
+                    self.scopes.pop();
+                }
+                StaticItem::Emit(statement, _) => self.walk_statement(statement),
+                StaticItem::Var { .. } | StaticItem::Evaluate(_) | StaticItem::Jump { .. } => {}
+            }
+        }
+    }
+
+    /// A compile-time value used inside a closure that a `static` block
+    /// emits: the lifted closure's body is outside the block, where the
+    /// value no longer exists.
+    fn static_value_in_closure(&self, loc: Loc) -> bool {
+        let Some(&start) = self.static_levels.last() else { return false };
+        if self.level <= start {
+            return false;
+        }
+        crate::errors::report(
+            Diagnostic::error(
+                "a closure cannot use a compile-time value of its static block; assign the value to a local outside the closure and use the local"
+                    .to_string(),
+            )
+            .at(loc),
+        );
+        true
     }
 
     /// The local an assignment target names, if any.
@@ -277,6 +337,16 @@ impl<'a> Lifter<'a> {
             Expression::ClosureLiteral(_) => {
                 self.lift(expr);
                 return;
+            }
+            Expression::StaticValue(value) => {
+                if self.static_value_in_closure(value.loc) {
+                    return;
+                }
+            }
+            Expression::StaticMember(member) => {
+                if self.static_value_in_closure(member.loc) {
+                    return;
+                }
             }
             Expression::SymbolRef { id, loc, .. } => {
                 if let Some(v) = self.resolve(id) {
