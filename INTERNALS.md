@@ -2993,15 +2993,17 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   it by the expression's address), and `globals.pep` globals,
   thread-locals, exports, context switching, intrinsics, TBAA facts and
   the CPU attributes. Errors are `Result`s whose location `locate` records,
-  as `error_loc` does in Rust. Debug info, the JIT and the build cache's
-  units are not ported: `pepc` generates the whole program as one module,
-  recording in `owners` the file that declares each symbol.
-  `partition.pep` splits that module into parts for parallel compilation:
-  `prepare` makes owned symbols external and hidden in their file's part
-  (files spread over the parts by size), every other definition
-  `linkonce_odr` in each part that uses it (private `unnamed_addr`
-  constants stay private copies), keeps `main`, `__pep_global_init`, the
-  exports and `llvm.*` in part 0, and respells symbols with `symbol_name`;
+  as `error_loc` does in Rust. Debug info and the JIT are not ported:
+  `pepc` generates the whole program as one module, recording in `owners`
+  the file that declares each symbol.
+  `partition.pep` splits that module into one part per compilation unit
+  (`link/units.pep`: `units` and `unit_inputs`, ported from
+  `Program::units` and `Program::unit_inputs`) and one for the program's
+  entry points: `prepare` makes owned symbols external and hidden in their
+  unit's part, every other definition `linkonce_odr` in each part that
+  uses it (private `unnamed_addr` constants stay private copies), keeps
+  `main`, `__pep_global_init`, the exports and `llvm.*` in the entry
+  part, respells symbols with `symbol_name`, and measures each part;
   `keep_part` turns the other parts' definitions into declarations and
   runs `globaldce`.
   `pepc --emit-llvm` prints it as `pep-build --emit-llvm -O0` does: byte
@@ -3022,18 +3024,39 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   adds the `main` that registers the `[Test]` functions, and the loader
   takes the changed texts from `Setup.sources` instead of the disk.
 - `compiler.driver` (`compiler/driver/`) builds a program as
-  `crates/pepper-driver` does, with no build cache: `build.pep` runs
-  merge and the sema passes (printing their warnings on standard error,
-  failed or not), generates the module for the host with clang's default
-  CPU, optimizes and compiles it, and links the objects. `parts.pep`
-  compiles the module as one part per logical CPU (no more than the
-  files): it writes the bitcode and a plan (the machine, the level, each
-  owned symbol's part) to `.pep/build/<name>.parts`, and runs a
-  `pepc --compile-part <dir> <part> <object>` child per part, which keeps
-  its part, runs LLVM's `default<On>` pipeline and writes its object;
-  with one part the pipeline runs over the whole module, which becomes one
-  object. The module holding `llvm.global_ctors` moves the static
-  constructors into `.init_array` on ELF after optimizing. `linker.pep`
+  `crates/pepper-driver` does: `build.pep` runs merge and the sema passes
+  (printing their warnings on standard error, failed or not), generates
+  the module for the host with clang's default CPU, compiles each unit's
+  parts to objects, and links the objects. A unit larger than
+  `_PART_SIZE` (blocks and definitions, `codegen.file_sizes`) is split by
+  file into parts of about that size, which depends on the unit alone, so
+  its objects are the same in every program. `parts.pep` compiles the
+  parts that need it: one in this process, more in `pepc --compile-part
+  <dir> <part> <object>...` children, one per logical CPU at most, given
+  parts of about the same size. Each reads the bitcode `compile_parts`
+  wrote to `<build>/<name>.<pid>` (a folder per build, so builds at once
+  do not meet) once, keeps all its parts (`codegen.keep_parts`), so the
+  copy it makes for each part but the last is smaller, and keeps,
+  optimizes (LLVM's `default<On>`) and emits each. The entry part moves the static constructors into
+  `.init_array` on ELF. `cache.pep` is the build cache (`--cache dir`,
+  else `$PEPPER_CACHE_DIR`, else `.pep/cache`; `--no-cache` skips it): a
+  unit's key (`Keys.unit`) hashes (BLAKE3) the compiler's identity (its
+  executable's path, size and modification time), the target, CPU, `-O`
+  level and `-D` options, the unit's name and files, and each of its
+  inputs' name, namespace, kind and text. Its objects are
+  `<cache>/v1/units/<unit>/<key>/<n>.o`, written to the build folder and
+  moved into place as one folder. The same key gives the same objects, so
+  they never change once there, and builds share the cache without locks
+  or copies: a hit is linked where it is. Each unit keeps its newest eight
+  keys. Unlike `Program::units`, the files of a module are one unit, and
+  a module's other files are inputs of a file that reads it, since they see
+  each other's declarations without imports; an override file is an input
+  by its own text only. A program's key (`Keys.program`) hashes every file
+  and what the link takes (output, `-l`, `-L`, the current folder); when
+  `programs/<hash of the output path>` records that key and the output's
+  hash, the build stops before sema. A build that warned records nothing,
+  so the next one warns again. `-T time` prints each stage's time, `-T
+  cache` each unit's hit or miss. `linker.pep`
   finds clang (as `find_link_driver` does) and links with the `[Link]`
   libraries and folders, `-l` and `-L`, and the OS's default system libraries;
   `project.pep` builds a project as `apply_project` and `fetch.rs` do:
@@ -3044,9 +3067,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `pepper-files`' `project.rs` does, with the same errors (the TOML tree
   has no positions, so spans are found from the keys that lead to them),
   and `load` resolves imports of dependencies through `Packages`. Not yet
-  ported: units and the build cache, `--test`, `--target` and
-  cross-linking, LTO, debug info, libraries (`--shared`, `--static`), and
-  the other options.
+  ported: skipping the bodies of cached units in sema, the checked
+  runtime and parse caches, `--target` and cross-linking, LTO, debug info,
+  libraries (`--shared`, `--static`), and the other options.
 
 ---
 

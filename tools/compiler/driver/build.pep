@@ -11,6 +11,7 @@ import llvm;
 import os;
 import process;
 import compiler.sema;
+import "cache";
 import "linker";
 import "parts";
 
@@ -26,6 +27,15 @@ export struct BuildOptions {
     var libraries: String[] = Array<String>();
     ## More folders to search for them (`-L`).
     var library_dirs: Path[] = Array<Path>();
+    ## The build cache, unless the build has none (`--no-cache`).
+    var cache: Cache? = Optional<Cache>.Empty;
+    ## Whether to print how long each stage took (`-T time`).
+    var trace_time: bool = false;
+    ## Whether to print where each unit's object came from (`-T cache`).
+    var trace_cache: bool = false;
+    ## Whether to compile every part in this process rather than in
+    ## `pepc --compile-part` children (for a program other than `pepc`).
+    var in_process: bool = false;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -161,21 +171,56 @@ export use_init_array(ir: llvm.Module, context: llvm.Context) {
     array.set_alignment(8);
 }
 
+## What a build did.
+export struct Built {
+    ## Whether the output already was this program, so nothing was built.
+    var unchanged: bool = false;
+    ## The units whose objects came from the build cache, by name.
+    var hits: String[] = Array<String>();
+    ## The units compiled and stored in the build cache, by name.
+    var misses: String[] = Array<String>();
+
+    construct() {}
+}
+
 ## Builds `program` into an executable: merge, the sema passes, code
-## generation for the host, LLVM's standard pipeline at the `-O` level, an
-## object file, then the link. Warnings print on standard error whether or
-## not the build succeeds.
+## generation for the host, LLVM's standard pipeline at the `-O` level, one
+## object per compilation unit (from the build cache when its key hits),
+## then the link. When the cache records that the output is this very
+## program, unchanged since, nothing is built. Warnings print on standard
+## error whether or not the build succeeds.
 ##
 ## @param program the loaded and linked program
 ## @param options where the output goes, and how it is built
-## @returns nothing, or the error, rendered
-export build(program: link.Program, options: BuildOptions): Result<void, String> {
+## @returns what the build did, or the error, rendered
+export build(program: link.Program, options: BuildOptions): Result<Built, String> {
+    var report = Built();
+    var clock = _Clock(options.trace_time);
+    var triple = llvm.default_triple();
+    var cpu = codegen.Cpu.default_for(triple);
+    var units = link.units(program);
+    var keys = Optional<Keys>.Empty;
+    String program_key = "";
+    if (options.cache.is_value()) {
+        keys = Optional<Keys>.Value(Keys(program, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}"));
+        program_key = keys.value().program(program, _link_text(options));
+        if (options.cache.value().is_built(options.output, program_key)) {
+            if (options.trace_cache) {
+                File.stderr().write_all($"cache: {options.output} is up to date\n");
+            }
+            clock.lap("unchanged");
+            report.unchanged = true;
+            return Result<Built, String>.ok(report);
+        }
+        clock.lap("keys");
+    }
+
     var sources = program.sources();
     var warnings = program.warnings();
     var built = sema.merge(program);
     if (built.is_err()) {
         report_warnings(warnings, sources);
-        return Result<void, String>.err(built.error());
+        return Result<Built, String>.err(built.error());
     }
     var module = built.value();
     var state = sema.PassState(program.target);
@@ -186,15 +231,14 @@ export build(program: link.Program, options: BuildOptions): Result<void, String>
     }
     report_warnings(warnings, sources);
     if (ran.is_err()) {
-        return Result<void, String>.err(render_all([ran.error()], sources));
+        return Result<Built, String>.err(render_all([ran.error()], sources));
     }
+    clock.lap("sema");
 
-    var triple = llvm.default_triple();
-    var cpu = codegen.Cpu.default_for(triple);
     var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][options.opt_level];
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
     if (machine.is_err()) {
-        return Result<void, String>.err(machine.error().message);
+        return Result<Built, String>.err(machine.error().message);
     }
     var setup = codegen.Build(machine.value(), cpu);
     setup.opt_level = options.opt_level;
@@ -207,49 +251,111 @@ export build(program: link.Program, options: BuildOptions): Result<void, String>
     var stem = name.is_value() ? name.value() : "main";
     var generated = codegen.generate(module, state, namespaces, stem, setup, owners);
     if (generated.is_err()) {
-        return Result<void, String>.err(render_all([generated.error()], sources));
+        return Result<Built, String>.err(render_all([generated.error()], sources));
     }
     var ir = generated.value();
+    clock.lap("codegen");
 
-    var created = Directory.create_all(options.build_dir);
+    # Each unit is one part or more; the program's entry points are the
+    # last part.
+    var sizes = codegen.file_sizes(ir, owners, program.files.count);
+    var part_of_file = Array<uint>();
+    for (var _ in program.files) {
+        part_of_file.append(0);
+    }
+    var unit_parts = Array<uint[]>();
+    uint parts = 0;
+    for (var unit in units) {
+        var split = _split(unit, sizes, parts);
+        var own = Array<uint>();
+        for (var part in split) {
+            if (!own.contains(part)) {
+                own.append(part);
+            }
+        }
+        for (var i in 0..unit.files.count) {
+            part_of_file[unit.files[i]] = split[i];
+        }
+        unit_parts.append(_unit_size(unit, sizes) == 0 ? Array<uint>() : own);
+        parts += own.count as uint;
+    }
+    var entry_part = parts;
+    var partition = codegen.prepare(ir, owners, part_of_file, entry_part, entry_part + 1);
+    # A folder of this build's own, so builds running at once do not meet.
+    var work = options.build_dir.join(Path($"{stem}.{process.id()}"));
+    var created = Directory.create_all(work);
     if (created.is_err()) {
-        return Result<void, String>.err($"cannot create build dir: {created.error().message}");
+        return Result<Built, String>.err($"cannot create {work}: {created.error().message}");
     }
     var extension = triple.contains("-windows") ? "obj" : "o";
     var objects = Array<Path>();
-    var parts = part_count(namespaces.count as uint);
-    if (parts > 1) {
-        # Optimized and compiled in parallel, one object per part.
-        var compiled = compile_parts(
-            ir,
-            owners,
-            namespaces.count as uint,
-            parts,
-            machine.value(),
-            cpu,
-            options.opt_level,
-            options.build_dir.join(Path($"{stem}.parts")),
-            extension
-        );
-        if (compiled.is_err()) {
-            return Result<void, String>.err(compiled.error());
+    var jobs = Array<PartJob>();
+    # The units compiled, with their keys, to store in the cache.
+    var stored = Array<(ulong, String)>();
+    for (var u in 0..units.count) {
+        var own = unit_parts[u];
+        if (own.is_empty) {
+            continue;
         }
-        objects = compiled.value();
-    } else {
-        if (options.opt_level > 0) {
-            var optimized = ir.run_passes($"default<O{options.opt_level}>", machine.value());
-            if (optimized.is_err()) {
-                return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
+        var folder = work.join(Path($"{u}"));
+        if (keys.is_value()) {
+            var key = keys.value().unit(program, units[u]);
+            var cached = options.cache.value().objects(units[u].name, key);
+            var found = Array<Path>();
+            for (var i in 0..own.count) {
+                var object = cached.join(Path($"{i}.{extension}"));
+                if (object.is_file()) {
+                    found.append(object);
+                }
+            }
+            if (found.count == own.count) {
+                if (options.trace_cache) {
+                    File.stderr().write_all($"cache: hit {units[u].name}\n");
+                }
+                objects.append_all(found);
+                report.hits.append(units[u].name);
+                continue;
+            }
+            if (options.trace_cache) {
+                File.stderr().write_all($"cache: miss {units[u].name} ({own.count} parts)\n");
+            }
+            stored.append((u, key));
+            report.misses.append(units[u].name);
+        }
+        Directory.create_all(folder);
+        for (var i in 0..own.count) {
+            jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
+        }
+    }
+    var entry_object = work.join(Path($"{stem}.{extension}"));
+    jobs.append(PartJob(entry_part, entry_object));
+    var compiled = compile_parts(
+        ir, partition, jobs, machine.value(), cpu, options.opt_level, work, options.trace_time, options.in_process
+    );
+    if (compiled.is_err()) {
+        Directory.remove_all(work);
+        return Result<Built, String>.err(compiled.error());
+    }
+    if (keys.is_value()) {
+        for (var (u, key) in stored) {
+            var kept = options.cache.value().store(work.join(Path($"{u}")), units[u].name, key);
+            if (kept.is_err()) {
+                Directory.remove_all(work);
+                return Result<Built, String>.err(kept.error());
+            }
+            for (var i in 0..unit_parts[u].count) {
+                objects.append(kept.value().join(Path($"{i}.{extension}")));
             }
         }
-        place_constructors(ir, triple);
-        var object = options.build_dir.join(Path($"{stem}.{extension}"));
-        var emitted = machine.value().emit_to_file(ir, object.to_string());
-        if (emitted.is_err()) {
-            return Result<void, String>.err($"cannot write {object}: {emitted.error().message}");
+    } else {
+        for (var job in jobs) {
+            if (job.part != entry_part) {
+                objects.append(job.object);
+            }
         }
-        objects.append(object);
     }
+    objects.append(entry_object);
+    clock.lap("objects");
 
     # Search order: `-L`, then `[Link(path = ...)]`.
     var (linked, linked_dirs) = link_inputs(module, program);
@@ -267,5 +373,120 @@ export build(program: link.Program, options: BuildOptions): Result<void, String>
     for (var dir in linked_dirs) {
         dirs.append(dir);
     }
-    return link_objects(objects, options.output, libraries, dirs);
+    var made = link_objects(objects, options.output, libraries, dirs);
+    Directory.remove_all(work);
+    if (made.is_err()) {
+        return Result<Built, String>.err(made.error());
+    }
+    clock.lap("link");
+    if (options.cache.is_value()) {
+        options.cache.value().record(options.output, program_key, !warnings.is_empty);
+    }
+    return Result<Built, String>.ok(report);
+}
+
+## The largest part a unit is compiled in, in `codegen.file_sizes`'s
+## measure (blocks and definitions): a larger unit is split into parts of
+## about this size, so one large unit does not keep the build waiting on
+## one process. The split depends only on the unit's own code, so its
+## objects stay the same from one program to the next.
+const _PART_SIZE = 20000;
+
+## The part of each of `unit`'s files: as many parts as the unit's size
+## needs (`_PART_SIZE`), no more than its files, each file (largest first)
+## to the part with the least code so far; the parts are numbered from
+## `first`, with no gaps.
+_split(unit: link.Unit, sizes: ulong[], first: uint): uint[] {
+    var total = _unit_size(unit, sizes);
+    var count = (total + (_PART_SIZE as ulong) - 1) / (_PART_SIZE as ulong);
+    if (count > unit.files.count) {
+        count = unit.files.count;
+    }
+    if (count < 1) {
+        count = 1;
+    }
+    var order = Array<ulong>();
+    for (var i in 0..unit.files.count) {
+        order.append(i);
+    }
+    order.sort((a, b) => {
+        var x = sizes[unit.files[a]];
+        var y = sizes[unit.files[b]];
+        return x != y ? (x > y ? -1 : 1) : (a < b ? -1 : (a > b ? 1 : 0));
+    });
+    var loads = Array<ulong>();
+    for (var _ in 0..count) {
+        loads.append(0);
+    }
+    var split = Array<uint>();
+    for (var _ in unit.files) {
+        split.append(0);
+    }
+    for (var i in order) {
+        ulong least = 0;
+        for (var part in 1..loads.count) {
+            if (loads[part] < loads[least]) {
+                least = part;
+            }
+        }
+        split[i] = least as uint;
+        loads[least] += sizes[unit.files[i]];
+    }
+    # Numbered in the order the parts first appear, from `first`, so a
+    # part no file went to takes no number.
+    var number = HashMap<uint, uint>();
+    for (var i in 0..split.count) {
+        if (!number.contains(split[i])) {
+            number[split[i]] = first + number.count as uint;
+        }
+        split[i] = number[split[i]];
+    }
+    return split;
+}
+
+## How much code `unit`'s files own.
+_unit_size(unit: link.Unit, sizes: ulong[]): ulong {
+    ulong total = 0;
+    for (var file in unit.files) {
+        total += sizes[file];
+    }
+    return total;
+}
+
+## What linking a program takes beyond its files, as text for its key: the
+## output, the `-l` libraries, the `-L` folders, and the current folder
+## (`[Link(path = ...)]` folders are relative to it).
+_link_text(options: BuildOptions): String {
+    var cwd = process.working_directory();
+    var here = cwd.is_ok() ? cwd.value().to_string() : "";
+    var text = StringBuilder();
+    text.append($"output {options.output}\ncwd {here}\n");
+    for (var library in options.libraries) {
+        text.append($"-l {library}\n");
+    }
+    for (var dir in options.library_dirs) {
+        text.append($"-L {dir}\n");
+    }
+    return text.to_string();
+}
+
+## Prints how long each stage of a build took (`-T time`).
+struct _Clock {
+    var on: bool;
+    var start: os.Instant;
+
+    construct(on: bool) {
+        this.on = on;
+        start = os.Instant.now();
+    }
+
+    ## Prints how long `stage` took, since the last stage ended.
+    lap(stage: String) {
+        if (!on) {
+            return;
+        }
+        var now = os.Instant.now();
+        File.stderr().write_all($"time: {stage} {(now - start).milliseconds()} ms\n");
+        start = now;
+    }
 }

@@ -7,7 +7,8 @@
 #
 #     pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #     pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
-#     pepc [--test] [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#     pepc [--test] [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]]
+#          [--cache dir | --no-cache] [-T time] [-T cache] [--Tall] file.pep
 #
 # print the file's syntax tree, or the whole program after linking, as the
 # JSON that `pep-build` prints with the same options, or what the checks
@@ -19,6 +20,10 @@
 # `pep-build` does: `out`, else the file's stem in the current directory.
 # `--test` builds the test program of the file (or of several files of one
 # folder) instead, as `pep-build --test` does (`driver/test_main.pep`).
+# A build keeps each unit's object in the build cache (`driver/cache.pep`):
+# `--cache dir`, else `$PEPPER_CACHE_DIR`, else `.pep/cache`; `--no-cache`
+# compiles everything. `-T time` prints how long each stage took, `-T
+# cache` whether each unit's object came from the cache, `--Tall` both.
 
 import compiler.codegen;
 import [render_all] from compiler.diagnostic;
@@ -32,14 +37,20 @@ import process;
 import compiler.sema;
 
 main(args: String[]): int {
-    # One part of a build this compiler split (`driver/parts.pep`).
-    if (args.count == 5 and args[1] == "--compile-part") {
-        var part = uint.parse(args[3]);
-        if (!part.is_value()) {
-            File.stderr().write_all($"pepc: --compile-part needs a part number, not '{args[3]}'\n");
-            return 1;
+    # Parts of a build this compiler split (`driver/parts.pep`): a folder,
+    # then each part's number and object.
+    if (args.count >= 5 and args.count % 2 == 1 and args[1] == "--compile-part") {
+        var jobs = Array<driver.PartJob>();
+        for (var at in 0..((args.count - 3) / 2)) {
+            var number = args[3 + 2 * at];
+            var part = uint.parse(number);
+            if (!part.is_value()) {
+                File.stderr().write_all($"pepc: --compile-part needs a part number, not '{number}'\n");
+                return 1;
+            }
+            jobs.append(driver.PartJob(part.value(), Path(args[4 + 2 * at])));
         }
-        var compiled = driver.compile_part(Path(args[2]), part.value(), Path(args[4]));
+        var compiled = driver.compile_part(Path(args[2]), jobs);
         if (compiled.is_err()) {
             File.stderr().write_all($"pepc: {compiled.error()}\n");
             return 1;
@@ -59,6 +70,9 @@ main(args: String[]): int {
     var libraries = Array<String>();
     var library_dirs = Array<Path>();
     var step = Optional<ulong>.Empty;
+    bool no_cache = false;
+    String? cache_dir;
+    var traces = Array<String>();
     var setup = link.Setup();
     ulong i = 1;
     while (i < args.count) {
@@ -111,6 +125,22 @@ main(args: String[]): int {
             step = Optional<ulong>.Value(parsed.value());
         } else if (arg == "--no-runtime") {
             setup.runtime = false;
+        } else if (arg == "--no-cache") {
+            no_cache = true;
+        } else if (arg == "--cache" or arg == "-T") {
+            if (i + 1 >= args.count) {
+                print($"pepc: {arg} needs a value");
+                return 2;
+            }
+            i += 1;
+            if (arg == "--cache") {
+                cache_dir = Optional<String>.Value(args[i]);
+            } else {
+                traces.append(args[i]);
+            }
+        } else if (arg == "--Tall") {
+            traces.append("time");
+            traces.append("cache");
         } else if (arg == "-I" or arg == "--import" or arg == "-D" or arg.starts_with("-I") or arg.starts_with("-D")) {
             # `-I dir` or `-Idir`; `-D NAME` or `-DNAME`.
             var value = arg.size > 2 and arg != "--import" ? arg.substr_bytes(2, arg.size - 2) : "";
@@ -282,6 +312,13 @@ main(args: String[]): int {
             }
             options.libraries = libraries;
             options.library_dirs = library_dirs;
+            if (!no_cache) {
+                options.cache = Optional<driver.Cache>.Value(
+                    cache_dir.is_value() ? driver.Cache(Path(cache_dir.value())) : driver.default_cache(work)
+                );
+            }
+            options.trace_time = traces.contains("time");
+            options.trace_cache = traces.contains("cache");
             var made = driver.build(program.value(), options);
             if (made.is_err()) {
                 File.stderr().write_all(made.error() + "\n");

@@ -3,6 +3,7 @@
 ## as `crates/pepper-driver` does for the Rust compiler.
 
 export * from "build";
+export * from "cache";
 export * from "linker";
 export * from "parts";
 export * from "project";
