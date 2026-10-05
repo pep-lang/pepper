@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8165734e.js";
+            window.path_to_searchindex_js = "searchindex-382a5987.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -6792,12 +6792,6 @@ any trait value.</p>
 set iterators, <code>ChannelIterator</code>, and the <code>map</code>, <code>filter</code>, <code>enumerate</code> and
 <code>zip</code> adapters) are value structs, so a <code>for</code> loop over an <code>Array</code>, a
 <code>String</code> or any map or set allocates no iterator.</p>
-<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
-<ul>
-<li>A <a href="#value-enums">value enum</a> stores the values of all its cases
-side by side, so it is as large as all of them together; the cases do not
-share storage yet.</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="hashing-and-equality"><a class="header" href="#hashing-and-equality">Hashing and equality</a></h1>
 <p><code>HashMap&lt;K, V&gt;</code> and <code>HashSet&lt;K&gt;</code> find a key by hashing it with <code>hash&lt;K&gt;</code>
@@ -7417,6 +7411,9 @@ enum Shape {
 }
 </code></pre>
 <ul>
+<li>Its cases share one storage: a value is as large as its largest case, plus
+the tag that says which case it holds (<code>sizeof&lt;Shape&gt;()</code> is 12: the tag,
+then room for <code>Rect</code>’s two <code>int</code>s, which <code>Circle</code>’s <code>radius</code> reuses).</li>
 <li>A value enum is never null. A slot that is not given a value holds the
 first case, with every value it carries zero, <code>false</code>, or null: an unset
 <code>Shape</code> is <code>Circle(0)</code>.</li>
@@ -16428,7 +16425,7 @@ smallest CPU quota (<code>cpu.max</code>, or v1’s <code>cpu.cfs_quota_us</code
 </ul>
 <p>Where no limit is set, or the files cannot be read, they report the
 machine.</p>
-<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
+<h2 id="current-limitations"><a class="header" href="#current-limitations">Current limitations</a></h2>
 <ul>
 <li><code>async.timeout</code> still takes milliseconds, not a <code>Duration</code>.</li>
 </ul>
@@ -16614,7 +16611,7 @@ names when it is set.</li>
 <li>On WebAssembly, TZif files under <code>/usr/share/zoneinfo</code> (or <code>TZDIR</code>) when
 the host lends the program that folder.</li>
 </ul>
-<h2 id="current-limitations-2"><a class="header" href="#current-limitations-2">Current limitations</a></h2>
+<h2 id="current-limitations-1"><a class="header" href="#current-limitations-1">Current limitations</a></h2>
 <ul>
 <li><code>format</code> writes text but nothing reads a <code>strftime</code> pattern back; parse
 ISO 8601, RFC 3339 and HTTP dates with the <code>parse</code> functions.</li>

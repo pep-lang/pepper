@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8165734e.js";
+            window.path_to_searchindex_js = "../searchindex-382a5987.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -380,6 +380,9 @@ enum Shape {
 }
 </code></pre>
 <ul>
+<li>Its cases share one storage: a value is as large as its largest case, plus
+the tag that says which case it holds (<code>sizeof&lt;Shape&gt;()</code> is 12: the tag,
+then room for <code>Rect</code>’s two <code>int</code>s, which <code>Circle</code>’s <code>radius</code> reuses).</li>
 <li>A value enum is never null. A slot that is not given a value holds the
 first case, with every value it carries zero, <code>false</code>, or null: an unset
 <code>Shape</code> is <code>Circle(0)</code>.</li>
