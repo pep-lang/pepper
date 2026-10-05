@@ -4,6 +4,7 @@
 import [Directory, File, Path] from io;
 import lsp;
 import compiler.parse;
+import "actions";
 import "analysis";
 import "completion";
 import "edits";
@@ -379,4 +380,85 @@ inlay_hints_name_literal_arguments() {
         hint_list(lsp.TextDocument(uri, text), ready, false, true),
         "15:24 width:, 15:29 height:, 16:18 width:, 18:19 text:"
     );
+}
+
+# The titles of `actions`, then each one's edits as `line:character-line:character text`.
+action_list(actions: lsp.CodeAction[]): String {
+    var out = Array<String>();
+    for (var action in actions) {
+        var edits = Array<String>();
+        for (var (_, list) in action.edit.value().changes) {
+            for (var e in list) {
+                var r = e.range;
+                edits.append($"{r.start.line}:{r.start.character}-{r.end.line}:{r.end.character} {e.new_text}");
+            }
+        }
+        out.append(action.title + " [" + "; ".join(edits) + "]");
+    }
+    return " | ".join(out);
+}
+
+# The actions of `analysis` at `line:character`.
+actions_at(analysis: Analysis, line: int, character: int): String {
+    var document = lsp.TextDocument(analysis.uri, analysis.text);
+    var at = lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
+    return action_list(code_actions(document, Optional<String>.Value(analysis.text), analysis.actions, at));
+}
+
+[Test]
+syntax_offers_quick_fixes() {
+    var text = "struct S {\n    var x: int;\n    new(this.x = 1) {}\n}\n";
+    var document = lsp.TextDocument("file:///nowhere/a.pep", text);
+    var none = Optional<String>.Empty;
+    var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
+    var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
+    expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
+    var shown = actions[0].diagnostics.value()[0];
+    expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
+    expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
+    # Nothing to fix away from the warning, or once it is fixed.
+    expect_equal(code_actions(document, none, Array<lsp.CodeAction>(), at(0, 0)).count, 0 as ulong);
+    var fixed = lsp.TextDocument("file:///nowhere/a.pep", text.replace("new(", "construct("));
+    expect_equal(code_actions(fixed, none, Array<lsp.CodeAction>(), at(2, 5)).count, 0 as ulong);
+
+    text = "main(): int {\n    var total = 1\n    return total;\n}\n";
+    document = lsp.TextDocument("file:///nowhere/a.pep", text);
+    actions = code_actions(document, none, Array<lsp.CodeAction>(), at(1, 17));
+    expect_equal(action_list(actions), "Insert ';' [1:17-1:17 ;]");
+    expect_equal(actions[0].diagnostics.value()[0].severity.value(), lsp.SEVERITY_ERROR);
+}
+
+[Test]
+deprecated_declarations_offer_quick_fixes() {
+    var text = "struct Counter {\n    var value: int;\n    [Deprecated(\"use 'copy' instead\", \"copy\")]\n"
+        + "    clone(): Counter { return this; }\n    copy(): Counter { return this; }\n}\n"
+        + "[Deprecated(\"use 'twice' instead\", \"twice\")]\ndup(x: int): int { return x * 2; }\n"
+        + "twice(x: int): int { return x * 2; }\n"
+        + "test(): int {\n    var c = Counter();\n    var d = c.clone();\n    return dup(d.value);\n}\n";
+    var analysis = analyze(temp_file("deprecated.pep", text), text);
+    expect_equal(actions_at(analysis, 11, 16), "Replace 'clone' with 'copy' [11:14-11:19 copy]");
+    expect_equal(actions_at(analysis, 12, 12), "Replace 'dup' with 'twice' [12:11-12:14 twice]");
+}
+
+[Test]
+sending_a_variable_offers_move_and_copy() {
+    var text = "import async;\n\nconst lines = async.Channel<String>();\n\nmain(): int {\n"
+        + "    var line = \"hello\";\n    lines.send(line);\n    return 0;\n}\n";
+    var analysis = analyze(temp_file("send_named.pep", text), text);
+    expect_equal(
+        actions_at(analysis, 6, 17),
+        "Hand 'line' over with 'move(line)' [6:15-6:19 move(line)] | Pass a copy with 'copy(line)' [6:15-6:19 copy(line)]"
+    );
+}
+
+[Test]
+a_match_missing_cases_offers_to_add_them() {
+    var text = "## A traffic light color.\nenum Color { Red, Amber = 1, Green }\n\n"
+        + "score(c: Color): int {\n    match (c) {\n        Red => { return 1; }\n    }\n    return 0;\n}\n";
+    var analysis = analyze(temp_file("missing_arms.pep", text), text);
+    expect_equal(
+        actions_at(analysis, 4, 6),
+        "Add the missing cases of 'Color' [6:0-6:0         Amber => {}\n        Green => {}\n]"
+    );
+    expect_equal(actions_at(analysis, 0, 0), "");
 }

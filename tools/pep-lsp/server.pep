@@ -10,6 +10,7 @@ import [JsonValue] from json;
 import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
+import "actions";
 import "analysis";
 import "completion";
 import "edits";
@@ -86,6 +87,7 @@ extend PepperServer with lsp.LanguageServer {
         result.capabilities.hover_provider = Optional<bool>.Value(true);
         result.capabilities.definition_provider = Optional<bool>.Value(true);
         result.capabilities.inlay_hint_provider = Optional<bool>.Value(true);
+        result.capabilities.code_action_provider = Optional<bool>.Value(true);
         var completion = lsp.CompletionOptions();
         completion.trigger_characters = Optional<Array<String>>.Value([".", "("]);
         result.capabilities.completion_provider = Optional<lsp.CompletionOptions>.Value(completion);
@@ -209,6 +211,24 @@ extend PepperServer with lsp.LanguageServer {
         }
         var hints = inlay_hints(document.value(), _ready.try_get(uri), params.range, conversion_hints, parameter_hints);
         return Result<Array<lsp.InlayHint>, ResponseError>.ok(hints);
+    }
+
+    code_action(params: lsp.CodeActionParams): Result<Array<lsp.CodeAction>, ResponseError> {
+        var uri = params.text_document.uri;
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
+            return Result<Array<lsp.CodeAction>, ResponseError>.ok(Array<lsp.CodeAction>());
+        }
+        var analyzed = Optional<String>.Empty;
+        var actions = Array<lsp.CodeAction>();
+        var latest = _analyses.try_get(uri);
+        if (latest is Value(l)) {
+            analyzed = Optional<String>.Value(l.text);
+            actions = l.actions;
+        }
+        return Result<Array<lsp.CodeAction>, ResponseError>.ok(
+            code_actions(document.value(), analyzed, actions, params.range)
+        );
     }
 
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {

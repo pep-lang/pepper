@@ -21,6 +21,7 @@ import compiler.link;
 import lsp;
 import compiler.parse;
 import compiler.sema;
+import "actions";
 
 ## How long a document's text must stay unchanged before it is analyzed,
 ## so typing does not start an analysis per keystroke.
@@ -149,6 +150,8 @@ export struct Analysis {
     var state: sema.PassState?;
     ## The document's diagnostics, for `publishDiagnostics`.
     var diagnostics: Array<lsp.Diagnostic>;
+    ## The quick fixes those diagnostics suggest.
+    var actions: Array<lsp.CodeAction>;
     ## How many files its program has; 0 when it did not load.
     var files: ulong;
     ## How it went, for the log: "passed", "found an error", "did not
@@ -162,6 +165,7 @@ export struct Analysis {
         this.model = Optional<sema.Module>.Empty;
         this.state = Optional<sema.PassState>.Empty;
         this.diagnostics = Array<lsp.Diagnostic>();
+        this.actions = Array<lsp.CodeAction>();
         this.files = 0;
         this.outcome = "did not load";
     }
@@ -184,6 +188,7 @@ export analyze(uri: String, text: String): Analysis {
         var error = parsed.error();
         out.diagnostics.append(lsp.Diagnostic(document.range_of(error.span.start, error.span.end), error.message));
         out.outcome = "did not parse";
+        out.actions = syntax_actions(document);
         return out;
     }
     var path = lsp.uri_to_path(uri);
@@ -201,6 +206,7 @@ export analyze(uri: String, text: String): Analysis {
     out.program = Optional<link.Program>.Value(program);
     out.files = program.files.count;
     var reporter = _Reporter(document, program);
+    out.actions = reporter.actions;
     for (var warning in program.warnings()) {
         reporter.add_if_in_document(warning);
     }
@@ -240,7 +246,11 @@ export analyze(uri: String, text: String): Analysis {
     var model = built.value();
     var ran = sema.run_passes(model, program.target, program.sources());
     if (ran.is_err()) {
-        reporter.add(ran.error());
+        var shown = reporter.add(ran.error());
+        var arms = missing_arms(document, program, ran.error(), shown);
+        if (arms is Value(action)) {
+            out.actions.append(action);
+        }
         out.outcome = "found an error";
     } else {
         for (var note in ran.value().notes) {
@@ -259,25 +269,32 @@ struct _Reporter {
     var document: lsp.TextDocument;
     var program: link.Program;
     var out: Array<lsp.Diagnostic>;
+    # The fixes of the diagnostics added.
+    var actions: Array<lsp.CodeAction>;
 
     construct(document: lsp.TextDocument, program: link.Program) {
         this.document = document;
         this.program = program;
         this.out = Array<lsp.Diagnostic>();
+        this.actions = Array<lsp.CodeAction>();
     }
 
     # Adds `diagnostic` when it points into the document.
     add_if_in_document(diagnostic: Diagnostic) {
         if (diagnostic.location is Value(location)) {
             if (location.file == 0) {
-                out.append(convert(diagnostic));
+                add(diagnostic);
             }
         }
     }
 
-    # Adds `diagnostic`, wherever it points.
-    add(diagnostic: Diagnostic) {
-        out.append(convert(diagnostic));
+    # Adds `diagnostic`, wherever it points, with its fixes; returns it as
+    # shown.
+    add(diagnostic: Diagnostic): lsp.Diagnostic {
+        var shown = convert(diagnostic);
+        out.append(shown);
+        actions.append_all(fix_actions(document, diagnostic, shown));
+        return shown;
     }
 
     # `diagnostic` on the document, with its notes as related information.

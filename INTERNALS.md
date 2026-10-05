@@ -2481,8 +2481,8 @@ on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
-diagnostics, the document outline, hover, go to definition, completion
-and inlay hints:
+diagnostics, the document outline, hover, go to definition, completion,
+inlay hints and quick fixes:
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
   document's newest text once edits settle (250 ms). It loads the
@@ -2533,6 +2533,14 @@ and inlay hints:
   `initializationOptions.inlayHints` turns each kind off, and a passed
   analysis sends `workspace/inlayHint/refresh` when the client supports
   it.
+- `actions.pep`: quick fixes. Each compiler diagnostic in the document
+  that carries `fixes` becomes one code action per fix, kept with the
+  analysis that found it (`Analysis.actions`) and answered while the text
+  is that analysis's; otherwise only the current text's syntax answers (a
+  missing `;`, deprecated syntax such as `new`). `missing_arms` adds the
+  cases a `match` leaves out. `lsp.CodeAction` is built with its kind
+  passed: the Rust compiler emits a call LLVM rejects for that
+  constructor's default, a constant of the `lsp` package.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
   the runtime, 20 s for pep-doc), so the Rust server stays the one
   editors run until the rewrite does everything and sema is faster.
