@@ -10,10 +10,19 @@
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import [enum_method_name, getter_name] from "builder";
-import [ModuleTables, rewrite_module, sync_closures] from "closure_sites";
+import [
+    ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
+] from "closure_sites";
 import [MAIN_WITH_ARGUMENTS] from "entry_point";
 import [call_on_value, case_value_type, FieldTypes, is_enum, method_read] from "enums";
-import [bind_generic_function_values, bind_generic_method_values] from "generic_values";
+import [
+    bind_generic_function_values,
+    bind_generic_method_values,
+    generic_function_search,
+    generic_method_search,
+    GenericFunctionSearch,
+    GenericMethodSearch
+] from "generic_values";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -39,7 +48,17 @@ import [
 import [bind_method_call, Callees, has_named, report_function_value] from "named_arguments";
 import [set_name] from "names";
 import [is_comparison, op_name, simd_result, weak_result] from "operators";
-import [apply_choice, arg_info, ArgInfo, bind_function_values, Choice, method_target, Overloads] from "overload_select";
+import [
+    apply_choice,
+    arg_info,
+    ArgInfo,
+    bind_function_values,
+    Choice,
+    function_value_search,
+    FunctionValueSearch,
+    method_target,
+    Overloads
+] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
 import [PassState] from "state";
 import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
@@ -1974,6 +1993,105 @@ _size(module: Module): ulong {
     return count;
 }
 
+## What the binding passes changed, and the module's trait types after.
+struct _Bindings {
+    var trait_types: TypeName[];
+    var bound: bool = false;
+    var specialized: bool = false;
+    var methods: bool = false;
+
+    construct(trait_types: TypeName[]) {
+        this.trait_types = trait_types;
+    }
+}
+
+## The code of `module` holding what `search` looks for, if anything does.
+_function_sites(module: Module, search: GenericFunctionSearch?): SiteSelection? {
+    if (!search.is_value()) {
+        return Optional<SiteSelection>.Empty;
+    }
+    return Optional<SiteSelection>.Value(select_sites(module, search.value().filter, true));
+}
+
+## The code of `module` holding what `search` looks for, if anything does.
+_method_sites(module: Module, search: GenericMethodSearch?): SiteSelection? {
+    if (!search.is_value()) {
+        return Optional<SiteSelection>.Empty;
+    }
+    return Optional<SiteSelection>.Value(select_sites(module, search.value().filter, false));
+}
+
+## Runs the three binding passes: overloaded names, generic functions and
+## generic methods used as values. They share tables while none of them
+## changes the module, and the tables share the trait types one walk over
+## every function finds; one more walk finds the code each pass needs.
+##
+## @param module the model, changed in place
+## @param state the passes' state
+## @returns what changed
+_bind_values(module: Module, state: PassState): _Bindings {
+    var result = _Bindings(used_trait_types(module));
+    var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(result.trait_types));
+    var values = function_value_search(module, state, tables);
+    var functions = generic_function_search(module, state);
+    var methods = generic_method_search(module);
+    var filters = Array<SiteFilter>();
+    var applied = Array<bool>();
+    if (values.is_value()) {
+        filters.append(values.value().filter);
+        applied.append(false);
+    }
+    if (functions.is_value()) {
+        filters.append(functions.value().filter);
+        applied.append(true);
+    }
+    if (methods.is_value()) {
+        filters.append(methods.value().filter);
+        applied.append(false);
+    }
+    var selections = select_sites_each(module, filters, applied);
+    ulong at = 0;
+    var function_sites = Optional<SiteSelection>.Empty;
+    var method_sites = Optional<SiteSelection>.Empty;
+    if (values.is_value()) {
+        result.bound = bind_function_values(module, state, tables, values.value(), selections[at]);
+        at += 1;
+    }
+    if (functions.is_value()) {
+        function_sites = Optional<SiteSelection>.Value(selections[at]);
+        at += 1;
+    }
+    if (methods.is_value()) {
+        method_sites = Optional<SiteSelection>.Value(selections[at]);
+    }
+    if (result.bound) {
+        result.trait_types = used_trait_types(module);
+        tables.reset(Optional<TypeName[]>.Value(result.trait_types));
+        functions = generic_function_search(module, state);
+        function_sites = _function_sites(module, functions);
+    }
+    if (functions.is_value()) {
+        result.specialized = bind_generic_function_values(
+            module, state, tables, functions.value(), function_sites.value()
+        );
+    }
+    if (result.specialized) {
+        result.trait_types = used_trait_types(module);
+        tables.reset(Optional<TypeName[]>.Value(result.trait_types));
+    }
+    if (result.bound or result.specialized) {
+        methods = generic_method_search(module);
+        method_sites = _method_sites(module, methods);
+    }
+    if (methods.is_value()) {
+        result.methods = bind_generic_method_values(module, state, tables, methods.value(), method_sites.value());
+    }
+    if (result.methods) {
+        result.trait_types = used_trait_types(module);
+    }
+    return result;
+}
+
 ## Resolves `auto` variable types, unresolved names, inferred return types
 ## and overloaded and generic calls, as
 ## `resolve_implicit_types::resolve_implicit_types` does.
@@ -1990,31 +2108,14 @@ export resolve_implicit_types(module: Module, state: PassState) {
     while (round < 8) {
         var size = _size(module);
         bool synced = sync_closures(module, state);
-        # The binding passes share tables while none of them changes the
-        # module, and the round's tables share its trait types: one walk
-        # over every function finds them.
-        var trait_types = used_trait_types(module);
-        var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(trait_types));
-        bool bound = bind_function_values(module, state, tables);
-        if (bound) {
-            trait_types = used_trait_types(module);
-            tables.reset(Optional<TypeName[]>.Value(trait_types));
-        }
-        bool specialized = bind_generic_function_values(module, state, tables);
-        if (specialized) {
-            trait_types = used_trait_types(module);
-            tables.reset(Optional<TypeName[]>.Value(trait_types));
-        }
-        bool methods = bind_generic_method_values(module, state, tables);
-        if (methods) {
-            trait_types = used_trait_types(module);
-        }
+        var bindings = _bind_values(module, state);
+        bool bound = bindings.bound or bindings.specialized or bindings.methods;
         # Code the pass did not write changed: walk everything.
-        if (synced or bound or specialized or methods or _size(module) != size) {
+        if (synced or bound or _size(module) != size) {
             work.all = true;
         }
-        bool inferred = _resolve_once(module, state, work, trait_types);
-        if (!inferred and !synced and !bound and !specialized and !methods) {
+        bool inferred = _resolve_once(module, state, work, bindings.trait_types);
+        if (!inferred and !synced and !bound) {
             break;
         }
         work.next_run();

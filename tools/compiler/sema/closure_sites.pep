@@ -72,6 +72,57 @@ export rewrite_module(module: Module, rewriter: Rewriter) {
     }
 }
 
+## Applies `rewriter` to the expressions of the code `walk` picks, in
+## `_select_each`'s order over all of `module`, as `rewrite_module` does to
+## all of it.
+_rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
+    ulong at = 0;
+    for (var st in module.structs) {
+        for (var field in st.field_members) {
+            if (walk[at]) {
+                field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
+            }
+            at += 1;
+        }
+        for (var method in st.method_members) {
+            if (walk[at]) {
+                _rewrite_function(method, rewriter, true);
+            }
+            at += 1;
+        }
+        for (var c in st.constructors) {
+            if (walk[at]) {
+                _rewrite_function(c, rewriter, true);
+            }
+            at += 1;
+        }
+        if (walk[at]) {
+            _rewrite_function(st.destructor, rewriter, true);
+        }
+        at += 1;
+    }
+    for (var function in module.functions) {
+        if (walk[at]) {
+            _rewrite_function(function, rewriter, true);
+        }
+        at += 1;
+    }
+    for (var ext in module.extensions) {
+        for (var method in ext.methods) {
+            if (walk[at]) {
+                _rewrite_function(method, rewriter, false);
+            }
+            at += 1;
+        }
+    }
+    for (var global in module.globals) {
+        if (walk[at]) {
+            global.default = Optional<Expression>.Value(rewrite_expression(global.default.value(), rewriter));
+        }
+        at += 1;
+    }
+}
+
 _rewrite_function(function: FunctionDef, rewriter: Rewriter, defaults: bool) {
     if (defaults) {
         for (var p in function.parameters) {
@@ -272,9 +323,7 @@ export trait SiteFilter {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(
-        module, SiteTable(module, state), false, _select(module, false, Optional<SiteFilter>.Empty), visitor
-    );
+    _sites_in_module(module, SiteTable(module, state), false, _select_all(module, false), visitor);
 }
 
 ## Calls `visitor` at every expression site of `module`, skipping the
@@ -285,9 +334,7 @@ export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_applied_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(
-        module, SiteTable(module, state), true, _select(module, true, Optional<SiteFilter>.Empty), visitor
-    );
+    _sites_in_module(module, SiteTable(module, state), true, _select_all(module, true), visitor);
 }
 
 ## The code a limited site walk goes through: each function, field
@@ -321,7 +368,28 @@ export struct SiteSelection {
 ## @param applied whether to skip the extensions' own copies of their methods
 ## @returns the code to walk
 export select_sites(module: Module, filter: SiteFilter, applied: bool): SiteSelection {
-    return SiteSelection(_select(module, applied, Optional<SiteFilter>.Value(filter)), applied);
+    var filters = Array<SiteFilter>();
+    filters.append(filter);
+    var applies = Array<bool>();
+    applies.append(applied);
+    return SiteSelection(_select_each(module, filters, applies)[0], applied);
+}
+
+## Selects the code of `module` for each of `filters`, as `select_sites`
+## does, in one walk for all of them.
+##
+## @param module the model
+## @param filters which expressions each visitor acts on
+## @param applied per filter, whether to skip the extensions' own copies of
+##     their methods
+## @returns the code to walk, per filter
+export select_sites_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): Array<SiteSelection> {
+    var walks = _select_each(module, filters, applied);
+    var selections = Array<SiteSelection>();
+    for (var i in 0..filters.count) {
+        selections.append(SiteSelection(walks[i], applied[i]));
+    }
+    return selections;
 }
 
 ## Calls `visitor` at every expression site of the code `selection` holds,
@@ -391,30 +459,48 @@ export struct ModuleTables {
     }
 }
 
-## Whether `e`, or an expression inside it, is one `filter` wants.
-_holds(e: Expression, filter: SiteFilter): bool {
-    var holder = _Holder(filter);
-    holder.rewrite(e);
-    return holder.found;
-}
-
-## Looks through an expression for one its filter wants, and stops at the
-## first.
+## Looks through code for the expressions its filters want, one walk for
+## all of them, and stops once each has found one.
 struct _Holder {
-    var filter: SiteFilter;
-    var found: bool = false;
+    var filters: Array<SiteFilter>;
+    ## Per filter: whether the code looked through holds one it wants.
+    var found: Array<bool> = Array<bool>();
+    ## How many filters have found none yet.
+    var missing: ulong = 0;
 
-    construct(filter: SiteFilter) {
-        this.filter = filter;
+    construct(filters: Array<SiteFilter>) {
+        this.filters = filters;
+    }
+
+    ## Starts over on new code, none found.
+    clear() {
+        found = Array<bool>();
+        for (var filter in filters) {
+            found.append(false);
+        }
+        missing = filters.count;
+    }
+
+    ## Looks through `e`.
+    ##
+    ## @returns whether every filter has found one
+    holds(e: Expression): bool {
+        rewrite(e);
+        return missing == 0;
     }
 
     rewrite(e: Expression): Expression {
-        if (!found) {
-            if (filter.wants(e)) {
-                found = true;
-            } else {
-                rewrite_children(e, this);
+        if (missing == 0) {
+            return e;
+        }
+        for (var i in 0..filters.count) {
+            if (!found[i] and filters[i].wants(e)) {
+                found[i] = true;
+                missing -= 1;
             }
+        }
+        if (missing > 0) {
+            rewrite_children(e, this);
         }
         return e;
     }
@@ -422,41 +508,41 @@ struct _Holder {
 
 extend _Holder with Rewriter;
 
-_block_holds(block: Block, filter: SiteFilter): bool {
+_block_holds(block: Block, holder: _Holder): bool {
     for (var statement in block.items) {
         match (statement) {
             Expression(e) => {
-                if (_holds(e, filter)) {
+                if (holder.holds(e)) {
                     return true;
                 }
             }
             Block(inner) => {
-                if (_block_holds(inner, filter)) {
+                if (_block_holds(inner, holder)) {
                     return true;
                 }
             }
             Declaration(declaration) => {
                 if (declaration is Variable(variable)) {
-                    if (variable.default.is_value() and _holds(variable.default.value(), filter)) {
+                    if (variable.default.is_value() and holder.holds(variable.default.value())) {
                         return true;
                     }
                 }
             }
             Branch(branch) => {
-                if (_holds(branch.condition, filter) or _block_holds(branch.if_block, filter)) {
+                if (holder.holds(branch.condition) or _block_holds(branch.if_block, holder)) {
                     return true;
                 }
-                if (branch.else_block.is_value() and _block_holds(branch.else_block.value(), filter)) {
+                if (branch.else_block.is_value() and _block_holds(branch.else_block.value(), holder)) {
                     return true;
                 }
             }
             While(loop) => {
-                if (_holds(loop.condition, filter) or _block_holds(loop.block, filter)) {
+                if (holder.holds(loop.condition) or _block_holds(loop.block, holder)) {
                     return true;
                 }
             }
             Return(r) => {
-                if (r.expr.is_value() and _holds(r.expr.value(), filter)) {
+                if (r.expr.is_value() and holder.holds(r.expr.value())) {
                     return true;
                 }
             }
@@ -466,14 +552,37 @@ _block_holds(block: Block, filter: SiteFilter): bool {
     return false;
 }
 
-_function_holds(function: FunctionDef, filter: SiteFilter): bool {
+## Looks through `function` with `holder`, which holds the result.
+_look_through_function(function: FunctionDef, holder: _Holder) {
+    holder.clear();
     for (var p in function.parameters) {
-        if (p.default.is_value() and _holds(p.default.value(), filter)) {
-            return true;
+        if (p.default.is_value() and holder.holds(p.default.value())) {
+            return;
         }
     }
-    return function.body.is_value() and _block_holds(function.body.value(), filter);
+    if (function.body.is_value()) {
+        _block_holds(function.body.value(), holder);
+    }
 }
+
+## Looks through an initializer with `holder`, which holds the result.
+_look_through_default(default: Expression?, holder: _Holder) {
+    holder.clear();
+    if (default.is_value()) {
+        holder.holds(default.value());
+    }
+}
+
+## Wants the creations of any closure.
+struct _CreatesAnyClosure {
+    construct() {}
+
+    wants(e: Expression): bool {
+        return e is MakeClosure(_);
+    }
+}
+
+extend _CreatesAnyClosure with SiteFilter;
 
 ## Wants the creations of a set of closures.
 struct _CreatesClosure {
@@ -510,39 +619,88 @@ struct _Owned {
 
 ## Which code of `module` a walk goes through, in the walk's order (the
 ## extensions' own copies of their methods left out when `applied`): all
-## of it, or only the code holding an expression `filter` wants.
-_select(module: Module, applied: bool, filter: SiteFilter?): Array<bool> {
+## of it.
+_select_all(module: Module, applied: bool): Array<bool> {
     var walk = Array<bool>();
     for (var st in module.structs) {
         for (var field in st.field_members) {
-            walk.append(
-                field.default.is_value() and (!filter.is_value() or _holds(field.default.value(), filter.value()))
-            );
+            walk.append(field.default.is_value());
         }
         for (var method in st.method_members) {
-            walk.append(!filter.is_value() or _function_holds(method, filter.value()));
+            walk.append(true);
         }
         for (var c in st.constructors) {
-            walk.append(!filter.is_value() or _function_holds(c, filter.value()));
+            walk.append(true);
         }
-        walk.append(!filter.is_value() or _function_holds(st.destructor, filter.value()));
+        walk.append(true);
     }
     for (var function in module.functions) {
-        walk.append(!filter.is_value() or _function_holds(function, filter.value()));
+        walk.append(true);
     }
     if (!applied) {
         for (var ext in module.extensions) {
             for (var method in ext.methods) {
-                walk.append(!filter.is_value() or _function_holds(method, filter.value()));
+                walk.append(true);
             }
         }
     }
     for (var global in module.globals) {
-        walk.append(
-            global.default.is_value() and (!filter.is_value() or _holds(global.default.value(), filter.value()))
-        );
+        walk.append(global.default.is_value());
     }
     return walk;
+}
+
+## Notes, per filter of `holder`, whether the code it just looked through
+## holds an expression the filter wants; `extension` code is left out of
+## the walks of the `applied` filters.
+_note_found(holder: _Holder, applied: Array<bool>, extension: bool, walks: Array<Array<bool>>) {
+    for (var i in 0..walks.count) {
+        if (!extension or !applied[i]) {
+            walks[i].append(holder.found[i]);
+        }
+    }
+}
+
+## Which code of `module` each of `filters` picks, in the walk's order (the
+## extensions' own copies of their methods left out where `applied`): the
+## code holding an expression the filter wants. One walk serves them all.
+_select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): Array<Array<bool>> {
+    var walks = Array<Array<bool>>();
+    for (var filter in filters) {
+        walks.append(Array<bool>());
+    }
+    var holder = _Holder(filters);
+    for (var st in module.structs) {
+        for (var field in st.field_members) {
+            _look_through_default(field.default, holder);
+            _note_found(holder, applied, false, walks);
+        }
+        for (var method in st.method_members) {
+            _look_through_function(method, holder);
+            _note_found(holder, applied, false, walks);
+        }
+        for (var c in st.constructors) {
+            _look_through_function(c, holder);
+            _note_found(holder, applied, false, walks);
+        }
+        _look_through_function(st.destructor, holder);
+        _note_found(holder, applied, false, walks);
+    }
+    for (var function in module.functions) {
+        _look_through_function(function, holder);
+        _note_found(holder, applied, false, walks);
+    }
+    for (var ext in module.extensions) {
+        for (var method in ext.methods) {
+            _look_through_function(method, holder);
+            _note_found(holder, applied, true, walks);
+        }
+    }
+    for (var global in module.globals) {
+        _look_through_default(global.default, holder);
+        _note_found(holder, applied, false, walks);
+    }
+    return walks;
 }
 
 ## Walks the sites of the code of `module` that `walk` picks, as `_select`
@@ -1016,14 +1174,20 @@ export sync_closures(module: Module, state: PassState): bool {
             unknown.insert(st.name);
         }
     }
+    # One walk finds both the code creating a closure, whose types the
+    # end of this keeps in step, and the code creating one of those.
+    var filters = Array<SiteFilter>();
+    filters.append(_CreatesClosure(unknown));
+    filters.append(_CreatesAnyClosure());
+    var applied = Array<bool>();
+    applied.append(false);
+    applied.append(false);
+    var walks = _select_each(module, filters, applied);
     var learned = HashMap<String, _Learned>();
-    if (unknown.count > 0) {
-        var creating = select_sites(module, _CreatesClosure(unknown), false);
-        if (creating.any()) {
-            var learner = _Learner(SiteTable(module, state));
-            _sites_in_module(module, learner.table, false, creating.walk, learner);
-            learned = learner.learned;
-        }
+    if (unknown.count > 0 and walks[0].contains(true)) {
+        var learner = _Learner(SiteTable(module, state));
+        _sites_in_module(module, learner.table, false, walks[0], learner);
+        learned = learner.learned;
     }
     bool changed = false;
     for (var st in module.structs) {
@@ -1066,7 +1230,8 @@ export sync_closures(module: Module, state: PassState): bool {
             signatures[st.ty.to_string()] = TypeName.with_args(FUNCTION, types);
         }
     }
+    # Nothing above creates a closure or moves a creation.
     var keeper = _Signatures(signatures);
-    rewrite_module(module, keeper);
+    _rewrite_selected(module, walks[1], keeper);
     return changed or keeper.changed;
 }

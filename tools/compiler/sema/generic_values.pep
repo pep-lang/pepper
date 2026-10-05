@@ -5,7 +5,7 @@
 ## names.
 
 import [
-    for_each_selected_site, ModuleTables, rewrite_module, select_sites, SiteFilter, SiteVisitor
+    for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
 import [Loc] from "loc";
 import [
@@ -131,15 +131,25 @@ struct _FunctionValueRewriter {
 
 extend _FunctionValueRewriter with Rewriter;
 
-## Names each generic function written without type arguments where a
-## function type is expected by the specialization that type picks, as
-## `type_arguments::bind_generic_function_values` does.
+## What `bind_generic_function_values` looks for: the generic functions,
+## and the expressions that may name one without type arguments.
+export struct GenericFunctionSearch {
+    var generics: HashMap<String, _Generic>;
+    var filter: SiteFilter;
+
+    construct(generics: HashMap<String, _Generic>) {
+        this.generics = generics;
+        this.filter = _UnboundFinder(generics);
+    }
+}
+
+## What `bind_generic_function_values` looks for in `module`, if it has
+## generic functions.
 ##
-## @param module the model, changed in place
+## @param module the model
 ## @param state the passes' state
-## @param tables the module's tables, built from it as it is now
-## @returns whether it named any
-export bind_generic_function_values(module: Module, state: PassState, tables: ModuleTables): bool {
+## @returns the search, or none when no function is generic
+export generic_function_search(module: Module, state: PassState): GenericFunctionSearch? {
     var generics = HashMap<String, _Generic>();
     for (var f in module.functions) {
         if (f.is_generic_func and !f.name.contains("<")) {
@@ -147,12 +157,29 @@ export bind_generic_function_values(module: Module, state: PassState, tables: Mo
         }
     }
     if (generics.count == 0) {
-        return false;
+        return Optional<GenericFunctionSearch>.Empty;
     }
-    var sites = select_sites(module, _UnboundFinder(generics), true);
+    return Optional<GenericFunctionSearch>.Value(GenericFunctionSearch(generics));
+}
+
+## Names each generic function written without type arguments where a
+## function type is expected by the specialization that type picks, as
+## `type_arguments::bind_generic_function_values` does.
+##
+## @param module the model, changed in place
+## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
+## @param search what to look for, found in the module as it is now
+## @param sites the code holding a candidate (`search.filter`), with the
+##     extensions' own copies of their methods left out
+## @returns whether it named any
+export bind_generic_function_values(
+    module: Module, state: PassState, tables: ModuleTables, search: GenericFunctionSearch, sites: SiteSelection
+): bool {
     if (!sites.any()) {
         return false;
     }
+    var generics = search.generics;
     var generic_bases = HashSet<String>();
     for (var f in module.functions) {
         if (f.is_generic_func) {
@@ -366,15 +393,24 @@ struct _MethodValueRewriter {
 
 extend _MethodValueRewriter with Rewriter;
 
-## Names each generic method written as a value without type arguments
-## where a function type is expected by the specialization that type picks
-## (`b.map<long>`), as `generic_methods::bind_generic_method_values` does.
+## What `bind_generic_method_values` looks for: the generic methods' names,
+## and the expressions that may name one as a value.
+export struct GenericMethodSearch {
+    var names: HashSet<String>;
+    var filter: SiteFilter;
+
+    construct(names: HashSet<String>) {
+        this.names = names;
+        this.filter = _MethodFinder(names);
+    }
+}
+
+## What `bind_generic_method_values` looks for in `module`, if it has
+## generic methods.
 ##
-## @param module the model, changed in place
-## @param state the passes' state
-## @param tables the module's tables, built from it as it is now
-## @returns whether it named any
-export bind_generic_method_values(module: Module, state: PassState, tables: ModuleTables): bool {
+## @param module the model
+## @returns the search, or none when no method is generic
+export generic_method_search(module: Module): GenericMethodSearch? {
     var names = HashSet<String>();
     for (var st in module.structs) {
         for (var m in st.generic_methods) {
@@ -382,12 +418,28 @@ export bind_generic_method_values(module: Module, state: PassState, tables: Modu
         }
     }
     if (names.count == 0) {
-        return false;
+        return Optional<GenericMethodSearch>.Empty;
     }
-    var sites = select_sites(module, _MethodFinder(names), false);
+    return Optional<GenericMethodSearch>.Value(GenericMethodSearch(names));
+}
+
+## Names each generic method written as a value without type arguments
+## where a function type is expected by the specialization that type picks
+## (`b.map<long>`), as `generic_methods::bind_generic_method_values` does.
+##
+## @param module the model, changed in place
+## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
+## @param search what to look for, found in the module as it is now
+## @param sites the code holding a candidate (`search.filter`)
+## @returns whether it named any
+export bind_generic_method_values(
+    module: Module, state: PassState, tables: ModuleTables, search: GenericMethodSearch, sites: SiteSelection
+): bool {
     if (!sites.any()) {
         return false;
     }
+    var names = search.names;
     var binder = _MethodValueBinder(module, names, tables.statics(), state);
     for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0) {

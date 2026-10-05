@@ -11,7 +11,7 @@ import [demangle_name] from compiler.link;
 import [int_literal_type, is_numeric_type] from "arithmetic";
 import [has_bare_attribute, IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
 import [
-    for_each_selected_site, ModuleTables, rewrite_module, select_sites, SiteFilter, SiteVisitor
+    for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
 import [Conformance, has_constraints] from "constraints";
 import [Loc] from "loc";
@@ -1429,6 +1429,31 @@ struct _ValueRewriter {
 
 extend _ValueRewriter with Rewriter;
 
+## What `bind_function_values` looks for: the overloaded names, and the
+## expressions that may use one as a value.
+export struct FunctionValueSearch {
+    var overloads: Overloads;
+    var filter: SiteFilter;
+
+    construct(overloads: Overloads) {
+        this.overloads = overloads;
+        this.filter = _CandidateFinder(overloads);
+    }
+}
+
+## What `bind_function_values` looks for in `module`, if it has overloads.
+##
+## @param module the model
+## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
+## @returns the search, or none when nothing is overloaded
+export function_value_search(module: Module, state: PassState, tables: ModuleTables): FunctionValueSearch? {
+    if (!has_overloads(module)) {
+        return Optional<FunctionValueSearch>.Empty;
+    }
+    return Optional<FunctionValueSearch>.Value(FunctionValueSearch(Overloads(module, state, tables.trait_types)));
+}
+
 ## Binds each overloaded name used as a value to the member whose function
 ## type is the type of the slot it flows into (`var f: (int) => int =
 ## scale;`), as `overloads::bind_function_values` does.
@@ -1436,18 +1461,17 @@ extend _ValueRewriter with Rewriter;
 ## @param module the model, changed in place
 ## @param state the passes' state
 ## @param tables the module's tables, built from it as it is now
+## @param search what to look for, found in the module as it is now
+## @param sites the code holding a candidate (`search.filter`); most runs
+##     find nothing to bind, so only that code is walked
 ## @returns whether it bound any
-export bind_function_values(module: Module, state: PassState, tables: ModuleTables): bool {
-    if (!has_overloads(module)) {
-        return false;
-    }
-    var overloads = Overloads(module, state);
-    # Most runs find nothing to bind: walk only the code holding a
-    # candidate.
-    var sites = select_sites(module, _CandidateFinder(overloads), false);
+export bind_function_values(
+    module: Module, state: PassState, tables: ModuleTables, search: FunctionValueSearch, sites: SiteSelection
+): bool {
     if (!sites.any()) {
         return false;
     }
+    var overloads = search.overloads;
     var binder = _ValueBinder(overloads, tables.statics(), state);
     for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0 and binder.methods.count == 0) {
