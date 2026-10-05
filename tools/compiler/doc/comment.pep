@@ -34,7 +34,7 @@ import [
 ] from compiler.ast;
 import compiler.diagnostic;
 import [Diagnostic, Location, SourceText] from compiler.diagnostic;
-import "strings";
+import "text";
 
 # One tag of a doc comment: `@param count how many` is kind `param`, name
 # `count`, text `how many`. Tags that name nothing (`@returns`) have an

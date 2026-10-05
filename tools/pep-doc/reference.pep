@@ -10,9 +10,20 @@
 import compiler.ast;
 import [Declaration, FunctionDecl, Import, Module, PropertyDecl, VariableDecl] from compiler.ast;
 import [Diagnostic, Location, SourceText] from compiler.diagnostic;
+import [
+    DocComment,
+    built_in_name,
+    doc_comment_before,
+    doc_comment_of,
+    file_doc,
+    first_attribute,
+    is_caller_location,
+    is_public,
+    is_public_member,
+    member_name
+] from compiler.doc;
 import [Directory, File, Path] from io;
 import compiler.parse;
-import "doc";
 import "strings";
 
 # Page titles for the runtime files, in the order the reference lists

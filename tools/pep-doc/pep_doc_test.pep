@@ -3,11 +3,11 @@
 # tool-option check, the chapter lint, and the site's versions. Run with
 # `-I tools`. `pep-doc check` itself runs in CI on the whole repository.
 
+import [DocComment, check_documented, doc_comment_of, file_doc] from compiler.doc;
 import [Directory, File, Path] from io;
 import [TempFolder] from testing;
 import "book";
 import "checks";
-import "doc";
 import "reference";
 import "site";
 

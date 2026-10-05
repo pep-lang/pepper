@@ -48,31 +48,6 @@ export skip_spaces(text: String, from: ulong, to: ulong): ulong {
     return i;
 }
 
-# Whether `prefix` is in `text` at `at`, ending at or before `end`.
-export starts_with_at(text: String, at: ulong, end: ulong, prefix: String): bool {
-    if (at + prefix.size > end) {
-        return false;
-    }
-    ulong i = 0;
-    while (i < prefix.size) {
-        if (text.byte_at(at + i) != prefix.byte_at(i)) {
-            return false;
-        }
-        i += 1;
-    }
-    return true;
-}
-
-# The start of the line that holds offset `end` (just after the last line
-# feed before it), or 0.
-export line_start_before(text: String, end: ulong): ulong {
-    var i = end;
-    while (i > 0 and text.byte_at(i - 1) != '\n') {
-        i -= 1;
-    }
-    return i;
-}
-
 # `text` from byte `start` up to byte `end`.
 export slice(text: String, start: ulong, end: ulong): String {
     return text.substr_bytes(start, end - start);

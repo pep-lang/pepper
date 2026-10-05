@@ -21,10 +21,10 @@
 # else the release build's folder when it holds `pep-build`, else the
 # debug build's). `scripts/pepper-tests.sh` builds the Pepper tools there.
 
+import [check_documented] from compiler.doc;
 import [Directory, File, Path] from io;
 import os;
 import process;
-import "doc";
 import "reference";
 import "strings";
 

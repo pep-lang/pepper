@@ -368,7 +368,7 @@ T remove_at(ulong index) { ... }
   then warns, in every program, so migrate the runtime's own uses in the
   same PR.
 - **Enforced**: `pep-doc check` (`tools/pep-doc/checks.pep`) runs
-  `check_documented` (`tools/pep-doc/doc.pep`) over every `.pep` file under
+  `check_documented` (`tools/compiler/doc/comment.pep`) over every `.pep` file under
   `runtime/` and fails with a clang-style error for each public declaration
   without a comment, description, or required tag, and for tags naming a
   parameter that does not exist. The language server shows these comments on
