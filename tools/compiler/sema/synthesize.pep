@@ -5,7 +5,7 @@
 ## field initializations and `return this`.
 
 import [Diagnostic] from compiler.diagnostic;
-import [has_bare_attribute, SHARED_ATTRIBUTE] from "builder";
+import [has_bare_attribute, payload_field, SHARED_ATTRIBUTE, TAG_FIELD] from "builder";
 import [error_at] from "common";
 import [Loc] from "loc";
 import [
@@ -18,6 +18,7 @@ import [
     CountField,
     CountStepExpression,
     Declaration,
+    EnumCaseDef,
     Expression,
     FunctionCallExpression,
     Kind,
@@ -319,8 +320,11 @@ export finish(state: PassState, st: StructDef): String? {
                 )
             );
         }
-        # Field initializations: a field's default, else its zero.
-        for (var field in st.field_members) {
+        # Field initializations: a field's default, else its zero. A value
+        # enum starts as the zero value already, and its cases' values share
+        # storage, so it sets only the tag and the named case's values.
+        var fields = st.has_union_layout() ? Array<VariableDef>() : st.field_members;
+        for (var field in fields) {
             Expression value = Expression.PointerLiteral;
             if (field.name == "__refcount") {
                 # `this` owns the object's first reference for the whole
@@ -339,9 +343,12 @@ export finish(state: PassState, st: StructDef): String? {
             items.append(Statement.Expression(_binary(BinaryOp.Assign, _member_ref(field.name), value)));
         }
         # The `this.<field>` parameters, assigned to their fields.
-        for (var (_, field, ty) in init_params) {
-            var parameter = Expression.SymbolRef(SymbolRefExpression($"__init_{field}", ty.copy(), Loc.none()));
-            items.append(Statement.Expression(_binary(BinaryOp.Assign, _member_ref(field), parameter)));
+        if (st.has_union_layout()) {
+            items.append_all(_case_assignments(st.enum_cases.value(), init_params));
+        } else {
+            for (var (_, field, ty) in init_params) {
+                items.append(_init_assignment(field, ty));
+            }
         }
         items.append_all(user_ctor);
         var this_ref = Expression.SymbolRef(SymbolRefExpression("this", st.ty.copy(), Loc.none()));
@@ -356,6 +363,54 @@ export finish(state: PassState, st: StructDef): String? {
     st.method_members.append(st.acquire.copy());
     st.method_members.append(st.destructor.copy());
     return Optional<String>.Empty;
+}
+
+# `this.<field> = __init_<field>`.
+_init_assignment(field: String, ty: TypeName): Statement {
+    var parameter = Expression.SymbolRef(SymbolRefExpression($"__init_{field}", ty.copy(), Loc.none()));
+    return Statement.Expression(_binary(BinaryOp.Assign, _member_ref(field), parameter));
+}
+
+# A value enum's constructor stores: the tag, then, for the case the tag
+# names, that case's values (`if (__init___tag == 2) { this.Label.text =
+# __init_Label.text; ... }`). The other cases' arguments are their zero
+# values, which would overwrite the case's storage.
+_case_assignments(cases: Array<EnumCaseDef>, init_params: Array<(ulong, String, TypeName)>): Array<Statement> {
+    var items = Array<Statement>();
+    var tag_ty = Optional<TypeName>.Empty;
+    for (var (_, field, ty) in init_params) {
+        if (field == TAG_FIELD) {
+            tag_ty = Optional<TypeName>.Value(ty);
+        }
+    }
+    if (!tag_ty.is_value()) {
+        return items;
+    }
+    items.append(_init_assignment(TAG_FIELD, tag_ty.value()));
+    for (var case in cases) {
+        if (case.payload.is_empty) {
+            continue;
+        }
+        var stores = Array<Statement>();
+        for (var (_, field, ty) in init_params) {
+            if (_is_payload_of(case, field)) {
+                stores.append(_init_assignment(field, ty));
+            }
+        }
+        var tag = Expression.SymbolRef(SymbolRefExpression($"__init_{TAG_FIELD}", tag_ty.value().copy(), Loc.none()));
+        items.append(_if_block(_binary(BinaryOp.Equal, tag, Expression.IntLiteral(case.value)), stores));
+    }
+    return items;
+}
+
+# Whether `field` holds one of `case`'s values.
+_is_payload_of(case: EnumCaseDef, field: String): bool {
+    for (var (value, _) in case.payload) {
+        if (payload_field(case.name, value) == field) {
+            return true;
+        }
+    }
+    return false;
 }
 
 _names_parameter(ty: TypeName, name: String): bool {

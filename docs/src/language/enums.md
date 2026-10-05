@@ -129,6 +129,9 @@ enum Shape {
 }
 ```
 
+- Its cases share one storage: a value is as large as its largest case, plus
+  the tag that says which case it holds (`sizeof<Shape>()` is 12: the tag,
+  then room for `Rect`'s two `int`s, which `Circle`'s `radius` reuses).
 - A value enum is never null. A slot that is not given a value holds the
   first case, with every value it carries zero, `false`, or null: an unset
   `Shape` is `Circle(0)`.

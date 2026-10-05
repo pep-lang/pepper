@@ -219,7 +219,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             .map(|((field, ty), loc)| (field.clone(), ty.clone(), *loc))
             .collect();
         let display = pepper_parser::namespace::demangle_name(name).to_string();
-        let target = crate::target::target_machine().expect("target machine").get_target_data();
         let mut members = vec![];
         for (index, (field, ty, field_loc)) in fields.iter().enumerate() {
             // A field's struct is built already, or is being built: never
@@ -234,7 +233,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 self.debug_type(ty)
             };
             let Some(member_type) = member_type else { continue };
-            let offset = target.offset_of_element(&llvm_type, index as u32).unwrap_or(0) * 8;
+            // A value enum's case values overlap, as a union's members do.
+            let offset = self.field_offset(name, llvm_type, index).unwrap_or(0) * 8;
             let debug = self.debug.as_mut().expect("debug info");
             let file = debug.file_of(*field_loc);
             let line = debug.line_column(*field_loc).map_or(0, |(line, _)| line);

@@ -32,4 +32,13 @@ export extend StructDef {
     is_value(): bool {
         return has_bare_attribute(attributes, VALUE_ATTRIBUTE);
     }
+
+    ## Returns whether this is a `[Value]` enum, whose cases' values share
+    ## one storage after the tag, so only the case the tag names holds live
+    ## values.
+    ##
+    ## @returns true for a value enum with a union layout
+    has_union_layout(): bool {
+        return is_value() and enum_cases.is_value();
+    }
 }

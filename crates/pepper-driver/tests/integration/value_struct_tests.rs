@@ -441,6 +441,101 @@ test(): int {
     );
 }
 
+/// A value enum's cases share one storage after the tag (#392): it is as
+/// large as its largest case, and switching a slot between cases that hold
+/// references, copying, comparing and hashing it count only the case it
+/// holds.
+#[test]
+fn value_enum_cases_share_storage() {
+    assert_runs_clean(
+        r#"
+[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Label(text: String, size: int),
+    Pair(first: String, second: String),
+    Point,
+}
+
+[Value]
+enum Listed {
+    Count(n: int),
+    Items(items: Array<int>),
+    Named(name: String, items: Array<int>),
+}
+
+[Value]
+struct Holder {
+    var shape: Shape;
+    var count: int;
+
+    construct(this.shape = Shape.Point, this.count = 0) {}
+}
+
+describe(s: Shape): String {
+    return match (s) {
+        Circle(r) => $"circle {r}",
+        Rect(w, h) => $"rect {w} {h}",
+        Label(t, n) => $"label {t} {n}",
+        Pair(a, b) => $"pair {a} {b}",
+        Point => "point",
+    };
+}
+
+test(): int {
+    if (sizeof<Shape>() != 24) { return -1; }
+    if (sizeof<Optional<int>>() != 8 || sizeof<Optional<Shape>>() != 32) { return -2; }
+    var s = Shape.Pair($"a{1}", $"b{2}");
+    if (describe(s) != "pair a1 b2") { return -3; }
+    s = Shape.Rect(3, 4);
+    if (describe(s) != "rect 3 4") { return -4; }
+    s = Shape.Label($"l{5}", 7);
+    var copy = s;
+    s = Shape.Circle(9);
+    if (describe(copy) != "label l5 7" || describe(s) != "circle 9") { return -5; }
+    if (Shape.Label("x", 1) != Shape.Label($"{"x"}", 1) || Shape.Label("x", 1) == Shape.Label("x", 2)) { return -6; }
+    if (Shape.Rect(1, 2) == Shape.Circle(1) || Shape.Point != Shape.Point) { return -7; }
+    var counts = HashMap<Shape, int>();
+    counts[Shape.Pair("a", "b")] = 1;
+    counts[Shape.Label("a", 2)] = 2;
+    counts[Shape.Circle(3)] = 3;
+    if (counts[Shape.Pair($"{"a"}", "b")] != 1 || counts[Shape.Label("a", 2)] != 2 || counts.count != 3) { return -8; }
+    var holders = Array<Holder>();
+    holders.append(Holder(Shape.Pair("p", "q"), 1));
+    holders.append(Holder(Shape.Circle(2), 2));
+    holders[0] = holders[1];
+    var holder = holders[1];
+    holder.shape = Shape.Label("z", 26);
+    holders[1] = holder;
+    if (describe(holders[0].shape) != "circle 2" || describe(holders[1].shape) != "label z 26") { return -9; }
+    var maybe = Optional<Shape>.Value(Shape.Pair("m", "n"));
+    if (describe(maybe.value()) != "pair m n") { return -10; }
+    maybe = Optional<Shape>.Empty;
+    if (maybe.is_value()) { return -11; }
+    var items = Array<int>();
+    items.append(4);
+    var lists = Array<Listed>();
+    lists.append(Listed.Count(3));
+    lists.append(Listed.Items(items));
+    lists.append(Listed.Named("n", items));
+    var copied = copy(lists);
+    items.append(5);
+    var sizes = 0;
+    for (var l in copied) {
+        sizes = sizes * 10 + match (l) {
+            Count(n) => n,
+            Items(i) => i.count as int,
+            Named(_, i) => i.count as int,
+        };
+    }
+    if (sizes != 311) { return -12; }
+    return 0;
+}
+"#,
+    );
+}
+
 #[test]
 fn result_and_optional_are_value_enums() {
     assert_runs_clean(

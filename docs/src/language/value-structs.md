@@ -113,9 +113,3 @@ The runtime's iterators (`ArrayIterator`, `StringIterator`, the map and
 set iterators, `ChannelIterator`, and the `map`, `filter`, `enumerate` and
 `zip` adapters) are value structs, so a `for` loop over an `Array`, a
 `String` or any map or set allocates no iterator.
-
-## Current limitations
-
-- A [value enum](enums.md#value-enums) stores the values of all its cases
-  side by side, so it is as large as all of them together; the cases do not
-  share storage yet.

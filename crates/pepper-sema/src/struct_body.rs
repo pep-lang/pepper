@@ -284,7 +284,11 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         // stores are redundant today — kept for C++ reference parity and to make
         // the ctor's initialization contract explicit in the model (a future
         // non-zeroing allocator would not silently change semantics).
-        for field in &st.field_members {
+        // A value enum starts as the zero value already, and its cases'
+        // values share storage, so it sets only the tag and the values of
+        // the case the tag names (below).
+        let fields: &[VariableDef] = if st.has_union_layout() { &[] } else { &st.field_members };
+        for field in fields {
             let value = match &field.default {
                 // Why 1 and not 0: `this` owns the object's first
                 // reference for the whole constructor, like the local
@@ -318,17 +322,17 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
         // Assign the `this.<field>` parameters to their fields, in declaration
         // order. The `__init_` prefix keeps them out of the bare-symbol →
         // `this.<field>` rewrite, so they don't shadow the field.
-        for (_, field, ty) in &init_params {
-            items.push(Statement::Expression(Expression::Binary {
+        let assign = |field: &str, ty: &TypeName| {
+            Statement::Expression(Expression::Binary {
                 op: BinaryOp::Assign,
                 lhs: Box::new(member_ref(field)),
-                rhs: Box::new(Expression::SymbolRef {
-                    id: format!("__init_{}", field),
-                    ty: ty.clone(),
-                    loc: Loc::NONE,
-                }),
+                rhs: Box::new(Expression::SymbolRef { id: format!("__init_{}", field), ty: ty.clone(), loc: Loc::NONE }),
                 loc: Loc::NONE,
-            }));
+            })
+        };
+        match &st.enum_cases {
+            Some(cases) if st.has_union_layout() => items.extend(case_assignments(cases, &init_params, assign)),
+            _ => items.extend(init_params.iter().map(|(_, field, ty)| assign(field, ty))),
         }
 
         // The object leaves the ctor with `__refcount == 1`: `return this`
@@ -375,6 +379,37 @@ pub fn finish(st: &mut StructDef) -> Result<(), String> {
     st.method_members.push(acquire);
     st.method_members.push(destructor);
     Ok(())
+}
+
+/// A value enum's constructor stores: the tag, then, for the case the tag
+/// names, that case's values (`if (__init___tag == 2) { this.Label.text =
+/// __init_Label.text; ... }`). The other cases' arguments are their zero
+/// values, which would overwrite the case's storage.
+fn case_assignments(
+    cases: &[EnumCaseDef],
+    init_params: &[(usize, String, TypeName)],
+    assign: impl Fn(&str, &TypeName) -> Statement,
+) -> Vec<Statement> {
+    let mut items = vec![];
+    let Some((_, tag, tag_ty)) = init_params.iter().find(|(_, field, _)| field == TAG_FIELD) else {
+        return items;
+    };
+    items.push(assign(tag, tag_ty));
+    for case in cases.iter().filter(|c| !c.payload.is_empty()) {
+        let stores = init_params
+            .iter()
+            .filter(|(_, field, _)| case.payload.iter().any(|(value, _)| payload_field(&case.name, value) == *field))
+            .map(|(_, field, ty)| assign(field, ty))
+            .collect();
+        let is_case = Expression::Binary {
+            op: BinaryOp::Equal,
+            lhs: Box::new(Expression::SymbolRef { id: format!("__init_{}", TAG_FIELD), ty: tag_ty.clone(), loc: Loc::NONE }),
+            rhs: Box::new(Expression::IntLiteral(case.value)),
+            loc: Loc::NONE,
+        };
+        items.push(if_block(is_case, stores));
+    }
+    items
 }
 
 /// Apply both the constructor bodies and the synthesized members to every

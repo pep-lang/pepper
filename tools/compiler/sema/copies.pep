@@ -14,12 +14,14 @@
 
 import compiler.ast;
 import [demangle, Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
+import [payload_field, TAG_FIELD] from "builder";
 import [location_of] from "common";
 import [Loc, NO_FILE] from "loc";
 import [
     BinaryExpression,
     BinaryOp,
     Block,
+    Branch,
     Declaration,
     Expression,
     FunctionCallExpression,
@@ -638,20 +640,51 @@ _copy_value_method(st: StructDef, safe: ThreadSafeStructs): FunctionDef {
             )
         )
     );
-    for (var field in st.field_members) {
-        if (!unsafe_part_in(field.ty, safe).is_value() or field.ty.is_weak()) {
+    if (!st.has_union_layout()) {
+        for (var field in st.field_members) {
+            _copy_field(field, safe, this_ty, items);
+        }
+        items.append(_return(_symbol("__made", this_ty)));
+        return _context_method(st, _COPY_VALUE_METHOD, this_ty, items);
+    }
+    # A value enum's cases share storage: only the case `this` holds has
+    # values to copy.
+    for (var case in st.enum_cases.value()) {
+        var stores = Array<Statement>();
+        for (var field in st.field_members) {
+            for (var (value, _) in case.payload) {
+                if (payload_field(case.name, value) == field.name) {
+                    _copy_field(field, safe, this_ty, stores);
+                }
+            }
+        }
+        if (stores.is_empty) {
             continue;
         }
-        var original = _member(Expression.ThisRef, field.name);
-        items.append(
-            _assign(
-                _member(_symbol("__made", this_ty), field.name),
-                _method_call(_symbol("copies", _copies_type()), $"copy<{field.ty}>", [original])
+        var is_case = Expression.Binary(
+            BinaryExpression(
+                _member(Expression.ThisRef, TAG_FIELD), Expression.IntLiteral(case.value), BinaryOp.Equal, Loc.none()
             )
         );
+        items.append(Statement.Branch(Branch(is_case, Block("", stores))));
     }
     items.append(_return(_symbol("__made", this_ty)));
     return _context_method(st, _COPY_VALUE_METHOD, this_ty, items);
+}
+
+# `__made.field = copies.copy<T>(this.field)`, appended to `items`, when
+# `field` is not thread-safe.
+_copy_field(field: VariableDef, safe: ThreadSafeStructs, this_ty: TypeName, items: Array<Statement>) {
+    if (!unsafe_part_in(field.ty, safe).is_value() or field.ty.is_weak()) {
+        return;
+    }
+    var original = _member(Expression.ThisRef, field.name);
+    items.append(
+        _assign(
+            _member(_symbol("__made", this_ty), field.name),
+            _method_call(_symbol("copies", _copies_type()), $"copy<{field.ty}>", [original])
+        )
+    );
 }
 
 # The pass.

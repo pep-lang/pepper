@@ -18,6 +18,7 @@ pub mod partition;
 pub mod types;
 pub mod target;
 mod static_debug;
+mod unions;
 pub mod thread_locals;
 
 use address::{Address, Frame};
@@ -215,6 +216,10 @@ pub struct CodeGenerator<'ctx> {
     /// value struct is held by value like a tuple, and its layout has no
     /// header (see `pepper_sema::value_structs`).
     values: HashMap<String, Vec<String>>,
+    /// The value enums' union layouts, by name (see `unions`).
+    unions: HashMap<String, unions::UnionLayout<'ctx>>,
+    /// Value enums whose bodies [`Self::finish_unions`] has yet to set.
+    pending_unions: Vec<String>,
     /// The program's own `hash<T>` overrides (`hash<String>`, `hash<Point>`),
     /// by name; the generic `hash<T>`'s specializations, which hash by
     /// identity, are not among them.
@@ -400,6 +405,8 @@ impl<'ctx> CodeGenerator<'ctx> {
             tuples: HashMap::new(),
             tuple_order: Vec::new(),
             values: HashMap::new(),
+            unions: HashMap::new(),
+            pending_unions: Vec::new(),
             hash_overrides: HashSet::new(),
             equality_methods: HashMap::new(),
             reads_methods: HashSet::new(),
@@ -628,6 +635,7 @@ impl<'ctx> CodeGenerator<'ctx> {
         for &idx in &structs {
             self.instantiate_struct(&module.structs[idx])?;
         }
+        self.finish_unions()?;
         // ABI sizes are only correct once every body is set (a field may
         // name a struct declared later, e.g. `Holder { Array<int> items; }`),
         // so measure after the whole registration pass.
@@ -1192,7 +1200,11 @@ impl<'ctx> CodeGenerator<'ctx> {
             field_types.push(ty);
         }
 
-        self.types.register_struct(st, &field_types);
+        if st.has_union_layout() {
+            self.plan_union(st, &field_types);
+        } else {
+            self.types.register_struct(st, &field_types);
+        }
         let llvm_type = self.types.struct_type(&st.name).expect("registered");
         if st.is_value() {
             self.values.insert(st.name.clone(), st.field_members.iter().map(|f| f.ty.to_string()).collect());
@@ -1757,6 +1769,25 @@ impl<'ctx> CodeGenerator<'ctx> {
         let entry = self.context.append_basic_block(thunk, "entry");
         self.builder.position_at_end(entry);
         let value = thunk.get_nth_param(0).expect("tuple").into_struct_value();
+        // A value enum steps the references of the case it holds.
+        if self.unions.contains_key(tuple) {
+            let none = self.context.bool_type().const_zero();
+            self.switch_on_case(tuple, value, none, |this, indices| {
+                for &index in indices {
+                    let element = this.field_type_name(tuple, index);
+                    if this.is_reference_name(&element) {
+                        let item = this.extract_field(tuple, value, index, "case_value")?;
+                        this.call_function(&format!("{}.{}", element, member), vec![item])?;
+                    }
+                }
+                Ok(none)
+            })?;
+            self.builder.build_return(None).map_err(|e| e.to_string())?;
+            if let Some(block) = saved {
+                self.builder.position_at_end(block);
+            }
+            return Ok(());
+        }
         // A value struct's fields are its elements.
         let elements = self.tuples.get(tuple).or_else(|| self.values.get(tuple)).cloned().unwrap_or_default();
         for (index, element) in elements.iter().enumerate() {
@@ -1844,6 +1875,9 @@ impl<'ctx> CodeGenerator<'ctx> {
         l: BasicValueEnum<'ctx>,
         r: BasicValueEnum<'ctx>,
     ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        if self.unions.contains_key(tuple) {
+            return self.enum_value_equal(tuple, l.into_struct_value(), r.into_struct_value());
+        }
         let elements = self.aggregate_elements(tuple).cloned().unwrap_or_default();
         let mut all = self.context.bool_type().const_int(1, false);
         for (index, element) in elements.iter().enumerate() {
@@ -1859,6 +1893,36 @@ impl<'ctx> CodeGenerator<'ctx> {
             all = self.builder.build_and(all, same, "tuple_equal").map_err(|e| e.to_string())?;
         }
         Ok(all)
+    }
+
+    /// Whether values `l` and `r` of value enum `name` are equal: the same
+    /// case, holding equal values. Only the case `l` holds is compared; the
+    /// others' fields read its bytes as something else.
+    fn enum_value_equal(
+        &mut self,
+        name: &str,
+        l: inkwell::values::StructValue<'ctx>,
+        r: inkwell::values::StructValue<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let bool_type = self.context.bool_type();
+        let l_tag = self.builder.build_extract_value(l, 0, "lhs_tag").map_err(|e| e.to_string())?.into_int_value();
+        let r_tag = self.builder.build_extract_value(r, 0, "rhs_tag").map_err(|e| e.to_string())?.into_int_value();
+        let same_case = self.builder.build_int_compare(inkwell::IntPredicate::EQ, l_tag, r_tag, "same_case").map_err(|e| e.to_string())?;
+        // Each case's values are read only once the tags match, and only
+        // the values of the case both hold.
+        self.unless_false(same_case, |this| {
+            this.switch_on_case(name, l, bool_type.const_int(1, false), |this, indices| {
+                let mut all = bool_type.const_int(1, false);
+                for &index in indices {
+                    let element = this.field_type_name(name, index);
+                    let a = this.extract_field(name, l, index, "lhs_value")?;
+                    let b = this.extract_field(name, r, index, "rhs_value")?;
+                    let same = this.value_equal(&element, a, b)?;
+                    all = this.builder.build_and(all, same, "case_equal").map_err(|e| e.to_string())?;
+                }
+                Ok(all)
+            })
+        })
     }
 
     /// The function `a == b` calls for two values of struct type `ty`: its
@@ -1922,6 +1986,28 @@ impl<'ctx> CodeGenerator<'ctx> {
 
     /// `compute`'s result, or `if_null` when any of `pointers` is null (then
     /// `compute` does not run).
+    /// `compute`'s result when `condition` holds, else `false`, computed
+    /// only when `condition` holds.
+    fn unless_false(
+        &mut self,
+        condition: inkwell::values::IntValue<'ctx>,
+        compute: impl FnOnce(&mut Self) -> Result<inkwell::values::IntValue<'ctx>, String>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let function = self.builder.get_insert_block().and_then(|b| b.get_parent()).ok_or("no function")?;
+        let from = self.builder.get_insert_block().ok_or("no block")?;
+        let then = self.context.append_basic_block(function, "when");
+        let done = self.context.append_basic_block(function, "when_done");
+        self.builder.build_conditional_branch(condition, then, done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(then);
+        let computed = compute(self)?;
+        let computed_in = self.builder.get_insert_block().ok_or("no block")?;
+        self.builder.build_unconditional_branch(done).map_err(|e| e.to_string())?;
+        self.builder.position_at_end(done);
+        let phi = self.builder.build_phi(computed.get_type(), "when_result").map_err(|e| e.to_string())?;
+        phi.add_incoming(&[(&computed.get_type().const_zero(), from), (&computed, computed_in)]);
+        Ok(phi.as_basic_value().into_int_value())
+    }
+
     fn unless_null(
         &mut self,
         pointers: &[PointerValue<'ctx>],
@@ -2137,47 +2223,85 @@ impl<'ctx> CodeGenerator<'ctx> {
     /// program's `hash<E>` when there is one (`hash<String>` by content),
     /// else by identity for references and by value otherwise.
     fn tuple_hash(&mut self, tuple: &str, value: BasicValueEnum<'ctx>) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let seed = self.context.i64_type().const_int(0xcbf29ce484222325, false);
+        if self.unions.contains_key(tuple) {
+            return self.enum_value_hash(tuple, value.into_struct_value(), seed);
+        }
         let elements = self.aggregate_elements(tuple).cloned().unwrap_or_default();
-        let mut h = self.context.i64_type().const_int(0xcbf29ce484222325, false);
+        let mut h = seed;
         for (index, element) in elements.iter().enumerate() {
             let item = self
                 .builder
                 .build_extract_value(value.into_struct_value(), index as u32, "element")
                 .map_err(|e| e.to_string())?;
-            let own_hash = self.hash_overrides.contains(&format!("hash<{}>", element));
-            let derived = format!("{}.{}", element, pepper_sema::equatable::HASH_METHOD);
-            let element_hash = if self.tuples.contains_key(element) || (self.values.contains_key(element) && !own_hash) {
-                self.tuple_hash(element, item)?
-            } else if self.functions.contains_key(&derived) {
-                // An `[Equatable]` struct hashes its fields; null as 0.
-                let pointer = self.object_pointer(item)?;
-                let zero = self.context.i64_type().const_zero();
-                self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&derived, vec![item])?.into_int_value()))?
-            } else if !own_hash && self.functions.contains_key(&self.equality_method(element)) && matches!(item, BasicValueEnum::PointerValue(_)) {
-                // An object compared by its `==` but hashed by identity
-                // (an `Array`): equal elements would hash apart, so it
-                // adds nothing to the hash.
-                continue;
-            } else if own_hash {
-                // A null reference hashes as 0, without the call.
-                let function = format!("hash<{}>", element);
-                match item {
-                    BasicValueEnum::PointerValue(pointer) => {
-                        let zero = self.context.i64_type().const_zero();
-                        self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&function, vec![item])?.into_int_value()))?
-                    }
-                    _ => self.call_function(&function, vec![item])?.into_int_value(),
-                }
-            } else {
-                let item = match item {
-                    BasicValueEnum::ArrayValue(_) => self.object_pointer(item)?.into(),
-                    other => other,
-                };
-                self.hash_value_to_i64(&item)?
-            };
-            h = self.hash_fold(h, &element_hash)?;
+            if let Some(element_hash) = self.element_hash(element, item)? {
+                h = self.hash_fold(h, &element_hash)?;
+            }
         }
         Ok(h)
+    }
+
+    /// `hash<T>` of a value of value enum `name`: its tag, then the values of
+    /// the case it holds, folded into `seed` as a tuple's elements are.
+    fn enum_value_hash(
+        &mut self,
+        name: &str,
+        value: inkwell::values::StructValue<'ctx>,
+        seed: inkwell::values::IntValue<'ctx>,
+    ) -> Result<inkwell::values::IntValue<'ctx>, String> {
+        let tag = self.builder.build_extract_value(value, 0, "tag").map_err(|e| e.to_string())?;
+        let tag_hash = self.hash_value_to_i64(&tag)?;
+        let h = self.hash_fold(seed, &tag_hash)?;
+        self.switch_on_case(name, value, h, |this, indices| {
+            let mut h = h;
+            for &index in indices {
+                let element = this.field_type_name(name, index);
+                let item = this.extract_field(name, value, index, "case_value")?;
+                if let Some(element_hash) = this.element_hash(&element, item)? {
+                    h = this.hash_fold(h, &element_hash)?;
+                }
+            }
+            Ok(h)
+        })
+    }
+
+    /// The hash a tuple element `item` of sema type `element` adds, as
+    /// `hash<E>` would hash it: through the program's `hash<E>` when there
+    /// is one (`hash<String>` by content), else by identity for references
+    /// and by value otherwise. `None` when it adds nothing.
+    fn element_hash(&mut self, element: &str, item: BasicValueEnum<'ctx>) -> Result<Option<inkwell::values::IntValue<'ctx>>, String> {
+        let own_hash = self.hash_overrides.contains(&format!("hash<{}>", element));
+        let derived = format!("{}.{}", element, pepper_sema::equatable::HASH_METHOD);
+        let element_hash = if self.tuples.contains_key(element) || (self.values.contains_key(element) && !own_hash) {
+            self.tuple_hash(element, item)?
+        } else if self.functions.contains_key(&derived) {
+            // An `[Equatable]` struct hashes its fields; null as 0.
+            let pointer = self.object_pointer(item)?;
+            let zero = self.context.i64_type().const_zero();
+            self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&derived, vec![item])?.into_int_value()))?
+        } else if !own_hash && self.functions.contains_key(&self.equality_method(element)) && matches!(item, BasicValueEnum::PointerValue(_)) {
+            // An object compared by its `==` but hashed by identity
+            // (an `Array`): equal elements would hash apart, so it
+            // adds nothing to the hash.
+            return Ok(None);
+        } else if own_hash {
+            // A null reference hashes as 0, without the call.
+            let function = format!("hash<{}>", element);
+            match item {
+                BasicValueEnum::PointerValue(pointer) => {
+                    let zero = self.context.i64_type().const_zero();
+                    self.unless_null(&[pointer], zero, |this| Ok(this.call_function(&function, vec![item])?.into_int_value()))?
+                }
+                _ => self.call_function(&function, vec![item])?.into_int_value(),
+            }
+        } else {
+            let item = match item {
+                BasicValueEnum::ArrayValue(_) => self.object_pointer(item)?.into(),
+                other => other,
+            };
+            self.hash_value_to_i64(&item)?
+        };
+        Ok(Some(element_hash))
     }
 
     /// Load vtable slot `slot` of trait value `value`.
@@ -4803,10 +4927,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .ok_or_else(|| format!("no member named '{}' in '{}'", name, struct_name))?;
                 let lhs_temp = self.owned_temp_type(lhs);
                 let value = self.codegen_expr(lhs)?;
-                let field = self
-                    .builder
-                    .build_extract_value(value.into_struct_value(), index as u32, name)
-                    .map_err(|e| e.to_string())?;
+                let field = self.extract_field(&struct_name, value.into_struct_value(), index, name)?;
                 if let Some(ty) = lhs_temp {
                     self.deferred_temps.push((value, ty));
                 }
@@ -4847,10 +4968,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                     .types
                     .get(&desc.fields[idx].1)
                     .ok_or_else(|| format!("unknown field type {}", desc.fields[idx].1))?;
-                let gep = self
-                    .builder
-                    .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
-                    .map_err(|e| e.to_string())?;
+                let llvm_type = desc.llvm_type;
+                let (gep, _) = self.field_address(&struct_name, llvm_type, base_ptr, idx, name)?;
                 // Struct-typed fields store a reference (the heap object's
                 // pointer), exactly like struct locals and params — load the
                 // stored pointer, not the slot address.
@@ -7346,17 +7465,8 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // the field's Pepper type: a struct-typed field is a `ptr`
                 // slot (a trait-typed one a `[2 x ptr]`), and the store
                 // guard compares against this.
-                let field_ty = match desc.llvm_type.get_field_type_at_index(idx as u32) {
-                    Some(ty) => ty,
-                    None => self
-                        .types
-                        .get(&ty_name)
-                        .ok_or_else(|| format!("unknown field type {}", ty_name))?,
-                };
-                let gep = self
-                    .builder
-                    .build_struct_gep(desc.llvm_type, base_ptr, idx as u32, name)
-                    .map_err(|e| e.to_string())?;
+                let llvm_type = desc.llvm_type;
+                let (gep, field_ty) = self.field_address(&struct_name, llvm_type, base_ptr, idx, name)?;
                 if let Some(ty) = lhs_temp {
                     self.deferred_temps.push((this_ptr, ty));
                 }

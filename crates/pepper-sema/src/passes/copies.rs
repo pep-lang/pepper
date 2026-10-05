@@ -509,12 +509,41 @@ fn copy_value_method(st: &StructDef, safe: &ThreadSafeStructs) -> FunctionDef {
     let copies = || symbol("copies", copies_type());
     let made = || symbol("__made", this_ty.clone());
     let mut items = vec![Statement::Declaration(Declaration::Variable(variable("__made", this_ty.clone(), Some(Expression::ThisRef), Kind::Variable)))];
-    for field in &st.field_members {
+    let copy_field = |field: &VariableDef| {
         if unsafe_part_in(&field.ty, safe).is_none() || field.ty.weak_target().is_some() {
-            continue;
+            return None;
         }
         let original = member(Expression::ThisRef, &field.name);
-        items.push(assign(member(made(), &field.name), method_call(copies(), &format!("copy<{}>", field.ty), vec![original])));
+        Some(assign(member(made(), &field.name), method_call(copies(), &format!("copy<{}>", field.ty), vec![original])))
+    };
+    match &st.enum_cases {
+        // A value enum's cases share storage: only the case `this` holds
+        // has values to copy.
+        Some(cases) if st.has_union_layout() => {
+            for case in cases.iter().filter(|c| !c.payload.is_empty()) {
+                let stores: Vec<Statement> = st
+                    .field_members
+                    .iter()
+                    .filter(|f| case.payload.iter().any(|(value, _)| payload_field(&case.name, value) == f.name))
+                    .filter_map(copy_field)
+                    .collect();
+                if stores.is_empty() {
+                    continue;
+                }
+                let is_case = Expression::Binary {
+                    op: BinaryOp::Equal,
+                    lhs: Box::new(member(Expression::ThisRef, TAG_FIELD)),
+                    rhs: Box::new(Expression::IntLiteral(case.value)),
+                    loc: Loc::NONE,
+                };
+                items.push(Statement::Branch(Branch {
+                    condition: is_case,
+                    if_block: Block { name: String::new(), items: stores, attributes: vec![] },
+                    else_block: None,
+                }));
+            }
+        }
+        _ => items.extend(st.field_members.iter().filter_map(copy_field)),
     }
     items.push(Statement::Return(ReturnStatement { expr: Some(made()), loc: Loc::NONE }));
     method(st, COPY_VALUE_METHOD, this_ty, items)

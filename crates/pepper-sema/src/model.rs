@@ -1517,6 +1517,13 @@ impl StructDef {
         has_attribute(&self.attributes, VALUE_ATTRIBUTE)
     }
 
+    /// A `[Value]` enum: its cases' values share one storage after the
+    /// tag, so only the case the tag names holds live values (codegen lays
+    /// it out as a tag and a union).
+    pub fn has_union_layout(&self) -> bool {
+        self.is_value() && self.enum_cases.is_some()
+    }
+
     /// Declared `[__Lazy]`: an empty object is null until first written or
     /// shared (see [`LAZY_ATTRIBUTE`]).
     pub fn is_lazy(&self) -> bool {
