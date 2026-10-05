@@ -86,13 +86,30 @@ if [ -d digest/test ]; then
 fi
 
 cd "$root/tools"
+# The compiler's tests (tools/compiler) import pepper-llvm, which links the
+# LLVM library. Linux finds it on the default search path; macOS and
+# Windows need its folder (see pepper-llvm's llvm_c/link.pep): the prefix
+# scripts/setup-llvm.sh or .ps1 wrote to .cargo/config.toml, or
+# LLVM_SYS_201_PREFIX. Windows also needs its DLL's folder on PATH to run
+# the tests.
+llvm=()
+llvm_prefix="${LLVM_SYS_201_PREFIX:-}"
+if [ -z "$llvm_prefix" ] && [ -f "$root/.cargo/config.toml" ]; then
+  llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' "$root/.cargo/config.toml" | head -1 | sed 's/\\\\/\\/g')"
+fi
+if [ -n "$llvm_prefix" ] && [ "$(uname -s)" != Linux ]; then
+  llvm=(-L "$llvm_prefix/lib")
+  if [ -n "$exe" ]; then
+    PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
+  fi
+fi
 if grep -rlq --include='*.pep' '^\[Test\]' .; then
   # At -O1: the compiler's passes tests run the Pepper passes in-process
   # over the test programs, which is slow unoptimized (near the 60 s
   # timeout at -O0), and -O1 builds them quickly enough to save time
   # overall. They still take most of a minute each, so on a runner that
   # shares its host they get 300 s (`-t` in the arguments still wins).
-  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . -t 300 "$@"
+  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "${llvm[@]+"${llvm[@]}"}" -t 300 "$@"
 fi
 
 exit $failed
