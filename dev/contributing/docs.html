@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4f4fdfdc.js";
+            window.path_to_searchindex_js = "../searchindex-68399303.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -247,17 +247,17 @@ mdBook error. An include indented inside a list item is one: mdBook pastes
 the file’s lines at column 0, which ends the list and the code block, so the
 rest of the example shows as prose and its <code>#</code> comments as headings. Put an
 included example at column 0, after the list or in its own <code>###</code> section. The runtime itself must meet the doc
-comment standard in <code>AGENTS.md</code>, which <code>runtime_docs_tests.rs</code> enforces.</p>
+comment standard in <code>AGENTS.md</code>, which <code>pep-doc check</code> enforces.</p>
 <h2 id="tool-options-stay-documented"><a class="header" href="#tool-options-stay-documented">Tool options stay documented</a></h2>
 <p>Every command-line option of every tool has its place in the book:
 <code>docs/src/tools/&lt;tool&gt;.md</code> for <code>pep-build</code>, <code>pepper</code>, <code>pep-fmt</code>, <code>pep-lsp</code>
 and <code>pep-doc</code>, and <a href="setup.html">Setting up LLVM</a> for <code>cargo setup</code>.
-<code>crates/pepper-driver/tests/integration/tool_docs_tests.rs</code> takes each tool’s
-options from the tool itself (clap’s definition for <code>pep-build</code>, the
-<code>--help</code> text for the others) and fails, naming the tool, the option and the
-page, when a page does not mention one. It also checks <code>pep-build</code>’s trace
-channels and environment variables, and <code>pep-lsp</code>’s initialization options
-and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
+<code>pep-doc check</code> takes each tool’s options from the tool itself (its
+<code>--help</code> text, from the tools that <code>scripts/pepper-tests.sh</code> builds beside
+<code>pep-build</code>) and fails, naming the tool, the option and the page, when a
+page does not mention one. It also checks <code>pep-build</code>’s option values,
+trace channels and environment variables, and <code>pep-lsp</code>’s initialization
+options and VS Code settings. A new option goes in the tool’s <code>--help</code> (or
 <code>help.txt</code> / <code>usage.txt</code>) and on its page in the same PR.</p>
 
                     </main>

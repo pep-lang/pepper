@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4f4fdfdc.js";
+            window.path_to_searchindex_js = "../searchindex-68399303.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -201,10 +201,29 @@ with cargo; <code>pepper doc</code> runs it, and from the repository root
 file it changed. Run it after changing a runtime doc comment, and commit the
 result.</p>
 <h3 id="pep-doc-check"><a class="header" href="#pep-doc-check"><code>pep-doc check</code></a></h3>
-<p>Changes nothing, and fails (exit status 1) when the committed reference does
-not match the runtime, naming the stale pages, or when a chapter has
-Markdown that renders broken without an mdBook error, such as an include
-indented inside a list item. CI runs it.</p>
+<p>Changes nothing, and fails (exit status 1) when:</p>
+<ul>
+<li>the committed reference does not match the runtime, naming the stale
+pages;</li>
+<li>a chapter has Markdown that renders broken without an mdBook error, such
+as an include indented inside a list item;</li>
+<li>a public declaration in <code>runtime/</code> (or <code>tools/syntax</code>) has no doc comment,
+or one without a description or a tag the
+<a href="../contributing/docs.html">documentation standard</a> requires, as a
+clang-style error at the declaration;</li>
+<li>a tool’s option, command, option value, trace channel, environment
+variable or setting is missing from the tool’s page in this book, naming
+the tool and the page.</li>
+</ul>
+<p>The tools’ options come from their <code>--help</code>: <code>pep-build</code>‘s and the Pepper
+tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-test</code>),
+which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>, so run it first.</p>
+<ul>
+<li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default: the release
+build’s folder under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it holds
+<code>pep-build</code>, else the debug build’s).</li>
+</ul>
+<p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>
 <p>Regenerates the reference, renders the book into <code>&lt;site&gt;/&lt;version&gt;/</code>, and
 refreshes the site’s <code>versions.json</code> and <code>index.html</code>. Other versions in the
