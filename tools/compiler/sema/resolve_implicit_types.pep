@@ -10,7 +10,7 @@
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import [enum_method_name, getter_name] from "builder";
-import [rewrite_module, sync_closures] from "closure_sites";
+import [ModuleTables, rewrite_module, sync_closures] from "closure_sites";
 import [MAIN_WITH_ARGUMENTS] from "entry_point";
 import [call_on_value, case_value_type, FieldTypes, is_enum, method_read] from "enums";
 import [bind_generic_function_values, bind_generic_method_values] from "generic_values";
@@ -1776,9 +1776,18 @@ export resolve_implicit_types(module: Module, state: PassState) {
     ulong round = 0;
     while (round < 8) {
         bool synced = sync_closures(module, state);
-        bool bound = bind_function_values(module, state);
-        bool specialized = bind_generic_function_values(module, state);
-        bool methods = bind_generic_method_values(module, state);
+        # The binding passes share tables while none of them changes the
+        # module.
+        var tables = ModuleTables(module, state);
+        bool bound = bind_function_values(module, state, tables);
+        if (bound) {
+            tables.reset();
+        }
+        bool specialized = bind_generic_function_values(module, state, tables);
+        if (specialized) {
+            tables.reset();
+        }
+        bool methods = bind_generic_method_values(module, state, tables);
         if (!_resolve_once(module, state) and !synced and !bound and !specialized and !methods) {
             break;
         }

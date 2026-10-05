@@ -10,7 +10,9 @@
 import [demangle_name] from compiler.link;
 import [int_literal_type, is_numeric_type] from "arithmetic";
 import [has_bare_attribute, IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
-import [for_each_site, rewrite_module, SiteVisitor] from "closure_sites";
+import [
+    for_each_selected_site, ModuleTables, rewrite_module, select_sites, SiteFilter, SiteVisitor
+] from "closure_sites";
 import [Conformance, has_constraints] from "constraints";
 import [Loc] from "loc";
 import [Expression, ExtensionScopes, FunctionDef, FunctionRefExpression, Module, StructDef, TypeName] from "model";
@@ -1302,31 +1304,26 @@ _named_at(name: String, loc: Loc): String {
 ## Whether some expression could be an overloaded name used as a value.
 struct _CandidateFinder {
     var overloads: Overloads;
-    var found: bool = false;
 
     construct(overloads: Overloads) {
         this.overloads = overloads;
     }
 
-    rewrite(e: Expression): Expression {
+    wants(e: Expression): bool {
         match (e) {
             SymbolRef(node) => {
-                if (node.ty.contains_auto() and overloads.is_set(node.id)) {
-                    found = true;
-                }
+                return node.ty.contains_auto() and overloads.is_set(node.id);
             }
             MemberRef(node) => {
-                if (overloads.is_any_method_set(node.name)) {
-                    found = true;
-                }
+                return overloads.is_any_method_set(node.name);
             }
             else => {}
         }
-        return e;
+        return false;
     }
 }
 
-extend _CandidateFinder with Rewriter;
+extend _CandidateFinder with SiteFilter;
 
 ## Finds the member each overloaded name used as a value stands for.
 struct _ValueBinder {
@@ -1410,20 +1407,21 @@ extend _ValueRewriter with Rewriter;
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
 ## @returns whether it bound any
-export bind_function_values(module: Module, state: PassState): bool {
+export bind_function_values(module: Module, state: PassState, tables: ModuleTables): bool {
     if (!has_overloads(module)) {
         return false;
     }
     var overloads = Overloads(module, state);
-    # Most runs find nothing to bind: look for a candidate first.
-    var finder = _CandidateFinder(overloads);
-    rewrite_module(module, finder);
-    if (!finder.found) {
+    # Most runs find nothing to bind: walk only the code holding a
+    # candidate.
+    var sites = select_sites(module, _CandidateFinder(overloads), false);
+    if (!sites.any()) {
         return false;
     }
-    var binder = _ValueBinder(overloads, StructTable(module), state);
-    for_each_site(module, state, binder);
+    var binder = _ValueBinder(overloads, tables.statics(), state);
+    for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0 and binder.methods.count == 0) {
         return false;
     }

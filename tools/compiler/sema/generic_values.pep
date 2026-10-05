@@ -4,7 +4,9 @@
 ## type is expected, the expected type picks the specialization the value
 ## names.
 
-import [for_each_applied_site, for_each_site, rewrite_module, SiteVisitor] from "closure_sites";
+import [
+    for_each_selected_site, ModuleTables, rewrite_module, select_sites, SiteFilter, SiteVisitor
+] from "closure_sites";
 import [Loc] from "loc";
 import [
     Block,
@@ -44,21 +46,17 @@ _is_unbound(e: Expression, generics: HashMap<String, _Generic>): bool {
 
 struct _UnboundFinder {
     var generics: HashMap<String, _Generic>;
-    var found: bool = false;
 
     construct(generics: HashMap<String, _Generic>) {
         this.generics = generics;
     }
 
-    rewrite(e: Expression): Expression {
-        if (_is_unbound(e, generics)) {
-            found = true;
-        }
-        return e;
+    wants(e: Expression): bool {
+        return _is_unbound(e, generics);
     }
 }
 
-extend _UnboundFinder with Rewriter;
+extend _UnboundFinder with SiteFilter;
 
 struct _FunctionValueBinder {
     var generics: HashMap<String, _Generic>;
@@ -139,8 +137,9 @@ extend _FunctionValueRewriter with Rewriter;
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
 ## @returns whether it named any
-export bind_generic_function_values(module: Module, state: PassState): bool {
+export bind_generic_function_values(module: Module, state: PassState, tables: ModuleTables): bool {
     var generics = HashMap<String, _Generic>();
     for (var f in module.functions) {
         if (f.is_generic_func and !f.name.contains("<")) {
@@ -150,9 +149,8 @@ export bind_generic_function_values(module: Module, state: PassState): bool {
     if (generics.count == 0) {
         return false;
     }
-    var finder = _UnboundFinder(generics);
-    rewrite_module(module, finder);
-    if (!finder.found) {
+    var sites = select_sites(module, _UnboundFinder(generics), true);
+    if (!sites.any()) {
         return false;
     }
     var generic_bases = HashSet<String>();
@@ -167,7 +165,7 @@ export bind_generic_function_values(module: Module, state: PassState): bool {
         }
     }
     var binder = _FunctionValueBinder(generics, generic_bases, _shadowed_names(module, generics));
-    for_each_applied_site(module, state, binder);
+    for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0) {
         return false;
     }
@@ -268,23 +266,20 @@ _shadowed_names(module: Module, generics: HashMap<String, _Generic>): HashSet<St
 
 struct _MethodFinder {
     var names: HashSet<String>;
-    var found: bool = false;
 
     construct(names: HashSet<String>) {
         this.names = names;
     }
 
-    rewrite(e: Expression): Expression {
+    wants(e: Expression): bool {
         if (e is MemberRef(node)) {
-            if (names.contains(node.name)) {
-                found = true;
-            }
+            return names.contains(node.name);
         }
-        return e;
+        return false;
     }
 }
 
-extend _MethodFinder with Rewriter;
+extend _MethodFinder with SiteFilter;
 
 struct _MethodValueBinder {
     var module: Module;
@@ -377,8 +372,9 @@ extend _MethodValueRewriter with Rewriter;
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
+## @param tables the module's tables, built from it as it is now
 ## @returns whether it named any
-export bind_generic_method_values(module: Module, state: PassState): bool {
+export bind_generic_method_values(module: Module, state: PassState, tables: ModuleTables): bool {
     var names = HashSet<String>();
     for (var st in module.structs) {
         for (var m in st.generic_methods) {
@@ -388,13 +384,12 @@ export bind_generic_method_values(module: Module, state: PassState): bool {
     if (names.count == 0) {
         return false;
     }
-    var finder = _MethodFinder(names);
-    rewrite_module(module, finder);
-    if (!finder.found) {
+    var sites = select_sites(module, _MethodFinder(names), false);
+    if (!sites.any()) {
         return false;
     }
-    var binder = _MethodValueBinder(module, names, StructTable(module), state);
-    for_each_site(module, state, binder);
+    var binder = _MethodValueBinder(module, names, tables.statics(), state);
+    for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0) {
         return false;
     }

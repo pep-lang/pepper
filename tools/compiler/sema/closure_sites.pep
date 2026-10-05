@@ -112,9 +112,9 @@ export struct SiteTable {
     ##
     ## @param module the model
     ## @param state the passes' state
-    construct(module: Module, state: PassState) {
+    construct(module: Module, state: PassState, statics: StructTable? = Optional<StructTable>.Empty) {
         this.state = state;
-        statics = StructTable(module);
+        this.statics = statics.is_value() ? statics.value() : StructTable(module);
         # A generic base's parameter types name its own type parameters;
         # only its specializations give a closure argument its types.
         for (var f in module.functions) {
@@ -255,14 +255,14 @@ _field_types(st: StructDef): HashMap<String, TypeName> {
     return out;
 }
 
-## Which functions a site walk goes through.
-enum _Sites {
-    ## Every function, extensions' own copies of their methods included.
-    All,
-    ## Every function but the extensions' own copies.
-    Applied,
-    ## Only functions (and initializers) creating one of the closures.
-    Closures,
+## Picks the expressions a limited site walk is for: the walk visits only
+## the functions, field defaults and global initializers holding one.
+export trait SiteFilter {
+    ## Whether the walk is for `e`.
+    ##
+    ## @param e the expression
+    ## @returns whether to visit the code holding it
+    wants(e: Expression): bool;
 }
 
 ## Calls `visitor` at every expression of `module` with the type of the
@@ -272,7 +272,9 @@ enum _Sites {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(module, SiteTable(module, state), _Sites.All, HashSet<String>(), visitor);
+    _sites_in_module(
+        module, SiteTable(module, state), false, _select(module, false, Optional<SiteFilter>.Empty), visitor
+    );
 }
 
 ## Calls `visitor` at every expression site of `module`, skipping the
@@ -283,59 +285,170 @@ export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
 ## @param state the passes' state
 ## @param visitor what to do at each site
 export for_each_applied_site(module: Module, state: PassState, visitor: SiteVisitor) {
-    _sites_in_module(module, SiteTable(module, state), _Sites.Applied, HashSet<String>(), visitor);
+    _sites_in_module(
+        module, SiteTable(module, state), true, _select(module, true, Optional<SiteFilter>.Empty), visitor
+    );
 }
 
-## Whether `e` creates one of `closures`.
-_creates_closure(e: Expression, closures: HashSet<String>): bool {
-    if (e is MakeClosure(node)) {
-        if (closures.contains(node.closure)) {
-            return true;
-        }
+## The code a limited site walk goes through: each function, field
+## default and global initializer holding an expression a filter wants.
+export struct SiteSelection {
+    ## Per piece of code, in the walk's order: whether to walk it.
+    var walk: Array<bool>;
+    ## Whether the extensions' own copies of their methods are left out.
+    var applied: bool;
+
+    construct(walk: Array<bool>, applied: bool) {
+        this.walk = walk;
+        this.applied = applied;
     }
-    for (var child in expression_children(e)) {
-        if (_creates_closure(child, closures)) {
-            return true;
-        }
+
+    ## Whether any code holds an expression the filter wants.
+    ##
+    ## @returns whether the walk visits anything
+    any(): bool {
+        return walk.contains(true);
     }
-    return false;
 }
 
-_block_creates_closure(block: Block, closures: HashSet<String>): bool {
+## Selects the code of `module` holding an expression `filter` wants (all
+## sites, or with `applied` those of `for_each_applied_site`), so that a
+## visitor that acts on nothing else walks only that code, and nothing
+## needs building when none does.
+##
+## @param module the model
+## @param filter which expressions the visitor acts on
+## @param applied whether to skip the extensions' own copies of their methods
+## @returns the code to walk
+export select_sites(module: Module, filter: SiteFilter, applied: bool): SiteSelection {
+    return SiteSelection(_select(module, applied, Optional<SiteFilter>.Value(filter)), applied);
+}
+
+## Calls `visitor` at every expression site of the code `selection` holds,
+## as `for_each_site` does in all of it.
+##
+## @param tables the tables of the model `selection` was made from,
+##     unchanged since
+## @param selection the code to walk
+## @param visitor what to do at each site
+export for_each_selected_site(tables: ModuleTables, selection: SiteSelection, visitor: SiteVisitor) {
+    if (selection.any()) {
+        _sites_in_module(tables.module, tables.sites(), selection.applied, selection.walk, visitor);
+    }
+}
+
+## The struct and site tables of a module, built when first asked for and
+## shared by the passes that run while the module stays as it was: each
+## costs a walk over every function.
+export struct ModuleTables {
+    var module: Module;
+    var state: PassState;
+    var built_statics: StructTable? = Optional<StructTable>.Empty;
+    var built_sites: SiteTable? = Optional<SiteTable>.Empty;
+
+    ## Tables of `module`, none built yet.
+    ##
+    ## @param module the model
+    ## @param state the passes' state
+    construct(module: Module, state: PassState) {
+        this.module = module;
+        this.state = state;
+    }
+
+    ## The module's struct table. Not to be first asked for in the middle
+    ## of a walk over the module's code, which building it walks too.
+    ##
+    ## @returns the table
+    statics(): StructTable {
+        if (!built_statics.is_value()) {
+            built_statics = Optional<StructTable>.Value(StructTable(module));
+        }
+        return built_statics.value();
+    }
+
+    ## The module's site table, with its struct table.
+    ##
+    ## @returns the table
+    sites(): SiteTable {
+        if (!built_sites.is_value()) {
+            built_sites = Optional<SiteTable>.Value(SiteTable(module, state, Optional<StructTable>.Value(statics())));
+        }
+        return built_sites.value();
+    }
+
+    ## Drops the tables, after a pass changed the module.
+    reset() {
+        built_statics = Optional<StructTable>.Empty;
+        built_sites = Optional<SiteTable>.Empty;
+    }
+}
+
+## Whether `e`, or an expression inside it, is one `filter` wants.
+_holds(e: Expression, filter: SiteFilter): bool {
+    var holder = _Holder(filter);
+    holder.rewrite(e);
+    return holder.found;
+}
+
+## Looks through an expression for one its filter wants, and stops at the
+## first.
+struct _Holder {
+    var filter: SiteFilter;
+    var found: bool = false;
+
+    construct(filter: SiteFilter) {
+        this.filter = filter;
+    }
+
+    rewrite(e: Expression): Expression {
+        if (!found) {
+            if (filter.wants(e)) {
+                found = true;
+            } else {
+                rewrite_children(e, this);
+            }
+        }
+        return e;
+    }
+}
+
+extend _Holder with Rewriter;
+
+_block_holds(block: Block, filter: SiteFilter): bool {
     for (var statement in block.items) {
         match (statement) {
             Expression(e) => {
-                if (_creates_closure(e, closures)) {
+                if (_holds(e, filter)) {
                     return true;
                 }
             }
             Block(inner) => {
-                if (_block_creates_closure(inner, closures)) {
+                if (_block_holds(inner, filter)) {
                     return true;
                 }
             }
             Declaration(declaration) => {
                 if (declaration is Variable(variable)) {
-                    if (variable.default.is_value() and _creates_closure(variable.default.value(), closures)) {
+                    if (variable.default.is_value() and _holds(variable.default.value(), filter)) {
                         return true;
                     }
                 }
             }
             Branch(branch) => {
-                if (_creates_closure(branch.condition, closures) or _block_creates_closure(branch.if_block, closures)) {
+                if (_holds(branch.condition, filter) or _block_holds(branch.if_block, filter)) {
                     return true;
                 }
-                if (branch.else_block.is_value() and _block_creates_closure(branch.else_block.value(), closures)) {
+                if (branch.else_block.is_value() and _block_holds(branch.else_block.value(), filter)) {
                     return true;
                 }
             }
             While(loop) => {
-                if (_creates_closure(loop.condition, closures) or _block_creates_closure(loop.block, closures)) {
+                if (_holds(loop.condition, filter) or _block_holds(loop.block, filter)) {
                     return true;
                 }
             }
             Return(r) => {
-                if (r.expr.is_value() and _creates_closure(r.expr.value(), closures)) {
+                if (r.expr.is_value() and _holds(r.expr.value(), filter)) {
                     return true;
                 }
             }
@@ -345,14 +458,32 @@ _block_creates_closure(block: Block, closures: HashSet<String>): bool {
     return false;
 }
 
-_function_creates_closure(function: FunctionDef, closures: HashSet<String>): bool {
+_function_holds(function: FunctionDef, filter: SiteFilter): bool {
     for (var p in function.parameters) {
-        if (p.default.is_value() and _creates_closure(p.default.value(), closures)) {
+        if (p.default.is_value() and _holds(p.default.value(), filter)) {
             return true;
         }
     }
-    return function.body.is_value() and _block_creates_closure(function.body.value(), closures);
+    return function.body.is_value() and _block_holds(function.body.value(), filter);
 }
+
+## Wants the creations of a set of closures.
+struct _CreatesClosure {
+    var closures: HashSet<String>;
+
+    construct(closures: HashSet<String>) {
+        this.closures = closures;
+    }
+
+    wants(e: Expression): bool {
+        if (e is MakeClosure(node)) {
+            return closures.contains(node.closure);
+        }
+        return false;
+    }
+}
+
+extend _CreatesClosure with SiteFilter;
 
 ## A visitor that passes its owner along.
 struct _Owned {
@@ -369,37 +500,79 @@ struct _Owned {
     }
 }
 
-_sites_in_module(module: Module, table: SiteTable, sites: _Sites, closures: HashSet<String>, visitor: SiteVisitor) {
-    bool only_closures = sites == _Sites.Closures;
+## Which code of `module` a walk goes through, in the walk's order (the
+## extensions' own copies of their methods left out when `applied`): all
+## of it, or only the code holding an expression `filter` wants.
+_select(module: Module, applied: bool, filter: SiteFilter?): Array<bool> {
+    var walk = Array<bool>();
+    for (var st in module.structs) {
+        for (var field in st.field_members) {
+            walk.append(
+                field.default.is_value() and (!filter.is_value() or _holds(field.default.value(), filter.value()))
+            );
+        }
+        for (var method in st.method_members) {
+            walk.append(!filter.is_value() or _function_holds(method, filter.value()));
+        }
+        for (var c in st.constructors) {
+            walk.append(!filter.is_value() or _function_holds(c, filter.value()));
+        }
+        walk.append(!filter.is_value() or _function_holds(st.destructor, filter.value()));
+    }
+    for (var function in module.functions) {
+        walk.append(!filter.is_value() or _function_holds(function, filter.value()));
+    }
+    if (!applied) {
+        for (var ext in module.extensions) {
+            for (var method in ext.methods) {
+                walk.append(!filter.is_value() or _function_holds(method, filter.value()));
+            }
+        }
+    }
+    for (var global in module.globals) {
+        walk.append(
+            global.default.is_value() and (!filter.is_value() or _holds(global.default.value(), filter.value()))
+        );
+    }
+    return walk;
+}
+
+## Walks the sites of the code of `module` that `walk` picks, as `_select`
+## ordered it.
+_sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bool>, visitor: SiteVisitor) {
+    ulong at = 0;
     for (var st in module.structs) {
         var current = Optional<TypeName>.Value(st.ty);
         var owned = _Owned(Optional<String>.Value(st.name), visitor);
         for (var field in st.field_members) {
-            if (field.default.is_value() and (!only_closures or _creates_closure(field.default.value(), closures))) {
+            if (walk[at]) {
                 _sites_in_expression(field.default.value(), Optional<TypeName>.Value(field.ty), table, current, owned);
             }
+            at += 1;
         }
         var functions = Array<FunctionDef>();
         functions.append_all(st.method_members);
         functions.append_all(st.constructors);
         functions.append(st.destructor);
         for (var method in functions) {
-            if (!only_closures or _function_creates_closure(method, closures)) {
+            if (walk[at]) {
                 _sites_in_function(method, table, current, owned);
             }
+            at += 1;
         }
     }
     for (var function in module.functions) {
-        if (!only_closures or _function_creates_closure(function, closures)) {
+        if (walk[at]) {
             _sites_in_function(
                 function, table, Optional<TypeName>.Empty, _Owned(Optional<String>.Value(function.name), visitor)
             );
         }
+        at += 1;
     }
-    if (sites != _Sites.Applied) {
+    if (!applied) {
         for (var ext in module.extensions) {
             for (var method in ext.methods) {
-                if (!only_closures or _function_creates_closure(method, closures)) {
+                if (walk[at]) {
                     _sites_in_function(
                         method,
                         table,
@@ -407,11 +580,12 @@ _sites_in_module(module: Module, table: SiteTable, sites: _Sites, closures: Hash
                         _Owned(Optional<String>.Value(ext.target.name), visitor)
                     );
                 }
+                at += 1;
             }
         }
     }
     for (var global in module.globals) {
-        if (global.default.is_value() and (!only_closures or _creates_closure(global.default.value(), closures))) {
+        if (walk[at]) {
             _sites_in_expression(
                 global.default.value(),
                 Optional<TypeName>.Value(global.ty),
@@ -420,6 +594,7 @@ _sites_in_module(module: Module, table: SiteTable, sites: _Sites, closures: Hash
                 _Owned(Optional<String>.Empty, visitor)
             );
         }
+        at += 1;
     }
 }
 
@@ -835,9 +1010,12 @@ export sync_closures(module: Module, state: PassState): bool {
     }
     var learned = HashMap<String, _Learned>();
     if (unknown.count > 0) {
-        var learner = _Learner(SiteTable(module, state));
-        _sites_in_module(module, learner.table, _Sites.Closures, unknown, learner);
-        learned = learner.learned;
+        var creating = select_sites(module, _CreatesClosure(unknown), false);
+        if (creating.any()) {
+            var learner = _Learner(SiteTable(module, state));
+            _sites_in_module(module, learner.table, false, creating.walk, learner);
+            learned = learner.learned;
+        }
     }
     bool changed = false;
     for (var st in module.structs) {
