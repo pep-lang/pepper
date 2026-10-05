@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7ef62d68.js";
+            window.path_to_searchindex_js = "searchindex-a5e6bb67.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -15662,13 +15662,13 @@ main(): int {
 </code></pre>
 <ul>
 <li><code>set_read_timeout(milliseconds)</code> limits how long a read (or a UDP
-receive) waits for data, and <code>set_write_timeout(milliseconds)</code> how long
+datagram receive) waits for data, and <code>set_write_timeout(milliseconds)</code> how long
 a write waits for room to send. A call that waits longer fails with
 <code>is_timed_out()</code>, and the socket stays open for another try. Each wait
 counts on its own, so <code>read_exact</code> or <code>write_all</code> can take longer in all.
 0, the default, means no limit; <code>read_timeout()</code> and <code>write_timeout()</code>
-return the current values. <code>TcpStream</code>, <code>UdpSocket</code> and <code>UnixStream</code>
-have them.</li>
+return the current values. <code>TcpStream</code>, <code>UdpSocket</code>, <code>UnixStream</code> and
+<code>UnixDatagram</code> have them.</li>
 <li><code>TcpStream.connect_timeout(address, milliseconds)</code> gives up on a
 connection that is not established in time, instead of after the
 system’s own limit, which is often minutes.</li>
@@ -37467,6 +37467,56 @@ datagram is sent.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>the number of bytes appended; an error when the socket is closed, or another platform error</li>
+</ul>
+<h4 id="set_read_timeout-1-1"><a class="header" href="#set_read_timeout-1-1">set_read_timeout</a></h4>
+<pre><code class="language-pepper">set_read_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a receive waits: when no datagram arrives for
+<code>milliseconds</code>, <code>receive</code> or <code>receive_from</code> fails with
+<code>is_timed_out()</code> and the socket stays open for another try. 0, the
+default, waits as long as it takes. It works outside a task and in
+one, where the task’s <code>async.timeout</code> can end the wait sooner.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">socket.set_read_timeout(5000);   # give up after 5 seconds of silence
+</code></pre>
+<h4 id="read_timeout-1-1"><a class="header" href="#read_timeout-1-1">read_timeout</a></h4>
+<pre><code class="language-pepper">read_timeout(): ulong
+</code></pre>
+<p>Returns the read timeout <code>set_read_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
+</ul>
+<h4 id="set_write_timeout-1-1"><a class="header" href="#set_write_timeout-1-1">set_write_timeout</a></h4>
+<pre><code class="language-pepper">set_write_timeout(milliseconds: ulong): IoResult&lt;void&gt;
+</code></pre>
+<p>Limits how long a send waits for the receiver to take more: when its
+queue stays full for <code>milliseconds</code> (it is not receiving), <code>send</code> or
+<code>send_to</code> fails with <code>is_timed_out()</code> and sends nothing. 0, the
+default, waits as long as it takes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest wait, at most 4294967295 (about 49 days); 0 for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error with <code>is_invalid_input()</code> when <code>milliseconds</code> is too large, or an error when the socket is closed</li>
+</ul>
+<h4 id="write_timeout-1-1"><a class="header" href="#write_timeout-1-1">write_timeout</a></h4>
+<pre><code class="language-pepper">write_timeout(): ulong
+</code></pre>
+<p>Returns the write timeout <code>set_write_timeout</code> set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the timeout in milliseconds, 0 for none</li>
 </ul>
 <h4 id="close-2-1"><a class="header" href="#close-2-1">close</a></h4>
 <pre><code class="language-pepper">close(): IoResult&lt;void&gt;

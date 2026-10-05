@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7ef62d68.js";
+            window.path_to_searchindex_js = "../searchindex-a5e6bb67.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -615,13 +615,13 @@ main(): int {
 </code></pre>
 <ul>
 <li><code>set_read_timeout(milliseconds)</code> limits how long a read (or a UDP
-receive) waits for data, and <code>set_write_timeout(milliseconds)</code> how long
+datagram receive) waits for data, and <code>set_write_timeout(milliseconds)</code> how long
 a write waits for room to send. A call that waits longer fails with
 <code>is_timed_out()</code>, and the socket stays open for another try. Each wait
 counts on its own, so <code>read_exact</code> or <code>write_all</code> can take longer in all.
 0, the default, means no limit; <code>read_timeout()</code> and <code>write_timeout()</code>
-return the current values. <code>TcpStream</code>, <code>UdpSocket</code> and <code>UnixStream</code>
-have them.</li>
+return the current values. <code>TcpStream</code>, <code>UdpSocket</code>, <code>UnixStream</code> and
+<code>UnixDatagram</code> have them.</li>
 <li><code>TcpStream.connect_timeout(address, milliseconds)</code> gives up on a
 connection that is not established in time, instead of after the
 system’s own limit, which is often minutes.</li>
