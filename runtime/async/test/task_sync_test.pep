@@ -379,3 +379,32 @@ select_and_wait_while_park_tasks() {
     # Release the grown buffer the global holds.
     jobs.replace(Array<long>());
 }
+
+# A select's send arm parks its task while the bounded channel is full, and
+# a task on the same worker that takes a value wakes it.
+[Test]
+select_send_arm_parks_a_task() {
+    async.run(
+        () => {
+            var out = async.Channel<long>(1);
+            var drained = async.Atomic<long>(0);
+            var drainer = async.Task<void>.spawn_local(() => {
+                for (var n in out) {
+                    drained.fetch_add(n);
+                    async.yield_now();
+                }
+            });
+            var select = async.Select<long>();
+            long n = 1;
+            while (n <= COUNT) {
+                select.send(out, n, (): long => 1);
+                # The only arm: wait() returns once `out` takes the value.
+                expect_equal(select.wait_for(10000).value(), 1);
+                n = n + 1;
+            }
+            out.close();
+            drainer.join();
+            expect_equal(drained.load(), COUNT * (COUNT + 1) / 2);
+        }
+    );
+}

@@ -104,8 +104,11 @@ of its properties is too:
 - A computed `get` over the struct's `const` fields is allowed, as any method
   is.
 
-Accessors that store into a thread-safe member (an `Atomic<int>`, or a
-value behind a `Mutex`) are not supported yet.
+A `[Shared]` struct's properties are `get` only, by design: an assignment
+`x.p = v` would read as a write to a struct whose fields cannot change. To
+change what a thread-safe member holds (an `Atomic<int>`, or a value behind a
+`Mutex`), declare a method that says what it does, such as
+`store_hits(value)` or `add_name(name)`.
 
 ## How properties compile
 

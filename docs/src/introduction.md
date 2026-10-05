@@ -107,7 +107,7 @@ Some things you will meet quickly:
 - Threads can share only thread-safe values, which the compiler checks,
   closure captures included. A channel hands over what it is sent without
   copying it (`send(move(x))`, or `send(copy(x))` to keep `x`), a `Select`
-  waits on several channels at once, and a `Mutex` holds any struct, with
+  waits to receive from or send to several channels at once, and a `Mutex` holds any struct, with
   the compiler keeping each locked value apart from the rest of the program
   (see
   [threads](language/threads.md#what-a-lock-body-may-do)). An `RwLock`

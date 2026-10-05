@@ -388,7 +388,8 @@ method.
 ### Waiting on several channels with Select
 
 A `Select<E>` waits on several channels at once and takes the first value
-any of them receives, like Go's `select`. Each channel is added with a
+any of them receives (or, with a send arm, sends to the first with room),
+like Go's `select`. Each channel is added with a
 function that turns its values into an `E`, usually a case of an
 [enum](enums.md) of your own that carries the value, so the channels may
 carry different types and a `match` handles the result:
@@ -412,6 +413,26 @@ carry different types and a `match` handles the result:
 - A `Select` belongs to the thread (or [task](tasks.md)) that made it; it
   is not `[Shared]`. In a task, waiting parks the task, and a cancel or the
   task's `timeout` ends the wait.
+
+A `Select` can also wait to send, like a `case ch <- v` in Go's `select`.
+`send(channel, value, sent)` adds a send arm: `wait()` fires it once
+`channel` has room (a bounded channel that is full waits), and returns what
+`sent` returns. Here a loop keeps receiving jobs while each result waits for
+room in a bounded channel:
+
+```pepper
+{{#include ../../examples/threads-select-send.pep}}
+```
+
+- `value` must be a new value, as for `Channel.send` (`move(x)`, `copy(x)`,
+  a constructor call, ...). The select holds it and moves it into the
+  channel only when that arm fires, under the channel's lock, so it is never
+  sent when another arm fires first.
+- A send arm fires once: after its value is sent it leaves the select, so
+  the next `wait()` does not send it again. Add another with `send` for the
+  next value.
+- A send arm whose channel is closed is skipped like a closed receive
+  channel, and its value is dropped with the select.
 
 The [Select reference](../reference/async-select.md) documents every method.
 
@@ -690,9 +711,8 @@ The [Once reference](../reference/async-once.md) has the details.
   (`list.append(move(job))`).
 - There is no reader-writer lock, and no barrier or semaphore. A Mutex is
   not re-entrant.
-- A `Select` only receives: it cannot wait to send to a full channel. The
-  value `wait()` returns is not a new value for a lock body, since `wrap`
-  is a function value the compiler cannot follow; `copy` it to move it into
-  a locked value.
+- The value a `Select`'s `wait()` returns is not a new value for a lock
+  body, since `wrap` is a function value the compiler cannot follow; `copy`
+  it to move it into a locked value.
 - Deadlocks are not detected, except locking a Mutex twice on one thread,
   which panics.

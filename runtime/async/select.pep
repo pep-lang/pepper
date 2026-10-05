@@ -1,6 +1,7 @@
 ## Waiting on several channels at once: `Select<E>` takes the first value
-## any of them receives and turns it into a case of your own enum, which a
-## `match` then handles.
+## any of them receives, or sends a value to the first that has room, and
+## turns what happened into a case of your own enum, which a `match` then
+## handles.
 
 # A select tries each channel in turn (`_poll`), starting after the one that
 # fired last so a busy channel cannot starve the others. When none has a
@@ -15,6 +16,11 @@
 # tasks it waits for). A task parks as it does for
 # `receive`; a plain thread sleeps on the waiter's `_ThreadWake` instead of
 # a channel's condition variable (see sync_wait.pep).
+#
+# A send arm (`_SendCase`) works the same way on the sending side: it keeps
+# its value in a raw slot until a look finds room (`Channel._select_put`,
+# which moves the value in under the channel's lock), joins the channel's
+# `_senders` queue while it is full, and leaves the select once it fires.
 
 import "channel";
 import "sync_wait";
@@ -23,13 +29,16 @@ import "sys_wasi";
 import "sys_windows";
 import "task";
 
-# One channel of a `Select`, whatever its value type: taking a value (as an
-# `E`), and joining and leaving its wait queue (`_join` returns what
-# `Channel._select_join` found).
+# One arm of a `Select`, whatever its channel's value type: firing it
+# (receiving or sending, and turning that into an `E`), and joining and
+# leaving its channel's wait queue (`_join` returns what the channel
+# found). `_finished` is true for an arm that has fired and leaves the
+# select.
 trait _SelectCase<E> {
     _take(): _Polled<E>;
     _join(waiter: _SyncWaiter): _Joined;
     _leave(waiter: _SyncWaiter);
+    _finished(): bool;
 }
 
 # A channel of `T` values and how to turn one into an `E`.
@@ -67,23 +76,95 @@ extend _ReceiveCase<T, E> with _SelectCase<E> {
     _leave(waiter: _SyncWaiter) {
         _channel._select_leave(waiter);
     }
+
+    # A receive arm stays until the select is dropped.
+    _finished(): bool {
+        return false;
+    }
+}
+
+# A value waiting to be sent to a channel of `T` values, and what to return
+# once it is. The value is held in `_slot`, raw memory the compiler cannot
+# follow: `send` took it as a `[Move]` value, so the slot holds the only
+# reference, and `Channel._select_put` moves it out of the slot only when
+# the channel has room.
+struct _SendCase<T, E> {
+    const _channel: Channel<T>;
+    const _sent: () => E;
+    # One `T` slot; it holds the value until the arm fires.
+    const _slot: __ptr<T>;
+    # True once the value is in the channel.
+    var _done: bool;
+
+    construct(channel: Channel<T>, [Move] value: T, sent: () => E) {
+        _channel = channel;
+        _sent = sent;
+        _slot = _pep_malloc(sizeof<T>());
+        _slot[0] = move(value);
+        _done = false;
+    }
+
+    destruct {
+        # A value never sent is dropped with the select.
+        _slot[0] = __default<T>();
+        _pep_free(_slot);
+    }
+}
+
+extend _SendCase<T, E> with _SelectCase<E> {
+    # Sends the value if the channel has room, and returns what `_sent`
+    # makes of that.
+    _take(): _Polled<E> {
+        if (_done) {
+            return _Polled<E>.Closed;
+        }
+        var found = _channel._select_put(_slot);
+        if (found == _Joined.Ready) {
+            _done = true;
+            return _Polled<E>.Ready(_sent());
+        }
+        if (found == _Joined.Closed) {
+            return _Polled<E>.Closed;
+        }
+        return _Polled<E>.Empty;
+    }
+
+    _join(waiter: _SyncWaiter): _Joined {
+        if (_done) {
+            return _Joined.Closed;
+        }
+        return _channel._select_join_send(waiter);
+    }
+
+    _leave(waiter: _SyncWaiter) {
+        _channel._select_leave_send(waiter);
+    }
+
+    _finished(): bool {
+        return _done;
+    }
 }
 
 ## Waits on several channels at once and takes the first value any of them
-## receives, like Go's `select`.
+## receives, or sends to the first that has room, like Go's `select`.
 ##
-## Each channel is added with `receive(channel, wrap)`, where `wrap` turns
-## one of its values into an `E`, usually a case of an enum of your own that
-## carries it. `wait()` then returns the next value from whichever channel
-## has one, as an `E`, for a `match` to handle. The channels may carry
-## different types.
+## Each channel to receive from is added with `receive(channel, wrap)`,
+## where `wrap` turns one of its values into an `E`, usually a case of an
+## enum of your own that carries it. A value to send is added with
+## `send(channel, value, sent)`, where `sent` returns the `E` that says it
+## was sent. `wait()` then fires whichever arm is ready first and returns
+## its `E`, for a `match` to handle. The channels may carry different types.
 ##
 ## - The value is taken under the channel's own lock, so no other receiver
 ##   can take it between "ready" and "take".
+## - A send arm's value goes into its channel only when that arm fires;
+##   until then the select holds it. Once sent, the arm leaves the select,
+##   so the next `wait()` does not send it again. A value never sent is
+##   dropped with the select.
 ## - When several channels have values, each wait starts after the channel
 ##   that fired last, so a busy channel cannot starve the others.
-## - A channel that is closed and empty is skipped. Once every channel is,
-##   `wait()` returns an error.
+## - A channel that is closed and empty is skipped, and so is a send arm
+##   whose channel is closed. Once every arm is, `wait()` returns an error.
 ## - In a task (see `run`), waiting parks the task and its worker runs other
 ##   tasks; a cancel or the task's `timeout` ends the wait.
 ##
@@ -142,10 +223,31 @@ export struct Select<E> {
         _cases.append(_ReceiveCase<T, E>(channel, wrap));
     }
 
-    ## Takes the next value any of the channels receives, waiting until one
-    ## arrives.
+    ## Adds a send arm: `wait()` sends `value` to `channel` once the channel
+    ## has room (a bounded channel that is full waits), and returns what
+    ## `sent` returns.
     ##
-    ## @returns the value, turned into an `E`; or an error once every channel is closed and empty, when the select has no channels, or when the task's wait was cancelled or timed out
+    ## `value` must be a new value, as for `Channel.send`: the select holds
+    ## it and moves it into the channel only when this arm fires, so it is
+    ## never sent if another arm fires first. Once sent, the arm leaves the
+    ## select. A send arm whose channel is closed never fires, and its value
+    ## is dropped with the select.
+    ##
+    ## @typeParam T the type of the channel's values
+    ## @param channel the channel to send to
+    ## @param value the value to send; a new value, which the compiler checks
+    ## @param sent returns the `E` that `wait()` returns once the value is sent; it runs on the waiting thread
+    ## @example
+    ##     select.send(results, copy(line), (): Event => Event.Sent);
+    send<T>(channel: Channel<T>, [Move] value: T, sent: () => E) {
+        _cases.append(_SendCase<T, E>(channel, move(value), sent));
+    }
+
+    ## Fires the first arm that is ready, waiting until one is: takes the
+    ## next value any of the channels receives, or sends a send arm's value
+    ## to a channel with room.
+    ##
+    ## @returns the arm's `E` (the value received, turned into an `E`, or what a send arm's `sent` returned); or an error once every channel is closed (and empty, for a receive arm), when the select has no arms, or when the task's wait was cancelled or timed out
     wait(): Result<E> {
         return this._wait(0);
     }
@@ -153,14 +255,16 @@ export struct Select<E> {
     ## Like `wait()`, but gives up after about `milliseconds` milliseconds.
     ##
     ## @param milliseconds the longest time to wait
-    ## @returns the value, turned into an `E`; or an error if the time ran out, once every channel is closed and empty, or when the task's wait was cancelled
+    ## @returns the arm's `E`, as for `wait()`; or an error if the time ran out, once every channel is closed (and empty, for a receive arm), or when the task's wait was cancelled
     wait_for(milliseconds: ulong): Result<E> {
         return this._wait(_async_sys_monotonic_milliseconds() + milliseconds);
     }
 
-    ## Takes a value if any channel has one waiting, without waiting.
+    ## Fires an arm if one is ready now, without waiting: takes a value if a
+    ## channel has one waiting, or sends a send arm's value if its channel
+    ## has room.
     ##
-    ## @returns the value, turned into an `E`; or an error if none is waiting, or once every channel is closed and empty
+    ## @returns the arm's `E`, as for `wait()`; or an error if no arm is ready, or once every channel is closed (and empty, for a receive arm)
     try_wait(): Result<E> {
         match (this._poll()) {
             Ready(event) => {
@@ -175,8 +279,9 @@ export struct Select<E> {
         }
     }
 
-    # Looks at each channel once, starting at `_next`: the first value found
-    # (Ready), else Empty if any channel is still open, else Closed.
+    # Looks at each arm once, starting at `_next`: the first that fires
+    # (Ready), else Empty if any channel is still open, else Closed. A send
+    # arm that fires leaves the select.
     _poll(): _Polled<E> {
         var count = _cases.count;
         var closed: ulong = 0;
@@ -186,7 +291,12 @@ export struct Select<E> {
             var entry: _SelectCase<E> = _cases[index];
             match (entry._take()) {
                 Ready(event) => {
-                    _next = (index + 1) % count;
+                    if (entry._finished()) {
+                        _cases.remove_at(index);
+                        _next = count > 1 ? index % (count - 1) : 0;
+                    } else {
+                        _next = (index + 1) % count;
+                    }
                     return _Polled<E>.Ready(event);
                 }
                 Empty => {}

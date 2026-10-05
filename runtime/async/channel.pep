@@ -33,7 +33,9 @@
 # queues: `_select_join` adds its one waiter to `_receivers` unless a value
 # is already there or the channel is closed, and `_select_take` takes a
 # value the way `try_receive` does, telling an empty channel from a closed
-# one.
+# one. A send arm joins `_senders` instead (`_select_join_send`, unless
+# there is room or the channel is closed), and `_select_put` moves its
+# value in only when there is room.
 
 import "atomic";
 import "lock";
@@ -424,6 +426,47 @@ export struct Channel<T> {
     # For `Select`: takes `waiter` out of `_receivers`, if it is there.
     _select_leave(waiter: _SyncWaiter) {
         _receivers._remove(waiter);
+    }
+
+    # For a `Select` send arm: moves the value in `slot` into the channel if
+    # there is room now (`_Joined.Ready`, `slot` then holds nothing), and
+    # otherwise leaves it in `slot` and reports a full channel
+    # (`_Joined.Empty`) or a closed one (`_Joined.Closed`). `slot` holds the
+    # only reference to its value, the runtime's promise as for `send`.
+    _select_put(slot: __ptr<T>): _Joined {
+        _async_sys_mutex_lock(_lock);
+        var found = _Joined.Empty;
+        if (_state[3] != 0) {
+            found = _Joined.Closed;
+        } else if (_capacity == 0 || _state[1] < _capacity) {
+            this._push(move(slot[0]));
+            found = _Joined.Ready;
+        }
+        _async_sys_mutex_unlock(_lock);
+        return found;
+    }
+
+    # For a `Select` send arm: adds `waiter` to `_senders` and returns
+    # `_Joined.Empty`. Returns `_Joined.Ready` without adding it when there
+    # is room for a value, and `_Joined.Closed` when the channel is closed.
+    _select_join_send(waiter: _SyncWaiter): _Joined {
+        _async_sys_mutex_lock(_lock);
+        var found = _Joined.Empty;
+        if (_state[3] != 0) {
+            found = _Joined.Closed;
+        } else if (_capacity == 0 || _state[1] < _capacity) {
+            found = _Joined.Ready;
+        } else {
+            _senders._push(waiter);
+        }
+        _async_sys_mutex_unlock(_lock);
+        return found;
+    }
+
+    # For a `Select` send arm: takes `waiter` out of `_senders`, if it is
+    # there.
+    _select_leave_send(waiter: _SyncWaiter) {
+        _senders._remove(waiter);
     }
 
     # Parks the running task in `queue` until a waker wakes it, `deadline`
