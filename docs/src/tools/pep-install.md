@@ -33,7 +33,7 @@ one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
 | `list --available`, `-a` | Lists the releases that have an archive for this machine instead, marking those installed |
 | `add <version>` | Installs the newest release `<version>` names, unless it is installed; it becomes the default only when there was none |
 | `use <version>` | Makes the newest installed toolchain `<version>` names the default |
-| `update` | Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed |
+| `update` | Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed. Then updates the home's `pepper` and `pep-install` from it |
 | `remove <version>` | Removes the installed toolchain `<version>` names; it must name just one, and not the default |
 | `which` | Prints the toolchain the current folder uses and why, then the path of its `pep-build`; fails when that toolchain is not installed |
 | `-h`, `--help` | Prints the commands; after a command, that command's options |
@@ -57,6 +57,16 @@ The Pepper home holds them:
 ~/.pepper/toolchains/0.3.0/runtime/  and its runtime
 ~/.pepper/default-toolchain          the default toolchain's version
 ```
+
+The [install scripts](install.md) set up the home: they install the newest
+release this way, put its `pepper` and `pep-install` in `bin`, and move an
+install from before toolchains into `toolchains/`.
+
+`update` replaces the home's `pepper` and `pep-install` with the new
+toolchain's when they differ. Each is written beside the old one and
+renamed into place, the old one first moved aside to `<name>.old`; on
+Windows, where a running program cannot be removed, that `.old` file is
+removed by the next `update`.
 
 The home is the folder above the running `pep-install` when that is a home
 (it has a `toolchains` folder), else `PEPPER_HOME`, else

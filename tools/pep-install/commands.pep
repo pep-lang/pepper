@@ -23,7 +23,9 @@ export installed_list(home: toolchain.Home, in_use: toolchain.Choice?): String {
         if (default_version.is_value() and default_version.value() == version) {
             notes.append("default");
         }
-        if (in_use.is_value() and in_use.value().version.is_value() and in_use.value().version.value() == version) {
+        # The default in use needs no second note.
+        var used = in_use.is_value() and in_use.value().source != toolchain.Source.Default;
+        if (used and in_use.value().version.is_value() and in_use.value().version.value() == version) {
             notes.append("in use here, " + in_use.value().reason());
         }
         text = text + version.to_string() + (notes.is_empty ? "" : " (" + ", ".join(notes) + ")") + "\n";
@@ -63,7 +65,8 @@ export add_toolchain(home: toolchain.Home, releases: Array<Release>, spec: toolc
 }
 
 # Installs the newest release, unless it is installed, and makes it the
-# default. Older toolchains stay installed.
+# default. Older toolchains stay installed. The home's `pepper` and
+# `pep-install` are then updated from that toolchain.
 export update_toolchain(home: toolchain.Home, releases: Array<Release>): Result<String> {
     var release = _newest_release(releases, toolchain.VersionSpec())?;
     var version = release.version.to_string();
@@ -72,13 +75,83 @@ export update_toolchain(home: toolchain.Home, releases: Array<Release>): Result<
         install_release(home, release)?;
     }
     var was_default = home.default_version().is_value() and home.default_version().value() == release.version;
-    if (installed and was_default) {
-        return Result<String>.ok($"{version}, the newest release, is installed and the default\n");
+    var text = $"{version}, the newest release, is installed and the default\n";
+    if (!installed or !was_default) {
+        home.set_default(release.version)?;
+        text = (installed ? $"{version} is installed" : $"installed {version}") + " and made it the default\n";
     }
-    home.set_default(release.version)?;
-    return Result<String>.ok(
-        (installed ? $"{version} is installed" : $"installed {version}") + " and made it the default\n"
-    );
+    var updated = update_entry_points(home, release.version)?;
+    if (!updated.is_empty) {
+        text = text + $"updated {" and ".join(updated)} in {home.bin.to_string()}\n";
+    }
+    return Result<String>.ok(text);
+}
+
+# Copies the entry point and pep-install from the toolchain `version` into
+# the home's `bin` folder where they differ, and returns the names of those
+# it copied. A toolchain from before side-by-side toolchains has no
+# pep-install, and leaves both alone.
+#
+# A running program's file can be renamed but not overwritten or removed
+# on Windows, and this one runs from that folder: each old file is moved
+# aside to `<name>.old` before the new one takes its name, and an `.old`
+# that cannot be removed yet is removed the next time.
+export update_entry_points(home: toolchain.Home, version: toolchain.Version): Result<Array<String>> {
+    var updated = Array<String>();
+    var suffix = toolchain.executable_suffix();
+    var source = home.toolchain_bin(version);
+    if (!source.join("pep-install" + suffix).is_file()) {
+        return Result<Array<String>>.ok(updated);
+    }
+    var created = Directory.create_all(home.bin);
+    if (created.is_err()) {
+        return Result<Array<String>>.Err($"cannot create {home.bin.to_string()}: {created.error().message}");
+    }
+    # The programs of the home's `bin` folder: the entry point and this.
+    for (var name in ["pepper", "pep-install"]) {
+        var from = source.join(name + suffix);
+        var to = home.bin.join(name + suffix);
+        var old = Path(to.to_string() + ".old");
+        if (old.exists()) {
+            File.remove(old);
+        }
+        var contents = File.read_bytes(from);
+        if (contents.is_err()) {
+            return Result<Array<String>>.Err($"cannot read {from.to_string()}: {contents.error().message}");
+        }
+        var current = File.read_bytes(to);
+        if (current.is_ok() and current.value() == contents.value()) {
+            continue;
+        }
+        _replace(to, old, contents.value())?;
+        updated.append(name);
+    }
+    return Result<Array<String>>.ok(updated);
+}
+
+# Puts `contents` at `path`, an executable: written beside it, then renamed
+# into place, the file there first moved aside to `old`.
+_replace(path: Path, old: Path, contents: u8[]): Result<void> {
+    var fresh = Path(path.to_string() + ".new");
+    var written = File.write_bytes(fresh, contents);
+    if (written.is_err()) {
+        return Result<void>.Err($"cannot write {fresh.to_string()}: {written.error().message}");
+    }
+    fresh.set_executable(true);
+    if (path.exists()) {
+        var moved = File.rename(path, old);
+        if (moved.is_err()) {
+            File.remove(fresh);
+            return Result<void>.Err($"cannot move {path.to_string()} aside: {moved.error().message}");
+        }
+    }
+    var placed = File.rename(fresh, path);
+    if (placed.is_err()) {
+        return Result<void>.Err($"cannot replace {path.to_string()}: {placed.error().message}");
+    }
+    # Only Windows keeps it, while the old program still runs.
+    File.remove(old);
+    return Result<void>.ok();
 }
 
 # Makes the newest installed toolchain `spec` names the default.

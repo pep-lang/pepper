@@ -5,9 +5,15 @@
 .DESCRIPTION
     Downloads pepper-<version>-windows-x64.zip (the newest release that has
     one, or -Version's), checks it against its .sha256, unpacks it into
-    %LOCALAPPDATA%\pepper (bin\ and runtime\), and adds its bin folder to the
-    user's PATH. Running it again replaces the install; -Uninstall removes it
-    and the PATH entry.
+    %LOCALAPPDATA%\pepper\toolchains\<version>, makes it the default, puts
+    the entry point pepper.exe and pep-install.exe in %LOCALAPPDATA%\pepper\bin,
+    and adds that folder to the user's PATH. Other toolchains stay installed
+    (pepper install manages them), and an install from before toolchains
+    (bin\ and runtime\ in %LOCALAPPDATA%\pepper) moves into toolchains\
+    first. A release from before toolchains, which has no pep-install,
+    installs into %LOCALAPPDATA%\pepper itself as it used to, unless the
+    home already holds toolchains. -Uninstall removes the home and the PATH
+    entry.
 
     Linking a program needs clang and the MSVC libraries and Windows SDK.
     When there is no clang it offers to install LLVM with Scoop, winget or
@@ -197,8 +203,8 @@ function Install-MsvcTools {
 
 function Uninstall-Pepper {
     if (Test-Path $Prefix) {
-        if (-not (Test-Path (Join-Path $Prefix 'bin\pep-build.exe'))) {
-            Fail "$Prefix does not look like a Pepper install (no bin\pep-build.exe); remove it yourself"
+        if (-not (Test-Path (Join-Path $Prefix 'bin\pep-build.exe')) -and -not (Test-Path (Join-Path $Prefix 'toolchains'))) {
+            Fail "$Prefix does not look like a Pepper install (no bin\pep-build.exe or toolchains); remove it yourself"
         }
         Remove-Item -Recurse -Force $Prefix
         Say "removed $Prefix"
@@ -210,6 +216,73 @@ function Uninstall-Pepper {
     if ($userPath -and (Test-OnPath $userPath $bin)) {
         Set-UserPath ((($userPath -split ';') | Where-Object { $_ -and $_.TrimEnd('\') -ine $bin.TrimEnd('\') }) -join ';')
         Say "removed $bin from your PATH"
+    }
+}
+
+# Installs the unpacked toolchain as $Prefix\toolchains\<version>, beside
+# any others, and makes it the default; the home's bin holds the entry
+# point and pep-install, which run the toolchains (see pep-install). A flat
+# install from before toolchains moves into toolchains\ first.
+function Install-Toolchain([string]$Unpacked, [string]$ToolchainVersion) {
+    # An archive named for no release (a `dev` build) is installed under
+    # the version its compiler reports, which pep-install can read.
+    if ($ToolchainVersion -notmatch '^\d+\.\d+\.\d+$') {
+        $reported = (& (Join-Path $Unpacked 'bin\pep-build.exe') --version 2>$null | Select-Object -First 1)
+        if ($reported -notmatch '^pep-build (\d+\.\d+\.\d+)$') { Fail "cannot tell the version of $Unpacked\bin\pep-build.exe" }
+        $ToolchainVersion = $Matches[1]
+    }
+    Move-FlatInstall
+    $toolchains = Join-Path $Prefix 'toolchains'
+    $bin = Join-Path $Prefix 'bin'
+    New-Item -ItemType Directory -Force -Path $toolchains, $bin | Out-Null
+    $destination = Join-Path $toolchains $ToolchainVersion
+    if (Test-Path $destination) { Remove-Item -Recurse -Force $destination }
+    Move-Item $Unpacked $destination
+    # A release from before toolchains has no entry point that runs them;
+    # the home keeps its own.
+    if (Test-Path (Join-Path $destination 'bin\pep-install.exe')) {
+        foreach ($tool in 'pepper.exe', 'pep-install.exe') {
+            $entryPoint = Join-Path $bin $tool
+            # A running program can be renamed but not overwritten.
+            if (Test-Path "$entryPoint.old") { Remove-Item -Force "$entryPoint.old" -ErrorAction SilentlyContinue }
+            if (Test-Path $entryPoint) { Move-Item -Force $entryPoint "$entryPoint.old" }
+            Copy-Item (Join-Path $destination "bin\$tool") $entryPoint
+            Remove-Item -Force "$entryPoint.old" -ErrorAction SilentlyContinue
+        }
+    }
+    Set-Content -Path (Join-Path $Prefix 'default-toolchain') -Value $ToolchainVersion
+}
+
+# Moves an install from before toolchains (bin\pep-build.exe and runtime\
+# in $Prefix itself) into toolchains\<its version>, so it stays installed.
+function Move-FlatInstall {
+    $compiler = Join-Path $Prefix 'bin\pep-build.exe'
+    if (-not (Test-Path $compiler)) { return }
+    $reported = (& $compiler --version 2>$null | Select-Object -First 1)
+    $old = if ($reported -match '^pep-build (\d+\.\d+\.\d+)$') { $Matches[1] } else { '' }
+    $destination = Join-Path $Prefix "toolchains\$old"
+    if (-not $old -or (Test-Path $destination)) {
+        foreach ($entry in 'bin', 'runtime', 'LICENSE.md') {
+            $path = Join-Path $Prefix $entry
+            if (Test-Path $path) { Remove-Item -Recurse -Force $path }
+        }
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $destination | Out-Null
+    foreach ($entry in 'bin', 'runtime', 'LICENSE.md') {
+        $path = Join-Path $Prefix $entry
+        if (Test-Path $path) { Move-Item $path (Join-Path $destination $entry) }
+    }
+    Say "moved the earlier install, Pepper $old, into $destination"
+}
+
+# Installs a release from before toolchains, which has no pep-install, as
+# releases did then: bin\ and runtime\ in $Prefix itself, replacing it.
+function Install-Flat([string]$Unpacked) {
+    foreach ($entry in Get-ChildItem $Unpacked) {
+        $destination = Join-Path $Prefix $entry.Name
+        if (Test-Path $destination) { Remove-Item -Recurse -Force $destination }
+        Move-Item $entry.FullName $destination
     }
 }
 
@@ -246,10 +319,11 @@ function Install-Pepper {
         $unpacked = Join-Path $work ([IO.Path]::GetFileNameWithoutExtension($release.Name))
         if (-not (Test-Path (Join-Path $unpacked 'bin\pep-build.exe'))) { Fail "$($release.Name) does not hold bin\pep-build.exe" }
         New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
-        foreach ($entry in Get-ChildItem $unpacked) {
-            $destination = Join-Path $Prefix $entry.Name
-            if (Test-Path $destination) { Remove-Item -Recurse -Force $destination }
-            Move-Item $entry.FullName $destination
+        $installedVersion = ([IO.Path]::GetFileNameWithoutExtension($release.Name)) -replace '^pepper-', '' -replace "-$Target$", ''
+        if ((Test-Path (Join-Path $unpacked 'bin\pep-install.exe')) -or (Test-Path (Join-Path $Prefix 'bin\pep-install.exe'))) {
+            Install-Toolchain $unpacked $installedVersion
+        } else {
+            Install-Flat $unpacked
         }
         # Files from the internet carry a mark that makes SmartScreen ask
         # before each one runs.

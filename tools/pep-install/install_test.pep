@@ -95,6 +95,7 @@ chooses_a_folders_toolchain_in_order() {
     File.write_text(project.join("pep.toml"), "[package]\nname = \"app\"\ntoolchain = 3\n").value();
     expect_true(toolchain.choose_toolchain(home, "", "", source).is_err());
 
+    expect_equal(installed_list(home, Optional<toolchain.Choice>.Value(by_default)), "0.3.2\n0.3.0\n0.2.1 (default)\n");
     var listed = installed_list(home, Optional<toolchain.Choice>.Value(pinned));
     expect_equal(listed, $"0.3.2 (in use here, {pinned.reason()})\n0.3.0\n0.2.1 (default)\n");
 }
@@ -194,6 +195,11 @@ toolchain_archive(version: String): u8[] {
     tar.append_directory(top).value();
     tar.append_file(top + "bin/pep-build" + toolchain.executable_suffix(), "compiler".bytes(), mode = 493).value();
     tar.append_file(top + "runtime/core.pep", "# runtime\n".bytes()).value();
+    for (var name in ["pepper", "pep-install"]) {
+        tar.append_file(
+            top + "bin/" + name + toolchain.executable_suffix(), $"{name} {version}".bytes(), mode = 493
+        ).value();
+    }
     tar.finish().value();
     gzip.finish().value();
     return packed.bytes;
@@ -290,9 +296,21 @@ installs_and_updates_from_the_releases() {
             expect_equal(available_list(home, releases), "0.3.1\n0.3.0 (installed)\n0.2.1 (installed)\n");
             expect_equal(home.default_version().value().to_string(), "0.2.1");
 
-            expect_equal(update_toolchain(home, releases).value(), "installed 0.3.1 and made it the default\n");
+            # update also brings the home's pepper and pep-install up to date.
+            var entry_point = home.bin.join("pepper" + toolchain.executable_suffix());
+            expect_equal(
+                update_toolchain(home, releases).value(),
+                $"installed 0.3.1 and made it the default\nupdated pepper and pep-install in {home.bin.to_string()}\n"
+            );
+            expect_equal(File.read_to_string(entry_point).value(), "pepper 0.3.1");
+            expect_false(Path(entry_point.to_string() + ".old").exists());
             expect_equal(
                 update_toolchain(home, releases).value(), "0.3.1, the newest release, is installed and the default\n"
+            );
+            File.write_text(home.bin.join("pep-install" + toolchain.executable_suffix()), "pep-install 0.2.1").value();
+            expect_equal(
+                update_toolchain(home, releases).value(),
+                $"0.3.1, the newest release, is installed and the default\nupdated pep-install in {home.bin.to_string()}\n"
             );
             expect_equal(home.installed().count, 3);
 

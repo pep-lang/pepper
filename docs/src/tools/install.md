@@ -22,8 +22,10 @@ The script:
 1. picks this machine's archive (`linux-x64`, `macos-arm64`, `macos-x64` or
    `windows-x64`) from the newest release that has one;
 2. downloads it and checks it against its `.sha256`;
-3. unpacks it into `~/.pepper` (`%LOCALAPPDATA%\pepper` on Windows), replacing
-   an earlier install there;
+3. unpacks it into `~/.pepper/toolchains/<version>` (`%LOCALAPPDATA%\pepper`
+   on Windows), makes it the default toolchain, and puts the entry point
+   `pepper` and `pep-install` in `~/.pepper/bin`; toolchains installed
+   before stay (see [Toolchains: pep-install](pep-install.md));
 4. adds that folder's `bin` to the `PATH`: in `~/.profile`, `~/.bashrc`,
    `~/.bash_profile` and `~/.zshrc` and fish's `conf.d`, or in the Windows
    user's `PATH`, which it asks about first;
@@ -40,12 +42,31 @@ Open a new terminal afterwards so the `PATH` change takes effect, then
 ```text
 ~/.pepper/
   bin/
-    pepper          the entry point (The pepper command)
-    pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
-    pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc
-  runtime/          the runtime, which pep-build finds from its own folder
-  LICENSE.md
+    pepper              the entry point (The pepper command), which runs a toolchain's tools
+    pep-install         installs and removes toolchains (pepper install)
+  toolchains/
+    0.4.0/
+      bin/
+        pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
+        pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc  pepper  pep-install
+      runtime/          the runtime, which pep-build finds from its own folder
+      LICENSE.md
+  default-toolchain     the default toolchain's version
 ```
+
+`pepper` runs the tools of the toolchain a folder uses: the default, unless
+`pepper +<version>`, `PEPPER_TOOLCHAIN` or the project's `pep.toml` names
+another (see [Toolchains](pepper.md#toolchains)). `pepper install add`,
+`use` and `update` install more and change the default; `update` also
+updates `pepper` and `pep-install` themselves.
+
+Running the script again installs the newest release beside the others
+and makes it the default. An install from before toolchains, with `bin`
+and `runtime` straight in `~/.pepper`, moves into `toolchains/<its
+version>` first, so it stays installed. A release from before toolchains
+(0.3.0 and earlier, which have no `pep-install`) installs the old way, into
+`~/.pepper` itself, unless the home already holds toolchains; then it goes
+into `toolchains/` like any other.
 
 On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
 18.10 and later); systems that use musl, such as Alpine, are not supported.
@@ -96,12 +117,12 @@ install.sh --uninstall [--prefix <dir>]
 | `install.sh` | `install.ps1` | What it does |
 | --- | --- | --- |
 | `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest |
-| `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it |
+| `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it. One not named for a release, such as a `dev` build, installs as the version its `pep-build --version` reports |
 | `--prefix <dir>` | `-Prefix <dir>` | Installs into `<dir>` instead of `~/.pepper` (`%LOCALAPPDATA%\pepper`) |
 | `-y`, `--yes` | `-Yes` | Installs missing prerequisites, and on Windows changes the `PATH`, without asking |
 | `--no-modify-path` | `-NoModifyPath` | Leaves the `PATH` alone |
 | `--no-prerequisites` | `-NoPrerequisites` | Neither checks for nor installs what linking needs |
-| `--uninstall` | `-Uninstall` | Removes the install and the `PATH` entries the script added |
+| `--uninstall` | `-Uninstall` | Removes the install, every toolchain in it, and the `PATH` entries the script added |
 | `-h`, `--help` | `Get-Help .\install.ps1` | Shows the usage |
 
 Piped into a shell, the script still takes options: `curl ... | sh -s -- --version 0.4.0`.

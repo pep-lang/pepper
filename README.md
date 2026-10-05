@@ -65,6 +65,12 @@ irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.
 
 Then open a new terminal and check it with `pepper --version`.
 
+Toolchains install side by side. Use `pepper install update` to move to the
+newest release, `pepper install add 0.3` and `pepper install use 0.3.0` to
+keep and pick others, and `toolchain = "0.3"` in a project's `pep.toml` to
+pin the one it builds with (see
+[Toolchains: pep-install](docs/src/tools/pep-install.md)).
+
 Common options (`install.sh` / `install.ps1`):
 
 - `--version <x.y.z>` / `-Version`: install that release instead of the newest.

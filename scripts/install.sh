@@ -8,9 +8,15 @@
 #
 # It downloads `pepper-<version>-<target>.tar.gz` for this machine (the
 # newest release that has one, or --version's), checks it against its
-# `.sha256`, unpacks it into ~/.pepper (bin/ and runtime/), and adds
-# ~/.pepper/bin to the PATH in the shell's startup files. Running it again
-# replaces the install; --uninstall removes it and those PATH lines.
+# `.sha256`, unpacks it into ~/.pepper/toolchains/<version>, makes it the
+# default, puts the entry point `pepper` and `pep-install` in ~/.pepper/bin,
+# and adds ~/.pepper/bin to the PATH in the shell's startup files. Other
+# toolchains stay installed (`pepper install` manages them), and an install
+# from before toolchains (bin/ and runtime/ in ~/.pepper) moves into
+# toolchains/ first. A release from before toolchains, which has no
+# pep-install, installs into ~/.pepper itself as it used to, unless the
+# home already holds toolchains. --uninstall removes the home and the PATH
+# lines.
 #
 # Linking a program needs a clang and the C library's development files.
 # When there is no clang it offers to install one with the system's
@@ -331,13 +337,69 @@ remove_from_path() {
 
 uninstall() {
   if [ -d "$prefix" ]; then
-    [ -f "$prefix/bin/pep-build" ] || die "$prefix does not look like a Pepper install (no bin/pep-build); remove it yourself"
+    [ -f "$prefix/bin/pep-build" ] || [ -d "$prefix/toolchains" ] ||
+      die "$prefix does not look like a Pepper install (no bin/pep-build or toolchains); remove it yourself"
     rm -rf "$prefix"
     say "removed $prefix"
   else
     say "nothing installed at $prefix"
   fi
   remove_from_path
+}
+
+# Installs the unpacked toolchain as $prefix/toolchains/$version, beside
+# any others, and makes it the default; the home's bin holds the entry
+# point and pep-install, which run the toolchains (see pep-install). A
+# flat install from before toolchains moves into toolchains/ first.
+install_toolchain() {
+  # An archive named for no release (a `dev` build) is installed under
+  # the version its compiler reports, which pep-install can read.
+  case "$version" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *)
+      version=$("$unpacked/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\)$/\1/p')
+      [ -n "$version" ] || die "cannot tell the version of $unpacked/bin/pep-build"
+      ;;
+  esac
+  migrate_flat
+  mkdir -p "$prefix/toolchains" "$prefix/bin"
+  rm -rf "$prefix/toolchains/$version"
+  mv "$unpacked" "$prefix/toolchains/$version"
+  # A release from before toolchains has no entry point that runs them;
+  # the home keeps its own.
+  if [ -f "$prefix/toolchains/$version/bin/pep-install" ]; then
+    for tool in pepper pep-install; do
+      cp "$prefix/toolchains/$version/bin/$tool" "$prefix/bin/$tool.new"
+      mv -f "$prefix/bin/$tool.new" "$prefix/bin/$tool"
+    done
+  fi
+  printf '%s\n' "$version" > "$prefix/default-toolchain"
+}
+
+# Moves an install from before toolchains (bin/pep-build and runtime/ in
+# $prefix itself) into toolchains/<its version>, so it stays installed.
+migrate_flat() {
+  [ -f "$prefix/bin/pep-build" ] || return 0
+  old_version=$("$prefix/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\)$/\1/p')
+  if [ -z "$old_version" ] || [ -e "$prefix/toolchains/$old_version" ]; then
+    rm -rf "$prefix/bin" "$prefix/runtime" "$prefix/LICENSE.md"
+    return 0
+  fi
+  mkdir -p "$prefix/toolchains/$old_version"
+  for entry in bin runtime LICENSE.md; do
+    [ -e "$prefix/$entry" ] && mv "$prefix/$entry" "$prefix/toolchains/$old_version/"
+  done
+  say "moved the earlier install, Pepper $old_version, into $prefix/toolchains/$old_version"
+}
+
+# Installs a release from before toolchains, which has no pep-install, as
+# releases did then: bin/ and runtime/ in $prefix itself, replacing it.
+install_flat() {
+  rm -rf "$prefix/bin" "$prefix/runtime"
+  for entry in "$unpacked"/*; do
+    rm -rf "$prefix/$(basename "$entry")"
+    mv "$entry" "$prefix/"
+  done
 }
 
 # Builds and runs a program with the new install, from an empty folder.
@@ -392,10 +454,12 @@ main() {
     cp "$local_archive" "$work/$archive"
     cp "$local_archive.sha256" "$work/$archive.sha256"
     version=${archive#pepper-}
-    say "installing Pepper ${version%-"$target".tar.gz} ($target) into $prefix"
+    version=${version%-"$target".tar.gz}
+    say "installing Pepper $version ($target) into $prefix"
   else
     find_release
-    say "installing Pepper ${tag#v} ($target) into $prefix"
+    version=${tag#v}
+    say "installing Pepper $version ($target) into $prefix"
     fetch_asset "$archive_url" "$work/$archive" || die "cannot download $archive"
     fetch_asset "$checksum_url" "$work/$archive.sha256" || die "cannot download $archive.sha256"
   fi
@@ -407,11 +471,11 @@ main() {
   unpacked="$work/${archive%.tar.gz}"
   [ -f "$unpacked/bin/pep-build" ] || die "$archive does not hold bin/pep-build"
   mkdir -p "$prefix"
-  rm -rf "$prefix/bin" "$prefix/runtime"
-  for entry in "$unpacked"/*; do
-    rm -rf "$prefix/$(basename "$entry")"
-    mv "$entry" "$prefix/"
-  done
+  if [ -f "$unpacked/bin/pep-install" ] || [ -f "$prefix/bin/pep-install" ]; then
+    install_toolchain
+  else
+    install_flat
+  fi
   if [ "$target" != "${target#macos}" ]; then
     # Unsigned binaries: a download's quarantine flag makes Gatekeeper
     # refuse to run them. curl sets none, but a copy made elsewhere may.
