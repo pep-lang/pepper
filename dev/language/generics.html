@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7e25b7a7.js";
+            window.path_to_searchindex_js = "../searchindex-f577a943.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -834,10 +834,11 @@ content-based hash, while <code>hash&lt;T&gt;</code> hashes other structs by ide
 struct keyed by its content overrides <code>hash&lt;T&gt;</code> the same way (see
 <a href="hashing.html">Hashing and equality</a>).</p>
 <p>An override can name a built-in type (<code>int</code>, <code>bool</code>, <code>String</code>, and so on) or
-a struct, such as <code>describe&lt;Point&gt;</code>. It may be declared in any file that can
-see both the generic function and the struct: here <code>main.pep</code> overrides
-<code>shapes.pep</code>’s <code>describe&lt;T&gt;</code> for its own <code>Point</code>, and the generic code in
-<code>shapes.pep</code> uses the override too:</p>
+a struct, such as <code>describe&lt;Point&gt;</code>. It must be declared next to the generic
+function or next to one of its type arguments: in the file that declares
+either, or in another file of the same <a href="modules.html">module</a>. Here
+<code>main.pep</code> overrides <code>shapes.pep</code>’s <code>describe&lt;T&gt;</code> for its own <code>Point</code>, and
+the generic code in <code>shapes.pep</code> uses the override too:</p>
 <pre><code class="language-pepper"># A generic function, and code that calls it for any type.
 export describe&lt;T&gt;(v: T): int {
     return 0;
@@ -886,6 +887,18 @@ same parameters, or the generic’s type parameters all name structs the file
 can see without a generic of that name to override: either is an error,
 since it usually means an override whose type argument the file cannot see,
 or of a generic the file’s own function of that name hides.</p>
+<p>This placement rule (Rust calls it the orphan rule) means a file that
+can see both the generic and the type can also see every override that
+applies to them, so the compiler can check each file on its own. An
+override that neither of them is declared beside is an error:</p>
+<pre><code class="language-text">main.pep:2:1: error: cannot override 'hash' for 'int' here: an override must be in the file or module that declares 'hash' or one of its type arguments
+    2 | hash&lt;int&gt;(value: int): ulong {
+      | ^~~~
+</code></pre>
+<p>The standard library’s generics, such as <code>hash&lt;T&gt;</code> and <code>to_string&lt;T&gt;</code>,
+can be overridden for your own structs, but not for built-in types: the
+standard library declares both. Wrap the built-in type in a struct of your
+own instead.</p>
 <p>To add methods to a generic struct from outside its declaration, use an
 <a href="traits-and-extensions.html#extending-generic-structs">extension</a>.</p>
 

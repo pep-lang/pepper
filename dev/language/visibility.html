@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7e25b7a7.js";
+            window.path_to_searchindex_js = "../searchindex-f577a943.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -668,8 +668,9 @@ one file (<code>override 'hash&lt;int&gt;' is also declared in b.pep</code>), an
 one the runtime already provides, such as <code>hash&lt;String&gt;</code>, is also an error.
 An override must be for a generic function you can see: overriding another
 file’s private generic function reports that it is private. An override
-may be for a struct, such as <code>hash&lt;Point&gt;</code> (see
-<a href="generics.html">Generics</a>).</li>
+may be for a struct, such as <code>hash&lt;Point&gt;</code>, and must be declared in the
+file or module that declares the generic or one of its type arguments
+(see <a href="generics.html#overriding-a-generic-function-for-one-type">Generics</a>).</li>
 <li><strong>Declarations that a <code>[Target(...)]</code> attribute drops</strong> for the platform
 being compiled (see <a href="platform-selection.html">Platform selection</a>) are never
 compiled. This is why the first <code>lib.pep</code> above can declare <code>platform_name</code>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7e25b7a7.js";
+            window.path_to_searchindex_js = "../searchindex-f577a943.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -386,7 +386,8 @@ both miss it. Remove it, change it, then insert it again.</p>
 <li>
 <p><strong>One override per program.</strong> <code>hash&lt;Point&gt;</code> replaces <code>hash&lt;T&gt;</code> for
 <code>Point</code> everywhere, including inside <code>HashMap</code>, so it may be declared in
-only one file. Declare it next to the struct.</p>
+only one file, and that file must declare <code>Point</code> or be in its module
+(see <a href="generics.html#overriding-a-generic-function-for-one-type">overriding a generic function</a>).</p>
 </li>
 <li>
 <p>The hash is not keyed, so it does not resist keys chosen by an attacker to
