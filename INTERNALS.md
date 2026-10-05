@@ -1394,7 +1394,9 @@ How the language lowers:
   function's address; a static method is `Owner.name`), `Address` (FNV-folds POD values),
   `AtomicLoad` (acquire), `AtomicStore` (release, via `xchg`),
   `AtomicCmpXchg` (acq_rel/monotonic; floats are bitcast), `AtomicFetch`
-  (`atomicrmw` acq_rel), and `ConstructAt` (`__construct_at(p[i], v)`, an
+  (`atomicrmw` acq_rel); their operands are converted to a numeric `T` as
+  arguments to a `T` parameter are (`atomic_operand`), so a literal fills
+  the whole slot; and `ConstructAt` (`__construct_at(p[i], v)`, an
   element store into a slot the runtime knows is empty:
   `codegen_assignment` with `construct`, which acquires through
   `construct_refcount_ops` and never loads or releases the old occupant).

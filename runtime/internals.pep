@@ -384,10 +384,7 @@ _pep_small_new_state(): __ptr<ulong> {
 
 [Unsafe("overflow")]
 _pep_small_lock(lock: __ptr<ulong>) {
-    # Typed values: literals compare and store only 4 bytes (#639).
-    ulong unlocked = 0;
-    ulong locked = 1;
-    while (!__atomic_cmpxchg<ulong>(lock, unlocked, locked)) {
+    while (!__atomic_cmpxchg<ulong>(lock, 0, 1)) {
         ulong spins = 0;
         while (__atomic_load<ulong>(lock) != 0) {
             spins = spins + 1;
@@ -400,9 +397,7 @@ _pep_small_lock(lock: __ptr<ulong>) {
 
 [Unsafe("overflow")]
 _pep_small_unlock(lock: __ptr<ulong>) {
-    # A typed 0: a literal stores only 4 bytes (#639).
-    ulong unlocked = 0;
-    __atomic_store<ulong>(lock, unlocked);
+    __atomic_store<ulong>(lock, 0);
 }
 
 # Adds `delta` to a count only its own thread changes: a plain load and
@@ -450,8 +445,7 @@ _pep_small_take_remote(header: __ptr<ulong>): bool {
         if ((head & ~_SMALL_NOTIFY) == 0) {
             return false;
         }
-        ulong empty = 0;
-        if (__atomic_cmpxchg<ulong>(remote, head, empty)) {
+        if (__atomic_cmpxchg<ulong>(remote, head, 0)) {
             header[_SMALL_HEADER_FREE] = head & ~_SMALL_NOTIFY;
             return true;
         }
@@ -472,8 +466,7 @@ _pep_small_ask_to_notify(header: __ptr<ulong>): bool {
         if (head != 0) {
             return false;
         }
-        ulong empty = 0;
-        if (__atomic_cmpxchg<ulong>(remote, empty, _SMALL_NOTIFY)) {
+        if (__atomic_cmpxchg<ulong>(remote, 0, _SMALL_NOTIFY)) {
             return true;
         }
     }
@@ -779,9 +772,7 @@ _pep_small_pool(span: ulong) {
     __ptr<ulong> header = unsafe_cast<__ptr<ulong>>(span);
     __ptr<ulong> central = _pep_small_state + _SMALL_CENTRAL + header[_SMALL_HEADER_CLASS] * _SMALL_CENTRAL_WORDS;
     header[_SMALL_HEADER_STATE] = _SMALL_STATE_POOLED;
-    # A typed 0: a literal stores only 4 bytes (#639).
-    ulong none = 0;
-    __atomic_store<ulong>(header + _SMALL_HEADER_OWNER, none);
+    __atomic_store<ulong>(header + _SMALL_HEADER_OWNER, 0);
     _pep_small_lock(central);
     header[_SMALL_HEADER_NEXT] = central[1];
     central[1] = span;

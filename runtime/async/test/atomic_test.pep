@@ -212,3 +212,23 @@ contention() {
     expect_equal(wins.load(), steps);
     expect_equal(swapped.load(), steps);
 }
+
+# A literal operand of an `__atomic_*<T>` intrinsic takes the type `T`, as an
+# argument to a `T` parameter does, so it writes and compares all 8 bytes of
+# a `ulong` (#639).
+[Test]
+intrinsic_literals_take_the_type_argument() {
+    __ptr<ulong> p = _pep_malloc(8);
+    p[0] = 0xFFFFFFFFFFFFFFFF;
+    __atomic_store<ulong>(p, 0);
+    expect_equal(p[0], 0);
+    var head = __atomic_load<ulong>(p);
+    expect_true(__atomic_cmpxchg<ulong>(p, head, 0x100000000));
+    expect_equal(p[0], 0x100000000);
+    expect_false(__atomic_cmpxchg<ulong>(p, 0, 1));
+    expect_true(__atomic_cmpxchg<ulong>(p, 0x100000000, 0xFFFFFFFF00000000));
+    expect_equal(p[0], 0xFFFFFFFF00000000);
+    expect_equal(__atomic_fetch_add<ulong>(p, 1), 0xFFFFFFFF00000000);
+    expect_equal(p[0], 0xFFFFFFFF00000001);
+    _pep_free(p);
+}

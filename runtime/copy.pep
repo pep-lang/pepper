@@ -99,8 +99,7 @@ _copy_key(): ulong {
     if (key != 0) {
         return key - 1;
     }
-    ulong none = 0;
-    __atomic_cmpxchg<ulong>(_copy_key_cell, none, _copy_key_create() + 1);
+    __atomic_cmpxchg<ulong>(_copy_key_cell, 0, _copy_key_create() + 1);
     return __atomic_load<ulong>(_copy_key_cell) - 1;
 }
 

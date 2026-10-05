@@ -3409,6 +3409,18 @@ impl<'ctx> CodeGenerator<'ctx> {
         }
     }
 
+    /// An operand of an `__atomic_*<T>` intrinsic (the stored, expected,
+    /// desired or added value) converted to a numeric `T`, as an argument to
+    /// a `T` parameter is: a literal is an `int` or `double` until then, so
+    /// `__atomic_store<ulong>(p, 0)` would store only 4 bytes (#639).
+    fn atomic_operand(&self, expr: &Expression, value: BasicValueEnum<'ctx>, ty_name: &str) -> BasicValueEnum<'ctx> {
+        if !llvm_ops::is_numeric_type(ty_name) || !matches!(value, BasicValueEnum::IntValue(_) | BasicValueEnum::FloatValue(_)) {
+            return value;
+        }
+        let source = self.numeric_source_name(expr, &value);
+        llvm_ops::coerce(self.context, &self.builder, value, &source, ty_name)
+    }
+
     /// Sema type string of an expression's value, as declared (pointer
     /// The pointer an index expression subscripts: the buffer pointer, or
     /// the struct reference whose `_data` it indexes. Anything else (`a[0][0]`
@@ -4846,6 +4858,7 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // slot has taken over ownership (the store acquires it below).
                 let val_temp = self.owned_temp_type(arg_val);
                 let val = self.codegen_expr(arg_val)?;
+                let val = self.atomic_operand(arg_val, val, &ty_name);
                 if is_struct {
                     self.acquire_ref(&ty_name, val)?;
                     let i64 = self.context.i64_type();
@@ -4886,8 +4899,10 @@ impl<'ctx> CodeGenerator<'ctx> {
                     BasicValueEnum::PointerValue(p) => p,
                     other => return Err(format!("__atomic_cmpxchg expects a pointer, got {:?}", other)),
                 };
-                let mut expected = self.codegen_expr(arg_expected)?;
-                let mut desired = self.codegen_expr(arg_desired)?;
+                let expected = self.codegen_expr(arg_expected)?;
+                let mut expected = self.atomic_operand(arg_expected, expected, &ty_name);
+                let desired = self.codegen_expr(arg_desired)?;
+                let mut desired = self.atomic_operand(arg_desired, desired, &ty_name);
                 // cmpxchg only accepts integers and pointers: bitcast floats.
                 match stored {
                     BasicTypeEnum::FloatType(ft) => {
@@ -4932,51 +4947,41 @@ impl<'ctx> CodeGenerator<'ctx> {
                 // runtime restricts fetch_* to numeric types), so no ref work:
                 // the old value is a plain integer, not an owned reference.
                 let ty_name = ty.to_string();
-                let stored = match self.types.get(&ty_name) {
-                    Some(BasicTypeEnum::IntType(it)) => it,
-                    _ => {
-                        // Non-integer T: the fetch operations are undefined
-                        // (as in C++'s std::atomic<T>::fetch_add for a
-                        // non-arithmetic T). Emit an abort — unreachable at
-                        // runtime; the constant return keeps the IR valid.
-                        // It has T's own LLVM type (a null `ptr` for a
-                        // pointer or struct T), since the caller stores it
-                        // into a T-typed slot.
-                        let dummy = match self.types.get(&ty_name) {
-                            Some(BasicTypeEnum::StructType(_)) | Some(BasicTypeEnum::PointerType(_)) => {
-                                BasicValueEnum::PointerValue(
-                                    self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
-                                )
-                            }
-                            Some(BasicTypeEnum::FloatType(ft)) => {
-                                BasicValueEnum::FloatValue(ft.const_zero())
-                            }
-                            Some(BasicTypeEnum::ArrayType(at)) => {
-                                BasicValueEnum::ArrayValue(at.const_zero())
-                            }
-                            _ => BasicValueEnum::IntValue(self.context.i64_type().const_zero()),
-                        };
-                        self.call_function("abort", vec![])?;
-                        return Ok(dummy);
-                    }
-                };
+                if !matches!(self.types.get(&ty_name), Some(BasicTypeEnum::IntType(_))) {
+                    // Non-integer T: the fetch operations are undefined
+                    // (as in C++'s std::atomic<T>::fetch_add for a
+                    // non-arithmetic T). Emit an abort — unreachable at
+                    // runtime; the constant return keeps the IR valid.
+                    // It has T's own LLVM type (a null `ptr` for a
+                    // pointer or struct T), since the caller stores it
+                    // into a T-typed slot.
+                    let dummy = match self.types.get(&ty_name) {
+                        Some(BasicTypeEnum::StructType(_)) | Some(BasicTypeEnum::PointerType(_)) => {
+                            BasicValueEnum::PointerValue(
+                                self.context.ptr_type(inkwell::AddressSpace::default()).const_null(),
+                            )
+                        }
+                        Some(BasicTypeEnum::FloatType(ft)) => {
+                            BasicValueEnum::FloatValue(ft.const_zero())
+                        }
+                        Some(BasicTypeEnum::ArrayType(at)) => {
+                            BasicValueEnum::ArrayValue(at.const_zero())
+                        }
+                        _ => BasicValueEnum::IntValue(self.context.i64_type().const_zero()),
+                    };
+                    self.call_function("abort", vec![])?;
+                    return Ok(dummy);
+                }
                 let ptr = match self.codegen_expr(arg_ptr)? {
                     BasicValueEnum::PointerValue(p) => p,
                     other => return Err(format!("__atomic_fetch expects a pointer, got {:?}", other)),
                 };
                 // Owned-rvalue argument: released once the RMW has consumed it.
                 let val_temp = self.owned_temp_type(arg_val);
-                let val = match self.codegen_expr(arg_val)? {
+                let val = self.codegen_expr(arg_val)?;
+                let val = match self.atomic_operand(arg_val, val, &ty_name) {
                     BasicValueEnum::IntValue(v) => v,
                     other => return Err(format!("__atomic_fetch expects an integer, got {:?}", other)),
-                };
-                // Match the slot's width (i32 int vs i64 long operands).
-                let val = if val.get_type() != stored {
-                    self.builder
-                        .build_int_cast(val, stored, "fetchv")
-                        .map_err(|e| e.to_string())?
-                } else {
-                    val
                 };
                 let rmw_op = match op {
                     pepper_sema::model::AtomicFetchOp::Add => inkwell::AtomicRMWBinOp::Add,
