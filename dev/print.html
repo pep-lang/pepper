@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6cc3becd.js";
+            window.path_to_searchindex_js = "searchindex-21cfd555.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -8581,6 +8581,40 @@ thread that allocated, take no lock; a block freed on another thread goes
 back to its span with one atomic step. Larger blocks come from the C
 library’s <code>calloc</code> and go back with <code>free</code>. A small block’s size is
 rounded up to its class, so a 40-byte object takes 48 bytes.</p>
+<p>An empty <code>Array</code> allocates nothing. <code>Array&lt;T&gt;()</code> makes no object until the
+Array is written (<code>append</code>, <code>insert</code>, <code>reserve</code>, …) or shared (assigned to
+a second variable, stored in a field or element, passed or returned):
+reading it (<code>count</code>, <code>is_empty</code>, <code>contains</code>, a <code>for</code> loop over it)
+allocates nothing. The first write or share allocates the object, so every
+name for the Array still sees the same appends:</p>
+<pre><code class="language-pepper">struct Node {
+    String name;
+    # Most nodes never get children, and an empty Array costs nothing.
+    Array&lt;Node&gt; children = Array&lt;Node&gt;();
+    construct(name: String) {
+        this.name = name;
+    }
+}
+
+main(): int {
+    var a = Array&lt;int&gt;();           # no allocation
+    assert(a.count == 0 &amp;&amp; a.is_empty, "reading allocates nothing");
+    for (var x in a) {
+        assert(false, "an empty Array has no elements");
+    }
+    var b = a;                      # allocates the Array: a and b share it
+    b.append(1);                    # allocates its buffer
+    assert(a.count == 1, "both names see the append");
+
+    var leaf = Node("leaf");
+    var root = Node("root");
+    root.children.append(leaf);
+    assert(leaf.children.is_empty &amp;&amp; root.children.count == 1, "only root's children were allocated");
+    return 0;
+}
+</code></pre>
+<p>Structs that hold an Array which usually stays empty (a tree node’s
+children, a list of comments) cost nothing extra for it.</p>
 <p>The environment variable <code>PEPPER_SMALL_BLOCK_LIMIT</code>, read when the program
 starts, sets the largest size the small block allocator serves, in bytes,
 up to 4096 (a larger value counts as 4096). <code>0</code> turns it off, and then
@@ -29417,7 +29451,7 @@ reached.</p>
 <h1 id="array"><a class="header" href="#array">Array</a></h1>
 <p>Source: <code>runtime/array.pep</code></p>
 <h2 id="array-1"><a class="header" href="#array-1">Array</a></h2>
-<pre><code class="language-pepper">struct Array&lt;T&gt;
+<pre><code class="language-pepper">[__Lazy] struct Array&lt;T&gt;
 </code></pre>
 <p>A growable, contiguous, zero-indexed sequence of <code>T</code> values.</p>
 <p>Elements live in one heap buffer that doubles when full (starting at 4
@@ -29431,6 +29465,12 @@ reference counts.</p>
 <p><code>Array</code> is itself a struct, so assigning it or passing it to a function
 shares the same Array rather than copying its elements; use <code>clone()</code> for
 an independent copy.</p>
+<p>An empty Array allocates nothing: <code>Array&lt;T&gt;()</code> makes no object until the
+Array is first written (<code>append</code>, <code>insert</code>, <code>reserve</code>, …) or shared
+(assigned, stored, passed or returned), and reading it (<code>count</code>,
+<code>is_empty</code>, <code>capacity</code>, <code>find</code>, <code>contains</code>, iterating) allocates nothing.
+Sharing allocates first, so every name for an Array sees the same
+elements.</p>
 <p>An Array is <code>Iterable&lt;T&gt;</code>: <code>for (var x in a)</code> visits each element in index
 order. Every mutating operation (an element store through <code>[]</code>, <code>append</code>,
 <code>insert</code>, <code>remove_at</code>, <code>pop</code>, <code>clear</code>, a shrinking <code>truncate</code>, <code>swap</code>, and
@@ -29477,8 +29517,9 @@ must be reallocated.</p>
 </code></pre>
 <p>Creates an empty Array, optionally preallocating room for <code>capacity</code>
 elements.</p>
-<p>With the default <code>capacity</code> of 0, nothing is allocated until the first
-element is added. Preallocating avoids the reallocations <code>append</code>
+<p>With the default <code>capacity</code> of 0, nothing is allocated, not even the
+Array itself, until the Array is first written or shared (see <code>Array</code>).
+Preallocating avoids the reallocations <code>append</code>
 would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Parameters</strong></p>
 <ul>
@@ -29489,14 +29530,15 @@ would otherwise perform while the Array grows to a known size.</p>
 </code></pre>
 <h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
 <h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
-<pre><code class="language-pepper">iterate(): ArrayIterator&lt;T&gt;
+<pre><code class="language-pepper">[__Reads] iterate(): ArrayIterator&lt;T&gt;
 </code></pre>
 <p>Returns an iterator over the elements in index order; this is what
 <code>for (var x in array)</code> calls (the <code>Iterable&lt;T&gt;</code> protocol).</p>
 <p>The iterator holds a reference to the Array, so iterating a temporary
 keeps it alive for the whole loop. Modifying the Array while the
 iterator is in use makes the iterator’s next <code>next()</code> or <code>current()</code>
-panic.</p>
+panic, except when the Array was empty when the iterator was made:
+the iterator then sees no elements and ends.</p>
 <p><strong>Returns</strong></p>
 <ul>
 <li>a new iterator positioned before the first element</li>
@@ -29540,7 +29582,7 @@ Does not change the elements or invalidate iterators.</p>
 <li>if the buffer must grow while an I/O operation in a task is using it</li>
 </ul>
 <h4 id="operator--29"><a class="header" href="#operator--29">operator []</a></h4>
-<pre><code class="language-pepper">[](idx: ulong): T
+<pre><code class="language-pepper">[__Reads] [](idx: ulong): T
 </code></pre>
 <p>Returns the element at <code>idx</code>; this is the indexer read <code>a[idx]</code>.</p>
 <p>Runs in O(1). For a struct <code>T</code> the result is the stored reference
@@ -29676,7 +29718,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <pre><code class="language-pepper">var top = a.pop();
 </code></pre>
 <h4 id="first"><a class="header" href="#first">first</a></h4>
-<pre><code class="language-pepper">first(): T
+<pre><code class="language-pepper">[__Reads] first(): T
 </code></pre>
 <p>Returns the first element without removing it; the same as <code>a[0]</code>.</p>
 <p><strong>Returns</strong></p>
@@ -29688,7 +29730,7 @@ the caller. The capacity is unchanged. Invalidates running iterators.</p>
 <li>if the Array is empty (“Array first on empty Array”)</li>
 </ul>
 <h4 id="last"><a class="header" href="#last">last</a></h4>
-<pre><code class="language-pepper">last(): T
+<pre><code class="language-pepper">[__Reads] last(): T
 </code></pre>
 <p>Returns the last element without removing it; the same as
 <code>a[a.count - 1]</code>.</p>
@@ -29787,7 +29829,7 @@ numbers.append(1);
 numbers.sort((a, b) =&gt; b - a);        # descending: [3, 1]
 </code></pre>
 <h4 id="find-2"><a class="header" href="#find-2">find</a></h4>
-<pre><code class="language-pepper">find(item: T): ulong?
+<pre><code class="language-pepper">[__Reads] find(item: T): ulong?
 </code></pre>
 <p>Returns the position of the first element equal to <code>item</code>, or none
 when no element matches.</p>
@@ -29812,7 +29854,7 @@ var i = a.find(9);         # i.value() == 1
 var missing = a.find(7);   # missing.is_empty() == true
 </code></pre>
 <h4 id="contains-3"><a class="header" href="#contains-3">contains</a></h4>
-<pre><code class="language-pepper">contains(item: T): bool
+<pre><code class="language-pepper">[__Reads] contains(item: T): bool
 </code></pre>
 <p>Reports whether any element equals <code>item</code>, compared as <code>find</code> does.</p>
 <p>Runs in O(count).</p>
@@ -29846,7 +29888,7 @@ Array’s running iterators when <code>rhs</code> is not empty.</p>
 <li><code>+=</code></li>
 </ul>
 <h4 id="clone-1"><a class="header" href="#clone-1">clone</a></h4>
-<pre><code class="language-pepper">clone(): Array&lt;T&gt;
+<pre><code class="language-pepper">[__Reads] clone(): Array&lt;T&gt;
 </code></pre>
 <p>Returns a new Array holding the same elements in the same order.</p>
 <p>Runs in O(count). The copy is shallow: for a struct <code>T</code> both Arrays
@@ -29882,7 +29924,7 @@ names.append("ada");
 var copied = copy(names);   # calls this method
 </code></pre>
 <h4 id="operator--2-3"><a class="header" href="#operator--2-3">operator ==</a></h4>
-<pre><code class="language-pepper">==(rhs: Array&lt;T&gt;): bool
+<pre><code class="language-pepper">[__Reads] ==(rhs: Array&lt;T&gt;): bool
 </code></pre>
 <p>Reports whether both Arrays have the same count and pairwise equal
 elements, compared with <code>==</code> as <code>find</code> does.</p>
@@ -29897,7 +29939,7 @@ equal. <code>capacity</code> is not compared.</p>
 <li>true when the Arrays are element-wise equal</li>
 </ul>
 <h4 id="operator--3-2"><a class="header" href="#operator--3-2">operator !=</a></h4>
-<pre><code class="language-pepper">!=(rhs: Array&lt;T&gt;): bool
+<pre><code class="language-pepper">[__Reads] !=(rhs: Array&lt;T&gt;): bool
 </code></pre>
 <p>Reports whether the Arrays differ in count or in any element; the
 negation of <code>==</code>.</p>
@@ -29931,7 +29973,7 @@ same as <code>append_all</code>.</p>
 <pre><code class="language-pepper">a += b;   # a now ends with b's elements
 </code></pre>
 <h4 id="operator--5-1"><a class="header" href="#operator--5-1">operator +</a></h4>
-<pre><code class="language-pepper">+(rhs: Array&lt;T&gt;): Array&lt;T&gt;
+<pre><code class="language-pepper">[__Reads] +(rhs: Array&lt;T&gt;): Array&lt;T&gt;
 </code></pre>
 <p>Returns a new Array holding this Array’s elements followed by those of
 <code>rhs</code> (<code>a + b</code>).</p>
@@ -29956,7 +29998,8 @@ same as <code>append_all</code>.</p>
 <p>Holds a reference to the Array, so iterating a temporary keeps it alive for
 the whole loop. The iterator is fail-fast: if the Array is modified after
 the iterator was created (see <code>Array</code> for which operations count), its next
-<code>next()</code> or <code>current()</code> panics instead of skipping or repeating elements.</p>
+<code>next()</code> or <code>current()</code> panics instead of skipping or repeating elements
+(an iterator over an Array that was empty when it was made just ends).</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the element type of the source Array</li>
@@ -46332,7 +46375,8 @@ property types follow the same rules, so structs nest.</p>
 <p>A struct property takes its key from <code>[Name("key")]</code> when it has one,
 and is left out when marked <code>[Ignore]</code> (the attributes of the <code>serialize</code>
 module, which <code>json</code> exports). A property of a struct type that holds no
-object (a struct field never assigned) is written as <code>null</code>.</p>
+object (a struct field never assigned) is written as <code>null</code>. An empty
+<code>Array</code>, even one never assigned, is written as <code>[]</code>.</p>
 <p>The conversion is generated while compiling, by a <code>static</code> block per
 type. A type it cannot convert, such as a <code>Result</code> or an <code>io.File</code>, is a
 compile error naming the property:

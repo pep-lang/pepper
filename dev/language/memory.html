@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6cc3becd.js";
+            window.path_to_searchindex_js = "../searchindex-21cfd555.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -723,6 +723,40 @@ thread that allocated, take no lock; a block freed on another thread goes
 back to its span with one atomic step. Larger blocks come from the C
 library’s <code>calloc</code> and go back with <code>free</code>. A small block’s size is
 rounded up to its class, so a 40-byte object takes 48 bytes.</p>
+<p>An empty <code>Array</code> allocates nothing. <code>Array&lt;T&gt;()</code> makes no object until the
+Array is written (<code>append</code>, <code>insert</code>, <code>reserve</code>, …) or shared (assigned to
+a second variable, stored in a field or element, passed or returned):
+reading it (<code>count</code>, <code>is_empty</code>, <code>contains</code>, a <code>for</code> loop over it)
+allocates nothing. The first write or share allocates the object, so every
+name for the Array still sees the same appends:</p>
+<pre><code class="language-pepper">struct Node {
+    String name;
+    # Most nodes never get children, and an empty Array costs nothing.
+    Array&lt;Node&gt; children = Array&lt;Node&gt;();
+    construct(name: String) {
+        this.name = name;
+    }
+}
+
+main(): int {
+    var a = Array&lt;int&gt;();           # no allocation
+    assert(a.count == 0 &amp;&amp; a.is_empty, "reading allocates nothing");
+    for (var x in a) {
+        assert(false, "an empty Array has no elements");
+    }
+    var b = a;                      # allocates the Array: a and b share it
+    b.append(1);                    # allocates its buffer
+    assert(a.count == 1, "both names see the append");
+
+    var leaf = Node("leaf");
+    var root = Node("root");
+    root.children.append(leaf);
+    assert(leaf.children.is_empty &amp;&amp; root.children.count == 1, "only root's children were allocated");
+    return 0;
+}
+</code></pre>
+<p>Structs that hold an Array which usually stays empty (a tree node’s
+children, a list of comments) cost nothing extra for it.</p>
 <p>The environment variable <code>PEPPER_SMALL_BLOCK_LIMIT</code>, read when the program
 starts, sets the largest size the small block allocator serves, in bytes,
 up to 4096 (a larger value counts as 4096). <code>0</code> turns it off, and then

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6cc3becd.js";
+            window.path_to_searchindex_js = "../searchindex-21cfd555.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -213,7 +213,8 @@ property types follow the same rules, so structs nest.</p>
 <p>A struct property takes its key from <code>[Name("key")]</code> when it has one,
 and is left out when marked <code>[Ignore]</code> (the attributes of the <code>serialize</code>
 module, which <code>json</code> exports). A property of a struct type that holds no
-object (a struct field never assigned) is written as <code>null</code>.</p>
+object (a struct field never assigned) is written as <code>null</code>. An empty
+<code>Array</code>, even one never assigned, is written as <code>[]</code>.</p>
 <p>The conversion is generated while compiling, by a <code>static</code> block per
 type. A type it cannot convert, such as a <code>Result</code> or an <code>io.File</code>, is a
 compile error naming the property:
