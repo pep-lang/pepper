@@ -7,6 +7,7 @@ import compiler.parse;
 import "analysis";
 import "completion";
 import "edits";
+import "hints";
 import "navigate";
 import "symbols";
 
@@ -318,4 +319,64 @@ completion_in_an_argument_list_offers_parameter_names() {
     expect_equal(names(text, at(text, "Window()", 7)), "width, height");
     # Not inside an argument.
     expect_equal(names(resized, at(resized, "640", 2)), "");
+}
+
+# A struct `[Implicit]` constructors convert to, and values converted.
+const CONVERTED = "struct Name {\n    var text: String;\n    [Implicit]\n    construct(text: String = \"\") { this.text = text; }\n}\n\ngreet(n: Name): String { return n.text; }\n\nmain(): int {\n    var who = \"ada\";\n    greet(who);\n    greet(\"bob\");\n    var typed: Name = who;\n    var plain = \"stays a String\";\n    return 0;\n}\n";
+
+# The hints of `document` from `ready`, each as `line:character label`.
+hint_list(document: lsp.TextDocument, ready: Analysis, conversions: bool, parameters: bool): String {
+    var all = lsp.Range(lsp.Position(0, 0), lsp.Position(1000, 0));
+    var out = Array<String>();
+    for (var hint in inlay_hints(document, Optional<Analysis>.Value(ready), all, conversions, parameters)) {
+        out.append($"{hint.position.line}:{hint.position.character} {hint.label}");
+    }
+    return ", ".join(out);
+}
+
+[Test]
+hover_and_inlay_hints_show_implicit_conversions() {
+    var text = CONVERTED;
+    var uri = temp_file("converted.pep", text);
+    var context = analyzed(uri, text);
+    var note = "Converted to `Name` by its `[Implicit]` constructor from `String`.";
+    expect_true(hover_text(context, at(text, "greet(who)", 7)).contains(note));
+    expect_true(hover_text(context, at(text, "\"bob\"", 2)).contains(note));
+    expect_true(hover_text(context, at(text, "= who", 3)).contains(note));
+    expect_false(hover_text(context, at(text, "\"stays", 2)).contains("Converted"));
+
+    var ready = analyze(uri, text);
+    var document = lsp.TextDocument(uri, text);
+    expect_equal(
+        hint_list(document, ready, true, false), "10:10 Name(, 10:13 ), 11:10 Name(, 11:15 ), 12:22 Name(, 12:25 )"
+    );
+    # A line above moves them down.
+    var edited = "# A note.\n" + text;
+    expect_equal(
+        hint_list(lsp.TextDocument(uri, edited), ready, true, false),
+        "11:10 Name(, 11:13 ), 12:10 Name(, 12:15 ), 13:22 Name(, 13:25 )"
+    );
+    # An edit on a hint's line drops it.
+    edited = text.replace("greet(\"bob\");", "greet(\"bobby\");");
+    expect_equal(
+        hint_list(lsp.TextDocument(uri, edited), ready, true, false), "10:10 Name(, 10:13 ), 12:22 Name(, 12:25 )"
+    );
+}
+
+[Test]
+inlay_hints_name_literal_arguments() {
+    var text = "struct Window {\n    var width: int;\n    var height: int;\n\n"
+        + "    construct(this.width = 0, this.height = 0) {}\n\n"
+        + "    resize(width: int, height: int) {\n        this.width = width;\n        this.height = height;\n    }\n}\n\n"
+        + "repeat(text: String, times: int): String { return text; }\n\n"
+        + "main(): int {\n    var window = Window(640, 480);\n    window.resize(800, height = 600);\n"
+        + "    var size = 4;\n    var s = repeat(\"ab\", size);\n    return 0;\n}\n";
+    var uri = temp_file("resized.pep", text);
+    var ready = analyze(uri, text);
+    expect_equal(ready.outcome, "passed");
+    # A named argument and a variable need no hint.
+    expect_equal(
+        hint_list(lsp.TextDocument(uri, text), ready, false, true),
+        "15:24 width:, 15:29 height:, 16:18 width:, 18:19 text:"
+    );
 }

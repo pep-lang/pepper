@@ -13,6 +13,7 @@ import compiler.parse;
 import "analysis";
 import "completion";
 import "edits";
+import "hints";
 import "symbols";
 
 ## The server: the open documents, and the analysis thread's queue.
@@ -22,6 +23,14 @@ export struct PepperServer {
     var documents: HashMap<String, lsp.TextDocument>;
     ## Whether the editor reports changed `.pep` files when asked.
     var watches_files: bool;
+    ## Whether the editor asks again for inlay hints when told to.
+    var refreshes_hints: bool;
+    ## Whether to show implicit conversions as inlay hints
+    ## (`inlayHints.implicitConversions`).
+    var conversion_hints: bool;
+    ## Whether to name literal arguments in inlay hints
+    ## (`inlayHints.parameterNames`).
+    var parameter_hints: bool;
     # The analysis thread's work.
     var _jobs: Channel<Job>;
     # The analyses the analysis thread finished, not yet taken in.
@@ -40,6 +49,9 @@ export struct PepperServer {
         this.client = client;
         this.documents = HashMap<String, lsp.TextDocument>();
         this.watches_files = false;
+        this.refreshes_hints = false;
+        this.conversion_hints = true;
+        this.parameter_hints = true;
         this._version = version;
         this._analyses = HashMap<String, Analysis>();
         this._ready = HashMap<String, Analysis>();
@@ -60,7 +72,12 @@ export struct PepperServer {
 
 extend PepperServer with lsp.LanguageServer {
     initialize(params: lsp.InitializeParams): Result<lsp.InitializeResult, ResponseError> {
-        watches_files = _dynamic_watching(params.capabilities);
+        watches_files = json_flag(
+            params.capabilities, ["workspace", "didChangeWatchedFiles", "dynamicRegistration"], false
+        );
+        refreshes_hints = json_flag(params.capabilities, ["workspace", "inlayHint", "refreshSupport"], false);
+        conversion_hints = json_flag(params.initialization_options, ["inlayHints", "implicitConversions"], true);
+        parameter_hints = json_flag(params.initialization_options, ["inlayHints", "parameterNames"], true);
         var result = lsp.InitializeResult();
         result.capabilities.text_document_sync = Optional<lsp.TextDocumentSyncOptions>.Value(
             lsp.TextDocumentSyncOptions(lsp.SYNC_FULL)
@@ -68,6 +85,7 @@ extend PepperServer with lsp.LanguageServer {
         result.capabilities.document_symbol_provider = Optional<bool>.Value(true);
         result.capabilities.hover_provider = Optional<bool>.Value(true);
         result.capabilities.definition_provider = Optional<bool>.Value(true);
+        result.capabilities.inlay_hint_provider = Optional<bool>.Value(true);
         var completion = lsp.CompletionOptions();
         completion.trigger_characters = Optional<Array<String>>.Value([".", "("]);
         result.capabilities.completion_provider = Optional<lsp.CompletionOptions>.Value(completion);
@@ -137,8 +155,13 @@ extend PepperServer with lsp.LanguageServer {
                 continue;
             }
             _analyses[analysis.uri] = analysis;
-            if (analysis.model.is_value()) {
-                _ready[analysis.uri] = analysis;
+            if (analysis.model.is_empty()) {
+                continue;
+            }
+            _ready[analysis.uri] = analysis;
+            # The hints come from the passed analysis: ask for them again.
+            if (refreshes_hints) {
+                client.refresh_inlay_hints();
             }
         }
     }
@@ -178,6 +201,16 @@ extend PepperServer with lsp.LanguageServer {
         );
     }
 
+    inlay_hint(params: lsp.InlayHintParams): Result<Array<lsp.InlayHint>, ResponseError> {
+        var uri = params.text_document.uri;
+        var document = documents.try_get(uri);
+        if (document.is_empty()) {
+            return Result<Array<lsp.InlayHint>, ResponseError>.ok(Array<lsp.InlayHint>());
+        }
+        var hints = inlay_hints(document.value(), _ready.try_get(uri), params.range, conversion_hints, parameter_hints);
+        return Result<Array<lsp.InlayHint>, ResponseError>.ok(hints);
+    }
+
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {
         var document = documents.try_get(params.text_document.uri);
         if (document.is_empty()) {
@@ -191,21 +224,24 @@ extend PepperServer with lsp.LanguageServer {
     }
 }
 
-# Whether the client registers file watchers when asked:
-# `workspace.didChangeWatchedFiles.dynamicRegistration` in its
-# capabilities.
-_dynamic_watching(capabilities: JsonValue?): bool {
-    if (capabilities.is_empty()) {
-        return false;
+## The boolean at `path` in the JSON object `value`, such as a client
+## capability or an initialization option.
+##
+## @param value the object, if any
+## @param path the member names leading to the value
+## @param missing what to return when it is not there or not a boolean
+## @returns the value
+export json_flag(value: JsonValue?, path: String[], missing: bool): bool {
+    if (value.is_empty()) {
+        return missing;
     }
-    var workspace = capabilities.value()["workspace"];
-    if (!workspace.contains("didChangeWatchedFiles")) {
-        return false;
+    var at = value.value();
+    for (var name in path) {
+        if (!at.contains(name)) {
+            return missing;
+        }
+        at = at[name];
     }
-    var watched = workspace["didChangeWatchedFiles"];
-    if (!watched.contains("dynamicRegistration")) {
-        return false;
-    }
-    var dynamic = watched["dynamicRegistration"].as_bool();
-    return dynamic.is_value() and dynamic.value();
+    var flag = at.as_bool();
+    return flag.is_value() ? flag.value() : missing;
 }

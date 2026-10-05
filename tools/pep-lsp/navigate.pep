@@ -11,6 +11,7 @@ import [doc_comment_before, doc_comment_of, first_attribute, DocComment] from co
 import compiler.link;
 import lsp;
 import compiler.sema;
+import "hints";
 import "imports";
 import "scope";
 import "symbols";
@@ -110,12 +111,18 @@ export struct Context {
 ## @returns the hover; empty when nothing is named there
 export hover_at(context: Context, offset: ulong): lsp.Hover? {
     var text = _hover_text(context, offset);
-    if (text.is_empty()) {
+    var value = text.is_value() ? _spelled_as_written(context, text.value()) : "";
+    # A value an `[Implicit]` constructor converts says so below.
+    if (context.model is Value(model)) {
+        var conversion = conversion_at(model, offset);
+        if (conversion is Value(c)) {
+            value = value == "" ? conversion_note(c) : value + DOC_SEPARATOR + conversion_note(c);
+        }
+    }
+    if (value == "") {
         return Optional<lsp.Hover>.Empty;
     }
-    return Optional<lsp.Hover>.Value(
-        lsp.Hover(lsp.MarkupContent(lsp.MARKDOWN, _spelled_as_written(context, text.value())))
-    );
+    return Optional<lsp.Hover>.Value(lsp.Hover(lsp.MarkupContent(lsp.MARKDOWN, value)));
 }
 
 # `text` with the names linking mangled (`Path@io/path`) spelled as

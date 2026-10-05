@@ -106,6 +106,29 @@ export struct EditMap {
         }
         return Optional<lsp.Range>.Empty;
     }
+
+    ## `range_to_current` for something that depends on its whole line, as
+    ## an answer computed at the earlier text does: only a range on a line
+    ## the edit left alone.
+    ##
+    ## @param earlier the earlier text
+    ## @param current the current text
+    ## @param range the range in the earlier text
+    ## @returns the range in the current text; empty when the edit touches
+    ##   its lines
+    line_range_to_current(earlier: String, current: String, range: lsp.Range): lsp.Range? {
+        var before = lsp.TextDocument("", earlier);
+        var start = before.offset_at(range.start);
+        var end = before.offset_at(range.end);
+        # `prefix` starts a line, so a range ending before it is on earlier
+        # lines; one after the edit must start on a later line than its end.
+        var after = start >= earlier_end
+            and (ends_line or earlier.substr_bytes(earlier_end, start - earlier_end).find("\n") >= 0);
+        if (end < prefix or after) {
+            return range_to_current(earlier, current, range);
+        }
+        return Optional<lsp.Range>.Empty;
+    }
 }
 
 # Whether `at` starts a line of `text`.
