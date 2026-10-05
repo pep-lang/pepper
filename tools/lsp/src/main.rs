@@ -3197,7 +3197,7 @@ fn guarded<R>(f: impl FnOnce() -> R) -> Option<R> {
 const STACK_SIZE: usize = 8 << 20;
 
 /// What `pep-lsp --help` prints. The book's tools/pep-lsp.md documents
-/// each option it lists, and `tool_docs_tests` checks that it does.
+/// each option it lists, and `pep-doc check` checks that it does.
 const HELP: &str = include_str!("help.txt");
 
 /// Answers `--help` and `--version`, and rejects an argument the server

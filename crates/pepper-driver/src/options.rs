@@ -221,7 +221,7 @@ pub struct Options {
 }
 
 /// The channels `-T` turns on (`--Tall` turns on all of them). The book's
-/// tools/pep-build.md documents each, and `tool_docs_tests` checks it does.
+/// tools/pep-build.md documents each, and `pep-doc check` checks it does.
 pub const TRACE_CHANNELS: [&str; 3] = ["time", "passes", "cache"];
 
 /// The environment variable naming `triple`'s system root:

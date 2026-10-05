@@ -250,8 +250,10 @@ jobs:
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`cargo run -p pepper-docgen --
-      # reference`) in the same PR.
-      - name: Standard library reference is current
+      # reference`) in the same PR. The check also fails on an undocumented
+      # public runtime declaration, and on a tool option missing from its
+      # page, reading the tools the Pepper tests step built.
+      - name: Documentation is current
         run: cargo run -p pepper-docgen --locked -- check
 
   # The suite on macOS against the default LLVM, from Homebrew. Not required

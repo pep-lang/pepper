@@ -31,8 +31,8 @@ use std::process::{Command, ExitCode};
 const WORKSPACE_MANIFEST: &str = include_str!("../../Cargo.toml");
 
 /// What `cargo setup --help` prints. The book's contributing/setup.md
-/// documents each option it lists, and the driver's `tool_docs_tests`
-/// checks that it does.
+/// documents each option it lists, and `pep-doc check` checks that it
+/// does.
 const USAGE: &str = include_str!("usage.txt");
 
 /// What the arguments asked for.

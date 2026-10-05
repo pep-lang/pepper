@@ -29,10 +29,29 @@ result.
 
 ### `pep-doc check`
 
-Changes nothing, and fails (exit status 1) when the committed reference does
-not match the runtime, naming the stale pages, or when a chapter has
-Markdown that renders broken without an mdBook error, such as an include
-indented inside a list item. CI runs it.
+Changes nothing, and fails (exit status 1) when:
+
+- the committed reference does not match the runtime, naming the stale
+  pages;
+- a chapter has Markdown that renders broken without an mdBook error, such
+  as an include indented inside a list item;
+- a public declaration in `runtime/` (or `tools/syntax`) has no doc comment,
+  or one without a description or a tag the
+  [documentation standard](../contributing/docs.md) requires, as a
+  clang-style error at the declaration;
+- a tool's option, command, option value, trace channel, environment
+  variable or setting is missing from the tool's page in this book, naming
+  the tool and the page.
+
+The tools' options come from their `--help`: `pep-build`'s and the Pepper
+tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-test`),
+which `scripts/pepper-tests.sh` builds beside `pep-build`, so run it first.
+
+- `--tools <DIR>`: the folder holding the built tools (default: the release
+  build's folder under `$CARGO_TARGET_DIR` or `target/` when it holds
+  `pep-build`, else the debug build's).
+
+CI runs it, after the tests.
 
 ### `pep-doc build`
 

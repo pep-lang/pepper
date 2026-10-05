@@ -4,7 +4,7 @@ usage: pep-doc [<command>] [options]
 
 Commands:
   reference   regenerate docs/src/reference/ from the runtime's doc comments
-  check       fail if the reference is out of date or a chapter renders broken
+  check       fail if the reference is stale, a chapter is broken, or an API or tool option is undocumented
   build       regenerate the reference and render the book (the default)
   serve       regenerate the reference and serve the book locally
   help        show this help
@@ -12,5 +12,7 @@ Commands:
 Options:
   --version <VERSION>  with build: the version to build, X.Y.Z or dev (default: dev)
   --site <DIR>         with build: the site folder (default: target/docs-site)
+  --tools <DIR>        with check: the folder of the built tools (default: the
+                       release build's, else the debug build's)
   -h, --help           show this help
   -V, --version        with no command: show pep-doc's version

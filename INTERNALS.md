@@ -171,8 +171,8 @@ or `miss`). `-g` emits debug info and `--frame-pointers` keeps frame pointers (s
 other `-T` channels are parsed and ignored.
 `--MSVC` returns an error. `-T` channels are listed in `TRACE_CHANNELS`
 (`tracing` debug-asserts a channel is there). Every option is documented in
-`docs/src/tools/pep-build.md`, which `tool_docs_tests.rs` checks against
-`Options::command()`. `output_path()` defaults to `<cwd>/<entry stem>`
+`docs/src/tools/pep-build.md`, which `pep-doc check` checks against
+`pep-build --help`. `output_path()` defaults to `<cwd>/<entry stem>`
 with no extension (with `--lib`, the library's file name for the stem,
 `LibraryKind::file_name`), and `module_name()` is the output's stem.
 
@@ -2414,7 +2414,7 @@ diagnostics"). The mechanics:
   book's C chapter).
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
-  `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` enforces it. The
+  `pep-doc check` enforces it (`tools/docgen/src/checks.rs`). The
   reference pages in `docs/src/reference/` and the reference part of
   `docs/src/SUMMARY.md` are **generated** by
   `cargo run -p pepper-docgen -- reference`. CI fails if they are stale
@@ -2993,8 +2993,7 @@ root package's test runs. Neither CI nor the pre-merge checks run them any more 
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/*/test.pep` | `corpus_tests.rs::corpus_files_compile_and_run` checks (visibility included), compiles, links, and runs each fixture with `-I tests`; `corpus_files_run_under_wasmtime` builds each for `wasm32-wasip1` and runs it under wasmtime (`support::run_under_wasmtime`, when `support::wasi_tools` finds `WASI_SDK_PATH` and wasmtime; `NOT_ON_WASI` lists what needs threads or tasks). `pep_fmt_tests.rs` parses and formats every file under `tests/`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
-| Runtime docs | `crates/pepper-driver/tests/integration/runtime_docs_tests.rs` | `check_documented` over every `runtime/**/*.pep`. |
-| Tool docs | `crates/pepper-driver/tests/integration/tool_docs_tests.rs` | Each tool's options (clap's `Options::command()` for `pep-build`; `--help` of `pepper` and `pep-fmt`, built with `support::pepper_tool`; `tools/docgen/src/help.txt`, `tools/lsp/src/help.txt`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s trace channels and environment variables and `pep-lsp`'s initialization options and VS Code settings. |
+| Runtime docs, tool docs | `tools/docgen/src/checks.rs`, run by `pep-doc check` | `check_documented` over every `runtime/**/*.pep` and `tools/syntax`. Each tool's options (`--help` of `pep-build` and of the Pepper tools, built by `scripts/pepper-tests.sh` beside it; `tools/docgen/src/help.txt`, `tools/lsp/src/help.txt`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s option values, trace channels and environment variables and `pep-lsp`'s initialization options and VS Code settings. |
 | Docs examples | `crates/pepper-driver/tests/integration/docs_examples_tests.rs` | Compiles and runs every `docs/examples/*.pep` (or `name/main.pep`) through `pepper_driver::run`, and again under wasmtime for `wasm32-wasip1` when a wasi-sdk and wasmtime are present (`documentation_examples_run_under_wasmtime`, skipping `NOT_ON_WASI`). Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
@@ -3099,7 +3098,7 @@ rendered-output test in `crates/pepper-driver/tests/integration/diagnostic_tests
    file, which joins the prelude automatically). Mark it `export`. Put
    internals under `_pep_`/`_io_`.
 2. Document it with `##` doc comments per AGENTS.md. Run
-   `cargo test --workspace --test integration runtime_docs_tests::`.
+   `cargo run -p pepper-docgen -- check`.
 3. For the `io` module, add it to the implementing file and re-export it
    from `runtime/io/module.pep`.
 4. Regenerate the reference: `cargo run -p pepper-docgen -- reference`.

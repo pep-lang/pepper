@@ -9,8 +9,10 @@
 #
 # compiler-dir holds the `pep-build` to test with (default: the release
 # build, else the debug build, under $CARGO_TARGET_DIR or target/). The
-# script builds `pepper` and `pep-test` with it, into that same folder, so
-# `pepper test` finds `pep-test` and `pep-test` finds `pep-build`. Further
+# script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
+# `pep-profile`, `pep-package`) with it, into that same folder, so
+# `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
+# `pep-doc check` finds every tool's `--help`. Further
 # arguments go to every `pepper test` (`-f name`, `-j 1`, ...).
 #
 # Besides the plain run, the compress tests run again with `-D USE_ZLIB`
@@ -39,8 +41,15 @@ if [ ! -x "$bin/pep-build$exe" ]; then
   exit 2
 fi
 
-for tool in pepper pep-test; do
-  "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build"
+# The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
+# and `pep-doc check` reads every tool's `--help`.
+pids=()
+for tool in pepper pep-test pep-fmt pep-profile pep-package; do
+  "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
+  pids+=($!)
+done
+for pid in "${pids[@]}"; do
+  wait "$pid"
 done
 pepper="$bin/pepper$exe"
 export PEPPER_RUNTIME="$root/runtime"

@@ -1,11 +1,12 @@
 //! Pepper documentation builder: `pep-doc`, run as `pepper doc` or
 //! `cargo run -p pepper-docgen -- <command>`. `help.txt` is its `--help`,
 //! listing each command and option; the book's tools/pep-doc.md documents
-//! them, and `tool_docs_tests` checks that it does.
+//! them, and `pep-doc check` checks that it does (`checks.rs`).
 //!
 //! mdBook must be on PATH (`cargo install mdbook --locked`).
 
 mod book;
+mod checks;
 mod reference;
 mod site;
 
@@ -80,7 +81,22 @@ fn run(args: &[String]) -> Result<(), String> {
             for e in &broken {
                 eprintln!("{}", e);
             }
+            let undocumented = checks::undocumented_declarations(&root)?;
+            for e in &undocumented {
+                eprintln!("{}", e);
+            }
+            let tools = checks::tools_dir(&root, option("--tools").map(PathBuf::from));
+            let unlisted = checks::undocumented_tool_options(&root, &tools)?;
+            for e in &unlisted {
+                eprintln!("{}", e);
+            }
             let mut errors = vec![];
+            if !undocumented.is_empty() {
+                errors.push(format!("{} public runtime declaration(s) without a doc comment", undocumented.len()));
+            }
+            if !unlisted.is_empty() {
+                errors.push(format!("{} tool option(s) missing from their pages", unlisted.len()));
+            }
             if !broken.is_empty() {
                 errors.push(format!("{} problem(s) in the book's chapters", broken.len()));
             }
