@@ -1435,7 +1435,10 @@ How the language lowers:
   the `String` object, its counts at `STATIC_REFCOUNT` and 1, `_size` and
   `_length` set and `_data` pointing at the NUL-terminated bytes that
   follow it. Named `str.object` so `partition::finish` orders it with the
-  other string constants. It is only ever an argument to a parameter whose
+  other string constants. pepc names it `str.object.<hash of its text>`
+  (`codegen/calls.pep`): `partition.prepare` makes it `linkonce_odr`, and
+  a numbered name would let an object kept in the build cache meet a
+  different literal under its name. It is only ever an argument to a parameter whose
   copy the caller makes (`copy_argument` makes none for it) or a receiver,
   so no count step reaches it, and it can be constant.
 - **Function values**: `FunctionRef` produces a static function object

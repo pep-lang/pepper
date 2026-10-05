@@ -130,3 +130,39 @@ builds_without_a_cache() {
     var ran = process.Command(output.to_string()).spawn();
     expect_true(ran.is_ok() and ran.value().wait().value().success());
 }
+
+# Each part names a string literal's object by its text: an object kept in
+# the cache still finds its own literals after an edit adds literals to
+# another unit.
+[Test]
+keeps_string_literals_apart_across_units() {
+    var folder = TempFolder("cached_strings");
+    var root = folder.path;
+    File.write_text(root.join(Path("a.pep")), "export a_text(): String {\n    return \"alpha\" + \"beta\";\n}\n");
+    File.write_text(
+        root.join(Path("main.pep")), "import \"a\";\nmain(): int {\n    return a_text() == \"alphabeta\" ? 0 : 1;\n}\n"
+    );
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var build = () => {
+        var output = root.join(Path("main"));
+        var options = driver.BuildOptions(output, root.join(Path("build")));
+        options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+        options.in_process = true;
+        var program = link.load_program(root.join(Path("main.pep")), setup);
+        expect_true(program.is_ok());
+        var built = driver.build(program.value(), options);
+        if (built.is_err()) {
+            print(built.error());
+        }
+        expect_true(built.is_ok());
+        var ran = process.Command(output.to_string()).spawn();
+        expect_true(ran.is_ok() and ran.value().wait().value().success());
+    };
+    build();
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nmain(): int {\n    var first = \"one\" + \"two\" + \"three\";\n    return a_text() == \"alphabeta\" and first == \"onetwothree\" ? 0 : 1;\n}\n"
+    );
+    build();
+}

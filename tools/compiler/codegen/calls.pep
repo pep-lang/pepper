@@ -3,6 +3,7 @@
 ## references, `move`, shared literals and enum cases, as
 ## `crates/pepper-codegen/src/lib.rs` generates them.
 
+import digest;
 import llvm;
 import compiler.sema;
 import [CountField, Expression, TypeName, WeakOp, WithSubject] from compiler.sema;
@@ -631,8 +632,10 @@ extend Generator {
     ## The immortal `String` of a shared literal (`Expression::StaticString`):
     ## one constant global holding the object, whose counts start at
     ## `STATIC_REFCOUNT` and 1, followed by its NUL-terminated bytes, which
-    ## `_data` points to. Private to the unit, and named like the other
-    ## string constants.
+    ## `_data` points to. Named by a hash of its text, so every part that
+    ## uses the same literal names the same object, and an object kept in
+    ## the build cache still means the same text when other units change
+    ## (a numbered name would not).
     static_string(value: String): Result<llvm.Value> {
         var existing = static_strings.try_get(value);
         if (existing.is_value()) {
@@ -650,7 +653,9 @@ extend Generator {
         }
         var bytes = context.const_string(value, true);
         var object_type = context.struct_type([string_type, bytes.value_type()]);
-        var object = ir.add_global(object_type, "str.object");
+        var hash = digest.blake3(value);
+        hash.truncate(16);
+        var object = ir.add_global(object_type, $"str.object.{digest.to_hex(hash)}");
         var i32_type = context.int32_type();
         var data = object.const_gep(object_type, [i32_type.zero(), i32_type.const_uint(1), i32_type.zero()]);
         var values = Array<llvm.Value>();
