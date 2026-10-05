@@ -351,14 +351,9 @@ struct _OperatorDispatch {
     _assignment(e: Expression, node: BinaryExpression): Expression {
         # `x[y] = z` is `x.__index_set(y, z)` when the container is a
         # struct declaring the setter.
-        if (node.op == BinaryOp.Assign) {
-            if (node.lhs is Index(index)) {
-                if (resolver.sets_index(index.lhs)) {
-                    return Expression.MethodCall(
-                        MethodCallExpression(index.lhs, "__index_set", [index.rhs, node.rhs], node.loc)
-                    );
-                }
-            }
+        var set = _index_assignment(resolver, e);
+        if (set.is_value()) {
+            return set.value();
         }
         # A compound assignment with an overload (`s += x` is `s.+=(x)`).
         var name = op_name(node.op);
@@ -443,6 +438,13 @@ struct _IndexLowering {
     }
 
     rewrite(e: Expression): Expression {
+        # An assignment whose target's receiver is now typed (`a[x][y] = v`
+        # once `a[x]` is) calls its setter; other indexes call the getter.
+        var set = _index_assignment(resolver, e);
+        if (set.is_value()) {
+            lowered = true;
+            return set.value();
+        }
         if (e is Index(node)) {
             var out = resolver.lower_index(node);
             if (out.is_value()) {
@@ -455,6 +457,26 @@ struct _IndexLowering {
 }
 
 extend _IndexLowering with Rewriter;
+
+## `x[y] = z` as `x.__index_set(y, z)` when the container is a struct
+## declaring the setter: `lower_index_assign`. Plain assignment only; a
+## compound one through an index expands at statement level.
+_index_assignment(resolver: _OperatorResolver, e: Expression): Expression? {
+    if (e is Binary(node)) {
+        if (node.op == BinaryOp.Assign) {
+            if (node.lhs is Index(index)) {
+                if (resolver.sets_index(index.lhs)) {
+                    return Optional<Expression>.Value(
+                        Expression.MethodCall(
+                            MethodCallExpression(index.lhs, "__index_set", [index.rhs, node.rhs], node.loc)
+                        )
+                    );
+                }
+            }
+        }
+    }
+    return Optional<Expression>.Empty;
+}
 
 ## Whether `ty` is an enum whose own instance method `operator` an operator
 ## on its value calls: `enums::declares_operator`.

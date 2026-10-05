@@ -66,7 +66,7 @@ const _MAX_SPECIALIZATION_DEPTH: ulong = 64;
 ## attribute must name an `[Attribute]` struct.
 _is_built_in_name(name: String): bool {
     match (name) {
-        "Alias", "Attribute", "BuildOption", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "Value", "__BuiltIn" => {
+        "Alias", "Attribute", "BuildOption", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "ThreadLocal", "Value", "__BuiltIn" => {
             return true;
         }
         else => {
@@ -161,6 +161,73 @@ export expand(module: Module, state: PassState, lowered: bool = false): bool {
         state.notes.append_all(expander.notes);
     }
     return true;
+}
+
+## Empties the `static` blocks left in function bodies once the
+## specializations are done: those of generic code, which only its
+## specializations expand. A non-generic struct's generic methods keep
+## theirs; they are the bases later specializations clone from.
+##
+## @param module the model, changed in place
+export remove_from_generic_code(module: Module) {
+    for (var function in module.functions) {
+        _strip_static_body(function);
+    }
+    for (var st in module.structs) {
+        for (var method in st.method_members) {
+            _strip_static_body(method);
+        }
+        for (var constructor in st.constructors) {
+            _strip_static_body(constructor);
+        }
+        if (st.generic_params.count > 0) {
+            for (var method in st.generic_methods) {
+                _strip_static_body(method);
+            }
+        }
+        _strip_static_body(st.destructor);
+    }
+    for (var t in module.traits) {
+        for (var method in t.methods) {
+            _strip_static_body(method);
+        }
+    }
+    for (var e in module.extensions) {
+        for (var method in e.methods) {
+            _strip_static_body(method);
+        }
+    }
+}
+
+_strip_static_body(function: FunctionDef) {
+    if (_body_has_static(function)) {
+        _strip_static(function.body.value());
+    }
+}
+
+_strip_static(block: Block) {
+    ulong i = 0;
+    while (i < block.items.count) {
+        match (block.items[i]) {
+            Static(_) => {
+                block.items[i] = Statement.Block(_block_of(Array<Statement>()));
+            }
+            Block(inner) => {
+                _strip_static(inner);
+            }
+            Branch(branch) => {
+                _strip_static(branch.if_block);
+                if (branch.else_block.is_value()) {
+                    _strip_static(branch.else_block.value());
+                }
+            }
+            While(loop) => {
+                _strip_static(loop.block);
+            }
+            else => {}
+        }
+        i += 1;
+    }
 }
 
 ## Runs the module-scope `static` blocks and gives each constant one

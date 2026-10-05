@@ -1,5 +1,5 @@
 # The compiler's sema passes in Pepper change the model as the Rust passes
-# do: after the steps ported so far (through the specialization loop), the model's JSON
+# do: after every step, the model's JSON
 # from `compiler.sema` here and from `pep-build --emit-model
 # --emit-model-step N` match byte for byte, and a program a step rejects
 # gets the same error.
@@ -76,6 +76,46 @@ runs_the_passes_over_the_test_programs_part_12() {
 }
 
 [Test]
+runs_the_passes_over_the_test_programs_part_13() {
+    runs_passes(12);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_14() {
+    runs_passes(13);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_15() {
+    runs_passes(14);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_16() {
+    runs_passes(15);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_17() {
+    runs_passes(16);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_18() {
+    runs_passes(17);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_19() {
+    runs_passes(18);
+}
+
+[Test]
+runs_the_passes_over_the_test_programs_part_20() {
+    runs_passes(19);
+}
+
+[Test]
 runs_the_passes_over_the_atomics_test() {
     runs_passes_over(Path("../tests/Atomic.Basic").join("test.pep"));
 }
@@ -105,7 +145,7 @@ runs_the_passes_over_the_threads_lock_body_example() {
     runs_passes_over(Path("../docs/examples").join("threads-lock-body.pep"));
 }
 
-const PARTS = 12;
+const PARTS = 20;
 
 # The corpus's programs with tests of their own.
 slow_programs(): String[] {
@@ -168,6 +208,8 @@ runs_passes(part: ulong) {
         "reflection-attributes.pep",
         "reflection-functions.pep",
         "structs-static.pep",
+        # Assignment through chained indexers.
+        "structs-indexers.pep",
         "reflection-module/main.pep",
         # Copies (`threads-copy.pep` and the census of a locked value in
         # `threads-lock-body.pep` have tests of their own).
@@ -200,6 +242,271 @@ reports_pass_errors_as_the_rust_passes_do() {
     expect_equal(write_and_compare(compiler.value(), folder, error_programs()), 0 as ulong);
 }
 
+# Programs without the runtime with `with` blocks, `match`es and
+# `[Export]`s the last passes check once types are final: each error
+# matches the Rust compiler's.
+[Test]
+reports_late_pass_errors_as_the_rust_passes_do() {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var folder = TempFolder("passes_match_errors");
+    expect_equal(write_and_compare(compiler.value(), folder, late_pass_programs()), 0 as ulong);
+}
+
+late_pass_programs(): String[] {
+    return [
+        # `with` blocks: a `void` binding, `else` on an `int`, assignment to
+        # the binding, and a scope without `enter()`.
+        "struct Lock {\n    construct() {}\n    enter() {}\n    exit() {}\n}\nmain(): int {\n    with (var l = Lock()) {\n    }\n    return 0;\n}\n",
+        "struct Counter {\n    construct() {}\n    int enter() { return 1; }\n    exit() {}\n}\nmain(): int {\n    with (var n = Counter()) {\n    } else {\n    }\n    return 0;\n}\n",
+        "struct Res {\n    construct() {}\n}\nstruct Pool {\n    construct() {}\n    enter(): Res { return Res(); }\n    exit() {}\n}\nmain(): int {\n    with (var r = Pool()) {\n        r = Res();\n    }\n    return 0;\n}\n",
+        "struct Plain {\n    construct() {}\n}\nmain(): int {\n    with (Plain()) {\n    }\n    return 0;\n}\n",
+        # `match`es that miss a case, repeat one, need `else` on an integer,
+        # repeat a range, miss a nested case and a tuple's value, mix arm
+        # types, name no case, match a struct, and bind a case without
+        # values; and two that pass.
+        "enum Color { Red, Green, Blue }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red => { return 1; }\n        Green => { return 2; }\n    }\n    return 0;\n}\n",
+        "enum Color { Red, Green, Blue }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red => { return 1; }\n        Red => { return 2; }\n        else => { return 3; }\n    }\n}\n",
+        "main(): int {\n    var n = 3;\n    match (n) {\n        0 => { return 1; }\n        1 => { return 2; }\n    }\n    return 0;\n}\n",
+        "main(): int {\n    var n = 3;\n    match (n) {\n        0..10 => { return 1; }\n        5..8 => { return 2; }\n        else => { return 3; }\n    }\n}\n",
+        "enum Color { Red, Green }\nenum Pick { Nothing, Some(c: Color) }\nmain(): int {\n    var p = Pick.Some(Color.Red);\n    match (p) {\n        Nothing => { return 0; }\n        Some(Red) => { return 1; }\n    }\n    return 2;\n}\n",
+        "main(): int {\n    var a = true;\n    var b = false;\n    match ((a, b)) {\n        (true, _) => { return 1; }\n        (false, true) => { return 2; }\n    }\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var x = match (c) { Red => 1, Green => Color.Red };\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Blue => { return 1; }\n        else => { return 0; }\n    }\n}\n",
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    match (s) {\n        else => { return 0; }\n    }\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    match (c) {\n        Red(x) => { return 1; }\n        else => { return 0; }\n    }\n}\n",
+        "enum Pick { Nothing, Some(v: int) }\nmain(): int {\n    var p = Pick.Some(1);\n    match (p) {\n        Some(1..5) => { return 1; }\n        Some(2) => { return 2; }\n        else => { return 0; }\n    }\n}\n",
+        "trait Shape {\n    area(): int;\n}\nstruct Circle {\n    construct() {}\n    area(): int { return 3; }\n}\nextend Circle with Shape;\nmain(): int {\n    Shape s = Circle();\n    match (s) {\n        Circle(c) => { return 1; }\n    }\n    return 0;\n}\n",
+        # `[Export]`: misplaced, a bad name, a type C cannot hold, a symbol
+        # taken twice or by a handle function, `main`, an unknown argument,
+        # and one that passes enums, pointers and a C function pointer.
+        "struct S {\n    construct() {}\n    [Export]\n    run() {}\n}\nmain(): int { return 0; }\n",
+        "[Export(name = \"2bad\")]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "[Value]\nstruct V {\n    var x: int;\n}\n[Export]\nf(v: V): int { return 1; }\nmain(): int { return 0; }\n",
+        "[Export(name = \"same\")]\nf(): int { return 1; }\n[Export(name = \"same\")]\ng(): int { return 2; }\nmain(): int { return 0; }\n",
+        "[Export(name = \"main\")]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "struct Counter {\n    construct() {}\n}\n[Export]\nmake(): Counter { return Counter(); }\n[Export]\ncounter_retain(): int { return 0; }\nmain(): int { return 0; }\n",
+        "[Export(size = 3)]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
+        "[Export]\nf(x: (int, int)): int { return 1; }\nmain(): int { return 0; }\n",
+        "enum Color { Red, Green }\n[Export]\nf(c: Color, p: __ptr<Color>, cb: extern (int, double) => int): int { return 1; }\nmain(): int { return 0; }\n"
+    ];
+}
+
+# Programs with the runtime that a check after the specializations
+# rejects: each error matches the Rust compiler's.
+# Each test takes an eighth, to keep within the time a test may take.
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_1() {
+    reports_specialized_errors(0);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_2() {
+    reports_specialized_errors(1);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_3() {
+    reports_specialized_errors(2);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_4() {
+    reports_specialized_errors(3);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_5() {
+    reports_specialized_errors(4);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_6() {
+    reports_specialized_errors(5);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_7() {
+    reports_specialized_errors(6);
+}
+
+[Test]
+reports_errors_in_specialized_code_as_the_rust_passes_do_part_8() {
+    reports_specialized_errors(7);
+}
+
+# A thread's closure capturing what is not thread-safe: `async` makes the
+# program slow enough to take a test of its own.
+[Test]
+reports_thread_capture_errors_as_the_rust_passes_do() {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var folder = TempFolder("passes_thread_capture");
+    var programs = [
+        "import async;\n\nmain(): int {\n    var name = \"worker\";\n    var t = async.Thread.spawn(() => { print(name); });\n    t.join();\n    return 0;\n}\n",
+    ];
+    expect_equal(write_and_compare(compiler.value(), folder, programs, true), 0 as ulong);
+}
+
+# Programs with `async` that `check_confinement` rejects: each loads the
+# runtime's threads, so each takes a test of its own.
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_1() {
+    reports_confinement_error(0);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_2() {
+    reports_confinement_error(1);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_3() {
+    reports_confinement_error(2);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_4() {
+    reports_confinement_error(3);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_5() {
+    reports_confinement_error(4);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_6() {
+    reports_confinement_error(5);
+}
+
+[Test]
+reports_confinement_errors_as_the_rust_passes_do_part_7() {
+    reports_confinement_error(6);
+}
+
+reports_confinement_error(index: ulong) {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var folder = TempFolder($"passes_confinement_{index}");
+    var programs = [confinement_error_programs()[index]];
+    expect_equal(write_and_compare(compiler.value(), folder, programs, true), 0 as ulong);
+}
+
+confinement_error_programs(): String[] {
+    return [
+        # A value from outside moved into a locked one, and part of a locked
+        # value kept outside it.
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var line = \"x\";\n    with (var list = names.lock()) {\n        list.append(line);\n    }\n    return 0;\n}\n",
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var first = \"\";\n    with (var list = names.lock()) {\n        first = list[0];\n    }\n    return 0;\n}\n",
+        # A `move` of a local another references, and a use after a `move` in
+        # a loop.
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var a = Array<String>();\n    var b = a;\n    names.replace(move(a));\n    return 0;\n}\n",
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var a = Array<String>();\n    while (true) {\n        names.replace(move(a));\n    }\n    return 0;\n}\n",
+        # A guard kept in a variable, and a `[Move]` argument that is not new.
+        "import async;\n\nconst names = async.Mutex<Array<String>>(Array<String>());\n\nmain(): int {\n    var g = names.lock();\n    return 0;\n}\n",
+        "import async;\n\nconst lines = async.Channel<String>();\n\nmain(): int {\n    var line = \"hello\";\n    lines.send(line);\n    return 0;\n}\n",
+        # A `[Locked]` closure that keeps part of the locked value.
+        "import async;\n\nconst jobs = async.Mutex<Array<String>>(Array<String>());\nconst ready = jobs.condition();\n\nmain(): int {\n    var saved = Array<String>();\n    with (var list = jobs.lock()) {\n        ready.wait_while((queue: Array<String>): bool => {\n            saved.append(queue[0]);\n            return queue.count == 0;\n        });\n    }\n    return 0;\n}\n"
+    ];
+}
+
+const _SPECIALIZED_PARTS: ulong = 8;
+
+reports_specialized_errors(part: ulong) {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var all = specialized_error_programs();
+    var programs = Array<String>();
+    ulong i = part;
+    while (i < all.count) {
+        programs.append(all[i]);
+        i += _SPECIALIZED_PARTS;
+    }
+    var folder = TempFolder($"passes_specialized_errors_{part}");
+    expect_equal(write_and_compare(compiler.value(), folder, programs, true), 0 as ulong);
+}
+
+# Programs whose errors only the checks after the specialization loop
+# find.
+specialized_error_programs(): String[] {
+    return [
+        # A module-scope `String`, inferred.
+        "const greeting = String(\"hi\");\nmain(): int { return 0; }\n",
+        # A field of a value struct in an array, and a const value
+        # iterator driven by `for`.
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var spans = Array<Span>();\n    spans.append(Span());\n    spans[0].end = 3;\n    return 0;\n}\n",
+        "main(): int {\n    var values = Array<int>();\n    const it = values.iterate();\n    for (var x in it) {\n        return x;\n    }\n    return 0;\n}\n",
+        # Closures and method values in `shared` and C function pointer
+        # slots that capture what they cannot, and a C function pointer
+        # type C cannot pass.
+        "make(): shared () => int {\n    var s = \"x\";\n    return () => s.length as int;\n}\nmain(): int { return 0; }\n",
+        "struct S {\n    var n: int;\n    construct(this.n = 0) {}\n    run() {\n        var f: shared () => int = () => n;\n    }\n}\nmain(): int { return 0; }\n",
+        "struct P {\n    var x: int;\n    construct(this.x = 0) {}\n    get(): int { return x; }\n}\ntake(f: shared () => int): int { return f(); }\nmain(): int {\n    var p = P(3);\n    return take(p.get);\n}\n",
+        "extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) => int compare);\nmain(): int {\n    var bias = 1;\n    qsort(_pep_malloc(4), 0, 4, (a, b) => bias);\n    return 0;\n}\n",
+        "take(s: String): int { return 0; }\nmain(): int {\n    var f: extern (String) => int = take;\n    return 0;\n}\n",
+        # `[MoveSource]` and `[Locked]` outside the runtime, and the old
+        # name of `[Move]`.
+        "take([MoveSource] s: String): String {\n    return s;\n}\n\nmain(): int {\n    return 0;\n}\n",
+        "keep([Sending] s: String) {\n}\n\nmain(): int {\n    return 0;\n}\n",
+        "check([Locked] predicate: (int) => bool): bool {\n    return predicate(1);\n}\n\nmain(): int {\n    return 0;\n}\n",
+        # Hash keys whose `==` and hash disagree, and an override of an
+        # `[Equatable]` struct's derived hash.
+        "struct K {\n    var x: int;\n    construct(this.x = 0) {}\n    ==(other: K): bool { return x == other.x; }\n}\nmain(): int {\n    var m = HashMap<K, int>();\n    m[K(1)] = 2;\n    return 0;\n}\n",
+        "struct K {\n    var x: int;\n    construct(this.x = 0) {}\n}\nhash<K>(value: K): u64 { return value.x as u64; }\nmain(): int {\n    var s = HashSet<K>();\n    s.insert(K(1));\n    return 0;\n}\n",
+        "[Equatable]\nstruct K {\n    var x: int;\n    construct(this.x = 0) {}\n}\nhash<K>(value: K): u64 { return value.x as u64; }\nmain(): int {\n    return 0;\n}\n",
+        # A closure parameter whose type nothing inferred.
+        "main(): int {\n    var f = (x) => x;\n    return 0;\n}\n",
+        # Destructures of the wrong count and of a non-tuple, and tuple
+        # elements assigned to or out of range.
+        "pair(): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    var (a, b, c) = pair();\n    return 0;\n}\n",
+        "main(): int {\n    var s = \"x\";\n    var (a, b) = s;\n    return 0;\n}\n",
+        "pair(): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    var t = pair();\n    t.0 = 3;\n    return 0;\n}\n",
+        "pair(): (int, int) {\n    return (1, 2);\n}\nmain(): int {\n    var t = pair();\n    return t.2;\n}\n",
+        # `[ThreadLocal]` on a field.
+        "struct Counter {\n    [ThreadLocal]\n    var hits: int;\n}\nmain(): int { return 0; }\n",
+        # A struct value as a condition, and as an operand of `!`.
+        "struct Node {\n    int value;\n}\nmain(): int {\n    var node = Node();\n    if (node) {\n        return 1;\n    }\n    return 0;\n}\n",
+        "struct Node {\n    int value;\n}\nmain(): int {\n    var node = Node();\n    return node.value > 0 && !node ? 1 : 0;\n}\n",
+        # An undeclared name passed to a generic function.
+        "wrap<T>(value: T): T {\n    return value;\n}\n\nmain(): int {\n    wrap(nope);\n    return 0;\n}\n",
+        # Assignment through an indexer that has no setter.
+        "struct G {\n    construct() {}\n    [](i: int): int { return i; }\n}\nmain(): int {\n    var a = Array<G>();\n    a.append(G());\n    a[0][1] = 3;\n    return 0;\n}\n",
+        # Assignment to a call.
+        "get(): int { return 1; }\nmain(): int {\n    get() = 3;\n    return 0;\n}\n",
+        # Overloads nothing settled: an ambiguous call and method call,
+        # and a set used as a value without a type.
+        "f(x: long): int { return 1; }\nf(x: short): int { return 2; }\nmain(): int { return f(1); }\n",
+        "struct S {\n    get(x: long): int { return 1; }\n    get(x: short): int { return 2; }\n}\nmain(): int { var s = S(); return s.get(1); }\n",
+        "f(x: int): int { return 1; }\nf(x: long): int { return 2; }\nmain(): int {\n    var g = f;\n    return 0;\n}\n",
+        # Type arguments nothing gave: a generic method and function used
+        # as values, and calls that leave one or all unbound.
+        "struct Box<T> {\n    T value;\n    construct(v: T) { value = v; }\n    map<U>(f: (T) => U): Box<U> { return Box<U>(f(value)); }\n}\nmain(): int {\n    var m = Box<int>(1).map;\n    return 0;\n}\n",
+        "larger<T>(a: T, b: T): T { return a > b ? a : b; }\nmain(): int {\n    var f = larger;\n    return 0;\n}\n",
+        "make<T>(): T { return __default<T>(); }\nmain(): int {\n    var x = make();\n    return 0;\n}\n",
+        "make<T, U>(a: T): int { return 0; }\nmain(): int {\n    return make<int>(1);\n}\n",
+        "struct S {\n    make<T>(): int { return 0; }\n}\nmain(): int {\n    var s = S();\n    return s.make();\n}\n",
+        # A variadic extern used as a value, and a method of `this` stored
+        # in a field of `this`.
+        "extern int snprintf(char* buffer, ulong size, char* format, ...);\nmain(): int {\n    var f = snprintf;\n    return 0;\n}\n",
+        "struct Widget {\n    int size;\n    () => int measure;\n    area(): int { return size; }\n    setup() { measure = this.area; }\n}\nmain(): int { return 0; }\n",
+        # A lane count that is not a power of two, and one past 64.
+        "import simd;\nmain(): int {\n    var v = simd.Vector<int, 3>(1);\n    return 0;\n}\n",
+        "import simd;\nmain(): int {\n    var m = simd.Mask<128>();\n    return 0;\n}\n",
+        # A member a constrained extension withholds from a specialization.
+        "import simd;\nmain(): int {\n    var v = simd.Vector<int, 4>(4);\n    var r = v.square_root();\n    return 0;\n}\n",
+        "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Named> {\n    label(): String { return item.name(); }\n}\nmain(): int {\n    var box = Box<Circle>(Circle());\n    box.label();\n    return 0;\n}\n"
+    ];
+}
+
 # Programs the platform filters, the closures lifting and the struct
 # synthesis change, without the runtime.
 [Test]
@@ -212,10 +519,29 @@ rewrites_programs_as_the_rust_passes_do() {
     expect_equal(write_and_compare(compiler.value(), folder, rewritten_programs()), 0 as ulong);
 }
 
+# Programs with the runtime that the passes after the specialization loop
+# rewrite: function values converted between plain, `shared` and C slots.
+[Test]
+rewrites_function_values_as_the_rust_passes_do() {
+    var compiler = process.find_companion("pep-build");
+    if (!compiler.is_value()) {
+        return;
+    }
+    var folder = TempFolder("passes_function_values");
+    var programs = [
+        # A `shared` value in a plain slot, through an adapter.
+        "apply(f: () => int): int { return f(); }\nmain(): int {\n    var g: shared () => int = () => 1;\n    var h: () => int = g;\n    return apply(g) + h();\n}\n",
+        # A named function and a closure that captures nothing, as C
+        # function pointers.
+        "extern void qsort(void* base, ulong count, ulong size, extern (void*, void*) => int compare);\ncompare(a: __ptr<void>, b: __ptr<void>): int { return 0; }\nmain(): int {\n    qsort(_pep_malloc(4), 0, 4, compare);\n    qsort(_pep_malloc(4), 0, 4, (a, b) => 0);\n    return 0;\n}\n"
+    ];
+    expect_equal(write_and_compare(compiler.value(), folder, programs, true), 0 as ulong);
+}
+
 # Writes each program to a `main.pep` of its own in `folder`, compares the
-# two compilers' passes over it, without the runtime, and returns how many
-# differ.
-write_and_compare(compiler: Path, folder: TempFolder, programs: String[]): ulong {
+# two compilers' passes over it, with the runtime or without, and returns
+# how many differ.
+write_and_compare(compiler: Path, folder: TempFolder, programs: String[], runtime: bool = false): ulong {
     ulong mismatches = 0;
     ulong t = 0;
     while (t < programs.count) {
@@ -223,7 +549,8 @@ write_and_compare(compiler: Path, folder: TempFolder, programs: String[]): ulong
         Directory.create_all(root);
         var path = root.join("main.pep");
         File.write_text(path, programs[t]);
-        if (!same_passes(compiler, path, ["--no-runtime"], false)) {
+        var arguments = runtime ? Array<String>() : ["--no-runtime"];
+        if (!same_passes(compiler, path, arguments, runtime)) {
             mismatches += 1;
         }
         t += 1;
@@ -361,6 +688,70 @@ excerpt(text: String, at: ulong): String {
 # Programs a pass rejects.
 error_programs(): String[] {
     return [
+        # Shared struct fields, module-scope variables and thread-locals
+        # that are not const, not thread-safe or not constant.
+        "[Shared]\nstruct Counter {\n    int count;\n}\nmain(): int { return 0; }\n",
+        "struct Plain { int x; }\n[Shared]\nstruct Config {\n    const inner: Plain;\n}\nmain(): int { return 0; }\n",
+        "var hits = 0;\nmain(): int { return hits; }\n",
+        "long total = 0;\nmain(): int { return 0; }\n",
+        "export var hits = 0;\nmain(): int { return hits; }\n",
+        "struct Plain { var x: int; }\nconst origin: Plain = Plain();\nmain(): int { return 0; }\n",
+        "struct Plain { var x: int; }\nexport const origin: Plain = Plain();\nmain(): int { return 0; }\n",
+        "trait Shape { int area(); }\n[Shared]\nstruct Square { construct() {} }\nextend Square with Shape { int area() { return 1; } }\n\n\nconst unit: Shape = Square();\nmain(): int { return 0; }\n",
+        "[Shared]\nstruct Cell<T> {\n    const value: T;\n}\n\nmake<T>(): Cell<T> { return Cell<T>(); }\n\nmain(): int {\n    var c = make<String>();\n    return 0;\n}\n",
+        "[Shared]\nstruct H {\n    const f: () => void;\n    construct(this.f = () => {}) {}\n}\nmain(): int { return 0; }\n",
+        "struct Plain { var x: int; }\n[ThreadLocal]\nvar scratch: Plain;\nmain(): int { return 0; }\n",
+        "start(): int { return 4; }\n[ThreadLocal]\nvar depth: int = start();\nmain(): int { return depth; }\n",
+        # Casts their kind does not allow.
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var p = s as __ptr<void>;\n    return 0;\n}\n",
+        "main(): int {\n    var f: float = 1.0;\n    var n = unsafe_cast<ulong>(f);\n    return 0;\n}\n",
+        "main(): int {\n    var p: __ptr<char> = __null;\n    var q = p as __ptr<byte>;\n    return 0;\n}\n",
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var p: __ptr<char> = __null;\n    var s = unsafe_cast<S>(p);\n    return 0;\n}\n",
+        "trait T {\n    f(): int;\n}\nstruct S {\n    f(): int { return 1; }\n}\nextend S with T;\nmain(): int {\n    var t: T = S();\n    var n = t as int;\n    return 0;\n}\n",
+        # Values that do not match their slots: function, enum, struct,
+        # pointer, weak and tuple types, `void` used as a value, calls with
+        # the wrong arity, bare returns, and enum and struct comparisons.
+        "square(x: int): int { return x * x; }\nmain(): int {\n    var f: (String) => int = square;\n    return 0;\n}\n",
+        "square(x: int): int { return x * x; }\nmain(): int {\n    var f = square;\n    return f(1, 2);\n}\n",
+        "f(x: int): int {\n    if (x > 0) {\n        return;\n    }\n    return 1;\n}\nmain(): int {\n    return f(1);\n}\n",
+        "struct S { int x = 0; }\nmain(): int {\n    var p: __ptr<void> = __null;\n    S s = p;\n    return 0;\n}\n",
+        "main(): int {\n    var g = () => {};\n    var f: shared () => void = g;\n    return 0;\n}\n",
+        "main(): int {\n    var g: (int) => int = (x) => x;\n    var f: extern (int) => int = g;\n    return 0;\n}\n",
+        "main(): int {\n    var t: (int, String) = (1, 2);\n    return 0;\n}\n",
+        "enum Color { Red }\nmain(): int {\n    int x = Color.Red;\n    return x;\n}\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nstruct Circle {\n}\nkeep<T: Shape>(item: T): int {\n    var shape: Shape = item;\n    var circle: Circle = item;\n    return 0;\n}\nmain(): int { return 0; }\n",
+        "trait Shape {\n    area(): int;\n    scale(by: int): int;\n}\nsmaller<T: Shape>(a: T, b: T): bool { return a < b; }\nmain(): int { return 0; }\n",
+        "trait Addable {\n    +(other: this): this;\n}\ngrow<T: Addable>(a: T, b: T): T {\n    var total = a;\n    total += b;\n    return total;\n}\nmain(): int { return 0; }\n",
+        "f() {}\nmain(): int {\n    var x: int = f();\n    return 0;\n}\n",
+        "struct S {\n    var x: int;\n}\nf(): S {\n    return 1;\n}\nmain(): int { return 0; }\n",
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var w: __weak<S> = s;\n    return 0;\n}\n",
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    return s == 1 ? 1 : 0;\n}\n",
+        "struct S {\n    var x: int;\n    get(): int { return x; }\n}\nmain(): int {\n    var s = S();\n    var n: int = s.get;\n    return n;\n}\n",
+        "enum Color { Red, Green }\nenum Size { Small, Large }\nmain(): int {\n    var c = Color.Red;\n    var s = Size.Small;\n    return c == s ? 1 : 0;\n}\n",
+        "struct Meters {\n    var v: long;\n    construct(v: long) { this.v = v; }\n}\ntake(m: Meters): long { return m.v; }\nmain(): int {\n    long n = 2;\n    return take(n) as int;\n}\n",
+        "struct S {\n    var x: int;\n}\nmain(): int {\n    var s = S();\n    var n = true ? s : 1;\n    return 0;\n}\n",
+        "enum Color { Red, Green }\nmain(): int {\n    var c = Color.Red;\n    var d = -c;\n    return 0;\n}\n",
+        # Struct values in trait slots they do not conform to, trait values
+        # of another trait, a number as a trait value, a static trait member
+        # called on a value, and a covariant return that does not conform.
+        "trait Shape {\n    int area();\n}\nstruct Circle {\n    construct() {}\n}\nmain(): int {\n    Shape s = Circle();\n    return 0;\n}\n",
+        "trait Shape {\n    int area();\n    static this unit();\n}\nstruct Square {\n    construct() {}\n}\nextend Square with Shape {\n    int area() { return 1; }\n    static Square unit() { return Square(); }\n}\nmain(): int {\n    Shape s = Square();\n    var u = s.unit();\n    return 0;\n}\n",
+        "trait Shape {\n    area(): int;\n}\ntrait Named {\n    name(): String;\n}\nstruct Circle {\n    area(): int { return 3; }\n}\nextend Circle with Shape {}\nstruct Box<T> {\n    var item: T;\n    construct(item: T) { this.item = item; }\n}\nextend Box<T: Shape> with Shape {\n    area(): int { return item.area() * 2; }\n}\nmain(): int {\n    Shape shape = Box<String>(\"x\");\n    return 0;\n}\n",
+        "trait Doubled {\n    doubled(): int;\n}\nextend int with Doubled {\n    doubled(): int { return this * 2; }\n}\nmain(): int {\n    Doubled d = 3;\n    return 0;\n}\n",
+        "trait A {\n    f(): int;\n}\ntrait B {\n    g(): int;\n}\nstruct S {\n    f(): int { return 1; }\n}\nextend S with A;\nmain(): int {\n    var a: A = S();\n    var b: B = a;\n    return 0;\n}\n",
+        "trait Shape {\n    make(): Shape;\n}\nstruct Plain {\n    var x: int;\n}\nstruct Other {\n    make(): Plain { return Plain(); }\n}\nextend Other with Shape;\nmain(): int { return 0; }\n",
+        # Value structs used as objects, containing themselves, passed to
+        # C, and changed through a const, a temporary or a closure's copy.
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    var b = Span();\n    return a === b ? 1 : 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    return a == __null ? 1 : 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var w: __weak<Span>;\n    return 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    var a = Span();\n    return __refcount(a);\n}\n",
+        "[Value]\nstruct A {\n    var b: B;\n}\n\n[Value]\nstruct B {\n    var a: A;\n}\n\nmain(): int {\n    return 0;\n}\n",
+        "[Value]\nstruct S {\n    var x: int;\n}\n\nextern int f(S s);\n\nmain(): int {\n    return 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.end = 3;\n    return 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmake(): Span {\n    return Span(1, 2);\n}\n\nmain(): int {\n    make().grow(1);\n    return 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    construct(this.start = 0, this.end = 0) {}\n\n    grow(by: int) {\n        end = end + by;\n    }\n}\n\nmain(): int {\n    const s = Span(1, 2);\n    s.grow(1);\n    return 0;\n}\n",
+        "[Value]\nstruct Span {\n    var start: int;\n    var end: int;\n\n    later(): () => void {\n        return () => { end = 5; };\n    }\n}\n\nmain(): int {\n    return 0;\n}\n",
         # A misspelled OS, in code that would be dropped anyway.
         "[Target(OS(Windoze))]\nf(): int { return 1; }\nmain(): int { return 0; }\n",
         # A build option comparison with no literal.
@@ -559,6 +950,10 @@ error_programs(): String[] {
 # Programs the steps ported so far rewrite.
 rewritten_programs(): String[] {
     return [
+        # Implicit constructor calls, from a variable and a literal.
+        "struct Meters {\n    var v: long;\n    [Implicit]\n    construct(v: long) { this.v = v; }\n}\ntake(m: Meters): long { return m.v; }\nmain(): int {\n    int n = 2;\n    var m: Meters = n;\n    return (take(3) + take(m)) as int;\n}\n",
+        # Methods, a struct and a specialization used as values.
+        "struct P {\n    var x: int;\n    get(): int { return x; }\n    static make(): P { return P(); }\n}\npick<T>(a: T, b: T): T { return a; }\nmain(): int {\n    var p = P();\n    var f = p.get;\n    var g = P.get;\n    var h = P.make;\n    var k = pick<int>;\n    var n = P;\n    return f() + g(p) + h().x + k(1, 2) + n().x;\n}\n",
         # Declarations, members, enum cases and blocks for one platform.
         "[Target(OS(Windows))]\nf(): int { return 1; }\n[Target(!OS(Windows))]\nf(): int { return 2; }\nstruct S {\n    var x: int;\n    [Target(OS(Linux))]\n    linux(): int { return 1; }\n    [Target(OS(Mac))]\n    mac(): int { return 2; }\n}\nenum E {\n    A,\n    [Target(OS(Windows))]\n    B,\n    C,\n}\nmain(): int {\n    var n = 0;\n    [Target(OS(Linux))] {\n        n = 1;\n    }\n    if (n == 0) {\n        [Target(OS(Windows))] {\n            n = 2;\n        }\n    } else {\n        [Target(Arch(x64))] {\n            n = 3;\n        }\n    }\n    while (n > 10) {\n        [Target(Arch(aarch64))] {\n            n = 4;\n        }\n    }\n    return f() + n;\n}\n",
         # A test, kept only in a test build.

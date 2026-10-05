@@ -4,6 +4,9 @@
 ## `pepper_sema::program` and `pepper_sema::modules` do.
 export * from "program";
 export [link, sort_errors, FileScope, Linked, ModuleError, ProgramFile] from "link";
-export [deprecation_of, is_deprecation, Deprecation, DeprecationError] from "deprecation";
+export [
+    declared_deprecation, deprecation_of, deprecation_warning, is_deprecation, Deprecation, DeprecationError
+] from "deprecation";
 export [is_build_option_name, Target, TEST_BUILD_OPTION] from "platform";
+export [Runtime] from "files";
 export [demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from "names";

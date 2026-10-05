@@ -2819,7 +2819,86 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   notes the uses that requested it (`instantiation.pep`). The loop's
   steps are counted as `checked::run_steps` counts them, so
   `pepc --emit-model --emit-model-step N` compares with `pep-build` at
-  any step. What the Rust passes keep in thread-locals
+  any step. After the loop, generic code's `static` blocks are emptied
+  (`static_blocks.pep`'s `remove_from_generic_code`), interpolations are
+  checked again, calls of members a constrained extension withheld are
+  reported (`withheld.pep`), as are SIMD lane counts that are not a power
+  of two up to 64 (`simd_shapes.pep`), and the intrinsics, extension
+  targets, extensions, `static` blocks, bare member names and function
+  types are handled again over the specialized code. Then methods,
+  structs and specializations used as values become closure structs
+  (`function_references.pep`: `p.area` captures `p`, `Shape.area` takes
+  the receiver first), and destructors release their struct fields
+  (`release_field_refs.pep`). Then implicit types once more with
+  overloads settled by arity, the `?` checks again, named arguments no
+  binding took and the parameter names of literal arguments
+  (`argument_names.pep`), and generic calls and values whose type
+  arguments nothing gave (`type_argument_checks.pep`), and overload calls
+  and values nothing settled (`overload_checks.pep`); then operators once
+  more, and assignments whose target is still a call
+  (`assignment_targets.pep`: `get() = v`, or `x[i] = v` through a `[]`
+  getter with no setter), struct values in a boolean context whose type
+  declares no `!!` (`conditions.pep`), and extension targets once more,
+  reporting undeclared names. Destructures then read their tuple and
+  labelled elements become positions (`destructures.pep`, which reports
+  a destructure of the wrong count or of a non-tuple, an element out of
+  range, and an assignment to an element), and function types inferred
+  by the final resolve are synthesized; a closure whose parameter,
+  return or captured type is still `auto` is reported
+  (`check_closures` in `closures.pep`). Function values then convert
+  between plain, `shared` and C function pointer slots
+  (`shared_functions.pep`): a named function or a closure whose captures
+  are thread-safe is retyped to a `shared` slot's type, a `shared` value
+  in a plain slot is wrapped in a forwarding closure, and a value with no
+  state becomes a function's address in a C slot; a capture that is not
+  thread-safe, a capture in a C slot, and a C function pointer type that
+  C cannot pass are reported, and function types are synthesized once
+  more. Value structs are then checked (`value_structs.pep`): identity,
+  `__null`, `__weak`, `__refcount` and C need an object, a value struct
+  must not contain itself, and a change to a temporary, through a
+  `const`, or to a closure's copy of `this` is reported, with the methods
+  that change `this` found by a fixpoint. Values then convert to the
+  slots they flow into (`convert_to_traits.pep`): `[Implicit]`
+  constructor calls, `ToTrait` for a struct in a trait slot (reporting a
+  struct that does not conform, a trait value of another trait, and a
+  number or `bool`), C strings, `StringConstant`s and `String`s from
+  string literals, and tuple and collection literals typed by their slot;
+  calls through a trait value are checked, and the trait types in use
+  and the implicit conversions are recorded. Then each value is checked
+  against the slot it flows into (`function_types_check.pep`): function,
+  enum, struct, pointer, weak, C function pointer and tuple types, a
+  `void` call used as a value, a call through a function value with the
+  wrong number of arguments, a bare `return` in a non-void function, and
+  enum and struct comparisons. Casts are then checked against what their
+  kind allows (`casts.pep`, whose `check_cast` code generation will ask
+  too). What threads share is checked last (`shared_type_checks.pep`):
+  a `[Shared]` struct's fields are `const` and thread-safe (a
+  specialization's error names the use the program wrote), module-scope
+  variables are `const` and thread-safe, and a `[ThreadLocal]` one is
+  thread-safe and starts from a constant (`thread_local_constant`, which
+  code generation reads too). Then `with` blocks over `[Isolated]`
+  guards are checked (`confinement.pep`): a region walk keeps the locked
+  value apart from the rest of the program, with each callee's link
+  summary found as a least fixed point over the call graph; it also checks
+  guard use, `[Move]` arguments, `[Locked]` closures, `move` and use after
+  it, `ThreadLocal.get` and `Mutex` of a number. `with` blocks then
+  test `enter()`'s result by its final type (`with_blocks.pep`), and
+  `match` arms become tests on the subject (`matches.pep`), with each
+  `match` checked to handle every value: by cases, by integer ranges, and
+  for nested and tuple patterns by Maranget's usefulness check, whose
+  witness names the value missed. Uses of deprecated members are found
+  by their owner's final type (`deprecated_members.pep`), and struct
+  hash keys whose `==` and `hash<K>` disagree are errors
+  (`hash_keys.pep`). `[Export]`ed functions are checked and collected
+  into `PassState.exports` (`exports.pep`), with `c_type` and
+  `declarator` for the C side. Last, string literals whose use neither
+  keeps nor changes the object become `StaticString`s
+  (`static_strings.pep`): a `String` slot is free while every use in its
+  body allows it, as a greatest fixed point over the call graph, and the
+  facts ride in the link summaries (`|s=`) with `caller_copies` for code
+  generation. With that, `pepc` runs every sema step. Index lowering sets
+  through a chained `a[x][y] = v` once `a[x]` is typed, as
+  `lower_index_assign` does. What the Rust passes keep in thread-locals
   between steps (the first error reported, closure numbers, enum
   representations and methods, reference enums, value structs,
   `reflect.print`'s notes and deprecation warnings, the next

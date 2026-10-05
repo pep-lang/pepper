@@ -918,3 +918,50 @@ _inherit_deprecation(attributes: Array<Array<ast.Attribute>>, lifted: StructDef[
         i += 1;
     }
 }
+
+## Reports the first closure whose parameter, return or captured type is
+## still `auto` once every type is final: the type must be written.
+##
+## @param module the model
+## @param state the passes' state, which takes the error
+export check_closures(module: Module, state: PassState) {
+    for (var st in module.structs) {
+        if (!is_closure_struct(st.name) or st.generic_params.count > 0) {
+            continue;
+        }
+        for (var call in st.method_members) {
+            if (call.name != CALL_METHOD) {
+                continue;
+            }
+            for (var param in call.parameters) {
+                if (param.ty.contains_auto()) {
+                    state.report(
+                        error_at(
+                            $"cannot infer the type of parameter '{param.name}'; write it: ({param.name}: Type) => ...",
+                            param.loc
+                        )
+                    );
+                    return;
+                }
+            }
+            if (call.ty.contains_auto()) {
+                state.report(
+                    error_at(
+                        "cannot infer the return type of this closure; write it after the parameters: (...): Type => ...",
+                        call.loc
+                    )
+                );
+                return;
+            }
+            for (var field in st.field_members) {
+                if (field.ty.contains_auto()) {
+                    state.report(
+                        error_at($"cannot infer the type of '{field.name}', which this closure captures", field.loc)
+                    );
+                    return;
+                }
+            }
+            break;
+        }
+    }
+}

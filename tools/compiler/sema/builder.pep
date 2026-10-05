@@ -101,6 +101,10 @@ export const SHARED_ATTRIBUTE = "Shared";
 export const VALUE_ATTRIBUTE = "Value";
 ## The attribute that lets a one-argument constructor convert implicitly.
 export const IMPLICIT_ATTRIBUTE = "Implicit";
+
+## The attribute that gives a module-scope variable a separate value on
+## every thread.
+export const THREAD_LOCAL_ATTRIBUTE = "ThreadLocal";
 ## The name of a property's storage inside its accessors.
 export const PROPERTY_FIELD = "field";
 ## The name of the value a property's `set` accessor receives.
@@ -2111,6 +2115,24 @@ struct _Builder {
         return Built<bool>.Ok(true);
     }
 
+    ## `[ThreadLocal]` gives a module-scope variable one value per thread:
+    ## on `what` (a field, a parameter) it is an error, at the attribute.
+    reject_thread_local(attributes: ast.Attribute[], what: String): Built<bool> {
+        for (var a in attributes) {
+            if (a.body is SymbolRef(id, _)) {
+                if (id == THREAD_LOCAL_ATTRIBUTE) {
+                    return Built<bool>.Err(
+                        _error(
+                            $"'{THREAD_LOCAL_ATTRIBUTE}' applies only to a module-scope variable, not {what}",
+                            loc(a.span)
+                        )
+                    );
+                }
+            }
+        }
+        return Built<bool>.Ok(true);
+    }
+
     variable_def(decl: ast.VariableDecl, kind: Kind): Built<VariableDef> {
         var saved = with_attributes(decl.attributes);
         var built = variable_in_context(decl, kind);
@@ -2121,6 +2143,11 @@ struct _Builder {
     variable_in_context(decl: ast.VariableDecl, kind: Kind): Built<VariableDef> {
         check_deprecation(decl.attributes)?;
         reject_implicit(decl.attributes)?;
+        if (kind == Kind.Field) {
+            reject_thread_local(decl.attributes, "a field")?;
+        } else if (kind == Kind.Param) {
+            reject_thread_local(decl.attributes, "a parameter")?;
+        }
         var ty = type_name_from(decl.type_name);
         # `const X = "text";` is a `StringConstant`: it keeps the literal's
         # constant bytes and allocates nothing.

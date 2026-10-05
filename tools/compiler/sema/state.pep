@@ -5,6 +5,7 @@
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
+import [Exports] from "exports";
 import [Loc] from "loc";
 import [EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
 import [is_integral_name] from "type_name";
@@ -57,6 +58,9 @@ export struct PassState {
     ## The program's files' text, by file index, for fixes that edit near
     ## a declaration (`Module::sources`).
     var sources: SourceText[] = Array<SourceText>();
+    ## What the program exports to C, as `exports::collect_exports` finds
+    ## it (`Module::exports`).
+    var exports: Exports = Exports();
 
     ## Creates the state for compiling for `target`.
     ##

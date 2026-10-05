@@ -8,39 +8,62 @@
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
 import [apply_extensions, check_parameter_names] from "apply_extensions";
+import [check_unbound, record_argument_names] from "argument_names";
+import [check_assignment_targets] from "assignment_targets";
 import [check_bindings] from "bindings";
+import [check_casts] from "casts";
 import [check_bounds] from "check_bounds";
 import [check_tries] from "check_tries";
-import [lift_closures] from "closures";
+import [check_closures, lift_closures] from "closures";
+import [check_conditions] from "conditions";
+import [check_confinement] from "confinement";
 import [check_constraints, check_specializations] from "constraints";
 import [convert_intrinsics] from "convert_intrinsics";
 import [convert_member_refs] from "convert_member_refs";
+import [convert_to_traits] from "convert_to_traits";
 import [synthesize_copies] from "copies";
+import [check_deprecated_members] from "deprecated_members";
+import [lower_destructures] from "destructures";
 import [lower_main_arguments] from "entry_point";
 import [resolve_enum_cases] from "enums";
 import [derive_equatable] from "equatable";
+import [collect_exports] from "exports";
+import [reference_functions] from "function_references";
 import [synthesize_function_types] from "function_types";
+import [check_function_types] from "function_types_check";
 import [has_generic_methods, specialize_methods] from "generic_methods";
 import [gather_generics] from "generics";
+import [check_hash_keys] from "hash_keys";
 import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
 import [convert_string_literals, resolve_literals] from "literals";
+import [lower_matches] from "matches";
 import [Module] from "model";
 import [bind_calls, check_link_attributes, check_named_attributes] from "named_arguments";
+import [check_overloads] from "overload_checks";
 import [has_overloads] from "overload_select";
 import [name_overloads] from "overloads";
 import [apply_platform_filters] from "platform";
 import [check_ranges] from "ranges";
+import [release_field_refs] from "release_field_refs";
 import [resolve_implicit_types] from "resolve_implicit_types";
 import [resolve_operators] from "resolve_operators";
 import [resolve_resolvables] from "resolve_resolvables";
+import [shared_functions] from "shared_functions";
+import [check_shared_types] from "shared_type_checks";
+import [check_simd_shapes] from "simd_shapes";
 import [specialize_functions] from "specialize_functions";
 import [freeze_templates, specialize_structs] from "specialize_structs";
 import [PassState] from "state";
-import [check_attributes, expand, expand_module_blocks] from "static_blocks";
+import [check_attributes, expand, expand_module_blocks, remove_from_generic_code] from "static_blocks";
+import [share_string_literals] from "static_strings";
 import [strip_bodies] from "strip_bodies";
 import [synthesize] from "synthesize";
 import [resolve_type_aliases] from "type_aliases";
+import [check_type_arguments] from "type_argument_checks";
+import [check_value_structs] from "value_structs";
+import [lower_with_blocks] from "with_blocks";
+import [check_withheld] from "withheld";
 
 ## How many of the Rust compiler's steps come before the specialization
 ## loop.
@@ -71,6 +94,9 @@ export run_steps(
     }
     if (!steps.error.is_value() and steps.ran == PORTED_STEPS and steps.ran < limit) {
         _specialization_loop(module, state, steps);
+        if (!steps.error.is_value() and steps.ran < limit) {
+            _after_specializing(module, state, steps);
+        }
     }
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
@@ -171,6 +197,194 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
                 return;
             }
         }
+    }
+}
+
+## The steps once every specialization is made, as far as they are
+## ported: generic code's `static` blocks go, then the checks and
+## conversions repeat over the specialized code.
+_after_specializing(module: Module, state: PassState, steps: _Steps) {
+    remove_from_generic_code(module);
+    check_interpolations(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # A call of a member a constrained extension withheld.
+    check_withheld(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    check_simd_shapes(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    convert_intrinsics(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    resolve_resolvables(module, false, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # The extensions of the specializations made in the loop.
+    apply_extensions(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    expand(module, state, true);
+    if (steps.stepped()) {
+        return;
+    }
+    convert_member_refs(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    synthesize_function_types(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Methods, structs and specializations used as values become closures.
+    reference_functions(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Destructors release their struct fields.
+    release_field_refs(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Implicit types once more, with overloads settled by how many
+    # arguments they take.
+    state.settle_overloads_by_arity = true;
+    resolve_implicit_types(module, state);
+    state.settle_overloads_by_arity = false;
+    if (steps.stepped()) {
+        return;
+    }
+    check_tries(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Named arguments no binding took.
+    check_unbound(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # The parameter names of literal arguments, for inlay hints.
+    record_argument_names(module, state);
+    check_type_arguments(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    check_overloads(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Once implicit types are resolved, operator overloading may exist.
+    resolve_operators(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # A call left as an assignment's target, which nothing can store into.
+    check_assignment_targets(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # A struct value in a boolean context needs its own `!!`.
+    check_conditions(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Undeclared names and calls are reported here.
+    resolve_resolvables(module, true, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Destructures read their tuple; labels become positions.
+    lower_destructures(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Types inferred by the final resolve (`var f = square;`).
+    synthesize_function_types(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Closure types nothing inferred must be written.
+    check_closures(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Plain and `shared` function values flowing into each other's slots,
+    # once every type is final.
+    shared_functions(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    synthesize_function_types(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # How value structs are used: identity, `const`, changes to copies.
+    check_value_structs(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Struct values flowing into trait-typed slots, once every type is
+    # final.
+    convert_to_traits(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    check_function_types(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # `as` and `unsafe_cast` convert only what their kind allows.
+    check_casts(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    check_shared_types(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # What `with` blocks over `[Isolated]` guards may do, `[Move]`
+    # arguments, and the guards' own rules, once every type is final.
+    check_confinement(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # `with` conditions need the final types of `enter()`.
+    lower_with_blocks(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # `match` arms need the final type of the value matched.
+    lower_matches(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Warnings only: uses of deprecated fields and methods, by final type.
+    check_deprecated_members(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Struct keys whose `==` and `hash<T>` disagree.
+    check_hash_keys(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # `[Export]`ed functions C can call, once every type is final.
+    collect_exports(module, state);
+    if (steps.stepped()) {
+        return;
+    }
+    # Last, over every body: which literals can be shared reads the
+    # callees' bodies.
+    share_string_literals(module, state);
+    if (steps.stepped()) {
+        return;
     }
 }
 

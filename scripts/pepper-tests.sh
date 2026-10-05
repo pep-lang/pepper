@@ -80,8 +80,9 @@ if grep -rlq --include='*.pep' '^\[Test\]' .; then
   # At -O1: the compiler's passes tests run the Pepper passes in-process
   # over the test programs, which is slow unoptimized (near the 60 s
   # timeout at -O0), and -O1 builds them quickly enough to save time
-  # overall.
-  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "$@"
+  # overall. They still take most of a minute each, so on a runner that
+  # shares its host they get 300 s (`-t` in the arguments still wins).
+  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . -t 300 "$@"
 fi
 
 exit $failed
