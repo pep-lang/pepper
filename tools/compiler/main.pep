@@ -6,13 +6,16 @@
 #     pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
 #     pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+#     pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
 #
 # print the file's syntax tree, or the whole program after linking, as the
 # JSON that `pep-build` prints with the same options, or what the checks
 # after linking report, or the sema model before any pass (or after the
 # first N steps of the passes, or the error one reports), as `pep-build`
-# prints it, so the two can be compared.
+# prints it, or the LLVM IR of the whole program, unoptimized, as
+# `pep-build --emit-llvm -O0` writes it, so the two can be compared.
 
+import compiler.codegen;
 import [render_all] from compiler.diagnostic;
 import io;
 import [File, Path] from io;
@@ -25,6 +28,7 @@ main(args: String[]): int {
     bool linked = false;
     bool checked = false;
     bool model = false;
+    bool ir = false;
     var step = Optional<ulong>.Empty;
     var setup = link.Setup();
     ulong i = 1;
@@ -36,6 +40,8 @@ main(args: String[]): int {
             checked = true;
         } else if (arg == "--emit-model") {
             model = true;
+        } else if (arg == "--emit-llvm") {
+            ir = true;
         } else if (arg == "--emit-model-step") {
             if (i + 1 >= args.count) {
                 print($"pepc: {arg} needs a value");
@@ -86,15 +92,41 @@ main(args: String[]): int {
         print(
             "       pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>"
         );
+        print("       pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
         return 2;
     }
-    if (linked or checked or model) {
+    if (linked or checked or model or ir) {
         var program = link.load_program(Path(path.value()), setup);
         if (program.is_err()) {
             print($"pepc: {program.error()}");
             return 1;
         }
-        if (model) {
+        if (ir) {
+            var built = sema.merge(program.value());
+            if (built.is_err()) {
+                print(built.error());
+                return 1;
+            }
+            var ran = sema.run_passes(built.value(), program.value().target, program.value().sources());
+            if (ran.is_err()) {
+                print(render_all([ran.error()], program.value().sources()));
+                return 1;
+            }
+            var namespaces = Array<String>();
+            for (var f in program.value().files) {
+                namespaces.append(f.namespace);
+            }
+            var generated = codegen.generate_ir(
+                built.value(), ran.value(), namespaces, Path(path.value()).file_stem().value()
+            );
+            if (generated.is_err()) {
+                print(render_all([generated.error()], program.value().sources()));
+                return 1;
+            }
+            # The IR ends with a newline, which `print` adds.
+            var text = generated.value();
+            print(text.ends_with("\n") ? text.substr_bytes(0, text.size - 1) : text);
+        } else if (model) {
             var built = sema.merge(program.value());
             if (built.is_err()) {
                 print(built.error());

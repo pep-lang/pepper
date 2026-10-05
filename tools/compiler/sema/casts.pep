@@ -7,7 +7,7 @@
 ## or an integer and back, and a number to another number of the same width
 ## with its bits unchanged. Neither ever applies to a refcounted reference.
 
-import [bit_width] from "arithmetic";
+import [bit_width, is_float_type] from "arithmetic";
 import [error_at] from "common";
 import [constraint_spelled] from "constraints";
 import [Loc] from "loc";
@@ -156,7 +156,7 @@ _category(ty: TypeName, state: PassState): _CastCategory {
     if (!width.is_value()) {
         return _CastCategory.Other;
     }
-    if (_is_float(name)) {
+    if (is_float_type(name)) {
         return _CastCategory.Float(width.value());
     }
     return _CastCategory.Integer(width.value());

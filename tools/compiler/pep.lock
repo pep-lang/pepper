@@ -1,0 +1,9 @@
+# Written by `pepper package`: the exact revision of every dependency.
+# Commit it with pep.toml; do not edit it by hand.
+version = 1
+
+[[package]]
+name = "llvm"
+source = "github:justinboswell/pepper-llvm"
+commit = "d260038c2182f3488775bae5361167facd84b27b"
+sha256 = "ae0c249db91fe93d61a2f474c28462fada0669848a56a587cdae46ff58768740"

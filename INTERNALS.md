@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder and the first sema passes. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder, every sema pass and codegen. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
 | `tools/pep-package` | `pep-package`, the package manager, written in Pepper and itself a `pep.toml` project with no dependencies (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `semver.pep` (versions and ranges), `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides). The driver's `fetch.rs` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package, or checks the commits out with git itself when `pep-package` is not installed. Tested by `package_tests.rs`. |
@@ -2911,10 +2911,34 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   corpus, the documentation's programs of several modules and
   with `static` blocks, and programs that exercise each pass and its
   errors; on a mismatch it reports the first step where the two differ.
+- `compiler.codegen` (`codegen/`) is `crates/pepper-codegen` in Pepper, on
+  the `pepper-llvm` package (`tools/compiler/pep.toml`; `pep-build` fetches
+  it into `tools/compiler/.pep`, and linking `pepc` needs LLVM 20). A
+  `Generator` declares every struct, method, extern and function, then
+  emits the globals and every body in the order `CodeGenerator::generate`
+  does, so the two print the same IR: `generator.pep` holds the generator
+  and `generate_items`, `functions.pep` instantiation, function bodies and
+  statements, `expressions.pep` the expression dispatch, `calls.pep`
+  calls, defaults and C ABI adapters, `operators.pep` assignment, binary,
+  unary, cast and ternary operators, `refs.pep` reference counting,
+  scopes and type queries, `traits.pep` tuples, equality, hashing,
+  vtables and boxing, `checks.pep` runtime checks, `ops.pep` numeric
+  conversions, `simd.pep` vectors, and `globals.pep` globals,
+  thread-locals, exports, context switching, intrinsics, TBAA facts and
+  the CPU attributes. Errors are `Result`s whose location `locate` records,
+  as `error_loc` does in Rust. Debug info, the JIT and partitioning into
+  units are not ported: `pepc` generates the whole program as one module.
+  `pepc --emit-llvm` prints it as `pep-build --emit-llvm -O0` does: byte
+  for byte on `--no-runtime` programs, and on the `tests/` programs with
+  the runtime up to the order of functions and globals (and the numbers
+  of attribute groups, metadata and string constants that follow from
+  it), which `pep-build`'s checked runtime (`pepper_sema::checked`, part
+  of the driver's port) decides.
 - `compiler/main.pep` builds `pepc`: `pepc --emit-ast=json file`,
   `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`,
-  `pepc --emit-checked ...` and `pepc --emit-model ...` print the same
-  output as `pep-build`, to diff a program by hand.
+  `pepc --emit-checked ...`, `pepc --emit-model ...` and
+  `pepc --emit-llvm ...` print the same output as `pep-build`, to diff a
+  program by hand.
 
 ---
 

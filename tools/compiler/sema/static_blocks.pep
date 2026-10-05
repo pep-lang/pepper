@@ -3253,8 +3253,15 @@ _default_constant(module: Module, default: Expression?): _CtValue? {
     return _model_constant(module, default.value());
 }
 
-## The location of an expression in the model, `Loc.none()` for one with
-## none: `Expression::loc`.
+## Returns the location of an expression in the model: `Expression::loc`.
+##
+## @param e the expression
+## @returns its location, `Loc.none()` for one with none
+export expression_loc(e: Expression): Loc {
+    return _expression_loc(e);
+}
+
+## `expression_loc`, by the name the passes use.
 _expression_loc(e: Expression): Loc {
     match (e) {
         SymbolRef(node) => {

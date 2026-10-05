@@ -83,6 +83,32 @@ export run_steps(
 ): Result<ulong, Diagnostic> {
     var state = PassState(target);
     state.sources = sources;
+    return run_steps_with(module, state, limit);
+}
+
+## Runs every step of the passes over `module`, for code generation.
+##
+## @param module the model `merge` built, changed in place
+## @param target the compile target
+## @param sources the program's files' text, by file index
+## @returns the passes' state, which code generation reads, or the error a step reported
+export run_passes(module: Module, target: Target, sources: SourceText[]): Result<PassState, Diagnostic> {
+    var state = PassState(target);
+    state.sources = sources;
+    var ran = run_steps_with(module, state, 0xffffffffffffffff);
+    if (ran.is_err()) {
+        return Result<PassState, Diagnostic>.Err(ran.error());
+    }
+    return Result<PassState, Diagnostic>.Ok(state);
+}
+
+## `run_steps` with the passes' state given.
+##
+## @param module the model, changed in place
+## @param state the passes' state
+## @param limit how many steps to run
+## @returns how many steps ran, or the error a step reported
+export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ulong, Diagnostic> {
     var steps = _Steps(limit, state);
     while (steps.ran < limit and steps.ran < PORTED_STEPS) {
         var error = _step(steps.ran, module, state);

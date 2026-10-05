@@ -90,7 +90,7 @@ _base_params(module: Module, name: String, is_struct: bool): String[] {
 
 ## Each generic struct with a defaulted parameter, by base name:
 ## `value_structs::defaulted_params`.
-_defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
+export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
     var out = HashMap<String, Array<GenericParam>>();
     for (var st in module.structs) {
         for (var p in st.generic_params) {
@@ -107,9 +107,9 @@ _defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
 ## generic parameter's default, and `__ptr<T>` as `T*`:
 ## `value_structs::fill_defaults`. Type names nest only as deep as the
 ## program spells them.
-_fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
+export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
     for (var arg in ty.sub_types) {
-        _fill_defaults(arg, params);
+        fill_defaults(arg, params);
     }
     if (ty.name == "__ptr" and ty.sub_types.count == 1) {
         ty.name = $"{ty.sub_types[0].to_string()}*";
@@ -135,7 +135,7 @@ _fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
         }
         var arg = p.default.value().copy();
         replace_map(arg, map);
-        _fill_defaults(arg, params);
+        fill_defaults(arg, params);
         map.append((p.name, arg));
         ty.sub_types.append(arg);
         i += 1;
@@ -303,7 +303,7 @@ struct _FunctionTypes {
         this.module = module;
         this.state = state;
         table = StructTable(module);
-        defaults = _defaulted_params(module);
+        defaults = defaulted_params(module);
         for (var st in module.structs) {
             struct_names.insert(st.name);
         }
@@ -353,7 +353,7 @@ struct _FunctionTypes {
     ## `ty` canonical, with every omitted type argument filled in.
     with_defaults(ty: TypeName): TypeName {
         var filled = _canonical(ty);
-        _fill_defaults(filled, defaults);
+        fill_defaults(filled, defaults);
         return _canonical(filled);
     }
 

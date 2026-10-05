@@ -6,8 +6,13 @@
 import [BinaryOp, TypeName] from "model";
 import [PassState] from "state";
 
-## `name`, or the integer type it is stored as when it names an enum.
-_stored_as(state: PassState, name: String): String {
+## Returns `name`, or the integer type it is stored as when it names an
+## enum.
+##
+## @param state the passes' state, which knows the enums
+## @param name the type's name
+## @returns the type it computes as
+export stored_as(state: PassState, name: String): String {
     var found = state.enum_representations.try_get(name);
     if (found.is_value()) {
         var (representation, _) = found.value();
@@ -58,8 +63,14 @@ export is_numeric_type(state: PassState, name: String): bool {
     return is_primitive_numeric(name) or state.enum_representations.contains(name);
 }
 
-_is_unsigned_int(state: PassState, name: String): bool {
-    match (_stored_as(state, name)) {
+## Returns whether `name` is an unsigned integer type, or an enum stored as
+## one.
+##
+## @param state the passes' state, which knows the enums
+## @param name the type's name
+## @returns true for an unsigned integer
+export is_unsigned_int_type(state: PassState, name: String): bool {
+    match (stored_as(state, name)) {
         "u8", "byte", "u16", "ushort", "u32", "uint", "u64", "ulong" => {
             return true;
         }
@@ -69,7 +80,11 @@ _is_unsigned_int(state: PassState, name: String): bool {
     }
 }
 
-_is_float(name: String): bool {
+## Returns whether `name` is a float type.
+##
+## @param name the type's name
+## @returns true for `f32` and `f64`, by any spelling
+export is_float_type(name: String): bool {
     return name == "f32" or name == "float" or name == "f64" or name == "double";
 }
 
@@ -86,18 +101,18 @@ _width(name: String): uint {
 ## @param right the right operand's type
 ## @returns the promoted type's name
 export result_type(state: PassState, left: String, right: String): String {
-    var lhs = _stored_as(state, left);
-    var rhs = _stored_as(state, right);
+    var lhs = stored_as(state, left);
+    var rhs = stored_as(state, right);
     if (!is_numeric_type(state, lhs) or !is_numeric_type(state, rhs)) {
         return lhs;
     }
     var w = _width(lhs) > _width(rhs) ? _width(lhs) : _width(rhs);
-    if (_is_float(lhs) or _is_float(rhs)) {
+    if (is_float_type(lhs) or is_float_type(rhs)) {
         return w > 32 ? "f64" : "f32";
     }
     uint promoted = w > 32 ? 64 : 32;
-    bool unsigned = (_is_unsigned_int(state, lhs) and _width(lhs) == promoted)
-        or (_is_unsigned_int(state, rhs) and _width(rhs) == promoted);
+    bool unsigned = (is_unsigned_int_type(state, lhs) and _width(lhs) == promoted)
+        or (is_unsigned_int_type(state, rhs) and _width(rhs) == promoted);
     if (w > 32) {
         return unsigned ? "u64" : "i64";
     }
