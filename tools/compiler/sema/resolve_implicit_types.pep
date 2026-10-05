@@ -137,6 +137,114 @@ _before_angle(text: String): String {
     return at < 0 ? text : text.substr_bytes(0, at as ulong);
 }
 
+## The key under which a lookup of struct or trait type `key`'s fields
+## is noted, and under which a change to them is announced: its spelling,
+## without pointer stars. Methods have their own keys (`_method_read`).
+_type_read(key: String): String {
+    var base = key;
+    while (base.ends_with("*")) {
+        base = base.substr_bytes(0, base.size - 1);
+    }
+    return $"t:{base}";
+}
+
+## The key under which a lookup of method `name` of struct or trait type
+## `key` is noted, and under which a change to its return type is
+## announced: the type without pointer stars, and the name before any `$`
+## or `@`, so an overload set and its members share it.
+_method_read(key: String, name: String): String {
+    var base = key;
+    while (base.ends_with("*")) {
+        base = base.substr_bytes(0, base.size - 1);
+    }
+    var bytes = name.bytes();
+    ulong end = 0;
+    while (end < bytes.count and bytes[end] != '$' as u8 and bytes[end] != '@' as u8) {
+        end += 1;
+    }
+    return $"m:{base}.{name.substr_bytes(0, end)}";
+}
+
+## The key of every specialization of `key`'s base type: overload sets
+## spell their receivers their own way, so a lookup of one notes this key
+## too, and a change to any specialization announces it.
+_base_read(key: String): String {
+    var base = _before_angle(key);
+    while (base.ends_with("*")) {
+        base = base.substr_bytes(0, base.size - 1);
+    }
+    return $"b:{base}";
+}
+
+## The key under which a lookup of free function `name` (or the overload
+## set or generic it belongs to) is noted, and under which a change to its
+## type is announced: the name before any `$`, `<` or `@`.
+_function_read(name: String): String {
+    var bytes = name.bytes();
+    ulong end = 0;
+    while (end < bytes.count and bytes[end] != '$' as u8 and bytes[end] != '<' as u8 and bytes[end] != '@' as u8) {
+        end += 1;
+    }
+    return $"f:{name.substr_bytes(0, end)}";
+}
+
+## Which callables a run of the pass walks again. A walk's result depends
+## only on the callable's code and on what it looks up, and the pass only
+## ever replaces `auto`: a callable whose last walk changed nothing, and
+## none of whose lookups changed since, would come out of another walk
+## unchanged, so it is skipped.
+struct _Worklist {
+    ## What each callable looked up in its last walk, by its place
+    ## (`s<struct>m<method>`, `f<function>`, ...); a callable whose last
+    ## walk changed it is absent.
+    var reads: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
+    ## What the last run changed: return types, fields and globals typed.
+    var changed: HashSet<String> = HashSet<String>();
+    ## The next run changes into this.
+    var changing: HashSet<String> = HashSet<String>();
+    ## Every callable is walked: the module changed outside the pass.
+    var all: bool = true;
+
+    ## Whether the callable at `place` must be walked.
+    needs(place: String): bool {
+        if (all) {
+            return true;
+        }
+        var read = reads.try_get(place);
+        if (!read.is_value()) {
+            return true;
+        }
+        for (var key in changed) {
+            if (read.value().contains(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## Starts walking the callable at `place`.
+    start(tables: _ImplicitTables, scopes: _TypeScopes) {
+        tables.reads = HashSet<String>();
+        scopes.edits = 0;
+    }
+
+    ## Finishes walking the callable at `place`.
+    finish(place: String, tables: _ImplicitTables, scopes: _TypeScopes) {
+        if (scopes.edits == 0) {
+            reads[place] = tables.reads;
+        } else {
+            reads.remove(place);
+        }
+    }
+
+    ## Ends a run: what it changed is what the next run looks for.
+    next_run() {
+        changed = changing;
+        changing = HashSet<String>();
+        all = false;
+    }
+}
+
 ## Program-wide lookup tables, built once per run of the pass. Where a name
 ## is declared twice, the first declaration wins.
 struct _ImplicitTables {
@@ -167,6 +275,9 @@ struct _ImplicitTables {
     ## Struct declared name to its type.
     var struct_types: HashMap<String, TypeName> = HashMap<String, TypeName>();
     var properties: Properties;
+    ## What the callable being walked looked up that a run of the pass can
+    ## change: `_type_read`, `_function_read` and `g:<global>` keys.
+    var reads: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState) {
         callees = Callees(module);
@@ -243,6 +354,11 @@ struct _ImplicitTables {
             _first_wins(globals, g.name, g.ty);
         }
     }
+
+    ## Records that the callable being walked looked up `key`.
+    note(key: String) {
+        reads.insert(key);
+    }
 }
 
 ## The struct whose methods are being resolved: its fields with resolved
@@ -283,6 +399,8 @@ struct _TypeScopes {
     ## The function or method being walked, and where it is declared.
     var function: String = "";
     var function_loc: Loc = Loc.none();
+    ## How many changes the walk made to the code it walked.
+    var edits: ulong = 0;
 
     construct(tables: _ImplicitTables, overloads: Overloads, resolved: Array<(Loc, String)>, state: PassState) {
         this.tables = tables;
@@ -322,6 +440,7 @@ struct _TypeScopes {
         if (found.is_value()) {
             return found;
         }
+        tables.note($"g:{name}");
         found = tables.globals.try_get(name);
         if (found.is_value()) {
             return found;
@@ -349,6 +468,7 @@ struct _TypeScopes {
 
     ## The field tables of struct type `key`, in order.
     field_tables(key: String): Array<Array<VariableDef>> {
+        tables.note(_type_read(key));
         var out = Array<Array<VariableDef>>();
         if (own.is_value() and own.value().name == key) {
             out.append(own.value().fields);
@@ -364,8 +484,10 @@ struct _TypeScopes {
         return out;
     }
 
-    ## The method tables of struct type `key`, in order.
-    method_tables(key: String): Array<Array<(String, TypeName)>> {
+    ## The method tables of struct type `key`, in order, for a lookup of
+    ## method `name`.
+    method_tables(key: String, name: String): Array<Array<(String, TypeName)>> {
+        tables.note(_method_read(key, name));
         var out = Array<Array<(String, TypeName)>>();
         if (own.is_value() and own.value().name == key) {
             out.append(own.value().methods);
@@ -397,7 +519,7 @@ struct _TypeScopes {
 
     ## Declared return type of method `name` on struct type `ty`.
     method_return(ty: TypeName, name: String): TypeName? {
-        var all = method_tables(ty.to_string());
+        var all = method_tables(ty.to_string(), name);
         if (all.count == 0) {
             return Optional<TypeName>.Empty;
         }
@@ -412,7 +534,7 @@ struct _TypeScopes {
     ## Whether struct type `ty` declares a method `name`; an overloaded
     ## method is declared under its members' names.
     has_method(ty: TypeName, name: String): bool {
-        for (var methods in method_tables(ty.to_string())) {
+        for (var methods in method_tables(ty.to_string(), name)) {
             for (var (m, _) in methods) {
                 if (m.starts_with(name) and (m.size == name.size or set_name(m) == name)) {
                     return true;
@@ -429,6 +551,7 @@ struct _TypeScopes {
         if (!has_method(ty, name)) {
             return false;
         }
+        tables.note(_function_read(name));
         bool free = tables.functions.contains(name)
             or tables.generic_functions.contains(name)
             or overloads.is_set(name);
@@ -450,6 +573,7 @@ struct _TypeScopes {
                 return Optional<TypeName>.Empty;
             }
         }
+        tables.note(_function_read(name));
         return tables.function_types.try_get(name);
     }
 
@@ -492,6 +616,9 @@ struct _TypeScopes {
     _infos(args: Expression[], current: TypeName?): Array<ArgInfo> {
         var infos = Array<ArgInfo>();
         for (var arg in args) {
+            if (arg is SymbolRef(node)) {
+                tables.note(_function_read(node.id));
+            }
             infos.append(arg_info(arg, overloads, Optional<TypeName>.Value(type_of(arg, current))));
         }
         return infos;
@@ -501,6 +628,7 @@ struct _TypeScopes {
     ## parameter or member by that name shadows it.
     overload_call(function: String, current: TypeName?): (String, Optional<TypeName[]>)? {
         var none = Optional<(String, Optional<TypeName[]>)>.Empty;
+        tables.note(_function_read(function));
         if (overloads.is_empty() or !overloads.is_set(overloads.call_set_name(function))) {
             return none;
         }
@@ -551,6 +679,7 @@ struct _TypeScopes {
                 return Optional<Choice>.Empty;
             }
         }
+        tables.note(_base_read(receiver.to_string()));
         var outcome = overloads.select_method(receiver, method, infos, at);
         if (outcome is Chosen(choice)) {
             return Optional<Choice>.Value(choice);
@@ -707,7 +836,7 @@ struct _TypeScopes {
                 if (source_type.is_empty() or source_type.is_auto()) {
                     return TypeName.auto();
                 }
-                var all = method_tables(source_type.to_string());
+                var all = method_tables(source_type.to_string(), "iterate");
                 if (all.count == 0) {
                     return TypeName.auto();
                 }
@@ -847,6 +976,9 @@ struct _TypeScopes {
             return found.value();
         }
         # A bare property in its struct's methods.
+        if (current.is_value()) {
+            tables.note(_type_read(current.value().to_string()));
+        }
         if (current.is_value() and tables.properties.find(current.value(), id).is_value()) {
             found = method_return(current.value(), getter_name(id));
             if (found.is_value()) {
@@ -887,7 +1019,7 @@ struct _TypeScopes {
             var choice = select_method_overload(this_type, node.method, node.args, node.loc, current);
             return choice.is_value() ? choice.value().ret : TypeName.auto();
         }
-        for (var methods in method_tables(text)) {
+        for (var methods in method_tables(text, node.method)) {
             for (var (m, ret) in methods) {
                 if (m == node.method) {
                     return ret;
@@ -942,6 +1074,7 @@ struct _TypeScopes {
 
     _call_type(node: FunctionCallExpression, current: TypeName?): TypeName {
         var function = node.function;
+        tables.note(_function_read(function));
         if (tuple_constructor_labels(function).is_value()) {
             var types = Array<TypeName>();
             for (var a in node.args) {
@@ -966,7 +1099,7 @@ struct _TypeScopes {
         if (current.is_value() and !_is_converted_literal(node)) {
             var st = current.value();
             if (!has_method(st, function) or calls_method(st, function, node.args.count)) {
-                var all = method_tables(st.to_string());
+                var all = method_tables(st.to_string(), function);
                 if (all.count > 0) {
                     for (var (m, ret) in all[0]) {
                         if (m == function) {
@@ -1158,7 +1291,7 @@ struct _SubjectFiller {
         if (e is WithSubject(scoped)) {
             var ty = scopes.type_of(scoped.subject, current);
             if (!ty.is_auto() and !ty.is_empty()) {
-                scoped.body = rewrite_expression(scoped.body, _SubjectTyper(scoped.id, ty));
+                scoped.body = rewrite_expression(scoped.body, _SubjectTyper(scoped.id, ty, scopes));
             }
         }
         return e;
@@ -1170,15 +1303,20 @@ extend _SubjectFiller with Rewriter;
 struct _SubjectTyper {
     var id: ulong;
     var ty: TypeName;
+    var scopes: _TypeScopes;
 
-    construct(id: ulong, ty: TypeName) {
+    construct(id: ulong, ty: TypeName, scopes: _TypeScopes) {
         this.id = id;
         this.ty = ty;
+        this.scopes = scopes;
     }
 
     rewrite(e: Expression): Expression {
         if (e is Subject(node)) {
             if (node.id == id) {
+                if (node.ty.to_string() != ty.to_string()) {
+                    scopes.edits += 1;
+                }
                 node.ty = ty.copy();
             }
         }
@@ -1200,7 +1338,11 @@ struct _ImplicitResolver {
 
     rewrite(e: Expression): Expression {
         var state = scopes.state;
+        var lowered = scopes.tables.properties.lowered;
         e = lower_property(e, scopes.tables.properties, _PropertyAt(scopes, current), state);
+        if (scopes.tables.properties.lowered != lowered) {
+            scopes.edits += 1;
+        }
         e = _bind_named_arguments(e);
         _resolve_overload(e);
         _resolve_method_overload(e);
@@ -1213,8 +1355,9 @@ struct _ImplicitResolver {
                     types.append(scopes.type_of(a, current));
                 }
                 var ty = tuple_literal_type(types);
-                if (ty.is_value()) {
+                if (ty.is_value() and node.function != ty.value().to_string()) {
                     node.function = ty.value().to_string();
+                    scopes.edits += 1;
                 }
             }
         }
@@ -1231,6 +1374,7 @@ struct _ImplicitResolver {
                 if (target is MemberRef(member)) {
                     member.loc = node.loc;
                 }
+                scopes.edits += 1;
                 return Expression.Invoke(InvokeExpression(target, node.args));
             }
         }
@@ -1253,6 +1397,7 @@ struct _ImplicitResolver {
                 args.append(node.lhs);
                 args.append(node.rhs);
                 var call = Expression.FunctionCall(FunctionCallExpression(function, args, node.loc));
+                scopes.edits += 1;
                 return negated ? Expression.Unary(UnaryExpression(call, UnaryOp.LogicalNot, node.loc)) : call;
             }
         }
@@ -1267,6 +1412,9 @@ struct _ImplicitResolver {
                 if (is_enum(state, this_type) or value_method) {
                     var owner = key.is_value() ? key.value() : this_type;
                     var call = call_on_value(state, owner, node.method, node.this_value, node.args, node.loc);
+                    if (call.is_value()) {
+                        scopes.edits += 1;
+                    }
                     return call.is_value() ? call.value() : e;
                 }
             }
@@ -1292,6 +1440,7 @@ struct _ImplicitResolver {
                 var field = scopes.field_type(this_type, node.method);
                 if (field.is_value() and field.value().is_callable()) {
                     var callee = Expression.MemberRef(MemberRefExpression(node.this_value, node.method, node.loc));
+                    scopes.edits += 1;
                     return Expression.Invoke(InvokeExpression(callee, node.args));
                 }
             }
@@ -1302,6 +1451,7 @@ struct _ImplicitResolver {
             if (node.ty.is_auto() and node.id != "this") {
                 var function_type = scopes.function_value(node.id, current);
                 if (function_type.is_value()) {
+                    scopes.edits += 1;
                     return Expression.FunctionRef(
                         FunctionRefExpression(node.id, function_type.value().copy(), node.loc)
                     );
@@ -1309,6 +1459,7 @@ struct _ImplicitResolver {
                 var resolved = scopes._symbol_type(node.id, current);
                 if (!resolved.is_empty() and !resolved.is_auto()) {
                     node.ty = resolved.copy();
+                    scopes.edits += 1;
                 }
             }
         }
@@ -1336,6 +1487,7 @@ struct _ImplicitResolver {
                         return e;
                     }
                 }
+                scopes.edits += 1;
                 return bind_method_call(e, receiver, scopes.tables.callees, state);
             }
             FunctionCall(node) => {
@@ -1368,6 +1520,7 @@ struct _ImplicitResolver {
             if (choice.is_value()) {
                 node.function = apply_choice(node.args, choice.value());
                 scopes.resolved.append((node.loc, choice.value().callee));
+                scopes.edits += 1;
             }
         }
     }
@@ -1392,6 +1545,7 @@ struct _ImplicitResolver {
         if (choice.is_value()) {
             node.method = apply_choice(node.args, choice.value());
             scopes.resolved.append((node.loc, method_target(receiver, choice.value().callee)));
+            scopes.edits += 1;
         }
     }
 
@@ -1418,6 +1572,7 @@ struct _ImplicitResolver {
             while (key.ends_with("*")) {
                 key = key.substr_bytes(0, key.size - 1);
             }
+            scopes.tables.note(_type_read(key));
             var methods = scopes.tables.generic_methods.try_get(key);
             if (!methods.is_value()) {
                 return;
@@ -1431,7 +1586,11 @@ struct _ImplicitResolver {
                     signature.complete(written.sub_types, types) :
                     signature.infer(types);
                 if (type_args.is_value()) {
-                    node.method = specialization(written.name, type_args.value());
+                    var specialized = specialization(written.name, type_args.value());
+                    if (node.method != specialized) {
+                        node.method = specialized;
+                        scopes.edits += 1;
+                    }
                 }
                 return;
             }
@@ -1447,6 +1606,7 @@ struct _ImplicitResolver {
             }
             return;
         }
+        scopes.tables.note(_function_read(call.function));
         var signature = scopes.tables.generic_functions.try_get(call.function);
         if (!signature.is_value() or scopes.value_callee(call.function, current).is_value()) {
             return;
@@ -1461,6 +1621,7 @@ struct _ImplicitResolver {
         }
         var type_args = signature.value().infer(scopes.argument_types(call.args, current));
         if (type_args.is_value()) {
+            scopes.edits += 1;
             call.function = specialization(call.function, type_args.value());
         }
     }
@@ -1469,6 +1630,7 @@ struct _ImplicitResolver {
     ## its arguments (or their defaults).
     _complete_type_arguments(call: FunctionCallExpression) {
         var written = parse_type_string(call.function);
+        scopes.tables.note(_function_read(written.name));
         var signature = scopes.tables.generic_functions.try_get(written.name);
         if (!signature.is_value()) {
             return;
@@ -1479,7 +1641,11 @@ struct _ImplicitResolver {
         }
         var type_args = signature.value().complete(written.sub_types, scopes.argument_types(call.args, current));
         if (type_args.is_value()) {
-            call.function = specialization(written.name, type_args.value());
+            var specialized = specialization(written.name, type_args.value());
+            if (call.function != specialized) {
+                call.function = specialized;
+                scopes.edits += 1;
+            }
         }
     }
 }
@@ -1540,6 +1706,7 @@ _resolve_statement(block: Block, index: ulong, scopes: _TypeScopes, current: Typ
                     var ty = scopes.type_of(variable.default.value(), current);
                     if (!ty.is_empty() and !ty.is_auto()) {
                         variable.ty = ty.copy();
+                        scopes.edits += 1;
                     }
                 }
                 if (variable.default.is_value()) {
@@ -1634,15 +1801,21 @@ _resolve_body(function: FunctionDef, scopes: _TypeScopes, current: TypeName?) {
     scopes.pop();
 }
 
-## One run of the pass; returns whether a function's return type was
-## inferred or a call resolved.
-_resolve_once(module: Module, state: PassState): bool {
+## One run of the pass over the callables `work` needs; returns whether a
+## function's return type was inferred or a call resolved.
+_resolve_once(module: Module, state: PassState, work: _Worklist): bool {
     bool inferred = false;
     var tables = _ImplicitTables(module, state);
     var overloads = Overloads(module, state);
     var resolved = Array<(Loc, String)>();
     # Structs first: methods see field types.
-    for (var st in module.structs) {
+    ulong s = 0;
+    while (s < module.structs.count) {
+        var st = module.structs[s];
+        var place = $"s{s}";
+        s += 1;
+        var struct_read = _type_read(st.ty.to_string());
+        var struct_base = _base_read(st.ty.to_string());
         var current = Optional<TypeName>.Value(st.ty);
         var scopes = _TypeScopes(tables, overloads, resolved, state);
         for (var p in st.generic_params) {
@@ -1655,6 +1828,8 @@ _resolve_once(module: Module, state: PassState): bool {
                 var ty = scopes.type_of(field.default.value(), current);
                 if (!ty.is_empty() and !ty.is_auto()) {
                     field.ty = ty.copy();
+                    work.changing.insert(struct_read);
+                    work.changing.insert(struct_base);
                 }
             }
             # A default calling an overloaded constructor or function picks
@@ -1672,18 +1847,35 @@ _resolve_once(module: Module, state: PassState): bool {
             own_methods.append((m.name, m.ty));
         }
         scopes.own = Optional<_OwnStruct>.Value(_OwnStruct(st.ty.to_string(), st.field_members.copy(), own_methods));
+        ulong index = 0;
         for (var c in st.constructors) {
+            var at = $"{place}c{index}";
+            index += 1;
+            if (!work.needs(at)) {
+                continue;
+            }
+            work.start(tables, scopes);
             _resolve_parameter_defaults(c.parameters, scopes, current);
             if (c.body.is_value()) {
                 scopes.in_constructor = true;
                 _resolve_body(c, scopes, current);
                 scopes.in_constructor = false;
             }
+            work.finish(at, tables, scopes);
         }
-        if (st.destructor.body.is_value()) {
+        if (st.destructor.body.is_value() and work.needs($"{place}d")) {
+            work.start(tables, scopes);
             _resolve_body(st.destructor, scopes, current);
+            work.finish($"{place}d", tables, scopes);
         }
+        index = 0;
         for (var method in st.method_members) {
+            var at = $"{place}m{index}";
+            index += 1;
+            if (!work.needs(at)) {
+                continue;
+            }
+            work.start(tables, scopes);
             # A specialization's methods keep the base's name as parent.
             var method_struct = st.ty;
             if (method.parent.is_value() and method.parent.value() != st.ty.name) {
@@ -1702,12 +1894,19 @@ _resolve_once(module: Module, state: PassState): bool {
             }
             if (_finish_return_inference(method, scopes)) {
                 inferred = true;
+                work.changing.insert(_method_read(st.ty.to_string(), method.name));
+                work.changing.insert(struct_base);
             }
+            work.finish(at, tables, scopes);
         }
     }
     # Free functions.
-    for (var function in module.functions) {
-        if (!function.body.is_value()) {
+    ulong f = 0;
+    while (f < module.functions.count) {
+        var function = module.functions[f];
+        var at = $"f{f}";
+        f += 1;
+        if (!function.body.is_value() or !work.needs(at)) {
             continue;
         }
         var none = Optional<TypeName>.Empty;
@@ -1717,12 +1916,15 @@ _resolve_once(module: Module, state: PassState): bool {
         }
         scopes.generic_base = function.is_generic_func;
         var returns = _returns_for(function);
+        work.start(tables, scopes);
         _resolve_parameter_defaults(function.parameters, scopes, none);
         scopes.returns = returns;
         _resolve_body(function, scopes, none);
         if (_finish_return_inference(function, scopes)) {
             inferred = true;
+            work.changing.insert(_function_read(function.name));
         }
+        work.finish(at, tables, scopes);
     }
     # Global variables: one shared scope so later globals see earlier ones.
     var scopes = _TypeScopes(tables, overloads, resolved, state);
@@ -1732,6 +1934,7 @@ _resolve_once(module: Module, state: PassState): bool {
             var ty = scopes.type_of(global.default.value(), none);
             if (!ty.is_empty() and !ty.is_auto()) {
                 global.ty = ty.copy();
+                work.changing.insert($"g:{global.name}");
             }
         }
         if (global.default.is_value()) {
@@ -1762,6 +1965,15 @@ struct _OverloadOnly {
 
 extend _OverloadOnly with Rewriter;
 
+## How many callables `module` has: places in `_Worklist` count them.
+_size(module: Module): ulong {
+    ulong count = module.functions.count;
+    for (var st in module.structs) {
+        count += st.constructors.count + st.method_members.count + 1;
+    }
+    return count;
+}
+
 ## Resolves `auto` variable types, unresolved names, inferred return types
 ## and overloaded and generic calls, as
 ## `resolve_implicit_types::resolve_implicit_types` does.
@@ -1773,8 +1985,10 @@ export resolve_implicit_types(module: Module, state: PassState) {
     # Inferring a return type can type the callers' locals, and closure
     # types and inferred types feed each other: repeat while anything
     # changes, at most eight times.
+    var work = _Worklist();
     ulong round = 0;
     while (round < 8) {
+        var size = _size(module);
         bool synced = sync_closures(module, state);
         # The binding passes share tables while none of them changes the
         # module.
@@ -1788,9 +2002,15 @@ export resolve_implicit_types(module: Module, state: PassState) {
             tables.reset();
         }
         bool methods = bind_generic_method_values(module, state, tables);
-        if (!_resolve_once(module, state) and !synced and !bound and !specialized and !methods) {
+        # Code the pass did not write changed: walk everything.
+        if (synced or bound or specialized or methods or _size(module) != size) {
+            work.all = true;
+        }
+        bool inferred = _resolve_once(module, state, work);
+        if (!inferred and !synced and !bound and !specialized and !methods) {
             break;
         }
+        work.next_run();
         round += 1;
     }
     sync_closures(module, state);

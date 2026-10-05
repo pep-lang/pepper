@@ -2834,8 +2834,13 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   (`closure_sites.pep`, `generic_values.pep`) and named arguments of
   method calls, repeated while anything changes (the value-binding passes
   walk only the code holding a candidate, `select_sites`, and share one
-  `ModuleTables` per round while none of them changes the module; the
-  model and errors they give are `pepper_sema`'s); then the `?` checks
+  `ModuleTables` per round while none of them changes the module; a
+  repeat round walks a callable again only when its last walk changed it
+  or something it looked up changed since, `_Worklist`: each walk notes
+  the field tables, methods, overload sets, functions and globals it
+  looked up, each change announces the same keys, and a change made
+  outside the walk walks everything; the model and errors they give are
+  `pepper_sema`'s); then the `?` checks
   (`check_tries.pep`), extension targets (`resolve_resolvables.pep`)
   and extensions applied to their structs, with each declared trait's
   members checked or defaulted (`apply_extensions.pep`), parameter names

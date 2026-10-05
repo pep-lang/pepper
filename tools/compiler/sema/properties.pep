@@ -41,6 +41,10 @@ export struct Properties {
     ## Where every extension method is declared: an extension's methods are
     ## not their struct's own code, even once copied into it.
     var extension_methods: HashSet<Loc> = HashSet<Loc>();
+    ## How many accesses `lower_property` has rewritten into something
+    ## else: a caller compares it before and after to learn whether an
+    ## access changed.
+    var lowered: ulong = 0;
 
     ## Returns the properties of `module`.
     ##
@@ -159,18 +163,20 @@ export lower_property(e: Expression, properties: Properties, site: PropertySite,
             var property = found.value();
             var at = member.loc;
             if (node.op != BinaryOp.Assign and _is_direct(property, site, properties)) {
-                if (property.storage.is_value()) {
-                    member.name = property.storage.value();
-                }
+                _rename(member, property, properties);
                 return e;
             }
             if (node.op == BinaryOp.Assign) {
+                if (!_stores_in_place(property, member.name)) {
+                    properties.lowered += 1;
+                }
                 return _write(member.lhs, property, node.rhs, at, site, properties, state);
             }
             var base = _compound_base(node.op);
             if (!base.is_value()) {
                 return e;
             }
+            properties.lowered += 1;
             return _read_modify_write(
                 member.lhs, property, base.value(), node.rhs, at, node.loc, site, properties, state
             );
@@ -193,11 +199,10 @@ export lower_property(e: Expression, properties: Properties, site: PropertySite,
             var at = member.loc;
             var base = increment ? BinaryOp.Add : BinaryOp.Sub;
             if (_is_direct(property, site, properties)) {
-                if (property.storage.is_value()) {
-                    member.name = property.storage.value();
-                }
+                _rename(member, property, properties);
                 return e;
             }
+            properties.lowered += 1;
             return _read_modify_write(
                 member.lhs, property, base, Expression.IntLiteral(1), at, node.loc, site, properties, state
             );
@@ -235,6 +240,9 @@ export lower_property(e: Expression, properties: Properties, site: PropertySite,
             if (!found.is_value() or _is_own_storage(site, node.lhs, found.value())) {
                 return e;
             }
+            if (!_reads_in_place(found.value(), node.name)) {
+                properties.lowered += 1;
+            }
             return _read(node.lhs, found.value(), node.loc);
         }
         else => {
@@ -270,6 +278,7 @@ _bare_to_member(e: Expression, properties: Properties, site: PropertySite, state
                 return e;
             }
             var self = Expression.SymbolRef(SymbolRefExpression("this", ty, Loc.none()));
+            properties.lowered += 1;
             return Expression.MemberRef(MemberRefExpression(self, node.id, node.loc));
         }
         return e;
@@ -283,6 +292,7 @@ _bare_to_member(e: Expression, properties: Properties, site: PropertySite, state
     if ((property.get == AccessorKind.Default and !body_set) or site.is_local(node.id)) {
         return e;
     }
+    properties.lowered += 1;
     return Expression.MemberRef(MemberRefExpression(Expression.ThisRef, node.id, node.loc));
 }
 
@@ -313,6 +323,34 @@ _is_direct(property: PropertyDef, site: PropertySite, properties: Properties): b
         return property.set.value() == AccessorKind.Default;
     }
     return _inside(property, site, properties) and (!property.shared or site.in_constructor());
+}
+
+## Points `member` at `property`'s storage, counting a change of name.
+_rename(member: MemberRefExpression, property: PropertyDef, properties: Properties) {
+    if (property.storage.is_value() and member.name != property.storage.value()) {
+        member.name = property.storage.value();
+        properties.lowered += 1;
+    }
+}
+
+## Whether `_read` of `property`, read as `name`, is that same member.
+_reads_in_place(property: PropertyDef, name: String): bool {
+    return property.storage.is_value()
+        and property.get == AccessorKind.Default
+        and !property.in_trait
+        and property.storage.value() == name;
+}
+
+## Whether `_write` of `property`, written as `name`, is an assignment of
+## that same member (or an error).
+_stores_in_place(property: PropertyDef, name: String): bool {
+    if (!property.storage.is_value() or property.storage.value() != name) {
+        return false;
+    }
+    if (property.set.is_value()) {
+        return property.set.value() == AccessorKind.Default and !property.in_trait;
+    }
+    return true;
 }
 
 ## The value of `receiver.p`.
