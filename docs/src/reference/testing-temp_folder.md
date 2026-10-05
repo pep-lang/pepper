@@ -1,4 +1,4 @@
-<!-- Generated from runtime/testing/temp_folder.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/testing/temp_folder.pep by `pep-doc reference`. Do not edit. -->
 
 # TempFolder
 

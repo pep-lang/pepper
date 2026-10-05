@@ -1,4 +1,4 @@
-<!-- Generated from runtime/uri.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/uri.pep by `pep-doc reference`. Do not edit. -->
 
 # URI
 

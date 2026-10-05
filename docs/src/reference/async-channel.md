@@ -1,4 +1,4 @@
-<!-- Generated from runtime/async/channel.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/async/channel.pep by `pep-doc reference`. Do not edit. -->
 
 # Channel
 

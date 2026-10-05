@@ -1,4 +1,4 @@
-<!-- Generated from runtime/io/path.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/io/path.pep by `pep-doc reference`. Do not edit. -->
 
 # Path
 

@@ -1,4 +1,4 @@
-<!-- Generated from runtime/weak.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/weak.pep by `pep-doc reference`. Do not edit. -->
 
 # Weak
 

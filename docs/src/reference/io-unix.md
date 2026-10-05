@@ -1,4 +1,4 @@
-<!-- Generated from runtime/io/unix.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/io/unix.pep by `pep-doc reference`. Do not edit. -->
 
 # Unix domain sockets
 

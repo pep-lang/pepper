@@ -6,12 +6,14 @@
 renders it with [mdBook](https://rust-lang.github.io/mdBook/), which must be
 on the `PATH` (`cargo install mdbook --locked`).
 
-It works on the repository it was built from, wherever it is run. Build it
-with cargo; `pepper doc` runs it, and from the repository root
-`cargo run -p pepper-docgen -- <command>` builds and runs it in one step:
+It is a Pepper program (`tools/pep-doc`), and it works on the Pepper
+checkout that holds the folder it is run in. `scripts/pepper-tests.sh`
+builds it beside `pep-build`, with the other Pepper tools, and `pepper doc`
+runs it. To build it alone, from the repository root:
 
 ```bash
-cargo run -p pepper-docgen -- reference     # the same as: pep-doc reference
+target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
+target/release/pep-doc reference
 ```
 
 ```text
@@ -44,8 +46,9 @@ Changes nothing, and fails (exit status 1) when:
   the tool and the page.
 
 The tools' options come from their `--help`: `pep-build`'s and the Pepper
-tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-test`),
-which `scripts/pepper-tests.sh` builds beside `pep-build`, so run it first.
+tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,
+`pep-test`), which `scripts/pepper-tests.sh` builds beside `pep-build`, so
+run it first.
 
 - `--tools <DIR>`: the folder holding the built tools (default: the release
   build's folder under `$CARGO_TARGET_DIR` or `target/` when it holds

@@ -1,4 +1,4 @@
-<!-- Generated from runtime/os/environment.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/os/environment.pep by `pep-doc reference`. Do not edit. -->
 
 # Environment
 

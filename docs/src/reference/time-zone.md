@@ -1,4 +1,4 @@
-<!-- Generated from runtime/time/zone.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/time/zone.pep by `pep-doc reference`. Do not edit. -->
 
 # Time zones
 

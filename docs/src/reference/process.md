@@ -1,4 +1,4 @@
-<!-- Generated from runtime/process.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/process.pep by `pep-doc reference`. Do not edit. -->
 
 # Arguments and exit (deprecated)
 

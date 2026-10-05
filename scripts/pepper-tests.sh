@@ -10,9 +10,9 @@
 # compiler-dir holds the `pep-build` to test with (default: the release
 # build, else the debug build, under $CARGO_TARGET_DIR or target/). The
 # script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
-# `pep-profile`, `pep-package`) with it, into that same folder, so
-# `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
-# `pep-doc check` finds every tool's `--help`. Further
+# `pep-profile`, `pep-package`, `pep-install`, `pep-doc`) with it, into
+# that same folder, so `pepper test` finds `pep-test`, `pep-test` finds
+# `pep-build`, and `pep-doc check` finds every tool's `--help`. Further
 # arguments go to every `pepper test` (`-f name`, `-j 1`, ...).
 #
 # Besides the plain run, the compress tests run again with `-D USE_ZLIB`
@@ -44,7 +44,7 @@ fi
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
 # and `pep-doc check` reads every tool's `--help`.
 pids=()
-for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install; do
+for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install pep-doc; do
   "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done

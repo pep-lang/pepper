@@ -1,4 +1,4 @@
-<!-- Generated from runtime/debug/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/debug/module.pep by `pep-doc reference`. Do not edit. -->
 
 # The debug module
 

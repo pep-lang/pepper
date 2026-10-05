@@ -131,14 +131,14 @@ echo "=== build the Rust tools"
 export RUSTFLAGS="${RUSTFLAGS:-} -L native=$static_dir"
 cargo --version
 cargo build --release --locked -p pepper "${features[@]}"
-cargo build --release --locked -p pepper-lsp -p pepper-docgen
+cargo build --release --locked -p pepper-lsp
 release="${CARGO_TARGET_DIR:-target}/release"
 
 stage_name="pepper-$version-$target"
 stage="$output/$stage_name"
 rm -rf "$stage"
 mkdir -p "$stage/bin"
-for tool in pep-build pep-lsp pep-doc; do
+for tool in pep-build pep-lsp; do
   cp "$release/$tool$exe" "$stage/bin/"
 done
 if [ "$target" = windows-x64 ]; then
@@ -150,7 +150,7 @@ cp -R runtime "$stage/runtime"
 cp LICENSE.md "$stage/"
 
 echo "=== build the Pepper tools"
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc; do
   "$stage/bin/pep-build$exe" -O -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
 # Windows builds write a .pdb beside each program; the archive does not

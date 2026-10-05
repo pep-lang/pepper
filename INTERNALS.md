@@ -34,7 +34,7 @@ names and the pass order come from that implementation.
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
-| `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
+| `tools/pep-doc` | `pep-doc`, written in Pepper on the compiler's parser (`tools/compiler`): generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `doc.pep`), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
 | `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder, every sema pass, codegen and a driver that builds executables. See [section 8](#8-language-server-and-vs-code-extension). |
@@ -52,8 +52,7 @@ names and the pass order come from that implementation.
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
 Dependency direction: `parser ← files ← sema ← codegen ← driver ← pep-build`.
-`lsp` and `docgen` depend on the parser (and the LSP also on sema and files)
-and nothing that links LLVM.
+`lsp` depends on the parser, sema and files, and nothing that links LLVM.
 
 ---
 
@@ -842,7 +841,7 @@ the loader, linking, and visibility all call it. It is also false for
 `[__BuiltIn]` (`ast::is_built_in`), which marks a runtime declaration of a
 compiler built-in (`runtime/reflect.pep`): the builder skips such a
 top-level declaration (`build_module`), so it declares, links and generates
-nothing, while docgen, `doc::check_documented` and the language server
+nothing, while pep-doc, `doc::check_documented` and the language server
 read it under the built-in's name (`ast::built_in_name`, `reflect.name`).
 `Program::built_in_errors` rejects the attribute outside the runtime
 (`checked::in_runtime`). Its functions and methods end in `;` after their
@@ -2034,7 +2033,7 @@ into one gdb rejects). Modules carry the host triple, which CodeView needs.
   on it: `place` moves a `static` block's emitted code into the expanded
   copy (§2.8), whose passes' blocks are then in that file too.
 - **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
-  chains itself, and `tools/docgen/examples_test.pep` builds a sample of
+  chains itself, and `tools/pep-doc/examples_test.pep` builds a sample of
   the examples at `-O2 -g`, so the verifier checks them.
 - **Cache.** `-g` is part of `Cache::compiler` and the cache directory
   (`O<n>-g`). It also sets `Keys::exact_positions`, which hashes every
@@ -2453,14 +2452,13 @@ diagnostics"). The mechanics:
   book's C chapter).
 - **Documentation.** The standard is in AGENTS.md (the library documentation
   section): `##` doc comments with the tags listed above.
-  `pep-doc check` enforces it (`tools/docgen/src/checks.rs`). The
+  `pep-doc check` enforces it (`tools/pep-doc/checks.pep`). The
   reference pages in `docs/src/reference/` and the reference part of
-  `docs/src/SUMMARY.md` are **generated** by
-  `cargo run -p pepper-docgen -- reference`. CI fails if they are stale
-  (`cargo run -p pepper-docgen -- check`). A page's title and place in the
-  table of contents come from `PAGES` in `tools/docgen/src/reference.rs`,
+  `docs/src/SUMMARY.md` are **generated** by `pep-doc reference`. CI fails
+  if they are stale (`pep-doc check`). A page's title and place in the
+  table of contents come from `pages()` in `tools/pep-doc/reference.pep`,
   which must name every runtime file with public declarations; `check`
-  also lints the chapters (`tools/docgen/src/book.rs`). A compiler built-in
+  also lints the chapters (`tools/pep-doc/book.pep`). A compiler built-in
   is documented by a `[__BuiltIn]` declaration in the runtime (see
   section 2.5), never by a hand-written page. See
   `docs/src/contributing/docs.md` for the book.
@@ -3066,14 +3064,15 @@ root package's test runs. Neither CI nor the pre-merge checks run them any more 
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/*/test.pep` | `corpus_tests.rs::corpus_files_compile_and_run` checks (visibility included), compiles, links, and runs each fixture with `-I tests`; `corpus_files_run_under_wasmtime` builds each for `wasm32-wasip1` and runs it under wasmtime (`support::run_under_wasmtime`, when `support::wasi_tools` finds `WASI_SDK_PATH` and wasmtime; `NOT_ON_WASI` lists what needs threads or tasks). `pep_fmt_tests.rs` parses and formats every file under `tests/`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
-| Runtime docs, tool docs | `tools/docgen/src/checks.rs`, run by `pep-doc check` | `check_documented` over every `runtime/**/*.pep` and `tools/syntax`. Each tool's options (`--help` of `pep-build` and of the Pepper tools, built by `scripts/pepper-tests.sh` beside it; `tools/docgen/src/help.txt`, `tools/lsp/src/help.txt`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s option values, trace channels and environment variables and `pep-lsp`'s initialization options and VS Code settings. |
-| Docs examples | `tools/docgen/examples_test.pep` (a Pepper test, run by `scripts/pepper-tests.sh`) | Builds every `docs/examples/*.pep` (or `name/main.pep`) with `pep-build` and runs it, and builds a sample of them (`sample()`) again at `-O2 -g`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
+| Runtime docs, tool docs | `tools/pep-doc/checks.pep`, run by `pep-doc check` | `check_documented` over every `runtime/**/*.pep` and `tools/syntax`. Each tool's options (`--help` of `pep-build` and of the Pepper tools, built by `scripts/pepper-tests.sh` beside it; `HELP` in `tools/pep-doc/main.pep`, `tools/lsp/src/help.txt`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s option values, trace channels and environment variables and `pep-lsp`'s initialization options and VS Code settings. |
+| Docs examples | `tools/pep-doc/examples_test.pep` (a Pepper test, run by `scripts/pepper-tests.sh`) | Builds every `docs/examples/*.pep` (or `name/main.pep`) with `pep-build` and runs it, and builds a sample of them (`sample()`) again at `-O2 -g`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
 | Built binaries | `tests/*.rs` (root package: `pep_build.rs`, `pep_test_tool.rs`) | Run the `pep-build` cargo builds from this source (`CARGO_BIN_EXE_pep-build`), for a tool that runs the compiler (`pep-test`). A `pep-build` found beside a pepper-driver test binary may be left over from an older build. |
 | Runtime | `runtime/<module>/test/*_test.pep`, `runtime/test/*_test.pep` (the prelude's) | `[Test]` functions in Pepper, run by `pepper test` in `runtime/` (`scripts/pepper-tests.sh`, which also runs the `-D USE_ZLIB` and `-D USE_LIBCRYPTO` variants and the tools' tests); each fails when it leaks (the `TestRunner` compares `_pep_live_allocs` before and after). Runtime and library behaviour is tested here, not in the driver's Rust suite; see `docs/src/contributing/tests.md`. |
 | LSP | `tools/lsp/src/tests.rs` | See section 8. |
-| xtask, docgen | `xtask/src/main.rs`, `tools/docgen/src/site.rs` | Unit tests. |
+| xtask | `xtask/src/main.rs` | Unit tests. |
+| pep-doc | `tools/pep-doc/pep_doc_test.pep` (a Pepper test, run by `scripts/pepper-tests.sh`) | Doc comments and the documentation standard, signatures and re-exports in the reference, the help parsing behind the tool-option check, the chapter lint, and site versions. |
 
 To run a subset:
 
@@ -3171,11 +3170,11 @@ rendered-output test in `crates/pepper-driver/tests/integration/diagnostic_tests
    file, which joins the prelude automatically). Mark it `export`. Put
    internals under `_pep_`/`_io_`.
 2. Document it with `##` doc comments per AGENTS.md. Run
-   `cargo run -p pepper-docgen -- check`.
+   `pep-doc check`.
 3. For the `io` module, add it to the implementing file and re-export it
    from `runtime/io/module.pep`.
-4. Regenerate the reference: `cargo run -p pepper-docgen -- reference`.
-   A new file needs a title in `PAGES` (`tools/docgen/src/reference.rs`)
+4. Regenerate the reference: `pep-doc reference`.
+   A new file needs a title in `pages()` (`tools/pep-doc/reference.pep`)
    first. Commit the changed `docs/src/reference/*.md` and `docs/src/SUMMARY.md`.
 5. Test it with `compile_with_runtime` + JIT in the matching
    `crates/pepper-driver/tests/integration/*_tests.rs`. For behavior the docs show, add a
@@ -3260,7 +3259,7 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   - `test-windows` runs on the self-hosted **`pepper-windows`** runner:
     provision LLVM (`ci-provision-llvm.sh`, cached), `cargo build
     --workspace --release --locked`, `scripts/pepper-tests.sh`, and
-    `cargo run -p pepper-docgen -- check`.
+    `pep-doc check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
     do the same against the default LLVM. The Rust tests (`cargo test`)
     run in no job (#662).

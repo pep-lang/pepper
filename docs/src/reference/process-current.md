@@ -1,4 +1,4 @@
-<!-- Generated from runtime/process/current.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/process/current.pep by `pep-doc reference`. Do not edit. -->
 
 # The running process
 

@@ -1,4 +1,4 @@
-<!-- Generated from runtime/iterator.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/iterator.pep by `pep-doc reference`. Do not edit. -->
 
 # Iterators
 

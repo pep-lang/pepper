@@ -1,4 +1,4 @@
-<!-- Generated from runtime/async/thread.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/async/thread.pep by `pep-doc reference`. Do not edit. -->
 
 # Thread
 

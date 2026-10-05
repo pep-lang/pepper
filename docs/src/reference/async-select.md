@@ -1,4 +1,4 @@
-<!-- Generated from runtime/async/select.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/async/select.pep by `pep-doc reference`. Do not edit. -->
 
 # Select
 

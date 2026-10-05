@@ -1,4 +1,4 @@
-<!-- Generated from runtime/time/civil.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/time/civil.pep by `pep-doc reference`. Do not edit. -->
 
 # Dates and times
 

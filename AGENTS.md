@@ -32,7 +32,7 @@ opening a PR, check each of these against the diff:
   `docs/src/introduction.md`.
 - **Runtime or library API**: write or update its `##` doc comment (see
   [the standard](#library-code-is-documented-with--doc-comments)), then run
-  `cargo run -p pepper-docgen -- reference` and commit the regenerated
+  `pep-doc reference` and commit the regenerated
   `docs/src/reference/`.
 - **Compiler structure** (a crate, stage, pass, file, or pattern that
   INTERNALS.md names moves, is added, or changes): update INTERNALS.md.
@@ -44,7 +44,7 @@ opening a PR, check each of these against the diff:
 CI enforces what it can: `pep-doc check` fails on an undocumented public
 runtime declaration, on a tool option missing from its page (it reads the
 tools that `scripts/pepper-tests.sh` builds, so run that first), and when
-the reference is stale, and `tools/docgen/examples_test.pep` builds and
+the reference is stale, and `tools/pep-doc/examples_test.pep` builds and
 runs every example. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
@@ -367,8 +367,8 @@ T remove_at(ulong index) { ... }
   only inside the signature). Every use outside a deprecated declaration
   then warns, in every program, so migrate the runtime's own uses in the
   same PR.
-- **Enforced**: `pep-doc check` (`tools/docgen/src/checks.rs`) runs
-  `pepper_parser::doc::check_documented` over every `.pep` file under
+- **Enforced**: `pep-doc check` (`tools/pep-doc/checks.pep`) runs
+  `check_documented` (`tools/pep-doc/doc.pep`) over every `.pep` file under
   `runtime/` and fails with a clang-style error for each public declaration
   without a comment, description, or required tag, and for tags naming a
   parameter that does not exist. The language server shows these comments on

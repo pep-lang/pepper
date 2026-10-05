@@ -86,8 +86,14 @@ jobs:
             git -C site switch --orphan gh-pages
           fi
 
+      # pep-doc is a Pepper program, built with the compiler.
+      - name: Build pep-doc
+        run: |
+          cargo build --release --locked -p pepper
+          target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
+
       - name: Build the docs
-        run: cargo run -p pepper-docgen -- build --version "$DOCS_VERSION" --site site
+        run: target/release/pep-doc build --version "$DOCS_VERSION" --site site
 
       - name: Publish
         run: |

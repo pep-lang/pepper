@@ -1,4 +1,4 @@
-<!-- Generated from runtime/tls/stream.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/tls/stream.pep by `pep-doc reference`. Do not edit. -->
 
 # Connectors and streams
 

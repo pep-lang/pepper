@@ -1,4 +1,4 @@
-<!-- Generated from runtime/result.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/result.pep by `pep-doc reference`. Do not edit. -->
 
 # Result
 

@@ -1,4 +1,4 @@
-<!-- Generated from runtime/text/code_page_437.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/text/code_page_437.pep by `pep-doc reference`. Do not edit. -->
 
 # Code page 437
 

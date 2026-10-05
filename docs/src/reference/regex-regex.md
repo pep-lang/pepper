@@ -1,4 +1,4 @@
-<!-- Generated from runtime/regex/regex.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
+<!-- Generated from runtime/regex/regex.pep by `pep-doc reference`. Do not edit. -->
 
 # Regex and Match
 

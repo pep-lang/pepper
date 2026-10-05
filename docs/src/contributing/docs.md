@@ -2,16 +2,19 @@
 
 This book lives in `docs/` and is rendered with [mdBook](https://rust-lang.github.io/mdBook/).
 The standard library reference (`docs/src/reference/`) is generated from the
-runtime's doc comments by `pep-doc`, a tool in this repository.
+runtime's doc comments by `pep-doc`, a Pepper tool in this repository
+(`tools/pep-doc`), which `scripts/pepper-tests.sh` builds beside `pep-build`.
 
 ```sh
 cargo install mdbook --locked                 # once
 
-cargo run -p pepper-docgen -- serve           # live preview while writing
-cargo run -p pepper-docgen -- reference       # regenerate the reference after changing runtime docs
-cargo run -p pepper-docgen -- build           # render into target/docs-site/dev/
-cargo run -p pepper-docgen -- build --version 0.2.0 --site <dir>
+pep-doc serve                                 # live preview while writing
+pep-doc reference                             # regenerate the reference after changing runtime docs
+pep-doc build                                 # render into target/docs-site/dev/
+pep-doc build --version 0.2.0 --site <dir>
 ```
+
+Run it as `target/release/pep-doc`, or as `pepper doc`.
 
 `pep-doc`'s commands and options are described in
 [The documentation builder: pep-doc](../tools/pep-doc.md).
@@ -34,7 +37,7 @@ mdBook's include syntax, so the text on the page is the file that was tested:
 ```
 ````
 
-`tools/docgen/examples_test.pep`, which `scripts/pepper-tests.sh` runs,
+`tools/pep-doc/examples_test.pep`, which `scripts/pepper-tests.sh` runs,
 builds and runs every example; each must return 0 from `main` and uses
 `assert` to check what it shows. `PEPPER_DOCS_EXAMPLE=structs` limits it to
 the examples whose name starts with `structs`. A sample of the examples is
@@ -55,8 +58,8 @@ The `Docs` workflow (`.github/workflows/docs.yml`) publishes to the
 
 ## The reference stays current
 
-`cargo run -p pepper-docgen -- check` fails when `docs/src/reference/` does
-not match the runtime, and CI runs it.
+`pep-doc check` fails when `docs/src/reference/` does not match the
+runtime, and CI runs it.
 
 What the compiler provides rather than the runtime declares is still
 declared in the runtime, marked `[__BuiltIn]`: `runtime/reflect.pep`
@@ -69,14 +72,10 @@ comment check and the language server read it like any other. A string
 argument names the built-in when it is not the declaration's own name:
 `[__BuiltIn("reflect.name")]` titles the entry and its signature
 `reflect.name`, and hover and go-to-definition on a use of `reflect.name`
-lead to it. Only the runtime may use the attribute. Docgen tests fail
-when the compiler gains a `reflect` function or property that
-`runtime/reflect.pep` does not declare, or loses one it does, and when
-`runtime/builtins.pep` declares an intrinsic the compiler does not have (or
-with another argument count), or misses one `convert_intrinsics` converts.
+lead to it. Only the runtime may use the attribute.
 
 Each reference page's title and place in the table of contents come from
-`PAGES` in `tools/docgen/src/reference.rs`. A new runtime file with public
+`pages()` in `tools/pep-doc/reference.pep`. A new runtime file with public
 declarations must be added there, under its module's `module.pep`; until it
 is, `reference` and `check` fail and name the file.
 
