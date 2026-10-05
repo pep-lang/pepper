@@ -37,7 +37,7 @@ names and the pass order come from that implementation.
 | `tools/docgen` | `pep-doc`: generates `docs/src/reference/` from runtime doc comments and builds the mdBook site. |
 | `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
-| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder, every sema pass and codegen. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder, every sema pass, codegen and a driver that builds executables. See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
 | `tools/pep-package` | `pep-package`, the package manager, written in Pepper and itself a `pep.toml` project with no dependencies (it reads and edits `pep.toml` and `pep.lock` with the runtime's `toml` module): `semver.pep` (versions and ranges), `manifest.pep`, `lock.pep` (`pep.lock`), `git.pep` (`ls-remote`, checkouts), `archive.pep` (the host's `.tar.gz` of a locked commit when git is missing, and the checksum of a package's files that `pep.lock` records), `resolve.pep` (one revision per package; the project's `pep.toml` overrides). The driver's `fetch.rs` runs `pep-package fetch` before a build when `.pep/deps` lacks a locked package, or checks the commits out with git itself when `pep-package` is not installed. Builds side by side (`pepper test` builds its test programs at once) fetch one at a time under `.pep/fetch.lock`. Tested by `package_tests.rs`. |
@@ -2938,7 +2938,20 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME] file`,
   `pepc --emit-checked ...`, `pepc --emit-model ...` and
   `pepc --emit-llvm ...` print the same output as `pep-build`, to diff a
-  program by hand.
+  program by hand. With no `--emit-*` option, `pepc [-O0..3] [-o out]
+  [-l lib] [-L dir] ... file` builds the program into an executable.
+- `compiler.driver` (`compiler/driver/`) builds a program as
+  `crates/pepper-driver` does, so far as one unit with no build cache:
+  `build.pep` runs merge and the sema passes (printing their warnings on
+  standard error, failed or not), generates the module for the host with
+  clang's default CPU, runs LLVM's `default<On>` pipeline, moves the
+  static constructors into `.init_array` on ELF, writes one object to
+  `.pep/build`, and links it; `linker.pep` finds clang (as
+  `find_link_driver` does) and links with the `[Link]` libraries and
+  folders, `-l` and `-L`, and the OS's default system libraries. Not yet
+  ported: units and the build cache, `--test`, `--target` and
+  cross-linking, LTO, debug info, libraries (`--shared`, `--static`),
+  packages, and the other options.
 
 ---
 

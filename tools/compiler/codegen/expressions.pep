@@ -725,6 +725,21 @@ extend Generator {
         return Result<llvm.Value>.ok(loaded);
     }
 
+    ## An operand of an `__atomic_*<T>` intrinsic (the stored, expected,
+    ## desired or added value) converted to a numeric `T`, as an argument to
+    ## a `T` parameter is: a literal is an `int` or `double` until then, so
+    ## `__atomic_store<ulong>(p, 0)` would store only 4 bytes (#639).
+    atomic_operand(expr: Expression, value: llvm.Value, ty_name: String): llvm.Value {
+        var kind = value.value_type().kind();
+        bool numeric_value = kind == llvm.TypeKind.Integer
+            or kind == llvm.TypeKind.Float
+            or kind == llvm.TypeKind.Double;
+        if (!numeric_value or !sema.is_numeric_type(state, ty_name)) {
+            return value;
+        }
+        return coerce(value, numeric_source_name(expr, value), ty_name);
+    }
+
     ## `__atomic_store<T>(p, v)`: release-ordered store, like shared_ptr's
     ## `operator=`: acquire(v), release(old). Struct T swaps the slot
     ## atomically (a plain load of old would race a concurrent store and
@@ -747,7 +762,7 @@ extend Generator {
         # Owned-rvalue argument: its creation ref is released once the slot
         # has taken over ownership (the store acquires it below).
         var val_temp = owned_temp_type(arg_val);
-        var val = codegen_expr(arg_val)?;
+        var val = atomic_operand(arg_val, codegen_expr(arg_val)?, ty_name);
         if (is_struct) {
             acquire_ref(ty_name, val)?;
             var i64 = context.int64_type();
@@ -788,8 +803,8 @@ extend Generator {
         if (!_is_kind(ptr, llvm.TypeKind.Pointer)) {
             return fail<llvm.Value>($"__atomic_cmpxchg expects a pointer, got {ptr.to_string()}");
         }
-        var expected = codegen_expr(arg_expected)?;
-        var desired = codegen_expr(arg_desired)?;
+        var expected = atomic_operand(arg_expected, codegen_expr(arg_expected)?, ty_name);
+        var desired = atomic_operand(arg_desired, codegen_expr(arg_desired)?, ty_name);
         # cmpxchg only accepts integers and pointers: bitcast floats.
         var stored_kind = stored.kind();
         if (stored_kind == llvm.TypeKind.Float or stored_kind == llvm.TypeKind.Double) {
@@ -854,27 +869,15 @@ extend Generator {
             call_function("abort", Array<llvm.Value>())?;
             return Result<llvm.Value>.ok(dummy);
         }
-        var stored = lowered.value();
         var ptr = codegen_expr(arg_ptr)?;
         if (!_is_kind(ptr, llvm.TypeKind.Pointer)) {
             return fail<llvm.Value>($"__atomic_fetch expects a pointer, got {ptr.to_string()}");
         }
         # Owned-rvalue argument: released once the RMW has consumed it.
         var val_temp = owned_temp_type(arg_val);
-        var val = codegen_expr(arg_val)?;
+        var val = atomic_operand(arg_val, codegen_expr(arg_val)?, ty_name);
         if (!_is_kind(val, llvm.TypeKind.Integer)) {
             return fail<llvm.Value>($"__atomic_fetch expects an integer, got {val.to_string()}");
-        }
-        # Match the slot's width (i32 int vs i64 long operands), as
-        # `build_int_cast` (a signed cast) does.
-        if (!val.value_type().same(stored)) {
-            var from = val.value_type().int_width();
-            var to = stored.int_width();
-            if (from > to) {
-                val = builder.truncate(val, stored, "fetchv");
-            } else if (from < to) {
-                val = builder.sign_extend(val, stored, "fetchv");
-            }
         }
         int rmw_op;
         match (op) {

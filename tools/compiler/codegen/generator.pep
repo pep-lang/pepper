@@ -525,6 +525,81 @@ value_type_name(value: llvm.Value): String {
     }
 }
 
+## The CPU code is generated for: LLVM's name for it, its features, and
+## the CPU it is tuned for (empty for none).
+export struct Cpu {
+    var name: String;
+    var features: String;
+    var tune: String;
+
+    construct(name: String, features: String, tune: String) {
+        this.name = name;
+        this.features = features;
+        this.tune = tune;
+    }
+
+    ## Clang's default CPU for `triple`, from its driver: `x86-64` tuned for
+    ## `generic` (`penryn` on Apple), else `generic` (`apple-m1` on Apple,
+    ## `apple-a7` on an iOS device).
+    ##
+    ## @param triple the target triple
+    ## @returns the CPU
+    static default_for(triple: String): Cpu {
+        var apple = triple.contains("-apple-");
+        var arch = triple.split_once("-");
+        var name = arch.is_value() ? arch.value().0 : triple;
+        if (name == "x86_64" or name == "amd64" or name == "i386" or name == "i686") {
+            return Cpu(
+                apple ? "penryn" : "x86-64", triple.contains("-android") ? "+sse4.2,+popcnt,+cx16" : "", "generic"
+            );
+        }
+        var device = apple and triple.contains("-ios") and !triple.ends_with("-simulator");
+        return Cpu(device ? "apple-a7" : (apple ? "apple-m1" : "generic"), "", "");
+    }
+}
+
+## What `generate` builds the module for.
+export struct Build {
+    ## The machine code is generated for.
+    var machine: llvm.TargetMachine;
+    ## Its CPU, stamped on every function defined.
+    var cpu: Cpu;
+    ## How much the module is optimized: 0 to 3.
+    var opt_level: uint = 0;
+    ## Which runtime checks the code performs.
+    var runtime_checks: RuntimeChecks = RuntimeChecks.all();
+
+    construct(machine: llvm.TargetMachine, cpu: Cpu) {
+        this.machine = machine;
+        this.cpu = cpu;
+    }
+}
+
+## The whole checked program as one LLVM module, unoptimized, stamped with
+## the build's CPU.
+##
+## @param module the checked model
+## @param state the passes' state for it
+## @param namespaces each file's namespace, by file index
+## @param name the module's name: the main file's stem
+## @param build the machine, CPU, optimization level and checks
+## @returns the module, or the first error
+export generate(
+    module: Module, state: PassState, namespaces: String[], name: String, build: Build
+): Result<llvm.Module, Diagnostic> {
+    var context = llvm.Context();
+    var generator = Generator(context, name, build.machine, state);
+    generator.file_namespaces = namespaces;
+    generator.opt_level = build.opt_level;
+    generator.runtime_checks = build.runtime_checks;
+    var generated = generator.generate(module);
+    if (generated.is_err()) {
+        return Result<llvm.Module, Diagnostic>.err(generated.error());
+    }
+    stamp_cpu(generator.ir, context, build.cpu.name, build.cpu.tune, build.cpu.features);
+    return Result<llvm.Module, Diagnostic>.ok(generator.ir);
+}
+
 ## The LLVM IR of the whole checked program, unoptimized, as
 ## `pep-build --emit-llvm -O0` writes it for the host.
 ##
@@ -534,17 +609,15 @@ value_type_name(value: llvm.Value): String {
 ## @param name the module's name: the main file's stem
 ## @returns the IR, or the first error
 export generate_ir(module: Module, state: PassState, namespaces: String[], name: String): Result<String, Diagnostic> {
-    var machine = llvm.TargetMachine.create(llvm.default_triple(), "x86-64", "", llvm.OptLevel.O0);
+    var triple = llvm.default_triple();
+    var cpu = Cpu.default_for(triple);
+    var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, llvm.OptLevel.O0);
     if (machine.is_err()) {
         return Result<String, Diagnostic>.err(Diagnostic.error(machine.error().message));
     }
-    var context = llvm.Context();
-    var generator = Generator(context, name, machine.value(), state);
-    generator.file_namespaces = namespaces;
-    var generated = generator.generate(module);
+    var generated = generate(module, state, namespaces, name, Build(machine.value(), cpu));
     if (generated.is_err()) {
         return Result<String, Diagnostic>.err(generated.error());
     }
-    stamp_cpu(generator.ir, context, "x86-64", "generic", "");
-    return Result<String, Diagnostic>.ok(generator.ir.to_string());
+    return Result<String, Diagnostic>.ok(generated.value().to_string());
 }
