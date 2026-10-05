@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-68399303.js";
+            window.path_to_searchindex_js = "searchindex-6cc3becd.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -50811,9 +50811,11 @@ mdBook’s include syntax, so the text on the page is the file that was tested:<
 {{#include ../../examples/structs.pep}}
 ```
 </code></pre>
-<p><code>crates/pepper-driver/tests/integration/docs_examples_tests.rs</code> compiles and runs every
-example; each must return 0 from <code>main</code> and uses <code>assert</code> to check what it
-shows. Short fragments that are not whole programs can stay inline in the
+<p><code>tools/docgen/examples_test.pep</code>, which <code>scripts/pepper-tests.sh</code> runs,
+builds and runs every example; each must return 0 from <code>main</code> and uses
+<code>assert</code> to check what it shows. <code>PEPPER_DOCS_EXAMPLE=structs</code> limits it to
+the examples whose name starts with <code>structs</code>. A sample of the examples is
+also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragments that are not whole programs can stay inline in the
 chapter.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
 <p>Documentation is versioned with the compiler’s <a href="https://semver.org">semantic version</a>
