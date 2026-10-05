@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-21cfd555.js";
+            window.path_to_searchindex_js = "searchindex-5c0f3ae9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-04b2b9dd.js"></script>
@@ -16627,7 +16627,7 @@ main(args: String[]): int {
     var parser = cli.Parser("greet", "Greets someone", version = "1.0");
     var greeting = parser.option("greeting", "g", "what to say", default_value = "hello");
     var loud = parser.flag("loud", "l", "shout it");
-    var times = parser.option("times", "n", "how many times to say it", value_name = "COUNT");
+    var times = parser.option&lt;int&gt;("times", "n", "how many times to say it", value_name = "COUNT", default_value = "1");
     var names = parser.positionals("names", "who to greet");
 
     # `parse` prints --help and --version and exits; on a mistake it writes
@@ -16637,14 +16637,9 @@ main(args: String[]): int {
     }
 
     var people = names.is_set ? names.values() : ["world"];
-    var count = int.parse(times.value_or("1"));
-    if (!count) {
-        print("greet: error: '--times' needs a number");
-        return 2;
-    }
     for (var person in people) {
         var line = $"{greeting.value()}, {person}";
-        for (var _ in 0..count.value()) {
+        for (var _ in 0..times.value()) {
             print(loud.is_set ? line.upper() : line);
         }
     }
@@ -16662,7 +16657,7 @@ Arguments:
 Options:
   -g, --greeting &lt;GREETING&gt;  what to say [default: hello]
   -l, --loud                 shout it
-  -n, --times &lt;COUNT&gt;        how many times to say it
+  -n, --times &lt;COUNT&gt;        how many times to say it [default: 1]
   -h, --help                 show this help
   -V, --version              show the version
 </code></pre>
@@ -16677,13 +16672,15 @@ receives them, program name first.</p>
 </thead>
 <tbody>
 <tr><td><code>flag(name, short_name, help)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
-<tr><td><code>option(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
-<tr><td><code>multiple(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
-<tr><td><code>positional(name, help, required, default_value)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
-<tr><td><code>positionals(name, help, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>positional&lt;T&gt;(name, help, required, default_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>positionals&lt;T&gt;(name, help, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 </tbody>
 </table>
 </div>
+<p><code>T</code> is the type of the value (see <a href="#typed-values">Typed values</a>); leave it
+out for a <code>String</code>: <code>option("output")</code> is <code>option&lt;String&gt;("output")</code>.</p>
 <ul>
 <li>An option’s <code>name</code> is its long name without <code>--</code>; <code>short_name</code> is one
 character without <code>-</code>, or empty for none. Pass the rest by
@@ -16714,8 +16711,34 @@ then <code>-o a.out</code>. <code>-vvv</code> counts three <code>occurrences</co
 options, so <code>rm -- -file</code> removes a file named <code>-file</code>, and <code>-</code> alone is
 a positional argument (by custom, standard input).</li>
 <li>An option that takes one value keeps the last one given.</li>
-<li>Values are Strings; parse numbers yourself (<code>int.parse</code>) and report a bad
-one, as the example does.</li>
+</ul>
+<h2 id="typed-values"><a class="header" href="#typed-values">Typed values</a></h2>
+<p>A declaration with a type argument reads its values as that type, and a
+value that is not one fails the parse:</p>
+<pre><code class="language-text">greet: error: invalid value 'x' for '--times': expected an integer
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>T</code></th><th>A value is</th><th>An error expects</th></tr>
+</thead>
+<tbody>
+<tr><td><code>String</code></td><td>any text</td><td></td></tr>
+<tr><td><code>int</code>, <code>long</code></td><td>an integer, as <code>int.parse</code> reads it</td><td><code>an integer</code></td></tr>
+<tr><td><code>uint</code>, <code>ulong</code></td><td>an integer that is not negative</td><td><code>a non-negative integer</code></td></tr>
+<tr><td><code>byte</code>, <code>short</code>, <code>ushort</code></td><td>an integer in the type’s range</td><td><code>an integer from 0 to 255</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td>a number, as <code>double.parse</code> reads it</td><td><code>a number</code></td></tr>
+<tr><td><code>io.Path</code></td><td>any text, as a path</td><td></td></tr>
+<tr><td>an enum whose cases carry no values</td><td>a case’s name in kebab case: <code>DebugInfo</code> is <code>debug-info</code></td><td><code>'fast' or 'debug-info'</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>An enum’s help lists its cases: <code>[possible values: fast, debug-info]</code>.</li>
+<li><code>default_value</code> is written as on the command line, so the help shows it
+as it is: <code>option&lt;int&gt;("jobs", default_value = "4")</code>. A default that is
+not a value of the type panics.</li>
+<li>Any other type is a compile error at the call.</li>
 </ul>
 <h2 id="errors-4"><a class="header" href="#errors-4">Errors</a></h2>
 <p><code>parse</code> writes a clang-style error, the usage and a hint to standard error
@@ -16730,6 +16753,7 @@ Run 'greet --help' for more information.
 <code>unknown option '-x'</code></li>
 <li><code>missing value for '-o'</code></li>
 <li><code>option '--loud' takes no value</code> (for <code>--loud=yes</code>)</li>
+<li><code>invalid value 'x' for '--times': expected an integer</code></li>
 <li><code>missing required option '--target'</code>, <code>missing required argument '&lt;source&gt;'</code></li>
 <li><code>unexpected argument 'x'</code> when there is no positional argument left for it</li>
 <li><code>unknown command 'x'</code> and <code>missing command: expected 'add' or 'update'</code></li>
@@ -16753,7 +16777,7 @@ struct Options {
     [cli.Option("l", "shout it")]
     var loud: bool;
     [cli.Option("n", "how many times to say it", value_name = "COUNT")]
-    var times: String?;
+    var times: int = 1;
     [cli.Positional("who to greet")]
     var names: String[];
 }
@@ -16767,14 +16791,9 @@ main(args: String[]): int {
     }
 
     var people = options.names.is_empty ? ["world"] : options.names;
-    var count = int.parse(options.times.value_or("1"));
-    if (!count) {
-        print("greet: error: '--times' needs a number");
-        return 2;
-    }
     for (var person in people) {
         var line = $"{options.greeting}, {person}";
-        for (var _ in 0..count.value()) {
+        for (var _ in 0..options.times) {
             print(options.loud ? line.upper() : line);
         }
     }
@@ -16790,25 +16809,28 @@ declarations are the same ones.</p>
 </thead>
 <tbody>
 <tr><td><code>bool</code></td><td><code>flag</code></td><td>whether it was given</td></tr>
-<tr><td><code>String</code></td><td><code>option</code></td><td>the value given, else the field’s starting value</td></tr>
-<tr><td><code>String?</code></td><td><code>option</code></td><td>the value given, or Empty</td></tr>
-<tr><td><code>String[]</code></td><td><code>multiple</code></td><td>the values given, in order</td></tr>
+<tr><td><code>T</code></td><td><code>option&lt;T&gt;</code></td><td>the value given, else the field’s starting value</td></tr>
+<tr><td><code>T?</code></td><td><code>option&lt;T&gt;</code></td><td>the value given, or Empty</td></tr>
+<tr><td><code>T[]</code></td><td><code>multiple&lt;T&gt;</code></td><td>the values given, in order</td></tr>
 </tbody>
 </table>
 </div>
 <ul>
+<li><code>T</code> is any type of <a href="#typed-values">Typed values</a>: <code>String</code>, a number
+type, <code>io.Path</code> or an enum. A field’s starting value is the default the
+help shows, except an empty <code>String</code> or a null <code>io.Path</code>, which means
+none.</li>
 <li>An option is named after its field, with each <code>_</code> written <code>-</code>:
 <code>import_path</code> is <code>--import-path</code>. Any other field type is a compile
-error at the call: <code>'add_options' cannot declare field 'count' of type 'int'; use bool, String, String? or String[]</code>.</li>
+error at the call: <code>'add_options' cannot declare field 'table' of type 'Map&lt;String, int&gt;'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]</code>.</li>
 <li><code>[cli.Option(short_name, help, name, value_name, required)]</code> sets the
 rest, every argument optional: <code>[cli.Option("o", "the executable to write")]</code>, <code>[cli.Option(required = true)]</code>.</li>
 <li><code>[cli.Positional(help, name, required)]</code> makes the field the next
-positional argument. A <code>String</code> one is required unless the field starts
-with a value; a <code>String?</code> one may be left out; a <code>String[]</code> one takes
-every value left (<code>positionals</code>), and <code>required</code> asks for at least one.</li>
-<li>A <code>String</code> field’s starting value is the default the help shows; an
-empty one means none. Each parse sets every field again, so a flag left
-out is false even if the field started true.</li>
+positional argument. A <code>T</code> one is required when it has no default or
+<code>required</code> is set; a <code>T?</code> one may be left out; a <code>T[]</code> one takes every
+value left (<code>positionals</code>), and <code>required</code> asks for at least one.</li>
+<li>Each parse sets every field again, so a flag left out is false even if
+the field started true.</li>
 <li>A parse that fails, or that asks for <code>--help</code> or <code>--version</code>, leaves the
 fields as they were.</li>
 <li>The two styles mix: call <code>flag</code> and <code>option</code> on the same parser, and
@@ -16860,8 +16882,6 @@ usage.</li>
 </ul>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
-<li>Typed values (integers, <code>io.Path</code>): values are Strings, and a struct’s
-fields are <code>bool</code>, <code>String</code>, <code>String?</code> or <code>String[]</code>.</li>
 <li>Options that apply after a subcommand’s name (clap’s global options).</li>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
 <li>Generating shell completions.</li>
@@ -48966,9 +48986,11 @@ were parsed.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
 <h4 id="option"><a class="header" href="#option">option</a></h4>
-<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument
+<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument&lt;String&gt;
 </code></pre>
-<p>Declares an option that takes one value, such as <code>--output a.out</code>.</p>
+<p>Declares an option that takes one String value, such as
+<code>--output a.out</code>. <code>option&lt;T&gt;</code> declares one whose value is a number,
+a path or an enum case.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — the long name, without <code>--</code></li>
@@ -48986,11 +49008,71 @@ were parsed.</p>
 <ul>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
+<h4 id="option-1"><a class="header" href="#option-1">option</a></h4>
+<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false ): Argument&lt;T&gt;
+</code></pre>
+<p>Declares an option that takes one value of type <code>T</code>, such as
+<code>--jobs 4</code> for <code>option&lt;int&gt;</code>. A value that does not read as a <code>T</code>
+fails the parse: <code>invalid value 'x' for '--jobs': expected an integer</code>.</p>
+<p><code>T</code> may be <code>String</code>, an integer type, <code>float</code>, <code>double</code>, <code>io.Path</code>,
+or an enum whose cases carry no values; a case is written in kebab
+case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists them.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option sets, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>JOBS</code>)</li>
+<li><code>default_value</code> — the value when the option is not given, written as on the command line (<code>"4"</code>); empty for none</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, or if <code>default_value</code> does not read as a <code>T</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var jobs = parser.option&lt;int&gt;("jobs", "j", "how many at once", default_value = "4");
+</code></pre>
 <h4 id="multiple"><a class="header" href="#multiple">multiple</a></h4>
-<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList
+<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList&lt;String&gt;
 </code></pre>
 <p>Declares an option that may be given any number of times, each with a
-value, such as <code>-I src -I lib</code>.</p>
+String value, such as <code>-I src -I lib</code>. <code>multiple&lt;T&gt;</code> declares one
+whose values are numbers, paths or enum cases.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option adds, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="multiple-1"><a class="header" href="#multiple-1">multiple</a></h4>
+<pre><code class="language-pepper">multiple&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false ): ArgumentList&lt;T&gt;
+</code></pre>
+<p>Declares an option that may be given any number of times, each with a
+value of type <code>T</code>, such as <code>-I src -I lib</code> for <code>multiple&lt;io.Path&gt;</code>.
+<code>T</code> is one of the types <code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value</li>
+</ul>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — the long name, without <code>--</code></li>
@@ -49008,10 +49090,12 @@ value, such as <code>-I src -I lib</code>.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
 <h4 id="positional"><a class="header" href="#positional">positional</a></h4>
-<pre><code class="language-pepper">positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument
+<pre><code class="language-pepper">positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument&lt;String&gt;
 </code></pre>
-<p>Declares the next positional argument. Positional arguments are
-filled in the order they are declared.</p>
+<p>Declares the next positional argument, with a String value.
+Positional arguments are filled in the order they are declared.
+<code>positional&lt;T&gt;</code> declares one whose value is a number, a path or an
+enum case.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — what the help and errors call it</li>
@@ -49027,11 +49111,62 @@ filled in the order they are declared.</p>
 <ul>
 <li>if <code>name</code> is empty or already declared, if a required argument follows an optional one, if it follows <code>positionals</code>, or if the parser has commands</li>
 </ul>
+<h4 id="positional-1"><a class="header" href="#positional-1">positional</a></h4>
+<pre><code class="language-pepper">positional&lt;T&gt;(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument&lt;T&gt;
+</code></pre>
+<p>Declares the next positional argument, with a value of type <code>T</code>.
+<code>T</code> is one of the types <code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what it is, for the help</li>
+<li><code>required</code> — whether leaving it out is an error</li>
+<li><code>default_value</code> — the value when it is left out, written as on the command line; empty for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if a required argument follows an optional one, if it follows <code>positionals</code>, if the parser has commands, or if <code>default_value</code> does not read as a <code>T</code></li>
+</ul>
 <h4 id="positionals"><a class="header" href="#positionals">positionals</a></h4>
-<pre><code class="language-pepper">positionals(name: String, help: String = "", required: bool = false): ArgumentList
+<pre><code class="language-pepper">positionals(name: String, help: String = "", required: bool = false): ArgumentList&lt;String&gt;
 </code></pre>
 <p>Declares a positional argument that takes every remaining value, such
-as a list of files. It must be the last positional argument.</p>
+as a list of files. It must be the last positional argument.
+<code>positionals&lt;T&gt;</code> declares one whose values are numbers, paths or enum
+cases.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what the values are, for the help</li>
+<li><code>required</code> — whether at least one value must be given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="positionals-1"><a class="header" href="#positionals-1">positionals</a></h4>
+<pre><code class="language-pepper">positionals&lt;T&gt;(name: String, help: String = "", required: bool = false): ArgumentList&lt;T&gt;
+</code></pre>
+<p>Declares a positional argument that takes every remaining value, each
+of type <code>T</code>, such as a list of files for <code>positionals&lt;io.Path&gt;</code>. It
+must be the last positional argument. <code>T</code> is one of the types
+<code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value</li>
+</ul>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — what the help and errors call it</li>
@@ -49218,10 +49353,14 @@ for the runtime.</p>
 <li><code>argument</code> — the declaration</li>
 </ul>
 <h2 id="argument-1"><a class="header" href="#argument-1">Argument</a></h2>
-<pre><code class="language-pepper">struct Argument
+<pre><code class="language-pepper">struct Argument&lt;T&gt;
 </code></pre>
 <p>An option or positional argument that takes one value, from
 <code>Parser.option</code> or <code>Parser.positional</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value: <code>String</code>, or what <code>option&lt;T&gt;</code> or <code>positional&lt;T&gt;</code> declared</li>
+</ul>
 <h3 id="properties-2-3"><a class="header" href="#properties-2-3">Properties</a></h3>
 <h4 id="is_set-1-1"><a class="header" href="#is_set-1-1">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
@@ -49240,7 +49379,7 @@ arguments; this constructor is for the runtime.</p>
 </ul>
 <h3 id="methods-1-35"><a class="header" href="#methods-1-35">Methods</a></h3>
 <h4 id="value-7"><a class="header" href="#value-7">value</a></h4>
-<pre><code class="language-pepper">value(): String
+<pre><code class="language-pepper">value(): T
 </code></pre>
 <p>Returns the value given, or the default when it was left out.</p>
 <p><strong>Returns</strong></p>
@@ -49252,7 +49391,7 @@ arguments; this constructor is for the runtime.</p>
 <li>if the argument was left out and has no default; check <code>is_set</code> or use <code>value_or</code> for an optional argument</li>
 </ul>
 <h4 id="value_or-1"><a class="header" href="#value_or-1">value_or</a></h4>
-<pre><code class="language-pepper">value_or(fallback: String): String
+<pre><code class="language-pepper">value_or(fallback: T): T
 </code></pre>
 <p>Returns the value given, or <code>fallback</code> when it was left out.</p>
 <p><strong>Parameters</strong></p>
@@ -49264,11 +49403,15 @@ arguments; this constructor is for the runtime.</p>
 <li>the value given, else the declared default, else <code>fallback</code></li>
 </ul>
 <h2 id="argumentlist"><a class="header" href="#argumentlist">ArgumentList</a></h2>
-<pre><code class="language-pepper">struct ArgumentList
+<pre><code class="language-pepper">struct ArgumentList&lt;T&gt;
 </code></pre>
 <p>An option that may be given many times, or a positional argument that
 takes every remaining value, from <code>Parser.multiple</code> or
 <code>Parser.positionals</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value: <code>String</code>, or what <code>multiple&lt;T&gt;</code> or <code>positionals&lt;T&gt;</code> declared</li>
+</ul>
 <h3 id="properties-3-1"><a class="header" href="#properties-3-1">Properties</a></h3>
 <h4 id="is_set-2-1"><a class="header" href="#is_set-2-1">is_set</a></h4>
 <pre><code class="language-pepper">var is_set: bool { get; }
@@ -49286,7 +49429,7 @@ argument lists; this constructor is for the runtime.</p>
 </ul>
 <h3 id="methods-2-19"><a class="header" href="#methods-2-19">Methods</a></h3>
 <h4 id="values-3"><a class="header" href="#values-3">values</a></h4>
-<pre><code class="language-pepper">values(): Array&lt;String&gt;
+<pre><code class="language-pepper">values(): Array&lt;T&gt;
 </code></pre>
 <p>Returns the values given, in command-line order.</p>
 <p><strong>Returns</strong></p>
@@ -49298,7 +49441,7 @@ argument lists; this constructor is for the runtime.</p>
 <p>The attributes that shape the options <code>Parser.add_options</code> declares
 from a struct’s fields.</p>
 <p>Source: <code>runtime/cli/options.pep</code></p>
-<h2 id="option-1"><a class="header" href="#option-1">Option</a></h2>
+<h2 id="option-2"><a class="header" href="#option-2">Option</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Option
 </code></pre>
 <p>Sets how a field of an options struct is declared as an option: its
@@ -49336,13 +49479,14 @@ struct Options {
 <pre><code class="language-pepper">const required: bool = false
 </code></pre>
 <p>Whether leaving the option out is an error.</p>
-<h2 id="positional-1"><a class="header" href="#positional-1">Positional</a></h2>
+<h2 id="positional-2"><a class="header" href="#positional-2">Positional</a></h2>
 <pre><code class="language-pepper">[Attribute] struct Positional
 </code></pre>
 <p>Declares a field of an options struct as the next positional argument
-instead of an option. A <code>String</code> field takes one value, required unless
-the field starts with a value (its default); a <code>String?</code> field takes an
-optional one; a <code>String[]</code> field takes every value that is left.</p>
+instead of an option. A <code>T</code> field takes one value, required unless the
+field starts with a value (its default; an empty <code>String</code> or a null
+<code>io.Path</code> is none); a <code>T?</code> field takes an optional one; a <code>T[]</code> field
+takes every value that is left.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import cli;
 
@@ -49363,8 +49507,9 @@ struct Options {
 <h4 id="required-1-1"><a class="header" href="#required-1-1">required</a></h4>
 <pre><code class="language-pepper">const required: bool = false
 </code></pre>
-<p>For a <code>String[]</code> field, whether at least one value must be given;
-other fields ignore it.</p>
+<p>Whether leaving it out is an error, even when the field has a
+default; for a <code>T[]</code> field, whether at least one value must be
+given. A <code>T?</code> field ignores it.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/module.pep by `cargo run -p pepper-docgen -- reference`. Do not edit. -->
 <h1 id="the-http-module"><a class="header" href="#the-http-module">The http module</a></h1>
 <p>HTTP/1.1 clients and servers, over TCP or TLS.</p>

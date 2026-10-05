@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-21cfd555.js";
+            window.path_to_searchindex_js = "../searchindex-5c0f3ae9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -195,7 +195,7 @@ main(args: String[]): int {
     var parser = cli.Parser("greet", "Greets someone", version = "1.0");
     var greeting = parser.option("greeting", "g", "what to say", default_value = "hello");
     var loud = parser.flag("loud", "l", "shout it");
-    var times = parser.option("times", "n", "how many times to say it", value_name = "COUNT");
+    var times = parser.option&lt;int&gt;("times", "n", "how many times to say it", value_name = "COUNT", default_value = "1");
     var names = parser.positionals("names", "who to greet");
 
     # `parse` prints --help and --version and exits; on a mistake it writes
@@ -205,14 +205,9 @@ main(args: String[]): int {
     }
 
     var people = names.is_set ? names.values() : ["world"];
-    var count = int.parse(times.value_or("1"));
-    if (!count) {
-        print("greet: error: '--times' needs a number");
-        return 2;
-    }
     for (var person in people) {
         var line = $"{greeting.value()}, {person}";
-        for (var _ in 0..count.value()) {
+        for (var _ in 0..times.value()) {
             print(loud.is_set ? line.upper() : line);
         }
     }
@@ -230,7 +225,7 @@ Arguments:
 Options:
   -g, --greeting &lt;GREETING&gt;  what to say [default: hello]
   -l, --loud                 shout it
-  -n, --times &lt;COUNT&gt;        how many times to say it
+  -n, --times &lt;COUNT&gt;        how many times to say it [default: 1]
   -h, --help                 show this help
   -V, --version              show the version
 </code></pre>
@@ -245,13 +240,15 @@ receives them, program name first.</p>
 </thead>
 <tbody>
 <tr><td><code>flag(name, short_name, help)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
-<tr><td><code>option(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
-<tr><td><code>multiple(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
-<tr><td><code>positional(name, help, required, default_value)</code></td><td><code>Argument</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
-<tr><td><code>positionals(name, help, required)</code></td><td><code>ArgumentList</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
+<tr><td><code>positional&lt;T&gt;(name, help, required, default_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>positionals&lt;T&gt;(name, help, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 </tbody>
 </table>
 </div>
+<p><code>T</code> is the type of the value (see <a href="#typed-values">Typed values</a>); leave it
+out for a <code>String</code>: <code>option("output")</code> is <code>option&lt;String&gt;("output")</code>.</p>
 <ul>
 <li>An option’s <code>name</code> is its long name without <code>--</code>; <code>short_name</code> is one
 character without <code>-</code>, or empty for none. Pass the rest by
@@ -282,8 +279,34 @@ then <code>-o a.out</code>. <code>-vvv</code> counts three <code>occurrences</co
 options, so <code>rm -- -file</code> removes a file named <code>-file</code>, and <code>-</code> alone is
 a positional argument (by custom, standard input).</li>
 <li>An option that takes one value keeps the last one given.</li>
-<li>Values are Strings; parse numbers yourself (<code>int.parse</code>) and report a bad
-one, as the example does.</li>
+</ul>
+<h2 id="typed-values"><a class="header" href="#typed-values">Typed values</a></h2>
+<p>A declaration with a type argument reads its values as that type, and a
+value that is not one fails the parse:</p>
+<pre><code class="language-text">greet: error: invalid value 'x' for '--times': expected an integer
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>T</code></th><th>A value is</th><th>An error expects</th></tr>
+</thead>
+<tbody>
+<tr><td><code>String</code></td><td>any text</td><td></td></tr>
+<tr><td><code>int</code>, <code>long</code></td><td>an integer, as <code>int.parse</code> reads it</td><td><code>an integer</code></td></tr>
+<tr><td><code>uint</code>, <code>ulong</code></td><td>an integer that is not negative</td><td><code>a non-negative integer</code></td></tr>
+<tr><td><code>byte</code>, <code>short</code>, <code>ushort</code></td><td>an integer in the type’s range</td><td><code>an integer from 0 to 255</code></td></tr>
+<tr><td><code>float</code>, <code>double</code></td><td>a number, as <code>double.parse</code> reads it</td><td><code>a number</code></td></tr>
+<tr><td><code>io.Path</code></td><td>any text, as a path</td><td></td></tr>
+<tr><td>an enum whose cases carry no values</td><td>a case’s name in kebab case: <code>DebugInfo</code> is <code>debug-info</code></td><td><code>'fast' or 'debug-info'</code></td></tr>
+</tbody>
+</table>
+</div>
+<ul>
+<li>An enum’s help lists its cases: <code>[possible values: fast, debug-info]</code>.</li>
+<li><code>default_value</code> is written as on the command line, so the help shows it
+as it is: <code>option&lt;int&gt;("jobs", default_value = "4")</code>. A default that is
+not a value of the type panics.</li>
+<li>Any other type is a compile error at the call.</li>
 </ul>
 <h2 id="errors"><a class="header" href="#errors">Errors</a></h2>
 <p><code>parse</code> writes a clang-style error, the usage and a hint to standard error
@@ -298,6 +321,7 @@ Run 'greet --help' for more information.
 <code>unknown option '-x'</code></li>
 <li><code>missing value for '-o'</code></li>
 <li><code>option '--loud' takes no value</code> (for <code>--loud=yes</code>)</li>
+<li><code>invalid value 'x' for '--times': expected an integer</code></li>
 <li><code>missing required option '--target'</code>, <code>missing required argument '&lt;source&gt;'</code></li>
 <li><code>unexpected argument 'x'</code> when there is no positional argument left for it</li>
 <li><code>unknown command 'x'</code> and <code>missing command: expected 'add' or 'update'</code></li>
@@ -321,7 +345,7 @@ struct Options {
     [cli.Option("l", "shout it")]
     var loud: bool;
     [cli.Option("n", "how many times to say it", value_name = "COUNT")]
-    var times: String?;
+    var times: int = 1;
     [cli.Positional("who to greet")]
     var names: String[];
 }
@@ -335,14 +359,9 @@ main(args: String[]): int {
     }
 
     var people = options.names.is_empty ? ["world"] : options.names;
-    var count = int.parse(options.times.value_or("1"));
-    if (!count) {
-        print("greet: error: '--times' needs a number");
-        return 2;
-    }
     for (var person in people) {
         var line = $"{options.greeting}, {person}";
-        for (var _ in 0..count.value()) {
+        for (var _ in 0..options.times) {
             print(options.loud ? line.upper() : line);
         }
     }
@@ -358,25 +377,28 @@ declarations are the same ones.</p>
 </thead>
 <tbody>
 <tr><td><code>bool</code></td><td><code>flag</code></td><td>whether it was given</td></tr>
-<tr><td><code>String</code></td><td><code>option</code></td><td>the value given, else the field’s starting value</td></tr>
-<tr><td><code>String?</code></td><td><code>option</code></td><td>the value given, or Empty</td></tr>
-<tr><td><code>String[]</code></td><td><code>multiple</code></td><td>the values given, in order</td></tr>
+<tr><td><code>T</code></td><td><code>option&lt;T&gt;</code></td><td>the value given, else the field’s starting value</td></tr>
+<tr><td><code>T?</code></td><td><code>option&lt;T&gt;</code></td><td>the value given, or Empty</td></tr>
+<tr><td><code>T[]</code></td><td><code>multiple&lt;T&gt;</code></td><td>the values given, in order</td></tr>
 </tbody>
 </table>
 </div>
 <ul>
+<li><code>T</code> is any type of <a href="#typed-values">Typed values</a>: <code>String</code>, a number
+type, <code>io.Path</code> or an enum. A field’s starting value is the default the
+help shows, except an empty <code>String</code> or a null <code>io.Path</code>, which means
+none.</li>
 <li>An option is named after its field, with each <code>_</code> written <code>-</code>:
 <code>import_path</code> is <code>--import-path</code>. Any other field type is a compile
-error at the call: <code>'add_options' cannot declare field 'count' of type 'int'; use bool, String, String? or String[]</code>.</li>
+error at the call: <code>'add_options' cannot declare field 'table' of type 'Map&lt;String, int&gt;'; use bool, String, a number type, io.Path or an enum, or one of those as T? or T[]</code>.</li>
 <li><code>[cli.Option(short_name, help, name, value_name, required)]</code> sets the
 rest, every argument optional: <code>[cli.Option("o", "the executable to write")]</code>, <code>[cli.Option(required = true)]</code>.</li>
 <li><code>[cli.Positional(help, name, required)]</code> makes the field the next
-positional argument. A <code>String</code> one is required unless the field starts
-with a value; a <code>String?</code> one may be left out; a <code>String[]</code> one takes
-every value left (<code>positionals</code>), and <code>required</code> asks for at least one.</li>
-<li>A <code>String</code> field’s starting value is the default the help shows; an
-empty one means none. Each parse sets every field again, so a flag left
-out is false even if the field started true.</li>
+positional argument. A <code>T</code> one is required when it has no default or
+<code>required</code> is set; a <code>T?</code> one may be left out; a <code>T[]</code> one takes every
+value left (<code>positionals</code>), and <code>required</code> asks for at least one.</li>
+<li>Each parse sets every field again, so a flag left out is false even if
+the field started true.</li>
 <li>A parse that fails, or that asks for <code>--help</code> or <code>--version</code>, leaves the
 fields as they were.</li>
 <li>The two styles mix: call <code>flag</code> and <code>option</code> on the same parser, and
@@ -428,8 +450,6 @@ usage.</li>
 </ul>
 <h2 id="not-yet"><a class="header" href="#not-yet">Not yet</a></h2>
 <ul>
-<li>Typed values (integers, <code>io.Path</code>): values are Strings, and a struct’s
-fields are <code>bool</code>, <code>String</code>, <code>String?</code> or <code>String[]</code>.</li>
 <li>Options that apply after a subcommand’s name (clap’s global options).</li>
 <li>Windows-style <code>/option</code> forms: every platform uses <code>-</code> and <code>--</code>.</li>
 <li>Generating shell completions.</li>

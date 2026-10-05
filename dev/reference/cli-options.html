@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-21cfd555.js";
+            window.path_to_searchindex_js = "../searchindex-5c0f3ae9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -228,9 +228,10 @@ struct Options {
 <pre><code class="language-pepper">[Attribute] struct Positional
 </code></pre>
 <p>Declares a field of an options struct as the next positional argument
-instead of an option. A <code>String</code> field takes one value, required unless
-the field starts with a value (its default); a <code>String?</code> field takes an
-optional one; a <code>String[]</code> field takes every value that is left.</p>
+instead of an option. A <code>T</code> field takes one value, required unless the
+field starts with a value (its default; an empty <code>String</code> or a null
+<code>io.Path</code> is none); a <code>T?</code> field takes an optional one; a <code>T[]</code> field
+takes every value that is left.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import cli;
 
@@ -251,8 +252,9 @@ struct Options {
 <h4 id="required-1"><a class="header" href="#required-1">required</a></h4>
 <pre><code class="language-pepper">const required: bool = false
 </code></pre>
-<p>For a <code>String[]</code> field, whether at least one value must be given;
-other fields ignore it.</p>
+<p>Whether leaving it out is an error, even when the field has a
+default; for a <code>T[]</code> field, whether at least one value must be
+given. A <code>T?</code> field ignores it.</p>
 
                     </main>
 
