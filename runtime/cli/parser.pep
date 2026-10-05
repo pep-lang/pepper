@@ -3,6 +3,7 @@
 
 import [File, Path] from io;
 import process;
+import "completions";
 import "options";
 
 # What a declared option or positional argument holds.
@@ -32,6 +33,9 @@ struct _CliArgument {
     var check: (String) => bool = __null;
     var expected: String = "";
     var choices = Array<String>();
+    # Whether a shell completes its value as a file name: true for a
+    # String or an `io.Path`.
+    var names_files: bool = true;
 
     construct(name: String, short_name: String, help: String, kind: int, positional: bool) {
         this.name = name;
@@ -595,6 +599,40 @@ export struct Parser {
         }
         _append_section(text, "Options", labels, descriptions);
         return text.to_string();
+    }
+
+    ## Returns a script that completes this program's command line in
+    ## `shell`: its options, commands and enum choices, and file names
+    ## where a value is a `String` or an `io.Path`. A program usually
+    ## prints it from a command of its own (`pkg completions bash`), for
+    ## the user to install where `Shell`'s cases say.
+    ##
+    ## Call it on the program's parser, after the declarations.
+    ##
+    ## @param shell the shell the script is for
+    ## @returns the script, ending in a line break
+    ## @example
+    ##     var parser = cli.Parser("pkg");
+    ##     var shell = parser.option<cli.Shell>("completions", help = "print a completion script");
+    ##     if (!parser.parse(args)) {
+    ##         return 2;
+    ##     }
+    ##     if (shell.is_set) {
+    ##         print(parser.completions(shell.value()));
+    ##     }
+    completions(shell: Shell): String {
+        var nodes = Array<_CliNode>();
+        _cli_nodes(this, _path, nodes);
+        if (shell == Shell.Bash) {
+            return _cli_bash(nodes);
+        }
+        if (shell == Shell.Zsh) {
+            return _cli_zsh(nodes);
+        }
+        if (shell == Shell.Fish) {
+            return _cli_fish(nodes);
+        }
+        return _cli_powershell(nodes);
     }
 
     ## Parses `args` and fills in every handle, or reports the problem.
@@ -1251,6 +1289,7 @@ _cli_type<T>(declared: _CliArgument) {
     var any_text = false;
     static (declared, any_text) {
         any_text = reflect.is_same<T, String>();
+        declared.names_files = any_text or reflect.is_same<T, Path>();
         if (reflect.is_enum<T>()) {
             for (var case in reflect.cases<T>()) {
                 declared.choices.append(_cli_kebab(case.name));

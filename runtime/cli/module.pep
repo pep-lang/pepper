@@ -8,6 +8,8 @@
 ## - [Parser](cli-parser.md): `Parser`, and the handles its declarations
 ##   return: `Flag`, `Argument`, `ArgumentList`; and `closest`, which
 ##   picks the name a misspelled one most likely meant
+## - [Completions](cli-completions.md): `Shell`, the shells
+##   `Parser.completions` writes a completion script for
 ## - [Options](cli-options.md): `Option` and `Positional`, the attributes
 ##   that shape what `Parser.add_options` declares from a struct's fields
 ##
@@ -28,6 +30,7 @@
 
 # This file only gathers the module's public API from its other files.
 
+import "completions";
 import "options";
 import "parser";
 
@@ -38,3 +41,4 @@ export ArgumentList;
 export closest;
 export Option;
 export Positional;
+export Shell;

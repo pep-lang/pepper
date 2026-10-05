@@ -1,0 +1,436 @@
+## Shell completion scripts generated from a `Parser`: `Shell` names the
+## shells, and `Parser.completions` writes the script.
+
+## A shell that `Parser.completions` writes a completion script for.
+export enum Shell {
+    ## GNU Bash: source the script, or put it in
+    ## `~/.local/share/bash-completion/completions/NAME`.
+    Bash,
+    ## Zsh: put the script in a directory on `$fpath` as `_NAME`.
+    Zsh,
+    ## fish: put the script in `~/.config/fish/completions/NAME.fish`.
+    Fish,
+    ## PowerShell (`powershell` on a command line): dot-source the script from your profile.
+    Powershell,
+}
+
+# One parser of the program and the words that select it: `pkg`, or
+# `pkg add` for a command.
+struct _CliNode {
+    var path: String = "";
+    var parser: Parser = __null;
+
+    construct(path: String, parser: Parser) {
+        this.path = path;
+        this.parser = parser;
+    }
+}
+
+# Every parser of the program, the program's first, each command after
+# the parser it belongs to. Recurses once per command level, which the
+# program declares.
+_cli_nodes(parser: Parser, path: String, nodes: Array<_CliNode>) {
+    nodes.append(_CliNode(path, parser));
+    for (var command in parser._commands) {
+        _cli_nodes(command, path + " " + command._name, nodes);
+    }
+}
+
+# The options a parser accepts: its own, the global ones above it, and
+# the built-in help and version, as `--name` and `-x` spellings.
+_cli_option_words(parser: Parser): Array<String> {
+    var words = Array<String>();
+    for (var option in _cli_options_of(parser)) {
+        words.append("--" + option.name);
+        if (!option.short_name.is_empty) {
+            words.append("-" + option.short_name);
+        }
+    }
+    words.append("--help");
+    if (parser._find_short("h") === __null) {
+        words.append("-h");
+    }
+    if (!parser._version.is_empty) {
+        words.append("--version");
+        if (parser._find_short("V") === __null) {
+            words.append("-V");
+        }
+    }
+    return words;
+}
+
+# A parser's own options, then the global ones of the parsers above it.
+_cli_options_of(parser: Parser): Array<_CliArgument> {
+    var options = parser._options.clone();
+    options.append_all(parser._inherited_options());
+    return options;
+}
+
+# The spellings of `option` that the shell sees before its value.
+_cli_spellings(option: _CliArgument): Array<String> {
+    var spellings = ["--" + option.name];
+    if (!option.short_name.is_empty) {
+        spellings.append("-" + option.short_name);
+    }
+    return spellings;
+}
+
+# Whether the positional arguments of `parser` name files, and the
+# choices they take.
+_cli_positional_files(parser: Parser): bool {
+    for (var positional in parser._positionals) {
+        if (positional.names_files) {
+            return true;
+        }
+    }
+    return false;
+}
+
+_cli_positional_choices(parser: Parser): Array<String> {
+    var choices = Array<String>();
+    for (var positional in parser._positionals) {
+        choices.append_all(positional.choices);
+    }
+    return choices;
+}
+
+# `name` usable in a shell function's name: each byte that is not a
+# letter, a digit or `_` written `_`.
+_cli_identifier(name: String): String {
+    var text = StringBuilder();
+    ulong index = 0;
+    while (index < name.size) {
+        var letter = name.substr_bytes(index, 1);
+        var byte = name.byte_at(index);
+        var plain = (byte >= 'a' as byte and byte <= 'z' as byte)
+            or (byte >= 'A' as byte and byte <= 'Z' as byte)
+            or (byte >= '0' as byte and byte <= '9' as byte);
+        text.append(plain ? letter : "_");
+        index += 1;
+    }
+    return text.to_string();
+}
+
+# `text` in single quotes for a POSIX shell (Bash, Zsh).
+_cli_quote_posix(text: String): String {
+    return "'" + text.replace("'", "'\\''") + "'";
+}
+
+# `text` in single quotes for fish.
+_cli_quote_fish(text: String): String {
+    return "'" + text.replace("\\", "\\\\").replace("'", "\\'") + "'";
+}
+
+# `text` in single quotes for PowerShell.
+_cli_quote_powershell(text: String): String {
+    return "'" + text.replace("'", "''") + "'";
+}
+
+# The lines of a POSIX shell `case` that move `$cmd` down to a command
+# when the word after it names one.
+_cli_posix_transitions(nodes: Array<_CliNode>, text: StringBuilder) {
+    for (var node in nodes) {
+        for (var command in node.parser._commands) {
+            text
+                .append("            ")
+                .append(_cli_quote_posix(node.path + ":" + command._name))
+                .append(") cmd=")
+                .append(_cli_quote_posix(node.path + " " + command._name))
+                .append(" ;;\n");
+        }
+    }
+}
+
+# The Bash script.
+_cli_bash(nodes: Array<_CliNode>): String {
+    var program = nodes[0].path;
+    var function = "_" + _cli_identifier(program) + "_complete";
+    var text = StringBuilder();
+    text.append("# Bash completion for ").append(program).append(", generated by its cli.Parser.\n");
+    text.append(function).append("() {\n");
+    text
+        .append("    local cur=\"${COMP_WORDS[COMP_CWORD]}\" prev=\"${COMP_WORDS[COMP_CWORD-1]}\" cmd=")
+        .append(_cli_quote_posix(program))
+        .append(" i\n");
+    text.append("    for ((i = 1; i < COMP_CWORD; i++)); do\n");
+    text.append("        case \"$cmd:${COMP_WORDS[i]}\" in\n");
+    _cli_posix_transitions(nodes, text);
+    text.append("        esac\n    done\n    COMPREPLY=()\n    case \"$cmd\" in\n");
+    for (var node in nodes) {
+        var parser = node.parser;
+        text.append("        ").append(_cli_quote_posix(node.path)).append(")\n");
+        text.append("            case \"$prev\" in\n");
+        for (var option in _cli_options_of(parser)) {
+            if (option.kind == FLAG_KIND) {
+                continue;
+            }
+            text.append("                ").append("|".join(_cli_spellings(option))).append(") ");
+            if (!option.choices.is_empty) {
+                text
+                    .append("COMPREPLY=($(compgen -W ")
+                    .append(_cli_quote_posix(" ".join(option.choices)))
+                    .append(" -- \"$cur\")); ");
+            } else if (option.names_files) {
+                text.append("COMPREPLY=($(compgen -f -- \"$cur\")); ");
+            }
+            text.append("return ;;\n");
+        }
+        text.append("            esac\n");
+        text.append("            if [[ \"$cur\" == -* ]]; then\n");
+        text
+            .append("                COMPREPLY=($(compgen -W ")
+            .append(_cli_quote_posix(" ".join(_cli_option_words(parser))))
+            .append(" -- \"$cur\"))\n");
+        var words = _cli_positional_choices(parser);
+        for (var command in parser._commands) {
+            words.append(command._name);
+        }
+        var files = _cli_positional_files(parser);
+        if (!words.is_empty or files) {
+            text.append("            else\n");
+        }
+        if (!words.is_empty) {
+            text
+                .append("                COMPREPLY=($(compgen -W ")
+                .append(_cli_quote_posix(" ".join(words)))
+                .append(" -- \"$cur\"))\n");
+        }
+        if (files) {
+            text.append("                COMPREPLY+=($(compgen -f -- \"$cur\"))\n");
+        }
+        text.append("            fi\n            ;;\n");
+    }
+    text.append("    esac\n}\n");
+    text.append("complete -F ").append(function).append(" ").append(program).append("\n");
+    return text.to_string();
+}
+
+# The Zsh script.
+_cli_zsh(nodes: Array<_CliNode>): String {
+    var program = nodes[0].path;
+    var function = "_" + _cli_identifier(program);
+    var text = StringBuilder();
+    text.append("#compdef ").append(program).append("\n");
+    text.append("# Zsh completion for ").append(program).append(", generated by its cli.Parser.\n");
+    text.append(function).append("() {\n");
+    text
+        .append("    local cur=\"${words[CURRENT]}\" prev=\"${words[CURRENT-1]}\" cmd=")
+        .append(_cli_quote_posix(program))
+        .append(" i\n");
+    text.append("    for ((i = 2; i < CURRENT; i++)); do\n");
+    text.append("        case \"$cmd:${words[i]}\" in\n");
+    _cli_posix_transitions(nodes, text);
+    text.append("        esac\n    done\n    case \"$cmd\" in\n");
+    for (var node in nodes) {
+        var parser = node.parser;
+        text.append("        ").append(_cli_quote_posix(node.path)).append(")\n");
+        text.append("            case \"$prev\" in\n");
+        for (var option in _cli_options_of(parser)) {
+            if (option.kind == FLAG_KIND) {
+                continue;
+            }
+            text.append("                ").append("|".join(_cli_spellings(option))).append(") ");
+            if (!option.choices.is_empty) {
+                text.append("compadd -- ").append(" ".join(option.choices)).append("; ");
+            } else if (option.names_files) {
+                text.append("_files; ");
+            }
+            text.append("return ;;\n");
+        }
+        text.append("            esac\n");
+        text.append("            if [[ \"$cur\" == -* ]]; then\n");
+        text.append("                compadd -- ").append(" ".join(_cli_option_words(parser))).append("\n");
+        var words = _cli_positional_choices(parser);
+        for (var command in parser._commands) {
+            words.append(command._name);
+        }
+        var files = _cli_positional_files(parser);
+        if (!words.is_empty or files) {
+            text.append("            else\n");
+        }
+        if (!words.is_empty) {
+            text.append("                compadd -- ").append(" ".join(words)).append("\n");
+        }
+        if (files) {
+            text.append("                _files\n");
+        }
+        text.append("            fi\n            ;;\n");
+    }
+    text.append("    esac\n}\n");
+    text.append("compdef ").append(function).append(" ").append(program).append("\n");
+    return text.to_string();
+}
+
+# The fish script: one `complete` line per option and command, each
+# conditioned on the command the words so far selected.
+_cli_fish(nodes: Array<_CliNode>): String {
+    var program = nodes[0].path;
+    var function = "__" + _cli_identifier(program) + "_command";
+    var text = StringBuilder();
+    text.append("# fish completion for ").append(program).append(", generated by its cli.Parser.\n");
+    text.append("function ").append(function).append("\n");
+    text.append("    set -l cmd ").append(_cli_quote_fish(program)).append("\n");
+    text.append("    set -l words (commandline -opc)\n");
+    text.append("    for word in $words[2..-1]\n");
+    text.append("        switch \"$cmd:$word\"\n");
+    for (var node in nodes) {
+        for (var command in node.parser._commands) {
+            text
+                .append("            case ")
+                .append(_cli_quote_fish(node.path + ":" + command._name))
+                .append("\n                set cmd ")
+                .append(_cli_quote_fish(node.path + " " + command._name))
+                .append("\n");
+        }
+    }
+    text.append("        end\n    end\n    echo $cmd\nend\n");
+    text.append("function ").append(function).append("_is\n");
+    text.append("    test (").append(function).append(") = \"$argv[1]\"\nend\n");
+    # Whether the word before the cursor is one of the options given, so
+    # the next word is its value rather than an argument.
+    text.append("function ").append(function).append("_after\n");
+    text.append("    set -l words (commandline -opc)\n");
+    text.append("    contains -- $words[-1] $argv\nend\n");
+    text.append("complete -c ").append(program).append(" -f\n");
+    for (var node in nodes) {
+        var parser = node.parser;
+        var start = "complete -c " + program + " -n " + _cli_quote_fish(function + "_is " + _cli_quote_fish(node.path));
+        for (var option in _cli_options_of(parser)) {
+            text.append(start).append(" -l ").append(option.name);
+            if (!option.short_name.is_empty) {
+                text.append(" -s ").append(option.short_name);
+            }
+            # `-x` takes a value that is not a file name, `-r -F` one that is.
+            if (option.kind != FLAG_KIND) {
+                text.append(option.names_files ? " -r -F" : " -x");
+                if (!option.choices.is_empty) {
+                    text.append(" -a ").append(_cli_quote_fish(" ".join(option.choices)));
+                }
+            }
+            if (!option.help.is_empty) {
+                text.append(" -d ").append(_cli_quote_fish(option.help));
+            }
+            text.append("\n");
+        }
+        text.append(start).append(" -l help");
+        if (parser._find_short("h") === __null) {
+            text.append(" -s h");
+        }
+        text.append(" -d ").append(_cli_quote_fish("show this help")).append("\n");
+        if (!parser._version.is_empty) {
+            text.append(start).append(" -l version");
+            if (parser._find_short("V") === __null) {
+                text.append(" -s V");
+            }
+            text.append(" -d ").append(_cli_quote_fish("show the version")).append("\n");
+        }
+        # Commands and positional arguments, unless the word before is an
+        # option that takes a value.
+        var value_spellings = Array<String>();
+        for (var option in _cli_options_of(parser)) {
+            if (option.kind != FLAG_KIND) {
+                value_spellings.append_all(_cli_spellings(option));
+            }
+        }
+        var condition = function + "_is " + _cli_quote_fish(node.path);
+        if (!value_spellings.is_empty) {
+            condition = condition + "; and not " + function + "_after " + " ".join(value_spellings);
+        }
+        start = "complete -c " + program + " -n " + _cli_quote_fish(condition);
+        for (var command in parser._commands) {
+            text.append(start).append(" -a ").append(_cli_quote_fish(command._name));
+            if (!command._about.is_empty) {
+                text.append(" -d ").append(_cli_quote_fish(command._about));
+            }
+            text.append("\n");
+        }
+        var choices = _cli_positional_choices(parser);
+        if (!choices.is_empty) {
+            text.append(start).append(" -a ").append(_cli_quote_fish(" ".join(choices))).append("\n");
+        }
+        if (_cli_positional_files(parser)) {
+            text.append(start).append(" -F\n");
+        }
+    }
+    return text.to_string();
+}
+
+# The PowerShell script: a native argument completer that offers the
+# options, commands and choices, and leaves file names to PowerShell.
+_cli_powershell(nodes: Array<_CliNode>): String {
+    var program = nodes[0].path;
+    var text = StringBuilder();
+    text.append("# PowerShell completion for ").append(program).append(", generated by its cli.Parser.\n");
+    text
+        .append("Register-ArgumentCompleter -Native -CommandName ")
+        .append(_cli_quote_powershell(program))
+        .append(" -ScriptBlock {\n");
+    text.append("    param($wordToComplete, $commandAst, $cursorPosition)\n");
+    text.append(
+        "    $words = @($commandAst.CommandElements | Where-Object { $_.Extent.EndOffset -lt $cursorPosition } | ForEach-Object { $_.ToString() })\n"
+    );
+    text.append("    $cmd = ").append(_cli_quote_powershell(program)).append("\n");
+    text.append("    foreach ($word in ($words | Select-Object -Skip 1)) {\n");
+    text.append("        switch -CaseSensitive (\"${cmd}:$word\") {\n");
+    for (var node in nodes) {
+        for (var command in node.parser._commands) {
+            text
+                .append("            ")
+                .append(_cli_quote_powershell(node.path + ":" + command._name))
+                .append(" { $cmd = ")
+                .append(_cli_quote_powershell(node.path + " " + command._name))
+                .append(" }\n");
+        }
+    }
+    text.append("        }\n    }\n");
+    text.append("    $prev = if ($words.Count -gt 0) { $words[-1] } else { '' }\n");
+    text.append("    $candidates = @()\n");
+    text.append("    switch -CaseSensitive ($cmd) {\n");
+    for (var node in nodes) {
+        var parser = node.parser;
+        text.append("        ").append(_cli_quote_powershell(node.path)).append(" {\n");
+        text.append("            switch -CaseSensitive ($prev) {\n");
+        for (var option in _cli_options_of(parser)) {
+            if (option.kind == FLAG_KIND) {
+                continue;
+            }
+            # An option whose value is a file name returns nothing, so
+            # PowerShell completes a file name.
+            var values = Array<String>();
+            for (var choice in option.choices) {
+                values.append(_cli_quote_powershell(choice));
+            }
+            for (var spelling in _cli_spellings(option)) {
+                text
+                    .append("                ")
+                    .append(_cli_quote_powershell(spelling))
+                    .append(" { $candidates = @(")
+                    .append(", ".join(values))
+                    .append("); break }\n");
+            }
+        }
+        var words = Array<String>();
+        for (var word in _cli_option_words(parser)) {
+            words.append(_cli_quote_powershell(word));
+        }
+        var arguments = Array<String>();
+        for (var choice in _cli_positional_choices(parser)) {
+            arguments.append(_cli_quote_powershell(choice));
+        }
+        for (var command in parser._commands) {
+            arguments.append(_cli_quote_powershell(command._name));
+        }
+        text.append("                default {\n");
+        text
+            .append("                    if ($wordToComplete.StartsWith('-')) { $candidates = @(")
+            .append(", ".join(words))
+            .append(") }\n");
+        text.append("                    else { $candidates = @(").append(", ".join(arguments)).append(") }\n");
+        text.append("                }\n            }\n        }\n");
+    }
+    text.append("    }\n");
+    text.append("    $candidates | Where-Object { $_.StartsWith($wordToComplete) } | ForEach-Object {\n");
+    text.append("        [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)\n");
+    text.append("    }\n}\n");
+    return text.to_string();
+}

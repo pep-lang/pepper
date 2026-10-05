@@ -200,7 +200,28 @@ command; after `parse`, `is_selected` tells which command was given.
   usage.
 - Commands nest: a command's parser can declare commands too.
 
+## Shell completions
+
+`completions(shell)` returns a script that completes the program's
+command line in Bash, Zsh, fish or PowerShell (`cli.Shell`), from the
+declarations: options (with the global ones in each command), commands,
+an enum's cases, and file names for a value that is a `String` or an
+`io.Path`. A program prints it on request, often from a command of its
+own, as `pkg completions fish` does here:
+
+```pepper
+{{#include ../../examples/cli-completions.pep}}
+```
+
+The user installs what it prints where the shell looks for it:
+
+| Shell | Install the script as |
+|-------|-----------------------|
+| `bash` | `~/.local/share/bash-completion/completions/pkg`, or `source` it from `~/.bashrc` |
+| `zsh` | `_pkg` in a directory on `$fpath` |
+| `fish` | `~/.config/fish/completions/pkg.fish` |
+| `powershell` | dot-sourced from `$PROFILE` |
+
 ## Not yet
 
 - Windows-style `/option` forms: every platform uses `-` and `--`.
-- Generating shell completions.

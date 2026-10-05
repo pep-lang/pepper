@@ -118,6 +118,7 @@ const PAGES: &[(&str, &str)] = &[
     ("cli/module.pep", "The cli module"),
     ("cli/parser.pep", "Parser"),
     ("cli/options.pep", "Options"),
+    ("cli/completions.pep", "Completions"),
     ("http/module.pep", "The http module"),
     ("http/message.pep", "Requests and responses"),
     ("http/client.pep", "Client"),

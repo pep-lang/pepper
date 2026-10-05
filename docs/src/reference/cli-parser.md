@@ -414,6 +414,38 @@ usage, and a line for each argument, option and command.
 **Returns**
 - the help text, ending in a line break
 
+#### completions
+
+```pepper
+completions(shell: Shell): String
+```
+
+Returns a script that completes this program's command line in
+`shell`: its options, commands and enum choices, and file names
+where a value is a `String` or an `io.Path`. A program usually
+prints it from a command of its own (`pkg completions bash`), for
+the user to install where `Shell`'s cases say.
+
+Call it on the program's parser, after the declarations.
+
+**Parameters**
+- `shell` — the shell the script is for
+
+**Returns**
+- the script, ending in a line break
+
+**Example**
+```pepper
+var parser = cli.Parser("pkg");
+var shell = parser.option<cli.Shell>("completions", help = "print a completion script");
+if (!parser.parse(args)) {
+    return 2;
+}
+if (shell.is_set) {
+    print(parser.completions(shell.value()));
+}
+```
+
 #### try_parse
 
 ```pepper

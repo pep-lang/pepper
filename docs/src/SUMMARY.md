@@ -184,6 +184,7 @@
   - [The cli module](reference/cli-module.md)
     - [Parser](reference/cli-parser.md)
     - [Options](reference/cli-options.md)
+    - [Completions](reference/cli-completions.md)
   - [The http module](reference/http-module.md)
     - [Requests and responses](reference/http-message.md)
     - [Client](reference/http-client.md)
