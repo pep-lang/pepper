@@ -244,7 +244,12 @@ jobs:
       # by `pepper test`; `cargo test` above runs the compiler's.
       - name: Pepper tests
         shell: bash
-        run: bash scripts/pepper-tests.sh
+        # tools/compiler depends on the private pepper-llvm package (#656).
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-pepper-llvm-auth.sh
+          bash scripts/pepper-tests.sh
 
       # docs/src/reference/ is generated from the runtime's doc comments; a
       # runtime change must regenerate it (`cargo run -p pepper-docgen --
@@ -293,7 +298,12 @@ jobs:
       # by `pepper test`; `cargo test` above runs the compiler's.
       - name: Pepper tests
         shell: bash
-        run: bash scripts/pepper-tests.sh
+        # tools/compiler depends on the private pepper-llvm package (#656).
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-pepper-llvm-auth.sh
+          bash scripts/pepper-tests.sh
 
   # The suite on Linux against the default LLVM. Required: `test` gates on it.
   # The other LLVM majors run before a release, in llvm-versions.yml, not on
@@ -358,7 +368,12 @@ jobs:
       # by `pepper test`; `cargo test` above runs the compiler's.
       - name: Pepper tests
         shell: bash
-        run: bash scripts/pepper-tests.sh
+        # tools/compiler depends on the private pepper-llvm package (#656).
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-pepper-llvm-auth.sh
+          bash scripts/pepper-tests.sh
 
       # Cross-compiling (`--target`): build a few examples for Linux arm64,
       # linking with lld and Ubuntu's arm64 sysroot, run them under qemu, and

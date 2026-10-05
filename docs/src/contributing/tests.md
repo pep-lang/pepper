@@ -74,6 +74,16 @@ files uses a fresh folder under the system's temporary folder
 CI runs `scripts/pepper-tests.sh` after `cargo test --workspace` on
 Linux, macOS and Windows.
 
+The compiler written in Pepper, `tools/compiler`, depends on
+`justinboswell/pepper-llvm`, a private repository. CI clones it over SSH
+with a read-only deploy key of that repository, whose private half is this
+repository's secret `PEPPER_LLVM_DEPLOY_KEY`.
+`scripts/ci-pepper-llvm-auth.sh` writes the key to a temporary file and
+points git at it for that one repository, through `GIT_CONFIG_*` and
+`GIT_SSH_COMMAND` variables of the test step only. Without the secret (in a
+fork, say) the step says so in a notice, and the `tools/compiler` tests
+fail when they fetch the package.
+
 ## Leaks fail a test
 
 Each test counts the runtime's live allocations before and after it runs,
