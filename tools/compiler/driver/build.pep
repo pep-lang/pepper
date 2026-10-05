@@ -12,6 +12,7 @@ import os;
 import process;
 import compiler.sema;
 import "linker";
+import "parts";
 
 ## What `build` makes.
 export struct BuildOptions {
@@ -114,6 +115,17 @@ export link_inputs(module: sema.Module, program: link.Program): (String[], Path[
     return (libraries, dirs);
 }
 
+## Puts `ir`'s static constructors where the target runs them: in
+## `.init_array` on ELF (see `use_init_array`).
+##
+## @param ir the optimized module
+## @param triple the target triple
+export place_constructors(ir: llvm.Module, triple: String) {
+    if (!triple.contains("-windows") and !triple.contains("-apple-") and !triple.starts_with("wasm")) {
+        use_init_array(ir, ir.context);
+    }
+}
+
 ## Moves `ir`'s static constructors from `llvm.global_ctors` into an
 ## `.init_array` section, as clang emits them for ELF: a machine made
 ## through LLVM's C API puts them in `.ctors`, which LLVM's linker does not
@@ -191,31 +203,52 @@ export build(program: link.Program, options: BuildOptions): Result<void, String>
         namespaces.append(f.namespace);
     }
     var name = options.output.file_stem();
-    var generated = codegen.generate(module, state, namespaces, name.is_value() ? name.value() : "main", setup);
+    var owners = HashMap<String, uint>();
+    var stem = name.is_value() ? name.value() : "main";
+    var generated = codegen.generate(module, state, namespaces, stem, setup, owners);
     if (generated.is_err()) {
         return Result<void, String>.err(render_all([generated.error()], sources));
     }
     var ir = generated.value();
-    if (options.opt_level > 0) {
-        var optimized = ir.run_passes($"default<O{options.opt_level}>", machine.value());
-        if (optimized.is_err()) {
-            return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
-        }
-    }
-    if (!triple.contains("-windows") and !triple.contains("-apple-") and !triple.starts_with("wasm")) {
-        use_init_array(ir, ir.context);
-    }
 
     var created = Directory.create_all(options.build_dir);
     if (created.is_err()) {
         return Result<void, String>.err($"cannot create build dir: {created.error().message}");
     }
     var extension = triple.contains("-windows") ? "obj" : "o";
-    var stem = name.is_value() ? name.value() : "main";
-    var object = options.build_dir.join(Path($"{stem}.{extension}"));
-    var emitted = machine.value().emit_to_file(ir, object.to_string());
-    if (emitted.is_err()) {
-        return Result<void, String>.err($"cannot write {object}: {emitted.error().message}");
+    var objects = Array<Path>();
+    var parts = part_count(namespaces.count as uint);
+    if (parts > 1) {
+        # Optimized and compiled in parallel, one object per part.
+        var compiled = compile_parts(
+            ir,
+            owners,
+            namespaces.count as uint,
+            parts,
+            machine.value(),
+            cpu,
+            options.opt_level,
+            options.build_dir.join(Path($"{stem}.parts")),
+            extension
+        );
+        if (compiled.is_err()) {
+            return Result<void, String>.err(compiled.error());
+        }
+        objects = compiled.value();
+    } else {
+        if (options.opt_level > 0) {
+            var optimized = ir.run_passes($"default<O{options.opt_level}>", machine.value());
+            if (optimized.is_err()) {
+                return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
+            }
+        }
+        place_constructors(ir, triple);
+        var object = options.build_dir.join(Path($"{stem}.{extension}"));
+        var emitted = machine.value().emit_to_file(ir, object.to_string());
+        if (emitted.is_err()) {
+            return Result<void, String>.err($"cannot write {object}: {emitted.error().message}");
+        }
+        objects.append(object);
     }
 
     # Search order: `-L`, then `[Link(path = ...)]`.
@@ -234,5 +267,5 @@ export build(program: link.Program, options: BuildOptions): Result<void, String>
     for (var dir in linked_dirs) {
         dirs.append(dir);
     }
-    return link_objects([object], options.output, libraries, dirs);
+    return link_objects(objects, options.output, libraries, dirs);
 }

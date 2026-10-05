@@ -178,6 +178,10 @@ export struct Generator {
     var file_namespaces: String[] = Array<String>();
     ## How much the module is optimized: 0 to 3.
     var opt_level: uint = 0;
+    ## The file each symbol a declaration defines belongs to, by symbol:
+    ## its index in the program's files. Instantiations, and code without a
+    ## source location, belong to no file (see `partition.pep`).
+    var owners: HashMap<String, uint> = HashMap<String, uint>();
     ## Which runtime checks the code performs.
     var runtime_checks: RuntimeChecks = RuntimeChecks.all();
     ## Each source's name and line starts, for check locations.
@@ -202,6 +206,14 @@ export struct Generator {
 
     ## Remembers `loc` as where a failing `result` arose, unless a node nested
     ## inside claimed it first.
+    ## Records the file declaring `loc` as the owner of `name`, unless it
+    ## names an instantiation (`Array<int>.append`) or has no location.
+    own(name: String, loc: Loc) {
+        if (!loc.is_none() and !name.contains("<")) {
+            owners[name] = loc.file;
+        }
+    }
+
     locate(result: Result<void>, loc: Loc) {
         if (result.is_err()) {
             locate_error(result.error().message, loc);
@@ -583,12 +595,20 @@ export struct Build {
 ## @param namespaces each file's namespace, by file index
 ## @param name the module's name: the main file's stem
 ## @param build the machine, CPU, optimization level and checks
+## @param owners receives the file each owned symbol belongs to, by name
+##               (see `partition.pep`)
 ## @returns the module, or the first error
 export generate(
-    module: Module, state: PassState, namespaces: String[], name: String, build: Build
+    module: Module,
+    state: PassState,
+    namespaces: String[],
+    name: String,
+    build: Build,
+    owners: HashMap<String, uint> = HashMap<String, uint>()
 ): Result<llvm.Module, Diagnostic> {
     var context = llvm.Context();
     var generator = Generator(context, name, build.machine, state);
+    generator.owners = owners;
     generator.file_namespaces = namespaces;
     generator.opt_level = build.opt_level;
     generator.runtime_checks = build.runtime_checks;

@@ -136,3 +136,48 @@ export parse_type_string(text: String, span: Span): TypeName {
     }
     return out;
 }
+
+## The linker spelling of a Pepper symbol, as `symbol_name` in
+## `crates/pepper-codegen/src/partition.rs`. `main`, and a member name of
+## letters, digits, `_` and `.` (`Point.length`), is its own spelling; any
+## other name is `_P` followed by the name with `_` doubled and every other
+## byte written as `_` and two hex digits (`Array<int>.count` is
+## `_PArray_3cint_3e.count`), so every spelling names one symbol and no
+## linker reads a `@` as a symbol version.
+##
+## @param name the symbol's Pepper name
+## @returns its spelling
+export symbol_name(name: String): String {
+    var bytes = name.bytes();
+    bool plain = true;
+    for (var b in bytes) {
+        if (!_is_plain(b)) {
+            plain = false;
+            break;
+        }
+    }
+    if (name == "main" or (plain and name.contains(".") and !name.starts_with("_P"))) {
+        return name;
+    }
+    var out = StringBuilder();
+    out.append("_P");
+    for (var i in 0..bytes.count) {
+        var b = bytes[i];
+        if (b == '_' as u8) {
+            out.append("__");
+        } else if (_is_plain(b)) {
+            out.append(name.substr_bytes(i, 1));
+        } else {
+            out.append(b < 16 ? $"_0{b:x}" : $"_{b:x}");
+        }
+    }
+    return out.to_string();
+}
+
+_is_plain(b: u8): bool {
+    return (b >= '0' as u8 and b <= '9' as u8)
+        or (b >= 'a' as u8 and b <= 'z' as u8)
+        or (b >= 'A' as u8 and b <= 'Z' as u8)
+        or b == '_' as u8
+        or b == '.' as u8;
+}

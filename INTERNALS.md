@@ -2942,8 +2942,17 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   conversions, `simd.pep` vectors, and `globals.pep` globals,
   thread-locals, exports, context switching, intrinsics, TBAA facts and
   the CPU attributes. Errors are `Result`s whose location `locate` records,
-  as `error_loc` does in Rust. Debug info, the JIT and partitioning into
-  units are not ported: `pepc` generates the whole program as one module.
+  as `error_loc` does in Rust. Debug info, the JIT and the build cache's
+  units are not ported: `pepc` generates the whole program as one module,
+  recording in `owners` the file that declares each symbol.
+  `partition.pep` splits that module into parts for parallel compilation:
+  `prepare` makes owned symbols external and hidden in their file's part
+  (files spread over the parts by size), every other definition
+  `linkonce_odr` in each part that uses it (private `unnamed_addr`
+  constants stay private copies), keeps `main`, `__pep_global_init`, the
+  exports and `llvm.*` in part 0, and respells symbols with `symbol_name`;
+  `keep_part` turns the other parts' definitions into declarations and
+  runs `globaldce`.
   `pepc --emit-llvm` prints it as `pep-build --emit-llvm -O0` does: byte
   for byte on `--no-runtime` programs, and on the `tests/` programs with
   the runtime up to the order of functions and globals (and the numbers
@@ -2957,14 +2966,20 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   program by hand. With no `--emit-*` option, `pepc [-O0..3] [-o out]
   [-l lib] [-L dir] ... file` builds the program into an executable.
 - `compiler.driver` (`compiler/driver/`) builds a program as
-  `crates/pepper-driver` does, so far as one unit with no build cache:
-  `build.pep` runs merge and the sema passes (printing their warnings on
-  standard error, failed or not), generates the module for the host with
-  clang's default CPU, runs LLVM's `default<On>` pipeline, moves the
-  static constructors into `.init_array` on ELF, writes one object to
-  `.pep/build`, and links it; `linker.pep` finds clang (as
-  `find_link_driver` does) and links with the `[Link]` libraries and
-  folders, `-l` and `-L`, and the OS's default system libraries;
+  `crates/pepper-driver` does, with no build cache: `build.pep` runs
+  merge and the sema passes (printing their warnings on standard error,
+  failed or not), generates the module for the host with clang's default
+  CPU, optimizes and compiles it, and links the objects. `parts.pep`
+  compiles the module as one part per logical CPU (no more than the
+  files): it writes the bitcode and a plan (the machine, the level, each
+  owned symbol's part) to `.pep/build/<name>.parts`, and runs a
+  `pepc --compile-part <dir> <part> <object>` child per part, which keeps
+  its part, runs LLVM's `default<On>` pipeline and writes its object;
+  with one part the pipeline runs over the whole module, which becomes one
+  object. The module holding `llvm.global_ctors` moves the static
+  constructors into `.init_array` on ELF after optimizing. `linker.pep`
+  finds clang (as `find_link_driver` does) and links with the `[Link]`
+  libraries and folders, `-l` and `-L`, and the OS's default system libraries;
   `project.pep` builds a project as `apply_project` and `fetch.rs` do:
   with no file, the `pep.toml`'s entry and output (and `.pep/build` in the
   project), its `[build]` `link` libraries, and the missing dependencies

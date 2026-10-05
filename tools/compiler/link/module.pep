@@ -9,7 +9,9 @@ export [
 ] from "deprecation";
 export [is_build_option_name, Target, TEST_BUILD_OPTION] from "platform";
 export [Runtime] from "files";
-export [demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from "names";
+export [
+    demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR, symbol_name
+] from "names";
 export [
     all_hosts,
     find_manifest,

@@ -143,6 +143,7 @@ extend Generator {
             }
             var global = ir.add_global(llvm_ty, variable.name);
             set_private_linkage(global, variable.name);
+            own(variable.name, variable.loc);
             # Every global is defined at link time: a zero/null base
             # initializer, which the constant arms below override.
             var kind = llvm_ty.kind();
@@ -233,6 +234,7 @@ extend Generator {
             }
             var namespace = (file as ulong) < file_namespaces.count ? file_namespaces[file as ulong] : $"file{file}";
             var init_fn = ir.add_function($"__pep_init{NAMESPACE_SEPARATOR}{namespace}", void_fn);
+            owners[init_fn.name()] = file;
             var entry = context.append_block(init_fn, "entry");
             builder.position_at_end(entry);
             deferred_temps.clear();

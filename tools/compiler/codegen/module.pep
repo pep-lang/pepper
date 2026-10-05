@@ -3,3 +3,4 @@
 ## `crates/pepper-codegen` does for the Rust compiler.
 
 export * from "generator";
+export * from "partition";

@@ -332,3 +332,16 @@ first_difference(a: String, b: String): ulong {
     }
     return i;
 }
+
+[Test]
+symbols_get_their_linker_spelling() {
+    expect_equal(link.symbol_name("main"), "main");
+    expect_equal(link.symbol_name("Point.length"), "Point.length");
+    expect_equal(link.symbol_name("Array<int>.count"), "_PArray_3cint_3e.count");
+    expect_equal(link.symbol_name("helper@io/file"), "_Phelper_40io_2ffile");
+    expect_equal(link.symbol_name("a_b@x"), "_Pa__b_40x");
+    expect_equal(link.symbol_name("_Pfoo"), "_P__Pfoo");
+    expect_equal(link.symbol_name("exit"), "_Pexit");
+    expect_equal(link.symbol_name("_pep_malloc"), "_P__pep__malloc");
+    expect_not_equal(link.symbol_name("a_40"), link.symbol_name("a@"));
+}

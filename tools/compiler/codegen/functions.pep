@@ -185,6 +185,7 @@ extend Generator {
             }
             var fn_value = ir.add_function(mangled, fn_type);
             set_private_linkage(fn_value, mangled);
+            own(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
             functions[mangled] = fn_value;
             var param_names = Array<String>();
             if (!method.is_static) {
@@ -361,6 +362,7 @@ extend Generator {
         }
         var fn_value = ir.add_function(function.name, fn_type);
         set_private_linkage(fn_value, function.name);
+        own(function.name, function.loc);
         functions[function.name] = fn_value;
         fn_returns[function.name] = function.ty.to_string();
         var defaults = Array<Expression?>();

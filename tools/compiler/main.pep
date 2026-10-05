@@ -29,6 +29,20 @@ import process;
 import compiler.sema;
 
 main(args: String[]): int {
+    # One part of a build this compiler split (`driver/parts.pep`).
+    if (args.count == 5 and args[1] == "--compile-part") {
+        var part = uint.parse(args[3]);
+        if (!part.is_value()) {
+            File.stderr().write_all($"pepc: --compile-part needs a part number, not '{args[3]}'\n");
+            return 1;
+        }
+        var compiled = driver.compile_part(Path(args[2]), part.value(), Path(args[4]));
+        if (compiled.is_err()) {
+            File.stderr().write_all($"pepc: {compiled.error()}\n");
+            return 1;
+        }
+        return 0;
+    }
     String? path;
     bool linked = false;
     bool checked = false;
