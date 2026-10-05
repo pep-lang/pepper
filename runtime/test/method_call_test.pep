@@ -1,6 +1,7 @@
-# Calls to a struct's own methods by their bare names: a generic method
+# Calls to a struct's own methods: by their bare names, a generic method
 # called with explicit type arguments (`make<String>(n)`) from a method, a
-# static method and a closure, as `this.make<String>(n)` would call it (#672).
+# static method and a closure, as `this.make<String>(n)` would call it (#672);
+# and overloads mixing plain and generic members (#674).
 
 struct Labeled<T> {
     var label = "";
@@ -53,4 +54,60 @@ calls_a_generic_method_by_its_bare_name() {
     expect_equal(maker.later("b")(), "p:b");
     expect_equal(LabelMaker.plain("c").label, "c");
     expect_equal(TagOf<int>().name(), "tag");
+}
+
+# A method overloaded by plain and generic members, picked by the argument's
+# type: `bool` goes to the plain member, `T?` and `T[]` to their generic
+# members ahead of the plain `T` one (#674).
+struct Describer<U> {
+    var tag = "d";
+
+    describe(value: bool): String {
+        return tag + ":bool";
+    }
+
+    describe<T>(value: T): String {
+        return tag + ":one";
+    }
+
+    describe<T>(value: T?): String {
+        return tag + ":maybe";
+    }
+
+    describe<T>(value: Array<T>): String {
+        return tag + ":many";
+    }
+
+    all(u: U): String {
+        return describe(true) + " " + describe(u) + " " + describe([u]) + " " + describe<U>(u);
+    }
+
+    kind<T>(value: T): String {
+        return "one";
+    }
+
+    kind<T>(value: Array<T>): String {
+        return "many";
+    }
+
+    static make<T>(value: T): String {
+        return "one";
+    }
+
+    static make<T>(value: T?): String {
+        return "maybe";
+    }
+}
+
+[Test]
+picks_between_plain_and_generic_overloads() {
+    var describer = Describer<int>();
+    expect_equal(describer.all(3), "d:bool d:one d:many d:one");
+    expect_equal(describer.describe(false), "d:bool");
+    expect_equal(describer.describe(Optional<int>.Value(1)), "d:maybe");
+    expect_equal(describer.describe<String>("a"), "d:one");
+    expect_equal(describer.kind([1, 2]), "many");
+    expect_equal(describer.kind(1), "one");
+    expect_equal(Describer<int>.make(1), "one");
+    expect_equal(Describer<int>.make(Optional<int>.Value(1)), "maybe");
 }

@@ -490,7 +490,7 @@ export struct Parser {
                     );
                     var name = positional.name.is_empty ? field.name : positional.name;
                     declared.append(
-                        _cli_field_positional(this, name, positional.help, positional.required, field.get(options))
+                        this._field_positional(name, positional.help, positional.required, field.get(options))
                     );
                 } else {
                     var short_name = "";
@@ -509,14 +509,8 @@ export struct Parser {
                         global = option.global;
                     }
                     declared.append(
-                        _cli_field_option(
-                            this,
-                            _cli_long_name(field.name, name),
-                            short_name,
-                            help,
-                            value_name,
-                            required,
-                            field.get(options)
+                        this._field_option(
+                            _cli_long_name(field.name, name), short_name, help, value_name, required, field.get(options)
                         )
                     );
                     if (global) {
@@ -526,6 +520,79 @@ export struct Parser {
             }
         }
         _binders.append(() => _cli_store<T>(options, declared));
+    }
+
+    # Declares the flag for a `bool` field of an options struct.
+    _field_option(
+        name: String, short_name: String, help: String, value_name: String, required: bool, current: bool
+    ): _CliArgument {
+        return this._declare_option(name, short_name, help, FLAG_KIND);
+    }
+
+    # Declares the option for a `T` field of an options struct, whose
+    # starting value is the default (none for an empty String or a null).
+    _field_option<T>(
+        name: String, short_name: String, help: String, value_name: String, required: bool, current: T
+    ): _CliArgument {
+        var declared = this._field_value_option(name, short_name, help, value_name, required, SINGLE_KIND);
+        declared.default_value = _cli_text<T>(current);
+        _cli_type<T>(declared);
+        return declared;
+    }
+
+    # Declares the option for a `T?` field of an options struct.
+    _field_option<T>(
+        name: String, short_name: String, help: String, value_name: String, required: bool, current: T?
+    ): _CliArgument {
+        var declared = this._field_value_option(name, short_name, help, value_name, required, SINGLE_KIND);
+        _cli_type<T>(declared);
+        return declared;
+    }
+
+    # Declares the repeatable option for a `T[]` field of an options struct.
+    _field_option<T>(
+        name: String, short_name: String, help: String, value_name: String, required: bool, current: Array<T>
+    ): _CliArgument {
+        var declared = this._field_value_option(name, short_name, help, value_name, required, LIST_KIND);
+        _cli_type<T>(declared);
+        return declared;
+    }
+
+    # Declares an option that takes a value, for a field of an options struct.
+    _field_value_option(
+        name: String, short_name: String, help: String, value_name: String, required: bool, kind: int
+    ): _CliArgument {
+        var declared = this._declare_option(name, short_name, help, kind);
+        declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
+        declared.required = required;
+        return declared;
+    }
+
+    # Declares a positional `T` field of an options struct. Its starting
+    # value is the default, so it is required only when it has none or
+    # `required` is set.
+    _field_positional<T>(name: String, help: String, required: bool, current: T): _CliArgument {
+        var fallback = _cli_text<T>(current);
+        var declared = this._declare_positional(name, help, SINGLE_KIND, required or fallback.is_empty);
+        declared.default_value = fallback;
+        _cli_type<T>(declared);
+        return declared;
+    }
+
+    # Declares a positional `T?` field of an options struct, which may be
+    # left out.
+    _field_positional<T>(name: String, help: String, required: bool, current: T?): _CliArgument {
+        var declared = this._declare_positional(name, help, SINGLE_KIND, false);
+        _cli_type<T>(declared);
+        return declared;
+    }
+
+    # Declares a positional `T[]` field of an options struct, which takes
+    # every value left.
+    _field_positional<T>(name: String, help: String, required: bool, current: Array<T>): _CliArgument {
+        var declared = this._declare_positional(name, help, LIST_KIND, required);
+        _cli_type<T>(declared);
+        return declared;
     }
 
     ## Whether the last `parse` reached this parser: whether this command
@@ -1158,85 +1225,6 @@ _cli_edit_distance(a: String, b: String): int {
         i += 1;
     }
     return previous[b.size];
-}
-
-# Declares the flag for a `bool` field of an options struct.
-_cli_field_option(
-    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: bool
-): _CliArgument {
-    return parser._declare_option(name, short_name, help, FLAG_KIND);
-}
-
-# Declares the option for a `T` field of an options struct, whose
-# starting value is the default (none for an empty String or a null).
-_cli_field_option<T>(
-    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: T
-): _CliArgument {
-    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, SINGLE_KIND);
-    declared.default_value = _cli_text<T>(current);
-    _cli_type<T>(declared);
-    return declared;
-}
-
-# Declares the option for a `T?` field of an options struct.
-_cli_field_option<T>(
-    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, current: T?
-): _CliArgument {
-    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, SINGLE_KIND);
-    _cli_type<T>(declared);
-    return declared;
-}
-
-# Declares the repeatable option for a `T[]` field of an options struct.
-_cli_field_option<T>(
-    parser: Parser,
-    name: String,
-    short_name: String,
-    help: String,
-    value_name: String,
-    required: bool,
-    current: Array<T>
-): _CliArgument {
-    var declared = _cli_field_value_option(parser, name, short_name, help, value_name, required, LIST_KIND);
-    _cli_type<T>(declared);
-    return declared;
-}
-
-# Declares an option that takes a value, for a field of an options struct.
-_cli_field_value_option(
-    parser: Parser, name: String, short_name: String, help: String, value_name: String, required: bool, kind: int
-): _CliArgument {
-    var declared = parser._declare_option(name, short_name, help, kind);
-    declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
-    declared.required = required;
-    return declared;
-}
-
-# Declares a positional `T` field of an options struct. Its starting
-# value is the default, so it is required only when it has none or
-# `required` is set.
-_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: T): _CliArgument {
-    var fallback = _cli_text<T>(current);
-    var declared = parser._declare_positional(name, help, SINGLE_KIND, required or fallback.is_empty);
-    declared.default_value = fallback;
-    _cli_type<T>(declared);
-    return declared;
-}
-
-# Declares a positional `T?` field of an options struct, which may be
-# left out.
-_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: T?): _CliArgument {
-    var declared = parser._declare_positional(name, help, SINGLE_KIND, false);
-    _cli_type<T>(declared);
-    return declared;
-}
-
-# Declares a positional `T[]` field of an options struct, which takes
-# every value left.
-_cli_field_positional<T>(parser: Parser, name: String, help: String, required: bool, current: Array<T>): _CliArgument {
-    var declared = parser._declare_positional(name, help, LIST_KIND, required);
-    _cli_type<T>(declared);
-    return declared;
 }
 
 # Stores each declaration's parsed value in its field of `options`, in the

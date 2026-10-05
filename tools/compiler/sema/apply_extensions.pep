@@ -27,7 +27,7 @@ import [
 ] from "model";
 import [Callee] from "named_arguments";
 import [set_name] from "names";
-import [group_methods] from "overloads";
+import [group_struct_methods] from "overloads";
 import [PassState] from "state";
 import [trait_def] from "traits";
 import [replace_map, SIMD] from "type_name";
@@ -62,7 +62,7 @@ export apply_extensions(module: Module, state: PassState) {
                 state.applied_extensions.insert(key);
                 _apply_to_struct(st, ext, module.traits, state);
                 # An extension's methods join the struct's overload sets.
-                var sets = group_methods(st.method_members, st.name, state);
+                var sets = group_struct_methods(st, state);
                 if (!sets.is_value()) {
                     return;
                 }

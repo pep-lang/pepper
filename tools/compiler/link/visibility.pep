@@ -1209,6 +1209,17 @@ extend _Checker with ScopeWalk {
                     unknown_receivers.insert(name_span.start);
                 }
             }
+            # A bare call with type arguments in a method (`make<String>(n)`)
+            # names the struct's method, as `this.make<String>(n)` does: only
+            # its type arguments are references.
+            FunctionCall(function, arguments, span) => {
+                if (function is TypeLiteral(type_name)) {
+                    if (is_local(type_name.name)) {
+                        walk_type_name(type_name);
+                        return Expression.FunctionCall(function, _visit_all(arguments), span);
+                    }
+                }
+            }
             else => {}
         }
         return walk_expression(e);

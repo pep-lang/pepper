@@ -292,7 +292,7 @@ pub fn apply_extensions(module: &mut Module, _specialized_pass: bool) {
                 if (st.name == target_name || st.ty.is_spelled(&target_name)) && applied.insert((ext_idx, st.name.clone())) {
                     apply_to_struct(st, ext, &module.traits);
                     // An extension's methods join the struct's overload sets.
-                    let Some(sets) = crate::passes::overloads::group_methods(&mut st.method_members, &st.name) else { return };
+                    let Some(sets) = crate::passes::overloads::group_struct_methods(st) else { return };
                     if !sets.is_empty() {
                         module.method_overload_sets.insert(st.name.clone(), sets);
                     }

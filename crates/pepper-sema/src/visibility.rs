@@ -873,6 +873,19 @@ impl ScopeWalk for Checker<'_, '_> {
         {
             self.unknown_receivers.insert(name_span.start);
         }
+        // A bare call with type arguments in a method (`make<String>(n)`)
+        // names the struct's method, as `this.make<String>(n)` does: only
+        // its type arguments are references.
+        if let Expression::FunctionCall { function, arguments, .. } = expr
+            && let Expression::TypeLiteral(ty) = &**function
+            && self.is_local(&ty.name)
+        {
+            self.walk_type_name(ty);
+            for a in arguments {
+                self.visit_expression(a);
+            }
+            return;
+        }
         self.walk_expression(expr);
     }
 

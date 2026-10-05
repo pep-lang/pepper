@@ -11,7 +11,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name, is_concrete_override, is_override, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from compiler.link;
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
-import [ExternDef, FunctionDef, GenericParam, Module, TypeName] from "model";
+import [ExternDef, FunctionDef, GenericParam, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
 import [parse_type_string, replace_map] from "type_name";
@@ -396,7 +396,7 @@ _check_constructors(module: Module, state: PassState): bool {
 ## error.
 _name_method_overloads(module: Module, state: PassState): bool {
     for (var st in module.structs) {
-        var sets = group_methods(st.method_members, st.name, state);
+        var sets = group_struct_methods(st, state);
         if (!sets.is_value()) {
             return false;
         }
@@ -415,6 +415,21 @@ _name_method_overloads(module: Module, state: PassState): bool {
         }
     }
     return true;
+}
+
+## Groups a struct's methods into overload sets as `group_methods` does,
+## its generic methods included: `f(bool)` and `f<T>(T?)` are members of
+## one set, which resolution chooses among as it does for free functions.
+## As `overloads::group_struct_methods` does.
+##
+## @param st the struct, whose methods are renamed in place
+## @param state the passes' state
+## @returns the sets, or none after reporting an error
+export group_struct_methods(st: StructDef, state: PassState): Map<String, Array<String>>? {
+    var all = Array<FunctionDef>();
+    all.append_all(st.method_members);
+    all.append_all(st.generic_methods);
+    return group_methods(all, st.name, state);
 }
 
 ## Groups the methods of struct or trait `owner` into overload sets by set

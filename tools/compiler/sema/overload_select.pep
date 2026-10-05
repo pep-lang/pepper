@@ -343,7 +343,10 @@ export struct Overloads {
             conformance = Optional<Conformance>.Value(Conformance(module, state));
         }
         for (var st in module.structs) {
-            for (var method in st.method_members) {
+            var methods_of = Array<FunctionDef>();
+            methods_of.append_all(st.method_members);
+            methods_of.append_all(st.generic_methods);
+            for (var method in methods_of) {
                 var set = set_name(method.name);
                 if (set != method.name) {
                     _add_method(_canonical(st.ty).to_string(), set, Member(method, state));
@@ -739,11 +742,14 @@ export struct Overloads {
     ##
     ## @returns the outcome
     select_method(receiver: TypeName, set: String, args: ArgInfo[], at: Loc): Outcome {
-        var members = _method_set(receiver, set, at);
+        # `set` may spell type arguments (`f<int>`), which only the set's
+        # generic members take.
+        var (name, explicit) = _method_set_and_type_arguments(set);
+        var members = _method_set(receiver, name, at);
         if (!members.is_value()) {
             return Outcome.Pending;
         }
-        return _select_in(members.value(), set, Optional<TypeName[]>.Empty, args);
+        return _select_in(members.value(), name, explicit, args);
     }
 
     ## The members of method set `set` of `receiver`'s struct code at `at`
@@ -773,17 +779,18 @@ export struct Overloads {
 
     ## Returns whether some struct has a method overload set named `set`.
     is_any_method_set(set: String): bool {
-        return method_set_names.contains(set);
+        return method_set_names.contains(_method_set_name(set));
     }
 
     ## Returns whether `set` names a method overload set of `receiver`'s
     ## struct.
     is_method_set(receiver: TypeName, set: String): bool {
-        if (!method_set_names.contains(set)) {
+        var name = _method_set_name(set);
+        if (!method_set_names.contains(name)) {
             return false;
         }
         var sets_of = methods.try_get(_canonical(receiver).to_string());
-        return sets_of.is_value() and sets_of.value().contains(set);
+        return sets_of.is_value() and sets_of.value().contains(name);
     }
 
     ## Returns the member of method set `set` of `receiver`'s struct,
@@ -1216,6 +1223,26 @@ export has_overloads(module: Module): bool {
 ##
 ## @param function the callee as spelled
 ## @returns the name, and the type arguments if written
+# The method set a call names, without the type arguments it may spell
+# (`f<int>` is `f`). An operator method (`<`, `<<`) is its own name.
+_method_set_name(method: String): String {
+    var (name, _) = _method_set_and_type_arguments(method);
+    return name;
+}
+
+# `split_type_arguments` for a method call's name, which may be an operator.
+_method_set_and_type_arguments(method: String): (String, TypeName[]?) {
+    if (method.is_empty) {
+        return (method, Optional<TypeName[]>.Empty);
+    }
+    var first = method.byte_at(0);
+    var word = (first >= 'a' and first <= 'z') or (first >= 'A' and first <= 'Z') or first == '_';
+    if (!word) {
+        return (method, Optional<TypeName[]>.Empty);
+    }
+    return split_type_arguments(method);
+}
+
 export split_type_arguments(function: String): (String, TypeName[]?) {
     if (set_name(function) != function) {
         return (function, Optional<TypeName[]>.Empty);

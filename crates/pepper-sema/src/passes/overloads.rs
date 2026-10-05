@@ -299,7 +299,7 @@ pub fn has_overloads(module: &Module) -> bool {
 /// `module.method_overload_sets`. Returns false after reporting an error.
 fn name_method_overloads(module: &mut Module) -> bool {
     for st in &mut module.structs {
-        let Some(sets) = group_methods(&mut st.method_members, &st.name) else { return false };
+        let Some(sets) = group_struct_methods(st) else { return false };
         if !sets.is_empty() {
             module.method_overload_sets.insert(st.name.clone(), sets);
         }
@@ -312,6 +312,19 @@ fn name_method_overloads(module: &mut Module) -> bool {
         }
     }
     true
+}
+
+/// [`group_methods`] over a struct's methods, its generic methods
+/// included: `f(bool)` and `f<T>(T?)` are members of one set, which
+/// resolution chooses among as it does for free functions.
+pub(crate) fn group_struct_methods(st: &mut StructDef) -> Option<BTreeMap<String, Vec<String>>> {
+    let count = st.method_members.len();
+    let mut all = std::mem::take(&mut st.method_members);
+    all.append(&mut st.generic_methods);
+    let sets = group_methods(&mut all, &st.name);
+    st.generic_methods = all.split_off(count);
+    st.method_members = all;
+    sets
 }
 
 /// Group the methods of struct or trait `owner` into overload sets by set
@@ -644,7 +657,7 @@ impl Overloads {
         }
         let mut methods: HashMap<String, HashMap<String, Vec<Member>>> = HashMap::new();
         for st in &module.structs {
-            for method in &st.method_members {
+            for method in st.method_members.iter().chain(&st.generic_methods) {
                 let set = set_name(&method.name);
                 if set != method.name {
                     methods
@@ -906,9 +919,12 @@ impl Overloads {
 
     /// Resolve a call of method `set` on a receiver of type `receiver`.
     /// Resolve a call from `at` of method set `set` of `receiver`'s struct.
+    /// `set` may spell type arguments (`f<int>`), which only the set's
+    /// generic members take.
     pub fn select_method(&self, receiver: &TypeName, set: &str, args: &[ArgInfo], at: Loc) -> Outcome {
+        let (set, explicit) = method_set_and_type_arguments(set);
         match self.method_set(receiver, set, at) {
-            Some(members) => self.select_in(&members, set, None, args),
+            Some(members) => self.select_in(&members, set, explicit.as_deref(), args),
             None => Outcome::Pending,
         }
     }
@@ -927,11 +943,12 @@ impl Overloads {
 
     /// Whether some struct has a method overload set named `set`.
     pub fn is_any_method_set(&self, set: &str) -> bool {
-        self.method_set_names.contains(set)
+        self.method_set_names.contains(method_set_name(set))
     }
 
     /// Whether `set` names a method overload set of `receiver`'s struct.
     pub fn is_method_set(&self, receiver: &TypeName, set: &str) -> bool {
+        let set = method_set_name(set);
         self.method_set_names.contains(set) && self.methods.get(&canonical(receiver).to_string()).is_some_and(|sets| sets.contains_key(set))
     }
 
@@ -1440,6 +1457,21 @@ pub fn check_overloads(module: &Module) {
 
 /// `name<args>` split into `name` and the written type arguments. A
 /// resolved member (`Box<int>$2`) is returned whole.
+/// The method set a call names, without the type arguments it may spell
+/// (`f<int>` is `f`). An operator method (`<`, `<<`) is its own name.
+fn method_set_name(method: &str) -> &str {
+    method_set_and_type_arguments(method).0
+}
+
+/// [`split_type_arguments`] for a method call's name, which may be an
+/// operator.
+fn method_set_and_type_arguments(method: &str) -> (&str, Option<Vec<TypeName>>) {
+    if !method.starts_with(|c: char| c.is_alphabetic() || c == '_') {
+        return (method, None);
+    }
+    split_type_arguments(method)
+}
+
 pub fn split_type_arguments(function: &str) -> (&str, Option<Vec<TypeName>>) {
     if set_name(function) != function {
         return (function, None);
