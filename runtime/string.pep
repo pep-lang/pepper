@@ -271,6 +271,11 @@ export struct String {
     ##     s.append("ING");   # s == "TESTING"
     append(rhs: String) {
         _version = _version + 1;
+        # Nothing to copy, and a String with no buffer has no terminator to
+        # write (#692).
+        if (rhs._size == 0) {
+            return;
+        }
         # Read rhs before growing: `s.append(s)` makes rhs this String, whose
         # _size grow() changes and whose _data it may move.
         ulong old_size = _size;

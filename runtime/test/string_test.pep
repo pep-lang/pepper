@@ -128,6 +128,18 @@ append_grows_capacity() {
 }
 
 [Test]
+appends_empty_to_a_string_without_a_buffer() {
+    # A substring of no bytes, and String(), hold no buffer (#692).
+    var empty = "export f()".substr_bytes(0, 0);
+    expect_equal(empty + "", "");
+    expect_equal(empty + empty, "");
+    expect_equal(String() + String(), "");
+    empty.append("");
+    expect_equal(empty.size, 0 as ulong);
+    expect_equal(empty + "x", "x");
+}
+
+[Test]
 equality_ignores_capacity() {
     var a = "hello";
     var b = "";
