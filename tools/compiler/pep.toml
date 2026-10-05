@@ -8,6 +8,8 @@ repository = "https://github.com/justinboswell/pepper"
 [build]
 entry = "main.pep"
 output = "pepc"
+# `compiler.parse` and the other modules are folders beside this one.
+include = [".."]
 
 [dependencies]
 llvm = { github = "justinboswell/pepper-llvm", branch = "main" }

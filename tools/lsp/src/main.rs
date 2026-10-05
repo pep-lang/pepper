@@ -1723,10 +1723,19 @@ fn sema_model_of(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
 /// document (`program[0]`) are reported; other files that fail to build are
 /// skipped.
 fn merged(program: &Program) -> Result<SemaModule, diag::Diagnostic> {
-    let mut module = SemaModule { linked: true, extension_scopes: program.extension_scopes(), ..SemaModule::default() };
+    // As `pepper_sema::program::merge` builds it: the overloads linking
+    // joined across files (private helpers of one name in two files of a
+    // module) and each file's namespace.
+    let mut module = SemaModule {
+        linked: true,
+        extension_scopes: program.extension_scopes(),
+        overload_unions: program.overload_unions.clone(),
+        ..SemaModule::default()
+    };
     // Indexed like the files, as the passes that read source text expect.
     for file in &program.files {
         module.sources.add(&file.name, &file.source);
+        module.namespaces.push(file.namespace.clone());
     }
     for (i, file) in program.files.iter().enumerate().skip(1) {
         if let Ok(m) = pepper_sema::builder::build_file(&file.module, FileId(i as u32)) {
