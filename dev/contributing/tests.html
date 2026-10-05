@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e559e9be.js";
+            window.path_to_searchindex_js = "../searchindex-7ef62d68.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-04b2b9dd.js"></script>
@@ -249,6 +249,15 @@ files uses a fresh folder under the system’s temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
 <p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo test --workspace</code> on
 Linux, macOS and Windows.</p>
+<p>The compiler written in Pepper, <code>tools/compiler</code>, depends on
+<code>justinboswell/pepper-llvm</code>, a private repository. CI clones it over SSH
+with a read-only deploy key of that repository, whose private half is this
+repository’s secret <code>PEPPER_LLVM_DEPLOY_KEY</code>.
+<code>scripts/ci-pepper-llvm-auth.sh</code> writes the key to a temporary file and
+points git at it for that one repository, through <code>GIT_CONFIG_*</code> and
+<code>GIT_SSH_COMMAND</code> variables of the test step only. Without the secret (in a
+fork, say) the step says so in a notice, and the <code>tools/compiler</code> tests
+fail when they fetch the package.</p>
 <h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
 <p>Each test counts the runtime’s live allocations before and after it runs,
 and fails when they differ:</p>
