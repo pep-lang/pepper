@@ -22,6 +22,7 @@ import lsp;
 import compiler.parse;
 import compiler.sema;
 import "actions";
+import "platforms";
 
 ## How long a document's text must stay unchanged before it is analyzed,
 ## so typing does not start an analysis per keystroke.
@@ -33,6 +34,8 @@ export enum Job {
     Analyze(uri: String, text: String),
     ## The document closed: drop its pending analysis.
     Close(uri: String),
+    ## Analyze with these build options (`-D`), by name, from now on.
+    Configure(build_options: HashMap<String, String>),
     ## Stop the thread.
     Stop,
 }
@@ -51,6 +54,7 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
     # The newest text of each document waiting for analysis, by URI.
     var pending = HashMap<String, String>();
     var order = Array<String>();
+    var build_options = HashMap<String, String>();
     while (true) {
         # Wait for work, then for the edits to settle.
         var job = order.count == 0 ? jobs.receive() : jobs.receive_for(SETTLE_MILLISECONDS);
@@ -64,6 +68,12 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
                 }
                 Close(uri) => {
                     pending.remove(uri);
+                }
+                Configure(options) => {
+                    build_options.clear();
+                    for (var (name, value) in options) {
+                        build_options[name] = value;
+                    }
                 }
                 Stop => {
                     return;
@@ -85,18 +95,21 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
         var start = os.Instant.now();
         # Copies, so the analysis shares nothing with `pending` and can move
         # to the server's thread.
-        var analysis = analyze(copy(uri), copy(text.value()));
+        var analysis = analyze(copy(uri), copy(text.value()), build_options);
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
-        var newer = _take_jobs(jobs, pending, order);
+        var newer = _take_jobs(jobs, pending, order, build_options);
         if (newer.is_value()) {
             return;
         }
         if (pending.contains(uri)) {
             continue;
         }
+        # A file analyzed for another OS than the build target's says so.
+        var as_os = analysis.os == link.Target().os ? "" : " as " + analysis.os;
         client.log_message(
-            lsp.MESSAGE_LOG, $"analyzed {_file_name(uri)} ({analysis.files} files): {analysis.outcome} in {took} ms"
+            lsp.MESSAGE_LOG,
+            $"analyzed {_file_name(uri)}{as_os} ({analysis.files} files): {analysis.outcome} in {took} ms"
         );
         client.publish_diagnostics(analysis.uri, analysis.diagnostics);
         results.send(copy(analysis));
@@ -106,7 +119,9 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
 
 # Takes the jobs waiting in `jobs` without waiting: Value(true) when one
 # was `Stop`.
-_take_jobs(jobs: Channel<Job>, pending: HashMap<String, String>, order: String[]): bool? {
+_take_jobs(
+    jobs: Channel<Job>, pending: HashMap<String, String>, order: String[], build_options: HashMap<String, String>
+): bool? {
     while (true) {
         var job = jobs.try_receive();
         if (job.is_err()) {
@@ -121,6 +136,12 @@ _take_jobs(jobs: Channel<Job>, pending: HashMap<String, String>, order: String[]
             }
             Close(uri) => {
                 pending.remove(uri);
+            }
+            Configure(options) => {
+                build_options.clear();
+                for (var (name, value) in options) {
+                    build_options[name] = value;
+                }
             }
             Stop => {
                 return Optional<bool>.Value(true);
@@ -152,6 +173,9 @@ export struct Analysis {
     var diagnostics: Array<lsp.Diagnostic>;
     ## The quick fixes those diagnostics suggest.
     var actions: Array<lsp.CodeAction>;
+    ## The OS it was analyzed for: the build target's, or the one whose
+    ## code the document mostly is (`analysis_os`).
+    var os: String;
     ## How many files its program has; 0 when it did not load.
     var files: ulong;
     ## How it went, for the log: "passed", "found an error", "did not
@@ -166,6 +190,7 @@ export struct Analysis {
         this.state = Optional<sema.PassState>.Empty;
         this.diagnostics = Array<lsp.Diagnostic>();
         this.actions = Array<lsp.CodeAction>();
+        this.os = "";
         this.files = 0;
         this.outcome = "did not load";
     }
@@ -179,8 +204,11 @@ export struct Analysis {
 ##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
+## @param build_options the build options (`-D`) to analyze with, by name
 ## @returns the diagnostics and how the analysis went
-export analyze(uri: String, text: String): Analysis {
+export analyze(
+    uri: String, text: String, build_options: HashMap<String, String> = HashMap<String, String>()
+): Analysis {
     var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
     var parsed = parse.parse(text);
@@ -195,7 +223,13 @@ export analyze(uri: String, text: String): Analysis {
     if (path.is_empty()) {
         return out;
     }
+    var host = link.Target();
+    for (var (name, value) in build_options) {
+        host.build_options[name] = value;
+    }
+    out.os = analysis_os(text, parsed.value(), host);
     var setup = link.Setup();
+    setup.target = target_for(host, out.os);
     setup.sources[link.path_key(Path(path.value()))] = text;
     var loaded = link.load_program(Path(path.value()), setup);
     if (loaded.is_err()) {
@@ -207,6 +241,8 @@ export analyze(uri: String, text: String): Analysis {
     out.files = program.files.count;
     var reporter = _Reporter(document, program);
     out.actions = reporter.actions;
+    # Code the build target leaves out, dimmed.
+    reporter.out.append_all(inactive_hints(document, parsed.value(), host));
     for (var warning in program.warnings()) {
         reporter.add_if_in_document(warning);
     }

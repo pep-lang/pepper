@@ -7,6 +7,7 @@ import async;
 import [Channel] from async;
 import json;
 import [JsonValue] from json;
+import compiler.link;
 import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
@@ -79,6 +80,7 @@ extend PepperServer with lsp.LanguageServer {
         refreshes_hints = json_flag(params.capabilities, ["workspace", "inlayHint", "refreshSupport"], false);
         conversion_hints = json_flag(params.initialization_options, ["inlayHints", "implicitConversions"], true);
         parameter_hints = json_flag(params.initialization_options, ["inlayHints", "parameterNames"], true);
+        _jobs.send(copy(Job.Configure(build_options(params.initialization_options))));
         var result = lsp.InitializeResult();
         result.capabilities.text_document_sync = Optional<lsp.TextDocumentSyncOptions>.Value(
             lsp.TextDocumentSyncOptions(lsp.SYNC_FULL)
@@ -242,6 +244,37 @@ extend PepperServer with lsp.LanguageServer {
         }
         return Result<Array<lsp.DocumentSymbol>, ResponseError>.ok(document_symbols(document.value(), module.value()));
     }
+}
+
+## The build options to analyze with, from the `buildOptions` array of
+## strings in the initialization options, each as the compiler's `-D`
+## takes it: `NAME` or `NAME=VALUE`. One that does not parse is left out.
+##
+## @param options the initialization options, if any
+## @returns the options' values by name
+export build_options(options: JsonValue?): HashMap<String, String> {
+    var out = HashMap<String, String>();
+    if (options.is_empty() or !options.value().contains("buildOptions")) {
+        return out;
+    }
+    var items = Array<JsonValue>();
+    if (options.value()["buildOptions"] is Array(listed)) {
+        items = listed;
+    }
+    for (var item in items) {
+        var text = item.as_string();
+        if (text.is_empty()) {
+            continue;
+        }
+        var option = text.value();
+        var equals = option.find("=");
+        var name = equals < 0 ? option : option.substr_bytes(0, equals as ulong);
+        var value = equals < 0 ? "1" : option.substr_bytes(equals as ulong + 1, option.size - equals as ulong - 1);
+        if (link.is_build_option_name(name)) {
+            out[name] = value;
+        }
+    }
+    return out;
 }
 
 ## The boolean at `path` in the JSON object `value`, such as a client

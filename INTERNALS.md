@@ -2482,7 +2482,7 @@ framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
 diagnostics, the document outline, hover, go to definition, completion,
-inlay hints and quick fixes:
+inlay hints, quick fixes and dimmed code for other platforms:
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
   document's newest text once edits settle (250 ms). It loads the
@@ -2541,6 +2541,14 @@ inlay hints and quick fixes:
   cases a `match` leaves out. `lsp.CodeAction` is built with its kind
   passed: the Rust compiler emits a call LLVM rejects for that
   constructor's default, a constant of the `lsp` package.
+- `platforms.pep`: the regions a `[Target(...)]` leaves out on the
+  build target (`link.Target.keep`), published as `Unnecessary` hints the
+  editor dims; constructors, destructors and fields are never dropped,
+  only blocks inside them. `analysis_os` picks the OS to analyze for: a
+  file whose code is mostly another OS's (and that keeps nothing of the
+  build target's own) is analyzed as that OS, so its names have types;
+  the log line says `as linux`. `initializationOptions.buildOptions`
+  reaches the analysis thread as `Job.Configure`.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
   the runtime, 20 s for pep-doc), so the Rust server stays the one
   editors run until the rewrite does everything and sema is faster.

@@ -2,6 +2,9 @@
 # and go-to-definition.
 
 import [Directory, File, Path] from io;
+import json;
+import [JsonValue] from json;
+import compiler.link;
 import lsp;
 import compiler.parse;
 import "actions";
@@ -10,6 +13,8 @@ import "completion";
 import "edits";
 import "hints";
 import "navigate";
+import "platforms";
+import "server";
 import "symbols";
 
 # Writes `text` to `name` in a new temporary folder; returns its URI.
@@ -461,4 +466,68 @@ a_match_missing_cases_offers_to_add_them() {
         "Add the missing cases of 'Color' [6:0-6:0         Amber => {}\n        Green => {}\n]"
     );
     expect_equal(actions_at(analysis, 0, 0), "");
+}
+
+# A target for `os` on x86-64.
+target_of(os: String): link.Target {
+    var target = link.Target();
+    target.os = os;
+    target.arch = "x86_64";
+    return target;
+}
+
+[Test]
+code_for_other_platforms_is_dimmed() {
+    var text = "[Target(OS(Windows))]\nimport \"win_only\";\n\n[Target(OS(Linux))]\nopen_linux(): int { return 1; }\n\n"
+        + "[Target(OS(Windows))]\nopen_windows(): int { return 2; }\n\nstruct File {\n    var size: int;\n\n"
+        + "    [Target(OS(Windows))]\n    construct() {}\n\n    [Target(OS(Windows))]\n    close() {}\n\n"
+        + "    read(): int {\n        [Target(OS(Windows))] {\n            return 1;\n        }\n"
+        + "        [Target(!OS(Windows))] {\n            return 2;\n        }\n"
+        + "        for (var i in [1, 2]) {\n            [Target(OS(Windows))] {\n                return i;\n            }\n        }\n"
+        + "        return 0;\n    }\n}\n";
+    var module = parse.parse(text).value();
+    var firsts = Array<String>();
+    var lasts = Array<String>();
+    for (var span in inactive_regions(text, module, target_of("linux"))) {
+        var lines = text.substr_bytes(span.start, span.end - span.start).split("\n");
+        firsts.append(lines[0]);
+        lasts.append(lines[lines.count - 1].trim());
+    }
+    # Not the constructor: it is compiled whatever its attributes.
+    expect_equal(firsts.count, 5 as ulong);
+    for (var first in firsts) {
+        expect_true(first.starts_with("[Target(OS(Windows))]"));
+    }
+    expect_equal(" | ".join(lasts), "import \"win_only\" | open_windows(): int { return 2; } | close() {} | } | }");
+    var hints = inactive_hints(lsp.TextDocument("file:///a.pep", text), module, target_of("linux"));
+    expect_equal(hints.count, 5 as ulong);
+    expect_equal(hints[0].tags.value()[0], lsp.TAG_UNNECESSARY);
+    expect_true(hints[0].message.contains("Linux x86_64"));
+}
+
+[Test]
+a_file_for_another_os_is_analyzed_for_it() {
+    var linux_only = "struct Socket { var handle: int; }\n[Target(OS(Linux))]\nopen_socket(): Socket { return Socket(); }\n"
+        + "[Target(OS(Linux))]\nhandle_of(): int {\n    var socket = open_socket();\n    return socket.handle;\n}\n";
+    var module = parse.parse(linux_only).value();
+    expect_equal(analysis_os(linux_only, module, target_of("windows")), "linux");
+    expect_equal(analysis_os(linux_only, module, target_of("linux")), "linux");
+    # Code for both the build target and another OS: the build target's.
+    var both = linux_only + "[Target(OS(Windows))]\nwindows_only(): int { return 1; }\n";
+    expect_equal(analysis_os(both, parse.parse(both).value(), target_of("windows")), "windows");
+    # A mostly portable file stays on the build target, so a call the
+    # build target rejects still shows its error.
+    var mixed = "[Target(OS(Linux))]\nfoo(): int { return 1; }\nbar(): int { return foo(); }\n"
+        + "baz(): int { return bar() + 1; }\nqux(): int { return baz() + bar() + 2; }\n";
+    expect_equal(analysis_os(mixed, parse.parse(mixed).value(), target_of("windows")), "windows");
+}
+
+[Test]
+build_options_come_from_the_initialization_options() {
+    var options = json.parse("{\"buildOptions\": [\"USE_ZLIB\", \"LOG_LEVEL=2\", \"not valid\", 3]}").value();
+    var parsed = build_options(Optional<JsonValue>.Value(options));
+    expect_equal(parsed.count, 2 as ulong);
+    expect_equal(parsed["USE_ZLIB"], "1");
+    expect_equal(parsed["LOG_LEVEL"], "2");
+    expect_equal(build_options(Optional<JsonValue>.Empty).count, 0 as ulong);
 }
