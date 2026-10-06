@@ -9,7 +9,9 @@
 ##   `print`), binding the arguments in a `match` when the braces do not
 ##   name each once, in order;
 ## - a module-scope `static` block is followed by the module-scope
-##   constants its `const`s declare.
+##   constants its `const`s declare;
+## - parentheses (`Expression.Parenthesized`) give way to the value
+##   inside them.
 
 import compiler.ast;
 import [
@@ -88,7 +90,8 @@ export desugar(module: ast.Module): Result<ast.Module, DesugarError> {
 ## node: an interpolated string of one hole and no text, and a
 ## `String.format` whose format is just `{0}`, become the call that
 ## converts the value, which spans the braces (or the specification's
-## `.`, type, `+` or `0`). Anything else keeps its span.
+## `.`, type, `+` or `0`). Parentheses give way to their value, and so
+## take its span. Anything else keeps its span.
 ##
 ## @param e an expression as `parse.parse_written` returns it
 ## @returns the span of what `desugar` makes of it
@@ -114,6 +117,9 @@ export desugared_span(e: Expression): Span {
                 }
             }
             return span;
+        }
+        Parenthesized(value, _) => {
+            return desugared_span(value);
         }
         else => {}
     }
@@ -638,6 +644,10 @@ struct _Desugarer {
             # Only ever a call's first argument, which `format_call`
             # rewrites with the call.
             FormatString(_, _, _, _) => {}
+            Parenthesized(value, _) => {
+                rewrites += 1;
+                return expression(value);
+            }
         }
         return e;
     }

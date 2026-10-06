@@ -2,9 +2,10 @@
 ## that `syntax.parse` reads, the way the Rust parser
 ## (`crates/pepper-parser`) builds its own: the same nodes, the same spans,
 ## and the same lowering of properties. Interpolated strings, `print` and
-## `String.format` formats and module-scope `static` blocks stay as the
-## source writes them (`parse_written`); `parse` then rewrites them as the
-## Rust parser does with `compiler.desugar`.
+## `String.format` formats, module-scope `static` blocks and parentheses
+## stay as the source writes them (`parse_written`), which also keeps
+## every token and its comments; `parse` rewrites them as the Rust parser
+## does with `compiler.desugar`, and keeps no tokens.
 
 import compiler.ast;
 import [
@@ -80,9 +81,12 @@ export parse(source: String): Result<ast.Module, ParseError> {
 ## Parses Pepper source into the compiler's syntax tree as the source
 ## writes it: interpolated strings stay `Expression.Interpolated`, a
 ## `print` or `String.format` format stays the call's first argument as an
-## `Expression.FormatString`, and a module-scope `static` block declares
-## nothing beside it. A format whose braces and arguments do not match is
-## an error only when `compiler.desugar` rewrites it.
+## `Expression.FormatString`, a module-scope `static` block declares
+## nothing beside it, and parentheses stay `Expression.Parenthesized`. A
+## format whose braces and arguments do not match is an error only when
+## `compiler.desugar` rewrites it. The module keeps every token, with its
+## comments and line breaks (`Module.tokens`), for tools that print the
+## source back.
 ##
 ## @param source the text of one source file
 ## @returns the module, or the first syntax error
@@ -128,6 +132,8 @@ struct Lowerer {
     # declaration that the Rust parser ends after the whitespace following
     # it ends.
     var token_offsets: ulong[] = Array<ulong>();
+    # Every token, as written (`parse_written`) only.
+    var source_tokens: ast.SourceTokens?;
     var error: ParseError?;
     var build_option_tests: Attribute[] = Array<Attribute>();
     var warnings: SyntaxWarning[] = Array<SyntaxWarning>();
@@ -207,9 +213,17 @@ struct Lowerer {
         return end(node);
     }
 
+    # Records every token's offset; as written (`parse_written`), keeps the
+    # tokens themselves too, for `Module.tokens`.
     record_tokens(root: Node) {
         token_offsets = Array<ulong>();
-        collect_token_offsets(root, token_offsets);
+        if (desugared) {
+            collect_token_offsets(root, token_offsets);
+            return;
+        }
+        var tokens = Array<Token>();
+        collect_tokens(root, token_offsets, tokens);
+        source_tokens = Optional<ast.SourceTokens>.Value(ast.SourceTokens(source, tokens));
     }
 
     # ── Module ──────────────────────────────────────────────────────────
@@ -254,6 +268,7 @@ struct Lowerer {
         }
         out.build_option_tests = build_option_tests;
         out.warnings = warnings;
+        out.tokens = source_tokens;
         return out;
     }
 
@@ -654,7 +669,11 @@ struct Lowerer {
                 return token_expression(node.leaf);
             }
             Parenthesized => {
-                return expression(node.child(1));
+                var value = expression(node.child(1));
+                if (desugared) {
+                    return value;
+                }
+                return Expression.Parenthesized(value, whole(node));
             }
             Binary => {
                 return binary(node);
@@ -2462,9 +2481,24 @@ collect_token_offsets(node: Node, out: ulong[]) {
     }
 }
 
+# Appends every token under `node` to `tokens`, and its offset to `offsets`.
+collect_tokens(node: Node, offsets: ulong[], tokens: Token[]) {
+    if (node.kind == NodeKind.Token) {
+        offsets.append(node.leaf.offset);
+        tokens.append(node.leaf);
+        return;
+    }
+    for (var child in node.children) {
+        collect_tokens(child, offsets, tokens);
+    }
+}
+
 # Whether an attribute's body is a top-level `Target(...)` or
 # `BuildOption(...)` call.
 contains_platform_predicate(body: Expression): bool {
+    if (body is Parenthesized(value, _)) {
+        return contains_platform_predicate(value);
+    }
     if (body is FunctionCall(function, _, _)) {
         if (function is SymbolRef(id, _)) {
             var lower = id.lower();
@@ -2515,6 +2549,9 @@ mentions_build_option(e: Expression): bool {
         }
         Binary(lhs, _, rhs, _) => {
             return mentions_build_option(lhs) or mentions_build_option(rhs);
+        }
+        Parenthesized(value, _) => {
+            return mentions_build_option(value);
         }
         else => {}
     }

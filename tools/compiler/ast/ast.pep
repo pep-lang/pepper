@@ -6,6 +6,8 @@
 
 import json;
 import [JsonValue] from json;
+import syntax;
+import [Comment, Token] from syntax;
 
 ## A byte range of one source file: `start` inclusive, `end` exclusive.
 [Value]
@@ -677,6 +679,13 @@ export enum Expression {
     ## @param argument_spans the arguments after the format, each from its
     ##   first token to its last
     FormatString(parts: StringPart[], span: Span, paren: ulong, argument_spans: Span[]),
+    ## `(value)` as written: `parse.parse_written` keeps the parentheses
+    ## for tools that print the source back, and `desugar` (like
+    ## `parse.parse`) leaves the value alone in their place.
+    ##
+    ## @param value the expression inside
+    ## @param span the parentheses and what is between them
+    Parenthesized(value: Expression, span: Span),
 
     ## Returns where a diagnostic about the expression points.
     ##
@@ -741,6 +750,9 @@ export enum Expression {
                 return span;
             }
             FormatString(_, span, _, _) => {
+                return span;
+            }
+            Parenthesized(_, span) => {
                 return span;
             }
         }
@@ -879,6 +891,9 @@ export enum Expression {
             }
             FormatString(parts, _, _, _) => {
                 return "\"" + _parts_text(parts) + "\"";
+            }
+            Parenthesized(value, _) => {
+                return $"({value.to_string()})";
             }
         }
         return "";
@@ -1028,6 +1043,12 @@ export enum Expression {
                 }
                 out["argument_spans"] = spans;
                 return tagged("FormatString", out);
+            }
+            Parenthesized(value, span) => {
+                var out = JsonValue.object();
+                out["value"] = value.to_json();
+                out["span"] = span.to_json();
+                return tagged("Parenthesized", out);
             }
         }
         return JsonValue.Null;
@@ -2542,7 +2563,6 @@ export struct ExportAlias {
     }
 }
 
-## One parsed source file.
 ## Deprecated syntax the parser accepted: how the source spells it, what
 ## replaces it, and the text that migrates it.
 export struct SyntaxWarning {
@@ -2569,6 +2589,110 @@ export struct SyntaxWarning {
     }
 }
 
+## Every token of one source file, with the comments and line breaks
+## around it: what `parse.parse_written` keeps beside the tree for tools
+## that print the source back (pep-fmt) or read its comments.
+##
+## Each comment belongs to exactly one token, as the lexer attached it: a
+## comment after a token on the same line is that token's trailing comment,
+## and every other comment is a leading comment of the token after it (the
+## `End` token for the file's last comments). A node's comments are those of
+## its tokens, which its spans locate: `leading` and `trailing` read the
+## ones before and after a node.
+export struct SourceTokens {
+    ## The text the tokens point into.
+    var source: String;
+    ## Every token in source order, as the parser read them (a `>` joined
+    ## with the `>` or `=` after it into one `>>`, `>=` or `>>=`), ending
+    ## with the `End` token.
+    var tokens: Token[];
+
+    ## Creates the tokens of a source file.
+    ##
+    ## @param source the text the tokens point into
+    ## @param tokens every token in source order, ending with `End`
+    construct(source: String, tokens: Token[]) {
+        this.source = source;
+        this.tokens = tokens;
+    }
+
+    ## Returns the index of the first token that starts at or after
+    ## `offset`: the `End` token's when none does.
+    ##
+    ## @param offset a byte offset in the source
+    ## @returns the token's index
+    next_index(offset: ulong): ulong {
+        ulong low = 0;
+        ulong high = tokens.count - 1;
+        while (low < high) {
+            var middle = low + (high - low) / 2;
+            if (tokens[middle].offset < offset) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
+        }
+        return low;
+    }
+
+    ## Returns the index of the token that starts at `offset`, or -1 when
+    ## none does.
+    ##
+    ## @param offset a byte offset in the source
+    ## @returns the token's index, or -1
+    index_at(offset: ulong): long {
+        var index = next_index(offset);
+        if (tokens[index].offset != offset) {
+            return -1;
+        }
+        return index as long;
+    }
+
+    ## Returns the text of the token at `index`, exactly as written.
+    ##
+    ## @param index the token's index
+    ## @returns its text
+    text(index: ulong): String {
+        return tokens[index].text(source);
+    }
+
+    ## Returns the comments on their own lines before the node at `span`:
+    ## the leading comments of its first token.
+    ##
+    ## @param span a node's span, starting at its first token
+    ## @returns the comments, in order
+    leading(span: Span): Comment[] {
+        return tokens[next_index(span.start)].leading_comments;
+    }
+
+    ## Returns the comment after the node at `span` on its last line: the
+    ## trailing comment of its last token, or an empty String.
+    ##
+    ## @param span a node's span, ending after its last token
+    ## @returns the comment, or an empty String
+    trailing(span: Span): String {
+        var after = next_index(span.end);
+        if (after == 0) {
+            return "";
+        }
+        return tokens[after - 1].trailing_comment;
+    }
+
+    ## Returns whether a blank line comes before the node at `span`,
+    ## counting from the first comment above it.
+    ##
+    ## @param span a node's span, starting at its first token
+    ## @returns true when two or more line breaks come first
+    blank_before(span: Span): bool {
+        var first = tokens[next_index(span.start)];
+        if (first.has_leading_comments()) {
+            return first.leading_comments[0].newlines_before >= 2;
+        }
+        return first.newlines_before >= 2;
+    }
+}
+
+## One parsed source file.
 export struct Module {
     ## The imports and re-exports of sources.
     var imports: Import[] = Array<Import>();
@@ -2580,6 +2704,9 @@ export struct Module {
     var build_option_tests: Attribute[] = Array<Attribute>();
     ## Deprecated syntax, in source order. Not part of the JSON.
     var warnings: SyntaxWarning[] = Array<SyntaxWarning>();
+    ## Every token, with its comments and line breaks: kept by
+    ## `parse.parse_written`, not by `parse.parse`. Not part of the JSON.
+    var tokens: SourceTokens?;
 
     ## Creates an empty module.
     construct() {}

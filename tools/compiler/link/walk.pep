@@ -805,6 +805,7 @@ export trait ScopeWalk {
             # `parse.parse` desugars these; only `parse_written` keeps them.
             Interpolated(_, _) => {}
             FormatString(_, _, _, _) => {}
+            Parenthesized(_, _) => {}
         }
         return e;
     }

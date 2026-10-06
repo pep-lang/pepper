@@ -2843,11 +2843,13 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   source writes it: an interpolated string is an `Expression.Interpolated`
   (`interpolated_string`, each hole parsed with `syntax.parse_expression`),
   a `print` or `String.format` format is the call's first argument, an
-  `Expression.FormatString` (`format_arguments`), and a module `static`
-  block declares nothing beside it. `compiler.desugar`
-  (`desugar/desugar.pep`) rewrites those three as `parsers.rs` does: the
+  `Expression.FormatString` (`format_arguments`), a module `static`
+  block declares nothing beside it, and parentheses are an
+  `Expression.Parenthesized`. `compiler.desugar`
+  (`desugar/desugar.pep`) rewrites those as `parsers.rs` does: the
   `_pep_interpolate` / `_pep_format*` calls, the format's text or `match`,
-  and the block's module-scope constants. `desugar(module)` walks a whole
+  the block's module-scope constants, and the value alone in place of its
+  parentheses. `desugar(module)` walks a whole
   written tree; `parse.parse` instead applies the same per-node rewrites
   (`desugar_interpolated`, `desugar_format_call`, `static_constants`) as
   the Lowerer reads each node (`Lowerer.desugared`), so it needs no
@@ -2860,6 +2862,21 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `parsers.rs` ends after the whitespace following a construct (a
   function, a parameter without a default) end at the next token's offset
   (`Lowerer.after`).
+- Comments live on tokens, not on nodes. `parse.parse_written` keeps
+  every token in `Module.tokens` (`ast.SourceTokens`: the source and the
+  `syntax.Token`s, `>`s joined as the parser joined them, ending with
+  `End`), each with the comments and line breaks the lexer attached to
+  it: a comment after a token on its line is that token's trailing
+  comment, any other one a leading comment of the token after it. A
+  node's spans locate its tokens, so `leading(span)`, `trailing(span)` and
+  `blank_before(span)` read a node's comments; a comment on a token that
+  starts or ends no node (a `,`, a `)`, a `}`) is inside the innermost
+  node around it. `parse.parse` keeps no tokens and no parentheses, at no
+  cost (`Lowerer.record_tokens`). `compiler/tokens_test.pep` walks every
+  repository file's written tree in source order, taking each token where
+  the grammar puts it (`TokenWalk`, the skeleton of a printer that formats
+  from the tree), and requires every token taken exactly once, in order,
+  and every comment placed on one node (`comment_owners`).
 - `compiler/parse_test.pep` runs `pep-build --emit-ast=json` on every `.pep`
   file under `runtime/`, `tools/`, `tests/` and `docs/examples/` and
   requires `compiler.parse`'s JSON to match byte for byte, so a parser

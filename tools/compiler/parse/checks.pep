@@ -399,6 +399,9 @@ struct _PointerCheck {
             }
             # Its arguments are the call's.
             FormatString(_, _, _, _) => {}
+            Parenthesized(value, _) => {
+                expression(value);
+            }
         }
     }
 }

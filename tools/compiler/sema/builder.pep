@@ -1908,6 +1908,7 @@ struct _Builder {
             # `parse.parse` desugars these; only `parse_written` keeps them.
             Interpolated(_, _) => {}
             FormatString(_, _, _, _) => {}
+            Parenthesized(_, _) => {}
         }
         return Built<Expression>.Err(_error("unsupported expression", loc(expr.span())));
     }
