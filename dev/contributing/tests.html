@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d562c090.js";
+            window.path_to_searchindex_js = "../searchindex-d84ec64a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -232,6 +232,9 @@ libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a fo
 holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, with <code>-I .</code>, the tools’ tests.</li>
 </ul>
+<p>The tools’ run, the longest, starts as soon as <code>pepper</code> and <code>pep-test</code>
+are built and runs beside the runtime’s runs; its output is printed after
+theirs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
 <pre><code class="language-bash">cd runtime
 pepper test                       # every runtime test
