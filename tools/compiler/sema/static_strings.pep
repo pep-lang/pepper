@@ -20,6 +20,7 @@
 ## cache skipped reads them back.
 
 import [is_numeric_type] from "arithmetic";
+import [is_checked_function] from "checked";
 import [expression_children] from "closure_sites";
 import [takes_over] from "confinement";
 import [Loc] from "loc";
@@ -89,8 +90,9 @@ export share_string_literals(module: Module, state: PassState) {
             caller_copies[key] = copies;
         }
     }
+    # A checked body shared its literals when its layer was checked.
     for (var (_, callee) in program.callees) {
-        if (callee.function.body.is_value()) {
+        if (callee.function.body.is_value() and !_is_checked(module, callee)) {
             _SharedLiterals(program, _LiteralScope.of(callee)).block(callee.function.body.value());
         }
     }
@@ -107,6 +109,14 @@ export share_string_literals(module: Module, state: PassState) {
         recorded.append((loc, found.is_value() ? summary + _FACTS + found.value() : summary));
     }
     module.summaries_to_record = recorded;
+}
+
+## Whether `callee` was checked with a unit below.
+_is_checked(module: Module, callee: _LiteralCallee): bool {
+    if (callee.owner.is_value()) {
+        return module.checked.structs.contains(callee.owner.value().name);
+    }
+    return is_checked_function(module, callee.function);
 }
 
 _facts_at(facts: Array<(Loc, String)>, at: Loc): String? {
