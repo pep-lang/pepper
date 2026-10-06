@@ -28,6 +28,7 @@
 ## every other part's definitions become declarations, and `globaldce`
 ## removes what the part does not use.
 
+import [File] from io;
 import compiler.link;
 import llvm;
 import "globals";
@@ -180,10 +181,10 @@ _respell(value: llvm.Value, name: String): String {
 ## @param partition the partition
 ## @param part the part to keep
 ## @returns Ok, or why the module's passes failed
-export keep_part(ir: llvm.Module, partition: Partition, part: uint): Result<void> {
+export keep_part(ir: llvm.Module, partition: Partition, part: uint, trace: bool = false): Result<void> {
     var parts = HashSet<uint>();
     parts.insert(part);
-    return keep_parts(ir, partition, parts);
+    return keep_parts(ir, partition, parts, trace);
 }
 
 ## Turns `ir`, a module `prepare` prepared (or a copy of it), into the
@@ -194,17 +195,22 @@ export keep_part(ir: llvm.Module, partition: Partition, part: uint): Result<void
 ## @param ir the module
 ## @param partition the partition
 ## @param parts the parts to keep
+## @param trace whether to name each step on stderr before it runs (with
+##   each function and global changed), to find where a split fails
 ## @returns Ok, or why the module's passes failed
-export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>): Result<void> {
+export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, trace: bool = false): Result<void> {
+    _trace(trace, "split: functions");
     for (var function in ir.functions()) {
         if (function.is_declaration()) {
             continue;
         }
         var owner = partition.part_of.try_get(function.name());
         if (owner.is_value() and !parts.contains(owner.value())) {
+            _trace(trace, $"split: delete body {function.name()}");
             function.delete_body();
         }
     }
+    _trace(trace, "split: globals");
     for (var global in ir.globals()) {
         if (global.is_declaration()) {
             continue;
@@ -212,6 +218,7 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>): 
         var name = global.name();
         var owner = partition.part_of.try_get(name);
         if (owner.is_value() and !parts.contains(owner.value())) {
+            _trace(trace, $"split: global {name}");
             if (name.starts_with("llvm.")) {
                 global.delete_global();
             } else {
@@ -220,9 +227,17 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>): 
             }
         }
     }
+    _trace(trace, "split: globaldce");
     var removed = ir.run_passes("globaldce");
     if (removed.is_err()) {
         return Result<void>.err(removed.error());
     }
+    _trace(trace, "split: done");
     return Result<void>.ok();
+}
+
+_trace(trace: bool, line: String) {
+    if (trace) {
+        File.stderr().write_all(line + "\n");
+    }
 }

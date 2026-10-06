@@ -92,12 +92,16 @@ export compile_parts(
         return Result<void, String>.err($"cannot find this compiler: {executable.error().message}");
     }
     var children = Array<process.Child>();
+    # Each child's command line, to name a failed one and how to rerun it.
+    var lines = Array<String>();
     String failure = "";
     for (var share in _shares(jobs, partition.sizes)) {
         var command = process.Command(executable.value().to_string());
         command.argument("--compile-part").argument(dir.to_string());
+        var line = $"{executable.value()} --compile-part {dir}";
         for (var job in share) {
             command.argument($"{job.part}").argument(job.object.to_string());
+            line = $"{line} {job.part} {job.object}";
         }
         var spawned = command.spawn();
         if (spawned.is_err()) {
@@ -105,17 +109,18 @@ export compile_parts(
             break;
         }
         children.append(spawned.value());
+        lines.append(line);
     }
     # Every child started is waited for, even after a failure.
-    for (var child in children) {
-        var status = child.wait();
+    for (var i in 0..children.count) {
+        var status = children[i].wait();
         if (!failure.is_empty) {
             continue;
         }
         if (status.is_err()) {
-            failure = $"a part failed: {status.error().message}";
+            failure = $"a part failed: {status.error().message}\n  rerun: {lines[i]}";
         } else if (!status.value().success()) {
-            failure = $"a part failed ({status.value()})";
+            failure = $"a part failed ({status.value()})\n  rerun: {lines[i]}";
         }
     }
     if (!failure.is_empty) {
@@ -172,17 +177,24 @@ _compile(
     trace_time: bool
 ): Result<void, String> {
     var start = os.Instant.now();
-    var kept = codegen.keep_part(ir, partition, job.part);
+    # `PEPC_TRACE_PARTS` names each stage before it runs and verifies the
+    # module between them, to find where a part fails.
+    bool tracing = os.environment("PEPC_TRACE_PARTS").is_value();
+    _stage(tracing, ir, job, "keep");
+    var kept = codegen.keep_part(ir, partition, job.part, tracing);
     if (kept.is_err()) {
         return Result<void, String>.err($"cannot split part {job.part}: {kept.error().message}");
     }
     if (opt_level > 0) {
+        _stage(tracing, ir, job, "optimize");
         var optimized = ir.run_passes($"default<O{opt_level}>", machine);
         if (optimized.is_err()) {
             return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
         }
     }
+    _stage(tracing, ir, job, "constructors");
     place_constructors(ir, machine.triple());
+    _stage(tracing, ir, job, "emit");
     var emitted = machine.emit_to_file(ir, job.object.to_string());
     if (emitted.is_err()) {
         return Result<void, String>.err($"cannot write {job.object}: {emitted.error().message}");
@@ -191,6 +203,17 @@ _compile(
         File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
     }
     return Result<void, String>.ok();
+}
+
+## When `tracing`, says which stage of `job` comes next, after checking
+## the module the stages before it left.
+_stage(tracing: bool, ir: llvm.Module, job: PartJob, stage: String) {
+    if (!tracing) {
+        return;
+    }
+    var verified = ir.verify();
+    var state = verified.is_ok() ? "valid" : $"INVALID: {verified.error().message}";
+    File.stderr().write_all($"part {job.part}: {stage} ({state})\n");
 }
 
 ## Compiles `jobs`, parts of the program `compile_parts` split into `dir`:

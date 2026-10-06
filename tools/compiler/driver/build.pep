@@ -345,8 +345,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         ir, partition, jobs, machine.value(), cpu, options.opt_level, work, options.trace_time, options.in_process
     );
     if (compiled.is_err()) {
-        Directory.remove_all(work);
-        return Result<Built, String>.err(compiled.error());
+        # The bitcode and plan stay, so the failed part can be run again.
+        return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
     }
     if (keys.is_value()) {
         for (var (u, key) in stored) {
