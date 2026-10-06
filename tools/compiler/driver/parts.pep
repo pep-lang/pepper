@@ -73,6 +73,10 @@ export compile_parts(
     if (created.is_err()) {
         return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
     }
+    var kept = _keep_jobs(ir, partition, jobs);
+    if (kept.is_err()) {
+        return Result<void, String>.err($"cannot split the parts: {kept.error().message}");
+    }
     var written = ir.write_bitcode(dir.join(Path(_BITCODE_FILE)).to_string());
     if (written.is_err()) {
         return Result<void, String>.err(written.error().message);
@@ -214,6 +218,27 @@ _stage(tracing: bool, ir: llvm.Module, job: PartJob, stage: String) {
     var verified = ir.verify();
     var state = verified.is_ok() ? "valid" : $"INVALID: {verified.error().message}";
     File.stderr().write_all($"part {job.part}: {stage} ({state})\n");
+}
+
+## Keeps only the parts of `jobs` in `ir` when they hold less than half of
+## its code, as after an edit: the bitcode written, and each child's read of
+## it, then cover what the edit compiles rather than the whole program.
+_keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[]): Result<void> {
+    ulong total = 0;
+    for (var size in partition.sizes) {
+        total += size;
+    }
+    var parts = HashSet<uint>();
+    ulong compiled = 0;
+    for (var job in jobs) {
+        if (parts.insert(job.part)) {
+            compiled += _size_of(partition.sizes, job.part);
+        }
+    }
+    if (compiled * 2 >= total) {
+        return Result<void>.ok();
+    }
+    return codegen.keep_parts(ir, partition, parts);
 }
 
 ## Compiles `jobs`, parts of the program `compile_parts` split into `dir`:
