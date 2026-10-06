@@ -37,6 +37,7 @@ import [check_hash_keys] from "hash_keys";
 import [with_instantiation] from "instantiation";
 import [check_interpolations] from "interpolation";
 import [check_lazy] from "lazy";
+import [drop_unused_methods, specialize_used_methods] from "lazy_methods";
 import [convert_string_literals, resolve_literals] from "literals";
 import [lower_matches] from "matches";
 import [Module] from "model";
@@ -96,6 +97,7 @@ export run_steps(
 export run_passes(module: Module, target: Target, sources: SourceText[]): Result<PassState, Diagnostic> {
     var state = PassState(target);
     state.sources = sources;
+    state.lazy_methods = true;
     var ran = run_steps_with(module, state, 0xffffffffffffffff);
     if (ran.is_err()) {
         return Result<PassState, Diagnostic>.Err(ran.error());
@@ -201,6 +203,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
                 return;
             }
         }
+        var used_added = specialize_used_methods(module, state);
         var methods_added = specialize_methods(module, state);
         var methods_expanded = expand(module, state, true);
         var copies_added = synthesize_copies(module, state);
@@ -210,6 +213,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         if (module.structs.count == structs
             and module.functions.count == functions
             and !methods_added
+            and !used_added
             and !copies_added
             and !expanded
             and !methods_expanded) {
@@ -221,6 +225,13 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
                 return;
             }
             if (module.struct_specs.count == struct_specs and module.func_specs.count == func_specs) {
+                # Before what no use named goes, any use of a method's name
+                # keeps it, whatever the type it is called on: the types
+                # spelled in the code may name a struct otherwise.
+                if (specialize_used_methods(module, state, true)) {
+                    continue;
+                }
+                drop_unused_methods(module, state);
                 return;
             }
         }

@@ -238,6 +238,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
     var state = sema.PassState(program.target);
     state.sources = sources;
+    state.lazy_methods = true;
     var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
     for (var note in state.notes) {
         warnings.append(note);

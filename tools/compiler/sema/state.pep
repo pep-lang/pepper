@@ -7,7 +7,7 @@ import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
 import [Exports] from "exports";
 import [Loc] from "loc";
-import [EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
+import [Block, EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -64,6 +64,15 @@ export struct PassState {
     ## What `resolve_implicit_types` saw when it last ran, so its next run
     ## walks only the code a change since can affect.
     var implicit: ImplicitMemo = ImplicitMemo();
+    ## Whether struct specializations get a method's body only once a use
+    ## names it (`lazy_methods`). Off when the passes are compared with the
+    ## Rust compiler's, which specializes every method.
+    var lazy_methods: bool = false;
+    ## The bodies of the specializations' methods no use has named yet, by
+    ## struct and method name.
+    var deferred: HashMap<String, HashMap<String, Block>> = HashMap<String, HashMap<String, Block>>();
+    ## Every trait's method names, which a trait may dispatch to.
+    var trait_method_names: HashSet<String>? = Optional<HashSet<String>>.Empty;
 
     ## Creates the state for compiling for `target`.
     ##

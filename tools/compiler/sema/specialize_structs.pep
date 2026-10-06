@@ -9,6 +9,7 @@ import [OVERLOAD_SEPARATOR] from compiler.link;
 import [enum_method_name, payload_field] from "builder";
 import [error_at, location_of] from "common";
 import [Conformance, withhold] from "constraints";
+import [defer_methods] from "lazy_methods";
 import [Loc] from "loc";
 import [
     BinaryOp,
@@ -134,6 +135,7 @@ export specialize_structs(module: Module, state: PassState) {
         }
         # The synthesized members (counting, release) of the new instance.
         apply_synthesized(specialized);
+        defer_methods(module, specialized, state);
         module.structs.append(specialized);
     }
 }
