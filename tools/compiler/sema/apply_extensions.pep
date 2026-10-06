@@ -46,17 +46,15 @@ const _COPY_TRAIT_METHOD = "_pep_copy_trait";
 ## @param module the model, changed in place
 ## @param state the passes' state: what was applied, and the first error
 export apply_extensions(module: Module, state: PassState) {
+    var targets = _structs_by_target(module);
     ulong index = 0;
     while (index < module.extensions.count) {
         var ext = module.extensions[index];
         if (ext.resolved.is_value()) {
-            var target = ext.resolved.value();
+            var found = targets.try_get(ext.resolved.value());
             # A checked struct has had the checked extensions applied.
             var done = index < module.checked.extensions;
-            for (var st in module.structs) {
-                if (st.name != target and st.ty.to_string() != target) {
-                    continue;
-                }
+            for (var st in found.is_value() ? found.value() : Array<StructDef>()) {
                 if (done and module.checked.structs.contains(st.name)) {
                     continue;
                 }
@@ -78,6 +76,29 @@ export apply_extensions(module: Module, state: PassState) {
         }
         index += 1;
     }
+}
+
+## The structs an extension's target names, by its name or type, in the
+## module's order.
+_structs_by_target(module: Module): HashMap<String, StructDef[]> {
+    var targets = HashMap<String, StructDef[]>();
+    for (var st in module.structs) {
+        _add_target(targets, st.name, st);
+        var ty = st.ty.to_string();
+        if (ty != st.name) {
+            _add_target(targets, ty, st);
+        }
+    }
+    return targets;
+}
+
+_add_target(targets: HashMap<String, StructDef[]>, target: String, st: StructDef) {
+    var found = targets.try_get(target);
+    if (found.is_value()) {
+        found.value().append(st);
+        return;
+    }
+    targets[target] = [st];
 }
 
 _extension_method(method: FunctionDef, parent: String): FunctionDef {
