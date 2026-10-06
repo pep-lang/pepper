@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7895d050.js";
+            window.path_to_searchindex_js = "../searchindex-d562c090.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -186,8 +186,9 @@
 file reads the same and nobody has to argue about layout. It changes only
 whitespace, line breaks, the order of imports, and the form of function
 declarations; the program means exactly what it meant before.</p>
-<p><code>pep-fmt</code> is written in Pepper. Its parser is a separate library,
-<code>tools/syntax</code>, that other tools can use.</p>
+<p><code>pep-fmt</code> is written in Pepper. It reads files with the Pepper compiler’s
+own parser (<code>tools/compiler/parse</code>), so it accepts exactly the syntax the
+compiler does.</p>
 <h2 id="running-it"><a class="header" href="#running-it">Running it</a></h2>
 <p>Build it with the compiler, with the <code>tools</code> folder on the import path:</p>
 <pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
@@ -228,6 +229,12 @@ syntax error to standard error, and exits with status 1 after the other
 files. Standard input is named <code>&lt;stdin&gt;</code>:</p>
 <pre><code class="language-text">main.pep:2:14: error: expected ')'
 </code></pre>
+<p>Errors the compiler finds after parsing, such as a number too large for its
+type, do not stop <code>pep-fmt</code>. A few mistakes that parse, but whose text the
+syntax tree does not keep (a second destructor, a second <code>get</code> or <code>set</code> in a
+property, a second <code>else</code> arm, a property’s value written before its
+accessors), are reported as <code>cannot lay out this file</code> and leave the file
+untouched.</p>
 <p>A file that cannot be read or written also exits with status 1, and an
 unknown option, or <code>-w</code> or <code>--check</code> without a path, exits with status 2
 after printing the usage (<code>pep-fmt -h</code> prints the full help). pep-fmt parses its options with the
