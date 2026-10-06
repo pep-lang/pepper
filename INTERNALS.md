@@ -2491,7 +2491,8 @@ inlay hints, quick fixes and dimmed code for other platforms:
   `Setup.sources`, and publishes the diagnostics through the `[Shared]`
   `lsp.Client`. A document edited again while it was analyzed is analyzed
   once more instead of publishing stale diagnostics. The diagnostics come
-  from the parse error, `Program.warnings`, linking errors (unresolved
+  from the parse errors (all of them, `parse.parse_recovering`, a missing
+  `}` with its `{` as related information), `Program.warnings`, linking errors (unresolved
   imports as warnings; one in another file at the document's start with
   that file's name), `Program.check_diagnostics`, `sema.build`, then
   `sema.run_passes`. It then hands a `copy` of the `Analysis` (the text
@@ -2903,7 +2904,29 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
 - `compiler/parse_bench.pep` times the same files through `syntax.lex`,
   `parse.parse` and `parse.parse_written` (the tree pep-fmt reads), the best of several passes each: the benchmark
-  for parser speed work (#601).
+  for parser speed work (#601). Its `broken`, `recover` and
+  `recover-intact` phases time `parse` and `parse_recovering` on step 1's
+  broken inputs (each file without its last `}`, without a `;`, cut after
+  a ` = `) and `parse_recovering` on the intact files.
+- `parse.parse_recovering` (for the language server) reads on past syntax
+  errors. A source `parse` accepts costs one `parse`; otherwise a second
+  parse runs with `Parser._recovering`. Where a list of items is read
+  (`_block`, `_members`, `_enum_members`, `module`), a failed item's error
+  is noted (`_record`, with the index of the item's first token, so that
+  `_restore` of an abandoned reading drops the errors noted inside it) and
+  the item is skipped with its brackets (`_skip_item`: through a `;` or a
+  braced body, to the next line at depth 0 past the error, or to the
+  enclosing `}`); a missing `;` keeps the item. The broken item is left
+  out of the tree (there is no error node). A missing `}` is noted where
+  it was due, at the end of the input or before an item indented no
+  deeper than the `{` line (`_dedented`), with the `{` as
+  `ParseError.related`: the block's own, or an inner one whose `}` was
+  indented unlike its `{` line (`_note_close`, `_suspect_open`). After an
+  error, a `}` indented deeper than the block's `{` line is skipped
+  (`_closes`). A line the lexer refuses is made spaces and lexed again.
+  Errors come in `parse`'s tiers, at most 100, and `_pin_first` makes the
+  first exactly `parse`'s. `compiler/recovering_test.pep` runs it on step
+  1's broken versions of every repository file.
 - `compiler.parse` also enforces what `parsers.rs` checks on the finished
   tree (`parse/checks.pep`): `T*` only in `extern` declarations, and imports
   before every declaration.

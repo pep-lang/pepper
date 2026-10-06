@@ -196,11 +196,24 @@ export struct Analysis {
     }
 }
 
-## Analyzes `text`, the text of document `uri`: its syntax error or
-## deprecated syntax, then, when `uri` names a file, the errors of the
-## program rooted at it (unresolved imports, linking and visibility errors,
-## then the first error type checking finds) and its warnings, all as they
-## apply to the document.
+# The diagnostic of a parse error, with the `{` a missing `}` should
+# close as related information.
+_parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diagnostic {
+    var out = lsp.Diagnostic(document.range_of(error.span.start, error.span.end), error.message);
+    if (error.related is Value(span)) {
+        var info = lsp.DiagnosticRelatedInformation();
+        info.location = lsp.Location(document.uri, document.range_of(span.start, span.end));
+        info.message = error.related_message;
+        out.related_information = Optional<Array<lsp.DiagnosticRelatedInformation>>.Value([info]);
+    }
+    return out;
+}
+
+## Analyzes `text`, the text of document `uri`: its syntax errors (all of
+## them, `parse.parse_recovering`) or deprecated syntax, then, when `uri`
+## names a file, the errors of the program rooted at it (unresolved
+## imports, linking and visibility errors, then the first error type
+## checking finds) and its warnings, all as they apply to the document.
 ##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
@@ -211,14 +224,17 @@ export analyze(
 ): Analysis {
     var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
-    var parsed = parse.parse(text);
-    if (parsed.is_err()) {
-        var error = parsed.error();
-        out.diagnostics.append(lsp.Diagnostic(document.range_of(error.span.start, error.span.end), error.message));
+    # Every error, read past each one, so that all show at once.
+    var recovered = parse.parse_recovering(text);
+    if (!recovered.errors.is_empty) {
+        for (var error in recovered.errors) {
+            out.diagnostics.append(_parse_diagnostic(document, error));
+        }
         out.outcome = "did not parse";
         out.actions = syntax_actions(document);
         return out;
     }
+    var parsed = recovered.module;
     var path = lsp.uri_to_path(uri);
     if (path.is_empty()) {
         return out;
@@ -227,7 +243,7 @@ export analyze(
     for (var (name, value) in build_options) {
         host.build_options[name] = value;
     }
-    out.os = analysis_os(text, parsed.value(), host);
+    out.os = analysis_os(text, parsed, host);
     var setup = link.Setup();
     setup.target = target_for(host, out.os);
     setup.sources[link.path_key(Path(path.value()))] = text;
@@ -242,7 +258,7 @@ export analyze(
     var reporter = _Reporter(document, program);
     out.actions = reporter.actions;
     # Code the build target leaves out, dimmed.
-    reporter.out.append_all(inactive_hints(document, parsed.value(), host));
+    reporter.out.append_all(inactive_hints(document, parsed, host));
     for (var warning in program.warnings()) {
         reporter.add_if_in_document(warning);
     }

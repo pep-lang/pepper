@@ -66,6 +66,25 @@ reports_a_syntax_error_without_loading_the_program() {
 }
 
 [Test]
+reports_every_syntax_error_and_the_brace_a_missing_brace_closes() {
+    var text = "f(): int {\n    return 0\n}\n\ng() {\n    var x = ;\n\nh() {\n}\n";
+    var analysis = analyze("file:///nowhere/a.pep", text);
+    expect_equal(analysis.outcome, "did not parse");
+    expect_equal(analysis.diagnostics.count, 3 as ulong);
+    expect_equal(analysis.diagnostics[0].message, "expected ';'");
+    expect_equal(analysis.diagnostics[1].message, "expected expression");
+    expect_equal(analysis.diagnostics[1].range.start.line, 5);
+    # `g`'s `}` is due before `h`, which starts a line no deeper than `g`.
+    var unclosed = analysis.diagnostics[2];
+    expect_equal(unclosed.message, "expected '}'");
+    expect_equal(unclosed.range.start.line, 7);
+    var related = unclosed.related_information.value();
+    expect_equal(related[0].message, "to match this '{'");
+    expect_equal(related[0].location.range.start.line, 4);
+    expect_equal(related[0].location.range.start.character, 4);
+}
+
+[Test]
 reports_the_first_type_error_of_the_text_given() {
     # The file on disk is fine; the editor's text is not.
     var uri = temp_file("typed.pep", "main(): int {\n    return 0;\n}\n");

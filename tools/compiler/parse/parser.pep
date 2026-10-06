@@ -64,6 +64,11 @@ export struct ParseError {
     var message: String;
     ## The byte range it is about.
     var span: Span;
+    ## Another place the error is about, if any: for a missing `}`, the `{`
+    ## it should close (`parse_recovering` only).
+    var related: Span?;
+    ## What `related` is, as "to match this '{'".
+    var related_message: String = "";
 
     ## Creates an error.
     ##
@@ -110,6 +115,123 @@ export parse_written(source: String, checked: bool = true): Result<ast.Module, P
     return _parse(source, false, checked);
 }
 
+## What `parse_recovering` returns: the module as far as it parses, and
+## every error.
+export struct Recovered {
+    ## The module in `parse`'s shape, without the statements, members and
+    ## declarations that did not parse.
+    var module: ast.Module;
+    ## Every error, in order; empty when the source parses. The first is
+    ## the one `parse` reports.
+    var errors: ParseError[] = Array<ParseError>();
+
+    ## Creates a result.
+    ##
+    ## @param module the module as far as it parses
+    construct(module: ast.Module) {
+        this.module = module;
+    }
+}
+
+# The most errors `parse_recovering` reports, and the most times it lexes a
+# file again after blanking a line the lexer refused.
+const _MOST_ERRORS: ulong = 100;
+
+## Parses Pepper source like `parse`, but reads on past its errors, for an
+## editor: the module keeps every statement, member and declaration that
+## parses, and the result lists every error. A source that `parse` accepts
+## costs one `parse`, and gives its module and no errors.
+##
+## After a syntax error the parser skips to the end of the broken
+## statement, member or declaration (its `;`, its braces, or the next line)
+## and goes on. A missing `}` is reported where it was due, with the `{`
+## it should close as `related`. A line the lexer refuses is read as spaces.
+## The errors come in `parse`'s order (lexical, syntax, errors in nodes that
+## parse, then the checks after parsing), and the first is always the one
+## `parse` reports, with the same message and offset.
+##
+## @param source the text of one source file
+## @returns the module as far as it parses, and its errors
+export parse_recovering(source: String): Recovered {
+    var parsed = parse(source);
+    if (parsed.is_ok()) {
+        return Recovered(parsed.value());
+    }
+    var errors = Array<ParseError>();
+    var text = source;
+    var tokens = syntax.lex(text, false);
+    while (tokens.is_err() and errors.count < _MOST_ERRORS) {
+        var error = tokens.error();
+        errors.append(ParseError(error.message, Span(error.offset, error.offset)));
+        var blanked = _blank_line(text, error.offset);
+        if (!blanked) {
+            break;
+        }
+        text = blanked.value();
+        tokens = syntax.lex(text, false);
+    }
+    if (tokens.is_err()) {
+        var out = Recovered(ast.Module());
+        out.errors = _pin_first(parsed.error(), errors);
+        return out;
+    }
+    var parser = Parser(text, tokens.value(), true);
+    parser._recovering = true;
+    var module = parser.module();
+    if (parser._failed) {
+        parser._record(parser._position, parser._failure());
+    }
+    errors.append_all(parser._recovered);
+    errors.append_all(parser._problems);
+    var broken = checks.check_module(module);
+    if (broken.is_value()) {
+        var offset = broken.value().offset;
+        errors.append(ParseError(broken.value().message, Span(offset, offset)));
+    }
+    var out = Recovered(module);
+    out.errors = _pin_first(parsed.error(), errors);
+    return out;
+}
+
+# `errors` with `first`, the error `parse` reports, first: in place of the
+# first of them when that is the same error (keeping its related place),
+# else before them.
+_pin_first(first: ParseError, errors: ParseError[]): ParseError[] {
+    var out = Array<ParseError>();
+    out.append(first);
+    ulong i = 0;
+    if (errors.count > 0 and errors[0].span.start == first.span.start and errors[0].message == first.message) {
+        out[0].related = errors[0].related;
+        out[0].related_message = errors[0].related_message;
+        i = 1;
+    }
+    while (i < errors.count) {
+        out.append(errors[i]);
+        i += 1;
+    }
+    return out;
+}
+
+# `text` with the line holding byte `offset`, from that byte to its end,
+# made spaces, which keeps every offset; empty when there is nothing there
+# but spaces.
+_blank_line(text: String, offset: ulong): String? {
+    ulong end = offset;
+    bool changed = false;
+    while (end < text.size and text.byte_at(end) != '\n') {
+        int c = text.byte_at(end);
+        if (c != ' ' and c != '\r') {
+            changed = true;
+        }
+        end += 1;
+    }
+    if (!changed) {
+        return Optional<String>.Empty;
+    }
+    var spaces = " ".repeat(end - offset);
+    return Optional<String>.Value(text.substr_bytes(0, offset) + spaces + text.substr_bytes(end, text.size - end));
+}
+
 # Parses `source`, desugared or as written; with `checked`, the errors in
 # nodes that parse and the checks after parsing are errors too.
 _parse(source: String, desugared: bool, checked: bool = true): Result<ast.Module, ParseError> {
@@ -139,6 +261,9 @@ _parse(source: String, desugared: bool, checked: bool = true): Result<ast.Module
     }
     return Result<ast.Module, ParseError>.ok(module);
 }
+
+# No token: the index `_suspect_open` holds when no block is suspect.
+const _NO_TOKEN: ulong = 0xFFFFFFFFFFFFFFFF;
 
 # A point the parser can come back to: the input position, and how full
 # each list was that a reading adds to, so that an abandoned reading leaves
@@ -312,6 +437,16 @@ struct Parser {
     var _negative_problems: ulong;
     # The type a `: Type` gave the last variable read, if any.
     var _variable_annotation: TypeName?;
+    # Whether a broken statement, member or declaration is noted and
+    # skipped instead of ending the parse (`parse_recovering`).
+    var _recovering: bool;
+    # The errors skipped past so far, and the index of the first token of
+    # the item each ended (so that abandoning a reading drops its errors).
+    var _recovered: ParseError[] = Array<ParseError>();
+    var _recovered_items: ulong[] = Array<ulong>();
+    # The `{` of the first block closed by a `}` indented unlike its own
+    # line, which may have taken an outer block's `}`; `_NO_TOKEN` if none.
+    var _suspect_open: ulong = _NO_TOKEN;
     # What `_nothing` returns, made when first needed.
     var _placeholder: Expression;
 
@@ -385,10 +520,189 @@ struct Parser {
         return mark;
     }
 
+    # ── Recovery (`parse_recovering`) ─────────────────────────────────────
+
+    # The syntax error that stopped the reading, which is cleared so that
+    # reading can go on.
+    _failure(): ParseError {
+        var offset = _peek().offset;
+        var message = "expected expression";
+        if (_error.is_value()) {
+            offset = _error.value().offset;
+            message = _error.value().message;
+        }
+        _failed = false;
+        _clear_error();
+        return ParseError(message, Span(offset, offset));
+    }
+
+    # Forgets the syntax error found so far.
+    _clear_error() {
+        _error = Optional<SyntaxError>.Empty;
+        _missing_semicolon = false;
+    }
+
+    # Notes `error`, which ended the item whose first token is `item`,
+    # unless the last error noted is at its offset or there are enough.
+    _record(item: ulong, error: ParseError) {
+        if (_recovered.count >= _MOST_ERRORS) {
+            return;
+        }
+        if (!_recovered.is_empty and _recovered.last().span.start == error.span.start) {
+            return;
+        }
+        _recovered.append(error);
+        _recovered_items.append(item);
+    }
+
+    # Drops the errors noted in items from token `position` on, which an
+    # abandoned reading read.
+    _drop_recovered(position: ulong) {
+        while (!_recovered_items.is_empty and _recovered_items.last() >= position) {
+            _recovered_items.pop();
+            _recovered.pop();
+        }
+    }
+
+    # After the item from `item` failed: notes the error, goes back to the
+    # item's start and skips its tokens (`_skip_item`). `open` is the `{` of
+    # the braces around the item, or `_NO_TOKEN` at the top level.
+    _skip_failed(item: Mark, open: ulong) {
+        var error = _failure();
+        _restore(item);
+        _record(item.position, error);
+        _skip_item(error.span.start, open);
+    }
+
+    # Skips a broken item from the next token, with its brackets: through a
+    # `;` or a braced body at depth 0, or up to a token that starts a line at
+    # depth 0 at or after byte `error` (where the error was found), or up to
+    # the `}` of the braces opened at `open`. Skips at least one token.
+    _skip_item(error: ulong, open: ulong) {
+        ulong first = _position;
+        int depth = 0;
+        while (!_at_end()) {
+            var token = _peek();
+            if (_position > first and depth == 0 and token.offset >= error and _indentation(_position) >= 0) {
+                return;
+            }
+            if (token.kind == TokenKind.Punctuation and token.size == 1) {
+                int c = _source.byte_at(token.offset);
+                if (c == '(' or c == '[' or c == '{') {
+                    depth += 1;
+                } else if (c == ')' or c == ']' or c == '}') {
+                    if (depth == 0) {
+                        if (c == '}' and _position > first and _closes(open)) {
+                            return;
+                        }
+                    } else {
+                        depth -= 1;
+                        if (depth == 0 and c == '}') {
+                            _advance();
+                            return;
+                        }
+                    }
+                } else if (c == ';' and depth == 0) {
+                    _advance();
+                    return;
+                }
+            }
+            _advance();
+        }
+    }
+
+    # Whether the `}` at the input, met while recovering inside the braces
+    # opened at `open` (`_NO_TOKEN` for none), closes them: unless it starts
+    # a line indented deeper than the `{` line, as the `}` of a construct
+    # whose `{` an error cut off does.
+    _closes(open: ulong): bool {
+        if (open == _NO_TOKEN) {
+            return false;
+        }
+        var column = _indentation(_position);
+        return column < 0 or column <= _line_indentation(open);
+    }
+
+    # The column of token `index` when it is the first on its line, else -1.
+    _indentation(index: ulong): long {
+        ulong offset = _tokens[index].offset;
+        ulong start = offset;
+        while (start > 0) {
+            int c = _source.byte_at(start - 1);
+            if (c == '\n') {
+                break;
+            }
+            if (c != ' ' and c != '\t') {
+                return -1;
+            }
+            start -= 1;
+        }
+        return (offset - start) as long;
+    }
+
+    # The column at which the line holding token `index` starts its text.
+    _line_indentation(index: ulong): long {
+        ulong offset = _tokens[index].offset;
+        while (offset > 0 and _source.byte_at(offset - 1) != '\n') {
+            offset -= 1;
+        }
+        ulong end = offset;
+        while (end < _source.size and (_source.byte_at(end) == ' ' or _source.byte_at(end) == '\t')) {
+            end += 1;
+        }
+        return (end - offset) as long;
+    }
+
+    # Whether the item from token `item`, in the braces opened at `open`,
+    # starts a line indented no deeper than the `{` line: where the `}`
+    # was due.
+    _dedented(item: ulong, open: ulong): bool {
+        var column = _indentation(item);
+        return column >= 0 and column <= _line_indentation(open);
+    }
+
+    # Notes that the braces opened at `open` are not closed before token
+    # `at`: "expected '}'" there, related to the `{` that most likely lost
+    # its `}`.
+    _unclosed(open: ulong, at: ulong) {
+        var brace = open;
+        if (_suspect_open != _NO_TOKEN and _suspect_open > open) {
+            brace = _suspect_open;
+        }
+        _suspect_open = _NO_TOKEN;
+        var offset = _tokens[at].offset + _base;
+        var error = ParseError("expected '}'", Span(offset, offset));
+        error.related = Optional<Span>.Value(_token_span(brace));
+        error.related_message = "to match this '{'";
+        # Noted as in the block, which the reading from `at` does not drop.
+        _record(at - 1, error);
+    }
+
+    # After the `}` of the braces opened at `open`: notes them as suspect
+    # when the `}` starts a line indented unlike the `{` line, and clears a
+    # suspect inside them when it does not.
+    _note_close(open: ulong) {
+        var close = _position - 1;
+        var column = _indentation(close);
+        if (column < 0) {
+            return;
+        }
+        if (column != _line_indentation(open)) {
+            if (_suspect_open == _NO_TOKEN) {
+                _suspect_open = open;
+            }
+        } else if (_suspect_open != _NO_TOKEN and _suspect_open > open) {
+            _suspect_open = _NO_TOKEN;
+        }
+    }
+
     # Goes back to `mark`, dropping what the abandoned reading added.
     _restore(mark: Mark) {
         _position = mark.position;
         _failed = false;
+        if (_recovering) {
+            _drop_recovered(mark.position);
+        }
         if (_joins.count > mark.joins) {
             _joins.truncate(mark.joins);
         }
@@ -1778,6 +2092,10 @@ struct Parser {
         if (_failed) {
             return out;
         }
+        if (_recovering) {
+            _recovering_statements(out, open);
+            return out;
+        }
         while (true) {
             if (_at("}") or _at_end()) {
                 break;
@@ -1801,6 +2119,70 @@ struct Parser {
         }
         out.span = Span(attributes.count > 0 ? attributes[0].span.start : _start(open), _last_end());
         return out;
+    }
+
+    # `_block`'s statements and `}` for `parse_recovering`, into `out`, after
+    # the `{` at `open`: a broken statement is noted and skipped.
+    _recovering_statements(out: Block, open: ulong) {
+        var attributes = out.attributes;
+        # Whether a statement of the block failed.
+        bool broken = false;
+        while (true) {
+            if (_at("}") or _at_end()) {
+                # After an error, a `}` indented deeper than the `{` line is
+                # one whose `{` the error cut off.
+                if (broken and _at("}") and !_closes(open)) {
+                    _advance();
+                    continue;
+                }
+                break;
+            }
+            if (_at(";")) {
+                _advance();
+                continue;
+            }
+            var item = _mark();
+            var statement = _statement();
+            if (_failed) {
+                # A statement indented no deeper than the `{` line, such as
+                # the next function's header: the `}` is missing before it.
+                if (_dedented(item.position, open)) {
+                    _restore(item);
+                    _clear_error();
+                    _unclosed(open, item.position);
+                    out.span = Span(attributes.count > 0 ? attributes[0].span.start : _start(open), _last_end());
+                    return;
+                }
+                _skip_failed(item, open);
+                broken = true;
+                continue;
+            }
+            if (ends_in_semicolon(statement)) {
+                _finish_statement();
+                if (_failed) {
+                    if (_dedented(item.position, open)) {
+                        _restore(item);
+                        _clear_error();
+                        _unclosed(open, item.position);
+                        out.span = Span(attributes.count > 0 ? attributes[0].span.start : _start(open), _last_end());
+                        return;
+                    }
+                    _record(item.position, _failure());
+                }
+            }
+            out.statements.append(statement);
+        }
+        if (_at_end()) {
+            _unclosed(open, _position);
+            out.span = Span(attributes.count > 0 ? attributes[0].span.start : _start(open), _last_end());
+            return;
+        }
+        _expect("}");
+        if (_failed) {
+            return;
+        }
+        _note_close(open);
+        out.span = Span(attributes.count > 0 ? attributes[0].span.start : _start(open), _last_end());
     }
 
     # A stand-in for the statement a failed reading would have built.
@@ -3005,8 +3387,13 @@ struct Parser {
 
     # `{ member... }` of a struct, trait or extension, into `out`.
     _members(kind: MemberKind, out: MemberList) {
+        ulong open = _position;
         _expect("{");
         if (_failed) {
+            return;
+        }
+        if (_recovering) {
+            _recovering_members(kind, out, open);
             return;
         }
         while (true) {
@@ -3017,98 +3404,143 @@ struct Parser {
                 _advance();
                 continue;
             }
-            var attributes = _attributes();
+            _member(kind, out);
             if (_failed) {
                 return;
             }
-            if (kind != MemberKind.Struct and _at_word("var")) {
-                var variable = _variable_declaration(Prefix(attributes));
-                if (_failed) {
-                    return;
-                }
-                if (!_at("{")) {
-                    _fail("expected '{'");
-                    return;
-                }
-                var property = _property(variable);
-                if (_failed) {
-                    return;
-                }
-                out.properties.append(property);
-                continue;
-            }
-            if (kind != MemberKind.Struct) {
-                var method = _method(attributes, kind == MemberKind.Trait);
-                if (_failed) {
-                    return;
-                }
-                out.methods.append(method);
-                continue;
-            }
-            if (_at_word("construct") or _at_word("new")) {
-                ulong keyword = _position;
-                _advance();
-                var parameters = _parameters();
-                if (_failed) {
-                    return;
-                }
-                var body = _block(Array<Attribute>());
-                if (_failed) {
-                    return;
-                }
-                out.constructors.append(_constructor(attributes, keyword, parameters, body));
-                continue;
-            }
-            if (_at_word("destruct")) {
-                var keyword = _token_span(_position);
-                _advance();
-                var body = _block(Array<Attribute>());
-                if (_failed) {
-                    return;
-                }
-                out.destruct_span = Optional<Span>.Value(keyword);
-                body.attributes = attributes;
-                if (attributes.count > 0) {
-                    body.span = Span(attributes[0].span.start, body.span.end);
-                }
-                out.destructor = Optional<Block>.Value(body);
-                continue;
-            }
-            if (_at_word("extern") and !_peek_at(1).is(_source, "(")) {
-                var function = _extern_function(Prefix(attributes));
-                if (_failed) {
-                    return;
-                }
-                out.methods.append(function);
-                continue;
-            }
-            var mark = _mark();
-            var member = _method(attributes, false);
-            if (!_failed) {
-                out.methods.append(member);
-                continue;
-            }
-            _restore(mark);
-            var field = _variable_declaration(Prefix(attributes));
-            if (_failed) {
-                return;
-            }
-            if (_at("{")) {
-                var property = _property(field);
-                if (_failed) {
-                    return;
-                }
-                out.properties.append(property);
-                continue;
-            }
-            if (!_declaration_boundary()) {
-                _fail("expected ';'");
-                return;
-            }
-            _finish_statement();
-            out.fields.append(field);
         }
         _expect("}");
+    }
+
+    # `_members`' members and `}` for `parse_recovering`, into `out`, after
+    # the `{` at `open`: a broken member is noted and skipped.
+    _recovering_members(kind: MemberKind, out: MemberList, open: ulong) {
+        while (true) {
+            if (_at("}") or _at_end()) {
+                break;
+            }
+            if (_at(";")) {
+                _advance();
+                continue;
+            }
+            var item = _mark();
+            _member(kind, out);
+            if (_failed) {
+                if (_dedented(item.position, open)) {
+                    _restore(item);
+                    _clear_error();
+                    _unclosed(open, item.position);
+                    return;
+                }
+                _skip_failed(item, open);
+            }
+        }
+        if (_at_end()) {
+            _unclosed(open, _position);
+            return;
+        }
+        _expect("}");
+        if (!_failed) {
+            _note_close(open);
+        }
+    }
+
+    # One member of a struct, trait or extension, with its attributes, into
+    # `out`.
+    _member(kind: MemberKind, out: MemberList) {
+        var attributes = _attributes();
+        if (_failed) {
+            return;
+        }
+        if (kind != MemberKind.Struct and _at_word("var")) {
+            var variable = _variable_declaration(Prefix(attributes));
+            if (_failed) {
+                return;
+            }
+            if (!_at("{")) {
+                _fail("expected '{'");
+                return;
+            }
+            var property = _property(variable);
+            if (_failed) {
+                return;
+            }
+            out.properties.append(property);
+            return;
+        }
+        if (kind != MemberKind.Struct) {
+            var method = _method(attributes, kind == MemberKind.Trait);
+            if (_failed) {
+                return;
+            }
+            out.methods.append(method);
+            return;
+        }
+        if (_at_word("construct") or _at_word("new")) {
+            ulong keyword = _position;
+            _advance();
+            var parameters = _parameters();
+            if (_failed) {
+                return;
+            }
+            var body = _block(Array<Attribute>());
+            if (_failed) {
+                return;
+            }
+            out.constructors.append(_constructor(attributes, keyword, parameters, body));
+            return;
+        }
+        if (_at_word("destruct")) {
+            var keyword = _token_span(_position);
+            _advance();
+            var body = _block(Array<Attribute>());
+            if (_failed) {
+                return;
+            }
+            out.destruct_span = Optional<Span>.Value(keyword);
+            body.attributes = attributes;
+            if (attributes.count > 0) {
+                body.span = Span(attributes[0].span.start, body.span.end);
+            }
+            out.destructor = Optional<Block>.Value(body);
+            return;
+        }
+        if (_at_word("extern") and !_peek_at(1).is(_source, "(")) {
+            var function = _extern_function(Prefix(attributes));
+            if (_failed) {
+                return;
+            }
+            out.methods.append(function);
+            return;
+        }
+        var mark = _mark();
+        var member = _method(attributes, false);
+        if (!_failed) {
+            out.methods.append(member);
+            return;
+        }
+        _restore(mark);
+        var field = _variable_declaration(Prefix(attributes));
+        if (_failed) {
+            return;
+        }
+        if (_at("{")) {
+            var property = _property(field);
+            if (_failed) {
+                return;
+            }
+            out.properties.append(property);
+            return;
+        }
+        if (!_declaration_boundary()) {
+            _fail("expected ';'");
+            return;
+        }
+        _finish_statement();
+        if (_failed and _recovering) {
+            _record(_position - 1, _failure());
+        }
+        out.fields.append(field);
     }
 
     # A constructor, whose `construct` (or `new`) is at `keyword`.
@@ -3335,6 +3767,8 @@ struct Parser {
 
     # An enum's cases, then its methods and properties, and its `}`.
     _enum_members(out: StructDecl, body: EnumBody) {
+        # The `{`, which the caller took.
+        ulong open = _position - 1;
         while (true) {
             if (_at("}") or _at_end()) {
                 break;
@@ -3388,29 +3822,57 @@ struct Parser {
                 _advance();
                 continue;
             }
-            var attributes = _attributes();
+            Mark item;
+            if (_recovering) {
+                item = _mark();
+            }
+            _enum_member(out);
+            if (_failed) {
+                if (!_recovering) {
+                    return;
+                }
+                if (_dedented(item.position, open)) {
+                    _restore(item);
+                    _clear_error();
+                    _unclosed(open, item.position);
+                    return;
+                }
+                _skip_failed(item, open);
+            }
+        }
+        if (_recovering and _at_end()) {
+            _unclosed(open, _position);
+            return;
+        }
+        _expect("}");
+        if (_recovering and !_failed) {
+            _note_close(open);
+        }
+    }
+
+    # One method or property of an enum, with its attributes, into `out`.
+    _enum_member(out: StructDecl) {
+        var attributes = _attributes();
+        if (_failed) {
+            return;
+        }
+        if (_at_word("var")) {
+            var variable = _variable_declaration(Prefix(attributes));
             if (_failed) {
                 return;
             }
-            if (_at_word("var")) {
-                var variable = _variable_declaration(Prefix(attributes));
-                if (_failed) {
-                    return;
-                }
-                var property = _property(variable);
-                if (_failed) {
-                    return;
-                }
-                out.properties.append(property);
-            } else {
-                var method = _method(attributes, false);
-                if (_failed) {
-                    return;
-                }
-                out.methods.append(method);
+            var property = _property(variable);
+            if (_failed) {
+                return;
             }
+            out.properties.append(property);
+        } else {
+            var method = _method(attributes, false);
+            if (_failed) {
+                return;
+            }
+            out.methods.append(method);
         }
-        _expect("}");
     }
 
     _extension(prefix: Prefix): ExtendDecl {
@@ -3748,14 +4210,25 @@ struct Parser {
             var mark = _mark();
             var attributes = _attributes();
             if (_failed) {
-                return out;
+                if (!_recovering) {
+                    return out;
+                }
+                _skip_failed(mark, _NO_TOKEN);
+                continue;
             }
             if (_at_word("import") or _at_export_from()) {
                 var item = _import_declaration(attributes);
                 if (_failed) {
-                    return out;
+                    if (!_recovering) {
+                        return out;
+                    }
+                    _skip_failed(mark, _NO_TOKEN);
+                    continue;
                 }
                 _finish_statement();
+                if (_failed and _recovering) {
+                    _record(mark.position, _failure());
+                }
                 out.imports.append(item);
                 # The names that qualify a type in an interpolated
                 # string's braces.
@@ -3774,6 +4247,9 @@ struct Parser {
                 var item = _export_alias(attributes);
                 if (!_failed) {
                     _finish_statement();
+                    if (_failed and _recovering) {
+                        _record(mark.position, _failure());
+                    }
                     out.exports.append(item);
                     continue;
                 }
@@ -3782,12 +4258,19 @@ struct Parser {
             _restore(mark);
             var declaration = _declaration();
             if (_failed) {
-                return out;
+                if (!_recovering) {
+                    return out;
+                }
+                _skip_failed(mark, _NO_TOKEN);
+                continue;
             }
             if (declaration is Variable(_)) {
                 _finish_statement();
             } else if (declaration is TypeAlias(_)) {
                 _finish_statement();
+            }
+            if (_failed and _recovering) {
+                _record(mark.position, _failure());
             }
             out.declarations.append(declaration);
             if (desugared) {
