@@ -221,7 +221,13 @@ restores_modes_times_and_links() {
 
     # Extracting again replaces a symlink in a file's place, never writing
     # through it.
-    target.join("bin").set_permissions(493);
+    [Target(OS(Linux) || OS(Mac))]
+    {
+        # Only POSIX applied the entry's mode (octal 555). On Windows the
+        # permissions are the attribute word, where 493 sets the read-only
+        # attribute, which then kept the folder from being removed (#724).
+        target.join("bin").set_permissions(493);
+    }
     io.File.remove(target.join("notes.txt"));
     [Target(!OS(Windows))]
     {

@@ -20,6 +20,9 @@ local cleans up when it returns.
 
 Its name joins the name the test gives with the process id, so tests
 running at once, each in a process of its own, never share a folder.
+When a folder of that name is left from an earlier run (whose process
+had the same id) and cannot be removed, a number is added to the name,
+so the folder is always new and empty.
 
 **Example**
 ```pepper
@@ -50,7 +53,8 @@ The folder's path.
 construct(name: String)
 ```
 
-Makes the folder, removing what a crashed run left at its path.
+Makes the folder, removing what a crashed run left at its path, or
+taking a numbered name when that cannot be removed.
 
 **Parameters**
 - `name` — a name for the folder, such as the test's
