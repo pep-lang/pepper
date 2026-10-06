@@ -220,6 +220,13 @@ reports_check_errors_and_warnings_as_the_rust_compiler_does() {
             "lib.pep",
             "export struct Lib { var n: int; }\nextend Lib { secret(): int { return 1; } extra(): int { return 2; } }\nextend Lib with Named { name(): int { return 3; } }\nprivate_fn(): int { return 4; }\nexport const PUBLIC = 5;\n"
         ],
+        # Declarations named like built-in types (#719).
+        [
+            "main.pep",
+            "import \"lib\";\nconst double = (x: int): int => x * 2;\nstruct short {}\nmain(): int { return 0; }\n",
+            "lib.pep",
+            "export float(): int { return 1; }\n"
+        ],
         # Tabs and characters outside ASCII before the reported name.
         [
             "main.pep",

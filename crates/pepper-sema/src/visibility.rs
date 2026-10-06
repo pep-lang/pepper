@@ -102,6 +102,10 @@ pub enum VisibilityErrorKind {
     /// Reported in the file loaded first, so a forced import's declaration,
     /// not the runtime's, carries the error.
     PreludeRedefinition,
+    /// A top-level declaration named like a built-in type (`double`): names
+    /// resolve program-wide by spelling, so it would capture the type in
+    /// every other file, the runtime's included.
+    BuiltInType,
 }
 
 /// A visibility violation.
@@ -185,6 +189,7 @@ impl VisibilityError {
             VisibilityErrorKind::Redefinition | VisibilityErrorKind::PreludeRedefinition => {
                 format!("redefinition of '{}'", self.name)
             }
+            VisibilityErrorKind::BuiltInType => format!("'{}' is the name of a built-in type; choose another name", self.name),
         }
     }
 
@@ -201,15 +206,28 @@ impl VisibilityError {
             .declared_at
             .or_else(|| declaration_span(files[self.declared_in].module, &self.name, self.kind))
             .map(|span| Loc::new(FileId(self.declared_in as u32), span));
-        Diagnostic::error(self.message(files))
-            .at(Loc::new(FileId(self.file as u32), self.span))
-            .with_note(note, declared_at)
+        let error = Diagnostic::error(self.message(files)).at(Loc::new(FileId(self.file as u32), self.span));
+        if self.kind == VisibilityErrorKind::BuiltInType {
+            return error;
+        }
+        error.with_note(note, declared_at)
     }
 
     /// The rendered diagnostic (see [`pepper_parser::diagnostic`]).
     pub fn render(&self, files: &[SourceFile]) -> String {
         self.to_diagnostic(files).render(&Files(files))
     }
+}
+
+/// The built-in types' names, which no declaration may take.
+const BUILT_IN_TYPES: [&str; 22] = [
+    "void", "bool", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64",
+    "ulong", "f64", "double", "f32", "float",
+];
+
+/// Whether `name` is a built-in type's name.
+fn is_built_in_type(name: &str) -> bool {
+    BUILT_IN_TYPES.contains(&name)
 }
 
 /// The name of the module whose folder is `root`.
@@ -293,6 +311,8 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     let mut aliases: HashMap<&str, &str> = HashMap::new();
     // trait -> (declaring file, exported, private, methods).
     let mut traits: HashMap<&str, (usize, bool, bool, Vec<&str>)> = HashMap::new();
+    // Declarations named like a built-in type.
+    let mut errors_before = vec![];
     for file in files {
         for d in file.module.declarations.iter().filter(|d| keep(d.attributes()).unwrap_or(true)) {
             if let Declaration::TypeAlias(t) = d {
@@ -315,6 +335,16 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
             // A malformed attribute is reported by platform filtering itself.
             if !keep(d.attributes()).unwrap_or(true) {
                 continue;
+            }
+            if !matches!(d, Declaration::Extend(_) | Declaration::Static(_)) && is_built_in_type(demangle_name(d.name())) {
+                errors_before.push(VisibilityError {
+                    file: i,
+                    span: d.name_span(),
+                    name: demangle_name(d.name()).to_string(),
+                    declared_in: i,
+                    declared_at: None,
+                    kind: VisibilityErrorKind::BuiltInType,
+                });
             }
             match d {
                 Declaration::Function(f) => decls.entry(&f.name).or_default().push(Decl {
@@ -405,6 +435,11 @@ pub fn check_visibility(files: &[SourceFile]) -> Vec<VisibilityError> {
     let prelude: Vec<bool> = files.iter().map(|f| f.prelude).collect();
     let roots: Vec<Option<&std::path::Path>> = files.iter().map(|f| f.module_root).collect();
     let exempt: Vec<bool> = files.iter().map(|f| f.duplicate_exempt).collect();
+    // Every reference to such a name would be reported too: only the
+    // declarations are.
+    if !errors_before.is_empty() {
+        return errors_before;
+    }
     let mut errors = vec![];
     for (name, entries) in &decls {
         // Exports of prelude files (the runtime and `--import` modules) may

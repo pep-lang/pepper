@@ -57,6 +57,25 @@ whatever its style (`GetCurrentProcessId`), because that name is what the
 linker looks up. The same goes for the fields of a struct that mirrors a C
 struct.
 
+## Built-in type names
+
+Unlike the conventions above, this rule is enforced. No top-level
+declaration may take the name of a built-in type: `void`, `bool`,
+`char`, `byte`, `short`, `ushort`, `int`, `uint`, `long`, `ulong`, `float`,
+`double`, and their sized spellings (`i8`, `u8`, `i16`, `u16`, `i32`, `u32`,
+`i64`, `u64`, `f32`, `f64`). Names resolve by spelling across the whole
+program, so such a declaration would take the type's place in every file,
+the runtime's included. The compiler reports it at the name:
+
+```text
+main.pep:1:7: error: 'double' is the name of a built-in type; choose another name
+    1 | const double = (x: int): int => x * 2;
+      |       ^~~~~~
+```
+
+Locals, parameters and members may still use these names, since they are
+visible only where they are declared.
+
 ## Private members
 
 Pepper's `private` keyword applies only to top-level declarations (see

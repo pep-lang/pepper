@@ -61,6 +61,10 @@ export enum VisibilityErrorKind {
     ## A type or variable that two prelude files both export. Reported in
     ## the file loaded first.
     PreludeRedefinition,
+    ## A top-level declaration named like a built-in type (`double`): names
+    ## resolve program-wide by spelling, so it would capture the type in
+    ## every other file, the runtime's included.
+    BuiltInType,
 }
 
 ## A visibility violation.
@@ -153,6 +157,9 @@ export struct VisibilityError {
             DuplicateOverride => {
                 return $"override '{name}' is also declared in {other}; a generic may be overridden for the same types in only one file";
             }
+            BuiltInType => {
+                return $"'{name}' is the name of a built-in type; choose another name";
+            }
             else => {
                 return $"redefinition of '{name}'";
             }
@@ -165,6 +172,9 @@ export struct VisibilityError {
     ## @param files the program's files
     ## @returns the diagnostic
     to_diagnostic(files: ProgramFile[]): Diagnostic {
+        if (kind == VisibilityErrorKind.BuiltInType) {
+            return Diagnostic.error(message(files)).at(Location(file, span));
+        }
         var note = "declared here";
         match (kind) {
             DuplicateOverride => {
@@ -455,6 +465,56 @@ _receiver_field(e: Expression): String? {
 ## @param target the target platform selection evaluates against
 ## @returns the errors: duplicate declarations in source order, then each
 ##   file's references in walk order
+## Whether `name` is a built-in type's, which no declaration may take.
+_is_built_in_type(name: String): bool {
+    match (name) {
+        "void", "bool", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64", "ulong", "f64", "double", "f32", "float" => {
+            return true;
+        }
+        else => {
+            return false;
+        }
+    }
+}
+
+# The top-level declarations named like a built-in type, as errors.
+_built_in_type_names(files: ProgramFile[], target: Target): VisibilityError[] {
+    var errors = Array<VisibilityError>();
+    for (var i in 0..files.count) {
+        for (var d in files[i].module.declarations) {
+            if (!target.keeps(d.attributes())) {
+                continue;
+            }
+            var name = "";
+            match (d) {
+                Function(f) => {
+                    name = f.name;
+                }
+                Struct(s) => {
+                    name = s.name;
+                }
+                Trait(t) => {
+                    name = t.name;
+                }
+                TypeAlias(t) => {
+                    name = t.name;
+                }
+                Variable(v) => {
+                    name = v.name;
+                }
+                else => {}
+            }
+            var written = names.demangle_name(name);
+            if (_is_built_in_type(written)) {
+                errors.append(
+                    VisibilityError(i, d.name_span(), written, i, Optional<Span>.Empty, VisibilityErrorKind.BuiltInType)
+                );
+            }
+        }
+    }
+    return errors;
+}
+
 export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Target): VisibilityError[] {
     var decls = HashMap<String, _Decl[]>();
     # Load order of the names in `decls`, so errors come out the same way
@@ -603,6 +663,12 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
         }
     }
 
+    # Every reference to a declaration named like a built-in type would be
+    # reported too: only the declarations are.
+    var built_in = _built_in_type_names(files, target);
+    if (!built_in.is_empty) {
+        return built_in;
+    }
     var errors = Array<VisibilityError>();
     for (var name in decl_names) {
         var entries = decls[name];
