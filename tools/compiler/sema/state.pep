@@ -64,6 +64,16 @@ export struct PassState {
     ## What `resolve_implicit_types` saw when it last ran, so its next run
     ## walks only the code a change since can affect.
     var implicit: ImplicitMemo = ImplicitMemo();
+    ## The bodies of checked declarations, taken out while the passes run
+    ## (`checked.stash_bodies`), by declaration.
+    var stashed: HashMap<String, Block> = HashMap<String, Block>();
+    ## How many of `Module.struct_specs` and `Module.func_specs` met their
+    ## constraints already (`check_specializations`).
+    var checked_specs: (ulong, ulong) = (0, 0);
+    ## The link summaries `check_confinement` settled for the functions not
+    ## checked before, by summary key, when `module.record_summaries` asks:
+    ## a checked unit's record keeps them (`Checked.summaries`).
+    var settled_summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
     ## Whether struct specializations get a method's body only once a use
     ## names it (`lazy_methods`). Off when the passes are compared with the
     ## Rust compiler's, which specializes every method.

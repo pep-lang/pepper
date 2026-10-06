@@ -12,6 +12,7 @@ import compiler.ast;
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
 import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
+import [is_checked_function] from "checked";
 import [error_at, location_of] from "common";
 import [convert_string_literal] from "literals";
 import [Loc] from "loc";
@@ -3729,6 +3730,10 @@ export check_attributes(module: Module, state: PassState) {
         if (st.name != st.ty.name and st.generic_params.count > 0) {
             continue;
         }
+        # A checked unit's attributes were checked with it.
+        if (module.checked.structs.contains(st.name)) {
+            continue;
+        }
         check(st.attributes, st.loc.file);
         for (var field in st.field_members) {
             check(field.attributes, st.loc.file);
@@ -3749,7 +3754,9 @@ export check_attributes(module: Module, state: PassState) {
         }
     }
     for (var f in module.functions) {
-        function(f);
+        if (!is_checked_function(module, f)) {
+            function(f);
+        }
     }
     for (var e in module.enums) {
         check(e.attributes, e.loc.file);
@@ -3758,7 +3765,9 @@ export check_attributes(module: Module, state: PassState) {
         }
     }
     for (var g in module.globals) {
-        check(g.attributes, g.loc.file);
+        if (!module.checked.globals.contains(g.name)) {
+            check(g.attributes, g.loc.file);
+        }
     }
     for (var t in module.traits) {
         check(t.attributes, t.loc.file);

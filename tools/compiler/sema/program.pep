@@ -8,7 +8,7 @@ import [JsonValue] from json;
 import compiler.link;
 import [Program] from compiler.link;
 import [build_file] from "builder";
-import [ExtensionScopes, Module, UNSIGNED_MARK, VariableDef] from "model";
+import [ExtensionScopes, ExternDef, Module, UNSIGNED_MARK, VariableDef] from "model";
 
 ## Checks `program`, then builds the model of each of its files and joins
 ## them: one module, its globals ordered so a file's come after those of
@@ -68,6 +68,55 @@ export build(program: Program): Result<Module, Diagnostic> {
         return left < right ? -1 : (left > right ? 1 : 0);
     });
     return Result<Module, Diagnostic>.Ok(out);
+}
+
+## Builds the model of `files`, some of `program`'s, on top of `base`, a
+## module whose declarations are checked already (a checked unit's record,
+## loaded): `base` takes `program`'s file list, namespaces, extension
+## scopes and overload unions, then the files' declarations, as
+## `checked::on_checked_runtime` does in Rust. Without a base, a new module.
+##
+## @param program the linked program
+## @param base the checked module, changed in place
+## @param files the files to add, as indices into `program.files`
+## @returns `base` with the files, or the first file's error
+export build_on(program: Program, base: Module, files: ulong[]): Result<Module, Diagnostic> {
+    var fresh = Module(linked = true, extension_scopes = _extension_scopes(program));
+    for (var (name, groups) in program.overload_unions) {
+        fresh.overload_unions[name] = groups;
+    }
+    for (var file in program.files) {
+        fresh.namespaces.append(file.namespace);
+    }
+    base.extension_scopes = fresh.extension_scopes;
+    base.overload_unions = fresh.overload_unions;
+    base.namespaces = fresh.namespaces;
+    base.linked = true;
+    for (var i in files) {
+        var built = build_file(program.files[i].module, i as uint);
+        if (built.is_err()) {
+            return Result<Module, Diagnostic>.Err(built.error());
+        }
+        _join(base, built.value());
+    }
+    var rank = Array<ulong>();
+    for (var _ in program.files) {
+        rank.append(0);
+    }
+    ulong position = 0;
+    for (var file in initialization_order(program)) {
+        rank[file] = position;
+        position += 1;
+    }
+    base.globals.sort((a: VariableDef, b: VariableDef) => {
+        var left = _rank_of(rank, a);
+        var right = _rank_of(rank, b);
+        return left < right ? -1 : (left > right ? 1 : 0);
+    });
+    # Externs are first-wins by C name, in file order, as when the whole
+    # program is merged at once.
+    base.externs.sort((a: ExternDef, b: ExternDef) => a.loc.file < b.loc.file ? -1 : (a.loc.file > b.loc.file ? 1 : 0));
+    return Result<Module, Diagnostic>.Ok(base);
 }
 
 ## Returns the order the files' globals are initialized in: each file after

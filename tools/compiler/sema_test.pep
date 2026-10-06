@@ -153,6 +153,53 @@ fingerprints_tell_changed_code_apart() {
     expect_true(_print(copy) != _print(function));
 }
 
+# A checked module saved as a record reads back the same: the model's JSON
+# (keys sorted, since a map's order is not kept) before and after the round
+# trip match, for a module the passes left and
+# for one only merged, on the runtime.
+[Test]
+records_read_back_what_they_wrote() {
+    var folder = TempFolder("sema_records");
+    var path = folder.path.join("main.pep");
+    File.write_text(
+        path,
+        "struct Point {\n    var x: int;\n    var y: int;\n    construct(x: int, y: int) {\n        this.x = x;\n        this.y = y;\n    }\n}\n"
+            + "main(): int {\n    var points = [Point(1, 2), Point(3, 4)];\n    var names = HashMap<String, double>();\n"
+            + "    names[\"pi\"] = 3.14;\n    print($\"{points.count} {names[\"pi\"]}\");\n    return 0;\n}\n"
+    );
+    var program = link.load_program(path, link.Setup());
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    expect_equal(_round_trip(built.value()), sema.model_json(built.value()));
+    var module = built.value();
+    var state = sema.PassState(program.value().target);
+    expect_true(sema.run_steps_with(module, state, 0xffffffffffffffff).is_ok());
+    expect_equal(_round_trip(module), sema.model_json(module));
+    # A record that is cut short says so rather than reading garbage.
+    var out = sema.RecordOut();
+    sema.write_module(out, module);
+    var bytes = out.finish();
+    var cut = Array<u8>();
+    for (var i in 0..bytes.count / 2) {
+        cut.append(bytes[i]);
+    }
+    var input = sema.RecordIn(cut);
+    sema.read_module(input);
+    expect_false(input.done());
+}
+
+# `module` written to a record and read back, as JSON.
+_round_trip(module: sema.Module): String {
+    var out = sema.RecordOut();
+    sema.write_module(out, module);
+    var input = sema.RecordIn(out.finish());
+    var read = sema.read_module(input);
+    expect_equal(input.error, "");
+    expect_true(input.done());
+    return sema.model_json(read);
+}
+
 _print(function: sema.FunctionDef): ulong {
     var into = sema.Fingerprint();
     function.fingerprint(into);

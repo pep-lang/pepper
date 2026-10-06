@@ -7,6 +7,7 @@ import compiler.diagnostic;
 import [Diagnostic] from compiler.diagnostic;
 import [OVERLOAD_SEPARATOR] from compiler.link;
 import [enum_method_name, payload_field] from "builder";
+import [is_checked_function] from "checked";
 import [error_at, location_of] from "common";
 import [Conformance, withhold] from "constraints";
 import [defer_methods] from "lazy_methods";
@@ -51,7 +52,7 @@ export freeze_templates(module: Module): Templates {
         }
     }
     for (var f in module.functions) {
-        if (f.is_generic_func and !module.checked.functions.contains(f.name)) {
+        if (f.is_generic_func and !is_checked_function(module, f)) {
             templates.functions.append(f.copy());
         }
     }
@@ -74,32 +75,31 @@ export specialize_structs(module: Module, state: PassState) {
             break;
         }
     }
-    for (var spec in specs) {
-        bool exists = false;
-        var spelled = spec.to_string();
-        for (var st in module.structs) {
-            if (st.name == spelled or st.ty == spec) {
-                exists = true;
-                break;
-            }
+    # The structs there are, by name and by spelled type, and the first
+    # generic base of each name: looked up once per spec.
+    var existing = HashSet<String>();
+    for (var st in module.structs) {
+        existing.insert(st.name);
+        existing.insert(st.ty.to_string());
+    }
+    var bases = HashMap<String, StructDef>();
+    for (var st in module.templates.frozen ? module.templates.structs : module.structs) {
+        if (st.ty.is_generic() and !bases.contains(st.name)) {
+            bases[st.name] = st;
         }
-        if (exists) {
+    }
+    for (var spec in specs) {
+        if (existing.contains(spec.to_string())) {
             continue;
         }
         if (specialization_too_deep(module, spec, state)) {
             return;
         }
-        var bases = module.templates.frozen ? module.templates.structs : module.structs;
-        var base = Optional<StructDef>.Empty;
-        for (var st in bases) {
-            if (st.name == spec.name and st.ty.is_generic()) {
-                base = Optional<StructDef>.Value(st.copy());
-                break;
-            }
-        }
-        if (!base.is_value()) {
+        var found = bases.try_get(spec.name);
+        if (!found.is_value()) {
             continue;
         }
+        var base = Optional<StructDef>.Value(found.value().copy());
         var specialized = _specialize_struct(base.value(), spec, state);
         if (conformance.is_value()) {
             var withheld = withhold(module, conformance.value(), base.value(), specialized);
@@ -137,6 +137,8 @@ export specialize_structs(module: Module, state: PassState) {
         apply_synthesized(specialized);
         defer_methods(module, specialized, state);
         module.structs.append(specialized);
+        existing.insert(specialized.name);
+        existing.insert(specialized.ty.to_string());
     }
 }
 

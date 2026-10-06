@@ -101,6 +101,11 @@ export check_confinement(module: Module, state: PassState) {
         if (program.settled.contains(body.key) or (!regions and !_mentions(body.function, triggers))) {
             continue;
         }
+        # A checked unit's bodies were checked with it; one is here only for
+        # its summary.
+        if (_is_checked(module, body)) {
+            continue;
+        }
         var error = _check_function(program, body.owner, body.function, regions);
         if (error.is_value()) {
             state.report(error.value());
@@ -123,8 +128,12 @@ struct _Summary {
     ## The first `return` whose value shares an operand's class or is
     ## tainted, for notes. Not compared.
     var blame: Loc? = Optional<Loc>.Empty;
-    ## It reaches a call through a trait value: never recorded.
+    ## It reaches a call through a trait value: recorded only with the
+    ## structs each such call may reach (`dispatches`), and kept only while
+    ## those stay the same.
     var dependent: bool = false;
+    ## The trait methods it reaches calls through, each `trait\tmethod`.
+    var dispatches: HashSet<String> = HashSet<String>();
 
     construct(classes: ulong[], tainted: bool[]) {
         this.classes = classes;
@@ -188,12 +197,14 @@ struct _Summary {
         var out = _Summary(joined, taints);
         out.blame = blame.is_value() ? blame : other.blame;
         out.dependent = dependent or other.dependent;
+        out.dispatches = _union(dispatches, other.dispatches);
         return out;
     }
 
     ## Whether `other` links and taints the same.
     same_links(other: _Summary): bool {
         if (dependent != other.dependent
+            or dispatches.count != other.dispatches.count
             or classes.count != other.classes.count
             or tainted.count != other.tainted.count) {
             return false;
@@ -232,6 +243,17 @@ struct _Summary {
         }
         return $"{_joined(class_text)};{_joined(taint_text)};{blamed}";
     }
+}
+
+_union(a: HashSet<String>, b: HashSet<String>): HashSet<String> {
+    var out = HashSet<String>();
+    for (var x in a) {
+        out.insert(x);
+    }
+    for (var x in b) {
+        out.insert(x);
+    }
+    return out;
 }
 
 _joined(parts: String[]): String {
@@ -305,6 +327,10 @@ _decode(text: String, file: uint): _Summary? {
     # What follows `|` is other passes'.
     var bar = text.find("|");
     var own = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
+    # What follows a newline is a dependent summary's dispatches, one a
+    # line, each `trait\tmethod` and the structs it reached.
+    var lines = own.split("\n");
+    own = lines[0];
     var fields = own.split(";");
     if (fields.count < 3) {
         return none;
@@ -331,6 +357,14 @@ _decode(text: String, file: uint): _Summary? {
             return none;
         }
         summary.blame = Optional<Loc>.Value(Loc.at(file, ast.Span(start.value(), end.value())));
+    }
+    for (var i in 1..lines.count) {
+        var parts = lines[i].split("\t");
+        if (parts.count < 2) {
+            return none;
+        }
+        summary.dependent = true;
+        summary.dispatches.insert($"{parts[0]}\t{parts[1]}");
     }
     return Optional<_Summary>.Value(summary);
 }
@@ -579,6 +613,10 @@ struct _Confinement {
     var recorded_out: Array<(Loc, String)> = Array<(Loc, String)>();
     ## Whether each file is part of the runtime, found on first use.
     var runtime_files: bool[]? = Optional<bool[]>.Empty;
+    # The structs implementing each trait, by trait name, found on first use.
+    var _implementors: HashMap<String, StructDef[]>? = Optional<HashMap<String, StructDef[]>>.Empty;
+    # `dispatched`'s answers, by trait and method.
+    var _dispatch: HashMap<String, String[]> = HashMap<String, String[]>();
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -613,6 +651,31 @@ struct _Confinement {
         for (var (key, _) in summaries) {
             settled.insert(key);
         }
+    }
+
+    ## The keys of method `method` of every struct that implements trait
+    ## `trait_name`, by struct name: what a call through the trait may
+    ## reach.
+    dispatched(trait_name: String, method: String): String[] {
+        var memo = $"{trait_name}\t{method}";
+        var known = _dispatch.try_get(memo);
+        if (known.is_value()) {
+            return known.value();
+        }
+        var keys = Array<String>();
+        for (var owner in _dispatch_owners(implementors(), trait_name, method)) {
+            keys.append(method_key(owner, method));
+        }
+        _dispatch[memo] = keys;
+        return keys;
+    }
+
+    ## The structs implementing each trait, by trait name.
+    implementors(): HashMap<String, StructDef[]> {
+        if (!_implementors.is_value()) {
+            _implementors = Optional<HashMap<String, StructDef[]>>.Value(_implementors_of(module));
+        }
+        return _implementors.value();
     }
 
     is_isolated(ty: TypeName): bool {
@@ -653,6 +716,102 @@ struct _Confinement {
 
     is_trait(ty: TypeName): bool {
         return traits.contains(ty.name);
+    }
+}
+
+# The structs implementing each trait of `module`, by trait name.
+_implementors_of(module: Module): HashMap<String, StructDef[]> {
+    var out = HashMap<String, StructDef[]>();
+    for (var candidate in module.structs) {
+        var seen = HashSet<String>();
+        for (var t in candidate.traits) {
+            if (!seen.insert(t.name)) {
+                continue;
+            }
+            var list = out.try_get(t.name);
+            if (!list.is_value()) {
+                out[t.name] = Array<StructDef>();
+                list = out.try_get(t.name);
+            }
+            list.value().append(candidate);
+        }
+    }
+    return out;
+}
+
+# The names of the structs a call of `method` through trait `trait_name`
+# may reach.
+_dispatch_owners(implementors: HashMap<String, StructDef[]>, trait_name: String, method: String): String[] {
+    var out = Array<String>();
+    var list = implementors.try_get(trait_name);
+    if (!list.is_value()) {
+        return out;
+    }
+    for (var candidate in list.value()) {
+        if (_method_named(candidate, method).is_value()) {
+            out.append(candidate.name);
+        }
+    }
+    # By name: units checked later may add specializations in another order.
+    out.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
+    return out;
+}
+
+# A dependent summary's dispatches as recorded after its text: a line for
+# each, `trait\tmethod` then a tab before each struct it reaches.
+_dispatch_lines(implementors: HashMap<String, StructDef[]>, dispatches: HashSet<String>): String {
+    var sorted = Array<String>();
+    for (var d in dispatches) {
+        sorted.append(d);
+    }
+    sorted.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
+    var out = StringBuilder();
+    for (var d in sorted) {
+        out.append("\n");
+        out.append(d);
+        var (trait_name, method) = d.split_once("\t").value();
+        for (var owner in _dispatch_owners(implementors, trait_name, method)) {
+            out.append("\t");
+            out.append(owner);
+        }
+    }
+    return out.to_string();
+}
+
+## Drops from `module`'s checked summaries each dependent one whose trait
+## calls now reach other structs than when it was recorded (a later unit
+## implements the trait), so that its function is summarized again.
+##
+## @param module the module
+export drop_stale_summaries(module: Module) {
+    var implementors = Optional<HashMap<String, StructDef[]>>.Empty;
+    var stale = Array<String>();
+    for (var (key, value) in module.checked.summaries) {
+        var (_, text) = value;
+        var bar = text.find("|");
+        var own = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
+        var lines = own.split("\n");
+        if (lines.count < 2) {
+            continue;
+        }
+        if (!implementors.is_value()) {
+            implementors = Optional<HashMap<String, StructDef[]>>.Value(_implementors_of(module));
+        }
+        for (var i in 1..lines.count) {
+            var parts = lines[i].split("\t");
+            var owners = parts.count < 2 ? Array<String>() : _dispatch_owners(implementors.value(), parts[0], parts[1]);
+            bool same = parts.count == owners.count + 2;
+            for (var j in 0..owners.count) {
+                same = same and parts[j + 2] == owners[j];
+            }
+            if (!same) {
+                stale.append(key);
+                break;
+            }
+        }
+    }
+    for (var key in stale) {
+        module.checked.summaries.remove(key);
     }
 }
 
@@ -724,6 +883,14 @@ export returns_fresh(module: Module, target: Target, key: String): bool? {
         n += 1;
     }
     return Optional<bool>.Value(true);
+}
+
+# Whether `body` belongs to a checked unit.
+_is_checked(module: Module, body: _Body): bool {
+    if (body.owner.is_value()) {
+        return module.checked.structs.contains(body.owner.value().name);
+    }
+    return module.checked.functions.contains(body.function.name);
 }
 
 ## Every compiled function body: free functions, then each struct's
@@ -834,6 +1001,20 @@ _record_summaries(program: _Confinement) {
     }
     out.sort(_compare_recorded);
     program.recorded_out = out;
+    # Every summary that does not depend on the rest of the program, by
+    # key: what a checked unit keeps for the units checked on top of it.
+    for (var body in program.all) {
+        var summary = program.summaries.try_get(body.key);
+        if (!summary.is_value() or program.module.checked.summaries.contains(body.key)) {
+            continue;
+        }
+        var blame = summary.value().blame.is_value() ? summary.value().blame.value() : body.function.loc;
+        var text = summary.value().encode();
+        if (summary.value().dependent) {
+            text = text + _dispatch_lines(program.implementors(), summary.value().dispatches);
+        }
+        program.state.settled_summaries[body.key] = (blame, text);
+    }
 }
 
 _compare_recorded(a: (Loc, String), b: (Loc, String)): int {
@@ -961,13 +1142,19 @@ _summarize(program: _Confinement, body: _Body): (_Summary, String[]) {
     }
     summary.blame = blame;
     bool dependent = walk.dependent;
+    var dispatches = walk.dispatches;
     for (var key in walk.called) {
         var known = program.summaries.try_get(key);
-        if (known.is_value() and known.value().dependent) {
-            dependent = true;
+        if (!known.is_value() or !known.value().dependent) {
+            continue;
+        }
+        dependent = true;
+        for (var d in known.value().dispatches) {
+            dispatches.insert(d);
         }
     }
     summary.dependent = dependent;
+    summary.dispatches = dispatches;
     return (summary, walk.called);
 }
 
@@ -980,6 +1167,8 @@ _summaries(program: _Confinement, roots: String[]) {
         all[body.key] = body;
     }
     var callers = HashMap<String, Array<String>>();
+    # Each callee and caller pair in `callers`.
+    var linked = HashSet<String>();
     var queue = Array<String>();
     var queued = HashSet<String>();
     for (var key in roots) {
@@ -1013,7 +1202,7 @@ _summaries(program: _Confinement, roots: String[]) {
                 callers[callee] = Array<String>();
                 list = callers.try_get(callee);
             }
-            if (!list.value().contains(key)) {
+            if (linked.insert($"{callee}\t{key}")) {
                 list.value().append(key);
             }
             if (!program.summaries.contains(callee)) {
@@ -1573,6 +1762,9 @@ struct _RegionWalk {
     ## The summary keys of the functions the walk called.
     var called: Array<String> = Array<String>();
     var dependent: bool = false;
+    ## The trait methods the walk called through a trait value, each
+    ## `trait\tmethod`.
+    var dispatches: HashSet<String> = HashSet<String>();
     ## The operand slots of `[Move]` parameters (summaries).
     var sending: Array<ulong> = Array<ulong>();
     ## Walking a `[Locked]` closure's body: its parameters are the locked
@@ -2527,18 +2719,8 @@ struct _RegionWalk {
             return _ResolvedMethod(_Callee.Unknown, false);
         }
         if (program.is_trait(receiver)) {
-            var keys = Array<String>();
-            for (var candidate in program.module.structs) {
-                bool implements = false;
-                for (var t in candidate.traits) {
-                    if (t.name == receiver.name) {
-                        implements = true;
-                    }
-                }
-                if (implements and _method_named(candidate, method).is_value()) {
-                    keys.append(method_key(candidate.name, method));
-                }
-            }
+            dispatches.insert($"{receiver.name}\t{method}");
+            var keys = program.dispatched(receiver.name, method);
             return _ResolvedMethod(_Callee.Trait(keys), false);
         }
         return _ResolvedMethod(_Callee.Unknown, false);

@@ -6,6 +6,7 @@
 ## on one, `this` in a closure) or that a `const` forbids is an error.
 
 import [Diagnostic, Location] from compiler.diagnostic;
+import [stashed_member] from "checked";
 import [THIS_FIELD] from "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
@@ -397,11 +398,17 @@ _mutating_methods(module: Module, table: StructTable, state: PassState): _Mutati
             }
             var spelled = st.ty.to_string();
             for (var method in st.method_members) {
-                if (method.is_static or mutating.contains(spelled, method.name) or !method.body.is_value()) {
+                if (method.is_static or mutating.contains(spelled, method.name)) {
+                    continue;
+                }
+                # A checked struct's bodies are stashed while the passes
+                # run; its methods change `this` all the same.
+                var body = method.body.is_value() ? method.body : stashed_member(state, st.name, "method", method.name);
+                if (!body.is_value()) {
                     continue;
                 }
                 var uses = _Uses(table, state, Optional<TypeName>.Value(st.ty), fields, globals, method);
-                uses.block(method.body.value());
+                uses.block(body.value());
                 for (var found in uses.found) {
                     if (found.error.is_value() or !(found.root is This)) {
                         continue;

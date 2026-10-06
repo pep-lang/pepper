@@ -6,7 +6,9 @@
 ## runs as many rounds of as it needs.
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
+import io;
 import [Target] from compiler.link;
+import os;
 import [apply_extensions, check_parameter_names] from "apply_extensions";
 import [check_unbound, record_argument_names] from "argument_names";
 import [check_assignment_targets] from "assignment_targets";
@@ -14,9 +16,10 @@ import [check_bindings] from "bindings";
 import [check_casts] from "casts";
 import [check_bounds] from "check_bounds";
 import [check_tries] from "check_tries";
+import [restore_bodies, restore_unsettled, stash_bodies] from "checked";
 import [check_closures, lift_closures] from "closures";
 import [check_conditions] from "conditions";
-import [check_confinement] from "confinement";
+import [check_confinement, drop_stale_summaries] from "confinement";
 import [check_constraints, check_specializations] from "constraints";
 import [convert_intrinsics] from "convert_intrinsics";
 import [convert_member_refs] from "convert_member_refs";
@@ -119,6 +122,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
             steps.error = error;
             break;
         }
+        steps.lap();
         steps.ran += 1;
     }
     if (!steps.error.is_value() and steps.ran == PORTED_STEPS and steps.ran < limit) {
@@ -127,6 +131,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
             _after_specializing(module, state, steps);
         }
     }
+    steps.report();
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));
@@ -141,10 +146,16 @@ struct _Steps {
     var limit: ulong;
     var state: PassState;
     var error: Diagnostic? = Optional<Diagnostic>.Empty;
+    # With `PEPC_TRACE_STEPS` set, the time each step took, by step.
+    var timed: bool = false;
+    var mark: os.Instant = os.Instant.now();
+    var spent: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
 
     construct(limit: ulong, state: PassState) {
         this.limit = limit;
         this.state = state;
+        var trace = os.environment("PEPC_TRACE_STEPS");
+        timed = trace.is_value() and !trace.value().is_empty;
     }
 
     ## After a step: whether to stop, at its error or at the limit.
@@ -152,8 +163,41 @@ struct _Steps {
         if (taken()) {
             return true;
         }
+        lap();
         ran += 1;
         return ran >= limit;
+    }
+
+    ## Adds the time since the last step to step `ran`'s.
+    lap() {
+        if (!timed) {
+            return;
+        }
+        var now = os.Instant.now();
+        var before = spent.try_get(ran);
+        spent[ran] = (before.is_value() ? before.value() : 0) + (now - mark).milliseconds() as ulong;
+        mark = now;
+    }
+
+    ## Prints each step's time, the slowest first.
+    report() {
+        if (!timed) {
+            return;
+        }
+        var all = Array<(ulong, ulong)>();
+        for (var (step, ms) in spent) {
+            all.append((step, ms));
+        }
+        all.sort((a, b) => {
+            var (_, x) = a;
+            var (_, y) = b;
+            return x > y ? -1 : (x < y ? 1 : 0);
+        });
+        for (var (step, ms) in all) {
+            if (ms > 0) {
+                io.File.stderr().write_all($"step {step}: {ms} ms\n");
+            }
+        }
     }
 
     ## Whether a pass that is not a step of its own reported an error.
@@ -389,10 +433,16 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     }
     # What `with` blocks over `[Isolated]` guards may do, `[Move]`
     # arguments, and the guards' own rules, once every type is final.
+    # Callee bodies (link summaries): the checked ones whose summaries
+    # were not settled when they were checked.
+    drop_stale_summaries(module);
+    restore_unsettled(module, state);
     check_confinement(module, state);
     if (steps.stepped()) {
         return;
     }
+    # The rest lower bodies, which checked ones have been already.
+    stash_bodies(module, state);
     # `with` conditions need the final types of `enter()`.
     lower_with_blocks(module, state);
     if (steps.stepped()) {
@@ -423,8 +473,9 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     if (steps.stepped()) {
         return;
     }
-    # Last, over every body: which literals can be shared reads the
-    # callees' bodies.
+    # Last, over every body (checked ones are back): which literals can be
+    # shared reads the callees' bodies.
+    restore_bodies(module, state);
     share_string_literals(module, state);
     if (steps.stepped()) {
         return;
@@ -446,6 +497,8 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
         2 => {
             # Enum names are integer types from here on; closure literals
             # become structs, so they get bodies below.
+            # Checked declarations' bodies stay out of the passes.
+            stash_bodies(module, state);
             state.install_enums(module.enums);
             lift_closures(module, state);
             return state.take_error();

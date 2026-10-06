@@ -51,8 +51,13 @@ export apply_extensions(module: Module, state: PassState) {
         var ext = module.extensions[index];
         if (ext.resolved.is_value()) {
             var target = ext.resolved.value();
+            # A checked struct has had the checked extensions applied.
+            var done = index < module.checked.extensions;
             for (var st in module.structs) {
                 if (st.name != target and st.ty.to_string() != target) {
+                    continue;
+                }
+                if (done and module.checked.structs.contains(st.name)) {
                     continue;
                 }
                 var key = $"{index}\n{st.name}";

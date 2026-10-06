@@ -8,6 +8,7 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [CAST_VALUE, enum_method_name, enum_this_parameter, payload_field] from "builder";
+import [is_checked_function] from "checked";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [
@@ -96,7 +97,7 @@ export resolve_enum_cases(module: Module, state: PassState) {
         }
     }
     for (var function in module.functions) {
-        if (!module.checked.functions.contains(function.name)) {
+        if (!is_checked_function(module, function)) {
             _resolve_defaults(function, resolver);
         }
     }

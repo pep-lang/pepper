@@ -236,6 +236,14 @@ export struct Keys {
         }
     }
 
+    ## Returns what every key starts from: the compiler and how the build
+    ## generates code.
+    ##
+    ## @returns the text
+    base(): String {
+        return _base;
+    }
+
     ## Returns the key of unit `u`: its name and files, and each file its
     ## code can depend on (`link.unit_inputs`), by its text in its own unit
     ## and by its interface in another; none while an interface it needs is

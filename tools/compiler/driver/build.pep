@@ -12,6 +12,7 @@ import os;
 import process;
 import compiler.sema;
 import "cache";
+import "layers";
 import "linker";
 import "parts";
 
@@ -183,6 +184,93 @@ export struct Built {
     construct() {}
 }
 
+## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
+## builds with and without them.
+_layers_off(): bool {
+    var named = os.environment("PEPC_NO_LAYERS");
+    return named.is_value() and !named.value().is_empty;
+}
+
+## Checks `program` layer by layer (`layers.pep`): from the record of the
+## longest run of unchanged layers in the cache, each layer after it on top
+## of the ones before, storing each but the last as a record. A layer whose
+## check warned is not stored, so the next build warns again.
+##
+## @returns the checked module and the state of the last layer's passes,
+##   or the error, rendered
+_check_layers(
+    program: link.Program,
+    layered: Layer[],
+    cache: Cache,
+    reused: Reused?,
+    sources: SourceText[],
+    warnings: Diagnostic[],
+    clock: _Clock,
+    trace: bool
+): Result<(sema.Module, sema.PassState), String> {
+    var errors = program.check();
+    if (errors.is_value()) {
+        return Result<(sema.Module, sema.PassState), String>.err(errors.value());
+    }
+    ulong first = 0;
+    var module = sema.Module();
+    var loaded = load_checked(cache, program, layered);
+    if (loaded.is_value()) {
+        var (covered, unit) = loaded.value();
+        first = covered;
+        module = sema.resume_checked(unit);
+    }
+    clock.lap($"load {first} layers");
+    if (trace) {
+        File.stderr().write_all($"cache: {first} of {layered.count} layers checked already\n");
+    }
+    var state = sema.PassState(program.target);
+    for (var k in first..layered.count) {
+        # The specializations the checked layers asked for met their
+        # constraints when they were checked.
+        var checked_specs = (module.struct_specs.count, module.func_specs.count);
+        var built = sema.build_on(program, module, layered[k].files);
+        if (built.is_err()) {
+            return Result<(sema.Module, sema.PassState), String>.err(render_all([built.error()], sources));
+        }
+        module = built.value();
+        var aliases = Array<sema.TypeAliasDef>();
+        for (var alias in module.type_aliases) {
+            aliases.append(alias.copy());
+        }
+        module.record_summaries = true;
+        if (reused.is_value()) {
+            module.cached_files = reused.value().files;
+            for (var (loc, text) in reused.value().summaries) {
+                module.recorded_summaries[loc] = text;
+            }
+        }
+        state = sema.PassState(program.target);
+        state.sources = sources;
+        state.checked_specs = checked_specs;
+        # No lazy methods: a later layer may use a method this one would
+        # drop from a specialization it made.
+        var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
+        for (var note in state.notes) {
+            warnings.append(note);
+        }
+        if (ran.is_err()) {
+            return Result<(sema.Module, sema.PassState), String>.err(render_all([ran.error()], sources));
+        }
+        clock.lap($"layer {layered[k].name}");
+        if (k + 1 == layered.count) {
+            break;
+        }
+        var unit = sema.finish_checked(module, state, aliases);
+        if (state.notes.is_empty) {
+            store_checked(cache, program, layered[k], unit);
+            clock.lap("store");
+        }
+        module = sema.resume_checked(unit);
+    }
+    return Result<(sema.Module, sema.PassState), String>.ok((module, state));
+}
+
 ## Builds `program` into an executable: merge, the sema passes, code
 ## generation for the host, LLVM's standard pipeline at the `-O` level, one
 ## object per compilation unit (from the build cache when its key hits),
@@ -225,27 +313,46 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
 
     var sources = program.sources();
     var warnings = program.warnings();
-    var built = sema.merge(program);
-    if (built.is_err()) {
-        report_warnings(warnings, sources);
-        return Result<Built, String>.err(built.error());
+    var layered = Array<Layer>();
+    if (options.cache.is_value() and !_layers_off()) {
+        layered = layers(program, units, keys.value().base());
     }
-    var module = built.value();
-    if (reused.is_value()) {
-        module.record_summaries = true;
-        module.cached_files = reused.value().files;
-        module.recorded_summaries = reused.value().summaries;
-    }
+    var module = sema.Module();
     var state = sema.PassState(program.target);
-    state.sources = sources;
-    state.lazy_methods = true;
-    var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
-    for (var note in state.notes) {
-        warnings.append(note);
-    }
-    report_warnings(warnings, sources);
-    if (ran.is_err()) {
-        return Result<Built, String>.err(render_all([ran.error()], sources));
+    if (layered.count > 1) {
+        var checked = _check_layers(
+            program, layered, options.cache.value(), reused, sources, warnings, clock, options.trace_cache
+        );
+        if (checked.is_err()) {
+            report_warnings(warnings, sources);
+            return Result<Built, String>.err(checked.error());
+        }
+        var (checked_module, checked_state) = checked.value();
+        module = checked_module;
+        state = checked_state;
+        report_warnings(warnings, sources);
+    } else {
+        var built = sema.merge(program);
+        if (built.is_err()) {
+            report_warnings(warnings, sources);
+            return Result<Built, String>.err(built.error());
+        }
+        module = built.value();
+        if (reused.is_value()) {
+            module.record_summaries = true;
+            module.cached_files = reused.value().files;
+            module.recorded_summaries = reused.value().summaries;
+        }
+        state.sources = sources;
+        state.lazy_methods = true;
+        var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
+        for (var note in state.notes) {
+            warnings.append(note);
+        }
+        report_warnings(warnings, sources);
+        if (ran.is_err()) {
+            return Result<Built, String>.err(render_all([ran.error()], sources));
+        }
     }
     clock.lap("sema");
     if (reused.is_value()) {

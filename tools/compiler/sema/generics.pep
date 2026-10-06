@@ -8,7 +8,17 @@
 import [is_closure_struct] from "closures";
 import [Loc] from "loc";
 import [
-    Block, Expression, ExtensionDef, FunctionDef, GenericParam, Module, SpecRequest, StructDef, TypeName, VariableDef
+    Block,
+    Expression,
+    ExtensionDef,
+    FunctionDef,
+    GenericParam,
+    Module,
+    SpecRequest,
+    StructDef,
+    TypeFlags,
+    TypeName,
+    VariableDef
 ] from "model";
 import [concrete_overrides] from "overloads";
 import [parse_type_string] from "type_name";
@@ -275,9 +285,10 @@ export gather_generics(module: Module) {
         }
     }
     var struct_specs = module.struct_specs.copy();
+    var struct_spelled = _spelled_types(struct_specs);
     for (var (name, _) in structs.entries) {
         var ty = parse_type_string(name);
-        if (_has_type(struct_specs, ty)) {
+        if (struct_spelled.contains(_type_key(ty))) {
             continue;
         }
         var found = struct_index.try_get(ty.name);
@@ -286,19 +297,22 @@ export gather_generics(module: Module) {
                 continue;
             }
             struct_specs.append(ty);
+            struct_spelled.insert(_type_key(ty));
         }
     }
     module.struct_specs = struct_specs;
     var func_specs = module.func_specs.copy();
+    var func_spelled = _spelled_types(func_specs);
     for (var (name, _) in functions.entries) {
         var ty = parse_type_string(name);
-        if (_has_type(func_specs, ty)) {
+        if (func_spelled.contains(_type_key(ty))) {
             continue;
         }
         var st = struct_index.try_get(ty.name);
         if (st.is_value()) {
-            if (!(module.structs[st.value()].ty == ty) and !_has_type(module.struct_specs, ty)) {
+            if (!(module.structs[st.value()].ty == ty) and !struct_spelled.contains(_type_key(ty))) {
                 module.struct_specs.append(ty.copy());
+                struct_spelled.insert(_type_key(ty));
             }
             continue;
         }
@@ -307,8 +321,35 @@ export gather_generics(module: Module) {
             continue;
         }
         func_specs.append(ty);
+        func_spelled.insert(_type_key(ty));
     }
     module.func_specs = func_specs;
+}
+
+# Each of `types` by `_type_key`, to tell whether a type is among them.
+_spelled_types(types: TypeName[]): HashSet<String> {
+    var out = HashSet<String>();
+    for (var t in types) {
+        out.insert(_type_key(t));
+    }
+    return out;
+}
+
+# What tells `ty` apart as `==` does: its name, flags and arguments, not
+# its labels.
+_type_key(ty: TypeName): String {
+    var kind = ty.flags == TypeFlags.Function ? "f" : "s";
+    if (ty.sub_types.count == 0) {
+        return $"{ty.name}/{kind}";
+    }
+    var out = StringBuilder();
+    out.append($"{ty.name}/{kind}<");
+    for (var sub in ty.sub_types) {
+        out.append(_type_key(sub));
+        out.append(",");
+    }
+    out.append(">");
+    return out.to_string();
 }
 
 _has_type(types: TypeName[], ty: TypeName): bool {

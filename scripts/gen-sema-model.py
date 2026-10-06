@@ -513,5 +513,6 @@ _tagged(name: String, value: JsonValue): JsonValue {
 }
 '''
 text=header+'\n\n'.join('\n'.join(b) for b in blocks)+'\n'+footer
-open(sys.argv[1],'w').write(text)
-print(len(blocks),'blocks', file=sys.stderr)
+if __name__ == '__main__':
+    open(sys.argv[1],'w').write(text)
+    print(len(blocks),'blocks', file=sys.stderr)

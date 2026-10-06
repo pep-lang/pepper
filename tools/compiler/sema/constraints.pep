@@ -1113,17 +1113,24 @@ export check_specializations(module: Module, state: PassState) {
         return;
     }
     var generics = _constrained_generics(module);
+    # The specializations checked before (in an earlier round, or with a
+    # checked unit) met their constraints then, and still do: conformances
+    # are only ever added.
     var specs = Array<TypeName>();
-    for (var s in module.struct_specs) {
+    var (struct_from, func_from) = state.checked_specs;
+    for (var i in struct_from..module.struct_specs.count) {
+        var s = module.struct_specs[i];
         if (generics.contains(s.name)) {
             specs.append(s);
         }
     }
-    for (var s in module.func_specs) {
+    for (var i in func_from..module.func_specs.count) {
+        var s = module.func_specs[i];
         if (generics.contains(s.name)) {
             specs.append(s);
         }
     }
+    state.checked_specs = (module.struct_specs.count, module.func_specs.count);
     if (specs.count == 0) {
         return;
     }

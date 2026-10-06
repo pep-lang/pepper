@@ -247,9 +247,10 @@ export struct Generator {
     ## Remembers `loc` as where a failing `result` arose, unless a node nested
     ## inside claimed it first.
     ## Records the file declaring `loc` as the owner of `name`, unless it
-    ## names an instantiation (`Array<int>.append`) or has no location.
+    ## names an instantiation (`Array<int>.append`, or a closure made in
+    ## one, whose name spells the `<` as `_3c_`) or has no location.
     own(name: String, loc: Loc) {
-        if (!loc.is_none() and !name.contains("<")) {
+        if (!loc.is_none() and !name.contains("<") and !name.contains("_3c_")) {
             owners[name] = loc.file;
         }
     }
