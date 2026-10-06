@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ea455c4f.js";
+            window.path_to_searchindex_js = "searchindex-2420d413.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -20001,6 +20001,20 @@ abbreviation only when it is the usual name for the thing, such as <code>io</cod
 whatever its style (<code>GetCurrentProcessId</code>), because that name is what the
 linker looks up. The same goes for the fields of a struct that mirrors a C
 struct.</p>
+<h2 id="built-in-type-names"><a class="header" href="#built-in-type-names">Built-in type names</a></h2>
+<p>Unlike the conventions above, this rule is enforced. No top-level
+declaration may take the name of a built-in type: <code>void</code>, <code>bool</code>,
+<code>char</code>, <code>byte</code>, <code>short</code>, <code>ushort</code>, <code>int</code>, <code>uint</code>, <code>long</code>, <code>ulong</code>, <code>float</code>,
+<code>double</code>, and their sized spellings (<code>i8</code>, <code>u8</code>, <code>i16</code>, <code>u16</code>, <code>i32</code>, <code>u32</code>,
+<code>i64</code>, <code>u64</code>, <code>f32</code>, <code>f64</code>). Names resolve by spelling across the whole
+program, so such a declaration would take the type’s place in every file,
+the runtime’s included. The compiler reports it at the name:</p>
+<pre><code class="language-text">main.pep:1:7: error: 'double' is the name of a built-in type; choose another name
+    1 | const double = (x: int): int =&gt; x * 2;
+      |       ^~~~~~
+</code></pre>
+<p>Locals, parameters and members may still use these names, since they are
+visible only where they are declared.</p>
 <h2 id="private-members"><a class="header" href="#private-members">Private members</a></h2>
 <p>Pepper’s <code>private</code> keyword applies only to top-level declarations (see
 <a href="#visibility">Visibility</a>); any code that can reach an object can name all
