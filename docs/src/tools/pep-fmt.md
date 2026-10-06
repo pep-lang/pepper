@@ -5,8 +5,9 @@ file reads the same and nobody has to argue about layout. It changes only
 whitespace, line breaks, the order of imports, and the form of function
 declarations; the program means exactly what it meant before.
 
-`pep-fmt` is written in Pepper. Its parser is a separate library,
-`tools/syntax`, that other tools can use.
+`pep-fmt` is written in Pepper. It reads files with the Pepper compiler's
+own parser (`tools/compiler/parse`), so it accepts exactly the syntax the
+compiler does.
 
 ## Running it
 
@@ -56,6 +57,13 @@ files. Standard input is named `<stdin>`:
 ```text
 main.pep:2:14: error: expected ')'
 ```
+
+Errors the compiler finds after parsing, such as a number too large for its
+type, do not stop `pep-fmt`. A few mistakes that parse, but whose text the
+syntax tree does not keep (a second destructor, a second `get` or `set` in a
+property, a second `else` arm, a property's value written before its
+accessors), are reported as `cannot lay out this file` and leave the file
+untouched.
 
 A file that cannot be read or written also exits with status 1, and an
 unknown option, or `-w` or `--check` without a path, exits with status 2

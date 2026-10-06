@@ -2163,6 +2163,9 @@ export struct Pattern {
 export struct StaticBlock {
     ## The runtime values the block may emit code against.
     var captures: Label[] = Array<Label>();
+    ## From `parse_written` only: every capture as written, which `captures`
+    ## keeps only when it is a name; empty without captures.
+    var written_captures: Expression[] = Array<Expression>();
     ## The block.
     var block: Block;
     ## The `static` keyword.
@@ -2189,6 +2192,13 @@ export struct StaticBlock {
             list.append(capture.to_json());
         }
         out["captures"] = list;
+        if (!written_captures.is_empty) {
+            var written = JsonValue.array();
+            for (var capture in written_captures) {
+                written.append(capture.to_json());
+            }
+            out["written_captures"] = written;
+        }
         out["block"] = block.to_json();
         out["keyword_span"] = keyword_span.to_json();
         out["span"] = span.to_json();

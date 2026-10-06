@@ -66,11 +66,18 @@ export struct Doc {
     ## @param this.text the text of a `DocKind.Text` or `DocKind.LineSuffix`
     construct(this.kind = DocKind.Concat, this.text = "") {}
 
-    ## Appends `part` to this node's parts.
+    ## Appends `part` to this node's parts. A `DocKind.Text` becomes a
+    ## `DocKind.Concat` of its text and then `part`, so a text can stand in
+    ## for a sequence that may grow.
     ##
     ## @param part the document to append
     ## @returns this node, so calls can be chained
     add(part: Doc): Doc {
+        if (kind == DocKind.Text) {
+            parts.append(Doc(DocKind.Text, text));
+            kind = DocKind.Concat;
+            text = "";
+        }
         parts.append(part);
         return this;
     }

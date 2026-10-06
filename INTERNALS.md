@@ -36,8 +36,8 @@ names and the pass order come from that implementation.
 | `tools/pep-lsp` | The Pepper rewrite of `pep-lsp` (#225), on the `lsp` package (justinboswell/pepper-lsp) and the Pepper front end (`tools/compiler`). It replaces `tools/lsp` once it does all that one does. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
 | `tools/pep-doc` | `pep-doc`, written in Pepper on the compiler's parser (`tools/compiler`): generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `compiler.doc`, `tools/compiler/doc/`, which the language server shares), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
-| `tools/syntax` | A Pepper library (written in Pepper): lexer and lossless syntax tree for Pepper source, for tools. See [section 8](#8-language-server-and-vs-code-extension). |
-| `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `tools/syntax`. |
+| `tools/syntax` | A Pepper library (written in Pepper): the lexer for Pepper source, which keeps each token's comments, for `compiler.parse` and tools. See [section 8](#8-language-server-and-vs-code-extension). |
+| `tools/pep-fmt` | `pep-fmt`, the code formatter, written in Pepper on `compiler.parse`'s written tree. |
 | `tools/compiler` | The compiler rewritten in Pepper (#225), stage by stage; so far its parser, linker, the checks after linking, the sema builder, every sema pass, codegen and a driver that builds executables, plus `compiler.doc` (doc comments, shared by pep-doc and the language server). See [section 8](#8-language-server-and-vs-code-extension). |
 | `tools/pep-profile` | `pep-profile`, written in Pepper: builds a program with `--frame-pointers`, records it with samply, perf or `sample`, names frames with `llvm-symbolizer` (or demangles `_P` linker names), folds the stacks and draws a flame graph SVG (`flame.pep`). Tested by `profile_tests.rs`. |
 | `tools/pep-test` | `pep-test`, written in Pepper: finds the files holding `[Test]` functions, builds each folder's into one program with `pep-build --test` (`by_folder`), lists its tests (`--list`) and runs each in a child process (`--run FILE::NAME`), in parallel on one task worker (`in_parallel`). Tested by `test_harness_tests.rs` and, end to end with the `pep-build` cargo builds, the root package's `tests/pep_test_tool.rs`. |
@@ -516,8 +516,8 @@ with no extension (with `--lib`, the library's file name for the stem,
   `ExtendDecl::target_bounds`, per argument. An extension with a `with`
   clause may end in `;` instead of a body (`extend X with Trait;`); it
   parses to an `ExtendDecl` with no methods, as `{}` does.
-  `tools/syntax/parser.pep` mirrors it, and `pep-fmt` writes an empty
-  body after a `with` clause as `;`.
+  `tools/compiler/parse/parser.pep` mirrors it, and `pep-fmt` writes an
+  empty body after a `with` clause as `;`.
   Function types `(P…) => R` are parsed directly into
   `__function<R, P…>`, and thread-safe ones `shared (P…) => R` into
   `__shared_function<R, P…>` (`shared_function_type_name`; `shared` is a
@@ -530,7 +530,8 @@ with no extension (with `--lib`, the library's file name for the stem,
   A `?` suffix wraps the type as `Optional<T>` (after any `[]`). While an
   expression is probed for a type (`EXPRESSION_PROBE`), `?` counts only where
   `optional_suffix_in_probe` rules out a ternary: before `>`/`,`, or before a
-  name that ends a declaration. `tools/syntax/parser.pep` mirrors the rule.
+  name that ends a declaration. `tools/compiler/parse/parser.pep` mirrors
+  the rule.
 
 ### 2.4 Building the sema model (`crates/pepper-sema/src/builder.rs`, `model.rs`)
 
@@ -852,7 +853,7 @@ read it under the built-in's name (`ast::built_in_name`, `reflect.name`).
 `Program::built_in_errors` rejects the attribute outside the runtime
 (`checked::in_runtime`). Its functions and methods end in `;` after their
 parameter list (`body_or_semicolon` in the parser; `_function_body` in
-`tools/syntax`); the builder's `function_def` rejects a bodyless function
+`tools/compiler/parse`); the builder's `function_def` rejects a bodyless function
 anywhere else, since only a trait method may lack one.
 The target is a `platform::Target` (`os`, `arch`, and the LLVM triple, or
 `None` for the host's own): `Target::parse` reads a `--target` triple (the
@@ -2783,48 +2784,56 @@ release mode, packages the VSIX with `npx @vscode/vsce`, and runs
 `pepper build -I tools tools/pep-fmt/main.pep`. They are the project's largest
 dogfooding of the language.
 
-- `tools/syntax` (a module: `module.pep` is four `export * from` lines) is a lexer
-  (`lexer.pep`, `token.pep`; an interpolated string `$"..."` is one
-  `TokenKind.String` token) and a recursive-descent parser (`parser.pep`)
-  that builds a *lossless* tree (`tree.pep`): every token is a leaf, in
-  source order, and each comment hangs off the token next to it (a comment
-  on the same line after a token is its `trailing_comment`, any other is an
-  entry in `leading_comments` of the next token). A `Token` is a `[Value]`
-  struct that points into the source (`offset`, `size`): `text(source)`
-  copies its text out, and `is`, `is_word` and `spells` compare in place,
-  so the lexer allocates nothing for a token without comments, and the
-  parser's keyword and operator checks (`is_reserved_word`,
-  `_operator_size`) allocate nothing either. Code that changes a token in
-  the tree (pep-fmt moving comments) changes the leaf's own copy,
-  `node.leaf`, reached with `first_leaf()`/`last_leaf()`. Nodes are uniform (`kind`, `leaf`,
-  `children`; a token leaf allocates no children array, and its `children`
-  reads as a new empty one): `kind` is a `NodeKind` (a token's is a `TokenKind`), and
-  the formatter dispatches on it with `match` (`_node`, then `_expression`,
-  whose `else` prints any other node's parts in order).
-- The parser mirrors `parsers.rs` decision for decision; like it, it
-  treats line breaks as whitespace except at a declaration missing its `;`
-  (`_declaration_boundary`, using the next token's `newlines_before`), and
-  `_finish_statement` reports a missing `;` right after the statement, over
-  any error found further on, as `missing_semicolon` does.
-  `>` is always its own token; the parser
-  joins adjacent ones into `>>`, `>=` and `>>=` where the compiler's
-  grammar would read those operators.
-- `tools/pep-fmt` turns the tree into a Wadler-style layout document
-  (`doc.pep`: text, soft and hard lines, indentation, groups, and a
-    `DocKind.Choice` of layouts tried in order) and renders it at 120 columns;
-    `format.pep` holds the style; a long binary
-  expression breaks before each operator, and `_member_chain` breaks a chain
-  of three or more calls before each `.`. Trailing comments are emitted as line
-  suffixes marked with byte 0x01, which `align_trailing_comments` aligns and
-  removes. `_format_off` copies a `# format: off` region from the source by
-  the comments' offsets, at the top level and in `_braced` item lists.
+- `tools/syntax` (a module: `module.pep` is two `export * from` lines) is
+  the lexer (`lexer.pep`, `token.pep`; an interpolated string `$"..."` is
+  one `TokenKind.String` token) that `compiler.parse` reads. Each comment
+  hangs off the token next to it (a comment on the same line after a token
+  is its `trailing_comment`, any other is an entry in `leading_comments` of
+  the next token). A `Token` is a `[Value]` struct that points into the
+  source (`offset`, `size`): `text(source)` copies its text out, and `is`,
+  `is_word` and `spells` compare in place, so the lexer allocates nothing
+  for a token without comments, and the parser's keyword and operator
+  checks (`is_reserved_word`, `_operator_size`) allocate nothing either.
+  `>` is always its own token; the parser joins adjacent ones into `>>`,
+  `>=` and `>>=` where the compiler's grammar would read those operators.
+- `tools/pep-fmt` lays out the tree `parse.parse_written(source, checked =
+  false)` returns (only a lexical or syntax error stops it, as in the
+  compiler; errors in nodes that parse, such as a literal out of range, and
+  `checks.pep` are left to the compiler, and so is the work only they need:
+  the parser's `_layout_only` leaves string literals undecoded and
+  interpolated strings and formats without parts, keeping their spans). `format.pep`'s `Formatter` walks
+  the tree in source order like `tokens_test.pep`'s `TokenWalk` and takes
+  each token of `Module.tokens` where the grammar puts it (`_take`,
+  `_type`, `_span`), so every token prints as written with its comments;
+  `_leading` and `_token_doc` remove a comment from the table (the
+  formatter takes it over; whether a range of tokens was parsed with a
+  comment is a lookup in `_commented_before`) once it is laid out. A body's or the module's items are
+  `Item`s (`_items`: the tree's members, statements or declarations in
+  source order, plus each `;` that ends nothing), which import sorting
+  (`_sort_imports`), `# format: off` regions (`_format_off`, copied from
+  the source by the comments' offsets) and blank-line rules work on. Where
+  the tree keeps less than the source (a second destructor or accessor, a
+  property's value before its accessors: code the compiler rejects),
+  `Formatter.error` says so and the file is reported, not changed. The
+  layout is a Wadler-style document (`doc.pep`: text, soft and hard lines,
+  indentation, groups, and a `DocKind.Choice` of layouts tried in order)
+  rendered at 120 columns; a token without comments is a bare text, which
+  `Doc.add` turns into a sequence if something is added to it; `format.pep` holds the style; a long binary
+  expression breaks before each operator, and `_member_chain` breaks a
+  chain of three or more calls before each `.`. Trailing comments are
+  emitted as line suffixes marked with byte 0x01, which
+  `align_trailing_comments` aligns and removes. `tools/pep-fmt/fmt_bench.pep`
+  times pep-fmt's phases over `runtime` and `tools` (lex, `parse_written`,
+  the layout, `render`, all of `format_source`), each the best of several
+  passes and one phase further than the one before.
 - `pep_fmt_tests.rs` compiles pep-fmt and runs it on every `.pep` file in
   the repository: each must format, be idempotent, and give the same AST
   (the compiler's `Display` of `Module`, imports sorted) before and after.
   Its formatting cases (input and expected output) are Pepper tests in
   `tools/pep-fmt/format_test.pep`, run by `scripts/pepper-tests.sh` (`pepper test -I .` in `tools/`).
-  So a grammar change to `parsers.rs` that `tools/syntax` does not mirror
-  fails there. The tool's own sources and `runtime/` must be pep-fmt formatted.
+  So a grammar change to `parsers.rs` that `tools/compiler/parse` does not
+  mirror fails there. The tool's own sources and `runtime/` must be pep-fmt
+  formatted.
 
 **`tools/compiler`** is the compiler being rewritten in Pepper (#225). The
 Rust compiler stays the stage-0 compiler until the Pepper one passes the
@@ -2839,11 +2848,10 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
 - `compiler.parse` (`parse/parser.pep`) is a recursive descent over the
   tokens `syntax.lex` reads that builds `compiler.ast` directly, as
   `parsers.rs` builds it, span for span, including property accessors and
-  `build_option_tests`. Its grammar is `tools/syntax/parser.pep`'s,
-  decision for decision (until step 5 of #225 moves pep-fmt onto it and
-  deletes that copy): the same lookahead, the same readings tried and
-  abandoned through a `Mark` (`_mark` / `_restore`), and the same syntax
-  error, the furthest one unless a `;` is missing first. Errors in nodes
+  `build_option_tests`. Its grammar is `parsers.rs`'s, decision for
+  decision, and the only Pepper copy of it (pep-fmt reads its tree): the
+  same lookahead, the same readings tried and abandoned through a `Mark`
+  (`_mark` / `_restore`), and the same syntax error, the furthest one unless a `;` is missing first. Errors in nodes
   that parse (a literal too large, an escape, a hole that is no
   expression, a format) go in `Parser._problems`, which `_restore` cuts
   back with everything else an abandoned reading added; the first is
@@ -2885,8 +2893,8 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   (`_take_operator`), to build the table at the end
   (`_written_tokens`). `compiler/tokens_test.pep` walks every
   repository file's written tree in source order, taking each token where
-  the grammar puts it (`TokenWalk`, the skeleton of a printer that formats
-  from the tree), and requires every token taken exactly once, in order,
+  the grammar puts it (`TokenWalk`, the skeleton of pep-fmt's
+  `Formatter`), and requires every token taken exactly once, in order,
   and every comment placed on one node (`comment_owners`).
 - `compiler/parse_test.pep` runs `pep-build --emit-ast=json` on every `.pep`
   file under `runtime/`, `tools/`, `tests/` and `docs/examples/` and
@@ -2894,8 +2902,7 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   change that `tools/compiler` does not follow fails there.
   `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
 - `compiler/parse_bench.pep` times the same files through `syntax.lex`,
-  `syntax.parse` (the tree pep-fmt reads), `parse.parse` and
-  `parse.parse_written`, the best of several passes each: the benchmark
+  `parse.parse` and `parse.parse_written` (the tree pep-fmt reads), the best of several passes each: the benchmark
   for parser speed work (#601).
 - `compiler.parse` also enforces what `parsers.rs` checks on the finished
   tree (`parse/checks.pep`): `T*` only in `extern` declarations, and imports
@@ -3326,14 +3333,13 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    the language guide chapter in `docs/src/language/` (with a tested
    example in `docs/examples/`) and the TextMate grammar in
    `tools/vscode-pepper`.
-6. Mirror the rule in `tools/syntax/parser.pep` (and its `NodeKind` case in
-   `tree.pep`), and print the node in `tools/pep-fmt/format.pep`.
+6. Mirror the rule in `tools/compiler/parse/parser.pep`, building the new
+   node (and add it to `tools/compiler/ast/ast.pep`);
+   `compiler/parse_test.pep` fails until its JSON matches
+   `pep-build --emit-ast=json`. Take its tokens in `tokens_test.pep`'s
+   `TokenWalk` and lay them out in `tools/pep-fmt/format.pep`;
    `pep_fmt_tests.rs` fails until the formatter keeps a file that uses the
    form unchanged in meaning.
-7. Mirror the rule again in `tools/compiler/parse/parser.pep`, building
-   the new node (and add it to `tools/compiler/ast/ast.pep`);
-   `compiler/parse_test.pep` fails until its JSON matches
-   `pep-build --emit-ast=json`.
 
 ### Add a sema pass
 

@@ -5,9 +5,9 @@
 # The token walk below is the proof: it walks a module in source order and
 # takes each token where the grammar puts it, checking its spelling, from
 # the tree and the token table alone. On every source file of the
-# repository it must take every token exactly once, in order. It is the
-# skeleton of a printer that formats from the tree (pep-fmt, #225 step 5),
-# which adds the layout.
+# repository it must take every token exactly once, in order. pep-fmt's
+# formatter (tools/pep-fmt/format.pep) walks the tree the same way and adds
+# the layout.
 
 import compiler.ast;
 import [

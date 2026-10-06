@@ -1,12 +1,11 @@
 # The parser benchmark (#601): every `.pep` file of the repository, read
-# into memory once, then lexed (`lex`), parsed to the lossless syntax tree
-# that pep-fmt reads (`tree`), parsed to the compiler's AST (`ast`,
-# `parse.parse`), and parsed to the AST as written, tokens and comments
-# kept (`written`, `parse.parse_written`), several passes each. Prints the
-# best pass of each phase.
+# into memory once, then lexed (`lex`), parsed to the compiler's AST
+# (`ast`, `parse.parse`), and parsed to the AST as written, tokens and
+# comments kept (`written`, `parse.parse_written`, what pep-fmt reads),
+# several passes each. Prints the best pass of each phase.
 #
 #     pep-build -O -I tools tools/compiler/parse_bench.pep -o parse_bench
-#     ./parse_bench [repository root] [lex|tree|ast|written|all] [passes]
+#     ./parse_bench [repository root] [lex|ast|written|all] [passes]
 
 import io;
 import [Directory, File, Path] from io;
@@ -48,7 +47,7 @@ main(args: String[]): int {
         bytes += s.size;
     }
     print($"{sources.count} files, {bytes} bytes");
-    for (var name in ["lex", "tree", "ast", "written"]) {
+    for (var name in ["lex", "ast", "written"]) {
         if (phase != "all" and phase != name) {
             continue;
         }
@@ -59,10 +58,6 @@ main(args: String[]): int {
             for (var source in sources) {
                 if (name == "lex") {
                     if (syntax.lex(source).is_err()) {
-                        failures += 1;
-                    }
-                } else if (name == "tree") {
-                    if (syntax.parse(source).is_err()) {
                         failures += 1;
                     }
                 } else if (name == "ast") {

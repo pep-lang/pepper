@@ -7,10 +7,11 @@
 ## `parse` rewrites them as the Rust parser does with `compiler.desugar`,
 ## and keeps no tokens.
 ##
-## The grammar is that of the `syntax` library's parser, decision for
-## decision: the same lookahead, the same readings tried and abandoned, and
-## the same syntax error, the one furthest into the source unless a `;` is
-## missing first. An error in a node that parses (a literal too large, an
+## The grammar is the one place Pepper's syntax is read in Pepper (pep-fmt
+## lays out what `parse_written` returns). It follows the Rust parser
+## decision for decision: the same lookahead, the same readings tried and
+## abandoned, and the same syntax error, the one furthest into the source
+## unless a `;` is missing first. An error in a node that parses (a literal too large, an
 ## unknown escape, a bad format) is reported only when the file has no
 ## syntax error, and the first one is the one the compiler meets first.
 
@@ -95,14 +96,23 @@ export parse(source: String): Result<ast.Module, ParseError> {
 ## comments and line breaks (`Module.tokens`), for tools that print the
 ## source back.
 ##
+## With `checked` false, only a lexical or syntax error stops it: the errors
+## in nodes that parse (a literal out of range, a bad escape or hole, a
+## format) and the checks after parsing are left out, as a tool that only
+## lays the source out (pep-fmt) needs. So is the work that only they need:
+## a string literal's text is not decoded (`Literal.String("")`), and an
+## interpolated string or a format has no parts. Every node keeps its spans.
+##
 ## @param source the text of one source file
+## @param checked whether errors beyond the syntax stop it too
 ## @returns the module, or the first syntax error
-export parse_written(source: String): Result<ast.Module, ParseError> {
-    return _parse(source, false);
+export parse_written(source: String, checked: bool = true): Result<ast.Module, ParseError> {
+    return _parse(source, false, checked);
 }
 
-# Parses `source`, desugared or as written.
-_parse(source: String, desugared: bool): Result<ast.Module, ParseError> {
+# Parses `source`, desugared or as written; with `checked`, the errors in
+# nodes that parse and the checks after parsing are errors too.
+_parse(source: String, desugared: bool, checked: bool = true): Result<ast.Module, ParseError> {
     # Only the written tree keeps the comments.
     var tokens = syntax.lex(source, !desugared);
     if (tokens.is_err()) {
@@ -110,10 +120,14 @@ _parse(source: String, desugared: bool): Result<ast.Module, ParseError> {
         return Result<ast.Module, ParseError>.err(ParseError(error.message, Span(error.offset, error.offset)));
     }
     var parser = Parser(source, tokens.value(), desugared);
+    parser._layout_only = !desugared and !checked;
     var module = parser.module();
     if (parser._failed) {
         var error = parser._error.value();
         return Result<ast.Module, ParseError>.err(ParseError(error.message, Span(error.offset, error.offset)));
+    }
+    if (!checked) {
+        return Result<ast.Module, ParseError>.ok(module);
     }
     if (!parser._problems.is_empty) {
         return Result<ast.Module, ParseError>.err(parser._problems[0]);
@@ -228,6 +242,10 @@ struct Parser {
     # and parentheses are desugared as they are read (`parse`), else kept as
     # written (`parse_written`).
     var desugared: bool;
+    # Whether the tree is read only to lay the source out (`parse_written`
+    # unchecked), so string literals, interpolated strings and formats are
+    # not taken apart: no error in them is reported.
+    var _layout_only: bool;
     # The text the tokens point into: the file, or inside an interpolated
     # string's braces the expression's own text.
     var _source: String;
@@ -294,6 +312,8 @@ struct Parser {
     var _negative_problems: ulong;
     # The type a `: Type` gave the last variable read, if any.
     var _variable_annotation: TypeName?;
+    # What `_nothing` returns, made when first needed.
+    var _placeholder: Expression;
 
     construct(source: String, tokens: Token[], desugared: bool) {
         this._source = source;
@@ -338,7 +358,7 @@ struct Parser {
     # Whether the next token is a name: an identifier that is not reserved.
     _at_name(): bool {
         var token = _peek();
-        return token.kind == TokenKind.Identifier and !syntax.is_reserved_word(_source, token);
+        return token.kind == TokenKind.Identifier and !is_reserved_word(_source, token);
     }
 
     # Whether the token at `offset` follows the one before it with no space.
@@ -471,7 +491,7 @@ struct Parser {
             return false;
         }
         if (_operator_names === __null) {
-            _operator_names = syntax.operator_method_names();
+            _operator_names = operator_method_names();
         }
         return _operator_names.contains(_operator_text(size));
     }
@@ -651,7 +671,7 @@ struct Parser {
         if (next.is(_source, ">") or next.is(_source, ",")) {
             return true;
         }
-        if (next.kind != TokenKind.Identifier or syntax.is_reserved_word(_source, next)) {
+        if (next.kind != TokenKind.Identifier or is_reserved_word(_source, next)) {
             return false;
         }
         var after = _peek_at(2);
@@ -785,7 +805,7 @@ struct Parser {
             and _adjacent(0)
             and _adjacent(1)
             and _peek_at(1).kind == TokenKind.Identifier
-            and !syntax.is_reserved_word(_source, _peek_at(1))) {
+            and !is_reserved_word(_source, _peek_at(1))) {
             _advance();
             _advance();
         }
@@ -1394,7 +1414,7 @@ struct Parser {
             i += 1;
         }
         _problems.truncate(arguments.problems_before);
-        var parts = _format_parts(format);
+        var parts = _layout_only ? Array<StringPart>() : _format_parts(format);
         for (var problem in later) {
             _problems.append(problem);
         }
@@ -1613,9 +1633,14 @@ struct Parser {
         return _token_expression(name);
     }
 
-    # A stand-in for the node a failed reading would have built.
+    # A stand-in for the node a failed reading would have built: one per
+    # parser, since an expression is a large allocation and a failed
+    # reading (a `(` tried as a closure first) is common.
     _nothing(): Expression {
-        return Expression.Literal(Literal.Null, Span());
+        if (_placeholder === __null) {
+            _placeholder = Expression.Literal(Literal.Null, Span());
+        }
+        return _placeholder;
     }
 
     # The expression a lone token is.
@@ -1629,6 +1654,9 @@ struct Parser {
             String => {
                 if (_source.byte_at(token.offset) == '$') {
                     return _interpolated_string(index);
+                }
+                if (_layout_only) {
+                    return Expression.Literal(Literal.String(""), span);
                 }
                 return Expression.Literal(Literal.String(_string_text(index)), span);
             }
@@ -1844,7 +1872,7 @@ struct Parser {
         bool declaration = token.is_word(_source, "var")
             or token.is_word(_source, "const")
             or (token.is_word(_source, "extern") and _peek_at(1).is(_source, "("))
-            or (token.kind == TokenKind.Identifier and !syntax.is_statement_keyword(_source, token));
+            or (token.kind == TokenKind.Identifier and !is_statement_keyword(_source, token));
         if (declaration) {
             var mark = _mark();
             var variable = _variable_declaration(Prefix(Array<Attribute>()));
@@ -1977,6 +2005,9 @@ struct Parser {
             _discard_lowering(lowering);
             if (_failed) {
                 return out;
+            }
+            if (!desugared) {
+                out.written_captures = arguments.values;
             }
             ulong i = 0;
             while (i < arguments.values.count) {
@@ -3781,9 +3812,14 @@ struct Parser {
     }
 
     # Every token as the tree has it: the lexer's, with the tokens the
-    # parser joined (`>>`, `>=`, `>>=`, `!!`) made one.
+    # parser joined (`>>`, `>=`, `>>=`, `!!`) made one. With none joined,
+    # the lexer's own table, which the parser no longer needs.
     _written_tokens(): Token[] {
+        if (_joins.is_empty) {
+            return _tokens;
+        }
         var out = Array<Token>();
+        out.reserve(_tokens.count);
         ulong index = 0;
         ulong join = 0;
         while (index < _tokens.count) {
@@ -3922,6 +3958,9 @@ struct Parser {
 
     # `$"sum is {a + b}"` at `index`: its text and the values in braces.
     _interpolated_string(index: ulong): Expression {
+        if (_layout_only) {
+            return Expression.Interpolated(Array<StringPart>(), _token_span(index));
+        }
         var text = _text(index);
         ulong literal_start = _start(index);
         var parts = Array<StringPart>();
@@ -4155,6 +4194,131 @@ struct Parser {
         flush(parts, bytes, text_start, literal_start + offset);
         return parts;
     }
+}
+
+# Returns whether `token` is one of the words the compiler's `identifier()`
+# refuses as names (`struct`, `if`, `and`, ...), compared in place.
+is_reserved_word(source: String, token: Token): bool {
+    if (token.kind != TokenKind.Identifier) {
+        return false;
+    }
+    int first = source.byte_at(token.offset);
+    if (first == 'a') {
+        return token.spells(source, "and");
+    } else if (first == 'c') {
+        return token.spells(source, "const") or token.spells(source, "construct");
+    } else if (first == 'd') {
+        return token.spells(source, "destruct");
+    } else if (first == 'e') {
+        return token.spells(source, "else")
+            or token.spells(source, "extern")
+            or token.spells(source, "extend")
+            or token.spells(source, "export")
+            or token.spells(source, "enum");
+    } else if (first == 'f') {
+        return token.spells(source, "for") or token.spells(source, "false");
+    } else if (first == 'i') {
+        return token.spells(source, "import") or token.spells(source, "if");
+    } else if (first == 'm') {
+        return token.spells(source, "match");
+    } else if (first == 'n') {
+        return token.spells(source, "new");
+    } else if (first == 'o') {
+        return token.spells(source, "or");
+    } else if (first == 'p') {
+        return token.spells(source, "private");
+    } else if (first == 'r') {
+        return token.spells(source, "return");
+    } else if (first == 's') {
+        return token.spells(source, "struct") or token.spells(source, "static") or token.spells(source, "sizeof");
+    } else if (first == 't') {
+        return token.spells(source, "true") or token.spells(source, "trait") or token.spells(source, "type");
+    } else if (first == 'v') {
+        return token.spells(source, "var");
+    } else if (first == 'w') {
+        return token.spells(source, "while") or token.spells(source, "with");
+    }
+    return false;
+}
+
+# Returns whether `token` is one of the words that stop a statement from
+# being read as a `Type name` declaration (the list in the compiler's
+# `statement()`), compared in place.
+is_statement_keyword(source: String, token: Token): bool {
+    if (token.kind != TokenKind.Identifier) {
+        return false;
+    }
+    int first = source.byte_at(token.offset);
+    if (first == 'a') {
+        return token.spells(source, "and");
+    } else if (first == 'b') {
+        return token.spells(source, "break");
+    } else if (first == 'c') {
+        return token.spells(source, "continue") or token.spells(source, "construct");
+    } else if (first == 'd') {
+        return token.spells(source, "destruct");
+    } else if (first == 'e') {
+        return token.spells(source, "extern") or token.spells(source, "extend") or token.spells(source, "enum");
+    } else if (first == 'f') {
+        return token.spells(source, "false");
+    } else if (first == 'i') {
+        return token.spells(source, "if") or token.spells(source, "import");
+    } else if (first == 'm') {
+        return token.spells(source, "match");
+    } else if (first == 'n') {
+        return token.spells(source, "new");
+    } else if (first == 'o') {
+        return token.spells(source, "or");
+    } else if (first == 'r') {
+        return token.spells(source, "return");
+    } else if (first == 's') {
+        return token.spells(source, "struct") or token.spells(source, "sizeof") or token.spells(source, "static");
+    } else if (first == 't') {
+        return token.spells(source, "true") or token.spells(source, "trait");
+    } else if (first == 'w') {
+        return token.spells(source, "while") or token.spells(source, "with");
+    }
+    return false;
+}
+
+# Returns the operators a method may be named after, as `bool ==(T other)`.
+operator_method_names(): HashSet<String> {
+    return [
+        "<<=",
+        ">>=",
+        "==",
+        "!=",
+        "!!",
+        "<=",
+        ">=",
+        "+=",
+        "-=",
+        "*=",
+        "/=",
+        "%=",
+        "++",
+        "--",
+        "<<",
+        ">>",
+        "**",
+        "&&",
+        "||",
+        "&=",
+        "|=",
+        "^=",
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        "<",
+        ">",
+        "&",
+        "|",
+        "^",
+        "!",
+        "~"
+    ];
 }
 
 # Whether `statement` ends in `;` rather than in a block.

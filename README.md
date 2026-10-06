@@ -440,9 +440,10 @@ automatically.
 ## Format Pepper code with pep-fmt
 
 `pep-fmt` formats Pepper source in the one standard style, like `gofmt`. It
-is written in Pepper (`tools/pep-fmt`), on top of a Pepper syntax library
-(`tools/syntax`) that other tools can reuse. Build it with the compiler, with
-`tools/` on the import path, then run it on files or directories:
+is written in Pepper (`tools/pep-fmt`), on top of the Pepper compiler's own
+parser (`tools/compiler/parse`) and lexer (`tools/syntax`). Build it with the
+compiler, with `tools/` on the import path, then run it on files or
+directories:
 
 ```bash
 cargo run --release -- -I tools tools/pep-fmt/main.pep -o pep-fmt    # pep-fmt.exe on Windows

@@ -9,7 +9,8 @@
 ##   `print`), binding the arguments in a `match` when the braces do not
 ##   name each once, in order;
 ## - a module-scope `static` block is followed by the module-scope
-##   constants its `const`s declare;
+##   constants its `const`s declare, and a `static` block keeps no
+##   `written_captures`;
 ## - parentheses (`Expression.Parenthesized`) give way to the value
 ##   inside them.
 
@@ -364,6 +365,8 @@ struct _Desugarer {
     }
 
     static_block(decl: StaticBlock) {
+        # `parse` keeps the captures that are names alone.
+        decl.written_captures = Array<Expression>();
         attributes(decl.attributes);
         block(decl.block);
     }
