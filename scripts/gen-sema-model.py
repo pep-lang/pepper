@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Generates tools/compiler/sema/model.pep, the sema model in Pepper, from
 # crates/pepper-sema/src/model.rs and type_name.rs: every type the Rust
-# `Module` reaches, with a constructor, a deep `copy()` and a `to_json()`
-# that writes what serde writes. Run it after changing the Rust model, then
-# format the result:
+# `Module` reaches, with a constructor, a deep `copy()`, a `fingerprint()`
+# and a `to_json()` that writes what serde writes. Run it after changing the
+# Rust model, then format the result:
 #
 #   python3 scripts/gen-sema-model.py tools/compiler/sema/model.pep
 #   target/release/pep-fmt -w tools/compiler/sema/model.pep
@@ -209,6 +209,42 @@ def to_json(expr, tp, depth=0):
     return [], f'{expr}.to_json()'
 
 
+FCOUNTER=[0]
+def fingerprint_of(expr, tp):
+    """Returns the lines that add expr to the fingerprint `into`."""
+    n,args=tp
+    FCOUNTER[0]+=1
+    d=FCOUNTER[0]
+    if n=='Box': return fingerprint_of(expr,args[0])
+    if n=='Option':
+        lines=fingerprint_of(f'{expr}.value()',args[0])
+        return [f'if ({expr}.is_value()) {{']+['    '+l for l in lines]+['    into.add(1);','} else {','    into.add(0);','}']
+    # Hash sets and maps add in their iteration order: two equal ones
+    # built in different orders may differ, which costs a walk, not a
+    # wrong answer.
+    if n in ('Vec','HashSet'):
+        item=f'_item{d}'
+        lines=fingerprint_of(item,args[0])
+        return [f'into.add({expr}.count);', f'for (var {item} in {expr}) {{']+['    '+l for l in lines]+['}']
+    if n in ('HashMap','BTreeMap'):
+        k=f'_key{d}'; item=f'_item{d}'
+        lines=fingerprint_of(k,args[0])+fingerprint_of(item,args[1])
+        return [f'into.add({expr}.count);', f'for (var ({k}, {item}) in {expr}) {{']+['    '+l for l in lines]+['}']
+    if n=='tuple':
+        names=[f'_t{d}_{i}' for i in range(len(args))]
+        out=[f'var ({", ".join(names)}) = {expr};']
+        for i,a in enumerate(args):
+            out+=fingerprint_of(names[i],a)
+        return out
+    if n=='String': return [f'into.add_text({expr});']
+    if n=='bool': return [f'into.add({expr} ? 1 : 0);']
+    if n=='f64': return [f'into.add_text($"{{{expr}}}");']
+    if n in PRIM: return [f'into.add({expr} as ulong);']
+    if n.startswith('ast::'):
+        # The parser's nodes: sema never changes them.
+        return []
+    return [f'{expr}.fingerprint(into);']
+
 CCOUNTER=[0]
 def copy_of(expr, tp):
     """Returns (setup_lines, value_expr) for a deep copy of expr."""
@@ -306,6 +342,16 @@ def gen_struct(name, fields, doc):
     lines.append(f'        return {name}({", ".join(vals)});')
     lines.append('    }')
     lines.append('')
+    lines.append('    ## Adds this to `into`: equal values add the same.')
+    lines.append('    ##')
+    lines.append('    ## @param into the fingerprint')
+    lines.append('    fingerprint(into: Fingerprint) {')
+    lines.append(f'        into.add_text("{name}");')
+    for f in fields:
+        if f['skip']: continue
+        lines+=['        '+l for l in fingerprint_of(f'this.{fname(f["name"])}',parse_type(f['type']))]
+    lines.append('    }')
+    lines.append('')
     lines.append('    to_json(): JsonValue {')
     lines.append('        var out = JsonValue.object();')
     for f in fields:
@@ -340,6 +386,29 @@ for name in [k for k in items if k in reach]:
                 sname=vv['name']+name
                 lines.append(f'    {vv["name"]}(node: {sname}),')
                 extra.append(gen_struct(sname,vv['fields'],f'The fields of `{name}::{vv["name"]}`.'))
+        lines.append('')
+        lines.append('    ## Adds this to `into`: equal values add the same.')
+        lines.append('    ##')
+        lines.append('    ## @param into the fingerprint')
+        lines.append('    fingerprint(into: Fingerprint) {')
+        lines.append('        match (this) {')
+        for i,vv in enumerate(it['variants']):
+            if vv['kind']=='unit':
+                lines.append(f'            {vv["name"]} => {{')
+                lines.append(f'                into.add({i});')
+            elif vv['kind']=='tuple':
+                ns=['value'] if len(vv['types'])==1 else [f'v{j}' for j in range(len(vv['types']))]
+                lines.append(f'            {vv["name"]}({", ".join(ns)}) => {{')
+                lines.append(f'                into.add({i});')
+                for nn,t in zip(ns,vv['types']):
+                    lines+=['                '+l for l in fingerprint_of(nn,parse_type(t))]
+            else:
+                lines.append(f'            {vv["name"]}(node) => {{')
+                lines.append(f'                into.add({i});')
+                lines.append('                node.fingerprint(into);')
+            lines.append('            }')
+        lines.append('        }')
+        lines.append('    }')
         lines.append('')
         if all(v['kind']=='unit' for v in it['variants']):
             lines.append('    to_json(): JsonValue {')
@@ -416,6 +485,7 @@ header='''## The sema model: `crates/pepper-sema/src/model.rs` and `type_name.rs
 import compiler.ast;
 import json;
 import [JsonValue] from json;
+import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
 
 '''

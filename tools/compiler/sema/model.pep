@@ -8,6 +8,7 @@
 import compiler.ast;
 import json;
 import [JsonValue] from json;
+import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
 
 ## `BinaryOp` in `model.rs`.
@@ -50,6 +51,128 @@ export enum BinaryOp {
     AddOverflows,
     SubOverflows,
     MulOverflows,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Add => {
+                into.add(0);
+            }
+            Sub => {
+                into.add(1);
+            }
+            Mul => {
+                into.add(2);
+            }
+            Div => {
+                into.add(3);
+            }
+            Mod => {
+                into.add(4);
+            }
+            Pow => {
+                into.add(5);
+            }
+            Identical => {
+                into.add(6);
+            }
+            NotIdentical => {
+                into.add(7);
+            }
+            Equal => {
+                into.add(8);
+            }
+            NotEqual => {
+                into.add(9);
+            }
+            Less => {
+                into.add(10);
+            }
+            LessEqual => {
+                into.add(11);
+            }
+            Greater => {
+                into.add(12);
+            }
+            GreaterEqual => {
+                into.add(13);
+            }
+            LShift => {
+                into.add(14);
+            }
+            RShift => {
+                into.add(15);
+            }
+            BitAnd => {
+                into.add(16);
+            }
+            BitOr => {
+                into.add(17);
+            }
+            BitXor => {
+                into.add(18);
+            }
+            LogicalAnd => {
+                into.add(19);
+            }
+            LogicalOr => {
+                into.add(20);
+            }
+            Assign => {
+                into.add(21);
+            }
+            AddAssign => {
+                into.add(22);
+            }
+            SubAssign => {
+                into.add(23);
+            }
+            MulAssign => {
+                into.add(24);
+            }
+            DivAssign => {
+                into.add(25);
+            }
+            ModAssign => {
+                into.add(26);
+            }
+            LShiftAssign => {
+                into.add(27);
+            }
+            RShiftAssign => {
+                into.add(28);
+            }
+            BitAndAssign => {
+                into.add(29);
+            }
+            BitOrAssign => {
+                into.add(30);
+            }
+            BitXorAssign => {
+                into.add(31);
+            }
+            WrappingAdd => {
+                into.add(32);
+            }
+            WrappingSub => {
+                into.add(33);
+            }
+            WrappingMul => {
+                into.add(34);
+            }
+            AddOverflows => {
+                into.add(35);
+            }
+            SubOverflows => {
+                into.add(36);
+            }
+            MulOverflows => {
+                into.add(37);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -182,6 +305,38 @@ export enum UnaryOp {
     LogicalNot,
     BitNot,
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Neg => {
+                into.add(0);
+            }
+            Pos => {
+                into.add(1);
+            }
+            PreInc => {
+                into.add(2);
+            }
+            PostInc => {
+                into.add(3);
+            }
+            PreDec => {
+                into.add(4);
+            }
+            PostDec => {
+                into.add(5);
+            }
+            LogicalNot => {
+                into.add(6);
+            }
+            BitNot => {
+                into.add(7);
+            }
+        }
+    }
+
     to_json(): JsonValue {
         match (this) {
             Neg => {
@@ -218,6 +373,23 @@ export enum Kind {
     Field,
     Param,
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Variable => {
+                into.add(0);
+            }
+            Field => {
+                into.add(1);
+            }
+            Param => {
+                into.add(2);
+            }
+        }
+    }
+
     to_json(): JsonValue {
         match (this) {
             Variable => {
@@ -240,6 +412,29 @@ export enum AtomicFetchOp {
     And,
     Or,
     Xor,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Add => {
+                into.add(0);
+            }
+            Sub => {
+                into.add(1);
+            }
+            And => {
+                into.add(2);
+            }
+            Or => {
+                into.add(3);
+            }
+            Xor => {
+                into.add(4);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -313,6 +508,161 @@ export enum SimdOp {
     Lanes,
     LaneBits,
     IsSigned,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Splat => {
+                into.add(0);
+            }
+            Add => {
+                into.add(1);
+            }
+            Subtract => {
+                into.add(2);
+            }
+            Multiply => {
+                into.add(3);
+            }
+            Divide => {
+                into.add(4);
+            }
+            Remainder => {
+                into.add(5);
+            }
+            And => {
+                into.add(6);
+            }
+            Or => {
+                into.add(7);
+            }
+            Xor => {
+                into.add(8);
+            }
+            ShiftLeft => {
+                into.add(9);
+            }
+            ShiftRight => {
+                into.add(10);
+            }
+            Negate => {
+                into.add(11);
+            }
+            Not => {
+                into.add(12);
+            }
+            Equal => {
+                into.add(13);
+            }
+            NotEqual => {
+                into.add(14);
+            }
+            Less => {
+                into.add(15);
+            }
+            LessEqual => {
+                into.add(16);
+            }
+            Greater => {
+                into.add(17);
+            }
+            GreaterEqual => {
+                into.add(18);
+            }
+            Select => {
+                into.add(19);
+            }
+            Minimum => {
+                into.add(20);
+            }
+            Maximum => {
+                into.add(21);
+            }
+            Abs => {
+                into.add(22);
+            }
+            RotateLeft => {
+                into.add(23);
+            }
+            RotateRight => {
+                into.add(24);
+            }
+            SquareRoot => {
+                into.add(25);
+            }
+            Floor => {
+                into.add(26);
+            }
+            Ceiling => {
+                into.add(27);
+            }
+            Sum => {
+                into.add(28);
+            }
+            ReduceMinimum => {
+                into.add(29);
+            }
+            ReduceMaximum => {
+                into.add(30);
+            }
+            Any => {
+                into.add(31);
+            }
+            All => {
+                into.add(32);
+            }
+            ToBits => {
+                into.add(33);
+            }
+            Extract => {
+                into.add(34);
+            }
+            Insert => {
+                into.add(35);
+            }
+            Shuffle => {
+                into.add(36);
+            }
+            Reverse => {
+                into.add(37);
+            }
+            InterleaveLow => {
+                into.add(38);
+            }
+            InterleaveHigh => {
+                into.add(39);
+            }
+            Load => {
+                into.add(40);
+            }
+            LoadAligned => {
+                into.add(41);
+            }
+            Store => {
+                into.add(42);
+            }
+            StoreAligned => {
+                into.add(43);
+            }
+            Convert => {
+                into.add(44);
+            }
+            Reinterpret => {
+                into.add(45);
+            }
+            Lanes => {
+                into.add(46);
+            }
+            LaneBits => {
+                into.add(47);
+            }
+            IsSigned => {
+                into.add(48);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -473,6 +823,23 @@ export enum CastKind {
     Unsafe,
     Synthesized,
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Static => {
+                into.add(0);
+            }
+            Unsafe => {
+                into.add(1);
+            }
+            Synthesized => {
+                into.add(2);
+            }
+        }
+    }
+
     to_json(): JsonValue {
         match (this) {
             Static => {
@@ -544,6 +911,241 @@ export enum Expression {
     FromTrait(node: FromTraitExpression),
     StaticValue(value: StaticValue),
     StaticMember(value: StaticMember),
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            SymbolRef(node) => {
+                into.add(0);
+                node.fingerprint(into);
+            }
+            ThisRef => {
+                into.add(1);
+            }
+            MemberRef(node) => {
+                into.add(2);
+                node.fingerprint(into);
+            }
+            BoolLiteral(value) => {
+                into.add(3);
+                into.add(value ? 1 : 0);
+            }
+            IntLiteral(value) => {
+                into.add(4);
+                into.add(value as ulong);
+            }
+            FloatLiteral(value) => {
+                into.add(5);
+                into.add_text($"{value}");
+            }
+            StringLiteral(node) => {
+                into.add(6);
+                node.fingerprint(into);
+            }
+            PointerLiteral => {
+                into.add(7);
+            }
+            Binary(node) => {
+                into.add(8);
+                node.fingerprint(into);
+            }
+            Unary(node) => {
+                into.add(9);
+                node.fingerprint(into);
+            }
+            Cast(node) => {
+                into.add(10);
+                node.fingerprint(into);
+            }
+            Ternary(node) => {
+                into.add(11);
+                node.fingerprint(into);
+            }
+            Index(node) => {
+                into.add(12);
+                node.fingerprint(into);
+            }
+            ArrayIndex(node) => {
+                into.add(13);
+                node.fingerprint(into);
+            }
+            SizeOf(value) => {
+                into.add(14);
+                value.fingerprint(into);
+            }
+            IsPod(value) => {
+                into.add(15);
+                value.fingerprint(into);
+            }
+            Default(value) => {
+                into.add(16);
+                value.fingerprint(into);
+            }
+            Allocate(value) => {
+                into.add(17);
+                value.fingerprint(into);
+            }
+            RefCount(v0, v1) => {
+                into.add(18);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+            }
+            Address(v0, v1) => {
+                into.add(19);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+            }
+            AtomicLoad(v0, v1) => {
+                into.add(20);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+            }
+            AtomicStore(v0, v1, v2) => {
+                into.add(21);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+                v2.fingerprint(into);
+            }
+            ConstructAt(v0, v1) => {
+                into.add(22);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+            }
+            AtomicCmpXchg(v0, v1, v2, v3) => {
+                into.add(23);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+                v2.fingerprint(into);
+                v3.fingerprint(into);
+            }
+            AtomicFetch(v0, v1, v2, v3) => {
+                into.add(24);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+                v2.fingerprint(into);
+                v3.fingerprint(into);
+            }
+            Simd(node) => {
+                into.add(25);
+                node.fingerprint(into);
+            }
+            Weak(v0, v1, v2) => {
+                into.add(26);
+                v0.fingerprint(into);
+                v1.fingerprint(into);
+                v2.fingerprint(into);
+            }
+            CountStep(node) => {
+                into.add(27);
+                node.fingerprint(into);
+            }
+            FunctionPointer(node) => {
+                into.add(28);
+                node.fingerprint(into);
+            }
+            FunctionCall(node) => {
+                into.add(29);
+                node.fingerprint(into);
+            }
+            NamedArgument(node) => {
+                into.add(30);
+                node.fingerprint(into);
+            }
+            DefaultArgument(node) => {
+                into.add(31);
+                node.fingerprint(into);
+            }
+            MethodCall(node) => {
+                into.add(32);
+                node.fingerprint(into);
+            }
+            FunctionRef(node) => {
+                into.add(33);
+                node.fingerprint(into);
+            }
+            Invoke(node) => {
+                into.add(34);
+                node.fingerprint(into);
+            }
+            ClosureLiteral(value) => {
+                into.add(35);
+                value.fingerprint(into);
+            }
+            MakeClosure(node) => {
+                into.add(36);
+                node.fingerprint(into);
+            }
+            MethodAddress(value) => {
+                into.add(37);
+                into.add_text(value);
+            }
+            CallPointer(node) => {
+                into.add(38);
+                node.fingerprint(into);
+            }
+            ForIterator(value) => {
+                into.add(39);
+                value.fingerprint(into);
+            }
+            WithEntered(value) => {
+                into.add(40);
+                value.fingerprint(into);
+            }
+            Move(node) => {
+                into.add(41);
+                node.fingerprint(into);
+            }
+            Destructure(node) => {
+                into.add(42);
+                node.fingerprint(into);
+            }
+            MatchArm(value) => {
+                into.add(43);
+                value.fingerprint(into);
+            }
+            CaseValue(value) => {
+                into.add(44);
+                value.fingerprint(into);
+            }
+            StaticCase(node) => {
+                into.add(45);
+                node.fingerprint(into);
+            }
+            StaticString(node) => {
+                into.add(46);
+                node.fingerprint(into);
+            }
+            WithSubject(value) => {
+                into.add(47);
+                value.fingerprint(into);
+            }
+            Subject(node) => {
+                into.add(48);
+                node.fingerprint(into);
+            }
+            NoMatch => {
+                into.add(49);
+            }
+            ToTrait(node) => {
+                into.add(50);
+                node.fingerprint(into);
+            }
+            FromTrait(node) => {
+                into.add(51);
+                node.fingerprint(into);
+            }
+            StaticValue(value) => {
+                into.add(52);
+                value.fingerprint(into);
+            }
+            StaticMember(value) => {
+                into.add(53);
+                value.fingerprint(into);
+            }
+        }
+    }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Expression {
@@ -928,6 +1530,16 @@ export struct SymbolRefExpression {
         return SymbolRefExpression(id = this.id, ty = this.ty.copy(), loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("SymbolRefExpression");
+        into.add_text(this.id);
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["id"] = JsonValue.String(this.id);
@@ -954,6 +1566,16 @@ export struct MemberRefExpression {
         return MemberRefExpression(lhs = this.lhs.copy(), name = this.name, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MemberRefExpression");
+        this.lhs.fingerprint(into);
+        into.add_text(this.name);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["lhs"] = this.lhs.to_json();
@@ -978,6 +1600,16 @@ export struct StringLiteralExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StringLiteralExpression {
         return StringLiteralExpression(value = this.value, is_raw = this.is_raw, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StringLiteralExpression");
+        into.add_text(this.value);
+        into.add(this.is_raw ? 1 : 0);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1008,6 +1640,17 @@ export struct BinaryExpression {
         return BinaryExpression(op = this.op, lhs = this.lhs.copy(), rhs = this.rhs.copy(), loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("BinaryExpression");
+        this.op.fingerprint(into);
+        this.lhs.fingerprint(into);
+        this.rhs.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["op"] = this.op.to_json();
@@ -1033,6 +1676,16 @@ export struct UnaryExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): UnaryExpression {
         return UnaryExpression(op = this.op, operand = this.operand.copy(), loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("UnaryExpression");
+        this.op.fingerprint(into);
+        this.operand.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1061,6 +1714,17 @@ export struct CastExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): CastExpression {
         return CastExpression(expr = this.expr.copy(), ty = this.ty.copy(), loc = this.loc, kind = this.kind);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CastExpression");
+        this.expr.fingerprint(into);
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
+        this.kind.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1092,6 +1756,16 @@ export struct TernaryExpression {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TernaryExpression");
+        this.condition.fingerprint(into);
+        this.true_expr.fingerprint(into);
+        this.false_expr.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["condition"] = this.condition.to_json();
@@ -1116,6 +1790,16 @@ export struct IndexExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): IndexExpression {
         return IndexExpression(lhs = this.lhs.copy(), rhs = this.rhs.copy(), loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("IndexExpression");
+        this.lhs.fingerprint(into);
+        this.rhs.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1144,6 +1828,17 @@ export struct ArrayIndexExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): ArrayIndexExpression {
         return ArrayIndexExpression(ty = this.ty.copy(), lhs = this.lhs.copy(), rhs = this.rhs.copy(), loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ArrayIndexExpression");
+        this.ty.fingerprint(into);
+        this.lhs.fingerprint(into);
+        this.rhs.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1184,6 +1879,20 @@ export struct SimdExpression {
         return SimdExpression(op = this.op, ty = this.ty.copy(), args = _c45, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("SimdExpression");
+        this.op.fingerprint(into);
+        this.ty.fingerprint(into);
+        into.add(this.args.count);
+        for (var _item45 in this.args) {
+            _item45.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["op"] = this.op.to_json();
@@ -1213,6 +1922,16 @@ export struct CountStepExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): CountStepExpression {
         return CountStepExpression(field = this.field, increment = this.increment, atomic = this.atomic);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CountStepExpression");
+        this.field.fingerprint(into);
+        into.add(this.increment ? 1 : 0);
+        into.add(this.atomic ? 1 : 0);
     }
 
     to_json(): JsonValue {
@@ -1245,6 +1964,21 @@ export struct FunctionPointerExpression {
         return FunctionPointerExpression(owner = _c51, function = this.function, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("FunctionPointerExpression");
+        if (this.owner.is_value()) {
+            this.owner.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add_text(this.function);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["owner"] = (this.owner.is_value() ? this.owner.value().to_json() : JsonValue.Null);
@@ -1273,6 +2007,19 @@ export struct FunctionCallExpression {
             _c56.append(_item56.copy());
         }
         return FunctionCallExpression(function = this.function, args = _c56, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("FunctionCallExpression");
+        into.add_text(this.function);
+        into.add(this.args.count);
+        for (var _item56 in this.args) {
+            _item56.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1305,6 +2052,16 @@ export struct NamedArgumentExpression {
         return NamedArgumentExpression(name = this.name, value = this.value.copy(), loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("NamedArgumentExpression");
+        into.add_text(this.name);
+        this.value.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -1325,6 +2082,14 @@ export struct DefaultArgumentExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): DefaultArgumentExpression {
         return DefaultArgumentExpression(ty = this.ty.copy());
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("DefaultArgumentExpression");
+        this.ty.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1361,6 +2126,20 @@ export struct MethodCallExpression {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MethodCallExpression");
+        this.this_value.fingerprint(into);
+        into.add_text(this.method);
+        into.add(this.args.count);
+        for (var _item67 in this.args) {
+            _item67.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["this"] = this.this_value.to_json();
@@ -1392,6 +2171,16 @@ export struct FunctionRefExpression {
         return FunctionRefExpression(function = this.function, ty = this.ty.copy(), loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("FunctionRefExpression");
+        into.add_text(this.function);
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["function"] = JsonValue.String(this.function);
@@ -1418,6 +2207,18 @@ export struct InvokeExpression {
             _c75.append(_item75.copy());
         }
         return InvokeExpression(callee = this.callee.copy(), args = _c75);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("InvokeExpression");
+        this.callee.fingerprint(into);
+        into.add(this.args.count);
+        for (var _item75 in this.args) {
+            _item75.fingerprint(into);
+        }
     }
 
     to_json(): JsonValue {
@@ -1453,6 +2254,17 @@ export struct MakeClosureExpression {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MakeClosureExpression");
+        this.value.fingerprint(into);
+        into.add_text(this.closure);
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["value"] = this.value.to_json();
@@ -1482,6 +2294,18 @@ export struct CallPointerExpression {
         return CallPointerExpression(pointer = this.pointer.copy(), args = _c84);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CallPointerExpression");
+        this.pointer.fingerprint(into);
+        into.add(this.args.count);
+        for (var _item84 in this.args) {
+            _item84.fingerprint(into);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["pointer"] = this.pointer.to_json();
@@ -1509,6 +2333,15 @@ export struct MoveExpression {
         return MoveExpression(value = this.value.copy(), loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MoveExpression");
+        this.value.fingerprint(into);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["value"] = this.value.to_json();
@@ -1532,6 +2365,16 @@ export struct DestructureExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): DestructureExpression {
         return DestructureExpression(value = this.value.copy(), count = this.count, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("DestructureExpression");
+        this.value.fingerprint(into);
+        into.add(this.count as ulong);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1558,6 +2401,15 @@ export struct StaticCaseExpression {
         return StaticCaseExpression(ty = this.ty.copy(), tag = this.tag);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticCaseExpression");
+        this.ty.fingerprint(into);
+        into.add(this.tag as ulong);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["ty"] = this.ty.to_json();
@@ -1579,6 +2431,15 @@ export struct StaticStringExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StaticStringExpression {
         return StaticStringExpression(value = this.value, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticStringExpression");
+        into.add_text(this.value);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1604,6 +2465,16 @@ export struct SubjectExpression {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): SubjectExpression {
         return SubjectExpression(id = this.id, ty = this.ty.copy(), loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("SubjectExpression");
+        into.add(this.id as ulong);
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1634,6 +2505,17 @@ export struct ToTraitExpression {
         return ToTraitExpression(
             value = this.value.copy(), from = this.from.copy(), to = this.to.copy(), loc = this.loc
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ToTraitExpression");
+        this.value.fingerprint(into);
+        this.from.fingerprint(into);
+        this.to.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1687,6 +2569,22 @@ export struct FromTraitExpression {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("FromTraitExpression");
+        this.value.fingerprint(into);
+        this.from.fingerprint(into);
+        this.to.fingerprint(into);
+        into.add(this.candidates.count);
+        for (var _item109 in this.candidates) {
+            _item109.fingerprint(into);
+        }
+        into.add(this.test ? 1 : 0);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["value"] = this.value.to_json();
@@ -1716,6 +2614,14 @@ export struct StaticValue {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StaticValue {
         return StaticValue(expr = this.expr, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticValue");
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -1765,6 +2671,21 @@ export struct StaticMember {
             span = this.span,
             argument_spans = this.argument_spans.copy()
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticMember");
+        into.add_text(this.method);
+        into.add(this.args.count);
+        for (var _item176 in this.args) {
+            _item176.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+        into.add(this.argument_spans.count);
+        for (var _item180 in this.argument_spans) {}
     }
 
     to_json(): JsonValue {
@@ -1828,6 +2749,24 @@ export struct MatchArmTest {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MatchArmTest");
+        this.subject.fingerprint(into);
+        into.add(this.patterns.count);
+        for (var _item183 in this.patterns) {
+            _item183.fingerprint(into);
+        }
+        this.site.fingerprint(into);
+        into.add(this.element_names.count);
+        for (var _item186 in this.element_names) {
+            _item186.fingerprint(into);
+        }
+        into.add(this.guarded ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["subject"] = this.subject.to_json();
@@ -1874,6 +2813,24 @@ export struct ElementName {
             _c192 = Optional<(String, Loc)>.Value((_t193_0, _t193_1));
         }
         return ElementName(name = this.name, loc = this.loc, declared = this.declared, missing = _c192);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ElementName");
+        into.add_text(this.name);
+        this.loc.fingerprint(into);
+        into.add(this.declared ? 1 : 0);
+        if (this.missing.is_value()) {
+            var (_t193_0, _t193_1) = this.missing.value();
+            into.add_text(_t193_0);
+            _t193_1.fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
     }
 
     to_json(): JsonValue {
@@ -1928,6 +2885,23 @@ export struct MatchSite {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("MatchSite");
+        into.add(this.id as ulong);
+        this.keyword.fingerprint(into);
+        if (this.else_arm.is_value()) {
+            this.else_arm.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.partial ? 1 : 0);
+        into.add(this.no_bindings ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["id"] = unsigned_json(this.id);
@@ -1972,6 +2946,23 @@ export struct WithSubject {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("WithSubject");
+        into.add(this.id as ulong);
+        this.subject.fingerprint(into);
+        this.body.fingerprint(into);
+        if (this.null_message.is_value()) {
+            into.add_text(this.null_message.value());
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["id"] = unsigned_json(this.id);
@@ -2008,6 +2999,20 @@ export struct CaseValue {
             _c210.append(_item210.copy());
         }
         return CaseValue(subject = this.subject.copy(), name = this.name, choices = _c210, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CaseValue");
+        this.subject.fingerprint(into);
+        into.add_text(this.name);
+        into.add(this.choices.count);
+        for (var _item210 in this.choices) {
+            _item210.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -2063,6 +3068,27 @@ export struct CaseChoice {
             bindings = this.bindings.copy(),
             loc = this.loc
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CaseChoice");
+        into.add_text(this.case);
+        this.case_loc.fingerprint(into);
+        if (this.ty.is_value()) {
+            this.ty.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.index as ulong);
+        into.add(this.bindings.count);
+        for (var _item218 in this.bindings) {
+            _item218.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -2167,6 +3193,61 @@ export struct CasePattern {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("CasePattern");
+        if (this.qualifier.is_value()) {
+            this.qualifier.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add_text(this.case);
+        this.loc.fingerprint(into);
+        if (this.bindings.is_value()) {
+            into.add(this.bindings.value().count);
+            for (var _item226 in this.bindings.value()) {
+                _item226.fingerprint(into);
+            }
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        if (this.literal.is_value()) {
+            this.literal.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        if (this.elements.is_value()) {
+            into.add(this.elements.value().count);
+            for (var _item231 in this.elements.value()) {
+                _item231.fingerprint(into);
+            }
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.range ? 1 : 0);
+        into.add(this.constant ? 1 : 0);
+        if (this.values.is_value()) {
+            var (_t236_0, _t236_1) = this.values.value();
+            into.add(_t236_0 as ulong);
+            into.add(_t236_1 as ulong);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        if (this.ty.is_value()) {
+            this.ty.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["qualifier"] = (this.qualifier.is_value() ? this.qualifier.value().to_json() : JsonValue.Null);
@@ -2245,6 +3326,22 @@ export struct EnumDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("EnumDef");
+        into.add_text(this.name);
+        this.representation.fingerprint(into);
+        into.add(this.cases.count);
+        for (var _item243 in this.cases) {
+            _item243.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item245 in this.attributes) {}
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -2296,6 +3393,24 @@ export struct EnumCaseDef {
         return EnumCaseDef(
             name = this.name, value = this.value, payload = _c250, attributes = this.attributes.copy(), loc = this.loc
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("EnumCaseDef");
+        into.add_text(this.name);
+        into.add(this.value as ulong);
+        into.add(this.payload.count);
+        for (var _item250 in this.payload) {
+            var (_t251_0, _t251_1) = _item250;
+            into.add_text(_t251_0);
+            _t251_1.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item254 in this.attributes) {}
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -2359,6 +3474,21 @@ export struct ClosureLiteral {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ClosureLiteral");
+        into.add(this.parameters.count);
+        for (var _item257 in this.parameters) {
+            _item257.fingerprint(into);
+        }
+        this.ty.fingerprint(into);
+        this.body.fingerprint(into);
+        into.add(this.expression_body ? 1 : 0);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         var _v257 = JsonValue.array();
@@ -2379,6 +3509,20 @@ export enum CountField {
     Strong,
     Weak,
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Strong => {
+                into.add(0);
+            }
+            Weak => {
+                into.add(1);
+            }
+        }
+    }
+
     to_json(): JsonValue {
         match (this) {
             Strong => {
@@ -2396,6 +3540,23 @@ export enum WeakOp {
     From,
     Upgrade,
     Expired,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            From => {
+                into.add(0);
+            }
+            Upgrade => {
+                into.add(1);
+            }
+            Expired => {
+                into.add(2);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -2437,6 +3598,20 @@ export struct Block {
         return Block(name = this.name, items = _c264, attributes = this.attributes.copy());
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Block");
+        into.add_text(this.name);
+        into.add(this.items.count);
+        for (var _item264 in this.items) {
+            _item264.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item266 in this.attributes) {}
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -2475,6 +3650,21 @@ export struct Branch {
         return Branch(condition = this.condition.copy(), if_block = this.if_block.copy(), else_block = _c270);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Branch");
+        this.condition.fingerprint(into);
+        this.if_block.fingerprint(into);
+        if (this.else_block.is_value()) {
+            this.else_block.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["condition"] = this.condition.to_json();
@@ -2497,6 +3687,15 @@ export struct While {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): While {
         return While(condition = this.condition.copy(), block = this.block.copy());
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("While");
+        this.condition.fingerprint(into);
+        this.block.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -2526,6 +3725,20 @@ export struct ReturnStatement {
         return ReturnStatement(expr = _c274, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ReturnStatement");
+        if (this.expr.is_value()) {
+            this.expr.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["expr"] = (this.expr.is_value() ? this.expr.value().to_json() : JsonValue.Null);
@@ -2538,6 +3751,20 @@ export struct ReturnStatement {
 export enum LoopBreakKind {
     Break,
     Continue,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Break => {
+                into.add(0);
+            }
+            Continue => {
+                into.add(1);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -2564,6 +3791,14 @@ export struct LoopBreak {
         return LoopBreak(kind = this.kind);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("LoopBreak");
+        this.kind.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["kind"] = this.kind.to_json();
@@ -2582,6 +3817,50 @@ export enum Statement {
     LoopBreak(value: LoopBreak),
     Static(value: StaticBlock),
     StaticPass(value: StaticPass),
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Expression(value) => {
+                into.add(0);
+                value.fingerprint(into);
+            }
+            Block(value) => {
+                into.add(1);
+                value.fingerprint(into);
+            }
+            Declaration(value) => {
+                into.add(2);
+                value.fingerprint(into);
+            }
+            Branch(value) => {
+                into.add(3);
+                value.fingerprint(into);
+            }
+            While(value) => {
+                into.add(4);
+                value.fingerprint(into);
+            }
+            Return(value) => {
+                into.add(5);
+                value.fingerprint(into);
+            }
+            LoopBreak(value) => {
+                into.add(6);
+                value.fingerprint(into);
+            }
+            Static(value) => {
+                into.add(7);
+                value.fingerprint(into);
+            }
+            StaticPass(value) => {
+                into.add(8);
+                value.fingerprint(into);
+            }
+        }
+    }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Statement {
@@ -2686,6 +3965,33 @@ export struct StaticPass {
         return StaticPass(loc = this.loc, stop = this.stop, values = _c290, header = this.header, lines = _c296);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticPass");
+        this.loc.fingerprint(into);
+        into.add(this.stop ? 1 : 0);
+        into.add(this.values.count);
+        for (var _item290 in this.values) {
+            var (_t291_0, _t291_1) = _item290;
+            into.add_text(_t291_0);
+            _t291_1.fingerprint(into);
+        }
+        if (this.header.is_value()) {
+            into.add(this.header.value() as ulong);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.lines.count);
+        for (var _item296 in this.lines) {
+            var (_t297_0, _t297_1) = _item296;
+            _t297_0.fingerprint(into);
+            into.add(_t297_1 as ulong);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["loc"] = this.loc.to_json();
@@ -2722,6 +4028,34 @@ export enum StaticConstant {
     Bool(value: bool),
     String(value: String),
     Record(node: RecordStaticConstant),
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Int(value) => {
+                into.add(0);
+                into.add(value as ulong);
+            }
+            Float(value) => {
+                into.add(1);
+                into.add_text($"{value}");
+            }
+            Bool(value) => {
+                into.add(2);
+                into.add(value ? 1 : 0);
+            }
+            String(value) => {
+                into.add(3);
+                into.add_text(value);
+            }
+            Record(node) => {
+                into.add(4);
+                node.fingerprint(into);
+            }
+        }
+    }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StaticConstant {
@@ -2785,6 +4119,20 @@ export struct RecordStaticConstant {
         return RecordStaticConstant(name = this.name, fields = _c301);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("RecordStaticConstant");
+        into.add_text(this.name);
+        into.add(this.fields.count);
+        for (var _item301 in this.fields) {
+            var (_t302_0, _t302_1) = _item301;
+            into.add_text(_t302_0);
+            _t302_1.fingerprint(into);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -2840,6 +4188,28 @@ export struct StaticBlock {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StaticBlock");
+        into.add(this.captures.count);
+        for (var _item309 in this.captures) {
+            into.add_text(_item309);
+        }
+        into.add(this.items.count);
+        for (var _item311 in this.items) {
+            _item311.fingerprint(into);
+        }
+        into.add(this.type_map.count);
+        for (var _item313 in this.type_map) {
+            var (_t314_0, _t314_1) = _item313;
+            into.add_text(_t314_0);
+            _t314_1.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         var _v309 = JsonValue.array();
@@ -2888,6 +4258,20 @@ export struct ModuleStaticBlock {
         return ModuleStaticBlock(block = this.block.copy(), constants = _c320);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ModuleStaticBlock");
+        this.block.fingerprint(into);
+        into.add(this.constants.count);
+        for (var _item320 in this.constants) {
+            var (_t321_0, _t321_1) = _item320;
+            into.add_text(_t321_0);
+            _t321_1.fingerprint(into);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["block"] = this.block.to_json();
@@ -2916,6 +4300,52 @@ export enum StaticItem {
     Var(node: VarStaticItem),
     Evaluate(value: ast.Expression),
     Emit(v0: Statement, v1: ast.Span),
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            For(node) => {
+                into.add(0);
+                node.fingerprint(into);
+            }
+            While(node) => {
+                into.add(1);
+                node.fingerprint(into);
+            }
+            Jump(node) => {
+                into.add(2);
+                node.fingerprint(into);
+            }
+            If(node) => {
+                into.add(3);
+                node.fingerprint(into);
+            }
+            EmitIf(node) => {
+                into.add(4);
+                node.fingerprint(into);
+            }
+            Block(value) => {
+                into.add(5);
+                into.add(value.count);
+                for (var _item350 in value) {
+                    _item350.fingerprint(into);
+                }
+            }
+            Var(node) => {
+                into.add(6);
+                node.fingerprint(into);
+            }
+            Evaluate(value) => {
+                into.add(7);
+            }
+            Emit(v0, v1) => {
+                into.add(8);
+                v0.fingerprint(into);
+            }
+        }
+    }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): StaticItem {
@@ -3019,6 +4449,19 @@ export struct ForStaticItem {
         return ForStaticItem(name = this.name, iterable = this.iterable, body = _c326, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ForStaticItem");
+        into.add_text(this.name);
+        into.add(this.body.count);
+        for (var _item326 in this.body) {
+            _item326.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -3054,6 +4497,18 @@ export struct WhileStaticItem {
         return WhileStaticItem(condition = this.condition, body = _c330, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("WhileStaticItem");
+        into.add(this.body.count);
+        for (var _item330 in this.body) {
+            _item330.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["condition"] = this.condition.to_json();
@@ -3080,6 +4535,14 @@ export struct JumpStaticItem {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): JumpStaticItem {
         return JumpStaticItem(kind = this.kind, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("JumpStaticItem");
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3120,6 +4583,22 @@ export struct IfStaticItem {
             _c338.append(_item338.copy());
         }
         return IfStaticItem(condition = this.condition, then_items = _c336, else_items = _c338, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("IfStaticItem");
+        into.add(this.then_items.count);
+        for (var _item336 in this.then_items) {
+            _item336.fingerprint(into);
+        }
+        into.add(this.else_items.count);
+        for (var _item338 in this.else_items) {
+            _item338.fingerprint(into);
+        }
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3174,6 +4653,22 @@ export struct EmitIfStaticItem {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("EmitIfStaticItem");
+        this.condition.fingerprint(into);
+        into.add(this.then_items.count);
+        for (var _item342 in this.then_items) {
+            _item342.fingerprint(into);
+        }
+        into.add(this.else_items.count);
+        for (var _item344 in this.else_items) {
+            _item344.fingerprint(into);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["condition"] = this.condition.to_json();
@@ -3207,6 +4702,15 @@ export struct VarStaticItem {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): VarStaticItem {
         return VarStaticItem(name = this.name, value = this.value, loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("VarStaticItem");
+        into.add_text(this.name);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3269,6 +4773,28 @@ export struct VariableDef {
             type_loc = this.type_loc,
             is_const = this.is_const
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("VariableDef");
+        into.add_text(this.name);
+        this.ty.fingerprint(into);
+        if (this.default.is_value()) {
+            this.default.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.hidden ? 1 : 0);
+        this.kind.fingerprint(into);
+        into.add(this.attributes.count);
+        for (var _item361 in this.attributes) {}
+        this.loc.fingerprint(into);
+        this.type_loc.fingerprint(into);
+        into.add(this.is_const ? 1 : 0);
     }
 
     to_json(): JsonValue {
@@ -3335,6 +4861,27 @@ export struct GenericParam {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("GenericParam");
+        into.add_text(this.name);
+        this.loc.fingerprint(into);
+        into.add(this.bounds.count);
+        for (var _item368 in this.bounds) {
+            _item368.fingerprint(into);
+        }
+        if (this.default.is_value()) {
+            this.default.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        this.default_loc.fingerprint(into);
+        into.add(this.is_argument ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -3364,6 +4911,15 @@ export struct Bound {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Bound {
         return Bound(ty = this.ty.copy(), loc = this.loc);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Bound");
+        this.ty.fingerprint(into);
+        this.loc.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3415,6 +4971,20 @@ export struct Withheld {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Withheld");
+        into.add_text(this.owner);
+        into.add_text(this.member);
+        into.add_text(this.name);
+        into.add(this.params as ulong);
+        this.arg.fingerprint(into);
+        this.bound.fingerprint(into);
+        this.at.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["owner"] = JsonValue.String(this.owner);
@@ -3443,6 +5013,19 @@ export struct TypeUse {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): TypeUse {
         return TypeUse(ty = this.ty.copy(), args = this.args.copy(), context = this.context);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TypeUse");
+        this.ty.fingerprint(into);
+        into.add(this.args.count);
+        for (var _item384 in this.args) {
+            _item384.fingerprint(into);
+        }
+        into.add(this.context as ulong);
     }
 
     to_json(): JsonValue {
@@ -3485,6 +5068,25 @@ export struct UseContext {
             _c389 = Optional<TypeName>.Value(this.extension.value().copy());
         }
         return UseContext(scope = _c387, extension = _c389, conditions = this.conditions.copy());
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("UseContext");
+        into.add(this.scope.count);
+        for (var _item387 in this.scope) {
+            _item387.fingerprint(into);
+        }
+        if (this.extension.is_value()) {
+            this.extension.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.conditions.count);
+        for (var _item391 in this.conditions) {}
     }
 
     to_json(): JsonValue {
@@ -3583,6 +5185,51 @@ export struct FunctionDef {
             trait_default = _c409,
             owner = this.owner
         );
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("FunctionDef");
+        into.add_text(this.name);
+        this.ty.fingerprint(into);
+        into.add(this.generic_params.count);
+        for (var _item395 in this.generic_params) {
+            _item395.fingerprint(into);
+        }
+        into.add(this.parameters.count);
+        for (var _item397 in this.parameters) {
+            _item397.fingerprint(into);
+        }
+        if (this.body.is_value()) {
+            this.body.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        if (this.parent.is_value()) {
+            into.add_text(this.parent.value());
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.is_static ? 1 : 0);
+        into.add(this.is_indexer ? 1 : 0);
+        into.add(this.is_generic_func ? 1 : 0);
+        into.add(this.attributes.count);
+        for (var _item406 in this.attributes) {}
+        this.loc.fingerprint(into);
+        if (this.trait_default.is_value()) {
+            into.add(this.trait_default.value().count);
+            for (var _item410 in this.trait_default.value()) {
+                into.add_text(_item410);
+            }
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        this.owner.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3725,6 +5372,54 @@ export struct StructDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("StructDef");
+        into.add_text(this.name);
+        this.ty.fingerprint(into);
+        into.add(this.generic_params.count);
+        for (var _item415 in this.generic_params) {
+            _item415.fingerprint(into);
+        }
+        into.add(this.field_members.count);
+        for (var _item417 in this.field_members) {
+            _item417.fingerprint(into);
+        }
+        into.add(this.method_members.count);
+        for (var _item419 in this.method_members) {
+            _item419.fingerprint(into);
+        }
+        into.add(this.generic_methods.count);
+        for (var _item421 in this.generic_methods) {
+            _item421.fingerprint(into);
+        }
+        into.add(this.constructors.count);
+        for (var _item423 in this.constructors) {
+            _item423.fingerprint(into);
+        }
+        this.destructor.fingerprint(into);
+        this.acquire.fingerprint(into);
+        this.release.fingerprint(into);
+        into.add(this.traits.count);
+        for (var _item428 in this.traits) {
+            _item428.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item430 in this.attributes) {}
+        this.loc.fingerprint(into);
+        if (this.enum_cases.is_value()) {
+            into.add(this.enum_cases.value().count);
+            for (var _item434 in this.enum_cases.value()) {
+                _item434.fingerprint(into);
+            }
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -3785,6 +5480,20 @@ export struct StructDef {
 export enum AccessorKind {
     Default,
     Body,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Default => {
+                into.add(0);
+            }
+            Body => {
+                into.add(1);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -3847,6 +5556,32 @@ export struct PropertyDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("PropertyDef");
+        into.add_text(this.name);
+        into.add_text(this.owner);
+        into.add(this.in_trait ? 1 : 0);
+        this.loc.fingerprint(into);
+        this.get.fingerprint(into);
+        if (this.set.is_value()) {
+            this.set.value().fingerprint(into);
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        this.set_loc.fingerprint(into);
+        if (this.storage.is_value()) {
+            into.add_text(this.storage.value());
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.shared ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -3879,6 +5614,17 @@ export struct Conversion {
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Conversion {
         return Conversion(at = this.at, from = this.from.copy(), to = this.to.copy(), constructor = this.constructor);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Conversion");
+        this.at.fingerprint(into);
+        this.from.fingerprint(into);
+        this.to.fingerprint(into);
+        this.constructor.fingerprint(into);
     }
 
     to_json(): JsonValue {
@@ -3932,6 +5678,25 @@ export struct TraitDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TraitDef");
+        into.add_text(this.name);
+        into.add(this.generic_params.count);
+        for (var _item452 in this.generic_params) {
+            _item452.fingerprint(into);
+        }
+        into.add(this.methods.count);
+        for (var _item454 in this.methods) {
+            _item454.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item456 in this.attributes) {}
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -3972,6 +5737,18 @@ export struct TraitType {
             _c460.append(_item460.copy());
         }
         return TraitType(ty = this.ty.copy(), methods = _c460);
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TraitType");
+        this.ty.fingerprint(into);
+        into.add(this.methods.count);
+        for (var _item460 in this.methods) {
+            _item460.fingerprint(into);
+        }
     }
 
     to_json(): JsonValue {
@@ -4048,6 +5825,39 @@ export struct ExtensionDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ExtensionDef");
+        this.target.fingerprint(into);
+        if (this.resolved.is_value()) {
+            into.add_text(this.resolved.value());
+            into.add(1);
+        } else {
+            into.add(0);
+        }
+        into.add(this.traits.count);
+        for (var _item465 in this.traits) {
+            _item465.fingerprint(into);
+        }
+        into.add(this.restated.count);
+        for (var _item467 in this.restated) {
+            var (_t468_0, _t468_1) = _item467;
+            into.add(_t468_0 as ulong);
+            _t468_1.fingerprint(into);
+        }
+        into.add(this.methods.count);
+        for (var _item471 in this.methods) {
+            _item471.fingerprint(into);
+        }
+        into.add(this.attributes.count);
+        for (var _item473 in this.attributes) {}
+        this.loc.fingerprint(into);
+        into.add(this.is_exported ? 1 : 0);
+        into.add(this.is_private ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["target"] = this.target.to_json();
@@ -4107,6 +5917,33 @@ export struct ExtensionScopes {
             _c480.append(_item480.copy());
         }
         return ExtensionScopes(prelude = this.prelude.copy(), visible = _c480, module = this.module.copy());
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ExtensionScopes");
+        into.add(this.prelude.count);
+        for (var _item478 in this.prelude) {
+            into.add(_item478 as ulong);
+        }
+        into.add(this.visible.count);
+        for (var _item480 in this.visible) {
+            into.add(_item480.count);
+            for (var _item481 in _item480) {
+                into.add(_item481 as ulong);
+            }
+        }
+        into.add(this.module.count);
+        for (var _item483 in this.module) {
+            if (_item483.is_value()) {
+                into.add(_item483.value() as ulong);
+                into.add(1);
+            } else {
+                into.add(0);
+            }
+        }
     }
 
     to_json(): JsonValue {
@@ -4175,6 +6012,23 @@ export struct ExternDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("ExternDef");
+        into.add_text(this.name);
+        this.ty.fingerprint(into);
+        into.add(this.parameters.count);
+        for (var _item488 in this.parameters) {
+            _item488.fingerprint(into);
+        }
+        into.add(this.is_variadic ? 1 : 0);
+        into.add(this.attributes.count);
+        for (var _item491 in this.attributes) {}
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -4232,6 +6086,22 @@ export struct TypeAliasDef {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TypeAliasDef");
+        into.add_text(this.name);
+        into.add(this.generic_params.count);
+        for (var _item495 in this.generic_params) {
+            _item495.fingerprint(into);
+        }
+        this.target.fingerprint(into);
+        into.add(this.attributes.count);
+        for (var _item498 in this.attributes) {}
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["name"] = JsonValue.String(this.name);
@@ -4260,6 +6130,42 @@ export enum Declaration {
     Extension(value: ExtensionDef),
     Extern(value: ExternDef),
     TypeAlias(value: TypeAliasDef),
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Variable(value) => {
+                into.add(0);
+                value.fingerprint(into);
+            }
+            Function(value) => {
+                into.add(1);
+                value.fingerprint(into);
+            }
+            Struct(value) => {
+                into.add(2);
+                value.fingerprint(into);
+            }
+            Trait(value) => {
+                into.add(3);
+                value.fingerprint(into);
+            }
+            Extension(value) => {
+                into.add(4);
+                value.fingerprint(into);
+            }
+            Extern(value) => {
+                into.add(5);
+                value.fingerprint(into);
+            }
+            TypeAlias(value) => {
+                into.add(6);
+                value.fingerprint(into);
+            }
+        }
+    }
 
     ## Returns a deep copy, which shares only locations and AST nodes.
     copy(): Declaration {
@@ -4608,6 +6514,186 @@ export struct Module {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Module");
+        into.add(this.imports.count);
+        for (var _item508 in this.imports) {}
+        into.add(this.structs.count);
+        for (var _item510 in this.structs) {
+            _item510.fingerprint(into);
+        }
+        into.add(this.traits.count);
+        for (var _item512 in this.traits) {
+            _item512.fingerprint(into);
+        }
+        into.add(this.extensions.count);
+        for (var _item514 in this.extensions) {
+            _item514.fingerprint(into);
+        }
+        into.add(this.functions.count);
+        for (var _item516 in this.functions) {
+            _item516.fingerprint(into);
+        }
+        into.add(this.externs.count);
+        for (var _item518 in this.externs) {
+            _item518.fingerprint(into);
+        }
+        into.add(this.globals.count);
+        for (var _item520 in this.globals) {
+            _item520.fingerprint(into);
+        }
+        into.add(this.static_blocks.count);
+        for (var _item522 in this.static_blocks) {
+            _item522.fingerprint(into);
+        }
+        into.add(this.enums.count);
+        for (var _item524 in this.enums) {
+            _item524.fingerprint(into);
+        }
+        into.add(this.struct_specs.count);
+        for (var _item526 in this.struct_specs) {
+            _item526.fingerprint(into);
+        }
+        into.add(this.func_specs.count);
+        for (var _item528 in this.func_specs) {
+            _item528.fingerprint(into);
+        }
+        into.add(this.type_aliases.count);
+        for (var _item530 in this.type_aliases) {
+            _item530.fingerprint(into);
+        }
+        into.add(this.withheld.count);
+        for (var _item532 in this.withheld) {
+            _item532.fingerprint(into);
+        }
+        into.add(this.properties.count);
+        for (var _item534 in this.properties) {
+            _item534.fingerprint(into);
+        }
+        into.add(this.type_uses.count);
+        for (var _item536 in this.type_uses) {
+            _item536.fingerprint(into);
+        }
+        into.add(this.use_contexts.count);
+        for (var _item538 in this.use_contexts) {
+            _item538.fingerprint(into);
+        }
+        into.add(this.literal_args.count);
+        for (var _item540 in this.literal_args) {
+            var (_t541_0, _t541_1, _t541_2) = _item540;
+            _t541_0.fingerprint(into);
+            into.add(_t541_1 as ulong);
+            _t541_2.fingerprint(into);
+        }
+        into.add(this.constrained_aliases.count);
+        for (var _item545 in this.constrained_aliases) {
+            _item545.fingerprint(into);
+        }
+        into.add(this.trait_types.count);
+        for (var _item547 in this.trait_types) {
+            _item547.fingerprint(into);
+        }
+        into.add(this.conversions.count);
+        for (var _item549 in this.conversions) {
+            _item549.fingerprint(into);
+        }
+        into.add(this.overload_sets.count);
+        for (var (_key551, _item551) in this.overload_sets) {
+            into.add_text(_key551);
+            into.add(_item551.count);
+            for (var _item553 in _item551) {
+                into.add_text(_item553);
+            }
+        }
+        into.add(this.overload_unions.count);
+        for (var (_key555, _item555) in this.overload_unions) {
+            into.add_text(_key555);
+            into.add(_item555.count);
+            for (var _item557 in _item555) {
+                into.add(_item557.count);
+                for (var _item558 in _item557) {
+                    into.add_text(_item558);
+                }
+            }
+        }
+        into.add(this.method_overload_sets.count);
+        for (var (_key560, _item560) in this.method_overload_sets) {
+            into.add_text(_key560);
+            into.add(_item560.count);
+            for (var (_key562, _item562) in _item560) {
+                into.add_text(_key562);
+                into.add(_item562.count);
+                for (var _item564 in _item562) {
+                    into.add_text(_item564);
+                }
+            }
+        }
+        this.extension_scopes.fingerprint(into);
+        into.add(this.private_functions.count);
+        for (var _item567 in this.private_functions) {
+            _item567.fingerprint(into);
+        }
+        into.add(this.file_private_functions.count);
+        for (var _item569 in this.file_private_functions) {
+            _item569.fingerprint(into);
+        }
+        into.add(this.call_targets.count);
+        for (var _item571 in this.call_targets) {
+            var (_t572_0, _t572_1) = _item571;
+            _t572_0.fingerprint(into);
+            into.add_text(_t572_1);
+        }
+        into.add(this.argument_names.count);
+        for (var _item575 in this.argument_names) {
+            var (_t576_0, _t576_1) = _item575;
+            _t576_0.fingerprint(into);
+            into.add_text(_t576_1);
+        }
+        into.add(this.namespaces.count);
+        for (var _item579 in this.namespaces) {
+            into.add_text(_item579);
+        }
+        into.add(this.cached_files.count);
+        for (var _item581 in this.cached_files) {
+            into.add(_item581 ? 1 : 0);
+        }
+        into.add(this.recorded_summaries.count);
+        for (var (_key583, _item583) in this.recorded_summaries) {
+            _key583.fingerprint(into);
+            into.add_text(_item583);
+        }
+        into.add(this.stripped.count);
+        for (var _item586 in this.stripped) {
+            _item586.fingerprint(into);
+        }
+        this.templates.fingerprint(into);
+        this.checked.fingerprint(into);
+        into.add(this.spec_requests.count);
+        for (var (_key590, _item590) in this.spec_requests) {
+            into.add_text(_key590);
+            _item590.fingerprint(into);
+        }
+        into.add(this.record_summaries ? 1 : 0);
+        into.add(this.summaries_to_record.count);
+        for (var _item594 in this.summaries_to_record) {
+            var (_t595_0, _t595_1) = _item594;
+            _t595_0.fingerprint(into);
+            into.add_text(_t595_1);
+        }
+        into.add(this.caller_copies.count);
+        for (var (_key598, _item598) in this.caller_copies) {
+            into.add_text(_key598);
+            into.add(_item598.count);
+            for (var _item600 in _item598) {
+                into.add(_item600 ? 1 : 0);
+            }
+        }
+        into.add(this.linked ? 1 : 0);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         var _v508 = JsonValue.array();
@@ -4872,6 +6958,33 @@ export struct Checked {
         );
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Checked");
+        into.add(this.structs.count);
+        for (var _item603 in this.structs) {
+            into.add_text(_item603);
+        }
+        into.add(this.functions.count);
+        for (var _item605 in this.functions) {
+            into.add_text(_item605);
+        }
+        into.add(this.globals.count);
+        for (var _item607 in this.globals) {
+            into.add_text(_item607);
+        }
+        into.add(this.extensions as ulong);
+        into.add(this.summaries.count);
+        for (var (_key610, _item610) in this.summaries) {
+            into.add_text(_key610);
+            var (_t612_0, _t612_1) = _item610;
+            _t612_0.fingerprint(into);
+            into.add_text(_t612_1);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         var _v596 = JsonValue.array();
@@ -4919,6 +7032,15 @@ export struct SpecRequest {
         return SpecRequest(by = this.by, loc = this.loc);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("SpecRequest");
+        into.add_text(this.by);
+        this.loc.fingerprint(into);
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["by"] = JsonValue.String(this.by);
@@ -4956,6 +7078,22 @@ export struct Templates {
         return Templates(frozen = this.frozen, structs = _c610, functions = _c612);
     }
 
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("Templates");
+        into.add(this.frozen ? 1 : 0);
+        into.add(this.structs.count);
+        for (var _item618 in this.structs) {
+            _item618.fingerprint(into);
+        }
+        into.add(this.functions.count);
+        for (var _item620 in this.functions) {
+            _item620.fingerprint(into);
+        }
+    }
+
     to_json(): JsonValue {
         var out = JsonValue.object();
         out["frozen"] = JsonValue.Bool(this.frozen);
@@ -4977,6 +7115,20 @@ export struct Templates {
 export enum TypeFlags {
     Scalar,
     Function,
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        match (this) {
+            Scalar => {
+                into.add(0);
+            }
+            Function => {
+                into.add(1);
+            }
+        }
+    }
 
     to_json(): JsonValue {
         match (this) {
@@ -5016,6 +7168,23 @@ export struct TypeName {
             _c615.append(_item615.copy());
         }
         return TypeName(name = this.name, sub_types = _c615, flags = this.flags, labels = this.labels.copy());
+    }
+
+    ## Adds this to `into`: equal values add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add_text("TypeName");
+        into.add_text(this.name);
+        into.add(this.sub_types.count);
+        for (var _item623 in this.sub_types) {
+            _item623.fingerprint(into);
+        }
+        this.flags.fingerprint(into);
+        into.add(this.labels.count);
+        for (var _item626 in this.labels) {
+            into.add_text(_item626);
+        }
     }
 
     to_json(): JsonValue {

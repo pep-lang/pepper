@@ -15,6 +15,7 @@ import [
 ] from "closure_sites";
 import [MAIN_WITH_ARGUMENTS] from "entry_point";
 import [call_on_value, case_value_type, FieldTypes, is_enum, method_read] from "enums";
+import [Fingerprint] from "fingerprint";
 import [
     bind_generic_function_values,
     bind_generic_method_values,
@@ -60,7 +61,7 @@ import [
     Overloads
 ] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
-import [PassState] from "state";
+import [ImplicitMemo, PassState] from "state";
 import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
@@ -209,23 +210,46 @@ _function_read(name: String): String {
 
 ## Which callables a run of the pass walks again. A walk's result depends
 ## only on the callable's code and on what it looks up, and the pass only
-## ever replaces `auto`: a callable whose last walk changed nothing, and
-## none of whose lookups changed since, would come out of another walk
-## unchanged, so it is skipped.
+## ever replaces `auto`: a callable whose code is as its last walk left it,
+## whose last walk changed nothing, and none of whose lookups changed
+## since, would come out of another walk unchanged, so it is skipped. The
+## worklist lives on in `PassState.implicit` between runs of the pass:
+## specialization rounds add code and change little of what was there.
 struct _Worklist {
     ## What each callable looked up in its last walk, by its place
     ## (`s<struct>m<method>`, `f<function>`, ...); a callable whose last
     ## walk changed it is absent.
     var reads: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
-    ## What the last run changed: return types, fields and globals typed.
+    ## Each callable's fingerprint after its last walk, by its place: code
+    ## another pass changed since is walked again.
+    var prints: HashMap<String, ulong> = HashMap<String, ulong>();
+    ## What changed since the last run: return types, fields and globals
+    ## the pass typed, and declarations other passes added or changed.
     var changed: HashSet<String> = HashSet<String>();
     ## The next run changes into this.
     var changing: HashSet<String> = HashSet<String>();
-    ## Every callable is walked: the module changed outside the pass.
+    ## Every callable is walked: nothing is known of earlier walks.
     var all: bool = true;
+    ## Whether other passes may have changed code since the last run, so
+    ## each callable's code is checked against its fingerprint.
+    var checks_code: bool = true;
 
-    ## Whether the callable at `place` must be walked.
-    needs(place: String): bool {
+    construct() {}
+
+    ## Picks up where the last run of the pass left off.
+    ##
+    ## @param memo what it left
+    construct(memo: ImplicitMemo) {
+        if (memo.kept) {
+            reads = memo.reads;
+            prints = memo.prints;
+            changed = memo.pending;
+            all = false;
+        }
+    }
+
+    ## Whether the callable `f` at `place` must be walked.
+    needs(place: String, f: FunctionDef): bool {
         if (all) {
             return true;
         }
@@ -233,8 +257,23 @@ struct _Worklist {
         if (!read.is_value()) {
             return true;
         }
-        for (var key in changed) {
-            if (read.value().contains(key)) {
+        if (checks_code) {
+            var print = prints.try_get(place);
+            if (!print.is_value() or print.value() != _print(f)) {
+                return true;
+            }
+        }
+        # Through the smaller set: a round can announce thousands of keys.
+        if (changed.count < read.value().count) {
+            for (var key in changed) {
+                if (read.value().contains(key)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        for (var key in read.value()) {
+            if (changed.contains(key)) {
                 return true;
             }
         }
@@ -247,12 +286,14 @@ struct _Worklist {
         scopes.edits = 0;
     }
 
-    ## Finishes walking the callable at `place`.
-    finish(place: String, tables: _ImplicitTables, scopes: _TypeScopes) {
+    ## Finishes walking the callable `f` at `place`.
+    finish(place: String, f: FunctionDef, tables: _ImplicitTables, scopes: _TypeScopes) {
         if (scopes.edits == 0) {
             reads[place] = tables.reads;
+            prints[place] = _print(f);
         } else {
             reads.remove(place);
+            prints.remove(place);
         }
     }
 
@@ -262,6 +303,198 @@ struct _Worklist {
         changing = HashSet<String>();
         all = false;
     }
+}
+
+## The fingerprint of callable `f`, its code included.
+_print(f: FunctionDef): ulong {
+    var into = Fingerprint();
+    f.fingerprint(into);
+    return into.value;
+}
+
+## The fingerprint of what callers of `f` see: everything but its code.
+_signature(f: FunctionDef): ulong {
+    var into = Fingerprint();
+    into.add_text(f.name);
+    f.ty.fingerprint(into);
+    into.add(f.generic_params.count);
+    for (var p in f.generic_params) {
+        p.fingerprint(into);
+    }
+    into.add(f.parameters.count);
+    for (var p in f.parameters) {
+        p.fingerprint(into);
+    }
+    into.add_text(f.parent.is_value() ? f.parent.value() : "");
+    into.add(f.is_static ? 1 : 0);
+    into.add(f.is_indexer ? 1 : 0);
+    into.add(f.is_generic_func ? 1 : 0);
+    return into.value;
+}
+
+## What the walks look up, by declaration: each one's fingerprint and the
+## read keys a change to it announces, and one fingerprint for what no key
+## covers.
+struct _Declarations {
+    var prints: HashMap<String, ulong> = HashMap<String, ulong>();
+    var announces: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
+    var context: ulong = 0;
+
+    ## Takes the declarations of `module` the walks can look up.
+    construct(module: Module, trait_types: TypeName[]) {
+        for (var st in module.structs) {
+            var key = st.ty.to_string();
+            var base = _base_read(key);
+            var shape = Fingerprint();
+            into_struct(st, shape);
+            _add($"s:{key}", shape.value, [_type_read(key), base, _function_read(key)]);
+            ulong i = 0;
+            for (var c in st.constructors) {
+                _add($"s:{key}c{i}", _signature(c), [_type_read(key), base, _function_read(key)]);
+                i += 1;
+            }
+            for (var m in st.method_members) {
+                _add($"s:{key}m:{m.name}", _signature(m), [_method_read(key, m.name), base]);
+            }
+            for (var m in st.generic_methods) {
+                _add($"s:{key}g:{m.name}", _signature(m), [_method_read(key, m.name), base]);
+            }
+        }
+        for (var ty in trait_types) {
+            var key = ty.to_string();
+            var shape = Fingerprint();
+            ty.fingerprint(shape);
+            _add($"t:{key}", shape.value, [_type_read(key), _base_read(key)]);
+        }
+        for (var f in module.functions) {
+            _add($"f:{f.name}", _signature(f), [_function_read(f.name)]);
+        }
+        for (var e in module.externs) {
+            var shape = Fingerprint();
+            e.fingerprint(shape);
+            _add($"e:{e.name}", shape.value, [_function_read(e.name)]);
+        }
+        for (var g in module.globals) {
+            var shape = Fingerprint();
+            g.fingerprint(shape);
+            _add($"g:{g.name}", shape.value, [$"g:{g.name}"]);
+        }
+        for (var (name, members) in module.overload_sets) {
+            _add($"o:{name}", _names(members), [_function_read(name)]);
+        }
+        for (var (name, unions) in module.overload_unions) {
+            var shape = Fingerprint();
+            for (var members in unions) {
+                shape.add(_names(members));
+            }
+            _add($"u:{name}", shape.value, [_function_read(name)]);
+        }
+        for (var (owner, sets) in module.method_overload_sets) {
+            for (var (name, members) in sets) {
+                _add($"m:{owner}.{name}", _names(members), [_method_read(owner, name), _base_read(owner)]);
+            }
+        }
+        var rest = Fingerprint();
+        rest.add(module.traits.count);
+        for (var t in module.traits) {
+            t.fingerprint(rest);
+        }
+        rest.add(module.extensions.count);
+        for (var x in module.extensions) {
+            x.fingerprint(rest);
+        }
+        rest.add(module.enums.count);
+        for (var x in module.enums) {
+            x.fingerprint(rest);
+        }
+        rest.add(module.type_aliases.count);
+        for (var x in module.type_aliases) {
+            x.fingerprint(rest);
+        }
+        rest.add(module.properties.count);
+        for (var x in module.properties) {
+            x.fingerprint(rest);
+        }
+        rest.add(module.conversions.count);
+        for (var x in module.conversions) {
+            x.fingerprint(rest);
+        }
+        module.extension_scopes.fingerprint(rest);
+        context = rest.value;
+    }
+
+    ## Adds what `st` itself declares, its methods aside, to `into`.
+    into_struct(st: StructDef, into: Fingerprint) {
+        into.add_text(st.name);
+        st.ty.fingerprint(into);
+        into.add(st.generic_params.count);
+        for (var p in st.generic_params) {
+            p.fingerprint(into);
+        }
+        into.add(st.field_members.count);
+        for (var f in st.field_members) {
+            f.fingerprint(into);
+        }
+        into.add(st.traits.count);
+        for (var t in st.traits) {
+            t.fingerprint(into);
+        }
+        into.add(st.constructors.count);
+    }
+
+    ## Records declaration `id`; a name declared twice folds into one.
+    _add(id: String, print: ulong, announce: String[]) {
+        var had = prints.try_get(id);
+        if (!had.is_value()) {
+            prints[id] = print;
+            announces[id] = announce;
+            return;
+        }
+        var both = Fingerprint();
+        both.add(had.value());
+        both.add(print);
+        prints[id] = both.value;
+    }
+
+    ## Adds to `into` the read keys of what differs from `before`; returns
+    ## whether what no key covers changed.
+    changes(before: ImplicitMemo, into: HashSet<String>): bool {
+        for (var (id, print) in prints) {
+            var had = before.declarations.try_get(id);
+            if (had.is_value() and had.value() == print) {
+                continue;
+            }
+            for (var key in announces[id]) {
+                into.insert(key);
+            }
+        }
+        for (var (id, keys) in before.announces) {
+            if (prints.contains(id)) {
+                continue;
+            }
+            for (var key in keys) {
+                into.insert(key);
+            }
+        }
+        return context != before.context;
+    }
+
+    ## Leaves these in `memo` for the next run.
+    keep(memo: ImplicitMemo) {
+        memo.declarations = prints;
+        memo.announces = announces;
+        memo.context = context;
+    }
+}
+
+## The fingerprint of a list of names.
+_names(names: String[]): ulong {
+    var into = Fingerprint();
+    into.add(names.count);
+    for (var name in names) {
+        into.add_text(name);
+    }
+    return into.value;
 }
 
 ## Program-wide lookup tables, built once per run of the pass. Where a name
@@ -1831,7 +2064,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
     ulong s = 0;
     while (s < module.structs.count) {
         var st = module.structs[s];
-        var place = $"s{s}";
+        var place = $"s{st.ty.to_string()}";
         s += 1;
         var struct_read = _type_read(st.ty.to_string());
         var struct_base = _base_read(st.ty.to_string());
@@ -1870,7 +2103,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
         for (var c in st.constructors) {
             var at = $"{place}c{index}";
             index += 1;
-            if (!work.needs(at)) {
+            if (!work.needs(at, c)) {
                 continue;
             }
             work.start(tables, scopes);
@@ -1880,18 +2113,18 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
                 _resolve_body(c, scopes, current);
                 scopes.in_constructor = false;
             }
-            work.finish(at, tables, scopes);
+            work.finish(at, c, tables, scopes);
         }
-        if (st.destructor.body.is_value() and work.needs($"{place}d")) {
+        if (st.destructor.body.is_value() and work.needs($"{place}d", st.destructor)) {
             work.start(tables, scopes);
             _resolve_body(st.destructor, scopes, current);
-            work.finish($"{place}d", tables, scopes);
+            work.finish($"{place}d", st.destructor, tables, scopes);
         }
         index = 0;
         for (var method in st.method_members) {
-            var at = $"{place}m{index}";
+            var at = $"{place}m{index}:{method.name}";
             index += 1;
-            if (!work.needs(at)) {
+            if (!work.needs(at, method)) {
                 continue;
             }
             work.start(tables, scopes);
@@ -1916,16 +2149,16 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
                 work.changing.insert(_method_read(st.ty.to_string(), method.name));
                 work.changing.insert(struct_base);
             }
-            work.finish(at, tables, scopes);
+            work.finish(at, method, tables, scopes);
         }
     }
     # Free functions.
     ulong f = 0;
     while (f < module.functions.count) {
         var function = module.functions[f];
-        var at = $"f{f}";
+        var at = $"f{function.name}";
         f += 1;
-        if (!function.body.is_value() or !work.needs(at)) {
+        if (!function.body.is_value() or !work.needs(at, function)) {
             continue;
         }
         var none = Optional<TypeName>.Empty;
@@ -1943,7 +2176,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
             inferred = true;
             work.changing.insert(_function_read(function.name));
         }
-        work.finish(at, tables, scopes);
+        work.finish(at, function, tables, scopes);
     }
     # Global variables: one shared scope so later globals see earlier ones.
     var scopes = _TypeScopes(tables, overloads, resolved, state);
@@ -1983,15 +2216,6 @@ struct _OverloadOnly {
 }
 
 extend _OverloadOnly with Rewriter;
-
-## How many callables `module` has: places in `_Worklist` count them.
-_size(module: Module): ulong {
-    ulong count = module.functions.count;
-    for (var st in module.structs) {
-        count += st.constructors.count + st.method_members.count + 1;
-    }
-    return count;
-}
 
 ## What the binding passes changed, and the module's trait types after.
 struct _Bindings {
@@ -2102,17 +2326,29 @@ export resolve_implicit_types(module: Module, state: PassState) {
     record_conformances(module, state);
     # Inferring a return type can type the callers' locals, and closure
     # types and inferred types feed each other: repeat while anything
-    # changes, at most eight times.
-    var work = _Worklist();
+    # changes, at most eight times. Each run walks only what changed and
+    # what looks it up, since the last run here too.
+    var memo = state.implicit;
+    var work = _Worklist(memo);
+    # Settling overloads by arity selects calls whose lookups did not
+    # change: every callable is walked.
+    if (state.settle_overloads_by_arity) {
+        work.all = true;
+    }
     ulong round = 0;
     while (round < 8) {
-        var size = _size(module);
         bool synced = sync_closures(module, state);
         var bindings = _bind_values(module, state);
         bool bound = bindings.bound or bindings.specialized or bindings.methods;
-        # Code the pass did not write changed: walk everything.
-        if (synced or bound or _size(module) != size) {
-            work.all = true;
+        # Code and declarations other passes changed: any before the first
+        # run, and what closures and bindings changed before the others.
+        work.checks_code = round == 0 or synced or bound;
+        if (work.checks_code) {
+            var declarations = _Declarations(module, bindings.trait_types);
+            if (declarations.changes(memo, work.changed)) {
+                work.all = true;
+            }
+            declarations.keep(memo);
         }
         bool inferred = _resolve_once(module, state, work, bindings.trait_types);
         if (!inferred and !synced and !bound) {
@@ -2122,4 +2358,10 @@ export resolve_implicit_types(module: Module, state: PassState) {
         round += 1;
     }
     sync_closures(module, state);
+    # What this run changed is the next run's to look for.
+    _Declarations(module, used_trait_types(module)).keep(memo);
+    memo.reads = work.reads;
+    memo.prints = work.prints;
+    memo.pending = work.changing;
+    memo.kept = true;
 }

@@ -4,6 +4,7 @@
 import compiler.ast;
 import json;
 import [JsonValue] from json;
+import [Fingerprint] from "fingerprint";
 
 ## The file index of `Loc.none()`.
 export const NO_FILE: uint = 4294967295;
@@ -36,6 +37,15 @@ export struct Loc {
         var out = Loc();
         out.file = NO_FILE;
         return out;
+    }
+
+    ## Adds this to `into`: equal locations add the same.
+    ##
+    ## @param into the fingerprint
+    fingerprint(into: Fingerprint) {
+        into.add(file);
+        into.add(span.start);
+        into.add(span.end);
     }
 
     ## Returns whether this is `none()`.

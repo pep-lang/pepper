@@ -2897,8 +2897,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   them by `scripts/gen-sema-model.py` (rerun it, then `pep-fmt -w`, after
   changing the Rust model): each enum variant with named fields holds a struct of its own
   (`SymbolRefExpression` for `Expression::SymbolRef`) so a pass can change
-  its fields in place, and every type has a deep `copy()` and a `to_json()`
-  that writes what serde writes. `type_name.pep` adds `TypeName`'s helpers,
+  its fields in place, and every type has a deep `copy()`, a
+  `fingerprint()` (a 64-bit hash, `fingerprint.pep`, equal for equal
+  values) and a `to_json()` that writes what serde writes. `type_name.pep` adds `TypeName`'s helpers,
   `walk.pep` is `rewrite_block`/`rewrite_expression` (a `Rewriter` trait),
   `builder.pep` is `builder.rs` with `static_items.rs` and `tries.rs`, and
   `program.pep` is `program::merge` (check, build each file, join, order
@@ -2947,9 +2948,15 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   repeat round walks a callable again only when its last walk changed it
   or something it looked up changed since, `_Worklist`: each walk notes
   the field tables, methods, overload sets, functions and globals it
-  looked up, each change announces the same keys, and a change made
-  outside the walk walks everything; the model and errors they give are
-  `pepper_sema`'s); then the `?` checks
+  looked up, each change announces the same keys, and the worklist lives
+  on between runs of the pass (`PassState.implicit`), so a specialization
+  round walks only new code, code another pass changed (its
+  `fingerprint()` differs from the one its last walk left), and code
+  looking up a declaration that changed (`_Declarations` fingerprints each
+  struct's fields, each signature, global and overload set, and announces
+  its keys when it differs; a change to what no key covers, traits,
+  extensions, enums and the like, walks everything); the model and errors
+  they give are `pepper_sema`'s); then the `?` checks
   (`check_tries.pep`), extension targets (`resolve_resolvables.pep`)
   and extensions applied to their structs, with each declared trait's
   members checked or defaulted (`apply_extensions.pep`), parameter names

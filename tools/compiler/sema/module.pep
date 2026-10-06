@@ -22,6 +22,7 @@ export [defaulted_params, fill_defaults] from "function_types_check";
 export [set_name] from "names";
 export [is_comparison, is_overflow_test, op_name, simd_result, weak_result] from "operators";
 export [thread_local_constant] from "shared_type_checks";
+export [Fingerprint] from "fingerprint";
 export [PassState] from "state";
 export [attribute_arguments, attribute_name, expression_loc] from "static_blocks";
 export [STATIC_REFCOUNT] from "synthesize";

@@ -61,6 +61,9 @@ export struct PassState {
     ## What the program exports to C, as `exports::collect_exports` finds
     ## it (`Module::exports`).
     var exports: Exports = Exports();
+    ## What `resolve_implicit_types` saw when it last ran, so its next run
+    ## walks only the code a change since can affect.
+    var implicit: ImplicitMemo = ImplicitMemo();
 
     ## Creates the state for compiling for `target`.
     ##
@@ -174,4 +177,28 @@ _default_value(e: EnumDef): long {
         }
     }
     return e.cases.count > 0 ? e.cases[0].value : 0;
+}
+
+## What a run of `resolve_implicit_types` leaves for the next: what each
+## callable looked up and its fingerprint after its last walk, and the
+## fingerprints of the declarations the walks look up.
+export struct ImplicitMemo {
+    ## Whether a run has filled this in.
+    var kept: bool = false;
+    ## What each callable looked up in its last walk, by its place.
+    var reads: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
+    ## Each callable's fingerprint after its last walk, by its place.
+    var prints: HashMap<String, ulong> = HashMap<String, ulong>();
+    ## Each declaration's fingerprint, by its id.
+    var declarations: HashMap<String, ulong> = HashMap<String, ulong>();
+    ## The read keys a change to each declaration announces, by its id.
+    var announces: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
+    ## The fingerprint of what no read key covers (traits, extensions,
+    ## enums, ...): when it changes, every callable is walked.
+    var context: ulong = 0;
+    ## What the last run changed that its callers have not looked for yet
+    ## (when it stopped at its limit of runs).
+    var pending: HashSet<String> = HashSet<String>();
+
+    construct() {}
 }

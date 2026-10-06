@@ -127,6 +127,38 @@ reports_builder_errors_as_the_rust_builder_does() {
     expect_equal(write_and_compare(compiler.value(), folder, error_programs()), 0 as ulong);
 }
 
+# A model value's fingerprint is the same for an equal value (a copy) and
+# differs once the value changes: the implicit-types pass relies on it to
+# find the code another pass changed.
+[Test]
+fingerprints_tell_changed_code_apart() {
+    var folder = TempFolder("sema_fingerprints");
+    var path = folder.path.join("main.pep");
+    File.write_text(
+        path, "twice(x: int): int {\n    var y = x + x;\n    return y;\n}\nmain(): int {\n    return twice(2) - 4;\n}\n"
+    );
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(path, setup);
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    var function = built.value().functions[0];
+    var copy = function.copy();
+    expect_equal(_print(copy), _print(function));
+    copy.name = "thrice";
+    expect_true(_print(copy) != _print(function));
+    copy = function.copy();
+    copy.body.value().items.pop();
+    expect_true(_print(copy) != _print(function));
+}
+
+_print(function: sema.FunctionDef): ulong {
+    var into = sema.Fingerprint();
+    function.fingerprint(into);
+    return into.value;
+}
+
 # Writes each program to a `main.pep` of its own in `folder`, compares the
 # two builders' models of it, without the runtime, and returns how many
 # differ.
