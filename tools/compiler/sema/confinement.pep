@@ -622,6 +622,8 @@ struct _Confinement {
     # Every body by key (`_by_key`).
     var _known: HashMap<String, _Body> = HashMap<String, _Body>();
     var _known_filled: bool = false;
+    # The bodies `restore` put back, by key.
+    var _restored: HashMap<String, _Body> = HashMap<String, _Body>();
     # `dispatched`'s answers, by trait and method.
     var _dispatch: HashMap<String, String[]> = HashMap<String, String[]>();
 
@@ -688,9 +690,14 @@ struct _Confinement {
     }
 
     ## Puts back the stashed body of the checked function `key` names, so
-    ## its summary can be made; none when there is no such body.
+    ## its summary can be made; none when there is no such body. A body put
+    ## back before comes back again.
     restore(key: String): _Body? {
         var none = Optional<_Body>.Empty;
+        var restored = _restored.try_get(key);
+        if (restored.is_value()) {
+            return restored;
+        }
         if (state.stashed.count == 0) {
             return none;
         }
@@ -709,6 +716,8 @@ struct _Confinement {
         body.function.body = stashed;
         state.stashed.remove(stash_key);
         _by_key()[key] = body;
+        _restored[key] = body;
+        bodies.insert(key);
         return Optional<_Body>.Value(body);
     }
 
@@ -2827,7 +2836,12 @@ struct _RegionWalk {
         if (found.is_value()) {
             return found.value();
         }
-        return program.bodies.contains(key) ? _bottom(operands, results) : _top(operands, results);
+        # A checked function no summary settled starts at the bottom like
+        # any other body: the caller is walked again once it has its own.
+        if (program.bodies.contains(key) or program.restore(key).is_value()) {
+            return _bottom(operands, results);
+        }
+        return _top(operands, results);
     }
 
     ## The summary of a call, sized for its operands and results; none for
