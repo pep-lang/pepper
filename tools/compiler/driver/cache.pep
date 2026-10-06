@@ -45,8 +45,10 @@ export struct Cache {
 
     ## Moves `built`, a folder of objects just written, to where the objects
     ## of `unit` under `key` belong, and removes the unit's oldest keys beyond
-    ## the few it keeps. A folder already there, from a build that failed
-    ## part way, is replaced.
+    ## the few it keeps. When another build stored that key first, its
+    ## objects stay and `built` goes: they are the same objects, and that
+    ## build may be linking them now. A key's folder only ever appears whole,
+    ## by a rename.
     ##
     ## @param built the folder of objects
     ## @param unit the unit's name
@@ -59,12 +61,12 @@ export struct Cache {
         if (created.is_err()) {
             return Result<Path, String>.err($"cannot create {folder}: {created.error().message}");
         }
-        if (File.rename(built, target).is_err()) {
-            Directory.remove_all(target);
-            var moved = File.rename(built, target);
-            if (moved.is_err()) {
+        var moved = File.rename(built, target);
+        if (moved.is_err()) {
+            if (!target.metadata().is_ok()) {
                 return Result<Path, String>.err($"cannot move {built} to {target}: {moved.error().message}");
             }
+            Directory.remove_all(built);
         }
         _prune(folder);
         return Result<Path, String>.ok(target);

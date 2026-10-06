@@ -141,6 +141,29 @@ rebuilds_only_the_unit_whose_body_changed() {
 }
 
 [Test]
+keeps_the_objects_another_build_stored_first() {
+    var folder = TempFolder("store_twice");
+    var root = folder.path;
+    var cache = driver.Cache(root.join(Path("cache")));
+    var first = root.join(Path("first"));
+    Directory.create_all(first);
+    File.write_text(first.join(Path("0.o")), "first");
+    var stored = cache.store(first, "unit", "key");
+    expect_true(stored.is_ok());
+
+    # A build that made the same key at the same time finds it stored: the
+    # objects a build may be linking stay, and its own copy goes.
+    var second = root.join(Path("second"));
+    Directory.create_all(second);
+    File.write_text(second.join(Path("0.o")), "second");
+    var again = cache.store(second, "unit", "key");
+    expect_true(again.is_ok());
+    expect_equal(again.value().to_string(), stored.value().to_string());
+    expect_equal(File.read_to_string(stored.value().join(Path("0.o"))).value(), "first");
+    expect_false(second.metadata().is_ok());
+}
+
+[Test]
 builds_without_a_cache() {
     var folder = TempFolder("no_cache");
     var root = folder.path;
