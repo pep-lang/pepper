@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-2420d413.js";
+            window.path_to_searchindex_js = "../searchindex-7895d050.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -194,7 +194,10 @@ that writes files. The folder and everything in it are removed when the
 last reference to the fixture is released, so a test that holds it in a
 local cleans up when it returns.</p>
 <p>Its name joins the name the test gives with the process id, so tests
-running at once, each in a process of its own, never share a folder.</p>
+running at once, each in a process of its own, never share a folder.
+When a folder of that name is left from an earlier run (whose process
+had the same id) and cannot be removed, a number is added to the name,
+so the folder is always new and empty.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">[Test]
 writes_a_file() {
@@ -213,7 +216,8 @@ writes_a_file() {
 <h4 id="tempfolder-2"><a class="header" href="#tempfolder-2">TempFolder()</a></h4>
 <pre><code class="language-pepper">construct(name: String)
 </code></pre>
-<p>Makes the folder, removing what a crashed run left at its path.</p>
+<p>Makes the folder, removing what a crashed run left at its path, or
+taking a numbered name when that cannot be removed.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>name</code> — a name for the folder, such as the test’s</li>
