@@ -30,6 +30,10 @@ extern void* pthread_getspecific(ulong key);
 [Target(OS(Linux) || OS(Mac))]
 extern int pthread_setspecific(ulong key, void* value);
 [Target(OS(Linux) || OS(Mac))]
+extern void* malloc(ulong size);
+[Target(OS(Linux) || OS(Mac))]
+extern void free(void* pointer);
+[Target(OS(Linux) || OS(Mac))]
 extern int nanosleep(void* request, void* remaining);
 [Target(OS(Linux) || OS(Mac))]
 extern long sysconf(int name);
@@ -81,15 +85,17 @@ _async_sys_os_thread(): ulong {
 
 [Target(OS(Linux) || OS(Mac))]
 _async_sys_sleep(milliseconds: ulong) {
-    # struct timespec { time_t tv_sec; long tv_nsec; }
-    __ptr<long> time = _pep_malloc(16);
+    # struct timespec { time_t tv_sec; long tv_nsec; }. From C's malloc, so
+    # a thread asleep does not hold a live allocation that a leak check
+    # would count (a test's timeout watchdog sleeps through the test, #741).
+    __ptr<long> time = malloc(16);
     time[0] = (milliseconds / 1000) as long;
     time[1] = ((milliseconds % 1000) * 1000000) as long;
     # Interrupted by a signal: sleep again for the time that was left, which
     # nanosleep wrote back. The request is always valid, so no other error
     # can repeat.
     while (nanosleep(time, time) != 0) {}
-    _pep_free(time);
+    free(time);
 }
 
 # ── Thread-local keys ────────────────────────────────────────────────────────
