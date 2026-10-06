@@ -52,7 +52,7 @@ import [Rewriter, rewrite_block, rewrite_children, rewrite_expression] from "wal
 ## @param state the passes' state, which takes the error
 export lower_matches(module: Module, state: PassState) {
     var lowering = _MatchLowering(module, state);
-    var table = StructTable(module);
+    var table = StructTable(module, memo = state.trait_types_memo());
     install_traits(module, state);
     var bodies = Array<_MatchBody>();
     for (var st in module.structs) {

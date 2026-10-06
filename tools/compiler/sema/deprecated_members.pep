@@ -71,7 +71,7 @@ export check_deprecated_members(module: Module, state: PassState) {
     if (members.owners.count == 0) {
         return;
     }
-    var checker = _DeprecatedUses(members, StructTable(module), state);
+    var checker = _DeprecatedUses(members, StructTable(module, memo = state.trait_types_memo()), state);
     for (var function in module.functions) {
         if (!declared_deprecation(function.attributes).is_value()) {
             checker.function(function, Optional<TypeName>.Empty);

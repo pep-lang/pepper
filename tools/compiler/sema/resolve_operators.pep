@@ -44,7 +44,7 @@ const _INDEX_TEMPORARY = "_idx_tmp_";
 ## @param module the model, changed in place
 ## @param state the passes' state
 export resolve_operators(module: Module, state: PassState) {
-    var table = StructTable(module);
+    var table = StructTable(module, memo = state.trait_types_memo());
     var overloads = Overloads(module, state);
     var resolver = _OperatorResolver(table, overloads, state);
     for (var st in module.structs) {

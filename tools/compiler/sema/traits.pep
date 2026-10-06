@@ -2,7 +2,8 @@
 ## in Pepper, as far as the passes ported so far ask about them. A module
 ## with no checked runtime is assumed.
 
-import [Block, FunctionDef, Module, TraitDef, TraitType, TypeFlags, TypeName] from "model";
+import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
+import [TraitTypeMemo] from "state";
 import [parse_type_string] from "type_name";
 
 ## Returns the trait a type names: a plain (non-pointer, non-function) type
@@ -108,8 +109,10 @@ _substitute_type(ty: TypeName, type_map: Array<(String, TypeName)>) {
 ## too. Generic bases are skipped.
 ##
 ## @param module the model
+## @param memo what earlier calls found in the checked declarations, when
+##     the caller keeps it (`PassState.trait_memo`)
 ## @returns the trait types, each once, in the order found
-export used_trait_types(module: Module): TypeName[] {
+export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTypeMemo>.Empty): TypeName[] {
     var found = _TraitTypes(module.traits);
     if (module.traits.count == 0) {
         return found.types;
@@ -118,21 +121,43 @@ export used_trait_types(module: Module): TypeName[] {
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;
         }
-        for (var field in st.field_members) {
-            found.add(field.ty);
+        if (!memo.is_value() or !_is_settled(module, st)) {
+            found.add_struct(st);
+            continue;
         }
-        for (var method in st.method_members) {
-            found.add_function(method);
+        var members = st.method_members.count + st.constructors.count;
+        var known = memo.value().structs.try_get(st.name);
+        if (known.is_value()) {
+            var (counted, types) = known.value();
+            if (counted == members) {
+                found.replay(types);
+                continue;
+            }
         }
-        for (var constructor in st.constructors) {
-            found.add_function(constructor);
-        }
-        found.add_function(st.destructor);
+        found.noting = true;
+        found.add_struct(st);
+        memo.value().structs[st.name] = (members, found.noted);
+        found.noting = false;
+        found.noted = Array<TypeName>();
     }
     for (var function in module.functions) {
-        if (!function.is_generic_func) {
-            found.add_function(function);
+        if (function.is_generic_func) {
+            continue;
         }
+        if (!memo.is_value() or function.body.is_value() or !module.checked.functions.contains(function.name)) {
+            found.add_function(function);
+            continue;
+        }
+        var known = memo.value().functions.try_get(function.name);
+        if (known.is_value()) {
+            found.replay(known.value());
+            continue;
+        }
+        found.noting = true;
+        found.add_function(function);
+        memo.value().functions[function.name] = found.noted;
+        found.noting = false;
+        found.noted = Array<TypeName>();
     }
     for (var global in module.globals) {
         found.add(global.ty);
@@ -140,15 +165,36 @@ export used_trait_types(module: Module): TypeName[] {
     return found.types;
 }
 
-## `used_trait_types(module)`, or a copy of `known` when the caller already
+# Whether `st` is checked and none of its members has a body: the passes
+# stashed them, so it stays as it is.
+_is_settled(module: Module, st: StructDef): bool {
+    if (!module.checked.structs.contains(st.name) or st.destructor.body.is_value()) {
+        return false;
+    }
+    for (var method in st.method_members) {
+        if (method.body.is_value()) {
+            return false;
+        }
+    }
+    for (var constructor in st.constructors) {
+        if (constructor.body.is_value()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+## `used_trait_types(module, memo)`, or a copy of `known` when the caller already
 ## found them and the module's declared types have not changed since.
 ##
 ## @param module the model
 ## @param known the trait types found before, if any
 ## @returns the trait types
-export trait_types_of(module: Module, known: TypeName[]?): TypeName[] {
+export trait_types_of(
+    module: Module, known: TypeName[]?, memo: TraitTypeMemo? = Optional<TraitTypeMemo>.Empty
+): TypeName[] {
     if (!known.is_value()) {
-        return used_trait_types(module);
+        return used_trait_types(module, memo);
     }
     var out = Array<TypeName>();
     for (var ty in known.value()) {
@@ -167,6 +213,10 @@ struct _TraitTypes {
 
     ## The traits' names.
     var names: HashSet<String> = HashSet<String>();
+    ## The types `add` looked through, in order: what a `TraitTypeMemo`
+    ## keeps of a declaration.
+    var noted: Array<TypeName> = Array<TypeName>();
+    var noting: bool = false;
 
     construct(traits: TraitDef[]) {
         this.traits = traits;
@@ -191,6 +241,28 @@ struct _TraitTypes {
             }
         }
         return false;
+    }
+
+    ## Adds what struct `st`'s fields, methods, constructors and destructor
+    ## use.
+    add_struct(st: StructDef) {
+        for (var field in st.field_members) {
+            add(field.ty);
+        }
+        for (var method in st.method_members) {
+            add_function(method);
+        }
+        for (var constructor in st.constructors) {
+            add_function(constructor);
+        }
+        add_function(st.destructor);
+    }
+
+    ## Looks through types a `TraitTypeMemo` noted, as `add` did.
+    replay(types: TypeName[]) {
+        for (var ty in types) {
+            _look_through(ty);
+        }
     }
 
     add_function(function: FunctionDef) {
@@ -233,6 +305,14 @@ struct _TraitTypes {
         if (!_mentions_trait(ty)) {
             return;
         }
+        if (noting) {
+            noted.append(ty);
+        }
+        _look_through(ty);
+    }
+
+    # `add` for a type that may name a trait.
+    _look_through(ty: TypeName) {
         # Pointers carry their stars in the name (`Shape*`).
         var text = ty.to_string();
         if (visited.contains(text)) {
@@ -268,7 +348,9 @@ struct _TraitTypes {
             }
         }
         for (var arg in pointee.sub_types) {
-            add(arg);
+            if (_mentions_trait(arg)) {
+                _look_through(arg);
+            }
         }
     }
 }

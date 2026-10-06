@@ -344,7 +344,7 @@ struct _BoundsChecker {
         this.state = state;
         traits = module.traits;
         literal_args = module.literal_args;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         for (var st in module.structs) {
             if (st.generic_params.count != 0 and !st.name.contains("<")) {
                 var names = Array<String>();

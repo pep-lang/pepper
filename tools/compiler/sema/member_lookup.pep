@@ -92,7 +92,7 @@ export member_at(module: Module, state: PassState, file: uint, source: String, o
         return none;
     }
     var owner = finder.owner.value();
-    var ty = static_type_of(owner, StructTable(module), finder.current, state);
+    var ty = static_type_of(owner, StructTable(module, memo = state.trait_types_memo()), finder.current, state);
     if (ty.is_empty()) {
         # A static call names the struct itself: `S.make()`.
         if (owner is SymbolRef(node)) {

@@ -94,7 +94,7 @@ export convert_to_traits(module: Module, state: PassState) {
     }
     # Every trait type in use, for codegen: the declared ones and those the
     # conversions above introduced.
-    for (var ty in used_trait_types(module)) {
+    for (var ty in used_trait_types(module, state.trait_types_memo())) {
         converter.trait_type(ty);
     }
     var trait_types = Array<TraitType>();
@@ -174,7 +174,7 @@ struct _TraitConversions {
     construct(module: Module, state: PassState, implicit: HashMap<String, _Implicit>) {
         this.state = state;
         this.implicit = implicit;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         trait_defs = module.traits;
         bool restated = false;
         for (var e in module.extensions) {

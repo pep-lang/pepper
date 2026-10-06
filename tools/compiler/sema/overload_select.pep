@@ -356,7 +356,7 @@ export struct Overloads {
         }
         # A value of trait type calls the trait's members: every instance
         # the module uses, and each trait's base.
-        var trait_types = trait_types_of(module, known_trait_types);
+        var trait_types = trait_types_of(module, known_trait_types, state.trait_types_memo());
         for (var t in module.traits) {
             trait_types.append(TypeName.named(t.name));
         }

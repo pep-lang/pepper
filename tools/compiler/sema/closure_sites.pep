@@ -165,7 +165,7 @@ export struct SiteTable {
     ## @param state the passes' state
     construct(module: Module, state: PassState, statics: StructTable? = Optional<StructTable>.Empty) {
         this.state = state;
-        this.statics = statics.is_value() ? statics.value() : StructTable(module);
+        this.statics = statics.is_value() ? statics.value() : StructTable(module, memo = state.trait_types_memo());
         # A generic base's parameter types name its own type parameters;
         # only its specializations give a closure argument its types.
         for (var f in module.functions) {
@@ -433,7 +433,7 @@ export struct ModuleTables {
     ## @returns the table
     statics(): StructTable {
         if (!built_statics.is_value()) {
-            built_statics = Optional<StructTable>.Value(StructTable(module, trait_types));
+            built_statics = Optional<StructTable>.Value(StructTable(module, trait_types, state.trait_types_memo()));
         }
         return built_statics.value();
     }

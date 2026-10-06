@@ -67,7 +67,7 @@ struct _Casts {
     construct(module: Module, state: PassState) {
         this.module = module;
         this.state = state;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
     }
 
     visit(f: FunctionDef) {

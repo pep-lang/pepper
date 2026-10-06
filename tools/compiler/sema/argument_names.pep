@@ -142,7 +142,7 @@ struct _ArgumentNames {
         this.module = module;
         this.state = state;
         this.literals = literals;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
     }
 
     visit(function: FunctionDef, current: TypeName?) {

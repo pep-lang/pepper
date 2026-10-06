@@ -544,7 +544,7 @@ struct _ImplicitTables {
     var reads: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState, trait_types: TypeName[]) {
-        callees = Callees(module, Optional<TypeName[]>.Value(trait_types));
+        callees = Callees(module, state, Optional<TypeName[]>.Value(trait_types));
         properties = Properties(module);
         for (var st in module.structs) {
             var key = st.ty.to_string();
@@ -2293,7 +2293,7 @@ _method_sites(module: Module, search: GenericMethodSearch?): SiteSelection? {
 ## @param state the passes' state
 ## @returns what changed
 _bind_values(module: Module, state: PassState): _Bindings {
-    var result = _Bindings(used_trait_types(module));
+    var result = _Bindings(used_trait_types(module, state.trait_types_memo()));
     var tables = ModuleTables(module, state, Optional<TypeName[]>.Value(result.trait_types));
     var values = function_value_search(module, state, tables);
     var functions = generic_function_search(module, state);
@@ -2328,7 +2328,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
         method_sites = Optional<SiteSelection>.Value(selections[at]);
     }
     if (result.bound) {
-        result.trait_types = used_trait_types(module);
+        result.trait_types = used_trait_types(module, state.trait_types_memo());
         tables.reset(Optional<TypeName[]>.Value(result.trait_types));
         functions = generic_function_search(module, state);
         function_sites = _function_sites(module, functions);
@@ -2339,7 +2339,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
         );
     }
     if (result.specialized) {
-        result.trait_types = used_trait_types(module);
+        result.trait_types = used_trait_types(module, state.trait_types_memo());
         tables.reset(Optional<TypeName[]>.Value(result.trait_types));
     }
     if (result.bound or result.specialized) {
@@ -2350,7 +2350,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
         result.methods = bind_generic_method_values(module, state, tables, methods.value(), method_sites.value());
     }
     if (result.methods) {
-        result.trait_types = used_trait_types(module);
+        result.trait_types = used_trait_types(module, state.trait_types_memo());
     }
     return result;
 }
@@ -2398,7 +2398,7 @@ export resolve_implicit_types(module: Module, state: PassState) {
     }
     sync_closures(module, state);
     # What this run changed is the next run's to look for.
-    _Declarations(module, used_trait_types(module)).keep(memo);
+    _Declarations(module, used_trait_types(module, state.trait_types_memo())).keep(memo);
     memo.reads = work.reads;
     memo.prints = work.prints;
     memo.pending = work.changing;

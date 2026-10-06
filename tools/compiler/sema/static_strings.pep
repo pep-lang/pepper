@@ -183,7 +183,7 @@ struct _Literals {
     construct(module: Module, state: PassState) {
         this.module = module;
         this.state = state;
-        this.table = StructTable(module);
+        this.table = StructTable(module, memo = state.trait_types_memo());
         for (var f in module.functions) {
             if (!f.is_generic_func) {
                 callees[f.name] = _LiteralCallee(f, Optional<StructDef>.Empty, false);

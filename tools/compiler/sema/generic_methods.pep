@@ -173,7 +173,7 @@ struct _GenericMethodCalls {
             return;
         }
         if (!table.is_value()) {
-            table = Optional<StructTable>.Value(StructTable(module));
+            table = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
         }
         var owner = static_type_of(receiver, table.value(), current, state);
         if (owner.is_value() and !owner.value().contains_auto()) {

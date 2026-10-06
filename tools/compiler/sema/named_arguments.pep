@@ -6,6 +6,7 @@
 import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import [enum_method_name] from "builder";
+import [is_checked_function] from "checked";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [
@@ -18,6 +19,7 @@ import [
     MethodCallExpression,
     Module,
     Statement,
+    StructDef,
     SubjectExpression,
     TypeName,
     WithSubject
@@ -890,64 +892,126 @@ export struct Callees {
     ## `Module.literal_args`.
     var literals: Array<(Loc, ulong, Loc)>;
 
-    construct(module: Module, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
+    ## The callees of the checked declarations, when nothing in the unit
+    ## changed them: built once per unit (`PassState.checked_callees`), and
+    ## read under what the rest of the module adds.
+    var base: Callees? = Optional<Callees>.Empty;
+    # A unit's checked callees: how many methods and constructors each
+    # checked struct had (`covers`).
+    var members: HashMap<String, ulong> = HashMap<String, ulong>();
+
+    ## The callees of `module`.
+    ##
+    ## @param module the model
+    ## @param state the passes' state, which keeps the checked declarations'
+    ##     callees
+    ## @param trait_types the module's trait types, when already found
+    construct(module: Module, state: PassState, trait_types: TypeName[]? = Optional<TypeName[]>.Empty) {
         literals = module.literal_args;
+        bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
+        if (checked) {
+            if (!state.checked_callees.is_value()) {
+                state.checked_callees = Optional<Callees>.Value(Callees(module));
+            }
+            base = state.checked_callees;
+        }
         for (var function in module.functions) {
-            var display = _before_type_arguments(function.name);
-            _push(functions, set_name(display), Callee.of(function, display, 0, Array<String>()));
+            if (checked and is_checked_function(module, function)) {
+                continue;
+            }
+            _add_function(function);
         }
         for (var st in module.structs) {
-            var generic = Array<String>();
-            if (!st.name.contains("<")) {
-                for (var p in st.generic_params) {
-                    generic.append(p.name);
-                }
+            if (checked and base.value().covers(st)) {
+                continue;
             }
-            var made = Array<Callee>();
-            for (var c in st.constructors) {
-                made.append(Callee.of(c, st.name, 0, generic));
-            }
-            for (var c in made) {
-                _push(constructors, st.name, c);
-            }
-            var spelled = st.ty.to_string();
-            if (spelled != st.name) {
-                for (var c in made) {
-                    _push(constructors, spelled, c);
-                }
-            }
-            if (!methods.contains(spelled)) {
-                methods[spelled] = HashMap<String, Callee[]>();
-            }
-            var own = methods[spelled];
-            var all = Array<FunctionDef>();
-            all.append_all(st.method_members);
-            all.append_all(st.generic_methods);
-            for (var method in all) {
-                var base = _before_type_arguments(method.name);
-                var set = set_name(base);
-                if (!own.contains(set)) {
-                    own[set] = Array<Callee>();
-                }
-                # A specialized generic method (`map<long>`) repeats its base.
-                bool repeats = false;
-                if (method.name.contains("<")) {
-                    for (var g in st.generic_methods) {
-                        if (g.name == base) {
-                            repeats = true;
-                        }
-                    }
-                }
-                if (!repeats) {
-                    own[set].append(Callee.of(method, $"{st.name}.{set}", 0, generic));
-                }
-            }
+            _add_struct(st);
         }
         for (var e in module.externs) {
             externs.insert(e.name);
         }
-        # A value of trait type calls the trait's methods, by name.
-        for (var ty in trait_types_of(module, trait_types)) {
+        _add_trait_types(module, trait_types_of(module, trait_types, state.trait_types_memo()));
+    }
+
+    # The callees of `module`'s checked declarations alone.
+    construct(module: Module) {
+        literals = Array<(Loc, ulong, Loc)>();
+        for (var function in module.functions) {
+            if (is_checked_function(module, function)) {
+                _add_function(function);
+            }
+        }
+        for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name)) {
+                _add_struct(st);
+                members[st.name] = _members(st);
+            }
+        }
+    }
+
+    ## Whether these (a unit's checked callees) cover `st`: it is checked,
+    ## and nothing added to its methods or constructors since.
+    covers(st: StructDef): bool {
+        var counted = members.try_get(st.name);
+        return counted.is_value() and counted.value() == _members(st);
+    }
+
+    _add_function(function: FunctionDef) {
+        var display = _before_type_arguments(function.name);
+        _push(functions, set_name(display), Callee.of(function, display, 0, Array<String>()));
+    }
+
+    _add_struct(st: StructDef) {
+        var generic = Array<String>();
+        if (!st.name.contains("<")) {
+            for (var p in st.generic_params) {
+                generic.append(p.name);
+            }
+        }
+        var made = Array<Callee>();
+        for (var c in st.constructors) {
+            made.append(Callee.of(c, st.name, 0, generic));
+        }
+        for (var c in made) {
+            _push(constructors, st.name, c);
+        }
+        var spelled = st.ty.to_string();
+        if (spelled != st.name) {
+            for (var c in made) {
+                _push(constructors, spelled, c);
+            }
+        }
+        if (!methods.contains(spelled)) {
+            methods[spelled] = HashMap<String, Callee[]>();
+        }
+        var own = methods[spelled];
+        var all = Array<FunctionDef>();
+        all.append_all(st.method_members);
+        all.append_all(st.generic_methods);
+        for (var method in all) {
+            var bare = _before_type_arguments(method.name);
+            var set = set_name(bare);
+            if (!own.contains(set)) {
+                own[set] = Array<Callee>();
+            }
+            # A specialized generic method (`map<long>`) repeats its base.
+            bool repeats = false;
+            if (method.name.contains("<")) {
+                for (var g in st.generic_methods) {
+                    if (g.name == bare) {
+                        repeats = true;
+                    }
+                }
+            }
+            if (!repeats) {
+                own[set].append(Callee.of(method, $"{st.name}.{set}", 0, generic));
+            }
+        }
+    }
+
+    # A value of trait type calls the trait's methods, by name.
+    _add_trait_types(module: Module, trait_types: TypeName[]) {
+        for (var ty in trait_types) {
             var def = trait_def(module.traits, ty);
             if (!def.is_value()) {
                 continue;
@@ -966,16 +1030,65 @@ export struct Callees {
     ## The methods of set `method` on a receiver of type `receiver`.
     methods_of(receiver: String, method: String): Callee[]? {
         var own = methods.try_get(receiver);
+        if (!own.is_value() and base.is_value()) {
+            own = base.value().methods.try_get(receiver);
+        }
         if (!own.is_value()) {
             return Optional<Callee[]>.Empty;
         }
         return own.value().try_get(set_name(_before_type_arguments(method)));
     }
 
+    ## The methods a receiver of type `receiver` has, by overload set.
+    receiver(receiver: String): HashMap<String, Callee[]>? {
+        var own = methods.try_get(receiver);
+        if (own.is_value() or !base.is_value()) {
+            return own;
+        }
+        return base.value().methods.try_get(receiver);
+    }
+
     ## The free functions named `name` (type arguments ignored).
     functions_named(name: String): Callee[]? {
-        return functions.try_get(set_name(_before_type_arguments(name)));
+        return function_set(set_name(_before_type_arguments(name)));
     }
+
+    ## The free functions of overload set `set`: the checked ones first, as
+    ## the module declares them.
+    function_set(set: String): Callee[]? {
+        return _merged(
+            base.is_value() ? base.value().functions.try_get(set) : Optional<Callee[]>.Empty, functions.try_get(set)
+        );
+    }
+
+    ## The constructors of the struct called `name`: one struct's, so all
+    ## here or all in `base`.
+    constructors_of(name: String): Callee[]? {
+        var own = constructors.try_get(name);
+        if (own.is_value() or !base.is_value()) {
+            return own;
+        }
+        return base.value().constructors.try_get(name);
+    }
+}
+
+## `first`'s callees, then `then`'s.
+_merged(first: Callee[]?, then: Callee[]?): Callee[]? {
+    if (!first.is_value()) {
+        return then;
+    }
+    if (!then.is_value()) {
+        return first;
+    }
+    var out = Array<Callee>();
+    out.append_all(first.value());
+    out.append_all(then.value());
+    return Optional<Callee[]>.Value(out);
+}
+
+## How many methods and constructors `st` has.
+_members(st: StructDef): ulong {
+    return st.method_members.count + st.generic_methods.count + st.constructors.count;
 }
 
 _push(map: HashMap<String, Callee[]>, key: String, callee: Callee) {
@@ -1034,7 +1147,7 @@ _declared_in(block: Block, names: HashSet<String>) {
 ## @param module the model, changed in place
 ## @param state the passes' state
 export bind_calls(module: Module, state: PassState) {
-    var callees = Callees(module);
+    var callees = Callees(module, state);
     var globals = HashSet<String>();
     for (var g in module.globals) {
         globals.insert(g.name);
@@ -1064,7 +1177,7 @@ export bind_calls(module: Module, state: PassState) {
         if (!any) {
             continue;
         }
-        var own = callees.methods.try_get(st.ty.to_string());
+        var own = callees.receiver(st.ty.to_string());
         for (var m in members) {
             _bind_in(m, own, callees, globals, state);
         }
@@ -1145,13 +1258,13 @@ struct _Binder {
             found = own.value().try_get(set);
         }
         if (!found.is_value()) {
-            found = callees.functions.try_get(set);
+            found = callees.function_set(set);
         }
         if (!found.is_value()) {
-            found = callees.constructors.try_get(call.function);
+            found = callees.constructors_of(call.function);
         }
         if (!found.is_value()) {
-            found = callees.constructors.try_get(base);
+            found = callees.constructors_of(base);
         }
         if (found.is_value()) {
             return bind_call(e, found.value(), callees.literals, state);
@@ -1186,7 +1299,7 @@ struct _GlobalBinder {
         var base = _before_type_arguments(call.function);
         var found = callees.functions_named(base);
         if (!found.is_value()) {
-            found = callees.constructors.try_get(base);
+            found = callees.constructors_of(base);
         }
         if (found.is_value()) {
             return bind_call(e, found.value(), callees.literals, state);
@@ -1252,7 +1365,7 @@ export bind_method_call(e: Expression, receiver: TypeName, callees: Callees, sta
     var owner = key.is_value() ? key.value() : receiver_name;
     var is_static = method_is_static(state, owner, node.method);
     if (is_static.is_value()) {
-        var list = callees.functions.try_get(enum_method_name(owner, node.method));
+        var list = callees.function_set(enum_method_name(owner, node.method));
         if (!list.is_value()) {
             return e;
         }

@@ -139,7 +139,7 @@ struct _TypeArgumentChecks {
 
     owner_type(e: Expression): TypeName? {
         if (!statics.is_value()) {
-            statics = Optional<StructTable>.Value(StructTable(module));
+            statics = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
         }
         return static_type_of(e, statics.value(), current, state);
     }

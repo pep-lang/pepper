@@ -51,7 +51,7 @@ struct _Conditions {
 
     construct(module: Module, state: PassState) {
         this.state = state;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         for (var st in module.structs) {
             if (st.ty.name.starts_with("__")) {
                 continue;

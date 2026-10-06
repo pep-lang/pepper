@@ -37,7 +37,7 @@ struct _OverloadChecks {
     construct(module: Module, state: PassState) {
         this.state = state;
         overloads = Overloads(module, state);
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         for (var g in module.globals) {
             _note_untyped(g, overloads, untyped);
         }

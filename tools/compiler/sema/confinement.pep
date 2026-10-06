@@ -628,7 +628,7 @@ struct _Confinement {
     construct(module: Module, state: PassState) {
         this.module = module;
         this.state = state;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         safe = ThreadSafeStructs(module, state);
         all = _bodies(module);
         for (var body in all) {

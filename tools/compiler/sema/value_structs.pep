@@ -34,7 +34,7 @@ export check_value_structs(module: Module, state: PassState) {
     }
     _check_recursion(module, state);
     _check_value_types(module, state);
-    var table = StructTable(module);
+    var table = StructTable(module, memo = state.trait_types_memo());
     var mutating = _mutating_methods(module, table, state);
     var globals = Array<_ValueBinding>();
     for (var g in module.globals) {

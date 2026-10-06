@@ -90,7 +90,7 @@ struct _WithheldCalls {
                     return e;
                 }
                 if (!table.is_value()) {
-                    table = Optional<StructTable>.Value(StructTable(module));
+                    table = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
                 }
                 var receiver = static_type_of(node.this_value, table.value(), current, state);
                 if (receiver.is_value()) {

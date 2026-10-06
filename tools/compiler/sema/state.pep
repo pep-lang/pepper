@@ -8,6 +8,7 @@ import [Target] from compiler.link;
 import [Exports] from "exports";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
+import [Callees] from "named_arguments";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -64,6 +65,10 @@ export struct PassState {
     ## What `resolve_implicit_types` saw when it last ran, so its next run
     ## walks only the code a change since can affect.
     var implicit: ImplicitMemo = ImplicitMemo();
+    ## What `used_trait_types` found in the checked declarations.
+    var trait_memo: TraitTypeMemo = TraitTypeMemo();
+    ## The callees of the checked declarations, built once (`Callees`).
+    var checked_callees: Callees? = Optional<Callees>.Empty;
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
@@ -89,6 +94,11 @@ export struct PassState {
     ## @param target the compile target
     construct(target: Target) {
         this.target = target;
+    }
+
+    ## `trait_memo`, for `used_trait_types` and `StructTable`.
+    trait_types_memo(): TraitTypeMemo? {
+        return Optional<TraitTypeMemo>.Value(trait_memo);
     }
 
     ## Records an error. Only the first is kept: later ones are usually
@@ -196,6 +206,20 @@ _default_value(e: EnumDef): long {
         }
     }
     return e.cases.count > 0 ? e.cases[0].value : 0;
+}
+
+## What `used_trait_types` found in the checked declarations whose bodies
+## are stashed: those stay as they are while the passes run, so each is
+## looked through once per unit. Each holds the types that may name a
+## trait, in the order they were looked through.
+export struct TraitTypeMemo {
+    ## By struct name, with how many methods and constructors the struct
+    ## had: a specialization or extension may add more.
+    var structs: HashMap<String, (ulong, TypeName[])> = HashMap<String, (ulong, TypeName[])>();
+    ## By function name.
+    var functions: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+
+    construct() {}
 }
 
 ## What a run of `resolve_implicit_types` leaves for the next: what each

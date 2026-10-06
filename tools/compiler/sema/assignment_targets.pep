@@ -19,7 +19,7 @@ import [Rewriter, rewrite_block] from "walk";
 ## @param module the model
 ## @param state the passes' state, which takes the error
 export check_assignment_targets(module: Module, state: PassState) {
-    var checker = _AssignmentTargets(StructTable(module), state);
+    var checker = _AssignmentTargets(StructTable(module, memo = state.trait_types_memo()), state);
     for (var st in module.structs) {
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;

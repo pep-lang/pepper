@@ -297,7 +297,7 @@ struct _MethodUses {
             }
         }
         if (!table.is_value()) {
-            table = Optional<StructTable>.Value(StructTable(module));
+            table = Optional<StructTable>.Value(StructTable(module, memo = state.trait_types_memo()));
         }
         var ty = static_type_of(receiver, table.value(), current, state);
         if (!ty.is_value() or ty.value().contains_auto()) {

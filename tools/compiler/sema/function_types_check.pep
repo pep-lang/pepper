@@ -307,7 +307,7 @@ struct _FunctionTypes {
     construct(module: Module, state: PassState) {
         this.module = module;
         this.state = state;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         defaults = defaulted_params(module);
         for (var st in module.structs) {
             struct_names.insert(st.name);

@@ -167,7 +167,7 @@ struct _SharedFunctions {
 
     construct(module: Module, state: PassState) {
         this.state = state;
-        table = StructTable(module);
+        table = StructTable(module, memo = state.trait_types_memo());
         safe = ThreadSafeStructs(module, state);
         for (var st in module.structs) {
             if (!is_closure_struct(st.name)) {

@@ -69,8 +69,8 @@ struct _Referenceable {
     var variadic_externs: HashSet<String> = HashSet<String>();
     var statics: StructTable;
 
-    construct(module: Module) {
-        statics = StructTable(module);
+    construct(module: Module, state: PassState) {
+        statics = StructTable(module, memo = state.trait_types_memo());
         for (var st in module.structs) {
             if (st.generic_params.count != 0) {
                 continue;
@@ -112,7 +112,7 @@ struct _Referenceable {
                 plain_structs[st.name] = st.ty;
             }
         }
-        for (var ty in used_trait_types(module)) {
+        for (var ty in used_trait_types(module, state.trait_types_memo())) {
             var def = trait_def(module.traits, ty);
             var key = ty.to_string();
             if (def.is_value() and !methods.contains(key)) {
@@ -187,7 +187,7 @@ enum _Target {
 ## @param module the model, changed in place
 ## @param state the passes' state, which takes the first error
 export reference_functions(module: Module, state: PassState) {
-    var replacer = _References(_Referenceable(module), state);
+    var replacer = _References(_Referenceable(module, state), state);
     for (var st in module.structs) {
         if (st.generic_params.count != 0) {
             continue;
