@@ -460,6 +460,14 @@ extend Generator {
     }
 
     codegen_function(function: FunctionDef): Result<void> {
+        if (!function.body.is_value() and stripped.contains(function.loc)) {
+            # Declared only: its unit's object defines it.
+            var declared = functions.try_get(function.name);
+            if (declared.is_value()) {
+                declared.value().set_linkage(llvm.Linkage.External);
+            }
+            return Result<void>.ok();
+        }
         # `[Unsafe("...")]` turns checks off in this body only.
         var build_checks = runtime_checks;
         runtime_checks = build_checks.both(function_checks(function.attributes));

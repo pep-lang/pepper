@@ -1,7 +1,7 @@
 # The build cache of the compiler in Pepper (`driver/cache.pep`): a
 # module's files are one unit, a build keeps each unit's object, the next
-# build reuses those whose inputs did not change, and an unchanged program
-# is not built again.
+# build reuses those whose inputs did not change (other units' files by
+# their interfaces), and an unchanged program is not built again.
 
 import compiler.driver;
 import [Directory, File, Path] from io;
@@ -109,6 +109,35 @@ reuses_the_objects_of_unchanged_units() {
     var module = _build(root);
     expect_true(module.misses.contains(geo));
     expect_true(module.hits.contains(a) and module.hits.contains(b));
+}
+
+[Test]
+rebuilds_only_the_unit_whose_body_changed() {
+    var folder = TempFolder("early_cutoff");
+    var root = folder.path;
+    _write_program(root);
+    # Code of its own beside the entry point, so `main.pep`'s unit has an
+    # object to reuse.
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nimport \"b\";\nimport geo;\n_total(): int {\n    return a_value() + b_value() + geo.area(2, 3);\n}\nmain(): int {\n    return _total() - 9;\n}\n"
+    );
+    var program = _load(root);
+    var main = _unit_of(program, "main.pep");
+    var b = _unit_of(program, "b.pep");
+    _build(root);
+
+    # A body edit leaves `b.pep`'s interface alone: `main.pep`, which
+    # imports it, is still a hit.
+    File.write_text(root.join(Path("b.pep")), "export b_value(): int {\n    return 3 - 1;\n}\n");
+    var body = _build(root);
+    expect_true(body.misses.contains(b));
+    expect_true(body.hits.contains(main));
+
+    # A signature edit changes it: `main.pep` is checked and built again.
+    File.write_text(root.join(Path("b.pep")), "export b_value(x: int = 2): int {\n    return x;\n}\n");
+    var signature = _build(root);
+    expect_true(signature.misses.contains(b) and signature.misses.contains(main));
 }
 
 [Test]

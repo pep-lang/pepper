@@ -202,7 +202,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var keys = Optional<Keys>.Empty;
     String program_key = "";
     if (options.cache.is_value()) {
-        keys = Optional<Keys>.Value(Keys(program, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}"));
+        keys = Optional<Keys>.Value(Keys(program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}"));
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)) {
             if (options.trace_cache) {
@@ -215,6 +215,14 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         clock.lap("keys");
     }
 
+    var triple_extension = triple.contains("-windows") ? "obj" : "o";
+    # The units whose objects the cache has: sema skips their bodies.
+    var reused = Optional<Reused>.Empty;
+    if (keys.is_value()) {
+        reused = Optional<Reused>.Value(reuse(program, units, keys.value(), options.cache.value(), triple_extension));
+        clock.lap("reuse");
+    }
+
     var sources = program.sources();
     var warnings = program.warnings();
     var built = sema.merge(program);
@@ -223,6 +231,11 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         return Result<Built, String>.err(built.error());
     }
     var module = built.value();
+    if (reused.is_value()) {
+        module.record_summaries = true;
+        module.cached_files = reused.value().files;
+        module.recorded_summaries = reused.value().summaries;
+    }
     var state = sema.PassState(program.target);
     state.sources = sources;
     var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
@@ -234,6 +247,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         return Result<Built, String>.err(render_all([ran.error()], sources));
     }
     clock.lap("sema");
+    if (reused.is_value()) {
+        reuse_after_sema(reused.value(), program, units, keys.value(), options.cache.value(), triple_extension, module);
+        clock.lap("interfaces");
+    }
 
     var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][options.opt_level];
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
@@ -287,35 +304,27 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (created.is_err()) {
         return Result<Built, String>.err($"cannot create {work}: {created.error().message}");
     }
-    var extension = triple.contains("-windows") ? "obj" : "o";
+    var extension = triple_extension;
     var objects = Array<Path>();
     var jobs = Array<PartJob>();
     # The units compiled, with their keys, to store in the cache.
     var stored = Array<(ulong, String)>();
     for (var u in 0..units.count) {
+        if (reused.is_value() and reused.value().objects[u].count > 0) {
+            if (options.trace_cache) {
+                File.stderr().write_all($"cache: hit {units[u].name}\n");
+            }
+            objects.append_all(reused.value().objects[u]);
+            report.hits.append(units[u].name);
+            continue;
+        }
         var own = unit_parts[u];
         if (own.is_empty) {
             continue;
         }
         var folder = work.join(Path($"{u}"));
-        if (keys.is_value()) {
-            var key = keys.value().unit(program, units[u]);
-            var cached = options.cache.value().objects(units[u].name, key);
-            var found = Array<Path>();
-            for (var i in 0..own.count) {
-                var object = cached.join(Path($"{i}.{extension}"));
-                if (object.is_file()) {
-                    found.append(object);
-                }
-            }
-            if (found.count == own.count) {
-                if (options.trace_cache) {
-                    File.stderr().write_all($"cache: hit {units[u].name}\n");
-                }
-                objects.append_all(found);
-                report.hits.append(units[u].name);
-                continue;
-            }
+        if (reused.is_value()) {
+            var key = reused.value().keys[u].value();
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: miss {units[u].name} ({own.count} parts)\n");
             }
@@ -323,6 +332,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             report.misses.append(units[u].name);
         }
         Directory.create_all(folder);
+        if (reused.is_value()) {
+            write_record(folder, reused.value(), module, program, units[u], warnings);
+        }
         for (var i in 0..own.count) {
             jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
         }

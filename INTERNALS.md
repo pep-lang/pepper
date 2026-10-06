@@ -3165,7 +3165,24 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   unit's key (`Keys.unit`) hashes (BLAKE3) the compiler's identity (its
   executable's path, size and modification time), the target, CPU, `-O`
   level and `-D` options, the unit's name and files, and each of its
-  inputs' name, namespace, kind and text. Its objects are
+  inputs' name, namespace and kind, with its text when the input is the
+  unit's own or its unit reaches this one back through the units' inputs,
+  else its **interface hash** (`interface.pep`, early cutoff): the file's
+  tokens without comments or positions, each body sema may skip
+  (non-generic, explicit return type, link summary recorded) replaced by
+  its summary without the blame's position and how many `=>` it holds, so
+  a body edit or a comment leaves other units' keys alone. Keys resolve
+  bottom up (`reuse`): a unit's key is known once the interfaces of the
+  files it reads from other units are, which a hit's record gives; a hit
+  whose link summaries were recorded marks its files in
+  `Module.cached_files`, so `strip_bodies` skips their bodies and codegen
+  only declares them (`Generator.stripped`). After sema,
+  `reuse_after_sema` hashes the other files' interfaces from their tokens
+  and `summaries_to_record`, keys the remaining units, and a unit that hits
+  then generates no objects. Beside a unit's objects, `interfaces` holds its
+  files' interface hashes and `summaries` its functions' link summaries
+  (none when the build warned about the unit, so it is checked, and
+  warns, again). Its objects are
   `<cache>/v1/units/<unit>/<key>/<n>.o`, written to the build folder and
   moved into place as one folder. The same key gives the same objects, so
   they never change once there, and builds share the cache without locks
@@ -3189,8 +3206,7 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `pepper-files`' `project.rs` does, with the same errors (the TOML tree
   has no positions, so spans are found from the keys that lead to them),
   and `load` resolves imports of dependencies through `Packages`. Not yet
-  ported: skipping the bodies of cached units in sema, the checked
-  runtime and parse caches, `--target` and cross-linking, LTO, debug info,
+  ported: the checked runtime and parse caches, `--target` and cross-linking, LTO, debug info,
   libraries (`--shared`, `--static`), and the other options.
 
 ---

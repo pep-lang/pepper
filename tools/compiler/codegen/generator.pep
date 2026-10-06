@@ -187,6 +187,9 @@ export struct Generator {
     var static_strings: HashMap<String, llvm.Value> = HashMap<String, llvm.Value>();
     ## Per function, per parameter: the caller makes the parameter's copy.
     var caller_copies: HashMap<String, bool[]> = HashMap<String, bool[]>();
+    ## The functions whose bodies sema skipped (`Module.stripped`): their
+    ## units' objects come from the build cache, so they are only declared.
+    var stripped: HashSet<Loc> = HashSet<Loc>();
     ## The parameters of the function being generated whose copy its caller
     ## made.
     var copied_params: HashSet<String> = HashSet<String>();
@@ -320,6 +323,7 @@ export struct Generator {
     generate_module(module: Module): Result<void> {
         index_check_files();
         caller_copies = module.caller_copies;
+        stripped = module.stripped;
         hash_overrides = HashSet<String>();
         for (var f in module.functions) {
             if (f.name.starts_with("hash<") and f.generic_params.count == 0) {

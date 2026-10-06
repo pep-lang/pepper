@@ -114,10 +114,17 @@ export prepare(
         values.append(global);
     }
     for (var value in values) {
+        var name = value.name();
         if (value.is_declaration()) {
+            # A function whose body sema skipped (its unit's object comes
+            # from the build cache) is declared only, under the spelling
+            # that object defines.
+            if (owners.contains(name)) {
+                value.set_linkage(llvm.Linkage.External);
+                _respell(value, name);
+            }
             continue;
         }
-        var name = value.name();
         if (_is_entry(name)) {
             part_of[name] = entry_part;
             sizes[entry_part] += _size(value);
