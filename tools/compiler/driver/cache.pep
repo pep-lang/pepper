@@ -8,7 +8,9 @@
 ## gives the same objects. So builds share the cache with no lock, and link
 ## the objects where they are. Each unit keeps its newest few keys
 ## (`_KEEP`), so switching between builds that differ (`-O` levels,
-## programs with other overrides) does not rebuild every time.
+## programs with other overrides) does not rebuild every time; reusing a key
+## makes it the newest, and a key stored or reused lately (`_GRACE`) is
+## kept regardless, since another build may be linking it.
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
@@ -24,6 +26,10 @@ import "interface";
 const _VERSION = "v1";
 ## How many keys' objects each unit keeps.
 const _KEEP = 8;
+## How long a key's objects are kept after they were stored or last reused,
+## in nanoseconds, however many newer keys there are: a build running at
+## the same time may be linking them.
+const _GRACE: long = 600000000000;
 
 ## A build cache.
 export struct Cache {
@@ -41,6 +47,14 @@ export struct Cache {
     ## @returns the folder, which need not exist
     objects(unit: String, key: String): Path {
         return dir.join(Path("units")).join(Path(unit)).join(Path(key));
+    }
+
+    ## Marks the objects in `folder`, a key's, as just reused, so the
+    ## unit's pruning counts them as its newest.
+    ##
+    ## @param folder the key's folder (`objects`)
+    used(folder: Path) {
+        folder.set_modified(os.SystemTime.now().unix_nanoseconds());
     }
 
     ## Moves `built`, a folder of objects just written, to where the objects
@@ -138,9 +152,9 @@ export default_cache(work: Path): Cache {
     return Cache(work.join(Path(".pep")).join(Path("cache")));
 }
 
-## Removes the oldest keys' objects in `folder` beyond the newest `_KEEP`.
-## A build linking one of them at the same time would fail its link, and
-## building again rebuilds it.
+## Removes the oldest keys' objects in `folder` beyond the newest `_KEEP`,
+## but none stored or reused within `_GRACE`: a build running at the same
+## time may be linking them.
 _prune(folder: Path) {
     var entries = Directory.open(folder);
     if (entries.is_err()) {
@@ -163,8 +177,12 @@ _prune(folder: Path) {
         var (y, _) = b;
         return x > y ? -1 : (x < y ? 1 : 0);
     });
+    var now = os.SystemTime.now().unix_nanoseconds();
     for (var i in (_KEEP as ulong)..aged.count) {
-        var (_, path) = aged[i];
+        var (modified, path) = aged[i];
+        if (now - modified < _GRACE) {
+            continue;
+        }
         Directory.remove_all(path);
     }
 }
@@ -412,6 +430,7 @@ export reuse(program: link.Program, units: link.Unit[], keys: Keys, cache: Cache
             if (found.is_empty or interfaces.is_err()) {
                 continue;
             }
+            cache.used(folder);
             reused.objects[u] = found;
             for (var line in interfaces.value().split("\n")) {
                 var fields = line.split_once("\t");
@@ -484,6 +503,7 @@ export reuse_after_sema(
         reused.keys[u] = key;
         var folder = cache.objects(units[u].name, key.value());
         if (folder.join(Path(_INTERFACES)).is_file()) {
+            cache.used(folder);
             reused.objects[u] = _objects_in(folder, extension);
         }
     }

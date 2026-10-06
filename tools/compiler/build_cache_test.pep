@@ -6,6 +6,7 @@
 import compiler.driver;
 import [Directory, File, Path] from io;
 import compiler.link;
+import os;
 import process;
 import [TempFolder] from testing;
 
@@ -161,6 +162,48 @@ keeps_the_objects_another_build_stored_first() {
     expect_equal(again.value().to_string(), stored.value().to_string());
     expect_equal(File.read_to_string(stored.value().join(Path("0.o"))).value(), "first");
     expect_false(second.metadata().is_ok());
+}
+
+# A key reused by a build counts as the unit's newest, and no key stored
+# or reused lately is pruned, so a build linking it at the same time finds
+# its objects.
+[Test]
+prunes_neither_reused_nor_recent_keys() {
+    var folder = TempFolder("prune");
+    var root = folder.path;
+    var cache = driver.Cache(root.join(Path("cache")));
+    var hour: long = 3600000000000;
+    var now = os.SystemTime.now().unix_nanoseconds();
+    for (var i in 0..8) {
+        var built = root.join(Path($"built{i}"));
+        Directory.create_all(built);
+        File.write_text(built.join(Path("0.o")), $"{i}");
+        var stored = cache.store(built, "unit", $"key{i}");
+        expect_true(stored.is_ok());
+        # Stored hours ago, oldest first.
+        stored.value().set_modified(now - (10 - (i as long)) * hour);
+    }
+    cache.used(cache.objects("unit", "key0"));
+
+    var newest = root.join(Path("built8"));
+    Directory.create_all(newest);
+    File.write_text(newest.join(Path("0.o")), "8");
+    expect_true(cache.store(newest, "unit", "key8").is_ok());
+    expect_true(cache.objects("unit", "key0").exists());
+    expect_false(cache.objects("unit", "key1").exists());
+    expect_true(cache.objects("unit", "key2").exists());
+
+    # Within the grace period nothing goes, however many keys there are.
+    var recent = root.join(Path("built9"));
+    Directory.create_all(recent);
+    File.write_text(recent.join(Path("0.o")), "9");
+    for (var i in 2..8) {
+        cache.objects("unit", $"key{i}").set_modified(now - 60000000000);
+    }
+    expect_true(cache.store(recent, "unit", "key9").is_ok());
+    for (var i in [0, 2, 3, 4, 5, 6, 7, 8, 9]) {
+        expect_true(cache.objects("unit", $"key{i}").exists());
+    }
 }
 
 [Test]
