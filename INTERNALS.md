@@ -2838,11 +2838,22 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   writes what serde writes for the Rust node.
 - `compiler.parse` (`parse/lower.pep`) does not parse text itself: it
   lowers the lossless tree `tools/syntax` reads into `compiler.ast`, as
-  `parsers.rs` builds it, span for span. That includes what `parsers.rs`
-  desugars while parsing: interpolated strings (`interpolated_string`, each
-  hole parsed with `syntax.parse_expression`), `print` and `String.format`
-  formats (`format_arguments`), property accessors, a module `static`
-  block's `static_constants`, and `build_option_tests`. Token text comes
+  `parsers.rs` builds it, span for span, including property accessors and
+  `build_option_tests`. `parse.parse_written` returns that tree as the
+  source writes it: an interpolated string is an `Expression.Interpolated`
+  (`interpolated_string`, each hole parsed with `syntax.parse_expression`),
+  a `print` or `String.format` format is the call's first argument, an
+  `Expression.FormatString` (`format_arguments`), and a module `static`
+  block declares nothing beside it. `compiler.desugar`
+  (`desugar/desugar.pep`) rewrites those three as `parsers.rs` does: the
+  `_pep_interpolate` / `_pep_format*` calls, the format's text or `match`,
+  and the block's module-scope constants. `desugar(module)` walks a whole
+  written tree; `parse.parse` instead applies the same per-node rewrites
+  (`desugar_interpolated`, `desugar_format_call`, `static_constants`) as
+  the Lowerer reads each node (`Lowerer.desugared`), so it needs no
+  second walk and finds each error where it always did. The spans the
+  parser derives from a child expression use `desugar.desugared_span`, so
+  both trees carry the spans `parsers.rs` gives. Token text comes
   from `Lowerer.token_source` (`token_text`, `token_spells`): the file, or
   inside an interpolated string's braces the hole's own text, which
   `syntax.parse_expression` read. Spans that

@@ -1,8 +1,10 @@
 ## Builds the compiler's syntax tree (`compiler.ast`) from the lossless tree
 ## that `syntax.parse` reads, the way the Rust parser
 ## (`crates/pepper-parser`) builds its own: the same nodes, the same spans,
-## and the same lowering of interpolated strings, `print` and
-## `String.format` formats, properties and module-scope `static` blocks.
+## and the same lowering of properties. Interpolated strings, `print` and
+## `String.format` formats and module-scope `static` blocks stay as the
+## source writes them (`parse_written`); `parse` then rewrites them as the
+## Rust parser does with `compiler.desugar`.
 
 import compiler.ast;
 import [
@@ -16,6 +18,7 @@ import [
     ExportAlias,
     Expression,
     ExtendDecl,
+    FormatSpec,
     FunctionDecl,
     GenericParam,
     Import,
@@ -32,6 +35,7 @@ import [
     Span,
     Statement,
     StaticBlock,
+    StringPart,
     StructDecl,
     SyntaxWarning,
     TraitDecl,
@@ -39,6 +43,7 @@ import [
     TypeName,
     VariableDecl
 ] from compiler.ast;
+import compiler.desugar;
 import syntax;
 import [Node, NodeKind, Token, TokenKind] from syntax;
 import [Utf8] from text;
@@ -61,17 +66,42 @@ export struct ParseError {
     }
 }
 
-## Parses Pepper source into the compiler's syntax tree.
+## Parses Pepper source into the compiler's syntax tree, in the shape the
+## Rust parser builds: interpolated strings and `print` and `String.format`
+## formats lowered to calls, and each module-scope `static` block followed
+## by the constants it declares (see `compiler.desugar`).
 ##
 ## @param source the text of one source file
 ## @returns the module, or the first syntax error
 export parse(source: String): Result<ast.Module, ParseError> {
+    return _parse(source, true);
+}
+
+## Parses Pepper source into the compiler's syntax tree as the source
+## writes it: interpolated strings stay `Expression.Interpolated`, a
+## `print` or `String.format` format stays the call's first argument as an
+## `Expression.FormatString`, and a module-scope `static` block declares
+## nothing beside it. A format whose braces and arguments do not match is
+## an error only when `compiler.desugar` rewrites it.
+##
+## @param source the text of one source file
+## @returns the module, or the first syntax error
+export parse_written(source: String): Result<ast.Module, ParseError> {
+    return _parse(source, false);
+}
+
+# Parses `source`, desugared or as written.
+_parse(source: String, desugared: bool): Result<ast.Module, ParseError> {
     var tree = syntax.parse(source);
     if (tree.is_err()) {
         var error = tree.error();
         return Result<ast.Module, ParseError>.err(ParseError(error.message, Span(error.offset, error.offset)));
     }
     var lowerer = Lowerer(source);
+    # `parse` applies `compiler.desugar`'s rewrite to each interpolated
+    # string, format and module-scope `static` block as it reads it, so
+    # each error is found where it was before and no second walk is needed.
+    lowerer.desugared = desugared;
     var module = lowerer.module(tree.value());
     if (lowerer.error.is_value()) {
         return Result<ast.Module, ParseError>.err(lowerer.error.value());
@@ -84,30 +114,8 @@ export parse(source: String): Result<ast.Module, ParseError> {
     return Result<ast.Module, ParseError>.ok(module);
 }
 
-# The runtime functions an interpolated string calls (see the Rust
-# parser's INTERPOLATE_FUNCTION and friends).
-const INTERPOLATE_FUNCTION = "_pep_interpolate";
-const FORMAT_FUNCTION = "_pep_format";
-const FORMAT_INTEGER_FUNCTION = "_pep_format_integer";
-const FORMAT_FLOAT_FUNCTION = "_pep_format_float";
-
-# A format specification, `[[fill]align][+][0][width][.precision][type]`.
-struct FormatSpec {
-    var fill: String = " ";
-    var align: long;
-    var has_align: bool;
-    var plus: Span?;
-    var zero: Span?;
-    var width: long;
-    var precision: long;
-    var point: Span?;
-    var kind: String = "";
-    var kind_span: Span;
-
-    construct() {}
-}
-
-# One `{...}` of an interpolated or format string: its parts so far.
+# Lowers one source file's lossless tree into a `compiler.ast` module,
+# recording the first error.
 struct Lowerer {
     var source: String;
     # The text the tokens being lowered point into: `source`, or inside an
@@ -132,6 +140,10 @@ struct Lowerer {
     # Whether a struct's, enum's or extension's members are being lowered,
     # whose `Type name()` return types end at the type's name.
     var in_members: bool;
+    # Whether interpolated strings, formats and module-scope `static`
+    # blocks are desugared as they are read (`parse`), else kept as written
+    # (`parse_written`).
+    var desugared: bool;
 
     construct(source: String) {
         this.source = source;
@@ -231,8 +243,10 @@ struct Lowerer {
                     var declaration = declaration(child);
                     if (declaration.is_value()) {
                         out.declarations.append(declaration.value());
-                        if (declaration.value() is Static(block)) {
-                            static_constants(block, out.declarations);
+                        if (desugared) {
+                            if (declaration.value() is Static(module_block)) {
+                                desugar.static_constants(module_block, out.declarations);
+                            }
                         }
                     }
                 }
@@ -241,30 +255,6 @@ struct Lowerer {
         out.build_option_tests = build_option_tests;
         out.warnings = warnings;
         return out;
-    }
-
-    # The module-scope constants a module-scope `static` block declares.
-    static_constants(block: StaticBlock, out: Declaration[]) {
-        for (var statement in block.block.statements) {
-            if (statement is Declaration(declaration)) {
-                if (declaration is Variable(variable)) {
-                    if (variable.is_const and variable.default_value.is_value()) {
-                        var constant = VariableDecl(variable.name);
-                        constant.attributes = block.attributes;
-                        constant.name_span = variable.name_span;
-                        constant.type_name = variable.type_name.copy();
-                        constant.default_value = Optional<Expression>.Value(
-                            Expression.SymbolRef(variable.name, variable.name_span)
-                        );
-                        constant.is_const = true;
-                        constant.span = variable.span;
-                        constant.is_exported = block.is_exported;
-                        constant.is_private = block.is_private;
-                        out.append(Declaration.Variable(constant));
-                    }
-                }
-            }
-        }
     }
 
     # Splits a declaration's leading attributes and `export` from the rest.
@@ -673,7 +663,9 @@ struct Lowerer {
                 var condition = expression(node.child(0));
                 var true_expr = expression(node.child(2));
                 var false_expr = expression(node.child(4));
-                return Expression.Ternary(condition, true_expr, false_expr, Span(condition.span().start, end(node)));
+                return Expression.Ternary(
+                    condition, true_expr, false_expr, Span(desugar.desugared_span(condition).start, end(node))
+                );
             }
             Prefix => {
                 return prefix_expression(node, false);
@@ -681,7 +673,7 @@ struct Lowerer {
             Postfix => {
                 var operand = expression(node.child(0));
                 var op = token_text(node.child(1).leaf);
-                return Expression.Unary(op, false, operand, Span(operand.span().start, end(node)));
+                return Expression.Unary(op, false, operand, Span(desugar.desugared_span(operand).start, end(node)));
             }
             Cast => {
                 var value = expression(node.child(0));
@@ -692,7 +684,9 @@ struct Lowerer {
                     keyword = Span(keyword.start, keyword.end + 1);
                 }
                 var cast_type = type_name(type_node);
-                return Expression.Cast(value, cast_type, Span(value.span().start, end(type_node)), keyword, optional);
+                return Expression.Cast(
+                    value, cast_type, Span(desugar.desugared_span(value).start, end(type_node)), keyword, optional
+                );
             }
             Member => {
                 return member(node);
@@ -700,7 +694,7 @@ struct Lowerer {
             Index => {
                 var lhs = expression(node.child(0));
                 var rhs = expression(node.child(2));
-                return Expression.Index(lhs, rhs, Span(lhs.span().start, end(node)));
+                return Expression.Index(lhs, rhs, Span(desugar.desugared_span(lhs).start, end(node)));
             }
             Call => {
                 return call(node);
@@ -821,7 +815,9 @@ struct Lowerer {
         if (op == "is") {
             var value = expression(node.child(0));
             var tested = pattern(node.child(2));
-            return Expression.Is(value, tested, span_of(op_token), Span(value.span().start, tested.span.end));
+            return Expression.Is(
+                value, tested, span_of(op_token), Span(desugar.desugared_span(value).start, tested.span.end)
+            );
         }
         Expression lhs;
         Expression rhs;
@@ -848,17 +844,26 @@ struct Lowerer {
             name = generic.to_string();
             member_end = end(arguments);
         }
-        return Expression.MemberAccess(lhs, name, name_span, Span(lhs.span().start, member_end));
+        return Expression.MemberAccess(lhs, name, name_span, Span(desugar.desugared_span(lhs).start, member_end));
     }
 
     call(node: Node): Expression {
         var callee = node.child(0);
         var arguments = node.child(1);
+        var function = expression(callee);
         var format = format_call(node);
         if (format.is_value()) {
-            return format.value();
+            var span = Span(desugar.desugared_span(function).start, end(node));
+            if (!desugared) {
+                return Expression.FunctionCall(function, format.value(), span);
+            }
+            var lowered = desugar.desugar_format_call(function, format.value(), span);
+            if (lowered.is_err()) {
+                fail(lowered.error().message, lowered.error().span);
+                return Expression.Literal(Literal.Null, span);
+            }
+            return lowered.value();
         }
-        var function = expression(callee);
         var values = Array<Expression>();
         for (var argument in arguments.children) {
             if (argument.kind == NodeKind.Token
@@ -869,7 +874,7 @@ struct Lowerer {
             }
             values.append(argument_expression(argument));
         }
-        return Expression.FunctionCall(function, values, Span(function.span().start, end(node)));
+        return Expression.FunctionCall(function, values, Span(desugar.desugared_span(function).start, end(node)));
     }
 
     # An argument, `name = value` being a named one.
@@ -880,7 +885,7 @@ struct Lowerer {
                 var value = expression(node.child(2));
                 var name_span = span_of(name.leaf);
                 return Expression.NamedArgument(
-                    token_text(name.leaf), name_span, value, Span(name_span.start, value.span().end)
+                    token_text(name.leaf), name_span, value, Span(name_span.start, desugar.desugared_span(value).end)
                 );
             }
         }
@@ -931,7 +936,7 @@ struct Lowerer {
             out.body = block(body);
         } else {
             var value = expression(body);
-            var span = value.span();
+            var span = desugar.desugared_span(value);
             var wrapper = Block(span);
             wrapper.statements.append(Statement.Return(Optional<Expression>.Value(value), span));
             out.body = wrapper;
@@ -969,7 +974,7 @@ struct Lowerer {
                 }
                 index += 1;
             }
-            value_arm.span = Span(start(arm), value_arm.value.span().end);
+            value_arm.span = Span(start(arm), desugar.desugared_span(value_arm.value).end);
             out.arms.append(value_arm);
         }
         return Expression.Match(out);
@@ -1004,12 +1009,12 @@ struct Lowerer {
                 literal = expression(first);
             }
             out.literal = Optional<Expression>.Value(literal);
-            var span = literal.span();
+            var span = desugar.desugared_span(literal);
             if (node.count > 2) {
                 var range_end = expression(node.child(2));
                 out.range_end = Optional<Expression>.Value(range_end);
                 out.range_inclusive = node.child(1).is_token(token_source, "..>");
-                span = Span(span.start, range_end.span().end);
+                span = Span(span.start, desugar.desugared_span(range_end).end);
             }
             out.span = span;
             out.case_span = span;
@@ -1150,7 +1155,9 @@ struct Lowerer {
                     or (node.count > 1 and !node.child(1).is_token(token_source, ";"))) {
                     var value = expression(node.child(1));
                     return Optional<Statement>.Value(
-                        Statement.Return(Optional<Expression>.Value(value), Span(keyword.start, value.span().end))
+                        Statement.Return(
+                            Optional<Expression>.Value(value), Span(keyword.start, desugar.desugared_span(value).end)
+                        )
                     );
                 }
                 return Optional<Statement>.Value(Statement.Return(Optional<Expression>.Empty, keyword));
@@ -2079,12 +2086,11 @@ struct Lowerer {
 
     # ── Interpolated strings and formats ────────────────────────────────
 
-    # `$"sum is {a + b}"`: the concatenation of its text and the calls
-    # that convert each value in braces.
+    # `$"sum is {a + b}"`: its text and the values in braces, as written.
     interpolated_string(token: Token): Expression {
         var text = token_text(token);
         ulong literal_start = base + token.offset;
-        var parts = Array<Expression>();
+        var parts = Array<StringPart>();
         var bytes = Array<u8>();
         ulong offset = 2;
         ulong text_start = literal_start + offset;
@@ -2116,19 +2122,23 @@ struct Lowerer {
             offset += 1;
         }
         flush(parts, bytes, text_start, literal_start + offset);
-        return join_parts(parts, span_of(token));
+        if (desugared) {
+            return desugar.desugar_interpolated(parts, span_of(token));
+        }
+        return Expression.Interpolated(parts, span_of(token));
     }
 
-    flush(parts: Expression[], bytes: u8[], start: ulong, end: ulong) {
+    flush(parts: StringPart[], bytes: u8[], start: ulong, end: ulong) {
         if (bytes.count > 0) {
-            parts.append(Expression.Literal(Literal.String(Utf8.decode_lossy(bytes)), Span(start, end)));
+            parts.append(StringPart.Text(Utf8.decode_lossy(bytes), Span(start, end)));
             bytes.clear();
         }
     }
 
     # The value in braces from `open` (the `{`) to `close` (the `}`) of a
-    # literal's `text`, which starts at file offset `at`, converted to text.
-    hole(text: String, open: ulong, close: ulong, at: ulong): Expression {
+    # literal's `text`, which starts at file offset `at`, with its format
+    # specification.
+    hole(text: String, open: ulong, close: ulong, at: ulong): StringPart {
         var inner = text.substr_bytes(open + 1, close - open - 1);
         var braces = Span(at + open, at + close + 1);
         # The longest prefix ending at a top-level `:` (or the whole) that
@@ -2153,15 +2163,15 @@ struct Lowerer {
                 token_source = outer_source;
                 token_offsets = saved;
                 if (cut == inner.size) {
-                    return interpolation_call(value, braces, Optional<FormatSpec>.Empty);
+                    return StringPart.Hole(value, braces, Optional<FormatSpec>.Empty);
                 }
                 var spec = format_spec(inner.substr_bytes(cut + 1, inner.size - cut - 1), at + open + 2 + cut);
-                return interpolation_call(value, braces, Optional<FormatSpec>.Value(spec));
+                return StringPart.Hole(value, braces, Optional<FormatSpec>.Value(spec));
             }
             choice -= 1;
         }
         fail("expected an expression after '{' in interpolated string; write '{{' for a literal '{'", braces);
-        return Expression.Literal(Literal.Null, braces);
+        return StringPart.Hole(Expression.Literal(Literal.Null, braces), braces, Optional<FormatSpec>.Empty);
     }
 
     # The offsets of the `:`s in `text` outside brackets and literals.
@@ -2316,101 +2326,14 @@ struct Lowerer {
         return c.size == 1 and c.byte_at(0) >= '0' and c.byte_at(0) <= '9';
     }
 
-    # The call that converts `value`, in braces at `braces`, to text.
-    interpolation_call(value: Expression, braces: Span, spec: FormatSpec?): Expression {
-        if (!spec.is_value()) {
-            return format_call_of(INTERPOLATE_FUNCTION, braces, [value]);
-        }
-        var s = spec.value();
-        var fill = Expression.Literal(Literal.String(s.fill), braces);
-        var align = Expression.Literal(Literal.Integer(s.has_align ? s.align : 0), braces);
-        var width = Expression.Literal(Literal.Integer(s.width), braces);
-        if (s.point.is_value()) {
-            return format_call_of(
-                FORMAT_FLOAT_FUNCTION,
-                s.point.value(),
-                [
-                    value,
-                    Expression.Literal(Literal.Integer(s.precision), braces),
-                    Expression.Literal(Literal.Bool(s.plus.is_value()), braces),
-                    fill,
-                    align,
-                    width,
-                    Expression.Literal(Literal.Bool(s.zero.is_value()), braces)
-                ]
-            );
-        }
-        Span? integer;
-        if (!s.kind.is_empty) {
-            integer = Optional<Span>.Value(s.kind_span);
-        } else if (s.plus.is_value()) {
-            integer = s.plus;
-        } else if (s.zero.is_value()) {
-            integer = s.zero;
-        }
-        if (!integer.is_value()) {
-            return format_call_of(FORMAT_FUNCTION, braces, [value, fill, align, width]);
-        }
-        var kind = s.kind.is_empty ? "d" : s.kind;
-        long number_base = 10;
-        if (kind == "x" or kind == "X") {
-            number_base = 16;
-        } else if (kind == "b") {
-            number_base = 2;
-        } else if (kind == "o") {
-            number_base = 8;
-        }
-        return format_call_of(
-            FORMAT_INTEGER_FUNCTION,
-            integer.value(),
-            [
-                value,
-                Expression.Literal(Literal.Integer(number_base), braces),
-                Expression.Literal(Literal.Bool(kind == "X"), braces),
-                Expression.Literal(Literal.Bool(s.plus.is_value()), braces),
-                fill,
-                align,
-                width,
-                Expression.Literal(Literal.Bool(s.zero.is_value()), braces)
-            ]
-        );
-    }
-
-    format_call_of(name: String, span: Span, arguments: Expression[]): Expression {
-        return Expression.FunctionCall(Expression.SymbolRef(name, span), arguments, span);
-    }
-
-    # The concatenation of `parts`, covering `span`.
-    join_parts(parts: Expression[], span: Span): Expression {
-        if (parts.count == 0) {
-            return Expression.Literal(Literal.String(""), span);
-        }
-        var joined = parts[0];
-        ulong i = 1;
-        while (i < parts.count) {
-            var rhs = parts[i];
-            joined = Expression.Binary(joined, "+", rhs, Span(joined.span().start, rhs.span().end));
-            i += 1;
-        }
-        match (joined) {
-            Binary(lhs, op, rhs, _) => {
-                return Expression.Binary(lhs, op, rhs, span);
-            }
-            Literal(value, _) => {
-                return Expression.Literal(value, span);
-            }
-            else => {}
-        }
-        return joined;
-    }
-
-    # `print("{0}", x)` and `String.format("{0}", x)`: formats lowered as
-    # the Rust parser lowers them; none for any other call.
-    format_call(node: Node): Expression? {
+    # `print("{0}", x)` and `String.format("{0}", x)`: the arguments, the
+    # format first as an `Expression.FormatString`, that `compiler.desugar`
+    # lowers as the Rust parser lowers them; none for any other call.
+    format_call(node: Node): Expression[]? {
         var callee = node.child(0);
         var arguments = node.child(1);
         if (arguments.count < 3) {
-            return Optional<Expression>.Empty;
+            return Optional<Expression[]>.Empty;
         }
         var first = arguments.child(1);
         bool literal = first.kind == NodeKind.Token
@@ -2418,42 +2341,31 @@ struct Lowerer {
             and !token_text(first.leaf).starts_with("$");
         if (callee.kind == NodeKind.Token and token_spells(callee.leaf, "print")) {
             if (!literal or !arguments.child(2).is_token(token_source, ",")) {
-                return Optional<Expression>.Empty;
+                return Optional<Expression[]>.Empty;
             }
-            var name_span = span_of(callee.leaf);
-            var text = format_arguments(arguments, name_span.start, name_span, "print");
-            var call = Expression.FunctionCall(
-                Expression.SymbolRef("print", name_span), [text], Span(name_span.start, end(node))
-            );
-            return Optional<Expression>.Value(call);
+            return Optional<Expression[]>.Value(format_arguments(arguments));
         }
         bool string_format = callee.kind == NodeKind.Member
             and callee.count == 3
             and callee.child(0).is_token(token_source, "String")
             and callee.child(2).is_token(token_source, "format");
         if (!string_format) {
-            return Optional<Expression>.Empty;
+            return Optional<Expression[]>.Empty;
         }
         if (!literal) {
             fail("the format of 'String.format' must be a string literal", whole(first));
-            return Optional<Expression>.Empty;
+            return Optional<Expression[]>.Empty;
         }
-        var name_span = span_of(callee.child(2).leaf);
-        return Optional<Expression>.Value(format_arguments(arguments, start(callee), name_span, "String.format"));
+        return Optional<Expression[]>.Value(format_arguments(arguments));
     }
 
-    # The format string and the arguments after it, as the concatenation
-    # an interpolated string would make, or a `match` that binds the
-    # arguments when the braces do not name each once, in order.
-    format_arguments(arguments: Node, call_start: ulong, name_span: Span, callee: String): Expression {
+    # The format string, its text and the arguments it names in braces,
+    # then the arguments after it.
+    format_arguments(arguments: Node): Expression[] {
         var format = arguments.child(1).leaf;
         var text = token_text(format);
         ulong literal_start = base + format.offset;
-        ulong paren = start(arguments);
-        var span = Span(call_start, end(arguments));
-        var parts = Array<Expression>();
-        var holes = Array<ulong>();
-        var hole_spans = Array<Span>();
+        var parts = Array<StringPart>();
         var bytes = Array<u8>();
         ulong offset = 1;
         ulong text_start = literal_start + offset;
@@ -2493,10 +2405,8 @@ struct Lowerer {
                         format_spec(text.substr_bytes(digits + 1, close - digits - 1), literal_start + digits + 1)
                     );
                 }
-                holes.append(index);
-                hole_spans.append(index_span);
-                var value = Expression.SymbolRef($"_pep_format_{index}", index_span);
-                parts.append(interpolation_call(value, Span(literal_start + brace, literal_start + close + 1), spec));
+                var braces = Span(literal_start + brace, literal_start + close + 1);
+                parts.append(StringPart.Argument(index, index_span, braces, spec));
                 offset = close + 1;
                 text_start = literal_start + offset;
                 continue;
@@ -2517,89 +2427,11 @@ struct Lowerer {
             }
             i += 1;
         }
-        var count = values.count;
-        ulong h = 0;
-        while (h < holes.count) {
-            if (holes[h] >= count) {
-                var noun = count == 1 ? "argument" : "arguments";
-                fail($"argument index {holes[h]} is out of range for {count} {noun}", hole_spans[h]);
-                return Expression.Literal(Literal.Null, span);
-            }
-            h += 1;
+        var out = Array<Expression>();
+        out.append(Expression.FormatString(parts, span_of(format), start(arguments), value_spans));
+        for (var value in values) {
+            out.append(value);
         }
-        ulong a = 0;
-        while (a < count) {
-            bool used = false;
-            for (var index in holes) {
-                if (index == a) {
-                    used = true;
-                }
-            }
-            if (!used) {
-                fail($"argument {a} of '{callee}' is not used by its format string", value_spans[a]);
-                return Expression.Literal(Literal.Null, span);
-            }
-            a += 1;
-        }
-        bool in_order = holes.count == count;
-        h = 0;
-        while (h < holes.count) {
-            if (holes[h] != h) {
-                in_order = false;
-            }
-            h += 1;
-        }
-        if (in_order) {
-            var next = 0 as ulong;
-            var filled = Array<Expression>();
-            for (var part in parts) {
-                if (part is FunctionCall(function, part_arguments, part_span)) {
-                    var replaced = Array<Expression>();
-                    replaced.append(values[next]);
-                    next += 1;
-                    ulong k = 1;
-                    while (k < part_arguments.count) {
-                        replaced.append(part_arguments[k]);
-                        k += 1;
-                    }
-                    filled.append(Expression.FunctionCall(function, replaced, part_span));
-                } else {
-                    filled.append(part);
-                }
-            }
-            return join_parts(filled, span);
-        }
-        var elements = Array<Pattern>();
-        ulong e = 0;
-        while (e < count) {
-            elements.append(name_pattern($"_pep_format_{e}", value_spans[e]));
-            e += 1;
-        }
-        var tuple_span = Span(paren, span.end);
-        if (count == 1) {
-            values.append(Expression.Literal(Literal.Bool(false), tuple_span));
-            elements.append(name_pattern("_", tuple_span));
-        }
-        var tuple_pattern = Pattern();
-        tuple_pattern.elements = Optional<Pattern[]>.Value(elements);
-        tuple_pattern.case_span = tuple_span;
-        tuple_pattern.span = tuple_span;
-        var arm = MatchValueArm();
-        arm.patterns.append(tuple_pattern);
-        arm.value = join_parts(parts, span);
-        arm.span = span;
-        var out = MatchExpression(Expression.Tuple(values, Array<Label>(), tuple_span));
-        out.arms.append(arm);
-        out.keyword_span = name_span;
-        out.span = span;
-        return Expression.Match(out);
-    }
-
-    name_pattern(name: String, span: Span): Pattern {
-        var out = Pattern();
-        out.case_name = name;
-        out.case_span = span;
-        out.span = span;
         return out;
     }
 }
@@ -2642,7 +2474,10 @@ contains_platform_predicate(body: Expression): bool {
     return false;
 }
 
-# Whether `e` calls `BuildOption(...)` anywhere.
+# Whether `e` calls `BuildOption(...)` anywhere, looking where it would
+# once desugared: into the calls and operators that build an interpolated
+# string or a format's text, which hold a format's arguments only when
+# its braces name them once each, in order.
 mentions_build_option(e: Expression): bool {
     match (e) {
         FunctionCall(function, arguments, _) => {
@@ -2651,9 +2486,26 @@ mentions_build_option(e: Expression): bool {
                     return true;
                 }
             }
+            if (arguments.count > 0) {
+                if (arguments[0] is FormatString(parts, _, _, _)) {
+                    if (!desugar.is_in_order(parts, arguments.count - 1)) {
+                        return false;
+                    }
+                }
+            }
             for (var argument in arguments) {
                 if (mentions_build_option(argument)) {
                     return true;
+                }
+            }
+            return false;
+        }
+        Interpolated(parts, _) => {
+            for (var part in parts) {
+                if (part is Hole(value, _, _)) {
+                    if (mentions_build_option(value)) {
+                        return true;
+                    }
                 }
             }
             return false;

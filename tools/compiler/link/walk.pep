@@ -802,6 +802,9 @@ export trait ScopeWalk {
                 visit_pattern_types(pattern);
                 return Expression.Is(walked, pattern, keyword_span, span);
             }
+            # `parse.parse` desugars these; only `parse_written` keeps them.
+            Interpolated(_, _) => {}
+            FormatString(_, _, _, _) => {}
         }
         return e;
     }

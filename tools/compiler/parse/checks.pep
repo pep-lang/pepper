@@ -390,6 +390,15 @@ struct _PointerCheck {
             Is(value, _, _, _) => {
                 expression(value);
             }
+            Interpolated(parts, _) => {
+                for (var part in parts) {
+                    if (part is Hole(value, _, _)) {
+                        expression(value);
+                    }
+                }
+            }
+            # Its arguments are the call's.
+            FormatString(_, _, _, _) => {}
         }
     }
 }

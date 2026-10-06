@@ -1905,6 +1905,9 @@ struct _Builder {
                 );
                 return Built<Expression>.Ok(Expression.ClosureLiteral(literal));
             }
+            # `parse.parse` desugars these; only `parse_written` keeps them.
+            Interpolated(_, _) => {}
+            FormatString(_, _, _, _) => {}
         }
         return Built<Expression>.Err(_error("unsupported expression", loc(expr.span())));
     }

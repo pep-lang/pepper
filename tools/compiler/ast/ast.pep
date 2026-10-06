@@ -405,6 +405,153 @@ export struct MapEntry {
     }
 }
 
+## A format specification after the `:` of an interpolated string's hole
+## or a format string's argument: `[[fill]align][+][0][width][.precision][type]`.
+export struct FormatSpec {
+    ## The fill character, a space when not written.
+    var fill: String = " ";
+    ## The alignment when `has_align`: 1 for `<`, 2 for `^`, 3 for `>`.
+    var align: long;
+    ## An alignment is written.
+    var has_align: bool;
+    ## The `+` sign flag, when written.
+    var plus: Span?;
+    ## The `0` padding flag, when written.
+    var zero: Span?;
+    ## The minimum width, 0 when not written.
+    var width: long;
+    ## The digits after the `.`.
+    var precision: long;
+    ## The `.` before the precision, when written.
+    var point: Span?;
+    ## The type, `d`, `x`, `X`, `b` or `o`; empty when not written.
+    var kind: String = "";
+    ## Where the type is written.
+    var kind_span: Span;
+
+    ## Creates a specification that writes nothing.
+    construct() {}
+
+    ## Returns the specification as source writes it: `>8.2`.
+    ##
+    ## @returns the text after the `:`
+    to_string(): String {
+        var out = StringBuilder();
+        if (has_align) {
+            if (fill != " ") {
+                out.append(fill);
+            }
+            out.append(align == 1 ? "<" : (align == 2 ? "^" : ">"));
+        }
+        if (plus.is_value()) {
+            out.append("+");
+        }
+        if (zero.is_value()) {
+            out.append("0");
+        }
+        if (width > 0) {
+            out.append($"{width}");
+        }
+        if (point.is_value()) {
+            out.append($".{precision}");
+        }
+        out.append(kind);
+        return out.to_string();
+    }
+
+    ## Returns the specification as JSON.
+    ##
+    ## @returns the JSON object
+    to_json(): JsonValue {
+        var out = JsonValue.object();
+        out["fill"] = JsonValue.String(fill);
+        out["align"] = has_align ? JsonValue.Integer(align) : JsonValue.Null;
+        out["plus"] = optional_span_json(plus);
+        out["zero"] = optional_span_json(zero);
+        out["width"] = JsonValue.Integer(width);
+        out["precision"] = point.is_value() ? JsonValue.Integer(precision) : JsonValue.Null;
+        out["point"] = optional_span_json(point);
+        out["kind"] = JsonValue.String(kind);
+        out["kind_span"] = kind_span.to_json();
+        return out;
+    }
+}
+
+## One part of an interpolated string (`$"..."`) or of the format string
+## that `print` and `String.format` take, as the source writes it.
+export enum StringPart {
+    ## Text between the braces, with its escapes and `{{` `}}` decoded.
+    ##
+    ## @param text the text
+    ## @param span where it is written
+    Text(text: String, span: Span),
+    ## `{value}` or `{value:spec}` of an interpolated string.
+    ##
+    ## @param value the value converted to text
+    ## @param braces the braces
+    ## @param spec the format specification, when written
+    Hole(value: Expression, braces: Span, spec: FormatSpec?),
+    ## `{0}` or `{0:spec}` of a format string: the argument after the
+    ## format that it stands for.
+    ##
+    ## @param index the argument's index, 0 for the first after the format
+    ## @param index_span where the index is written
+    ## @param braces the braces
+    ## @param spec the format specification, when written
+    Argument(index: ulong, index_span: Span, braces: Span, spec: FormatSpec?),
+
+    ## Returns the part as source writes it inside the quotes.
+    ##
+    ## @returns the text
+    to_string(): String {
+        match (this) {
+            Text(text, _) => {
+                var quoted = Literal.String(text).to_string();
+                return quoted.substr_bytes(1, quoted.size - 2).replace("{", "{{").replace("}", "}}");
+            }
+            Hole(value, _, spec) => {
+                return spec.is_value() ?
+                    $"{{{value.to_string()}:{spec.value().to_string()}}}" :
+                    $"{{{value.to_string()}}}";
+            }
+            Argument(index, _, _, spec) => {
+                return spec.is_value() ? $"{{{index}:{spec.value().to_string()}}}" : $"{{{index}}}";
+            }
+        }
+        return "";
+    }
+
+    ## Returns the part as JSON, externally tagged like serde.
+    ##
+    ## @returns the JSON value
+    to_json(): JsonValue {
+        match (this) {
+            Text(text, span) => {
+                var out = JsonValue.object();
+                out["text"] = JsonValue.String(text);
+                out["span"] = span.to_json();
+                return tagged("Text", out);
+            }
+            Hole(value, braces, spec) => {
+                var out = JsonValue.object();
+                out["value"] = value.to_json();
+                out["braces"] = braces.to_json();
+                out["spec"] = spec.is_value() ? spec.value().to_json() : JsonValue.Null;
+                return tagged("Hole", out);
+            }
+            Argument(index, index_span, braces, spec) => {
+                var out = JsonValue.object();
+                out["index"] = JsonValue.Integer(index as long);
+                out["index_span"] = index_span.to_json();
+                out["braces"] = braces.to_json();
+                out["spec"] = spec.is_value() ? spec.value().to_json() : JsonValue.Null;
+                return tagged("Argument", out);
+            }
+        }
+        return JsonValue.Null;
+    }
+}
+
 ## An expression.
 export enum Expression {
     ## A literal.
@@ -512,6 +659,24 @@ export enum Expression {
     ## @param keyword_span the `is` keyword
     ## @param span the test
     Is(value: Expression, pattern: Pattern, keyword_span: Span, span: Span),
+    ## `$"text {value} text"` as written: `parse.parse_written` keeps it,
+    ## and `desugar` turns it into the calls that convert each hole and
+    ## the concatenation of the results.
+    ##
+    ## @param parts the text and holes, in order
+    ## @param span the literal
+    Interpolated(parts: StringPart[], span: Span),
+    ## The string literal format that `print` and `String.format` take
+    ## first, `"{0} and {1}"`, followed by at least one argument for
+    ## `print`. It is only ever the first argument of such a call, which
+    ## `desugar` turns into the format's text.
+    ##
+    ## @param parts the text and arguments, in order
+    ## @param span the literal
+    ## @param paren where the call's `(` starts
+    ## @param argument_spans the arguments after the format, each from its
+    ##   first token to its last
+    FormatString(parts: StringPart[], span: Span, paren: ulong, argument_spans: Span[]),
 
     ## Returns where a diagnostic about the expression points.
     ##
@@ -570,6 +735,12 @@ export enum Expression {
                 return expression.span;
             }
             Is(_, _, _, span) => {
+                return span;
+            }
+            Interpolated(_, span) => {
+                return span;
+            }
+            FormatString(_, span, _, _) => {
                 return span;
             }
         }
@@ -703,6 +874,12 @@ export enum Expression {
             Is(value, pattern, _, _) => {
                 return $"({value.to_string()} is {pattern.to_string()})";
             }
+            Interpolated(parts, _) => {
+                return "$\"" + _parts_text(parts) + "\"";
+            }
+            FormatString(parts, _, _, _) => {
+                return "\"" + _parts_text(parts) + "\"";
+            }
         }
         return "";
     }
@@ -833,6 +1010,24 @@ export enum Expression {
                 out["keyword_span"] = keyword_span.to_json();
                 out["span"] = span.to_json();
                 return tagged("Is", out);
+            }
+            Interpolated(parts, span) => {
+                var out = JsonValue.object();
+                out["parts"] = parts_json(parts);
+                out["span"] = span.to_json();
+                return tagged("Interpolated", out);
+            }
+            FormatString(parts, span, paren, argument_spans) => {
+                var out = JsonValue.object();
+                out["parts"] = parts_json(parts);
+                out["span"] = span.to_json();
+                out["paren"] = JsonValue.Integer(paren as long);
+                var spans = JsonValue.array();
+                for (var argument_span in argument_spans) {
+                    spans.append(argument_span.to_json());
+                }
+                out["argument_spans"] = spans;
+                return tagged("FormatString", out);
             }
         }
         return JsonValue.Null;
@@ -1799,6 +1994,15 @@ _joined(expressions: Expression[]): String {
     return ", ".join(parts);
 }
 
+## Returns string parts as source writes them inside the quotes.
+_parts_text(parts: StringPart[]): String {
+    var out = StringBuilder();
+    for (var part in parts) {
+        out.append(part.to_string());
+    }
+    return out.to_string();
+}
+
 ## Returns `patterns` as source writes them, separated by commas.
 _patterns_text(patterns: Pattern[]): String {
     var parts = Array<String>();
@@ -2496,6 +2700,18 @@ bindings_json(bindings: DestructureBinding[]): JsonValue {
     var out = JsonValue.array();
     for (var item in bindings) {
         out.append(item.to_json());
+    }
+    return out;
+}
+
+optional_span_json(span: Span?): JsonValue {
+    return span.is_value() ? span.value().to_json() : JsonValue.Null;
+}
+
+parts_json(parts: StringPart[]): JsonValue {
+    var out = JsonValue.array();
+    for (var part in parts) {
+        out.append(part.to_json());
     }
     return out;
 }
