@@ -468,6 +468,10 @@ extend Generator {
             }
             return Result<void>.ok();
         }
+        if (waits(function.name)) {
+            waiting.append(function);
+            return Result<void>.ok();
+        }
         # `[Unsafe("...")]` turns checks off in this body only.
         var build_checks = runtime_checks;
         runtime_checks = build_checks.both(function_checks(function.attributes));
@@ -481,6 +485,41 @@ extend Generator {
         runtime_checks = build_checks;
         locate(result, function.loc);
         return result;
+    }
+
+    ## Whether the body of function `name` waits until something calls it:
+    ## an unowned one (a generic's instantiation, a synthesized member) that
+    ## nothing calls yet, since every part that does not call it drops it.
+    waits(name: String): bool {
+        if (owners.contains(name) or name == "main") {
+            return false;
+        }
+        var declared = functions.try_get(name);
+        return declared.is_value() and !declared.value().has_uses();
+    }
+
+    ## Generates the bodies `waits` held back that something now calls,
+    ## until no new one is called; the rest stay declarations.
+    codegen_called(): Result<void> {
+        var progress = true;
+        while (progress) {
+            progress = false;
+            var held = waiting;
+            waiting = Array<FunctionDef>();
+            for (var function in held) {
+                if (!functions[function.name].has_uses()) {
+                    waiting.append(function);
+                    continue;
+                }
+                codegen_function(function)?;
+                progress = true;
+            }
+        }
+        for (var function in waiting) {
+            functions[function.name].set_linkage(llvm.Linkage.External);
+        }
+        waiting = Array<FunctionDef>();
+        return Result<void>.ok();
     }
 
     ## Whether the object of the unit owning function `name` comes from the

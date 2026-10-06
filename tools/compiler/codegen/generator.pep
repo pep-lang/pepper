@@ -193,6 +193,8 @@ export struct Generator {
     ## The files whose units' objects come from the build cache: the bodies
     ## they own are only declared.
     var cached_files: HashSet<uint> = HashSet<uint>();
+    ## The unowned bodies no generated code calls yet (`waits`).
+    var waiting: FunctionDef[] = Array<FunctionDef>();
     ## The parameters of the function being generated whose copy its caller
     ## made.
     var copied_params: HashSet<String> = HashSet<String>();
@@ -473,6 +475,7 @@ export struct Generator {
         for (var function in module.functions) {
             codegen_function(function)?;
         }
+        codegen_called()?;
         var verified = ir.verify();
         if (verified.is_err()) {
             return fail<void>(verification_error(module, verified.error().message));
