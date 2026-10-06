@@ -2507,7 +2507,24 @@ inlay hints, quick fixes and dimmed code for other platforms:
   `named`; `compiler.sema`'s `member_at` and `local_type`
   (`sema/member_lookup.pep`) type a member access's owner and an inferred
   local in the checked model. Hover heads spell a type as written:
-  linking's `@namespace` suffixes are stripped.
+  linking's `@namespace` suffixes are stripped. Before the syntax,
+  `navigate.pep` asks the model for what only it knows: a call's chosen
+  overload (`Module.call_targets`, with "(+N overloads)"), a use of a
+  `[__BuiltIn]` declaration (`reflect.name`, `__null`, `sizeof`), an
+  enum case's value, and whether a function returns a fresh value
+  (`sema.returns_fresh`, from the confinement summaries).
+- `infer.pep`: the syntax's own typer (`Typer`), ported from `tools/lsp`'s
+  `infer.rs`, for what the model leaves untyped: generic bodies nothing
+  instantiates (sema checks only specializations), the names a `match`
+  arm or an `is` test binds, and the members such code reaches. A name's
+  type comes from its declaration, else the model's inferred type, else
+  its initializer; a member is found in every program file's
+  declarations, the owner's type arguments bound to the declaration's
+  parameters. `SyntaxWalk` visits a module with an explicit stack, and
+  typing gives up past 48 steps. `written.pep` finds what the tree holds
+  in no node: tuple labels, a type argument written in a member's name
+  (`copy<T>`), and the names of `String.format(...)`, which the parser
+  lowers.
 - `edits.pep`: requests never wait for sema. The server keeps each
   document's last analysis and the newest one whose sema passed. When the
   text changed since that one, an `EditMap` (the one region where the two

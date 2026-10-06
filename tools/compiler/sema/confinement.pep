@@ -16,7 +16,7 @@ import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
-import [demangle_name, Runtime] from compiler.link;
+import [demangle_name, Runtime, Target] from compiler.link;
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import [location_of] from "common";
@@ -685,6 +685,45 @@ _runtime_files(state: PassState): bool[] {
         out.append(path == dir or path.starts_with(dir + "/") or path.starts_with(dir + "\\"));
     }
     return out;
+}
+
+## Whether the function or method with summary key `key` (a function's
+## name, or `Struct.method`) returns a fresh value: one that shares nothing
+## with its inputs, so it may move into a locked value or be passed to a
+## `[Move]` parameter. For the language server's hover.
+##
+## @param module the checked model
+## @param target the compile target
+## @param key the summary key
+## @returns empty when it has no body or returns a value of a thread-safe
+##     type, which crosses freely anyway
+export returns_fresh(module: Module, target: Target, key: String): bool? {
+    var none = Optional<bool>.Empty;
+    var program = _Confinement(module, PassState(target));
+    var found = Optional<_Body>.Empty;
+    for (var body in program.all) {
+        if (body.key == key) {
+            found = Optional<_Body>.Value(body);
+            break;
+        }
+    }
+    if (found.is_empty() or !program.has_region(found.value().function.ty)) {
+        return none;
+    }
+    _summaries(program, [key]);
+    var summary = program.summaries.try_get(key);
+    if (summary.is_empty()) {
+        return none;
+    }
+    var s = summary.value();
+    ulong n = 0;
+    while (n < s.results()) {
+        if (!s.fresh_at(n)) {
+            return Optional<bool>.Value(false);
+        }
+        n += 1;
+    }
+    return Optional<bool>.Value(true);
 }
 
 ## Every compiled function body: free functions, then each struct's

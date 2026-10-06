@@ -469,7 +469,7 @@ export generic_param_at(module: Module, offset: ulong, matches: (GenericParam) =
                 for (var bound in p.bounds) {
                     bounds.append(bound.to_string());
                 }
-                type_text += ": " + " & ".join(bounds);
+                type_text = type_text + ": " + " & ".join(bounds);
             }
             return Optional<Symbol>.Value(Symbol(p.name, p.name_span, type_text));
         }

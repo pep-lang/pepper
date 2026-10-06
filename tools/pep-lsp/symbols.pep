@@ -124,10 +124,10 @@ export generics_string(parameters: GenericParam[]): String {
             for (var bound in p.bounds) {
                 bounds.append(bound.to_string());
             }
-            out += ": " + " & ".join(bounds);
+            out = out + ": " + " & ".join(bounds);
         }
         if (p.default is Value(fallback)) {
-            out += (p.bounds.count == 0 ? "=" : " = ") + fallback.to_string();
+            out = out + (p.bounds.count == 0 ? "=" : " = ") + fallback.to_string();
         }
         spelled.append(out);
     }
