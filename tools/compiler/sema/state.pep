@@ -71,7 +71,7 @@ export struct PassState {
     ## constraints already (`check_specializations`).
     var checked_specs: (ulong, ulong) = (0, 0);
     ## The link summaries `check_confinement` settled for the functions not
-    ## checked before, by summary key, when `module.record_summaries` asks:
+    ## checked before, by summary key:
     ## a checked unit's record keeps them (`Checked.summaries`).
     var settled_summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
     ## Whether struct specializations get a method's body only once a use

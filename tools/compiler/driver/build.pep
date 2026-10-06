@@ -238,7 +238,9 @@ _check_layers(
         for (var alias in module.type_aliases) {
             aliases.append(alias.copy());
         }
-        module.record_summaries = true;
+        # Summaries for the build cache's skipped bodies; a layer records
+        # the ones it makes either way (`settled_summaries`).
+        module.record_summaries = reused.is_value();
         if (reused.is_value()) {
             module.cached_files = reused.value().files;
             for (var (loc, text) in reused.value().summaries) {

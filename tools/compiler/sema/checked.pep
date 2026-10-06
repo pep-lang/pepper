@@ -254,36 +254,3 @@ export resume_checked(unit: CheckedUnit): Module {
     module.summaries_to_record = Array<(Loc, String)>();
     return module;
 }
-
-## Puts back only the stashed bodies whose link summaries the checked units
-## did not settle (`Checked.summaries`): `check_confinement` summarizes
-## those again from their bodies, and takes the rest as recorded.
-##
-## @param module the module
-## @param state the passes' state
-export restore_unsettled(module: Module, state: PassState) {
-    if (state.stashed.count == 0) {
-        return;
-    }
-    var settled = module.checked.summaries;
-    for (var f in module.functions) {
-        if (is_checked_function(module, f) and !settled.contains(f.name)) {
-            _restore(state, $"f {f.name}", f);
-        }
-    }
-    for (var st in module.structs) {
-        if (!module.checked.structs.contains(st.name)) {
-            continue;
-        }
-        for (var m in st.method_members) {
-            if (!settled.contains(method_key(st.name, m.name))) {
-                _restore(state, $"m {st.name} method {m.name}", m);
-            }
-        }
-        for (var c in st.constructors) {
-            if (!settled.contains(method_key(c.name, "__ctor"))) {
-                _restore(state, $"m {st.name} constructor {c.name}", c);
-            }
-        }
-    }
-}

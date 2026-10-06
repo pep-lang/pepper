@@ -17,6 +17,7 @@ import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
+import [is_checked_function] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import [location_of] from "common";
@@ -94,6 +95,7 @@ export check_confinement(module: Module, state: PassState) {
         _record_summaries(program);
     } else if (roots.count > 0) {
         _summaries(program, roots);
+        _settle(program);
     }
     var triggers = _triggers(program);
     for (var body in program.all) {
@@ -615,6 +617,11 @@ struct _Confinement {
     var runtime_files: bool[]? = Optional<bool[]>.Empty;
     # The structs implementing each trait, by trait name, found on first use.
     var _implementors: HashMap<String, StructDef[]>? = Optional<HashMap<String, StructDef[]>>.Empty;
+    # The checked bodies `restore` may bring back, by summary key.
+    var _stashed_bodies: HashMap<String, (_Body, String)> = HashMap<String, (_Body, String)>();
+    # Every body by key (`_by_key`).
+    var _known: HashMap<String, _Body> = HashMap<String, _Body>();
+    var _known_filled: bool = false;
     # `dispatched`'s answers, by trait and method.
     var _dispatch: HashMap<String, String[]> = HashMap<String, String[]>();
 
@@ -668,6 +675,78 @@ struct _Confinement {
         }
         _dispatch[memo] = keys;
         return keys;
+    }
+
+    ## The function a summary key names: a compiled body, or a checked one
+    ## `restore` brought back.
+    function_of(key: String): FunctionDef? {
+        var body = _by_key().try_get(key);
+        if (body.is_value()) {
+            return Optional<FunctionDef>.Value(body.value().function);
+        }
+        return Optional<FunctionDef>.Empty;
+    }
+
+    ## Puts back the stashed body of the checked function `key` names, so
+    ## its summary can be made; none when there is no such body.
+    restore(key: String): _Body? {
+        var none = Optional<_Body>.Empty;
+        if (state.stashed.count == 0) {
+            return none;
+        }
+        if (_stashed_bodies.count == 0) {
+            _index_stashed();
+        }
+        var found = _stashed_bodies.try_get(key);
+        if (!found.is_value()) {
+            return none;
+        }
+        var (body, stash_key) = found.value();
+        var stashed = state.stashed.try_get(stash_key);
+        if (!stashed.is_value()) {
+            return none;
+        }
+        body.function.body = stashed;
+        state.stashed.remove(stash_key);
+        _by_key()[key] = body;
+        return Optional<_Body>.Value(body);
+    }
+
+    # The checked functions' bodies, by summary key, with their stash keys.
+    _index_stashed() {
+        var none = Optional<TypeName>.Empty;
+        for (var f in module.functions) {
+            if (!f.is_generic_func and is_checked_function(module, f)) {
+                _stashed_bodies[f.name] = (_Body(none, f.name, f), $"f {f.name}");
+            }
+        }
+        for (var st in module.structs) {
+            if (!module.checked.structs.contains(st.name) or _is_generic_base(st)) {
+                continue;
+            }
+            var owner = Optional<TypeName>.Value(TypeName.named(st.name));
+            for (var m in st.method_members) {
+                if (!m.is_generic_func) {
+                    var key = method_key(st.name, m.name);
+                    _stashed_bodies[key] = (_Body(owner, key, m), $"m {st.name} method {m.name}");
+                }
+            }
+            for (var c in st.constructors) {
+                var key = method_key(c.name, "__ctor");
+                _stashed_bodies[key] = (_Body(owner, key, c), $"m {st.name} constructor {c.name}");
+            }
+        }
+    }
+
+    # Every body by key: the compiled ones and those `restore` brought back.
+    _by_key(): HashMap<String, _Body> {
+        if (!_known_filled) {
+            _known_filled = true;
+            for (var body in all) {
+                _known[body.key] = body;
+            }
+        }
+        return _known;
     }
 
     ## The structs implementing each trait, by trait name.
@@ -1001,19 +1080,28 @@ _record_summaries(program: _Confinement) {
     }
     out.sort(_compare_recorded);
     program.recorded_out = out;
-    # Every summary that does not depend on the rest of the program, by
-    # key: what a checked unit keeps for the units checked on top of it.
-    for (var body in program.all) {
-        var summary = program.summaries.try_get(body.key);
-        if (!summary.is_value() or program.module.checked.summaries.contains(body.key)) {
+    _settle(program);
+}
+
+## Keeps every summary the passes made of a function not settled before,
+## by key: what a checked unit records for the units checked on top of it.
+## A summary that calls through a trait keeps the structs those calls
+## reach, and holds while they stay the same.
+_settle(program: _Confinement) {
+    for (var (key, summary) in program.summaries) {
+        if (program.settled.contains(key)) {
             continue;
         }
-        var blame = summary.value().blame.is_value() ? summary.value().blame.value() : body.function.loc;
-        var text = summary.value().encode();
-        if (summary.value().dependent) {
-            text = text + _dispatch_lines(program.implementors(), summary.value().dispatches);
+        var function = program.function_of(key);
+        if (!function.is_value()) {
+            continue;
         }
-        program.state.settled_summaries[body.key] = (blame, text);
+        var blame = summary.blame.is_value() ? summary.blame.value() : function.value().loc;
+        var text = summary.encode();
+        if (summary.dependent) {
+            text = text + _dispatch_lines(program.implementors(), summary.dispatches);
+        }
+        program.state.settled_summaries[key] = (blame, text);
     }
 }
 
@@ -1194,6 +1282,14 @@ _summaries(program: _Confinement, roots: String[]) {
         var (summary, called) = _summarize(program, all[key]);
         for (var callee in called) {
             var callee_body = all.try_get(callee);
+            if (!callee_body.is_value() and !program.settled.contains(callee)) {
+                # A checked function no summary settled: its body comes
+                # back from the stash, for its summary only.
+                callee_body = program.restore(callee);
+                if (callee_body.is_value()) {
+                    all[callee] = callee_body.value();
+                }
+            }
             if (!callee_body.is_value()) {
                 continue;
             }

@@ -16,7 +16,7 @@ import [check_bindings] from "bindings";
 import [check_casts] from "casts";
 import [check_bounds] from "check_bounds";
 import [check_tries] from "check_tries";
-import [restore_bodies, restore_unsettled, stash_bodies] from "checked";
+import [restore_bodies, stash_bodies] from "checked";
 import [check_closures, lift_closures] from "closures";
 import [check_conditions] from "conditions";
 import [check_confinement, drop_stale_summaries] from "confinement";
@@ -150,6 +150,8 @@ struct _Steps {
     var timed: bool = false;
     var mark: os.Instant = os.Instant.now();
     var spent: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
+    # Each traced step's pass, when the loop or the last steps name it.
+    var names: HashMap<ulong, String> = HashMap<ulong, String>();
 
     construct(limit: ulong, state: PassState) {
         this.limit = limit;
@@ -159,9 +161,12 @@ struct _Steps {
     }
 
     ## After a step: whether to stop, at its error or at the limit.
-    stepped(): bool {
+    stepped(name: String = ""): bool {
         if (taken()) {
             return true;
+        }
+        if (timed and !name.is_empty) {
+            names[ran] = name;
         }
         lap();
         ran += 1;
@@ -195,7 +200,8 @@ struct _Steps {
         });
         for (var (step, ms) in all) {
             if (ms > 0) {
-                io.File.stderr().write_all($"step {step}: {ms} ms\n");
+                var name = names.try_get(step);
+                io.File.stderr().write_all($"step {step}: {ms} ms {name.is_value() ? name.value() : ""}\n");
             }
         }
     }
@@ -215,23 +221,23 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         var structs = module.structs.count;
         var functions = module.functions.count;
         gather_generics(module);
-        if (steps.stepped()) {
+        if (steps.stepped("gather_generics")) {
             return;
         }
         check_specializations(module, state);
-        if (steps.stepped()) {
+        if (steps.stepped("check_specializations")) {
             return;
         }
         specialize_structs(module, state);
-        if (steps.stepped()) {
+        if (steps.stepped("specialize_structs")) {
             return;
         }
         specialize_functions(module, state);
-        if (steps.stepped()) {
+        if (steps.stepped("specialize_functions")) {
             return;
         }
         check_ranges(module, state);
-        if (steps.stepped()) {
+        if (steps.stepped("check_ranges")) {
             return;
         }
         # The `static` blocks of what the round specialized.
@@ -243,7 +249,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         # arguments the round just typed is typed only now.
         if (expanded or has_generic_methods(module) or has_overloads(module)) {
             resolve_implicit_types(module, state);
-            if (steps.stepped()) {
+            if (steps.stepped("resolve_implicit_types")) {
                 return;
             }
         }
@@ -265,7 +271,7 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
             var struct_specs = module.struct_specs.count;
             var func_specs = module.func_specs.count;
             gather_generics(module);
-            if (steps.stepped()) {
+            if (steps.stepped("gather_generics")) {
                 return;
             }
             if (module.struct_specs.count == struct_specs and module.func_specs.count == func_specs) {
@@ -288,51 +294,51 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
 _after_specializing(module: Module, state: PassState, steps: _Steps) {
     remove_from_generic_code(module);
     check_interpolations(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_interpolations")) {
         return;
     }
     # A call of a member a constrained extension withheld.
     check_withheld(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_withheld")) {
         return;
     }
     check_simd_shapes(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_simd_shapes")) {
         return;
     }
     convert_intrinsics(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("convert_intrinsics")) {
         return;
     }
     resolve_resolvables(module, false, state);
-    if (steps.stepped()) {
+    if (steps.stepped("resolve_resolvables")) {
         return;
     }
     # The extensions of the specializations made in the loop.
     apply_extensions(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("apply_extensions")) {
         return;
     }
     expand(module, state, true);
-    if (steps.stepped()) {
+    if (steps.stepped("expand")) {
         return;
     }
     convert_member_refs(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("convert_member_refs")) {
         return;
     }
     synthesize_function_types(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("synthesize_function_types")) {
         return;
     }
     # Methods, structs and specializations used as values become closures.
     reference_functions(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("reference_functions")) {
         return;
     }
     # Destructors release their struct fields.
     release_field_refs(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("release_field_refs")) {
         return;
     }
     # Implicit types once more, with overloads settled by how many
@@ -340,144 +346,144 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     state.settle_overloads_by_arity = true;
     resolve_implicit_types(module, state);
     state.settle_overloads_by_arity = false;
-    if (steps.stepped()) {
+    if (steps.stepped("resolve_implicit_types")) {
         return;
     }
     check_tries(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_tries")) {
         return;
     }
     # Named arguments no binding took.
     check_unbound(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_unbound")) {
         return;
     }
     # The parameter names of literal arguments, for inlay hints.
     record_argument_names(module, state);
     check_type_arguments(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_type_arguments")) {
         return;
     }
     check_overloads(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_overloads")) {
         return;
     }
     # Once implicit types are resolved, operator overloading may exist.
     resolve_operators(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("resolve_operators")) {
         return;
     }
     # A call left as an assignment's target, which nothing can store into.
     check_assignment_targets(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_assignment_targets")) {
         return;
     }
     # A struct value in a boolean context needs its own `!!`.
     check_conditions(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_conditions")) {
         return;
     }
     # Undeclared names and calls are reported here.
     resolve_resolvables(module, true, state);
-    if (steps.stepped()) {
+    if (steps.stepped("resolve_resolvables")) {
         return;
     }
     # Destructures read their tuple; labels become positions.
     lower_destructures(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("lower_destructures")) {
         return;
     }
     # Types inferred by the final resolve (`var f = square;`).
     synthesize_function_types(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("synthesize_function_types")) {
         return;
     }
     # Closure types nothing inferred must be written.
     check_closures(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_closures")) {
         return;
     }
     # Plain and `shared` function values flowing into each other's slots,
     # once every type is final.
     shared_functions(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("shared_functions")) {
         return;
     }
     synthesize_function_types(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("synthesize_function_types")) {
         return;
     }
     # How value structs are used: identity, `const`, changes to copies.
     check_value_structs(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_value_structs")) {
         return;
     }
     # Struct values flowing into trait-typed slots, once every type is
     # final.
     convert_to_traits(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("convert_to_traits")) {
         return;
     }
     check_function_types(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_function_types")) {
         return;
     }
     # `as` and `unsafe_cast` convert only what their kind allows.
     check_casts(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_casts")) {
         return;
     }
     check_shared_types(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_shared_types")) {
         return;
     }
     # What `with` blocks over `[Isolated]` guards may do, `[Move]`
     # arguments, and the guards' own rules, once every type is final.
-    # Callee bodies (link summaries): the checked ones whose summaries
-    # were not settled when they were checked.
+    # Link summaries recorded with a checked unit hold while the structs
+    # their trait calls reach stay the same; the checked bodies the others
+    # need come back from the stash on demand.
     drop_stale_summaries(module);
-    restore_unsettled(module, state);
     check_confinement(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_confinement")) {
         return;
     }
     # The rest lower bodies, which checked ones have been already.
     stash_bodies(module, state);
     # `with` conditions need the final types of `enter()`.
     lower_with_blocks(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("lower_with_blocks")) {
         return;
     }
     # `match` arms need the final type of the value matched.
     lower_matches(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("lower_matches")) {
         return;
     }
     # Warnings only: uses of deprecated fields and methods, by final type.
     check_deprecated_members(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_deprecated_members")) {
         return;
     }
     # Struct keys whose `==` and `hash<T>` disagree.
     check_hash_keys(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_hash_keys")) {
         return;
     }
     # `[__Reads]` methods of `[__Lazy]` structs, which run on a null `this`.
     check_lazy(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("check_lazy")) {
         return;
     }
     # `[Export]`ed functions C can call, once every type is final.
     collect_exports(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("collect_exports")) {
         return;
     }
     # Last, over every body (checked ones are back): which literals can be
     # shared reads the callees' bodies.
     restore_bodies(module, state);
     share_string_literals(module, state);
-    if (steps.stepped()) {
+    if (steps.stepped("share_string_literals")) {
         return;
     }
 }

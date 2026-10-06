@@ -10,6 +10,7 @@
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import [enum_method_name, getter_name] from "builder";
+import [is_checked_function] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
 ] from "closure_sites";
@@ -342,7 +343,13 @@ struct _Declarations {
 
     ## Takes the declarations of `module` the walks can look up.
     construct(module: Module, trait_types: TypeName[]) {
+        # A checked unit's declarations do not change on top of it, so they
+        # never announce anything: only its structs that got methods
+        # specialized since (`_find<Point>`) count.
         for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name) and !_has_body(st)) {
+                continue;
+            }
             var key = st.ty.to_string();
             var base = _base_read(key);
             var shape = Fingerprint();
@@ -367,7 +374,9 @@ struct _Declarations {
             _add($"t:{key}", shape.value, [_type_read(key), _base_read(key)]);
         }
         for (var f in module.functions) {
-            _add($"f:{f.name}", _signature(f), [_function_read(f.name)]);
+            if (!is_checked_function(module, f)) {
+                _add($"f:{f.name}", _signature(f), [_function_read(f.name)]);
+            }
         }
         for (var e in module.externs) {
             var shape = Fingerprint();
@@ -375,6 +384,9 @@ struct _Declarations {
             _add($"e:{e.name}", shape.value, [_function_read(e.name)]);
         }
         for (var g in module.globals) {
+            if (module.checked.globals.contains(g.name)) {
+                continue;
+            }
             var shape = Fingerprint();
             g.fingerprint(shape);
             _add($"g:{g.name}", shape.value, [$"g:{g.name}"]);
@@ -536,7 +548,11 @@ struct _ImplicitTables {
         properties = Properties(module);
         for (var st in module.structs) {
             var key = st.ty.to_string();
-            structs.append((key, st.field_members.copy()));
+            # A checked unit's fields are final: no copy to keep apart from
+            # what this run types.
+            structs.append(
+                (key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy())
+            );
             var own = Array<(String, TypeName)>();
             for (var m in st.method_members) {
                 own.append((m.name, m.ty));
@@ -2064,8 +2080,8 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
     ulong s = 0;
     while (s < module.structs.count) {
         var st = module.structs[s];
-        var place = $"s{st.ty.to_string()}";
         s += 1;
+        var place = $"s{st.ty.to_string()}";
         var struct_read = _type_read(st.ty.to_string());
         var struct_base = _base_read(st.ty.to_string());
         var current = Optional<TypeName>.Value(st.ty);
@@ -2091,6 +2107,11 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
                     rewrite_expression(field.default.value(), _OverloadOnly(scopes, current))
                 );
             }
+        }
+        # A checked unit's methods were resolved when it was checked; only
+        # those specialized on top of it (`_find<Point>`) have bodies.
+        if (module.checked.structs.contains(st.name) and !_has_body(st)) {
+            continue;
         }
         # Method bodies see this struct's resolved fields and its methods
         # in place of its table entries.
@@ -2158,7 +2179,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
         var function = module.functions[f];
         var at = $"f{function.name}";
         f += 1;
-        if (!function.body.is_value() or !work.needs(at, function)) {
+        if (!function.body.is_value() or is_checked_function(module, function) or !work.needs(at, function)) {
             continue;
         }
         var none = Optional<TypeName>.Empty;
@@ -2199,6 +2220,24 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
     }
     module.call_targets.append_all(resolved);
     return inferred;
+}
+
+## Whether any constructor, method or the destructor of `st` has a body.
+_has_body(st: StructDef): bool {
+    if (st.destructor.body.is_value()) {
+        return true;
+    }
+    for (var c in st.constructors) {
+        if (c.body.is_value()) {
+            return true;
+        }
+    }
+    for (var m in st.method_members) {
+        if (m.body.is_value()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ## Resolves only the overloaded calls in a field's default.
