@@ -52,6 +52,10 @@ first argument overrides it), puts them beside it, and runs `pepper test`:
   holding `zlib.lib`, and is skipped without it);
 - in `tools/`, with `-I .`, the tools' tests.
 
+The tools' run, the longest, starts as soon as `pepper` and `pep-test`
+are built and runs beside the runtime's runs; its output is printed after
+theirs.
+
 Once `pepper` is built, run any part of them by hand:
 
 ```bash

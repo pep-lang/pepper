@@ -1512,8 +1512,33 @@ problem(source: String): String {
     return "";
 }
 
+# The files are split in parts, each a test of its own, so they run side
+# by side.
 [Test]
-walks_every_token_of_every_source_file() {
+walks_every_token_of_every_source_file_part_1() {
+    walks_tokens(0);
+}
+
+[Test]
+walks_every_token_of_every_source_file_part_2() {
+    walks_tokens(1);
+}
+
+[Test]
+walks_every_token_of_every_source_file_part_3() {
+    walks_tokens(2);
+}
+
+[Test]
+walks_every_token_of_every_source_file_part_4() {
+    walks_tokens(3);
+}
+
+const TOKEN_PARTS: ulong = 4;
+
+# Walks the tokens of every `TOKEN_PARTS`th source file of the repository,
+# from the `part`th.
+walks_tokens(part: ulong) {
     var files = Array<Path>();
     for (var folder in ["runtime", "tools", "tests", "docs/examples"]) {
         collect_sources(Path("..").join(folder), files);
@@ -1523,7 +1548,10 @@ walks_every_token_of_every_source_file() {
     ulong tokens = 0;
     ulong comments = 0;
     ulong failures = 0;
-    for (var file in files) {
+    var i = part;
+    while (i < files.count) {
+        var file = files[i];
+        i += TOKEN_PARTS;
         var source = File.read_to_string(file);
         if (source.is_err()) {
             continue;
@@ -1545,6 +1573,6 @@ walks_every_token_of_every_source_file() {
         comments += comment_count(table);
     }
     print($"walked {walked} files: {tokens} tokens, {comments} comments");
-    expect_true(walked > 400, "most files parse");
+    expect_true(walked * TOKEN_PARTS > 400, "most files parse");
     expect_equal(failures, 0 as ulong);
 }

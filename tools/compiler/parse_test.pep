@@ -8,8 +8,52 @@ import [Directory, File, Path] from io;
 import compiler.parse;
 import process;
 
+# The files are split in parts, each a test of its own, so they run side
+# by side.
 [Test]
-parses_every_source_file_as_the_rust_parser_does() {
+parses_every_source_file_as_the_rust_parser_does_part_1() {
+    parses_sources(0);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_2() {
+    parses_sources(1);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_3() {
+    parses_sources(2);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_4() {
+    parses_sources(3);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_5() {
+    parses_sources(4);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_6() {
+    parses_sources(5);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_7() {
+    parses_sources(6);
+}
+
+[Test]
+parses_every_source_file_as_the_rust_parser_does_part_8() {
+    parses_sources(7);
+}
+
+const PARSE_PARTS: ulong = 8;
+
+# Checks every `PARSE_PARTS`th source file of the repository, from the `part`th.
+parses_sources(part: ulong) {
     var compiler = process.find_companion("pep-build");
     expect_true(compiler.is_value(), "pep-build is beside pep-test or on the PATH");
     if (!compiler.is_value()) {
@@ -23,10 +67,12 @@ parses_every_source_file_as_the_rust_parser_does() {
     }
     expect_true(files.count > 400, "the repository's sources are found from tools/");
     ulong mismatches = 0;
-    for (var file in files) {
-        if (!same_tree(compiler.value(), file)) {
+    var i = part;
+    while (i < files.count) {
+        if (!same_tree(compiler.value(), files[i])) {
             mismatches += 1;
         }
+        i += PARSE_PARTS;
     }
     expect_equal(mismatches, 0 as ulong);
 }

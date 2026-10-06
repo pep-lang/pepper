@@ -19,6 +19,10 @@
 # and the digest tests with `-D USE_LIBCRYPTO`, which link the system's
 # zlib and libcrypto. On Windows the zlib run needs PEPPER_TEST_ZLIB_DIR, a
 # folder holding zlib.lib, and is skipped without it.
+#
+# The tools' tests take the longest, mostly building their test programs,
+# so they start as soon as `pepper` and `pep-test` are built and run beside
+# the runtime's; their output follows the runtime's (#662).
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -42,15 +46,15 @@ if [ ! -x "$bin/pep-build$exe" ]; then
 fi
 
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
-# and `pep-doc check` reads every tool's `--help`.
+# and `pep-doc check` reads every tool's `--help`. The tests wait only for
+# the first two; the rest are waited for at the end.
 pids=()
 for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install pep-doc; do
   "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done
-for pid in "${pids[@]}"; do
-  wait "$pid"
-done
+wait "${pids[0]}"
+wait "${pids[1]}"
 pepper="$bin/pepper$exe"
 export PEPPER_RUNTIME="$root/runtime"
 # The compiler's parser test (tools/compiler) runs pep-build itself.
@@ -64,6 +68,38 @@ run() {
 
 # Tests run in the folder they belong to, so data files beside them are
 # found by a path from there; the builds go to its .pep/ folder.
+tools_log="$bin/pepper-tests-tools.log"
+(
+  cd "$root/tools"
+  # The compiler's tests (tools/compiler) import pepper-llvm, which links the
+  # LLVM library. Linux finds it on the default search path; macOS and
+  # Windows need its folder (see pepper-llvm's llvm_c/link.pep): the prefix
+  # scripts/setup-llvm.sh or .ps1 wrote to .cargo/config.toml, or
+  # LLVM_SYS_201_PREFIX. Windows also needs its DLL's folder on PATH to run
+  # the tests.
+  llvm=()
+  llvm_prefix="${LLVM_SYS_201_PREFIX:-}"
+  if [ -z "$llvm_prefix" ] && [ -f "$root/.cargo/config.toml" ]; then
+    llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' "$root/.cargo/config.toml" | head -1 | sed 's/\\\\/\\/g')"
+  fi
+  if [ -n "$llvm_prefix" ] && [ "$(uname -s)" != Linux ]; then
+    llvm=(-L "$llvm_prefix/lib")
+    if [ -n "$exe" ]; then
+      PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
+    fi
+  fi
+  if grep -rlq --include='*.pep' '^\[Test\]' .; then
+    # At -O1: the compiler's passes tests run the Pepper passes in-process
+    # over the test programs, which is slow unoptimized (near the 60 s
+    # timeout at -O0), and -O1 builds them quickly enough to save time
+    # overall. They still take most of a minute each, so on a runner that
+    # shares its host they get 300 s (`-t` in the arguments still wins).
+    PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "${llvm[@]+"${llvm[@]}"}" -t 300 "$@"
+  fi
+  exit $failed
+) > "$tools_log" 2>&1 &
+tools=$!
+
 cd "$root/runtime"
 run "$@"
 if [ -d compress/test ]; then
@@ -85,31 +121,10 @@ if [ -d digest/test ]; then
   run -D USE_LIBCRYPTO "${libcrypto[@]+"${libcrypto[@]}"}" "$@" digest/test
 fi
 
-cd "$root/tools"
-# The compiler's tests (tools/compiler) import pepper-llvm, which links the
-# LLVM library. Linux finds it on the default search path; macOS and
-# Windows need its folder (see pepper-llvm's llvm_c/link.pep): the prefix
-# scripts/setup-llvm.sh or .ps1 wrote to .cargo/config.toml, or
-# LLVM_SYS_201_PREFIX. Windows also needs its DLL's folder on PATH to run
-# the tests.
-llvm=()
-llvm_prefix="${LLVM_SYS_201_PREFIX:-}"
-if [ -z "$llvm_prefix" ] && [ -f "$root/.cargo/config.toml" ]; then
-  llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' "$root/.cargo/config.toml" | head -1 | sed 's/\\\\/\\/g')"
-fi
-if [ -n "$llvm_prefix" ] && [ "$(uname -s)" != Linux ]; then
-  llvm=(-L "$llvm_prefix/lib")
-  if [ -n "$exe" ]; then
-    PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
-  fi
-fi
-if grep -rlq --include='*.pep' '^\[Test\]' .; then
-  # At -O1: the compiler's passes tests run the Pepper passes in-process
-  # over the test programs, which is slow unoptimized (near the 60 s
-  # timeout at -O0), and -O1 builds them quickly enough to save time
-  # overall. They still take most of a minute each, so on a runner that
-  # shares its host they get 300 s (`-t` in the arguments still wins).
-  PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "${llvm[@]+"${llvm[@]}"}" -t 300 "$@"
-fi
+wait "$tools" || failed=1
+cat "$tools_log"
+for pid in "${pids[@]:2}"; do
+  wait "$pid"
+done
 
 exit $failed
