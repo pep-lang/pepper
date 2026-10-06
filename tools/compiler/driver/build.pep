@@ -376,7 +376,18 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var name = options.output.file_stem();
     var owners = HashMap<String, uint>();
     var stem = name.is_value() ? name.value() : "main";
-    var generated = codegen.generate(module, state, namespaces, stem, setup, owners);
+    # The bodies of units whose objects the cache holds are only declared.
+    var cached_files = HashSet<uint>();
+    if (reused.is_value()) {
+        for (var u in 0..units.count) {
+            if (reused.value().objects[u].count > 0) {
+                for (var file in units[u].files) {
+                    cached_files.insert(file as uint);
+                }
+            }
+        }
+    }
+    var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files);
     if (generated.is_err()) {
         return Result<Built, String>.err(render_all([generated.error()], sources));
     }
@@ -452,7 +463,16 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var entry_object = work.join(Path($"{stem}.{extension}"));
     jobs.append(PartJob(entry_part, entry_object));
     var compiled = compile_parts(
-        ir, partition, jobs, machine.value(), cpu, options.opt_level, work, options.trace_time, options.in_process
+        ir,
+        partition,
+        jobs,
+        machine.value(),
+        cpu,
+        options.opt_level,
+        work,
+        options.trace_time,
+        options.in_process,
+        !cached_files.is_empty
     );
     if (compiled.is_err()) {
         # The bitcode and plan stay, so the failed part can be run again.

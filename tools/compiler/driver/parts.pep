@@ -47,6 +47,7 @@ export struct PartJob {
 ## @param in_process whether to compile every part in this process, one
 ##   after another (for a program that is not this compiler, such as a
 ##   test, which cannot run `--compile-part`)
+## @param partial whether other units' objects come from the build cache
 ## @returns nothing, or why a part failed
 export compile_parts(
     ir: llvm.Module,
@@ -57,7 +58,8 @@ export compile_parts(
     opt_level: uint,
     dir: Path,
     trace_time: bool = false,
-    in_process: bool = false
+    in_process: bool = false,
+    partial: bool = false
 ): Result<void, String> {
     if (jobs.count == 1 or in_process) {
         for (var i in 0..jobs.count) {
@@ -73,7 +75,7 @@ export compile_parts(
     if (created.is_err()) {
         return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
     }
-    var kept = _keep_jobs(ir, partition, jobs);
+    var kept = _keep_jobs(ir, partition, jobs, partial);
     if (kept.is_err()) {
         return Result<void, String>.err($"cannot split the parts: {kept.error().message}");
     }
@@ -220,10 +222,11 @@ _stage(tracing: bool, ir: llvm.Module, job: PartJob, stage: String) {
     File.stderr().write_all($"part {job.part}: {stage} ({state})\n");
 }
 
-## Keeps only the parts of `jobs` in `ir` when they hold less than half of
-## its code, as after an edit: the bitcode written, and each child's read of
-## it, then cover what the edit compiles rather than the whole program.
-_keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[]): Result<void> {
+## Keeps only the parts of `jobs` in `ir` when other units' objects come
+## from the build cache or the jobs hold less than half of its code, as
+## after an edit: the bitcode written, and each child's read of it, then
+## cover what the edit compiles rather than the whole program.
+_keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[], partial: bool): Result<void> {
     ulong total = 0;
     for (var size in partition.sizes) {
         total += size;
@@ -235,7 +238,7 @@ _keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[]): Resu
             compiled += _size_of(partition.sizes, job.part);
         }
     }
-    if (compiled * 2 >= total) {
+    if (!partial and compiled * 2 >= total) {
         return Result<void>.ok();
     }
     return codegen.keep_parts(ir, partition, parts);

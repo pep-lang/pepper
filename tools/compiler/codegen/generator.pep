@@ -190,6 +190,9 @@ export struct Generator {
     ## The functions whose bodies sema skipped (`Module.stripped`): their
     ## units' objects come from the build cache, so they are only declared.
     var stripped: HashSet<Loc> = HashSet<Loc>();
+    ## The files whose units' objects come from the build cache: the bodies
+    ## they own are only declared.
+    var cached_files: HashSet<uint> = HashSet<uint>();
     ## The parameters of the function being generated whose copy its caller
     ## made.
     var copied_params: HashSet<String> = HashSet<String>();
@@ -639,6 +642,8 @@ export struct Build {
 ## @param build the machine, CPU, optimization level and checks
 ## @param owners receives the file each owned symbol belongs to, by name
 ##               (see `partition.pep`)
+## @param cached_files the files whose units' objects come from the build
+##   cache: the bodies they own are only declared
 ## @returns the module, or the first error
 export generate(
     module: Module,
@@ -646,11 +651,13 @@ export generate(
     namespaces: String[],
     name: String,
     build: Build,
-    owners: HashMap<String, uint> = HashMap<String, uint>()
+    owners: HashMap<String, uint> = HashMap<String, uint>(),
+    cached_files: HashSet<uint> = HashSet<uint>()
 ): Result<llvm.Module, Diagnostic> {
     var context = llvm.Context();
     var generator = Generator(context, name, build.machine, state);
     generator.owners = owners;
+    generator.cached_files = cached_files;
     generator.file_namespaces = namespaces;
     generator.opt_level = build.opt_level;
     generator.runtime_checks = build.runtime_checks;

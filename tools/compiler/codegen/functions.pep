@@ -460,7 +460,7 @@ extend Generator {
     }
 
     codegen_function(function: FunctionDef): Result<void> {
-        if (!function.body.is_value() and stripped.contains(function.loc)) {
+        if ((!function.body.is_value() and stripped.contains(function.loc)) or is_cached(function.name)) {
             # Declared only: its unit's object defines it.
             var declared = functions.try_get(function.name);
             if (declared.is_value()) {
@@ -481,6 +481,17 @@ extend Generator {
         runtime_checks = build_checks;
         locate(result, function.loc);
         return result;
+    }
+
+    ## Whether the object of the unit owning function `name` comes from the
+    ## build cache. Not `main`: the entry part, compiled every build,
+    ## defines it.
+    is_cached(name: String): bool {
+        if (cached_files.is_empty or name == "main") {
+            return false;
+        }
+        var file = owners.try_get(name);
+        return file.is_value() and cached_files.contains(file.value());
     }
 
     codegen_function_unlocated(function: FunctionDef): Result<void> {
