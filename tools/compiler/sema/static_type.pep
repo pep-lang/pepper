@@ -63,6 +63,28 @@ _struct_info(st: StructDef): StructInfo {
     return info;
 }
 
+## The spelling of `st`'s type and its `StructTable` entry: a checked
+## struct's from `memo` while its fields and methods stay the same, since
+## its fields' types were final when it was checked.
+_named_info(module: Module, st: StructDef, memo: TraitTypeMemo?): (String, StructInfo) {
+    if (!memo.is_value() or !module.checked.structs.contains(st.name)) {
+        return (st.ty.to_string(), _struct_info(st));
+    }
+    var fields = st.field_members.count;
+    var methods = st.method_members.count;
+    var kept = memo.value().infos.try_get(st.name);
+    if (kept.is_value()) {
+        var (kept_fields, kept_methods, name, info) = kept.value();
+        if (kept_fields == fields and kept_methods == methods) {
+            return (name, info);
+        }
+    }
+    var name = st.ty.to_string();
+    var info = _struct_info(st);
+    memo.value().infos[st.name] = (fields, methods, name, info);
+    return (name, info);
+}
+
 _trait_info(t: TraitType): StructInfo {
     var info = StructInfo();
     info._add_methods(t.methods);
@@ -88,8 +110,7 @@ export struct StructTable {
         memo: TraitTypeMemo? = Optional<TraitTypeMemo>.Empty
     ) {
         for (var st in module.structs) {
-            var name = st.ty.to_string();
-            var info = _struct_info(st);
+            var (name, info) = _named_info(module, st, memo);
             # Also key the generic base (`Array<T>` as `Array`) so lookups
             # before specialization resolve; never clobber a concrete entry.
             if (name != st.ty.name and !structs.contains(st.ty.name)) {

@@ -9,6 +9,7 @@ import [Exports] from "exports";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
 import [Callees] from "named_arguments";
+import [StructInfo] from "static_type";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -218,6 +219,9 @@ export struct TraitTypeMemo {
     var structs: HashMap<String, (ulong, TypeName[])> = HashMap<String, (ulong, TypeName[])>();
     ## By function name.
     var functions: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+    ## Each checked struct's `StructTable` entry, by name, with how many
+    ## fields and methods it had, and its type's spelling.
+    var infos: HashMap<String, (ulong, ulong, String, StructInfo)> = HashMap<String, (ulong, ulong, String, StructInfo)>();
 
     construct() {}
 }
