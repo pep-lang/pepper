@@ -2490,8 +2490,9 @@ inlay hints, quick fixes and dimmed code for other platforms:
   `Setup.sources`, and publishes the diagnostics through the `[Shared]`
   `lsp.Client`. A document edited again while it was analyzed is analyzed
   once more instead of publishing stale diagnostics. The diagnostics come
-  from the parse error, `Program.warnings`, unresolved imports (as
-  warnings), `Program.check_diagnostics`, `sema.build`, then
+  from the parse error, `Program.warnings`, linking errors (unresolved
+  imports as warnings; one in another file at the document's start with
+  that file's name), `Program.check_diagnostics`, `sema.build`, then
   `sema.run_passes`. It then hands a `copy` of the `Analysis` (the text
   it analyzed, the linked `Program`, and the checked `sema.Module` and
   `PassState` when the passes passed) to the server thread through a

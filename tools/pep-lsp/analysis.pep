@@ -247,11 +247,10 @@ export analyze(
         reporter.add_if_in_document(warning);
     }
     # Unresolved imports are warnings: the editor does not know the `-I`
-    # folders a build passes, so the compiler may still find them.
+    # folders a build passes, so the compiler may still find them. An
+    # error in another file shows at the document's start, since it stops
+    # the analysis before sema.
     for (var error in program.errors) {
-        if (error.file != 0) {
-            continue;
-        }
         var diagnostic = reporter.convert(error.to_diagnostic());
         if (error.unresolved) {
             diagnostic.severity = Optional<int>.Value(lsp.SEVERITY_WARNING);

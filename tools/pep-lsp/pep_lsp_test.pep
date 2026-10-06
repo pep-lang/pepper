@@ -92,6 +92,21 @@ warns_about_an_import_it_cannot_find() {
     expect_equal(analysis.diagnostics[0].range.start.line, 0);
 }
 
+[Test]
+shows_an_error_in_another_file_at_the_start() {
+    # The document is fine, but a file it imports is not: without the
+    # error, the analysis stops before sema with nothing to show.
+    temp_file_in("other_error.pep", "helper.pep", "import nowhere_to_be_found;\nexport helper(): int { return 0; }\n");
+    var text = "import \"helper\";\nmain(): int {\n    return helper();\n}\n";
+    var analysis = analyze(temp_file_in("other_error.pep", "main.pep", text), text);
+    expect_equal(analysis.outcome, "found an error");
+    expect_equal(analysis.diagnostics.count, 1 as ulong);
+    expect_true(analysis.diagnostics[0].message.contains("helper.pep: "));
+    expect_true(analysis.diagnostics[0].message.contains("nowhere_to_be_found"));
+    expect_equal(analysis.diagnostics[0].severity.value(), lsp.SEVERITY_WARNING);
+    expect_equal(analysis.diagnostics[0].range.start.line, 0);
+}
+
 # Analyzes `text` as the document `uri` and gives the context hover and
 # definition read, with the analysis's program and model.
 analyzed(uri: String, text: String): Context {
