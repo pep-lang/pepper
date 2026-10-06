@@ -2836,32 +2836,40 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
 - `compiler.ast` (`ast/ast.pep`) is `crates/pepper-parser/src/ast.rs` in
   Pepper: the same nodes, fields and spans, each with a `to_json()` that
   writes what serde writes for the Rust node.
-- `compiler.parse` (`parse/lower.pep`) does not parse text itself: it
-  lowers the lossless tree `tools/syntax` reads into `compiler.ast`, as
+- `compiler.parse` (`parse/parser.pep`) is a recursive descent over the
+  tokens `syntax.lex` reads that builds `compiler.ast` directly, as
   `parsers.rs` builds it, span for span, including property accessors and
-  `build_option_tests`. `parse.parse_written` returns that tree as the
-  source writes it: an interpolated string is an `Expression.Interpolated`
-  (`interpolated_string`, each hole parsed with `syntax.parse_expression`),
-  a `print` or `String.format` format is the call's first argument, an
-  `Expression.FormatString` (`format_arguments`), a module `static`
-  block declares nothing beside it, and parentheses are an
-  `Expression.Parenthesized`. `compiler.desugar`
+  `build_option_tests`. Its grammar is `tools/syntax/parser.pep`'s,
+  decision for decision (until step 5 of #225 moves pep-fmt onto it and
+  deletes that copy): the same lookahead, the same readings tried and
+  abandoned through a `Mark` (`_mark` / `_restore`), and the same syntax
+  error, the furthest one unless a `;` is missing first. Errors in nodes
+  that parse (a literal too large, an escape, a hole that is no
+  expression, a format) go in `Parser._problems`, which `_restore` cuts
+  back with everything else an abandoned reading added; the first is
+  reported when there is no syntax error, in the order `parsers.rs` meets
+  them (`_property` and `_call` move the two out of source order).
+  `parse.parse_written` returns the tree as the source writes it: an
+  interpolated string is an `Expression.Interpolated`
+  (`_interpolated_string`, each hole read by a `Parser` of its own over
+  the hole's text, `_parse_hole`), a `print` or `String.format` format is
+  the call's first argument, an `Expression.FormatString`
+  (`_format_call`), a module `static` block declares nothing beside it,
+  and parentheses are an `Expression.Parenthesized`. `compiler.desugar`
   (`desugar/desugar.pep`) rewrites those as `parsers.rs` does: the
   `_pep_interpolate` / `_pep_format*` calls, the format's text or `match`,
   the block's module-scope constants, and the value alone in place of its
   parentheses. `desugar(module)` walks a whole
   written tree; `parse.parse` instead applies the same per-node rewrites
   (`desugar_interpolated`, `desugar_format_call`, `static_constants`) as
-  the Lowerer reads each node (`Lowerer.desugared`), so it needs no
+  the parser builds each node (`Parser.desugared`), so it needs no
   second walk and finds each error where it always did. The spans the
   parser derives from a child expression use `desugar.desugared_span`, so
-  both trees carry the spans `parsers.rs` gives. Token text comes
-  from `Lowerer.token_source` (`token_text`, `token_spells`): the file, or
-  inside an interpolated string's braces the hole's own text, which
-  `syntax.parse_expression` read. Spans that
+  both trees carry the spans `parsers.rs` gives. Spans come from token
+  indexes (`_start`, `_last_end`), plus `_base` inside a hole. Spans that
   `parsers.rs` ends after the whitespace following a construct (a
   function, a parameter without a default) end at the next token's offset
-  (`Lowerer.after`).
+  (`_after`), or at the construct's end inside a hole.
 - Comments live on tokens, not on nodes. `parse.parse_written` keeps
   every token in `Module.tokens` (`ast.SourceTokens`: the source and the
   `syntax.Token`s, `>`s joined as the parser joined them, ending with
@@ -2872,7 +2880,10 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `blank_before(span)` read a node's comments; a comment on a token that
   starts or ends no node (a `,`, a `)`, a `}`) is inside the innermost
   node around it. `parse.parse` keeps no tokens and no parentheses, at no
-  cost (`Lowerer.record_tokens`). `compiler/tokens_test.pep` walks every
+  cost: it lexes without comment text (`lex(source, keep_comments =
+  false)`), and only `parse_written` records the `>`s the parser joins
+  (`_take_operator`), to build the table at the end
+  (`_written_tokens`). `compiler/tokens_test.pep` walks every
   repository file's written tree in source order, taking each token where
   the grammar puts it (`TokenWalk`, the skeleton of a printer that formats
   from the tree), and requires every token taken exactly once, in order,
@@ -2883,8 +2894,9 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   change that `tools/compiler` does not follow fails there.
   `scripts/pepper-tests.sh` puts its `pep-build` on the `PATH` for it.
 - `compiler/parse_bench.pep` times the same files through `syntax.lex`,
-  `syntax.parse` and `compiler.parse`, the best of several passes each:
-  the benchmark for parser speed work (#601).
+  `syntax.parse` (the tree pep-fmt reads), `parse.parse` and
+  `parse.parse_written`, the best of several passes each: the benchmark
+  for parser speed work (#601).
 - `compiler.parse` also enforces what `parsers.rs` checks on the finished
   tree (`parse/checks.pep`): `T*` only in `extern` declarations, and imports
   before every declaration.
@@ -3318,9 +3330,10 @@ of each test's cost, which is why `pepper-parser`, `pepper-sema` and
    `tree.pep`), and print the node in `tools/pep-fmt/format.pep`.
    `pep_fmt_tests.rs` fails until the formatter keeps a file that uses the
    form unchanged in meaning.
-7. Lower the new node in `tools/compiler/parse/lower.pep` (and add it to
-   `tools/compiler/ast/ast.pep`); `compiler/parse_test.pep` fails until its
-   JSON matches `pep-build --emit-ast=json`.
+7. Mirror the rule again in `tools/compiler/parse/parser.pep`, building
+   the new node (and add it to `tools/compiler/ast/ast.pep`);
+   `compiler/parse_test.pep` fails until its JSON matches
+   `pep-build --emit-ast=json`.
 
 ### Add a sema pass
 

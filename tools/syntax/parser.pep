@@ -10,10 +10,13 @@ import "lexer";
 import "token";
 import "tree";
 
-# The words `identifier()` in the compiler refuses as names.
-# Whether `token` is one of the words `identifier()` in the compiler refuses
-# as names, compared in place.
-is_reserved_word(source: String, token: Token): bool {
+## Returns whether `token` is one of the words the compiler's `identifier()`
+## refuses as names (`struct`, `if`, `and`, ...), compared in place.
+##
+## @param source the text the token was read from
+## @param token the token to test
+## @returns true for a reserved word
+export is_reserved_word(source: String, token: Token): bool {
     if (token.kind != TokenKind.Identifier) {
         return false;
     }
@@ -56,12 +59,14 @@ is_reserved_word(source: String, token: Token): bool {
     return false;
 }
 
-# The words that stop a statement from being read as a `Type name`
-# declaration (the list in the compiler's `statement()`).
-# Whether `token` is one of the words that stop a statement from being read
-# as a `Type name` declaration (the list in the compiler's `statement()`),
-# compared in place.
-is_statement_keyword(source: String, token: Token): bool {
+## Returns whether `token` is one of the words that stop a statement from
+## being read as a `Type name` declaration (the list in the compiler's
+## `statement()`), compared in place.
+##
+## @param source the text the token was read from
+## @param token the token to test
+## @returns true for such a word
+export is_statement_keyword(source: String, token: Token): bool {
     if (token.kind != TokenKind.Identifier) {
         return false;
     }
@@ -98,8 +103,10 @@ is_statement_keyword(source: String, token: Token): bool {
     return false;
 }
 
-# The operators a method may be named after, as `bool ==(T other)`.
-operator_method_names(): HashSet<String> {
+## Returns the operators a method may be named after, as `bool ==(T other)`.
+##
+## @returns a new set of the operators' texts
+export operator_method_names(): HashSet<String> {
     return [
         "<<=",
         ">>=",

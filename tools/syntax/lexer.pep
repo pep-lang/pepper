@@ -208,10 +208,15 @@ interpolation_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
 ## that holds the comments after the last real token.
 ##
 ## @param source the text of a Pepper source file
+## @param keep_comments whether to keep each comment's text; when false, a
+##   token has no leading comments, and a token followed by a comment on its
+##   line has the trailing comment `#` (the parser asks only whether there is
+##   one), which saves making a String per comment. Line breaks count the
+##   same either way.
 ## @returns the tokens, or the first lexical error: an unterminated string,
 ##   an unclosed `{` in an interpolated string, or a character that cannot
 ##   start a token
-export lex(source: String): Result<Token[], SyntaxError> {
+export lex(source: String, keep_comments: bool = true): Result<Token[], SyntaxError> {
     var tokens = Array<Token>();
     # The punctuation by first byte, longest first, so each token tries
     # only the entries that can match.
@@ -248,6 +253,17 @@ export lex(source: String): Result<Token[], SyntaxError> {
             ulong start = i;
             while (i < size and data[i] != '\n') {
                 i += 1;
+            }
+            if (!keep_comments) {
+                if (tokens.count > 0 and newlines == 0 and tokens.last()._trailing_comment === __null) {
+                    var last = tokens.last();
+                    last._trailing_comment = "#";
+                    tokens[tokens.count - 1] = last;
+                } else {
+                    newlines_since_comment = 0;
+                }
+                space = true;
+                continue;
             }
             ulong end = i;
             while (end > start and (data[end - 1] == ' ' or data[end - 1] == '\t' or data[end - 1] == '\r')) {
