@@ -242,13 +242,22 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
         failures.append($"docs/examples/{label}: does not build:\n{build.value().stdout}{build.value().stderr}");
         return;
     }
+    # Its own temporary folder: an example that writes under
+    # `Directory.temp()` runs at once in its plain and its optimized build.
+    var temp = run_temp(label);
+    Directory.remove_all(temp);
+    Directory.create_all(temp);
     var ran = process
         .Command(program.to_string())
         .working_directory(folder.path)
+        .environment("TMPDIR", temp.to_string())
+        .environment("TMP", temp.to_string())
+        .environment("TEMP", temp.to_string())
         .stdin(process.Stream.Null)
         .stdout(process.Stream.Pipe)
         .stderr(process.Stream.Pipe)
         .run();
+    Directory.remove_all(temp);
     if (ran.is_err()) {
         failures.append($"docs/examples/{label}: cannot run it: {ran.error().message}");
         return;
@@ -259,4 +268,22 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
             $"docs/examples/{label}: exited with {output.status.to_string()}\nstdout:\n{output.stdout}\nstderr:\n{output.stderr}"
         );
     }
+}
+
+# The temporary folder of the run labeled `label`: short, since examples
+# bind Unix sockets in it and macOS caps a socket's path at 104 bytes (its
+# own temporary folder already takes about half), so under `/tmp` but on
+# Windows.
+run_temp(label: String): Path {
+    var root = Directory.temp();
+    [Target(!OS(Windows))]
+    {
+        root = Path("/tmp");
+    }
+    # FNV-1a of the label: the plain and optimized runs differ.
+    ulong hash = 2166136261;
+    for (var b in label.bytes()) {
+        hash = ((hash ^ (b as ulong)) * 16777619) & 0xffffffff;
+    }
+    return root.join($"pd{hash}_{process.id()}");
 }

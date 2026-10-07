@@ -414,6 +414,10 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get install -y --no-install-recommends lld-20 qemu-user libc6-dev-arm64-cross libgcc-13-dev-arm64-cross
+          # lld-20 names its linker ld.lld only in LLVM 20's folder; the
+          # installed pep-build links with the clang on the PATH, which looks
+          # for ld.lld there too.
+          export PATH="/usr/lib/llvm-20/bin:$PATH"
           compiler="$PEPPER_COMPILER_DIR/pep-build"
           out="$RUNNER_TEMP/cross"
           rm -rf "$out"
