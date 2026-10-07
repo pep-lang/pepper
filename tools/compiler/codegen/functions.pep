@@ -452,20 +452,35 @@ extend Generator {
             codegen_function(ctor)?;
         }
         for (var method in st.method_members) {
+            var name = $"{st.name}.{method.name}";
+            # One declared only needs no renamed copy of its body.
+            if (declared_only(method, name)) {
+                declare_external(name);
+                continue;
+            }
             var m = method.copy();
-            m.name = $"{st.name}.{method.name}";
+            m.name = name;
             codegen_function(m)?;
         }
         return Result<void>.ok();
     }
 
+    ## Whether `function`, named `name`, is declared only: its unit's
+    ## object defines it.
+    declared_only(function: FunctionDef, name: String): bool {
+        return (!function.body.is_value() and stripped.contains(function.loc)) or is_cached(name);
+    }
+
+    declare_external(name: String) {
+        var declared = functions.try_get(name);
+        if (declared.is_value()) {
+            declared.value().set_linkage(llvm.Linkage.External);
+        }
+    }
+
     codegen_function(function: FunctionDef): Result<void> {
-        if ((!function.body.is_value() and stripped.contains(function.loc)) or is_cached(function.name)) {
-            # Declared only: its unit's object defines it.
-            var declared = functions.try_get(function.name);
-            if (declared.is_value()) {
-                declared.value().set_linkage(llvm.Linkage.External);
-            }
+        if (declared_only(function, function.name)) {
+            declare_external(function.name);
             return Result<void>.ok();
         }
         if (waits(function.name)) {

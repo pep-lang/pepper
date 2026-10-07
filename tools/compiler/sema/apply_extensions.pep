@@ -29,6 +29,7 @@ import [Callee] from "named_arguments";
 import [set_name] from "names";
 import [group_struct_methods] from "overloads";
 import [PassState] from "state";
+import [StructTable] from "static_type";
 import [trait_def] from "traits";
 import [replace_map, SIMD] from "type_name";
 import [substitute_block] from "value_types";
@@ -64,6 +65,13 @@ export apply_extensions(module: Module, state: PassState) {
                 }
                 state.applied_extensions.insert(key);
                 _apply_to_struct(st, ext, module.traits, state);
+                if (module.checked.structs.contains(st.name)) {
+                    state.extended_checked.insert(st.name);
+                    # The checked structs' shared `StructTable` has this one
+                    # without the extension's methods.
+                    state.trait_memo.checked_table = Optional<StructTable>.Empty;
+                    state.trait_memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Empty;
+                }
                 # An extension's methods join the struct's overload sets.
                 var sets = group_struct_methods(st, state);
                 if (!sets.is_value()) {

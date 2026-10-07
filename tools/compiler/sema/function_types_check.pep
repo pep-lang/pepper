@@ -29,8 +29,9 @@ import [Rewriter, rewrite_expression] from "walk";
 ## @param state the passes' state, which takes the error
 export check_function_types(module: Module, state: PassState) {
     var checker = _FunctionTypes(module, state);
+    var bases = _Bases(module);
     for (var f in module.functions) {
-        checker.unbound = _base_params(module, f.name, false);
+        checker.unbound = bases.params(f.name, false);
         checker.current = Optional<TypeName>.Empty;
         checker.function(f);
     }
@@ -40,7 +41,7 @@ export check_function_types(module: Module, state: PassState) {
         if (_is_generic_base(st) or st.ty.is_function_type() or st.ty.is_weak()) {
             continue;
         }
-        checker.unbound = _base_params(module, st.name, true);
+        checker.unbound = bases.params(st.name, true);
         checker.current = Optional<TypeName>.Value(st.ty);
         for (var c in st.constructors) {
             checker.function(c);
@@ -58,34 +59,50 @@ export check_function_types(module: Module, state: PassState) {
     }
 }
 
-## The parameter names of the generic base the specialization `name` (a
-## function, or a struct when `is_struct`) came from; none for a name that
-## is not a specialization.
-_base_params(module: Module, name: String, is_struct: bool): String[] {
-    var out = Array<String>();
-    var open = name.find("<");
-    if (open < 0) {
+## The generic parameters of the module's structs and functions by base
+## name, looked up once rather than by a scan per specialization.
+struct _Bases {
+    var structs: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
+    var functions: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
+
+    construct(module: Module) {
+        for (var b in module.structs) {
+            _add(structs, b.ty.name, b.generic_params);
+        }
+        for (var f in module.functions) {
+            _add(functions, f.name, f.generic_params);
+        }
+    }
+
+    # Every declaration of a name adds its parameters, in order, as the scan
+    # over the module did.
+    static _add(to: HashMap<String, Array<String>>, name: String, params: GenericParam[]) {
+        if (params.is_empty) {
+            return;
+        }
+        if (!to.contains(name)) {
+            to[name] = Array<String>();
+        }
+        for (var p in params) {
+            to[name].append(p.name);
+        }
+    }
+
+    ## The parameter names of the generic base the specialization `name` (a
+    ## function, or a struct when `is_struct`) came from; none for a name
+    ## that is not a specialization.
+    params(name: String, is_struct: bool): String[] {
+        var open = name.find("<");
+        if (open < 0) {
+            return Array<String>();
+        }
+        var found = (is_struct ? structs : functions).try_get(name.substr_bytes(0, open as ulong));
+        var out = Array<String>();
+        if (found.is_value()) {
+            out.append_all(found.value());
+        }
         return out;
     }
-    var base = name.substr_bytes(0, open as ulong);
-    if (is_struct) {
-        for (var b in module.structs) {
-            if (b.ty.name == base) {
-                for (var p in b.generic_params) {
-                    out.append(p.name);
-                }
-            }
-        }
-    } else {
-        for (var f in module.functions) {
-            if (f.name == base) {
-                for (var p in f.generic_params) {
-                    out.append(p.name);
-                }
-            }
-        }
-    }
-    return out;
 }
 
 ## Each generic struct with a defaulted parameter, by base name:
@@ -955,7 +972,7 @@ struct _FunctionTypes {
         if (t.is_pointer() or is_enum(state, t.name)) {
             return false;
         }
-        var info = table.structs.try_get(t.to_string());
+        var info = table.get(t.to_string());
         return info.is_value() and !info.value().methods.contains(op);
     }
 

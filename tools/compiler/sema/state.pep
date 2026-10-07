@@ -9,7 +9,7 @@ import [Exports] from "exports";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
 import [Callees] from "named_arguments";
-import [StructInfo] from "static_type";
+import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -73,6 +73,12 @@ export struct PassState {
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
+    ## The declarations `checked.restore_bodies` put a stashed body back
+    ## in, by the same keys.
+    var restored: HashSet<String> = HashSet<String>();
+    ## The checked structs an extension of the files being checked
+    ## changed (`apply_extensions`), by name.
+    var extended_checked: HashSet<String> = HashSet<String>();
     ## How many of `Module.struct_specs` and `Module.func_specs` met their
     ## constraints already (`check_specializations`).
     var checked_specs: (ulong, ulong) = (0, 0);
@@ -222,6 +228,23 @@ export struct TraitTypeMemo {
     ## Each checked struct's `StructTable` entry, by name, with how many
     ## fields and methods it had, and its type's spelling.
     var infos: HashMap<String, (ulong, ulong, String, StructInfo)> = HashMap<String, (ulong, ulong, String, StructInfo)>();
+    ## The checked structs' and functions' `StructTable`, which every pass's
+    ## table falls back to, with how many checked structs and functions,
+    ## and how many fields and methods those structs had, it was built
+    ## from; `apply_extensions` drops it when it changes a checked struct.
+    var checked_table: StructTable? = Optional<StructTable>.Empty;
+    var checked_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
+    ## Whether the checked declarations' bodies are stashed: from
+    ## `stash_bodies` to `restore_bodies`. While they are, `used_trait_types`
+    ## looks through the checked declarations once, into `checked_types`.
+    var stashed: bool = false;
+    ## What `used_trait_types` found in the settled checked declarations
+    ## (the trait types, and the names and types it looked through), with
+    ## the checked structs it must look through each time (not settled),
+    ## and how many checked structs and functions, and fields and methods
+    ## of those structs, there were.
+    var checked_types: (TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)? = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Empty;
+    var checked_types_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
 
     construct() {}
 }

@@ -45,6 +45,7 @@ export stash_bodies(module: Module, state: PassState) {
         _stash(state, $"m {st.name} acquire {st.acquire.name}", st.acquire);
         _stash(state, $"m {st.name} release {st.release.name}", st.release);
     }
+    state.trait_memo.stashed = true;
 }
 
 _stash(state: PassState, key: String, function: FunctionDef) {
@@ -80,6 +81,7 @@ export is_checked_function(module: Module, function: FunctionDef): bool {
 ## @param module the module
 ## @param state the passes' state
 export restore_bodies(module: Module, state: PassState) {
+    state.trait_memo.stashed = false;
     if (state.stashed.count == 0) {
         return;
     }
@@ -112,6 +114,7 @@ _restore(state: PassState, key: String, function: FunctionDef) {
     }
     function.body = body;
     state.stashed.remove(key);
+    state.restored.insert(key);
 }
 
 ## The body `stash_bodies` took from `function`, a free function, if any.

@@ -1329,30 +1329,6 @@ _named_at(name: String, loc: Loc): String {
     return $"{name}\n{loc.file}:{loc.span.start}:{loc.span.end}";
 }
 
-## Whether some expression could be an overloaded name used as a value.
-struct _CandidateFinder {
-    var overloads: Overloads;
-
-    construct(overloads: Overloads) {
-        this.overloads = overloads;
-    }
-
-    wants(e: Expression): bool {
-        match (e) {
-            SymbolRef(node) => {
-                return node.ty.contains_auto() and overloads.is_set(node.id);
-            }
-            MemberRef(node) => {
-                return overloads.is_any_method_set(node.name);
-            }
-            else => {}
-        }
-        return false;
-    }
-}
-
-extend _CandidateFinder with SiteFilter;
-
 ## Finds the member each overloaded name used as a value stands for.
 struct _ValueBinder {
     var overloads: Overloads;
@@ -1432,14 +1408,79 @@ extend _ValueRewriter with Rewriter;
 ## What `bind_function_values` looks for: the overloaded names, and the
 ## expressions that may use one as a value.
 export struct FunctionValueSearch {
-    var overloads: Overloads;
+    var module: Module;
+    var state: PassState;
+    var trait_types: TypeName[]?;
     var filter: SiteFilter;
+    var _overloads: Overloads? = Optional<Overloads>.Empty;
 
-    construct(overloads: Overloads) {
-        this.overloads = overloads;
-        this.filter = _CandidateFinder(overloads);
+    construct(module: Module, state: PassState, trait_types: TypeName[]?) {
+        this.module = module;
+        this.state = state;
+        this.trait_types = trait_types;
+        this.filter = _CandidateNames(module);
+    }
+
+    ## The overloads, built on first use: most runs find no site to bind.
+    overloads(): Overloads {
+        if (!_overloads.is_value()) {
+            _overloads = Optional<Overloads>.Value(Overloads(module, state, trait_types));
+        }
+        return _overloads.value();
     }
 }
+
+## Finds the overloaded names used as values, from the names of the
+## overload sets alone (those `Overloads.is_set` and
+## `Overloads.is_any_method_set` know), without building the overloads.
+struct _CandidateNames {
+    var sets: HashSet<String> = HashSet<String>();
+    var method_set_names: HashSet<String> = HashSet<String>();
+
+    construct(module: Module) {
+        for (var (set, _) in module.overload_sets) {
+            sets.insert(set);
+        }
+        for (var st in module.structs) {
+            for (var method in st.method_members) {
+                _method(method.name);
+            }
+            for (var method in st.generic_methods) {
+                _method(method.name);
+            }
+            if (!(st.ty.is_generic() and st.name == st.ty.name) and st.constructors.count > 1) {
+                sets.insert(st.ty.to_string());
+            }
+        }
+        for (var t in module.traits) {
+            for (var method in t.methods) {
+                _method(method.name);
+            }
+        }
+    }
+
+    _method(name: String) {
+        var set = set_name(name);
+        if (set != name) {
+            method_set_names.insert(set);
+        }
+    }
+
+    wants(e: Expression): bool {
+        match (e) {
+            SymbolRef(node) => {
+                return node.ty.contains_auto() and sets.contains(node.id);
+            }
+            MemberRef(node) => {
+                return method_set_names.contains(_method_set_name(node.name));
+            }
+            else => {}
+        }
+        return false;
+    }
+}
+
+extend _CandidateNames with SiteFilter;
 
 ## What `bind_function_values` looks for in `module`, if it has overloads.
 ##
@@ -1451,7 +1492,9 @@ export function_value_search(module: Module, state: PassState, tables: ModuleTab
     if (!has_overloads(module)) {
         return Optional<FunctionValueSearch>.Empty;
     }
-    return Optional<FunctionValueSearch>.Value(FunctionValueSearch(Overloads(module, state, tables.trait_types)));
+    # What building the overloads records, as when they were built here.
+    record_conformances(module, state);
+    return Optional<FunctionValueSearch>.Value(FunctionValueSearch(module, state, tables.trait_types));
 }
 
 ## Binds each overloaded name used as a value to the member whose function
@@ -1471,7 +1514,7 @@ export bind_function_values(
     if (!sites.any()) {
         return false;
     }
-    var overloads = search.overloads;
+    var overloads = search.overloads();
     var binder = _ValueBinder(overloads, tables.statics(), state);
     for_each_selected_site(tables, sites, binder);
     if (binder.bound.count == 0 and binder.methods.count == 0) {

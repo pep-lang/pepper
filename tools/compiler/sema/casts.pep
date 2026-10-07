@@ -27,9 +27,10 @@ import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 ## @param state the passes' state, which takes the error
 export check_casts(module: Module, state: PassState) {
     var checker = _Casts(module, state);
+    var bases = _Bases(module);
     for (var f in module.functions) {
         if (f.generic_params.count == 0) {
-            checker.unbound = _base_params(module, f.name, false);
+            checker.unbound = bases.params(f.name, false);
             checker.current = Optional<TypeName>.Empty;
             checker.visit(f);
         }
@@ -39,7 +40,7 @@ export check_casts(module: Module, state: PassState) {
         if (_is_generic_base(st) or st.ty.is_function_type() or st.ty.is_weak()) {
             continue;
         }
-        checker.unbound = _base_params(module, st.name, true);
+        checker.unbound = bases.params(st.name, true);
         checker.current = Optional<TypeName>.Value(st.ty);
         for (var c in st.constructors) {
             checker.visit(c);

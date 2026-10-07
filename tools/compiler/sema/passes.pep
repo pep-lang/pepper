@@ -442,7 +442,7 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     # Link summaries recorded with a checked unit hold while the structs
     # their trait calls reach stay the same; the checked bodies the others
     # need come back from the stash on demand.
-    drop_stale_summaries(module);
+    drop_stale_summaries(module, state);
     check_confinement(module, state);
     if (steps.stepped("check_confinement")) {
         return;

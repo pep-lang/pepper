@@ -70,7 +70,10 @@ export share_string_literals(module: Module, state: PassState) {
         }
     }
     # Facts and copies first: sharing replaces literals in the bodies.
-    var facts = program.record_facts();
+    var facts = HashMap<Loc, String>();
+    for (var (loc, text) in program.record_facts()) {
+        facts[loc] = text;
+    }
     var caller_copies = HashMap<String, Array<bool>>();
     for (var (key, callee) in program.callees) {
         if (!program.kept.contains(key)) {
@@ -105,7 +108,7 @@ export share_string_literals(module: Module, state: PassState) {
     module.caller_copies = caller_copies;
     var recorded = Array<(Loc, String)>();
     for (var (loc, summary) in module.summaries_to_record) {
-        var found = _facts_at(facts, loc);
+        var found = facts.try_get(loc);
         recorded.append((loc, found.is_value() ? summary + _FACTS + found.value() : summary));
     }
     module.summaries_to_record = recorded;
@@ -117,15 +120,6 @@ _is_checked(module: Module, callee: _LiteralCallee): bool {
         return module.checked.structs.contains(callee.owner.value().name);
     }
     return is_checked_function(module, callee.function);
-}
-
-_facts_at(facts: Array<(Loc, String)>, at: Loc): String? {
-    for (var (loc, text) in facts) {
-        if (loc.same(at)) {
-            return Optional<String>.Value(text);
-        }
-    }
-    return Optional<String>.Empty;
 }
 
 _is_string(ty: TypeName): bool {
@@ -189,6 +183,8 @@ struct _Literals {
     ## Per key, per operand slot: kept (`true`) or free. Only keys with a
     ## `String` slot.
     var kept: HashMap<String, Array<bool>> = HashMap<String, Array<bool>>();
+    ## Keys whose recorded facts stand: no body to refine, or a checked one.
+    var settled: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState) {
         this.module = module;
@@ -223,7 +219,25 @@ struct _Literals {
     ## Seeds every slot: a `String` slot of a function with a body starts
     ## free; one whose body the cache skipped takes its recorded fact.
     seed() {
-        var indirect = _indirectly_called(module);
+        var indirect = _indirectly_called(module, state, false);
+        # A checked body's facts were settled with its layer, and its calls
+        # reach only checked functions: it keeps its recorded facts unless
+        # this layer made a checked function newly called indirectly.
+        bool reuse = true;
+        for (var key in indirect) {
+            var callee = callees.try_get(key);
+            if (callee.is_value() and _is_checked(module, callee.value())) {
+                var recorded = _recorded_facts(module, callee.value().function, callee.value().slot_types().count);
+                if (recorded.is_value()) {
+                    for (var k in recorded.value()) {
+                        reuse = reuse and k;
+                    }
+                }
+            }
+        }
+        if (!reuse) {
+            indirect = _indirectly_called(module, state, true);
+        }
         for (var (key, callee) in callees) {
             var types = callee.slot_types();
             bool any = false;
@@ -246,17 +260,17 @@ struct _Literals {
                 for (var t in types) {
                     out.append(true);
                 }
-            } else if (callee.function.body.is_value()) {
-                for (var t in types) {
-                    out.append(!_is_string(t));
-                }
             } else {
-                var recorded = _recorded_facts(module, callee.function, types.count);
+                var recorded = Optional<bool[]>.Empty;
+                if (!callee.function.body.is_value() or (reuse and _is_checked(module, callee))) {
+                    recorded = _recorded_facts(module, callee.function, types.count);
+                }
                 if (recorded.is_value()) {
                     out = recorded.value();
+                    settled.insert(key);
                 } else {
                     for (var t in types) {
-                        out.append(true);
+                        out.append(!callee.function.body.is_value() or !_is_string(t));
                     }
                 }
             }
@@ -341,7 +355,7 @@ struct _Literals {
         }
         var slots = found.value();
         var callee = callees[key];
-        if (!callee.function.body.is_value()) {
+        if (!callee.function.body.is_value() or settled.contains(key)) {
             return false;
         }
         var names = Array<String>();
@@ -397,23 +411,26 @@ struct _Literals {
 ## The keys of the functions and methods a call can reach without naming
 ## them: those used as function values, and the methods that implement a
 ## trait's, which a trait value's vtable calls.
-_indirectly_called(module: Module): HashSet<String> {
+##
+## With `checked_too` false, the bodies checked with a unit below are
+## skipped: what they call indirectly was found with their layer, and is
+## recorded kept.
+_indirectly_called(module: Module, state: PassState, checked_too: bool): HashSet<String> {
     var note = _IndirectCalls();
-    for (var f in module.functions) {
-        if (f.body.is_value()) {
+    var walk = (key: String, f: FunctionDef) => {
+        if (f.body.is_value() and (checked_too or !state.restored.contains(key))) {
             rewrite_block(f.body.value(), note);
         }
+    };
+    for (var f in module.functions) {
+        walk($"f {f.name}", f);
     }
     for (var st in module.structs) {
         for (var f in st.method_members) {
-            if (f.body.is_value()) {
-                rewrite_block(f.body.value(), note);
-            }
+            walk($"m {st.name} method {f.name}", f);
         }
         for (var f in st.constructors) {
-            if (f.body.is_value()) {
-                rewrite_block(f.body.value(), note);
-            }
+            walk($"m {st.name} constructor {f.name}", f);
         }
     }
     for (var variable in module.globals) {

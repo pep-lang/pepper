@@ -85,6 +85,27 @@ _named_info(module: Module, st: StructDef, memo: TraitTypeMemo?): (String, Struc
     return (name, info);
 }
 
+# The memo's table of `module`'s checked declarations, built again when
+# the checked declarations have grown since, a checked struct's fields or
+# methods have (a generic method specialized for it, say), or
+# `apply_extensions` dropped it.
+_checked_table(module: Module, memo: TraitTypeMemo): StructTable {
+    ulong fields = 0;
+    ulong methods = 0;
+    for (var st in module.structs) {
+        if (module.checked.structs.contains(st.name)) {
+            fields += st.field_members.count;
+            methods += st.method_members.count;
+        }
+    }
+    var counts = (module.checked.structs.count as ulong, module.checked.functions.count as ulong, fields, methods);
+    if (!memo.checked_table.is_value() or memo.checked_counts != counts) {
+        memo.checked_table = Optional<StructTable>.Value(StructTable._checked(module, memo));
+        memo.checked_counts = counts;
+    }
+    return memo.checked_table.value();
+}
+
 _trait_info(t: TraitType): StructInfo {
     var info = StructInfo();
     info._add_methods(t.methods);
@@ -97,6 +118,9 @@ export struct StructTable {
     var structs: HashMap<String, StructInfo> = HashMap<String, StructInfo>();
     ## Free-function and extern name to return type.
     var functions: HashMap<String, TypeName> = HashMap<String, TypeName>();
+    # With a memo, the checked declarations' table, shared by the passes:
+    # this one holds the rest and looks there for what it lacks.
+    var _base: StructTable? = Optional<StructTable>.Empty;
 
     ## Returns the table of `module`.
     ##
@@ -109,29 +133,33 @@ export struct StructTable {
         trait_types: TypeName[]? = Optional<TypeName[]>.Empty,
         memo: TraitTypeMemo? = Optional<TraitTypeMemo>.Empty
     ) {
+        if (memo.is_value()) {
+            _base = Optional<StructTable>.Value(_checked_table(module, memo.value()));
+        }
+        bool shared = _base.is_value();
         for (var st in module.structs) {
-            var (name, info) = _named_info(module, st, memo);
-            # Also key the generic base (`Array<T>` as `Array`) so lookups
-            # before specialization resolve; never clobber a concrete entry.
-            if (name != st.ty.name and !structs.contains(st.ty.name)) {
-                structs[st.ty.name] = info;
+            if (shared and module.checked.structs.contains(st.name)) {
+                continue;
             }
-            structs[name] = info;
+            _add_struct(module, st, memo);
         }
         # Traits used as types: the specialized instances first, then each
         # base.
         for (var ty in trait_types_of(module, trait_types, memo)) {
             var def = trait_def(module.traits, ty);
-            if (def.is_value() and !structs.contains(ty.to_string())) {
+            if (def.is_value() and !_has(ty.to_string())) {
                 structs[ty.to_string()] = _trait_info(instance(def.value(), ty));
             }
         }
         for (var def in module.traits) {
-            if (!structs.contains(def.name)) {
+            if (!_has(def.name)) {
                 structs[def.name] = _trait_info(instance(def, TypeName.named(def.name)));
             }
         }
         for (var f in module.functions) {
+            if (shared and module.checked.functions.contains(f.name)) {
+                continue;
+            }
             functions[f.name] = f.ty;
         }
         for (var e in module.externs) {
@@ -139,26 +167,71 @@ export struct StructTable {
         }
     }
 
+    # The table of `module`'s checked structs and functions alone.
+    static _checked(module: Module, memo: TraitTypeMemo): StructTable {
+        var out = StructTable._empty();
+        for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name)) {
+                out._add_struct(module, st, Optional<TraitTypeMemo>.Value(memo));
+            }
+        }
+        for (var f in module.functions) {
+            if (module.checked.functions.contains(f.name)) {
+                out.functions[f.name] = f.ty;
+            }
+        }
+        return out;
+    }
+
+    # An empty table.
+    static _empty(): StructTable {
+        return StructTable(Module(), memo = Optional<TraitTypeMemo>.Empty);
+    }
+
+    # Files `st` under its spelled type and, for a specialization, also
+    # under its generic base (`Array<T>` as `Array`) so lookups before
+    # specialization resolve; never clobbering a concrete entry.
+    _add_struct(module: Module, st: StructDef, memo: TraitTypeMemo?) {
+        var (name, info) = _named_info(module, st, memo);
+        if (name != st.ty.name and !_has(st.ty.name)) {
+            structs[st.ty.name] = info;
+        }
+        structs[name] = info;
+    }
+
+    # Whether this table, or the checked one under it, files `name`.
+    _has(name: String): bool {
+        return structs.contains(name) or (_base.is_value() and _base.value().structs.contains(name));
+    }
+
     ## Returns the return type of free function or extern `name`.
     function(name: String): TypeName? {
-        return functions.try_get(name);
+        var own = functions.try_get(name);
+        if (own.is_value() or !_base.is_value()) {
+            return own;
+        }
+        return _base.value().functions.try_get(name);
     }
 
     ## Returns the struct info filed under `name`.
     get(name: String): StructInfo? {
-        return structs.try_get(name);
+        var own = structs.try_get(name);
+        if (own.is_value() or !_base.is_value()) {
+            return own;
+        }
+        return _base.value().structs.try_get(name);
     }
 
     ## Returns the struct info for a type: the exact specialization first
     ## (`Array<int>`), then the generic base (`Array`).
     lookup(ty: TypeName): StructInfo? {
         var text = ty.to_string();
-        var exact = structs.try_get(text);
+        var exact = get(text);
         if (exact.is_value()) {
             return exact;
         }
         var at = text.find("<");
-        return structs.try_get(at < 0 ? text : text.substr_bytes(0, at as ulong));
+        return get(at < 0 ? text : text.substr_bytes(0, at as ulong));
     }
 }
 

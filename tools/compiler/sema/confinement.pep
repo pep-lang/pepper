@@ -100,7 +100,7 @@ export check_confinement(module: Module, state: PassState) {
     var triggers = _triggers(program);
     for (var body in program.all) {
         var regions = with_blocks.contains(body.key);
-        if (program.settled.contains(body.key) or (!regions and !_mentions(body.function, triggers))) {
+        if (program.is_settled(body.key) or (!regions and !_mentions(body.function, triggers))) {
             continue;
         }
         # A checked unit's bodies were checked with it; one is here only for
@@ -600,6 +600,8 @@ struct _Confinement {
     var summaries: HashMap<String, _Summary> = HashMap<String, _Summary>();
     ## The functions whose summaries were recorded before.
     var settled: HashSet<String> = HashSet<String>();
+    # The checked summaries `_decode_checked` looked for.
+    var _tried: HashSet<String> = HashSet<String>();
     ## Every compiled function body.
     var all: Array<_Body>;
     var bodies: HashSet<String> = HashSet<String>();
@@ -658,6 +660,43 @@ struct _Confinement {
         }
         summaries = _recorded(module);
         for (var (key, _) in summaries) {
+            settled.insert(key);
+        }
+    }
+
+    ## The summary of `key`, as computed or recorded.
+    summary(key: String): _Summary? {
+        var found = summaries.try_get(key);
+        if (found.is_value()) {
+            return found;
+        }
+        _decode_checked(key);
+        return summaries.try_get(key);
+    }
+
+    ## Whether the summary of `key` was recorded before.
+    is_settled(key: String): bool {
+        if (settled.contains(key)) {
+            return true;
+        }
+        _decode_checked(key);
+        return settled.contains(key);
+    }
+
+    # A checked unit's summary is decoded on first use: a layer reads few
+    # of those below it.
+    _decode_checked(key: String) {
+        if (summaries.contains(key) or !_tried.insert(key)) {
+            return;
+        }
+        var recorded = module.checked.summaries.try_get(key);
+        if (!recorded.is_value()) {
+            return;
+        }
+        var (loc, text) = recorded.value();
+        var decoded = _decode(text, loc.file);
+        if (decoded.is_value()) {
+            summaries[key] = decoded.value();
             settled.insert(key);
         }
     }
@@ -871,15 +910,27 @@ _dispatch_lines(implementors: HashMap<String, StructDef[]>, dispatches: HashSet<
 ## implements the trait), so that its function is summarized again.
 ##
 ## @param module the module
-export drop_stale_summaries(module: Module) {
+## @param state the passes' state
+export drop_stale_summaries(module: Module, state: PassState) {
     var implementors = Optional<HashMap<String, StructDef[]>>.Empty;
     var stale = Array<String>();
+    var changed = _changed_traits(module, state);
     for (var (key, value) in module.checked.summaries) {
         var (_, text) = value;
         var bar = text.find("|");
         var own = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
         var lines = own.split("\n");
         if (lines.count < 2) {
+            continue;
+        }
+        # Only a struct this unit adds or changes can reach a trait call
+        # differently than when the summary was recorded.
+        bool touched = false;
+        for (var i in 1..lines.count) {
+            var tab = lines[i].find("\t");
+            touched = touched or changed.contains(tab < 0 ? lines[i] : lines[i].substr_bytes(0, tab as ulong));
+        }
+        if (!touched) {
             continue;
         }
         if (!implementors.is_value()) {
@@ -901,6 +952,25 @@ export drop_stale_summaries(module: Module) {
     for (var key in stale) {
         module.checked.summaries.remove(key);
     }
+}
+
+# The traits implemented by a struct the unit being checked adds, or by a
+# checked one it changes: an extension applied to it, or gave it members
+# with bodies, which the checked ones' stashed bodies are not.
+_changed_traits(module: Module, state: PassState): HashSet<String> {
+    var out = HashSet<String>();
+    for (var st in module.structs) {
+        bool changed = !module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name);
+        for (var m in st.method_members) {
+            changed = changed or m.body.is_value();
+        }
+        if (changed) {
+            for (var t in st.traits) {
+                out.insert(t.name);
+            }
+        }
+    }
+    return out;
 }
 
 ## Whether each of the program's files is under the runtime's directory.
@@ -958,7 +1028,7 @@ export returns_fresh(module: Module, target: Target, key: String): bool? {
         return none;
     }
     _summaries(program, [key]);
-    var summary = program.summaries.try_get(key);
+    var summary = program.summary(key);
     if (summary.is_empty()) {
         return none;
     }
@@ -1014,13 +1084,6 @@ _bodies(module: Module): Array<_Body> {
 ## functions whose bodies were skipped, by summary key.
 _recorded(module: Module): HashMap<String, _Summary> {
     var out = HashMap<String, _Summary>();
-    for (var (key, value) in module.checked.summaries) {
-        var (loc, text) = value;
-        var summary = _decode(text, loc.file);
-        if (summary.is_value()) {
-            out[key] = summary.value();
-        }
-    }
     if (module.recorded_summaries.count == 0) {
         return out;
     }
@@ -1069,7 +1132,7 @@ _record_summaries(program: _Confinement) {
             continue;
         }
         String? text = Optional<String>.Empty;
-        var summary = program.summaries.try_get(body.key);
+        var summary = program.summary(body.key);
         if (summary.is_value() and !summary.value().dependent) {
             text = Optional<String>.Value(summary.value().encode());
         }
@@ -1098,7 +1161,7 @@ _record_summaries(program: _Confinement) {
 ## reach, and holds while they stay the same.
 _settle(program: _Confinement) {
     for (var (key, summary) in program.summaries) {
-        if (program.settled.contains(key)) {
+        if (program.is_settled(key)) {
             continue;
         }
         var function = program.function_of(key);
@@ -1241,7 +1304,7 @@ _summarize(program: _Confinement, body: _Body): (_Summary, String[]) {
     bool dependent = walk.dependent;
     var dispatches = walk.dispatches;
     for (var key in walk.called) {
-        var known = program.summaries.try_get(key);
+        var known = program.summary(key);
         if (!known.is_value() or !known.value().dependent) {
             continue;
         }
@@ -1270,7 +1333,7 @@ _summaries(program: _Confinement, roots: String[]) {
     var queued = HashSet<String>();
     for (var key in roots) {
         var body = all.try_get(key);
-        if (!body.is_value() or program.settled.contains(key) or queued.contains(key)) {
+        if (!body.is_value() or program.is_settled(key) or queued.contains(key)) {
             continue;
         }
         queued.insert(key);
@@ -1291,7 +1354,7 @@ _summaries(program: _Confinement, roots: String[]) {
         var (summary, called) = _summarize(program, all[key]);
         for (var callee in called) {
             var callee_body = all.try_get(callee);
-            if (!callee_body.is_value() and !program.settled.contains(callee)) {
+            if (!callee_body.is_value() and !program.is_settled(callee)) {
                 # A checked function no summary settled: its body comes
                 # back from the stash, for its summary only.
                 callee_body = program.restore(callee);
@@ -1310,7 +1373,7 @@ _summaries(program: _Confinement, roots: String[]) {
             if (linked.insert($"{callee}\t{key}")) {
                 list.value().append(key);
             }
-            if (!program.summaries.contains(callee)) {
+            if (!program.summary(callee).is_value()) {
                 program.summaries[callee] = _bottom(
                     _slots(callee_body.value()), _result_slots(callee_body.value().function.ty)
                 );
@@ -1318,7 +1381,7 @@ _summaries(program: _Confinement, roots: String[]) {
                 queue.append(callee);
             }
         }
-        var before = program.summaries.try_get(key);
+        var before = program.summary(key);
         var changed = !before.is_value() or !before.value().same_links(summary);
         program.summaries[key] = summary;
         if (changed) {
@@ -1378,7 +1441,7 @@ _roots(program: _Confinement): String[] {
     }
     var out = Array<String>();
     for (var body in program.all) {
-        if (program.settled.contains(body.key) or !body.function.body.is_value()) {
+        if (program.is_settled(body.key) or !body.function.body.is_value()) {
             continue;
         }
         var finder = _RootFinder(sending, locked);
@@ -2832,7 +2895,7 @@ struct _RegionWalk {
     }
 
     known_summary(key: String, operands: ulong, results: ulong): _Summary {
-        var found = program.summaries.try_get(key);
+        var found = program.summary(key);
         if (found.is_value()) {
             return found.value();
         }
@@ -3384,7 +3447,7 @@ struct _Checks {
             }
         }
         if (callee is Known(key, function)) {
-            var found = program.summaries.try_get(key);
+            var found = program.summary(key);
             if (found.is_value()) {
                 return found.value().blame;
             }

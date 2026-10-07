@@ -117,6 +117,9 @@ export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTyp
     if (module.traits.count == 0) {
         return found.types;
     }
+    if (memo.is_value() and memo.value().stashed) {
+        return _with_checked(module, memo.value(), found);
+    }
     for (var st in module.structs) {
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;
@@ -158,6 +161,78 @@ export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTyp
         memo.value().functions[function.name] = found.noted;
         found.noting = false;
         found.noted = Array<TypeName>();
+    }
+    for (var global in module.globals) {
+        found.add(global.ty);
+    }
+    return found.types;
+}
+
+# `used_trait_types` while the checked bodies are stashed: what the settled
+# checked declarations hold is found once per layer (`TraitTypeMemo`), and
+# only the rest is looked through each time.
+_with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName[] {
+    # A checked struct gains methods (a generic method specialized for it)
+    # with bodies: what it holds is then looked through again.
+    ulong fields = 0;
+    ulong methods = 0;
+    for (var st in module.structs) {
+        if (module.checked.structs.contains(st.name)) {
+            fields += st.field_members.count;
+            methods += st.method_members.count;
+        }
+    }
+    var counts = (module.checked.structs.count as ulong, module.checked.functions.count as ulong, fields, methods);
+    if (!memo.checked_types.is_value() or memo.checked_types_counts != counts) {
+        var checked = _TraitTypes(module.traits);
+        var unsettled = HashSet<String>();
+        for (var st in module.structs) {
+            if (!module.checked.structs.contains(st.name) or (st.ty.is_generic() and st.name == st.ty.name)) {
+                continue;
+            }
+            if (_is_settled(module, st)) {
+                checked.add_struct(st);
+            } else {
+                unsettled.insert(st.name);
+            }
+        }
+        for (var function in module.functions) {
+            if (!function.is_generic_func
+                and !function.body.is_value()
+                and module.checked.functions.contains(function.name)) {
+                checked.add_function(function);
+            }
+        }
+        memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Value(
+            (checked.types, checked.seen, checked.visited, unsettled)
+        );
+        memo.checked_types_counts = counts;
+    }
+    var (types, seen, visited, unsettled) = memo.checked_types.value();
+    found.types.append_all(types);
+    for (var name in seen) {
+        found.seen.insert(name);
+    }
+    for (var name in visited) {
+        found.visited.insert(name);
+    }
+    for (var st in module.structs) {
+        if (st.ty.is_generic() and st.name == st.ty.name) {
+            continue;
+        }
+        if (module.checked.structs.contains(st.name) and !unsettled.contains(st.name)) {
+            continue;
+        }
+        found.add_struct(st);
+    }
+    for (var function in module.functions) {
+        if (function.is_generic_func) {
+            continue;
+        }
+        if (!function.body.is_value() and module.checked.functions.contains(function.name)) {
+            continue;
+        }
+        found.add_function(function);
     }
     for (var global in module.globals) {
         found.add(global.ty);
