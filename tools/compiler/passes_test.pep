@@ -650,7 +650,8 @@ compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, lim
         );
     }
     var expected = trimmed(output.value().stdout);
-    var actual = sema.model_json(module);
+    var actual = without_member_numbers(sema.model_json(module));
+    expected = without_member_numbers(expected);
     if (actual != expected) {
         var at = first_difference(actual, expected);
         return (
@@ -661,6 +662,33 @@ compare_step(compiler: Path, root: Path, arguments: String[], runtime: bool, lim
         );
     }
     return (none, steps);
+}
+
+# `json` without the number of each overload set member's name: `get$`
+# for `get$2`. The Rust passes number a set's members in order (`get$1`,
+# `get$2`); pepc by their signatures (`sema/overloads.pep`'s
+# `signature_member`), so that units checked apart name them alike.
+without_member_numbers(json: String): String {
+    var out = StringBuilder();
+    ulong copied = 0;
+    ulong i = 0;
+    while (i < json.size) {
+        if (json.byte_at(i) != '$') {
+            i += 1;
+            continue;
+        }
+        var end = i + 1;
+        while (end < json.size and json.byte_at(end) >= '0' and json.byte_at(end) <= '9') {
+            end += 1;
+        }
+        if (end > i + 1) {
+            out.append(json.substr_bytes(copied, i + 1 - copied));
+            copied = end;
+        }
+        i = end;
+    }
+    out.append(json.substr_bytes(copied, json.size - copied));
+    return out.to_string();
 }
 
 trimmed(text: String): String {

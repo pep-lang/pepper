@@ -3001,8 +3001,12 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   free functions, constructors and bare method calls
   (`named_arguments.pep`), the structs of function, tuple and weak
   reference types (`function_types.pep`), negated and string literals
-  (`literals.pep`), overload sets named `name$1`, `name$2`, with
-  concrete overrides (`overloads.pep`), the generic uses recorded as
+  (`literals.pep`), overload sets with concrete overrides
+  (`overloads.pep`; unlike the Rust passes' `name$1`, `name$2`, a member
+  is named by its signature, `name$<FNV-1a of its generic parameter
+  count, parameter types and staticness>`, so units checked apart, say an
+  extension adding an overload of another file's method, name members
+  alike; `passes_test` compares the models without these numbers), the generic uses recorded as
   specs (`generics.pep`), and implicit types (`resolve_implicit_types.pep`):
   `auto` locals, unresolved names and inferred return types, calls to
   overload sets (`overload_select.pep`, with generic constraints from

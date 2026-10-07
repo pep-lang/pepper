@@ -218,10 +218,8 @@ export name_overloads(module: Module, state: PassState) {
             continue;
         }
         var names = Array<String>();
-        ulong ordinal = 0;
         for (var index in group.members) {
-            ordinal += 1;
-            var member = $"{group.name}{OVERLOAD_SEPARATOR}{ordinal}";
+            var member = signature_member(group.name, module.functions[index], names);
             module.functions[index].name = member;
             names.append(member);
         }
@@ -480,18 +478,17 @@ export group_methods(methods: FunctionDef[], owner: String, state: PassState): M
             state.report(_clash(name, methods[later], methods[earlier]));
             return Optional<Map<String, Array<String>>>.Empty;
         }
-        ulong next = 0;
+        var named = Array<String>();
         for (var m in members) {
-            var ordinal = _ordinal(methods[m].name);
-            if (ordinal.is_value() and ordinal.value() > next) {
-                next = ordinal.value();
+            if (methods[m].name != name) {
+                named.append(methods[m].name);
             }
         }
         var names = Array<String>();
         for (var m in members) {
             if (methods[m].name == name) {
-                next += 1;
-                methods[m].name = $"{name}{OVERLOAD_SEPARATOR}{next}";
+                methods[m].name = signature_member(name, methods[m], named);
+                named.append(methods[m].name);
             }
             names.append(methods[m].name);
         }
@@ -500,23 +497,40 @@ export group_methods(methods: FunctionDef[], owner: String, state: PassState): M
     return Optional<Map<String, Array<String>>>.Value(sets);
 }
 
-## The number after the last `$` of `member`, if it is one.
-_ordinal(member: String): ulong? {
-    var at = member.rfind(OVERLOAD_SEPARATOR);
-    if (at < 0) {
-        return Optional<ulong>.Empty;
+## The name of `function` as a member of overload set `set`: the set's
+## name, `$`, and a number made from its signature (its generic parameters,
+## parameter types and whether it is static). A member's name depends only
+## on its own declaration, not on the other members or the order files are
+## checked in, so units checked apart (an extension in one file adding an
+## overload to a struct declared in another) name the same members alike.
+## Two signatures with the same number, which `taken` shows, take the next
+## free one.
+##
+## @param set the set's name
+## @param function the member
+## @param taken the names the set's other members have
+## @returns the member's name
+export signature_member(set: String, function: FunctionDef, taken: String[]): String {
+    var signature = StringBuilder();
+    signature.append($"{function.generic_params.count}");
+    for (var p in function.parameters) {
+        signature.append(",");
+        signature.append(p.ty.to_string());
     }
-    var digits = member.substr_bytes(at as ulong + 1, member.size - at as ulong - 1);
-    if (!_is_digits(digits)) {
-        return Optional<ulong>.Empty;
+    if (function.is_static) {
+        signature.append(",static");
     }
-    ulong value = 0;
-    ulong i = 0;
-    while (i < digits.size) {
-        value = value * 10 + (digits.byte_at(i) - 48) as ulong;
-        i += 1;
+    # FNV-1a, 32 bits: a short number of digits, which `set_name` reads.
+    ulong hash = 2166136261;
+    for (var b in signature.to_string().bytes()) {
+        hash = ((hash ^ (b as ulong)) * 16777619) & 0xffffffff;
     }
-    return Optional<ulong>.Value(value);
+    var member = $"{set}{OVERLOAD_SEPARATOR}{hash}";
+    while (taken.contains(member)) {
+        hash = (hash + 1) & 0xffffffff;
+        member = $"{set}{OVERLOAD_SEPARATOR}{hash}";
+    }
+    return member;
 }
 
 ## A concrete override of an overloaded generic (`hash<Point>` with two
