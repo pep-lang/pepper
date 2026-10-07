@@ -24,9 +24,9 @@ export [is_comparison, is_overflow_test, op_name, simd_result, weak_result] from
 export [thread_local_constant] from "shared_type_checks";
 export [Fingerprint] from "fingerprint";
 ## Checked units and their records in the build cache.
-export [CheckedUnit, finish_checked, resume_checked] from "checked";
-export [RecordIn, RecordOut] from "record";
-export [read_module, write_module] from "record_codec";
+export [CheckedUnit, finish_checked, interface_hash, resume_checked] from "checked";
+export [DeltaBase, RecordIn, RecordOut] from "record";
+export [index_module, index_resumed, interface_fields, read_module, write_module] from "record_codec";
 export [PassState] from "state";
 export [attribute_arguments, attribute_name, expression_loc] from "static_blocks";
 export [STATIC_REFCOUNT] from "synthesize";

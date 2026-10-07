@@ -184,6 +184,29 @@ export struct Built {
     construct() {}
 }
 
+## Whether `PEPC_VERIFY_DELTA` checks each checked layer's record as it is
+## stored: read back on the records before it, it must be the layer as
+## checked.
+_verify_delta(): bool {
+    var named = os.environment("PEPC_VERIFY_DELTA");
+    return named.is_value() and !named.value().is_empty;
+}
+
+## Whether `PEPC_VERIFY_CUTOFF` checks every layer loaded by early cutoff
+## again and compares: its record, written on an earlier check of the
+## layers below, must be what checking it on them now gives.
+_verify_cutoff(): bool {
+    var named = os.environment("PEPC_VERIFY_CUTOFF");
+    return named.is_value() and !named.value().is_empty;
+}
+
+## Whether `PEPC_RECORD_STATS` prints the bytes each field of the module
+## took in each delta record stored.
+_record_stats(): bool {
+    var named = os.environment("PEPC_RECORD_STATS");
+    return named.is_value() and !named.value().is_empty;
+}
+
 ## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
 ## builds with and without them.
 _layers_off(): bool {
@@ -212,65 +235,277 @@ _check_layers(
     if (errors.is_value()) {
         return Result<(sema.Module, sema.PassState), String>.err(errors.value());
     }
-    ulong first = 0;
     var module = sema.Module();
-    var loaded = load_checked(cache, program, layered);
-    if (loaded.is_value()) {
-        var (covered, unit) = loaded.value();
-        first = covered;
-        module = sema.resume_checked(unit);
-    }
-    clock.lap($"load {first} layers");
-    if (trace) {
-        File.stderr().write_all($"cache: {first} of {layered.count} layers checked already\n");
-    }
+    # Whether `module` holds the layers before the one at hand.
+    bool have = false;
+    # What the next layer is checked on: the interface of the layers so far.
+    String previous = "";
+    # Whether a layer was checked in this build, so the records after it
+    # that load are early cutoffs.
+    bool checked_any = false;
+    ulong loaded = 0;
     var state = sema.PassState(program.target);
-    for (var k in first..layered.count) {
-        # The specializations the checked layers asked for met their
-        # constraints when they were checked.
-        var checked_specs = (module.struct_specs.count, module.func_specs.count);
-        var built = sema.build_on(program, module, layered[k].files);
-        if (built.is_err()) {
-            return Result<(sema.Module, sema.PassState), String>.err(render_all([built.error()], sources));
-        }
-        module = built.value();
-        var aliases = Array<sema.TypeAliasDef>();
-        for (var alias in module.type_aliases) {
-            aliases.append(alias.copy());
-        }
-        # Summaries for the build cache's skipped bodies; a layer records
-        # the ones it makes either way (`settled_summaries`).
-        module.record_summaries = reused.is_value();
-        if (reused.is_value()) {
-            module.cached_files = reused.value().files;
-            for (var (loc, text) in reused.value().summaries) {
-                module.recorded_summaries[loc] = text;
+    bool verify = _verify_delta();
+    bool verify_cutoff = _verify_cutoff();
+    # The index of `module` its record's delta built, when it was written.
+    var indexed = Optional<sema.DeltaBase>.Empty;
+    for (var k in 0..layered.count) {
+        layered[k].key = layer_key(previous, layered[k]);
+        # The last layer is the program's own, checked on every build that
+        # gets this far.
+        if (k + 1 < layered.count) {
+            var found = read_checked(
+                cache, program, layered[k], have ? Optional<sema.Module>.Value(module) : Optional<sema.Module>.Empty
+            );
+            if (found.is_value()) {
+                var (unit, interface) = found.value();
+                if (verify_cutoff and checked_any) {
+                    var wrong = _verify_reuse(program, module, layered[k], unit, reused, sources, warnings);
+                    if (wrong.is_value()) {
+                        return Result<(sema.Module, sema.PassState), String>.err(
+                            $"PEPC_VERIFY_CUTOFF: {wrong.value()}"
+                        );
+                    }
+                }
+                module = sema.resume_checked(unit);
+                indexed = Optional<sema.DeltaBase>.Empty;
+                have = true;
+                previous = interface;
+                loaded += 1;
+                clock.lap($"load {layered[k].name}");
+                if (trace) {
+                    var how = checked_any ? "unchanged interface below" : "checked already";
+                    File.stderr().write_all($"cache: layer {layered[k].name} {how}\n");
+                }
+                continue;
             }
         }
-        state = sema.PassState(program.target);
-        state.sources = sources;
-        state.checked_specs = checked_specs;
-        # No lazy methods: a later layer may use a method this one would
-        # drop from a specialization it made.
-        var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
-        for (var note in state.notes) {
-            warnings.append(note);
+        # What this layer's record is a delta on: the module the layers
+        # before it left, indexed before this layer changes it.
+        var base = Optional<sema.DeltaBase>.Empty;
+        if (have and k + 1 < layered.count) {
+            if (indexed.is_value()) {
+                base = indexed;
+            } else {
+                var index = sema.DeltaBase();
+                sema.index_module(module, index);
+                base = Optional<sema.DeltaBase>.Value(index);
+                clock.lap("index");
+            }
         }
-        if (ran.is_err()) {
-            return Result<(sema.Module, sema.PassState), String>.err(render_all([ran.error()], sources));
+        indexed = Optional<sema.DeltaBase>.Empty;
+        var checked = _check_layer(program, module, layered[k], reused, sources, warnings);
+        if (checked.is_err()) {
+            return Result<(sema.Module, sema.PassState), String>.err(checked.error());
         }
+        var (after, ran_state, aliases) = checked.value();
+        module = after;
+        state = ran_state;
+        checked_any = true;
         clock.lap($"layer {layered[k].name}");
         if (k + 1 == layered.count) {
             break;
         }
         var unit = sema.finish_checked(module, state, aliases);
+        var interface = sema.interface_hash(unit);
+        clock.lap("interface");
+        # Writing the delta indexes the module for the next one.
+        var next = sema.DeltaBase();
+        bool stored = false;
         if (state.notes.is_empty) {
-            store_checked(cache, program, layered[k], unit);
+            store_checked(cache, program, layered[k], unit, base, interface, next);
+            stored = base.is_value();
             clock.lap("store");
+            if (base.is_value() and _record_stats()) {
+                _print_record_stats(layered[k].name, base.value());
+            }
+            if (verify) {
+                var upto = Array<Layer>();
+                for (var i in 0..k + 2) {
+                    upto.append(layered[i]);
+                }
+                var wrong = verify_checked(cache, program, upto, unit);
+                if (wrong.is_value()) {
+                    return Result<(sema.Module, sema.PassState), String>.err($"PEPC_VERIFY_DELTA: {wrong.value()}");
+                }
+                clock.lap("verify");
+            }
         }
         module = sema.resume_checked(unit);
+        if (stored) {
+            sema.index_resumed(module, next);
+            indexed = Optional<sema.DeltaBase>.Value(next);
+        }
+        have = true;
+        previous = interface;
+    }
+    if (trace) {
+        File.stderr().write_all($"cache: {loaded} of {layered.count} layers checked already\n");
     }
     return Result<(sema.Module, sema.PassState), String>.ok((module, state));
+}
+
+# Checks layer `layer`'s files on top of `module`, the layers before it:
+# the module after, the passes' state and the type aliases as built.
+_check_layer(
+    program: link.Program,
+    module: sema.Module,
+    layer: Layer,
+    reused: Reused?,
+    sources: SourceText[],
+    warnings: Diagnostic[]
+): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String> {
+    # The specializations the checked layers asked for met their
+    # constraints when they were checked.
+    var checked_specs = (module.struct_specs.count, module.func_specs.count);
+    var built = sema.build_on(program, module, layer.files);
+    if (built.is_err()) {
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.err(
+            render_all([built.error()], sources)
+        );
+    }
+    var after = built.value();
+    var aliases = Array<sema.TypeAliasDef>();
+    for (var alias in after.type_aliases) {
+        aliases.append(alias.copy());
+    }
+    # Summaries for the build cache's skipped bodies; a layer records the
+    # ones it makes either way (`settled_summaries`).
+    after.record_summaries = reused.is_value();
+    if (reused.is_value()) {
+        after.cached_files = reused.value().files;
+        for (var (loc, text) in reused.value().summaries) {
+            after.recorded_summaries[loc] = text;
+        }
+    }
+    var state = sema.PassState(program.target);
+    state.sources = sources;
+    state.checked_specs = checked_specs;
+    # No lazy methods: a later layer may use a method this one would drop
+    # from a specialization it made.
+    var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
+    for (var note in state.notes) {
+        warnings.append(note);
+    }
+    if (ran.is_err()) {
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.err(
+            render_all([ran.error()], sources)
+        );
+    }
+    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.ok((after, state, aliases));
+}
+
+# For `PEPC_VERIFY_CUTOFF`: checks `layer` again on a copy of `module`, the
+# layers before it as checked in this build, and compares the result with
+# `unit`, its record loaded by early cutoff. An error when they differ.
+_verify_reuse(
+    program: link.Program,
+    module: sema.Module,
+    layer: Layer,
+    unit: sema.CheckedUnit,
+    reused: Reused?,
+    sources: SourceText[],
+    warnings: Diagnostic[]
+): String? {
+    var checked = _check_layer(program, module.copy(), layer, reused, sources, warnings);
+    if (checked.is_err()) {
+        return Optional<String>.Value($"layer {layer.name} does not check again: {checked.error()}");
+    }
+    var (after, state, aliases) = checked.value();
+    var again = sema.finish_checked(after, state, aliases);
+    var expected = sema.RecordOut();
+    again.write(expected);
+    var actual = sema.RecordOut();
+    unit.write(actual);
+    if (!(expected.finish() == actual.finish())) {
+        # Name what differs: the fields, structs and functions.
+        var was = HashMap<String, String>();
+        for (var (what, hash) in sema.interface_fields(again.module, false)) {
+            was[what] = hash;
+        }
+        var differ = Array<String>();
+        for (var (what, hash) in sema.interface_fields(unit.module, false)) {
+            var had = was.try_get(what);
+            if (!had.is_value() or had.value() != hash) {
+                differ.append(what);
+            }
+            was.remove(what);
+        }
+        for (var (what, _) in was) {
+            differ.append(what + " (only checked again)");
+        }
+        # The checked summaries that differ, by key: as loaded, then as
+        # checked again.
+        var fresh = again.module.checked.summaries;
+        var kept = unit.module.checked.summaries;
+        ulong told = 0;
+        for (var (key, (loc, text)) in kept) {
+            var other = fresh.try_get(key);
+            var same = false;
+            if (other.is_value()) {
+                var (other_loc, other_text) = other.value();
+                same = other_loc == loc and other_text == text;
+            }
+            if (!same and told < 8) {
+                var shown_other = "none";
+                if (other.is_value()) {
+                    var (other_loc, other_text) = other.value();
+                    shown_other = $"{other_loc.file}:{other_loc.span.start} {other_text}";
+                }
+                differ.append($"summary {key}: {loc.file}:{loc.span.start} {text} / {shown_other}");
+                told += 1;
+            }
+        }
+        for (var (key, _) in fresh) {
+            if (!kept.contains(key) and told < 8) {
+                differ.append($"summary {key} only checked again");
+                told += 1;
+            }
+        }
+        for (var name in again.module.checked.functions) {
+            if (!unit.module.checked.functions.contains(name) and told < 12) {
+                differ.append($"checked function {name} only checked again");
+                told += 1;
+            }
+        }
+        for (var name in unit.module.checked.functions) {
+            if (!again.module.checked.functions.contains(name) and told < 16) {
+                differ.append($"checked function {name} only loaded");
+                told += 1;
+            }
+        }
+        if (unit.module.checked.extensions != again.module.checked.extensions) {
+            differ.append($"checked extensions {unit.module.checked.extensions} / {again.module.checked.extensions}");
+        }
+        var shown = Array<String>();
+        for (var i in 0..(differ.count < 40 ? differ.count : 40)) {
+            shown.append(differ[i]);
+        }
+        return Optional<String>.Value(
+            $"the record of layer {layer.name} loaded by early cutoff differs from the layer checked again in {differ.count} parts: {", ".join(shown)}"
+        );
+    }
+    return Optional<String>.Empty;
+}
+
+# Prints the bytes and counts `PEPC_RECORD_STATS` gathered for one record.
+_print_record_stats(name: String, base: sema.DeltaBase) {
+    var sizes = Array<(String, ulong)>();
+    for (var (field, bytes) in base.stats) {
+        sizes.append((field, bytes));
+    }
+    sizes.sort((a, b) => {
+        var (_, x) = a;
+        var (_, y) = b;
+        return x > y ? -1 : (x < y ? 1 : 0);
+    });
+    for (var (field, bytes) in sizes) {
+        if (field.ends_with(" count")) {
+            File.stderr().write_all($"record: {name} {field} {bytes}\n");
+        } else if (bytes >= 1024) {
+            File.stderr().write_all($"record: {name} {field} {bytes / 1024} KB\n");
+        }
+    }
 }
 
 ## Builds `program` into an executable: merge, the sema passes, code

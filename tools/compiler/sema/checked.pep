@@ -4,10 +4,15 @@
 ## (`check_confinement`, `share_string_literals`) run, then put back. Port
 ## of `crates/pepper-sema/src/checked.rs`.
 
+import digest;
+import io;
+import os;
 import [Loc] from "loc";
 import [Block, Checked, FunctionDef, Module, TypeAliasDef] from "model";
-import [RecordIn, RecordOut] from "record";
-import [read_module, read_type_alias, write_module, write_type_alias] from "record_codec";
+import [DeltaBase, RecordIn, RecordOut, write_interface_summaries] from "record";
+import [
+    read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
+] from "record_codec";
 import [method_key, PassState] from "state";
 
 ## Takes the bodies of `module`'s checked declarations out of it, into
@@ -168,28 +173,101 @@ export struct CheckedUnit {
         this.module = module;
     }
 
-    ## Writes this to `out`.
+    ## Writes this to `out`: in full, or with `base`, as a delta on the
+    ## module it indexes, so the list elements it holds as they are become
+    ## references.
     ##
     ## @param out the record
-    write(out: RecordOut) {
-        write_module(out, module);
-        out.unsigned(summaries.count);
-        for (var (loc, text) in summaries) {
-            out.loc(loc);
-            out.text(text);
+    ## @param base the index of the module this unit was checked on
+    ## @param next with `base`, filled with the index of this unit's module
+    ##     (`write_module_delta`)
+    write(out: RecordOut, base: DeltaBase? = Optional<DeltaBase>.Empty, next: DeltaBase = DeltaBase()) {
+        if (base.is_value()) {
+            out.unsigned(1);
+            write_module_delta(out, module, base.value(), next);
+        } else {
+            out.unsigned(0);
+            write_module(out, module);
         }
+        if (out.blank_locs) {
+            write_interface_summaries(out, summaries);
+        } else {
+            # By location, so the bytes do not depend on the map's order.
+            var locs = Array<Loc>();
+            for (var (loc, _) in summaries) {
+                locs.append(loc);
+            }
+            locs.sort((a, b) => {
+                if (a.file != b.file) {
+                    return a.file < b.file ? -1 : 1;
+                }
+                if (a.span.start != b.span.start) {
+                    return a.span.start < b.span.start ? -1 : 1;
+                }
+                return a.span.end < b.span.end ? -1 : (a.span.end > b.span.end ? 1 : 0);
+            });
+            # A delta holds those the base does not: its own.
+            var own = Array<Loc>();
+            for (var loc in locs) {
+                if (base.is_value()) {
+                    var key = base.value().scratch();
+                    key.loc(loc);
+                    var value = base.value().scratch();
+                    value.text(summaries[loc]);
+                    if (base.value().entry("recorded_summaries", key, value) == 1) {
+                        continue;
+                    }
+                }
+                own.append(loc);
+            }
+            out.unsigned(own.count);
+            for (var loc in own) {
+                out.loc(loc);
+                out.text(summaries[loc]);
+            }
+        }
+        # A delta refers to the base's aliases, as other list elements.
         out.unsigned(aliases.count);
         for (var alias in aliases) {
+            if (base.is_value()) {
+                var scratch = base.value().scratch();
+                write_type_alias(scratch, alias);
+                var at = base.value().find("type_aliases", scratch);
+                if (at >= 0) {
+                    out.unsigned((at as ulong) * 2 + 1);
+                    continue;
+                }
+                out.unsigned(0);
+            }
             write_type_alias(out, alias);
         }
     }
 
-    ## Reads what `write` wrote.
+    ## Reads what `write` wrote. A delta needs `base`: the module it was
+    ## written on, as read back and resumed (`resume_checked`); its
+    ## elements are shared, not copied.
     ##
     ## @param input the record
+    ## @param base the module a delta was written on
     ## @returns the checked unit; `input.error` says when the record is not one
-    static read(input: RecordIn): CheckedUnit {
-        var out = CheckedUnit(read_module(input));
+    static read(input: RecordIn, base: Module? = Optional<Module>.Empty): CheckedUnit {
+        var kind = input.unsigned();
+        var module = Module();
+        if (kind == 0) {
+            module = read_module(input);
+        } else if (kind == 1 and base.is_value()) {
+            module = read_module_delta(input, base.value());
+        } else {
+            input.fail("CheckedUnit", kind);
+        }
+        var out = CheckedUnit(module);
+        bool delta = kind == 1 and base.is_value();
+        if (delta) {
+            # The base's summaries as it is now, then this unit's own.
+            for (var (loc, text) in base.value().recorded_summaries) {
+                out.summaries[loc] = text;
+            }
+        }
         var count = input.count();
         for (var _ in 0..count) {
             var loc = input.loc();
@@ -197,6 +275,13 @@ export struct CheckedUnit {
         }
         count = input.count();
         for (var _ in 0..count) {
+            if (delta) {
+                var tag = input.unsigned();
+                if (tag & 1 == 1) {
+                    out.aliases.append(base.value().type_aliases[tag >> 1]);
+                    continue;
+                }
+            }
             out.aliases.append(read_type_alias(input));
         }
         return out;
@@ -223,8 +308,13 @@ export finish_checked(module: Module, state: PassState, aliases: TypeAliasDef[])
         }
     }
     var summaries = module.checked.summaries;
-    for (var (key, value) in state.settled_summaries) {
-        summaries[key] = value;
+    for (var (key, (blame, text)) in state.settled_summaries) {
+        # Only the file of a checked summary is read again (to decode it):
+        # without its bytes, an edit that only moves the function keeps
+        # the summary, and the records after it, the same.
+        var file = Loc();
+        file.file = blame.file;
+        summaries[key] = (file, text);
     }
     module.checked = all_checked(module, summaries);
     module.record_summaries = false;
@@ -237,6 +327,34 @@ export finish_checked(module: Module, state: PassState, aliases: TypeAliasDef[])
     }
     out.aliases = aliases;
     return out;
+}
+
+## Returns the hash of `unit`'s interface: the unit written with no
+## locations and no bodies of functions that are not generic. The units
+## checked on top of it depend on that alone: a change that keeps it, an
+## edit inside a function body that changes no inferred type and no link
+## summary, needs them checked again no more.
+##
+## @param unit the checked unit, as checked or as loaded
+## @returns the hash, as hex
+export interface_hash(unit: CheckedUnit): String {
+    var trace = os.environment("PEPC_TRACE_INTERFACE");
+    if (trace.is_value() and !trace.value().is_empty) {
+        for (var (what, hash) in interface_fields(unit.module)) {
+            io.File.stderr().write_all($"interface: {what} {hash.substr(0, 16)}\n");
+        }
+    }
+    var out = RecordOut();
+    out.blank_bodies = true;
+    out.blank_locs = true;
+    unit.write(out);
+    var hasher = digest.Blake3();
+    hasher.update(out.finish());
+    var hash = hasher.finish_hex();
+    if (trace.is_value() and !trace.value().is_empty) {
+        io.File.stderr().write_all($"interface: the unit {hash.substr(0, 16)}\n");
+    }
+    return hash;
 }
 
 ## Readies `unit`'s module, just checked or loaded, for the next files:

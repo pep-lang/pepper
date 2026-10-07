@@ -8,8 +8,10 @@
 ## record loads into a program whose files sit in other places.
 
 import compiler.ast;
+import digest;
 import [Utf8] from text;
 import [Loc, NO_FILE] from "loc";
+import [Checked] from "model";
 
 ## What every record starts with: the format's name and version.
 export const MAGIC = "pepper record 1\n";
@@ -21,6 +23,12 @@ export struct RecordOut {
     ## For each program file a location may name, its slot in the record,
     ## from 0. Empty: every file is its own slot.
     var files: HashMap<uint, uint> = HashMap<uint, uint>();
+    ## For an interface: write no body of a function that is not generic
+    ## (as none) outside the templates.
+    var blank_bodies: bool = false;
+    ## For an interface: write every location as the same, so moving code
+    ## around in a file does not change it.
+    var blank_locs: bool = false;
     # Each string's place in the list, by its text.
     var _places: HashMap<String, ulong> = HashMap<String, ulong>();
     # The strings' sizes, in their order.
@@ -84,6 +92,10 @@ export struct RecordOut {
     ##
     ## @param value the location
     loc(value: Loc) {
+        if (blank_locs) {
+            unsigned(0);
+            return;
+        }
         if (value.file == NO_FILE) {
             unsigned(0);
         } else if (files.is_empty) {
@@ -93,6 +105,18 @@ export struct RecordOut {
         }
         unsigned(value.span.start);
         unsigned(value.span.end);
+    }
+
+    ## Returns an empty record whose locations name the same file slots, to
+    ## write one value into alone.
+    ##
+    ## @returns the record
+    scratch(): RecordOut {
+        var out = RecordOut();
+        out.files = files;
+        out.blank_bodies = blank_bodies;
+        out.blank_locs = blank_locs;
+        return out;
     }
 
     ## Returns the whole record.
@@ -116,6 +140,478 @@ export struct RecordOut {
 }
 
 ## A record being read.
+## Returns the hash of what was written to `out`, as hex.
+##
+## @param out the record
+## @returns the hash
+export interface_text(out: RecordOut): String {
+    var hasher = digest.Blake3();
+    hasher.update(out.finish());
+    return hasher.finish_hex();
+}
+
+## Returns a link summary's text without the place its error would point
+## at (`classes;taint;start-end`, the first line's third part), for an
+## interface.
+##
+## @param text the summary
+## @returns the summary, its place left out
+export summary_without_place(text: String): String {
+    var line_end = text.find("\n");
+    var first = line_end >= 0 ? text.substr(0, line_end as ulong) : text;
+    var rest = line_end >= 0 ? text.substr(line_end as ulong, text.size) : "";
+    var parts = first.split(";");
+    if (parts.count < 3) {
+        return text;
+    }
+    parts[2] = "-";
+    return ";".join(parts) + rest;
+}
+
+## Writes link summaries by location to an interface: their texts without
+## places, sorted, the locations left out.
+##
+## @param out the record, writing an interface
+## @param summaries the summaries
+export write_interface_summaries(out: RecordOut, summaries: HashMap<Loc, String>) {
+    var texts = Array<String>();
+    for (var (_, text) in summaries) {
+        texts.append(summary_without_place(text));
+    }
+    texts.sort((a, b) => a.compare(b));
+    out.unsigned(texts.count);
+    for (var text in texts) {
+        out.text(text);
+    }
+}
+
+## Writes link summaries by key to an interface: by key, their texts
+## without places, the locations left out.
+##
+## @param out the record, writing an interface
+## @param summaries the summaries
+export write_interface_checked_summaries(out: RecordOut, summaries: HashMap<String, (Loc, String)>) {
+    var keys = Array<String>();
+    for (var (key, _) in summaries) {
+        keys.append(key);
+    }
+    keys.sort((a, b) => a.compare(b));
+    out.unsigned(keys.count);
+    for (var key in keys) {
+        var (_, text) = summaries[key];
+        out.text(key);
+        out.text(summary_without_place(text));
+    }
+}
+
+## Compares two byte strings, byte by byte, the shorter first on a tie.
+##
+## @param a the first
+## @param b the second
+## @returns a negative number, zero or a positive number as `a` sorts before, with or after `b`
+export compare_bytes(a: u8[], b: u8[]): int {
+    var n = a.count < b.count ? a.count : b.count;
+    for (var i in 0..n) {
+        if (a[i] != b[i]) {
+            return a[i] < b[i] ? -1 : 1;
+        }
+    }
+    if (a.count == b.count) {
+        return 0;
+    }
+    return a.count < b.count ? -1 : 1;
+}
+
+## Returns `base` and `added` in one list, sorted by place (file, then
+## start) without repeats, as `argument_names` keeps it.
+##
+## @param base a sorted list
+## @param added the elements to merge in
+## @returns the merged list
+export merge_by_place(base: Array<(Loc, String)>, added: Array<(Loc, String)>): Array<(Loc, String)> {
+    var all = Array<(Loc, String)>();
+    all.append_all(base);
+    all.append_all(added);
+    all.sort((a: (Loc, String), b: (Loc, String)) => {
+        var (x, _) = a;
+        var (y, _) = b;
+        if (x.file != y.file) {
+            return x.file < y.file ? -1 : 1;
+        }
+        return x.span.start < y.span.start ? -1 : (x.span.start > y.span.start ? 1 : 0);
+    });
+    var kept = Array<(Loc, String)>();
+    for (var (at, name) in all) {
+        if (kept.count > 0) {
+            var (last_at, last_name) = kept[kept.count - 1];
+            if (last_at == at and last_name == name) {
+                continue;
+            }
+        }
+        kept.append((at, name));
+    }
+    return kept;
+}
+
+## The index a delta record is written on (`write_module_delta`): each list
+## element of the base module, by its field and the hash of its own record,
+## at its place in that field.
+export struct DeltaBase {
+    ## The file slots of the record the delta goes into, which each element
+    ## is written with.
+    var files: HashMap<uint, uint> = HashMap<uint, uint>();
+    ## With `PEPC_RECORD_STATS` set, the bytes each field of the module took
+    ## in the last delta written on this base, by field.
+    var stats: HashMap<String, ulong> = HashMap<String, ulong>();
+    # The hashes of the base's lists kept whole and of its map entries.
+    var _hashes: HashMap<String, String> = HashMap<String, String>();
+    # How many different elements each of the base's lists holds.
+    var _distinct: HashMap<String, ulong> = HashMap<String, ulong>();
+    # How many elements each of the base's lists holds.
+    var _sizes: HashMap<String, ulong> = HashMap<String, ulong>();
+    # Each element's place, by "field:hash" of its record.
+    var _places: HashMap<String, ulong> = HashMap<String, ulong>();
+    # The base's checked names: structs, functions and globals, as indexed.
+    var _checked: Array<HashSet<String>> = Array<HashSet<String>>();
+    # The base's checked summaries, as indexed.
+    var _summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
+
+    construct() {}
+
+    ## Keeps copies of the names `checked`, the base's, marks checked, for
+    ## `write_checked`.
+    ##
+    ## @param checked the base's checked declarations
+    keep_checked(checked: Checked) {
+        _checked = Array<HashSet<String>>();
+        for (var names in [checked.structs, checked.functions, checked.globals]) {
+            var kept = HashSet<String>();
+            for (var name in names) {
+                kept.insert(name);
+            }
+            _checked.append(kept);
+        }
+        _summaries = HashMap<String, (Loc, String)>();
+        for (var (key, value) in checked.summaries) {
+            _summaries[key] = value;
+        }
+    }
+
+    ## Writes `checked` as a delta on the base's: each name set as the names
+    ## it lost and gained, sorted; the rest in full.
+    ##
+    ## @param out the record
+    ## @param checked the checked declarations
+    write_checked(out: RecordOut, checked: Checked) {
+        var sets = [checked.structs, checked.functions, checked.globals];
+        for (var i in 0..3) {
+            var had = i < _checked.count ? _checked[i] : HashSet<String>();
+            var lost = Array<String>();
+            for (var name in had) {
+                if (!sets[i].contains(name)) {
+                    lost.append(name);
+                }
+            }
+            var gained = Array<String>();
+            for (var name in sets[i]) {
+                if (!had.contains(name)) {
+                    gained.append(name);
+                }
+            }
+            for (var names in [lost, gained]) {
+                names.sort((a, b) => a.compare(b));
+                out.unsigned(names.count);
+                for (var name in names) {
+                    out.text(name);
+                }
+            }
+        }
+        out.unsigned(checked.extensions);
+        # The summaries: the keys the base's lost, then the entries new or
+        # changed since, by key.
+        var lost = Array<String>();
+        for (var (key, _) in _summaries) {
+            if (!checked.summaries.contains(key)) {
+                lost.append(key);
+            }
+        }
+        lost.sort((a, b) => a.compare(b));
+        out.unsigned(lost.count);
+        for (var key in lost) {
+            out.text(key);
+        }
+        var changed = Array<String>();
+        for (var (key, (loc, text)) in checked.summaries) {
+            var had = _summaries.try_get(key);
+            if (had.is_value()) {
+                var (had_loc, had_text) = had.value();
+                if (had_loc == loc and had_text == text) {
+                    continue;
+                }
+            }
+            changed.append(key);
+        }
+        changed.sort((a, b) => a.compare(b));
+        out.unsigned(changed.count);
+        for (var key in changed) {
+            var (loc, text) = checked.summaries[key];
+            out.text(key);
+            out.loc(loc);
+            out.text(text);
+        }
+    }
+
+    ## Reads what `write_checked` wrote on `base`, the base's checked
+    ## declarations, which it leaves as they are.
+    ##
+    ## @param input the record
+    ## @param base the base's checked declarations
+    ## @returns the checked declarations
+    static read_checked(input: RecordIn, base: Checked): Checked {
+        var sets = Array<HashSet<String>>();
+        for (var had in [base.structs, base.functions, base.globals]) {
+            var names = HashSet<String>();
+            for (var name in had) {
+                names.insert(name);
+            }
+            var lost = input.count();
+            for (var _ in 0..lost) {
+                names.remove(input.text());
+            }
+            var gained = input.count();
+            for (var _ in 0..gained) {
+                names.insert(input.text());
+            }
+            sets.append(names);
+        }
+        var extensions = input.unsigned();
+        var summaries = HashMap<String, (Loc, String)>();
+        for (var (key, value) in base.summaries) {
+            summaries[key] = value;
+        }
+        var lost = input.count();
+        for (var _ in 0..lost) {
+            summaries.remove(input.text());
+        }
+        var count = input.count();
+        for (var _ in 0..count) {
+            var key = input.text();
+            var loc = input.loc();
+            summaries[key] = (loc, input.text());
+        }
+        return Checked(sets[0], sets[1], sets[2], extensions, summaries);
+    }
+
+    ## Adds `bytes` to the bytes counted under `what`, and one to its count
+    ## (`PEPC_RECORD_STATS`).
+    ##
+    ## @param what what was written
+    ## @param bytes its size in the record
+    count(what: String, bytes: ulong) {
+        var had = stats.try_get(what + " bytes");
+        stats[what + " bytes"] = (had.is_value() ? had.value() : 0) + bytes;
+        var many = stats.try_get(what + " count");
+        stats[what + " count"] = (many.is_value() ? many.value() : 0) + 1;
+    }
+
+    ## Notes how many different elements of the base's list `list` a delta
+    ## did not refer to, of the `hit` it did: elements it rewrote or dropped,
+    ## under `category` (`PEPC_RECORD_STATS`).
+    ##
+    ## @param category what the count is added to
+    ## @param list the base's list
+    ## @param hit how many of its elements the delta referred to
+    missed(category: String, list: String, hit: ulong) {
+        var size = _distinct.try_get(list);
+        if (!size.is_value() or size.value() <= hit) {
+            return;
+        }
+        var had = stats.try_get(category + " missed count");
+        stats[category + " missed count"] = (had.is_value() ? had.value() : 0) + size.value() - hit;
+    }
+
+    ## Notes that field `field` took `bytes` bytes of the delta.
+    ##
+    ## @param field the field's name
+    ## @param bytes its size in the record
+    stat(field: String, bytes: ulong) {
+        stats[field] = bytes;
+    }
+
+    ## Returns an empty record to write one element into.
+    ##
+    ## @returns the record
+    scratch(): RecordOut {
+        var out = RecordOut();
+        out.files = files;
+        return out;
+    }
+
+    ## Indexes the element written to `scratch` as the `index`th of the
+    ## base's list `list`; an element already indexed keeps its first
+    ## place.
+    ##
+    ## @param list the list: a field of `Module`, or a member list of a struct
+    ## @param scratch the element, written alone
+    ## @param index its place in the list
+    add(list: String, scratch: RecordOut, index: ulong) {
+        var had = _sizes.try_get(list);
+        if (!had.is_value() or had.value() < index + 1) {
+            _sizes[list] = index + 1;
+        }
+        var key = _key(list, scratch);
+        if (!_places.contains(key)) {
+            _places[key] = index;
+            var distinct = _distinct.try_get(list);
+            _distinct[list] = (distinct.is_value() ? distinct.value() : 0) + 1;
+        }
+    }
+
+    ## Returns the place of the element of the base's list `list` whose
+    ## record is the one written to `scratch`, or -1 when it has none.
+    ##
+    ## @param list the list
+    ## @param scratch the element, written alone
+    ## @returns its place in the base's list, or -1
+    find(list: String, scratch: RecordOut): long {
+        var at = _places.try_get(_key(list, scratch));
+        return at.is_value() ? at.value() as long : -1;
+    }
+
+    ## Returns how many elements, or entries, the base's list or map `list`
+    ## holds.
+    ##
+    ## @param list the list or map
+    ## @returns its size; 0 when the base has none
+    size(list: String): ulong {
+        var had = _sizes.try_get(list);
+        return had.is_value() ? had.value() : 0;
+    }
+
+    ## Keeps the size of the base's list `list` and the hash of its
+    ## elements, written one after another to `scratch`.
+    ##
+    ## @param list the list
+    ## @param count how many elements it holds
+    ## @param scratch its elements, written
+    keep_list(list: String, count: ulong, scratch: RecordOut) {
+        _sizes[list] = count;
+        _hashes[list] = _hash(scratch);
+    }
+
+    ## Returns whether the elements written to `scratch` are the base's
+    ## list `list`, as `keep_list` kept it.
+    ##
+    ## @param list the list
+    ## @param scratch elements, written one after another
+    ## @returns true when they are the same
+    same_list(list: String, scratch: RecordOut): bool {
+        var had = _hashes.try_get(list);
+        return had.is_value() and had.value() == _hash(scratch);
+    }
+
+    ## Indexes an entry of the base's set or map `map`: its key written to
+    ## `key`, its value to `value` (empty for a set).
+    ##
+    ## @param map the set or map
+    ## @param key the key, written alone
+    ## @param value the value, written alone
+    keep_entry(map: String, key: RecordOut, value: RecordOut) {
+        var had = _sizes.try_get(map);
+        _sizes[map] = (had.is_value() ? had.value() : 0) + 1;
+        _hashes[$"{map}:{_hash(key)}"] = _hash(value);
+    }
+
+    ## Returns whether the base's set or map `map` has the entry: -1 when
+    ## it has no such key, 0 when the key has another value, 1 when it has
+    ## the same entry.
+    ##
+    ## @param map the set or map
+    ## @param key the key, written alone
+    ## @param value the value, written alone
+    ## @returns -1, 0 or 1
+    entry(map: String, key: RecordOut, value: RecordOut): int {
+        var had = _hashes.try_get($"{map}:{_hash(key)}");
+        if (!had.is_value()) {
+            return -1;
+        }
+        return had.value() == _hash(value) ? 1 : 0;
+    }
+
+    ## Returns the hash of the element written to `scratch`, for
+    ## `find_hashed` and `add_hashed`.
+    ##
+    ## @param scratch the element, written alone
+    ## @returns its hash
+    hash_of(scratch: RecordOut): String {
+        return _hash(scratch);
+    }
+
+    ## `find`, with the element's `hash_of`.
+    ##
+    ## @param list the list
+    ## @param hash the element's hash
+    ## @returns its place in the base's list, or -1
+    find_hashed(list: String, hash: String): long {
+        var at = _places.try_get($"{list}:{hash}");
+        return at.is_value() ? at.value() as long : -1;
+    }
+
+    ## `add`, with the element's `hash_of`.
+    ##
+    ## @param list the list
+    ## @param hash the element's hash
+    ## @param index its place in the list
+    add_hashed(list: String, hash: String, index: ulong) {
+        var had = _sizes.try_get(list);
+        if (!had.is_value() or had.value() < index + 1) {
+            _sizes[list] = index + 1;
+        }
+        var key = $"{list}:{hash}";
+        if (!_places.contains(key)) {
+            _places[key] = index;
+            var distinct = _distinct.try_get(list);
+            _distinct[list] = (distinct.is_value() ? distinct.value() : 0) + 1;
+        }
+    }
+
+    # The hash of what was written to `scratch`.
+    _hash(scratch: RecordOut): String {
+        var hasher = digest.Blake3();
+        hasher.update(scratch.finish());
+        return hasher.finish_hex();
+    }
+
+    ## Indexes the struct named `name` as the `index`th of the base's list
+    ## `list`; a name already indexed keeps its first place.
+    ##
+    ## @param list the list of structs
+    ## @param name the struct's name
+    ## @param index its place in the list
+    name(list: String, name: String, index: ulong) {
+        var key = $"{list}#{name}";
+        if (!_places.contains(key)) {
+            _places[key] = index;
+        }
+    }
+
+    ## Returns the place of the struct named `name` in the base's list
+    ## `list`, or -1 when it has none.
+    ##
+    ## @param list the list of structs
+    ## @param name the struct's name
+    ## @returns its place, or -1
+    named(list: String, name: String): long {
+        var at = _places.try_get($"{list}#{name}");
+        return at.is_value() ? at.value() as long : -1;
+    }
+
+    # The key of the element written to `scratch`, in list `list`.
+    _key(list: String, scratch: RecordOut): String {
+        return $"{list}:{_hash(scratch)}";
+    }
+}
+
 export struct RecordIn {
     ## For each slot in the record, the program file it is now. Empty:
     ## every slot is the file of its number.

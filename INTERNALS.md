@@ -3254,7 +3254,35 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   `programs/<hash of the output path>` records that key and the output's
   hash, the build stops before sema. A build that warned records nothing,
   so the next one warns again. `-T time` prints each stage's time, `-T
-  cache` each unit's hit or miss. `linker.pep`
+  cache` each unit's hit or miss. **Checked layers** (`layers.pep`,
+  `build.pep`'s `_check_layers`): sema checks the program one layer at a
+  time on top of the layers before it: the runtime first, then each unit
+  in dependency order (units that read each other share a layer). After
+  each layer but the program's own, `finish_checked` makes a
+  `sema.CheckedUnit` (the module, its link summaries and type aliases) and
+  the cache keeps it as a record under `<cache>/v1/checked11/<layer>/`
+  (the folder's number is the format's version). A record is a **delta**
+  on the module the layers before left (`write_module_delta`, generated
+  with the rest of `record_codec.pep` by `scripts/gen-sema-record.py`): a
+  list element the base holds as it is becomes a reference to its place,
+  found by the BLAKE3 hash of its own record (`DeltaBase`); a struct whose
+  name the base holds is written as a patch of its member lists; a list
+  that grows at its end is written as its tail, a set or map as the
+  entries it gained, the checked names and summaries as what they lost
+  and gained. Writing a delta also indexes the module for the next
+  layer's. A layer's key hashes its files and the **interface** of the
+  layers before it (`interface_hash`: the unit written with no
+  non-generic bodies, no positions and none of the body-derived tables),
+  so an edit that leaves a layer's interface alone loads the records of
+  the layers after it (**early cutoff**, `-T cache` says "unchanged
+  interface below") rather than checking them again. A checked summary
+  keeps only its function's file, which decoding it needs, so a layer
+  that settles a lower function's summary again does not depend on where
+  the function sits. `PEPC_VERIFY_DELTA` reads each record back and
+  compares it with the unit written in full, `PEPC_VERIFY_CUTOFF` checks
+  each layer early cutoff loads again and names the parts that differ,
+  `PEPC_RECORD_STATS` prints each delta's bytes by field and
+  `PEPC_TRACE_INTERFACE` each interface hash by field. `linker.pep`
   finds clang (as `find_link_driver` does) and links with the `[Link]`
   libraries and folders, `-l` and `-L`, and the OS's default system libraries;
   `project.pep` builds a project as `apply_project` and `fetch.rs` do:
