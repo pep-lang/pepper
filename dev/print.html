@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d84ec64a.js";
+            window.path_to_searchindex_js = "searchindex-dde9c64d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -20138,7 +20138,7 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 <tr><th><code>install.sh</code></th><th><code>install.ps1</code></th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest</td></tr>
+<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.4.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
 <tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites, and on Windows changes the <code>PATH</code>, without asking</td></tr>
@@ -20179,8 +20179,26 @@ GITHUB_TOKEN=$(gh auth token) sh install.sh
 <code>PATH</code> lines the script added. Prerequisites it installed, such as clang,
 stay.</p>
 <h2 id="how-releases-are-built"><a class="header" href="#how-releases-are-built">How releases are built</a></h2>
-<p>The <code>Release</code> workflow (<code>.github/workflows/release.yml</code>) runs on each
-<code>vX.Y.Z</code> tag. For each platform, <code>scripts/release-build.sh</code> builds the
+<p>The <code>Release</code> workflow (<code>.github/workflows/release.yml</code>) publishes:</p>
+<ul>
+<li><strong>the build of main</strong>, on each merge into main that changes the compiler,
+the runtime or the tools: main holds the version being developed as a
+prerelease (<code>0.4.0-dev</code> in <code>Cargo.toml</code> and each tool’s <code>version()</code>), and
+the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
+to the merge and replacing its archives. CI and the workers install it
+(<code>--version 0.4.0-dev</code>) instead of building the compiler. The newest
+release, the default, never picks a prerelease.</li>
+<li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand: <code>scripts/set-version.sh 0.4.0</code> sets the version everywhere a tool reads it, the commit is tagged
+<code>v0.4.0</code> (the workflow checks that it holds that version). Once it is
+published, the workflow opens a pull request that starts the next minor
+version on main (<code>0.5.0-dev</code>) and merges itself once its checks pass,
+unless main has already moved on; a major
+version is started by hand. A pull request the workflow opens with its
+own token starts no workflows, so it is opened with the
+<code>RELEASE_BUMP_TOKEN</code> secret when that is set, and otherwise the workflow
+dispatches CI on its branch.</li>
+</ul>
+<p>For each platform, <code>scripts/release-build.sh</code> builds the
 tools, lays them out as above, archives them as
 <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>, and
 <code>scripts/release-smoke-test.sh</code> proves the archive works: unpacked outside the
@@ -20189,7 +20207,7 @@ program, and the binaries must load nothing beyond the system’s C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
 <code>manylinux_2_28</code> container). The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
-<code>SHA256SUMS</code> and both scripts to the tag’s release. A pull request that
+<code>SHA256SUMS</code> and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="the-pepper-command"><a class="header" href="#the-pepper-command">The pepper command</a></h1>
@@ -20375,6 +20393,9 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 </div>
 <p>A <code>&lt;version&gt;</code> is exact (<code>0.3.0</code>), or a prefix (<code>0.3</code>, <code>0</code>) for the newest
 release, or installed toolchain, that starts so, or <code>latest</code> for the newest.
+A prerelease such as <code>0.4.0-dev</code>, the build of main that each merge
+replaces, is picked only by naming it exactly; prefixes, <code>latest</code> and
+<code>update</code> leave prereleases out.
 Only releases are installed; there is no nightly channel.</p>
 <p>The exit status is 0 on success, 1 when a command fails, and 2 for a
 mistake on the command line.</p>
@@ -21783,12 +21804,14 @@ the tool and the page.</li>
 </ul>
 <p>The tools’ options come from their <code>--help</code>: <code>pep-build</code>‘s and the Pepper
 tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
-<code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>, so
-run it first.</p>
+<code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds in
+<code>target/pepper-tests/bin</code> beside a link to its <code>pep-build</code>, so run it
+first.</p>
 <ul>
-<li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default: the release
-build’s folder under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it holds
-<code>pep-build</code>, else the debug build’s).</li>
+<li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default:
+<code>target/pepper-tests/bin</code> under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it
+holds <code>pep-build</code>, else the release build’s folder when it does, else the
+debug build’s).</li>
 </ul>
 <p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>
@@ -51399,13 +51422,24 @@ generator and the doc-comment check skip <code>test/</code> folders, so a test f
 needs no <code>##</code> comments.</p>
 <h2 id="running-them"><a class="header" href="#running-them">Running them</a></h2>
 <p><code>scripts/pepper-tests.sh</code> runs them all:</p>
-<pre><code class="language-bash">cargo build                                      # or --release
+<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
+scripts/pepper-tests.sh target/release           # with a cargo build instead
 </code></pre>
-<p>It builds <code>pepper</code> and <code>pep-test</code> with the <code>pep-build</code> you built (the
-release build if there is one, else the debug build; a folder given as the
-first argument overrides it), puts them beside it, and runs <code>pepper test</code>:</p>
+<p>The tests build with the installed toolchain’s <code>pep-build</code>, the one
+<code>pepper install which</code> names. Every merge into main that changes the
+compiler, the runtime or the tools publishes the build of main as a
+prerelease named by the version <code>Cargo.toml</code> holds (<code>0.4.0-dev</code>), replacing
+the one before; CI and the workers install it with the install scripts
+rather than building the compiler, and so can you (run the install again to
+refresh it). Only a change to the Rust compiler itself (<code>crates/</code>) needs its
+own build: pass its folder as the first argument, as CI does for a pull
+request that changes <code>crates/</code>.</p>
+<p>The script builds the Pepper tools (<code>pepper</code>, <code>pep-test</code>, <code>pep-doc</code> and the
+others) from the checkout with that <code>pep-build</code>, against the checkout’s
+runtime, into <code>target/pepper-tests/bin</code> beside a link to the <code>pep-build</code>,
+and runs <code>pepper test</code>:</p>
 <ul>
 <li>in <code>runtime/</code>, every runtime test;</li>
 <li>in <code>runtime/</code>, the <code>compress</code> tests again with <code>-D USE_ZLIB</code> and the

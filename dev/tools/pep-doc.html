@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d84ec64a.js";
+            window.path_to_searchindex_js = "../searchindex-dde9c64d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -219,12 +219,14 @@ the tool and the page.</li>
 </ul>
 <p>The tools’ options come from their <code>--help</code>: <code>pep-build</code>‘s and the Pepper
 tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
-<code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds beside <code>pep-build</code>, so
-run it first.</p>
+<code>pep-test</code>), which <code>scripts/pepper-tests.sh</code> builds in
+<code>target/pepper-tests/bin</code> beside a link to its <code>pep-build</code>, so run it
+first.</p>
 <ul>
-<li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default: the release
-build’s folder under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it holds
-<code>pep-build</code>, else the debug build’s).</li>
+<li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default:
+<code>target/pepper-tests/bin</code> under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it
+holds <code>pep-build</code>, else the release build’s folder when it does, else the
+debug build’s).</li>
 </ul>
 <p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>

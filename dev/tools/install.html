@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d84ec64a.js";
+            window.path_to_searchindex_js = "../searchindex-dde9c64d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -286,7 +286,7 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 <tr><th><code>install.sh</code></th><th><code>install.ps1</code></th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest</td></tr>
+<tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.4.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
 <tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
 <tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites, and on Windows changes the <code>PATH</code>, without asking</td></tr>
@@ -327,8 +327,26 @@ GITHUB_TOKEN=$(gh auth token) sh install.sh
 <code>PATH</code> lines the script added. Prerequisites it installed, such as clang,
 stay.</p>
 <h2 id="how-releases-are-built"><a class="header" href="#how-releases-are-built">How releases are built</a></h2>
-<p>The <code>Release</code> workflow (<code>.github/workflows/release.yml</code>) runs on each
-<code>vX.Y.Z</code> tag. For each platform, <code>scripts/release-build.sh</code> builds the
+<p>The <code>Release</code> workflow (<code>.github/workflows/release.yml</code>) publishes:</p>
+<ul>
+<li><strong>the build of main</strong>, on each merge into main that changes the compiler,
+the runtime or the tools: main holds the version being developed as a
+prerelease (<code>0.4.0-dev</code> in <code>Cargo.toml</code> and each tool’s <code>version()</code>), and
+the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
+to the merge and replacing its archives. CI and the workers install it
+(<code>--version 0.4.0-dev</code>) instead of building the compiler. The newest
+release, the default, never picks a prerelease.</li>
+<li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand: <code>scripts/set-version.sh 0.4.0</code> sets the version everywhere a tool reads it, the commit is tagged
+<code>v0.4.0</code> (the workflow checks that it holds that version). Once it is
+published, the workflow opens a pull request that starts the next minor
+version on main (<code>0.5.0-dev</code>) and merges itself once its checks pass,
+unless main has already moved on; a major
+version is started by hand. A pull request the workflow opens with its
+own token starts no workflows, so it is opened with the
+<code>RELEASE_BUMP_TOKEN</code> secret when that is set, and otherwise the workflow
+dispatches CI on its branch.</li>
+</ul>
+<p>For each platform, <code>scripts/release-build.sh</code> builds the
 tools, lays them out as above, archives them as
 <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>, and
 <code>scripts/release-smoke-test.sh</code> proves the archive works: unpacked outside the
@@ -337,7 +355,7 @@ program, and the binaries must load nothing beyond the system’s C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
 <code>manylinux_2_28</code> container). The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
-<code>SHA256SUMS</code> and both scripts to the tag’s release. A pull request that
+<code>SHA256SUMS</code> and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.</p>
 
                     </main>

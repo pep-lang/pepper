@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d84ec64a.js";
+            window.path_to_searchindex_js = "../searchindex-dde9c64d.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -222,6 +222,9 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 </div>
 <p>A <code>&lt;version&gt;</code> is exact (<code>0.3.0</code>), or a prefix (<code>0.3</code>, <code>0</code>) for the newest
 release, or installed toolchain, that starts so, or <code>latest</code> for the newest.
+A prerelease such as <code>0.4.0-dev</code>, the build of main that each merge
+replaces, is picked only by naming it exactly; prefixes, <code>latest</code> and
+<code>update</code> leave prereleases out.
 Only releases are installed; there is no nightly channel.</p>
 <p>The exit status is 0 on success, 1 when a command fails, and 2 for a
 mistake on the command line.</p>
