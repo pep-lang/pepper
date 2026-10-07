@@ -156,6 +156,28 @@ export all_checked(module: Module, summaries: HashMap<String, (Loc, String)>): C
     return out;
 }
 
+# A settled summary without the position of what it blames, which moves
+# with every edit above it: its first line ends in `;` and the blame, or
+# `;-` when nothing is blamed. The trait calls it reaches (more lines) and
+# the facts after `|` stay.
+_without_blame(text: String): String {
+    var line_end = text.find("\n");
+    var bar = text.find("|");
+    var end = line_end >= 0 ? line_end : (bar >= 0 ? bar : text.size as long);
+    if (bar >= 0 and bar < end) {
+        end = bar;
+    }
+    var head = text.substr_bytes(0, end as ulong);
+    var tail = text.substr_bytes(end as ulong, text.size - end as ulong);
+    var semi = head.rfind(";");
+    if (semi < 0) {
+        return text;
+    }
+    var blamed = head.substr_bytes(semi as ulong + 1, head.size - semi as ulong - 1);
+    var rest = head.substr_bytes(0, semi as ulong);
+    return blamed == "-" ? $"{rest};-{tail}" : $"{rest};blamed{tail}";
+}
+
 ## A unit checked with everything before it (a record in the build cache):
 ## the module the passes left, its declarations marked checked, with what
 ## the units checked on top of it need back.
@@ -371,4 +393,46 @@ export resume_checked(unit: CheckedUnit): Module {
     module.recorded_summaries = unit.summaries;
     module.summaries_to_record = Array<(Loc, String)>();
     return module;
+}
+
+## What other units can observe of each non-generic function and method
+## sema checked: its return type, as sema resolved it, and its settled link
+## summary, by the function's location. The build cache's interface hash
+## puts this in place of the body (`driver/interface.pep`), so a body edit
+## that changes neither leaves the file's interface alone. A function with
+## no summary has no entry; its body stays part of the interface.
+##
+## @param module the checked module
+## @param state the passes' state that checked its last layer
+## @returns each function's facts, by location
+export function_facts(module: Module, state: PassState): HashMap<Loc, String> {
+    var settled = HashMap<String, String>();
+    for (var (key, (_, text)) in module.checked.summaries) {
+        settled[key] = text;
+    }
+    for (var (key, (_, text)) in state.settled_summaries) {
+        settled[key] = text;
+    }
+    var out = HashMap<Loc, String>();
+    var add = (key: String, function: FunctionDef) => {
+        if (function.is_generic_func or function.generic_params.count > 0 or function.loc.is_none()) {
+            return;
+        }
+        var text = settled.try_get(key);
+        if (!text.is_value()) {
+            text = module.recorded_summaries.try_get(function.loc);
+        }
+        if (text.is_value()) {
+            out[function.loc] = $"returns {function.ty}\nsummary {_without_blame(text.value())}";
+        }
+    };
+    for (var f in module.functions) {
+        add(f.name, f);
+    }
+    for (var st in module.structs) {
+        for (var m in st.method_members) {
+            add(method_key(st.name, m.name), m);
+        }
+    }
+    return out;
 }

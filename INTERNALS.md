@@ -3227,10 +3227,12 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   inputs' name, namespace and kind, with its text when the input is the
   unit's own or its unit reaches this one back through the units' inputs,
   else its **interface hash** (`interface.pep`, early cutoff): the file's
-  tokens without comments or positions, each body sema may skip
-  (non-generic, explicit return type, link summary recorded) replaced by
-  its summary without the blame's position and how many `=>` it holds, so
-  a body edit or a comment leaves other units' keys alone. Keys resolve
+  tokens without comments or positions, each non-generic body sema
+  settled a link summary for replaced by what other units see of it
+  (`sema.function_facts`: its return type as resolved, inferred or not,
+  and that summary, trait calls included, without the blame's position)
+  and how many `=>` it holds, so a body edit that changes neither, or a
+  comment, leaves other units' keys alone. Keys resolve
   bottom up (`reuse`): a unit's key is known once the interfaces of the
   files it reads from other units are, which a hit's record gives; a hit
   whose link summaries were recorded marks its files in

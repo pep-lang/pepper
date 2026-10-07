@@ -6,12 +6,12 @@
 ## that file's unit: early cutoff.
 ##
 ## The interface is the file's tokens, without comments, whitespace or
-## positions, with each body the build cache may skip (`sema.strip_bodies`:
-## non-generic, an explicit return type, its link summary recorded)
-## replaced by that summary without the blame's position, and by how many
-## closures it may create, since a file's closure structs are numbered in
-## order. A body without a recorded summary is never skipped, so its tokens
-## are part of the interface.
+## positions, with each non-generic body sema settled a link summary for
+## replaced by what other units see of it (`sema.function_facts`): its
+## return type as sema resolved it, inferred or not, and that summary
+## without the blame's position; and by how many closures it may create,
+## since a file's closure structs are numbered in order. A body without a
+## summary keeps its tokens in the interface.
 
 import compiler.ast;
 import digest;
@@ -23,17 +23,18 @@ import syntax;
 ##
 ## @param file the file
 ## @param index its index in the program's files
-## @param summaries the link summaries recorded for the program's functions
+## @param facts each function's return type and link summary, by its
+##     location (`sema.function_facts`)
 ## @returns the hash
-export interface_hash(file: link.ProgramFile, index: uint, summaries: HashMap<sema.Loc, String>): String {
+export interface_hash(file: link.ProgramFile, index: uint, facts: HashMap<sema.Loc, String>): String {
     var skipped = Array<(ast.Span, String)>();
     var skip = (function: ast.FunctionDecl) => {
-        if (!function.body.is_value() or function.generic_params.count > 0 or _is_auto(function.return_type)) {
+        if (!function.body.is_value() or function.generic_params.count > 0) {
             return;
         }
-        var summary = summaries.try_get(sema.Loc.at(index, function.name_span));
-        if (summary.is_value()) {
-            skipped.append((function.body.value().span, $"summary {summary_without_position(summary.value())}"));
+        var fact = facts.try_get(sema.Loc.at(index, function.name_span));
+        if (fact.is_value()) {
+            skipped.append((function.body.value().span, fact.value()));
         }
     };
     for (var declaration in file.module.declarations) {
@@ -110,29 +111,4 @@ export interface_hash(file: link.ProgramFile, index: uint, summaries: HashMap<se
         hasher.update($"{summary}\nclosures {closures}\n");
     }
     return hasher.finish_hex();
-}
-
-## Whether `ty`, a declared return type, is none: the type is inferred.
-_is_auto(ty: ast.TypeName): bool {
-    return ty.name == "" or ty.name == "auto" or ty.name == "__auto";
-}
-
-## A recorded link summary without the position of what it blames, which
-## moves with every edit above it: `summary_without_position` in
-## `check_confinement.rs`.
-##
-## @param text the summary
-## @returns the summary without the position
-export summary_without_position(text: String): String {
-    # Facts other passes append after `|` (`static_strings`) stay.
-    var bar = text.find("|");
-    var head = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
-    var facts = bar < 0 ? "" : text.substr_bytes(bar as ulong, text.size - bar as ulong);
-    var semi = head.rfind(";");
-    if (semi < 0) {
-        return head + facts;
-    }
-    var rest = head.substr_bytes(0, semi as ulong);
-    var blamed = head.substr_bytes(semi as ulong + 1, head.size - semi as ulong - 1);
-    return blamed == "-" ? $"{rest};-{facts}" : $"{rest};blamed{facts}";
 }

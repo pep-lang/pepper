@@ -473,7 +473,8 @@ export reuse(program: link.Program, units: link.Unit[], keys: Keys, cache: Cache
 ## @param keys the keys
 ## @param cache the build cache
 ## @param extension the objects' file extension
-## @param module the checked model
+## @param facts each checked function's return type and link summary, by
+##     location (`sema.function_facts`)
 export reuse_after_sema(
     reused: Reused,
     program: link.Program,
@@ -481,18 +482,11 @@ export reuse_after_sema(
     keys: Keys,
     cache: Cache,
     extension: String,
-    module: sema.Module
+    facts: HashMap<sema.Loc, String>
 ) {
-    var summaries = HashMap<sema.Loc, String>();
-    for (var (loc, summary) in module.recorded_summaries) {
-        summaries[loc] = summary;
-    }
-    for (var (loc, summary) in module.summaries_to_record) {
-        summaries[loc] = summary;
-    }
     for (var i in 0..program.files.count) {
         if (!reused.interfaces[i].is_value()) {
-            reused.interfaces[i] = Optional<String>.Value(interface_hash(program.files[i], i as uint, summaries));
+            reused.interfaces[i] = Optional<String>.Value(interface_hash(program.files[i], i as uint, facts));
         }
     }
     for (var u in 0..units.count) {

@@ -593,7 +593,15 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
     clock.lap("sema");
     if (reused.is_value()) {
-        reuse_after_sema(reused.value(), program, units, keys.value(), options.cache.value(), triple_extension, module);
+        reuse_after_sema(
+            reused.value(),
+            program,
+            units,
+            keys.value(),
+            options.cache.value(),
+            triple_extension,
+            sema.function_facts(module, state)
+        );
         clock.lap("interfaces");
     }
 
