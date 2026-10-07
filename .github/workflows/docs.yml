@@ -86,14 +86,24 @@ jobs:
             git -C site switch --orphan gh-pages
           fi
 
-      # pep-doc is a Pepper program, built with the compiler.
+      # pep-doc is a Pepper program, built against this checkout's runtime
+      # with the published build of main (#713). A release tag builds the
+      # compiler instead, since its release may not be published yet.
+      - name: Install the toolchain
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: bash scripts/ci-install-toolchain.sh $([ "$REF_TYPE" = tag ] && echo --build)
+
       - name: Build pep-doc
+        env:
+          PEPPER_RUNTIME: ${{ github.workspace }}/runtime
         run: |
-          cargo build --release --locked -p pepper
-          target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
+          mkdir -p target/docs-tools
+          "$PEPPER_COMPILER_DIR/pep-build" -O -I tools tools/pep-doc/main.pep -o target/docs-tools/pep-doc
 
       - name: Build the docs
-        run: target/release/pep-doc build --version "$DOCS_VERSION" --site site
+        run: target/docs-tools/pep-doc build --version "$DOCS_VERSION" --site site
 
       - name: Publish
         run: |

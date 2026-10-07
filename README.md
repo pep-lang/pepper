@@ -269,14 +269,24 @@ need. Platform notes:
 cargo build                # debug compiler at target/debug/pep-build(.exe)
 cargo build --release
 target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper   # pepper.exe on Windows
-scripts/pepper-tests.sh    # the tests, with `pepper test`
 ```
 
-The tests are Pepper `[Test]` functions: `scripts/pepper-tests.sh` builds
-`pepper` and `pep-test` beside the `pep-build` you built and runs the
-runtime's and tools' tests (see `docs/src/contributing/tests.md`). The Rust
-compiler's own tests (`cargo test --workspace`) are still in the repository,
-but neither CI nor the pre-merge checks run them.
+The tests are Pepper `[Test]` functions, built with the installed build of
+main: each merge that changes the compiler, the runtime or the tools
+publishes it as the prerelease named by `Cargo.toml`'s version
+(`0.4.0-dev`), and CI installs it rather than building the compiler:
+
+```bash
+sh scripts/install.sh --version 0.4.0-dev    # install.ps1 -Version 0.4.0-dev on Windows
+scripts/pepper-tests.sh                      # the tests, with `pepper test`
+scripts/pepper-tests.sh target/release       # with your cargo build instead
+```
+
+`scripts/pepper-tests.sh` builds `pepper` and `pep-test` with that
+`pep-build` and runs the runtime's and tools' tests (see
+`docs/src/contributing/tests.md`). The Rust compiler's own tests (`cargo
+test --workspace`) are still in the repository, but neither CI nor the
+pre-merge checks run them.
 
 Those commands build against the default LLVM 20. For any other version, name
 it:

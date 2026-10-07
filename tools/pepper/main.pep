@@ -44,7 +44,7 @@ import toolchain;
 # The release this entry point belongs to. A test keeps it equal to the
 # workspace version in Cargo.toml.
 version(): String {
-    return "0.3.0";
+    return "0.4.0-dev";
 }
 
 main(args: String[]): int {

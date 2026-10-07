@@ -39,6 +39,32 @@ reads_versions_and_the_versions_a_command_names() {
     expect_true(toolchain.newest_match(versions, toolchain.parse_spec("1").value()).is_empty());
 }
 
+[Test]
+reads_prerelease_versions() {
+    var dev = toolchain.parse_version("v0.4.0-dev").value();
+    expect_equal(dev.prerelease, "dev");
+    expect_equal(dev.to_string(), "0.4.0-dev");
+    expect_equal(toolchain.parse_version("0.4.0-rc.1").value().to_string(), "0.4.0-rc.1");
+    expect_true(toolchain.parse_version("0.4.0-").is_empty());
+    expect_true(toolchain.parse_version("0.4.0-dev build").is_empty());
+    expect_true(toolchain.parse_spec("0.4-dev").is_empty());
+
+    # A prerelease sorts after the release before it and before its own.
+    expect_true(toolchain.Version(0, 3, 9).compare(dev) < 0);
+    expect_true(dev.compare(toolchain.Version(0, 4, 0)) < 0);
+    expect_true(dev.compare(toolchain.parse_version("0.4.0-dev").value()) == 0);
+
+    # Only a spec naming the prerelease picks it.
+    var versions = [toolchain.Version(0, 3, 0), dev];
+    expect_equal(toolchain.newest_match(versions, toolchain.parse_spec("latest").value()).value().to_string(), "0.3.0");
+    expect_true(toolchain.newest_match(versions, toolchain.parse_spec("0.4").value()).is_empty());
+    expect_true(toolchain.newest_match(versions, toolchain.parse_spec("0.4.0").value()).is_empty());
+    var named = toolchain.parse_spec("0.4.0-dev").value();
+    expect_true(named.is_exact);
+    expect_equal(named.to_string(), "0.4.0-dev");
+    expect_equal(toolchain.newest_match(versions, named).value().to_string(), "0.4.0-dev");
+}
+
 # Makes a toolchain folder that `Home.installed` counts.
 fake_toolchain(home: toolchain.Home, version: String) {
     var bin = home.toolchain(toolchain.parse_version(version).value()).join("bin");
@@ -131,6 +157,8 @@ reads_the_releases_for_a_machine() {
             "v0.4.0-rc.1", true, ["pepper-0.4.0-rc.1-linux-x64.tar.gz", "pepper-0.4.0-rc.1-linux-x64.tar.gz.sha256"]
         )
         + ","
+        + github_release("v0.5.0", true, ["pepper-0.5.0-linux-x64.tar.gz", "pepper-0.5.0-linux-x64.tar.gz.sha256"])
+        + ","
         + github_release(
             "v0.3.0",
             false,
@@ -144,13 +172,17 @@ reads_the_releases_for_a_machine() {
         + ","
         + github_release("v0.2.0", false, ["pepper-0.2.0-linux-x64.tar.gz"])
         + "]";
+    # The prerelease whose tag names one is listed; a prerelease tagged as
+    # a release (v0.5.0) is not.
     var linux = parse_releases(listed, "linux-x64").value();
-    expect_equal(linux.count, 2);
-    expect_equal(linux[0].version.to_string(), "0.3.0");
-    expect_equal(linux[0].archive_name, "pepper-0.3.0-linux-x64.tar.gz");
-    expect_equal(linux[0].archive_url, "https://example.com/assets/pepper-0.3.0-linux-x64.tar.gz");
-    expect_equal(linux[0].checksum_url, "https://example.com/assets/pepper-0.3.0-linux-x64.tar.gz.sha256");
-    expect_equal(linux[1].version.to_string(), "0.2.1");
+    expect_equal(linux.count, 3);
+    expect_equal(linux[0].version.to_string(), "0.4.0-rc.1");
+    expect_equal(linux[0].archive_name, "pepper-0.4.0-rc.1-linux-x64.tar.gz");
+    expect_equal(linux[1].version.to_string(), "0.3.0");
+    expect_equal(linux[1].archive_name, "pepper-0.3.0-linux-x64.tar.gz");
+    expect_equal(linux[1].archive_url, "https://example.com/assets/pepper-0.3.0-linux-x64.tar.gz");
+    expect_equal(linux[1].checksum_url, "https://example.com/assets/pepper-0.3.0-linux-x64.tar.gz.sha256");
+    expect_equal(linux[2].version.to_string(), "0.2.1");
     var windows = parse_releases(listed, "windows-x64").value();
     expect_equal(windows.count, 1);
     expect_equal(windows[0].archive_name, "pepper-0.3.0-windows-x64.zip");

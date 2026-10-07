@@ -48,7 +48,7 @@ names and the pass order come from that implementation.
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder, a subfolder of the module, so each test file sees the module's internal declarations (a test helper may not repeat one of their names), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
 | `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `corpus_tests.rs` compiles and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
-| `scripts/` | LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the runtime's and tools' Pepper tests (`pepper-tests.sh`), and `install-vscode-extension.ps1`. |
+| `scripts/` | The version every tool reports (`set-version.sh`), CI's toolchain install (`ci-install-toolchain.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`, `probe-llvm-packages.sh`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the runtime's and tools' Pepper tests (`pepper-tests.sh`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml`, `llvm-versions.yml` (see [section 11](#11-ci)). |
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
@@ -3477,9 +3477,13 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
     its verdict, so a pass left by a draft run cannot let the PR merge while
     the ready run is still testing it.
   - `test-windows` runs on the self-hosted **`pepper-windows`** runner:
-    provision LLVM (`ci-provision-llvm.sh`, cached), `cargo build
-    --workspace --release --locked`, `scripts/pepper-tests.sh`, and
-    `pep-doc check`.
+    provision LLVM (`ci-provision-llvm.sh`, cached; the compiler's tests
+    link it through pepper-llvm), install the build of main with
+    `scripts/ci-install-toolchain.sh` (the `x.y.z-dev` prerelease
+    `release.yml` publishes on each merge, through `install.sh` /
+    `install.ps1`; a cargo build instead when the PR changes `crates/`,
+    `Cargo.toml` or `Cargo.lock`, which `changes` reports as `compiler`),
+    `scripts/pepper-tests.sh`, and `pep-doc check` (#713).
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
     do the same against the default LLVM. The Rust tests (`cargo test`)
     run in no job (#662).
@@ -3517,7 +3521,14 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   push or a manual dispatch, and publishes the release from a tag or from
   `main`. There is no arm64 Windows or Linux runner, so those platforms get
   no bundled server.
-- **`release.yml`**: on a `vX.Y.Z` tag, builds the toolchain for
+- **`release.yml`**: on each merge into main that changes `crates/`,
+  `runtime/`, `tools/` or `Cargo.*`, publishes the build of main: the
+  version main holds (`0.4.0-dev`, set by `scripts/set-version.sh`) on that
+  prerelease, whose tag moves to the merge and whose assets are replaced
+  (#713); CI installs it. On a `vX.Y.Z` tag (which must hold that version),
+  it publishes a release, then its `bump` job opens a pull request setting
+  main to the next minor's `-dev` (when main still holds the released
+  version). Either way it builds the toolchain for
   linux-x64 (in a `manylinux_2_28` container on `ubuntu-latest`, for glibc
   2.28), macos-arm64 (`pepper-macos`), macos-x64 (hosted `macos-15-intel`)
   and windows-x64 (`pepper-windows`) with `scripts/release-build.sh`, which

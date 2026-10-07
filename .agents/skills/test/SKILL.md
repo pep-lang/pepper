@@ -7,14 +7,15 @@ description: Run the Pepper project's tests, Pepper [Test] functions run with pe
 
 ## Run tests
 
-The tests are Pepper `[Test]` functions, run with `pepper test`. After `cargo build --release`, run them all with:
+The tests are Pepper `[Test]` functions, run with `pepper test`. They build with the installed toolchain: the build of main, which every merge that changes the compiler, the runtime or the tools publishes as the `x.y.z-dev` prerelease named by `Cargo.toml`'s version (#713). Install or refresh it, then run them all:
 
 ```bash
+sh scripts/install.sh --version "$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)" --yes
 scripts/pepper-tests.sh
 scripts/pepper-tests.sh -f parses     # by name
 ```
 
-See `docs/src/contributing/tests.md`. The workspace must be built first, which needs LLVM provisioned — see the **build** skill if `llvm-sys` reports it cannot find LLVM.
+Only a change to the Rust compiler itself (`crates/`) needs a cargo build, passed as the first argument: `cargo build --release && scripts/pepper-tests.sh target/release` (LLVM must be provisioned for that; see the **build** skill). See `docs/src/contributing/tests.md`.
 
 The Rust compiler's own tests (`cargo test --workspace`) are still in the repository, but neither CI nor the pre-merge checks run them (#662). Run them only when asked, or when changing the Rust compiler's internals:
 

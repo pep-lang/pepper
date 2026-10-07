@@ -111,6 +111,8 @@ function Find-Release([string]$Work) {
     $releases = Get-Content -Raw $list | ConvertFrom-Json
     foreach ($release in $releases) {
         if ($release.tag_name -notmatch '^v\d+\.\d+\.\d+') { continue }
+        # A prerelease (v0.4.0-dev, the build of main) only when -Version names it.
+        if ($release.tag_name.Contains('-') -and $release.tag_name -ne "v$($Version.TrimStart('v'))") { continue }
         if ($Version -and $release.tag_name -ne "v$($Version.TrimStart('v'))") { continue }
         $name = "pepper-$($release.tag_name.Substring(1))-$Target.zip"
         $archive = $release.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
@@ -226,9 +228,9 @@ function Uninstall-Pepper {
 function Install-Toolchain([string]$Unpacked, [string]$ToolchainVersion) {
     # An archive named for no release (a `dev` build) is installed under
     # the version its compiler reports, which pep-install can read.
-    if ($ToolchainVersion -notmatch '^\d+\.\d+\.\d+$') {
+    if ($ToolchainVersion -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$') {
         $reported = (& (Join-Path $Unpacked 'bin\pep-build.exe') --version 2>$null | Select-Object -First 1)
-        if ($reported -notmatch '^pep-build (\d+\.\d+\.\d+)$') { Fail "cannot tell the version of $Unpacked\bin\pep-build.exe" }
+        if ($reported -notmatch '^pep-build (\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?)$') { Fail "cannot tell the version of $Unpacked\bin\pep-build.exe" }
         $ToolchainVersion = $Matches[1]
     }
     Move-FlatInstall

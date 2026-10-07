@@ -13,7 +13,7 @@ import "server";
 
 # The release this tool belongs to, as the other Pepper tools give it.
 version(): String {
-    return "0.3.0";
+    return "0.4.0-dev";
 }
 
 # What `pep-lsp --help` prints.

@@ -151,4 +151,4 @@ jobs:
           PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
           source scripts/ci-package-auth.sh
-          bash scripts/pepper-tests.sh
+          bash scripts/pepper-tests.sh "${CARGO_TARGET_DIR:-target}/release"

@@ -19,7 +19,7 @@ import "site";
 
 # The release this tool belongs to, as the other Pepper tools give it.
 version(): String {
-    return "0.3.0";
+    return "0.4.0-dev";
 }
 
 # What `pep-doc --help` prints.
@@ -37,8 +37,9 @@ Commands:
 Options:
   --version <VERSION>  with build: the version to build, X.Y.Z or dev (default: dev)
   --site <DIR>         with build: the site folder (default: target/docs-site)
-  --tools <DIR>        with check: the folder of the built tools (default: the
-                       release build's, else the debug build's)
+  --tools <DIR>        with check: the folder of the built tools (default:
+                       target/pepper-tests/bin, else the release build's, else
+                       the debug build's)
   -h, --help           show this help
   -V, --version        with no command: show pep-doc's version
 ";

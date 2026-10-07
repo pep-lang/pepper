@@ -690,7 +690,7 @@ dependencies = [
 
 [[package]]
 name = "pepper"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "clap",
  "pepper-driver",
@@ -698,7 +698,7 @@ dependencies = [
 
 [[package]]
 name = "pepper-codegen"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "inkwell",
  "llvm-sys 181.3.0",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "pepper-driver"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "ar_archive_writer",
  "blake3",
@@ -734,14 +734,14 @@ dependencies = [
 
 [[package]]
 name = "pepper-files"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "toml",
 ]
 
 [[package]]
 name = "pepper-lsp"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "pepper-files",
  "pepper-parser",
@@ -753,7 +753,7 @@ dependencies = [
 
 [[package]]
 name = "pepper-parser"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "itertools",
  "serde",
@@ -762,7 +762,7 @@ dependencies = [
 
 [[package]]
 name = "pepper-sema"
-version = "0.3.0"
+version = "0.4.0-dev"
 dependencies = [
  "blake3",
  "pepper-files",
@@ -1258,7 +1258,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.4.0-dev"
 
 [[package]]
 name = "yoke"

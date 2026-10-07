@@ -28,7 +28,7 @@ import "releases";
 # The release this tool belongs to. A test keeps it equal to the workspace
 # version in Cargo.toml.
 version(): String {
-    return "0.3.0";
+    return "0.4.0-dev";
 }
 
 main(args: String[]): int {

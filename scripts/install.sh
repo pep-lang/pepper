@@ -50,7 +50,8 @@ usage: install.sh [--version <x.y.z> | --archive <file>] [--prefix <dir>]
        install.sh --uninstall [--prefix <dir>]
 
 Options:
-  --version <x.y.z>   install this release (default: the newest with an archive for this machine)
+  --version <x.y.z>   install this release, or a prerelease such as 0.4.0-dev (default: the newest
+                      release with an archive for this machine)
   --archive <file>    install this downloaded archive instead, checked against <file>.sha256
   --prefix <dir>      install into <dir> (default: $PEPPER_HOME, else ~/.pepper)
   -y, --yes           install missing prerequisites without asking
@@ -139,7 +140,8 @@ detect_target() {
 # Finds the release to install and its two assets. Lists the releases
 # (newest first; the repository also has `vsix-*` and `llvm-*` ones) and
 # takes the first `v<x.y.z>` one, or --version's, that has this target's
-# archive. Sets tag, archive, archive_url and checksum_url.
+# archive. A prerelease such as `v0.4.0-dev` is taken only when --version
+# names it. Sets tag, archive, archive_url and checksum_url.
 find_release() {
   releases="$work/releases.json"
   if ! fetch "https://api.github.com/repos/$REPO/releases?per_page=100" "$releases"; then
@@ -157,6 +159,10 @@ find_release() {
     case "$candidate" in
       v[0-9]*.[0-9]*.[0-9]*) ;;
       *) continue ;;
+    esac
+    # A prerelease (`v0.4.0-dev`, the build of main) only when named.
+    case "$candidate" in
+      *-*) [ "$candidate" = "v$wanted_version" ] || continue ;;
     esac
     [ -z "$wanted_version" ] || [ "$candidate" = "v$wanted_version" ] || continue
     case "$url" in
@@ -357,7 +363,7 @@ install_toolchain() {
   case "$version" in
     [0-9]*.[0-9]*.[0-9]*) ;;
     *)
-      version=$("$unpacked/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\)$/\1/p')
+      version=$("$unpacked/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\(-[0-9A-Za-z.]*\)\{0,1\}\)$/\1/p')
       [ -n "$version" ] || die "cannot tell the version of $unpacked/bin/pep-build"
       ;;
   esac
@@ -380,7 +386,7 @@ install_toolchain() {
 # $prefix itself) into toolchains/<its version>, so it stays installed.
 migrate_flat() {
   [ -f "$prefix/bin/pep-build" ] || return 0
-  old_version=$("$prefix/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\)$/\1/p')
+  old_version=$("$prefix/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\(-[0-9A-Za-z.]*\)\{0,1\}\)$/\1/p')
   if [ -z "$old_version" ] || [ -e "$prefix/toolchains/$old_version" ]; then
     rm -rf "$prefix/bin" "$prefix/runtime" "$prefix/LICENSE.md"
     return 0

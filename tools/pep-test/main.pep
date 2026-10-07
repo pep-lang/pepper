@@ -28,7 +28,7 @@ import process;
 # The release this tool belongs to. A test keeps it equal to the workspace
 # version in Cargo.toml.
 version(): String {
-    return "0.3.0";
+    return "0.4.0-dev";
 }
 
 # How long a test may run, in seconds, when `--timeout` is not given.

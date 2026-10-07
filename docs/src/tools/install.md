@@ -116,7 +116,7 @@ install.sh --uninstall [--prefix <dir>]
 
 | `install.sh` | `install.ps1` | What it does |
 | --- | --- | --- |
-| `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest |
+| `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest, or a prerelease such as `0.4.0-dev`, the build of main (see below), which installing again refreshes |
 | `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it. One not named for a release, such as a `dev` build, installs as the version its `pep-build --version` reports |
 | `--prefix <dir>` | `-Prefix <dir>` | Installs into `<dir>` instead of `~/.pepper` (`%LOCALAPPDATA%\pepper`) |
 | `-y`, `--yes` | `-Yes` | Installs missing prerequisites, and on Windows changes the `PATH`, without asking |
@@ -160,8 +160,27 @@ stay.
 
 ## How releases are built
 
-The `Release` workflow (`.github/workflows/release.yml`) runs on each
-`vX.Y.Z` tag. For each platform, `scripts/release-build.sh` builds the
+The `Release` workflow (`.github/workflows/release.yml`) publishes:
+
+- **the build of main**, on each merge into main that changes the compiler,
+  the runtime or the tools: main holds the version being developed as a
+  prerelease (`0.4.0-dev` in `Cargo.toml` and each tool's `version()`), and
+  the workflow publishes it on the prerelease `v0.4.0-dev`, moving its tag
+  to the merge and replacing its archives. CI and the workers install it
+  (`--version 0.4.0-dev`) instead of building the compiler. The newest
+  release, the default, never picks a prerelease.
+- **a release**, on a `vX.Y.Z` tag, made by hand: `scripts/set-version.sh
+  0.4.0` sets the version everywhere a tool reads it, the commit is tagged
+  `v0.4.0` (the workflow checks that it holds that version). Once it is
+  published, the workflow opens a pull request that starts the next minor
+  version on main (`0.5.0-dev`) and merges itself once its checks pass,
+  unless main has already moved on; a major
+  version is started by hand. A pull request the workflow opens with its
+  own token starts no workflows, so it is opened with the
+  `RELEASE_BUMP_TOKEN` secret when that is set, and otherwise the workflow
+  dispatches CI on its branch.
+
+For each platform, `scripts/release-build.sh` builds the
 tools, lays them out as above, archives them as
 `pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`, and
 `scripts/release-smoke-test.sh` proves the archive works: unpacked outside the
@@ -170,5 +189,5 @@ program, and the binaries must load nothing beyond the system's C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
 `manylinux_2_28` container). The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
-`SHA256SUMS` and both scripts to the tag's release. A pull request that
+`SHA256SUMS` and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.

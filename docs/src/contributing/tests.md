@@ -36,14 +36,26 @@ needs no `##` comments.
 `scripts/pepper-tests.sh` runs them all:
 
 ```bash
-cargo build                                      # or --release
+sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
+scripts/pepper-tests.sh target/release           # with a cargo build instead
 ```
 
-It builds `pepper` and `pep-test` with the `pep-build` you built (the
-release build if there is one, else the debug build; a folder given as the
-first argument overrides it), puts them beside it, and runs `pepper test`:
+The tests build with the installed toolchain's `pep-build`, the one
+`pepper install which` names. Every merge into main that changes the
+compiler, the runtime or the tools publishes the build of main as a
+prerelease named by the version `Cargo.toml` holds (`0.4.0-dev`), replacing
+the one before; CI and the workers install it with the install scripts
+rather than building the compiler, and so can you (run the install again to
+refresh it). Only a change to the Rust compiler itself (`crates/`) needs its
+own build: pass its folder as the first argument, as CI does for a pull
+request that changes `crates/`.
+
+The script builds the Pepper tools (`pepper`, `pep-test`, `pep-doc` and the
+others) from the checkout with that `pep-build`, against the checkout's
+runtime, into `target/pepper-tests/bin` beside a link to the `pep-build`,
+and runs `pepper test`:
 
 - in `runtime/`, every runtime test;
 - in `runtime/`, the `compress` tests again with `-D USE_ZLIB` and the

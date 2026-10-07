@@ -70,8 +70,10 @@ export fetch_releases(url: String, target: String): Result<Array<Release>> {
 }
 
 # The releases in `text`, GitHub's JSON list of releases, that have an
-# archive and its `.sha256` for `target`, newest first. Drafts and
-# prereleases are left out, and so are tags that are not `v<version>`.
+# archive and its `.sha256` for `target`, newest first. Drafts are left
+# out, and so are tags that are not `v<version>`. A prerelease is listed
+# only when its tag names one (`v0.4.0-dev`, the build of main), which only
+# a spec naming it exactly picks.
 export parse_releases(text: String, target: String): Result<Array<Release>> {
     var decoded = json.decode<Array<_GithubRelease>>(text);
     if (decoded.is_err()) {
@@ -79,11 +81,11 @@ export parse_releases(text: String, target: String): Result<Array<Release>> {
     }
     var releases = Array<Release>();
     for (var listed in decoded.value()) {
-        if (listed.draft or listed.prerelease or !listed.tag_name.starts_with("v")) {
+        if (listed.draft or !listed.tag_name.starts_with("v")) {
             continue;
         }
         var version = toolchain.parse_version(listed.tag_name);
-        if (version.is_empty()) {
+        if (version.is_empty() or listed.prerelease != !version.value().prerelease.is_empty) {
             continue;
         }
         var release = Release();

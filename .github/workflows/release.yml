@@ -17,17 +17,45 @@
 #                 into an x86_64 pep-build
 #   windows-x64   the self-hosted Windows runner
 #
-# A vX.Y.Z tag publishes: the archives, their checksums, SHA256SUMS and the
-# install scripts go on the vX.Y.Z release (created if the tag has none
-# yet; repeat runs replace the assets). A dispatch, or a pull request that
-# changes the release scripts, builds and tests every leg and keeps the
-# archives as run artifacts.
+# What publishes:
+#
+#   a merge into main that changes the compiler, the runtime or the tools
+#                 (the `paths` below) publishes the build of main (#713):
+#                 the version main holds, a prerelease such as 0.4.0-dev,
+#                 on the prerelease v0.4.0-dev, whose tag moves to the merge
+#                 and whose assets are replaced. CI and the workers install
+#                 it instead of building the compiler.
+#   a vX.Y.Z tag  publishes that release, made by hand: the commit it tags
+#                 must hold that version (scripts/set-version.sh).
+#   a dispatch    on main with `publish` set publishes the build of main, as
+#                 a merge does.
+#
+# Publishing puts the archives, their checksums, SHA256SUMS and the install
+# scripts on the release, creating it if there is none yet. A pull request
+# that changes the release scripts, or a dispatch without `publish`, builds
+# and tests every leg as `dev` and keeps the archives as run artifacts.
 name: Release
 
 on:
   push:
+    branches: [main]
+    # Paths do not filter tag pushes: every vX.Y.Z tag publishes.
     tags: ['v*.*.*']
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - crates/**
+      - runtime/**
+      - tools/**
+      - scripts/release-build.sh
+      - scripts/release-smoke-test.sh
+      - .github/workflows/release.yml
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the build of main (its x.y.z-dev prerelease)
+        type: boolean
+        default: false
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -36,6 +64,8 @@ on:
       - scripts/install.sh
       - scripts/install.ps1
 
+# Builds of main publish one at a time. A run waiting behind another is
+# replaced by a newer merge's, which publishes both merges' changes.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -49,7 +79,64 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # The version to build and whether to publish it, as a release or as the
+  # prerelease build of main.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: version
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          held=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)
+          echo "the checkout holds $held"
+          version=dev
+          publish=false
+          prerelease=false
+          if [ "$REF_TYPE" = tag ]; then
+            version="${REF_NAME#v}"
+            if [ "$version" != "$held" ]; then
+              echo "::error::tag $REF_NAME is on a commit that holds version $held; run scripts/set-version.sh $version first"
+              exit 1
+            fi
+            publish=true
+            case "$version" in *-*) prerelease=true ;; esac
+          elif [ "$REF" = refs/heads/main ] && { [ "$EVENT" = push ] || [ "$PUBLISH_INPUT" = true ]; }; then
+            case "$held" in
+              *-*)
+                version="$held"
+                publish=true
+                prerelease=true
+                ;;
+              *)
+                # Main holds a release's version between set-version.sh and
+                # its tag; the tag publishes it.
+                echo "main holds release $held, not a prerelease: nothing to publish"
+                ;;
+            esac
+          fi
+          echo "version=$version publish=$publish prerelease=$prerelease"
+          {
+            echo "version=$version"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+          } >> "$GITHUB_OUTPUT"
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -74,19 +161,12 @@ jobs:
         shell: bash
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-release" >> "$GITHUB_ENV"
 
-      # The tag without its `v`, or `dev` for a build that publishes nothing.
+      # The version, or `dev` for a build that publishes nothing.
       - name: Version
         shell: bash
         env:
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          set -euo pipefail
-          if [ "$REF_TYPE" = tag ]; then
-            echo "PEPPER_VERSION=${REF_NAME#v}" >> "$GITHUB_ENV"
-          else
-            echo "PEPPER_VERSION=dev" >> "$GITHUB_ENV"
-          fi
+          VERSION: ${{ needs.version.outputs.version }}
+        run: echo "PEPPER_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Build, package and smoke-test
         shell: bash
@@ -136,8 +216,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    if: needs.version.outputs.publish == 'true'
+    needs: [version, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -156,13 +236,35 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: v${{ needs.version.outputs.version }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          REPO: ${{ github.repository }}
         run: |
           set -euxo pipefail
           cd dist
           cat pepper-*.sha256 > SHA256SUMS
           cat SHA256SUMS
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
+          if [ "$PRERELEASE" = true ]; then
+            # The build of main: its tag moves to this commit, and its
+            # assets, named the same each time, are replaced below.
+            if gh api "repos/$REPO/git/ref/tags/$TAG" >/dev/null 2>&1; then
+              gh api "repos/$REPO/git/refs/tags/$TAG" -X PATCH -f sha="$GITHUB_SHA" -F force=true > /dev/null
+            else
+              gh api "repos/$REPO/git/refs" -X POST -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
+            fi
+            printf '%s\n' \
+              "The build of main at $GITHUB_SHA: Pepper $TAG, replaced on each merge that changes the compiler, the runtime or the tools." \
+              "" \
+              "Install it with scripts/install.sh --version ${TAG#v} (Linux, macOS) or scripts/install.ps1 -Version ${TAG#v} (Windows)." \
+              > "$RUNNER_TEMP/notes.md"
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              gh release edit "$TAG" --prerelease --notes-file "$RUNNER_TEMP/notes.md"
+            else
+              gh release create "$TAG" --prerelease --verify-tag --title "Pepper $TAG" \
+                --notes-file "$RUNNER_TEMP/notes.md" \
+                || gh release view "$TAG" >/dev/null
+            fi
+          elif ! gh release view "$TAG" >/dev/null 2>&1; then
             printf '%s\n' \
               "Pepper $TAG." \
               "" \
@@ -175,3 +277,75 @@ jobs:
               || gh release view "$TAG" >/dev/null
           fi
           gh release upload "$TAG" pepper-* SHA256SUMS ../scripts/install.sh ../scripts/install.ps1 --clobber
+
+  # After a release, main starts the next minor version: a pull request that
+  # sets X.(Y+1).0-dev (scripts/set-version.sh) and merges itself once its
+  # checks pass (auto-merge), when main still holds the version just
+  # released. A patch release made from a branch, or a release
+  # main has already moved past, leaves main alone. A major version is
+  # started by hand.
+  #
+  # A pull request opened with the workflow's own token starts no
+  # workflows. With the RELEASE_BUMP_TOKEN secret (a token that can push
+  # branches and open pull requests) it is opened with that token and CI
+  # runs as for any other; without it, the job dispatches CI on the branch,
+  # whose `test` check on that commit is what auto-merge waits for.
+  bump:
+    if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
+    needs: [version, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          token: ${{ secrets.RELEASE_BUMP_TOKEN || github.token }}
+
+      - name: Open the pull request starting the next version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN || github.token }}
+          HAS_BUMP_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN != '' }}
+          RELEASED: ${{ needs.version.outputs.version }}
+        run: |
+          set -euxo pipefail
+          held=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)
+          if [ "$held" != "$RELEASED" ]; then
+            echo "main holds $held, not $RELEASED: nothing to start"
+            exit 0
+          fi
+          IFS=. read -r major minor _ <<< "$RELEASED"
+          next="$major.$((minor + 1)).0-dev"
+          branch="release/start-$next"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            echo "$branch exists already"
+            exit 0
+          fi
+          git switch -c "$branch"
+          bash scripts/set-version.sh "$next"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf '%s\n' \
+            "Start $next" \
+            "" \
+            "v$RELEASED is released: main now builds and publishes $next (scripts/set-version.sh)." \
+            > "$RUNNER_TEMP/message.txt"
+          git commit -a -F "$RUNNER_TEMP/message.txt"
+          git push origin "$branch"
+          printf '%s\n' \
+            "v$RELEASED is released. This sets main's version to \`$next\` (scripts/set-version.sh), so each merge publishes the \`v$next\` prerelease that CI installs." \
+            > "$RUNNER_TEMP/body.md"
+          gh pr create --base main --head "$branch" --title "Start $next" --body-file "$RUNNER_TEMP/body.md"
+          if [ "$HAS_BUMP_TOKEN" != true ]; then
+            gh workflow run ci.yml --ref "$branch"
+          fi
+          # It merges itself once its checks pass. Auto-merge must be allowed
+          # in the repository's settings.
+          if ! gh pr merge "$branch" --auto --squash; then
+            echo "::warning::could not turn on auto-merge for $branch; allow auto-merge in the repository settings, or merge it by hand"
+          fi

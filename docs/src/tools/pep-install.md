@@ -41,6 +41,9 @@ one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
 
 A `<version>` is exact (`0.3.0`), or a prefix (`0.3`, `0`) for the newest
 release, or installed toolchain, that starts so, or `latest` for the newest.
+A prerelease such as `0.4.0-dev`, the build of main that each merge
+replaces, is picked only by naming it exactly; prefixes, `latest` and
+`update` leave prereleases out.
 Only releases are installed; there is no nightly channel.
 
 The exit status is 0 on success, 1 when a command fails, and 2 for a

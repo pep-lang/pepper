@@ -7,13 +7,19 @@
 #
 #   scripts/pepper-tests.sh [compiler-dir] [pep-test options...]
 #
-# compiler-dir holds the `pep-build` to test with (default: the release
-# build, else the debug build, under $CARGO_TARGET_DIR or target/). The
-# script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
-# `pep-profile`, `pep-package`, `pep-install`, `pep-doc`) with it, into
-# that same folder, so `pepper test` finds `pep-test`, `pep-test` finds
-# `pep-build`, and `pep-doc check` finds every tool's `--help`. Further
-# arguments go to every `pepper test` (`-f name`, `-j 1`, ...).
+# compiler-dir holds the `pep-build` to test with. By default it is the
+# installed toolchain's, the one `pepper install which` names: CI and the
+# workers install the build of main (`scripts/install.sh --version
+# <x.y.z-dev>`, #713) rather than building the compiler. Pass a cargo
+# build's folder (target/release) to test a change to the compiler itself.
+#
+# The script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
+# `pep-profile`, `pep-package`, `pep-install`, `pep-doc`) from this
+# checkout with that `pep-build`, into target/pepper-tests/bin (under
+# $CARGO_TARGET_DIR when it is set), beside a link to the `pep-build`, so
+# `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
+# `pep-doc check` finds every tool's `--help` there. Further arguments go
+# to every `pepper test` (`-f name`, `-j 1`, ...).
 #
 # Besides the plain run, the compress tests run again with `-D USE_ZLIB`
 # and the digest tests with `-D USE_LIBCRYPTO`, which link the system's
@@ -33,17 +39,46 @@ case "$(uname -s)" in
 esac
 
 if [ $# -gt 0 ] && [ -d "$1" ]; then
-  bin="$(cd "$1" && pwd)"
+  compiler="$(cd "$1" && pwd)"
   shift
-elif [ -x "$target/release/pep-build$exe" ]; then
-  bin="$target/release"
 else
-  bin="$target/debug"
+  # The installed toolchain's pep-build: the second line of `which`.
+  compiler=""
+  if command -v pepper >/dev/null 2>&1; then
+    installed="$(pepper install which 2>/dev/null | sed -n 2p || true)"
+    [ -z "$installed" ] || compiler="$(dirname "$installed")"
+  fi
+  if [ -z "$compiler" ]; then
+    echo "error: no installed Pepper toolchain; install the build of main with" >&2
+    echo "  sh scripts/install.sh --version $(sed -nE 's/^version = "([^"]+)"/\1/p' "$root/Cargo.toml" | head -n 1)" >&2
+    echo "or pass the folder of a pep-build to test with (target/release after 'cargo build --release')" >&2
+    exit 2
+  fi
 fi
-if [ ! -x "$bin/pep-build$exe" ]; then
-  echo "error: no pep-build in $bin; run 'cargo build' first" >&2
+if [ ! -x "$compiler/pep-build$exe" ]; then
+  echo "error: no pep-build in $compiler" >&2
   exit 2
 fi
+"$compiler/pep-build$exe" --version
+
+# The tools get a folder of their own, with a link to the compiler (a copy
+# on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
+# never written to.
+bin="$target/pepper-tests/bin"
+mkdir -p "$bin"
+if [ "$compiler" != "$bin" ]; then
+  if [ -n "$exe" ]; then
+    cp -f "$compiler/pep-build$exe" "$bin/"
+    if [ -f "$compiler/LLVM-C.dll" ]; then
+      cp -f "$compiler/LLVM-C.dll" "$bin/"
+    fi
+  else
+    ln -sf "$compiler/pep-build" "$bin/pep-build"
+  fi
+fi
+
+# Everything builds against this checkout's runtime, not the toolchain's.
+export PEPPER_RUNTIME="$root/runtime"
 
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
 # and `pep-doc check` reads every tool's `--help`. The tests wait only for
@@ -56,7 +91,6 @@ done
 wait "${pids[0]}"
 wait "${pids[1]}"
 pepper="$bin/pepper$exe"
-export PEPPER_RUNTIME="$root/runtime"
 # The compiler's parser test (tools/compiler) runs pep-build itself.
 export PATH="$bin:$PATH"
 

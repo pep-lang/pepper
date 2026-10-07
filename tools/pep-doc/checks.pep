@@ -18,8 +18,9 @@
 # | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
 #
 # The tools' `--help` comes from the built tools in one folder (`--tools`,
-# else the release build's folder when it holds `pep-build`, else the
-# debug build's). `scripts/pepper-tests.sh` builds the Pepper tools there.
+# else `target/pepper-tests/bin`, where `scripts/pepper-tests.sh` builds the
+# Pepper tools beside its `pep-build`, when it holds `pep-build`, else the
+# release build's folder, else the debug build's).
 
 import [check_documented] from compiler.doc;
 import [Directory, File, Path] from io;
@@ -98,14 +99,19 @@ _executable(name: String): String {
     return os.system_os() == os.OperatingSystem.Windows ? $"{name}.exe" : name;
 }
 
-# The folder holding the built tools: `explicit`, else the release build's
-# folder when it holds `pep-build`, else the debug build's.
+# The folder holding the built tools: `explicit`, else the one
+# `scripts/pepper-tests.sh` builds them in when it holds `pep-build`, else
+# the release build's folder when it does, else the debug build's.
 export tools_dir(root: Path, explicit: String?): Path {
     if (explicit.is_value()) {
         return Path(explicit.value());
     }
     var variable = os.environment("CARGO_TARGET_DIR");
     var target = variable.is_value() ? Path(variable.value()) : root.join("target");
+    var tested = target.join("pepper-tests").join("bin");
+    if (tested.join(_executable("pep-build")).is_file()) {
+        return tested;
+    }
     var release = target.join("release");
     if (release.join(_executable("pep-build")).is_file()) {
         return release;
@@ -119,7 +125,7 @@ _help_of(dir: Path, tool: String, arguments: String[]): Result<String> {
     var path = dir.join(_executable(tool));
     if (!path.is_file()) {
         return Result<String>.Err(
-            $"cannot find {_executable(tool)} in {dir.to_string()}: build the compiler with cargo and the Pepper tools with scripts/pepper-tests.sh, or name their folder with --tools"
+            $"cannot find {_executable(tool)} in {dir.to_string()}: build the Pepper tools with scripts/pepper-tests.sh, or name their folder with --tools"
         );
     }
     var output = process
