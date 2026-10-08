@@ -193,8 +193,13 @@ export struct Generator {
     ## The files whose units' objects come from the build cache: the bodies
     ## they own are only declared.
     var cached_files: HashSet<uint> = HashSet<uint>();
-    ## The unowned bodies no generated code calls yet (`waits`).
-    var waiting: FunctionDef[] = Array<FunctionDef>();
+    ## The unowned bodies held back (`hold`), with the names they are
+    ## generated as and their declarations, and the places in those of the
+    ## ones no generated code calls yet.
+    var waiting_functions: FunctionDef[] = Array<FunctionDef>();
+    var waiting_names: String[] = Array<String>();
+    var waiting_values: llvm.Value[] = Array<llvm.Value>();
+    var waiting: ulong[] = Array<ulong>();
     ## The parameters of the function being generated whose copy its caller
     ## made.
     var copied_params: HashSet<String> = HashSet<String>();

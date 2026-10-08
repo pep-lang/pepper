@@ -73,14 +73,31 @@ export struct Program {
     ## pending linking, nothing.
     ##
     ## @param bodies per file, whether to link and check its bodies
-    link_bodies(bodies: bool[]) {
+    ## @returns a syntax error in a body read now, rendered as `load`
+    ##   renders one
+    link_bodies(bodies: bool[]): String? {
         if (!_pending.is_value()) {
-            return;
+            return Optional<String>.Empty;
+        }
+        # Loading read only the declarations: these files are read again,
+        # whole. The declarations come out the same.
+        for (var i in 0..files.count) {
+            if (i < bodies.count and !bodies[i]) {
+                continue;
+            }
+            var f = files[i];
+            var parsed = parse.parse(f.source);
+            if (parsed.is_err()) {
+                var error = parsed.error();
+                return Optional<String>.Value(_render(f.name, f.source, error.span, error.message));
+            }
+            f.module = parsed.value();
         }
         var linked = _pending.value().finish(bodies);
         _pending = Optional<link.PendingLink>.Empty;
         _take_linked(linked);
         this.bodies = bodies;
+        return Optional<String>.Empty;
     }
 
     # Takes the errors and scopes of finished linking.
@@ -437,7 +454,9 @@ export load(
         if (source.is_err()) {
             return Result<Program, String>.err($"cannot read {path}: {source.error().message}");
         }
-        var parsed = parse.parse(source.value());
+        # Deferred, only the declarations: `link_bodies` reads the bodies
+        # it links.
+        var parsed = defer_bodies ? parse.parse_declarations(source.value()) : parse.parse(source.value());
         if (parsed.is_err()) {
             var error = parsed.error();
             return Result<Program, String>.err(_render(path.to_string(), source.value(), error.span, error.message));

@@ -344,14 +344,8 @@ export struct Overloads {
             conformance = Optional<Conformance>.Value(Conformance(module, state));
         }
         for (var st in module.structs) {
-            var methods_of = Array<FunctionDef>();
-            methods_of.append_all(st.method_members);
-            methods_of.append_all(st.generic_methods);
-            for (var method in methods_of) {
-                var set = set_name(method.name);
-                if (set != method.name) {
-                    _add_method(_canonical(st.ty).to_string(), set, Member(method, state));
-                }
+            for (var (key, set, member) in _struct_members(module, st, state)) {
+                _add_method(key, set, member);
             }
         }
         # A value of trait type calls the trait's members: every instance
@@ -444,6 +438,40 @@ export struct Overloads {
         scopes = module.extension_scopes;
         file_private = module.file_private_functions;
         settle_by_arity = state.settle_overloads_by_arity;
+    }
+
+    # `st`'s overloaded methods: the type they are filed under, the set and
+    # the member. A checked struct's come from the memo while it is the
+    # same struct with as many methods, whose types were final when it was
+    # checked.
+    _struct_members(module: Module, st: StructDef, state: PassState): Array<(String, String, Member)> {
+        var checked = module.checked.structs.contains(st.name);
+        var methods = st.method_members.count;
+        var generics = st.generic_methods.count;
+        var memo = state.trait_memo;
+        if (checked) {
+            var kept = memo.members.try_get(st.name);
+            if (kept.is_value()) {
+                var (was, kept_methods, kept_generics, members) = kept.value();
+                if (was === st and kept_methods == methods and kept_generics == generics) {
+                    return members;
+                }
+            }
+        }
+        var out = Array<(String, String, Member)>();
+        var methods_of = Array<FunctionDef>();
+        methods_of.append_all(st.method_members);
+        methods_of.append_all(st.generic_methods);
+        for (var method in methods_of) {
+            var set = set_name(method.name);
+            if (set != method.name) {
+                out.append((_canonical(st.ty).to_string(), set, Member(method, state)));
+            }
+        }
+        if (checked) {
+            memo.members[st.name] = (st, methods, generics, out);
+        }
+        return out;
     }
 
     ## Why `type_args` do not meet `signature`'s constraints, as a note

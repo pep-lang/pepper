@@ -36,6 +36,7 @@ export check_value_structs(module: Module, state: PassState) {
     _check_value_types(module, state);
     var table = StructTable(module, memo = state.trait_types_memo());
     var mutating = _mutating_methods(module, table, state);
+    state.value_facts = _facts_of(mutating);
     var globals = Array<_ValueBinding>();
     for (var g in module.globals) {
         globals.append(_ValueBinding(g.name, g.is_const ? Optional<Loc>.Value(g.loc) : Optional<Loc>.Empty));
@@ -291,12 +292,15 @@ struct _Mutating {
     var at: HashMap<String, Loc> = HashMap<String, Loc>();
     ## (struct, method, where), in the order found.
     var found: Array<(String, String, Loc)> = Array<(String, String, Loc)>();
+    ## The name of each found method's struct, in the same order.
+    var owners: String[] = Array<String>();
 
     construct() {}
 
-    insert(ty: String, method: String, loc: Loc) {
+    insert(ty: String, method: String, loc: Loc, owner: String) {
         at[$"{ty}\n{method}"] = loc;
         found.append((ty, method, loc));
+        owners.append(owner);
     }
 
     contains(ty: String, method: String): bool {
@@ -383,13 +387,20 @@ _report_found(found: _ValueUse, mutating: _Mutating, state: PassState) {
 ## field of `this` (or of a value field of it), or calls a mutating method
 ## on `this` or a value field. A fixpoint, since one method can make
 ## another mutating.
+##
+## A checked struct's come from its unit's record (`VALUE_FACTS`), unless
+## this layer extended it: its stashed bodies are walked no more. Which
+## methods are mutating comes out the same; only the order they are found
+## in can differ, which picks the change a note shows for a call still
+## named by an overload set of two mutating methods.
 _mutating_methods(module: Module, table: StructTable, state: PassState): _Mutating {
     var mutating = _Mutating();
     var globals = Array<_ValueBinding>();
+    var seeded = _seed_mutating(module, state, mutating);
     while (true) {
         var before = mutating.found.count;
         for (var st in module.structs) {
-            if (!st.is_value() or _is_generic_base(st)) {
+            if (!st.is_value() or _is_generic_base(st) or seeded.contains(st.name)) {
                 continue;
             }
             var fields = HashSet<String>();
@@ -414,7 +425,7 @@ _mutating_methods(module: Module, table: StructTable, state: PassState): _Mutati
                         continue;
                     }
                     if (!found.method or mutating.first(found.ty, found.member).is_value()) {
-                        mutating.insert(spelled, method.name, found.at);
+                        mutating.insert(spelled, method.name, found.at, st.name);
                         break;
                     }
                 }
@@ -767,4 +778,53 @@ _call_name(name: String): String {
     }
     var open = set.find("<");
     return open < 0 ? set : set.substr_bytes(0, open as ulong);
+}
+
+## The key prefix of a value struct's mutating method in a checked unit's
+## summaries (`Checked.summaries`): `mut`, then the struct's name, its
+## type's spelling and the method, a line each; the text is where it falls
+## in the order found.
+export const VALUE_FACTS = "mut\n";
+
+# The mutating methods as recorded with the unit: (key, where, order).
+_facts_of(mutating: _Mutating): Array<(String, Loc, String)> {
+    var out = Array<(String, Loc, String)>();
+    for (var i in 0..mutating.found.count) {
+        var (ty, method, loc) = mutating.found[i];
+        out.append(($"{VALUE_FACTS}{mutating.owners[i]}\n{ty}\n{method}", loc, $"{i}"));
+    }
+    return out;
+}
+
+# Puts the checked structs' recorded mutating methods in `mutating`, in the
+# order found, and returns the structs they are of: all the checked value
+# structs but those an extension of this layer changed.
+_seed_mutating(module: Module, state: PassState, mutating: _Mutating): HashSet<String> {
+    var seeded = HashSet<String>();
+    var facts = Array<(ulong, String, String, String, Loc)>();
+    for (var (key, (loc, text)) in module.checked.summaries) {
+        if (!key.starts_with(VALUE_FACTS)) {
+            continue;
+        }
+        var parts = key.split("\n");
+        var order = ulong.parse(text);
+        if (parts.count != 4 or !order.is_value() or state.extended_checked.contains(parts[1])) {
+            continue;
+        }
+        facts.append((order.value(), parts[1], parts[2], parts[3], loc));
+    }
+    facts.sort((a, b) => {
+        var (x, _, _, _, _) = a;
+        var (y, _, _, _, _) = b;
+        return x < y ? -1 : (x > y ? 1 : 0);
+    });
+    for (var (_, owner, ty, method, loc) in facts) {
+        mutating.insert(ty, method, loc, owner);
+    }
+    for (var st in module.structs) {
+        if (st.is_value() and module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
+            seeded.insert(st.name);
+        }
+    }
+    return seeded;
 }

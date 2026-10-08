@@ -107,3 +107,22 @@ instead of `load_program`; how pepc prints that has to stay the same.
 Left as is: `check_value_structs` walks the checked value structs' bodies
 on each layer; keeping their facts in the record needs a field on
 `Checked`, which comes from the Rust model.
+
+## Done (third pass)
+On the 4-core Xeon the session moved to, same tree, `main.pep` edit:
+main before #761 12.13 s, this pass 8.08 s (layer `main` 4.75 → 3.51 s,
+codegen 1.65 → 0.84 s, cold 303 → 289 s).
+- codegen: held-back unowned bodies by place; a waiting method is copied
+  to be renamed only when generated (was 4.7% of the edit build).
+- `Overloads` memoizes checked structs' members; `check_value_structs`
+  takes checked value structs' mutating methods from the record
+  (`VALUE_FACTS` in `Checked.summaries`), 516 → 79 ms.
+- `share_string_literals` skips checked structs in its indirect scan.
+- Declarations-only parsing for the files of layers loaded from the cache.
+
+Checked: docs examples byte-identical to main's pepc's builds (same output
+name and cache path); the self-built pepc identical but for the paths it
+embeds and the build ID; `passes_test`, `build_cache_test` pass.
+
+Left: `Checked` comes from `crates/pepper-sema` through
+`scripts/gen-sema-model.py`; the generators should read `model.pep`.

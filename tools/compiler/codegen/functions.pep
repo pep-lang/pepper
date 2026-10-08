@@ -458,6 +458,11 @@ extend Generator {
                 declare_external(name);
                 continue;
             }
+            # Most held back are never called: renamed only when generated.
+            if (waits(name)) {
+                hold(method, name);
+                continue;
+            }
             var m = method.copy();
             m.name = name;
             codegen_function(m)?;
@@ -484,7 +489,7 @@ extend Generator {
             return Result<void>.ok();
         }
         if (waits(function.name)) {
-            waiting.append(function);
+            hold(function, function.name);
             return Result<void>.ok();
         }
         # `[Unsafe("...")]` turns checks off in this body only.
@@ -502,6 +507,15 @@ extend Generator {
         return result;
     }
 
+    ## Holds `function` back until something calls it, to be generated as
+    ## `name`.
+    hold(function: FunctionDef, name: String) {
+        waiting.append(waiting_functions.count);
+        waiting_functions.append(function);
+        waiting_names.append(name);
+        waiting_values.append(functions[name]);
+    }
+
     ## Whether the body of function `name` waits until something calls it:
     ## an unowned one (a generic's instantiation, a synthesized member) that
     ## nothing calls yet, since every part that does not call it drops it.
@@ -516,24 +530,34 @@ extend Generator {
     ## Generates the bodies `waits` held back that something now calls,
     ## until no new one is called; the rest stay declarations.
     codegen_called(): Result<void> {
+        # Each round passes places in `waiting_functions`, not the
+        # functions, so holding one back again costs no count step.
         var progress = true;
         while (progress) {
             progress = false;
             var held = waiting;
-            waiting = Array<FunctionDef>();
-            for (var function in held) {
-                if (!functions[function.name].has_uses()) {
-                    waiting.append(function);
+            waiting = Array<ulong>();
+            for (var at in held) {
+                if (!waiting_values[at].has_uses()) {
+                    waiting.append(at);
                     continue;
+                }
+                var function = waiting_functions[at];
+                if (function.name != waiting_names[at]) {
+                    function = function.copy();
+                    function.name = waiting_names[at];
                 }
                 codegen_function(function)?;
                 progress = true;
             }
         }
-        for (var function in waiting) {
-            functions[function.name].set_linkage(llvm.Linkage.External);
+        for (var at in waiting) {
+            waiting_values[at].set_linkage(llvm.Linkage.External);
         }
-        waiting = Array<FunctionDef>();
+        waiting = Array<ulong>();
+        waiting_functions = Array<FunctionDef>();
+        waiting_names = Array<String>();
+        waiting_values = Array<llvm.Value>();
         return Result<void>.ok();
     }
 

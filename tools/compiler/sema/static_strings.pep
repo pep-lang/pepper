@@ -145,6 +145,19 @@ struct _LiteralCallee {
         this.has_this = has_this;
     }
 
+    ## Whether a slot is a `String`, as `slot_types` would say.
+    has_string_slot(): bool {
+        if (has_this and owner.is_value() and _is_string(owner.value().ty)) {
+            return true;
+        }
+        for (var p in function.parameters) {
+            if (_is_string(p.ty)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     slot_types(): TypeName[] {
         var out = Array<TypeName>();
         if (has_this) {
@@ -240,14 +253,10 @@ struct _Literals {
             indirect = _indirectly_called(module, state, true);
         }
         for (var (key, callee) in callees) {
-            var types = callee.slot_types();
-            bool any = false;
-            for (var t in types) {
-                any = any or _is_string(t);
-            }
-            if (!any) {
+            if (!callee.has_string_slot()) {
                 continue;
             }
+            var types = callee.slot_types();
             # Only a direct call can make the caller's copy. A property
             # getter (`__get_p`) is called like any method.
             var method = callee.function.name;
@@ -423,10 +432,18 @@ _indirectly_called(module: Module, state: PassState, checked_too: bool): HashSet
             rewrite_block(f.body.value(), note);
         }
     };
+    # A checked free function's body is one `restore_bodies` put back.
     for (var f in module.functions) {
-        walk($"f {f.name}", f);
+        if (f.body.is_value() and (checked_too or !is_checked_function(module, f))) {
+            rewrite_block(f.body.value(), note);
+        }
     }
     for (var st in module.structs) {
+        # A checked struct no extension of this layer changed has only
+        # bodies `restore_bodies` put back.
+        if (!checked_too and module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
+            continue;
+        }
         for (var f in st.method_members) {
             walk($"m {st.name} method {f.name}", f);
         }

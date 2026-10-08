@@ -9,6 +9,7 @@ import [Exports] from "exports";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
 import [Callees] from "named_arguments";
+import [Member] from "overload_select";
 import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
 
@@ -79,6 +80,10 @@ export struct PassState {
     ## The checked structs an extension of the files being checked
     ## changed (`apply_extensions`), by name.
     var extended_checked: HashSet<String> = HashSet<String>();
+    ## The value structs' mutating methods `check_value_structs` found, as
+    ## a checked unit records them (`value_structs.VALUE_FACTS`): key,
+    ## where, and the order found.
+    var value_facts: Array<(String, Loc, String)> = Array<(String, Loc, String)>();
     ## How many of `Module.struct_specs` and `Module.func_specs` met their
     ## constraints already (`check_specializations`).
     var checked_specs: (ulong, ulong) = (0, 0);
@@ -233,6 +238,10 @@ export struct TraitTypeMemo {
     ## and how many fields and methods those structs had, it was built
     ## from; `apply_extensions` drops it when it changes a checked struct.
     var checked_table: StructTable? = Optional<StructTable>.Empty;
+    ## Each checked struct's overloaded methods for `Overloads` (the type
+    ## they are filed under, the set, the member), by name, with the struct
+    ## and how many methods and generic methods it had.
+    var members: HashMap<String, (StructDef, ulong, ulong, Array<(String, String, Member)>)> = HashMap<String, (StructDef, ulong, ulong, Array<(String, String, Member)>)>();
     var checked_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
     ## Whether the checked declarations' bodies are stashed: from
     ## `stash_bodies` to `restore_bodies`. While they are, `used_trait_types`

@@ -341,6 +341,10 @@ export finish_checked(module: Module, state: PassState, aliases: TypeAliasDef[])
         file.file = blame.file;
         summaries[key] = (file, text);
     }
+    # So the next layers walk no checked value struct's bodies for these.
+    for (var (key, loc, text) in state.value_facts) {
+        summaries[key] = (loc, text);
+    }
     module.checked = all_checked(module, summaries);
     module.record_summaries = false;
     var out = CheckedUnit(module);

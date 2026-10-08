@@ -209,6 +209,18 @@ _record_stats(): bool {
 
 ## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
 ## builds with and without them.
+# `program.link_bodies(bodies)`; a syntax error it reads is printed as pepc
+# prints one loading the program, which it would have been then, and the
+# error returned is empty: printed already.
+_link_bodies(program: link.Program, bodies: bool[]): String? {
+    var error = program.link_bodies(bodies);
+    if (error.is_value()) {
+        print($"pepc: {error.value()}");
+        return Optional<String>.Value("");
+    }
+    return Optional<String>.Empty;
+}
+
 # Every file of `program`, for `Program.link_bodies`.
 _every_file(program: link.Program): bool[] {
     var out = Array<bool>();
@@ -309,7 +321,10 @@ _check_layers(
                     bodies[file] = false;
                 }
             }
-            program.link_bodies(bodies);
+            var unread = _link_bodies(program, bodies);
+            if (unread.is_value()) {
+                return Result<(sema.Module, sema.PassState), String>.err(unread.value());
+            }
             var errors = program.check();
             if (errors.is_value()) {
                 return Result<(sema.Module, sema.PassState), String>.err(errors.value());
@@ -595,7 +610,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # Checking layers links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (layered.count <= 1) {
-        program.link_bodies(_every_file(program));
+        var unread = _link_bodies(program, _every_file(program));
+        if (unread.is_value()) {
+            return Result<Built, String>.err(unread.value());
+        }
         warnings = program.warnings();
     }
     var module = sema.Module();

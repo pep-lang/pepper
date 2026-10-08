@@ -91,6 +91,16 @@ export parse(source: String): Result<ast.Module, ParseError> {
     return _parse(source, true);
 }
 
+## `parse` with each function body read as an empty block over its span:
+## the declarations, for a file whose bodies a build does not check
+## (`link.Setup.defer_bodies`). An error in a body is not found.
+##
+## @param source the text of one source file
+## @returns the module, or the first syntax error
+export parse_declarations(source: String): Result<ast.Module, ParseError> {
+    return _parse(source, true, true, true);
+}
+
 ## Parses Pepper source into the compiler's syntax tree as the source
 ## writes it: interpolated strings stay `Expression.Interpolated`, a
 ## `print` or `String.format` format stays the call's first argument as an
@@ -234,7 +244,7 @@ _blank_line(text: String, offset: ulong): String? {
 
 # Parses `source`, desugared or as written; with `checked`, the errors in
 # nodes that parse and the checks after parsing are errors too.
-_parse(source: String, desugared: bool, checked: bool = true): Result<ast.Module, ParseError> {
+_parse(source: String, desugared: bool, checked: bool = true, skip_bodies: bool = false): Result<ast.Module, ParseError> {
     # Only the written tree keeps the comments.
     var tokens = syntax.lex(source, !desugared);
     if (tokens.is_err()) {
@@ -243,6 +253,7 @@ _parse(source: String, desugared: bool, checked: bool = true): Result<ast.Module
     }
     var parser = Parser(source, tokens.value(), desugared);
     parser._layout_only = !desugared and !checked;
+    parser._skip_bodies = skip_bodies;
     var module = parser.module();
     if (parser._failed) {
         var error = parser._error.value();
@@ -371,6 +382,9 @@ struct Parser {
     # unchecked), so string literals, interpolated strings and formats are
     # not taken apart: no error in them is reported.
     var _layout_only: bool;
+    # Whether function bodies are skipped, each read as an empty block over
+    # the same span (`parse_declarations`).
+    var _skip_bodies: bool = false;
     # The text the tokens point into: the file, or inside an interpolated
     # string's braces the expression's own text.
     var _source: String;
@@ -3103,7 +3117,37 @@ struct Parser {
             _advance();
             return;
         }
+        if (_skip_bodies and _at("{")) {
+            out.body = Optional<Block>.Value(_skipped_block());
+            return;
+        }
         out.body = Optional<Block>.Value(_block(Array<Attribute>()));
+    }
+
+    # A body `_skip_bodies` passes over: an empty block spanning its braces,
+    # as `_block` spans them. Interpolated strings are single tokens, so
+    # every brace token is one the body opens or closes.
+    _skipped_block(): Block {
+        var out = Block();
+        ulong open = _position;
+        ulong depth = 0;
+        while (true) {
+            if (_at_end()) {
+                _fail("expected '}'");
+                return out;
+            }
+            if (_at("{")) {
+                depth += 1;
+            } else if (_at("}")) {
+                depth -= 1;
+            }
+            _advance();
+            if (depth == 0) {
+                break;
+            }
+        }
+        out.span = Span(_start(open), _last_end());
+        return out;
     }
 
     # The function's name when it is an indexer, and its span, which runs

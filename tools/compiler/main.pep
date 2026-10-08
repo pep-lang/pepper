@@ -324,7 +324,10 @@ main(args: String[]): int {
             options.trace_cache = traces.contains("cache");
             var made = driver.build(program.value(), options);
             if (made.is_err()) {
-                File.stderr().write_all(made.error() + "\n");
+                # Empty: printed already (a syntax error read late).
+                if (!made.error().is_empty) {
+                    File.stderr().write_all(made.error() + "\n");
+                }
                 return 1;
             }
         }
