@@ -55,26 +55,20 @@ const _FACTS = "|s=";
 export share_string_literals(module: Module, state: PassState) {
     var program = _Literals(module, state);
     program.seed();
-    var keys = Array<String>();
-    for (var (key, _) in program.kept) {
-        keys.append(key);
-    }
-    keys.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
-    var changed = true;
-    while (changed) {
-        changed = false;
-        for (var key in keys) {
-            if (program.refine(key)) {
-                changed = true;
-            }
-        }
-    }
+    program.refine_all();
     # Facts and copies first: sharing replaces literals in the bodies.
     var facts = HashMap<Loc, String>();
     for (var (loc, text) in program.record_facts()) {
         facts[loc] = text;
     }
     var caller_copies = HashMap<String, Array<bool>>();
+    # A checked callee no body of this layer reaches keeps the copies its
+    # layer recorded: its facts stand.
+    for (var (key, copies) in module.caller_copies) {
+        if (!program.callees.contains(key) and program.lazy_key(key)) {
+            caller_copies[key] = copies;
+        }
+    }
     for (var (key, callee) in program.callees) {
         if (!program.kept.contains(key)) {
             continue;
@@ -94,10 +88,15 @@ export share_string_literals(module: Module, state: PassState) {
         }
     }
     # A checked body shared its literals when its layer was checked.
+    # A walk may make the callees of checked functions it reaches.
+    var own = Array<_LiteralCallee>();
     for (var (_, callee) in program.callees) {
         if (callee.function.body.is_value() and !_is_checked(module, callee)) {
-            _SharedLiterals(program, _LiteralScope.of(callee)).block(callee.function.body.value());
+            own.append(callee);
         }
+    }
+    for (var callee in own) {
+        _SharedLiterals(program, _LiteralScope.of(callee)).block(callee.function.body.value());
     }
     for (var variable in module.globals) {
         if (variable.default.is_value()) {
@@ -199,13 +198,37 @@ struct _Literals {
     var kept: HashMap<String, Array<bool>> = HashMap<String, Array<bool>>();
     ## Keys whose recorded facts stand: no body to refine, or a checked one.
     var settled: HashSet<String> = HashSet<String>();
+    ## The callees of checked functions and of the structs no extension of
+    ## this layer changed are made when a lookup reaches them: checked free
+    ## functions by name, checked structs' constructors by call name.
+    var checked_functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    var checked_constructors: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    ## Checked structs whose callees are made one by one, as lookups reach
+    ## them.
+    var lazy_structs: HashSet<String> = HashSet<String>();
+    ## Keys no callee answers.
+    var missing: HashSet<String> = HashSet<String>();
+    ## Set by `seed`: a callee made later is seeded as it is made.
+    var seeded: bool = false;
+    ## Set by `refine_all`: a callee made later with a body to refine is
+    ## refined with the others made later (`_refine_late`).
+    var refined: bool = false;
+    var _late: Array<String> = Array<String>();
+    var _refining_late: bool = false;
+    var reuse: bool = true;
+    var indirect: HashSet<String> = HashSet<String>();
 
     construct(module: Module, state: PassState) {
         this.module = module;
         this.state = state;
         this.table = StructTable(module, memo = state.trait_types_memo());
         for (var f in module.functions) {
-            if (!f.is_generic_func) {
+            if (f.is_generic_func) {
+                continue;
+            }
+            if (is_checked_function(module, f)) {
+                checked_functions[f.name] = f;
+            } else {
                 callees[f.name] = _LiteralCallee(f, Optional<StructDef>.Empty, false);
             }
         }
@@ -214,15 +237,13 @@ struct _Literals {
                 continue;
             }
             structs[st.name] = st;
-            for (var m in st.method_members) {
-                if (!m.is_generic_func) {
-                    callees[_key(st.name, m.name)] = _LiteralCallee(m, Optional<StructDef>.Value(st), !m.is_static);
+            if (module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
+                lazy_structs.insert(st.name);
+                for (var c in st.constructors) {
+                    checked_constructors[c.name] = st;
                 }
-            }
-            for (var c in st.constructors) {
-                var key = _key(c.name, "__ctor");
-                constructors[c.name] = key;
-                callees[key] = _LiteralCallee(c, Optional<StructDef>.Value(st), false);
+            } else {
+                _add_struct(st);
             }
         }
         for (var e in module.externs) {
@@ -233,13 +254,12 @@ struct _Literals {
     ## Seeds every slot: a `String` slot of a function with a body starts
     ## free; one whose body the cache skipped takes its recorded fact.
     seed() {
-        var indirect = _indirectly_called(module, state, false);
+        indirect = _indirectly_called(module, state, false);
         # A checked body's facts were settled with its layer, and its calls
         # reach only checked functions: it keeps its recorded facts unless
         # this layer made a checked function newly called indirectly.
-        bool reuse = true;
         for (var key in indirect) {
-            var callee = callees.try_get(key);
+            var callee = _callee(key);
             if (callee.is_value() and _is_checked(module, callee.value())) {
                 var recorded = _recorded_facts(module, callee.value().function, callee.value().slot_types().count);
                 if (recorded.is_value()) {
@@ -263,45 +283,197 @@ struct _Literals {
                 }
             }
             indirect = _indirectly_called(module, state, true);
+            # And every callee is made.
+            for (var (name, _) in checked_functions) {
+                _callee(name);
+            }
+            for (var st in module.structs) {
+                if (lazy_structs.contains(st.name)) {
+                    _add_struct(st);
+                }
+            }
+            lazy_structs = HashSet<String>();
+            checked_constructors = HashMap<String, StructDef>();
         }
+        seeded = true;
         for (var (key, callee) in callees) {
-            if (!callee.has_string_slot()) {
-                continue;
+            _seed(key, callee);
+        }
+    }
+
+    ## Seeds the slots of `key`: a `String` slot of a function with a body
+    ## starts free; one whose body the cache skipped takes its recorded fact.
+    _seed(key: String, callee: _LiteralCallee) {
+        if (!callee.has_string_slot()) {
+            return;
+        }
+        var types = callee.slot_types();
+        # Only a direct call can make the caller's copy. A property
+        # getter (`__get_p`) is called like any method.
+        var method = callee.function.name;
+        var dot = method.rfind(".");
+        if (dot >= 0) {
+            method = method.substr_bytes(dot as ulong + 1, method.size - dot as ulong - 1);
+        }
+        var internal = method.starts_with("__") and !method.starts_with("__get_");
+        var out = Array<bool>();
+        if (key.ends_with(".__ctor") or internal or indirect.contains(key)) {
+            for (var t in types) {
+                out.append(true);
             }
-            var types = callee.slot_types();
-            # Only a direct call can make the caller's copy. A property
-            # getter (`__get_p`) is called like any method.
-            var method = callee.function.name;
-            var dot = method.rfind(".");
-            if (dot >= 0) {
-                method = method.substr_bytes(dot as ulong + 1, method.size - dot as ulong - 1);
+        } else {
+            var recorded = Optional<bool[]>.Empty;
+            if (!callee.function.body.is_value() or (reuse and _is_checked(module, callee))) {
+                recorded = _recorded_facts(module, callee.function, types.count);
             }
-            var internal = method.starts_with("__") and !method.starts_with("__get_");
-            var out = Array<bool>();
-            if (key.ends_with(".__ctor") or internal or indirect.contains(key)) {
-                for (var t in types) {
-                    out.append(true);
-                }
+            if (recorded.is_value()) {
+                out = recorded.value();
+                settled.insert(key);
             } else {
-                var recorded = Optional<bool[]>.Empty;
-                if (!callee.function.body.is_value() or (reuse and _is_checked(module, callee))) {
-                    recorded = _recorded_facts(module, callee.function, types.count);
+                for (var t in types) {
+                    out.append(!callee.function.body.is_value() or !_is_string(t));
                 }
-                if (recorded.is_value()) {
-                    out = recorded.value();
-                    settled.insert(key);
-                } else {
-                    for (var t in types) {
-                        out.append(!callee.function.body.is_value() or !_is_string(t));
+            }
+        }
+        kept[key] = out;
+    }
+
+    ## Adds the callees of `st`'s methods and constructors.
+    _add_struct(st: StructDef) {
+        for (var m in st.method_members) {
+            if (!m.is_generic_func) {
+                _made(_key(st.name, m.name), _LiteralCallee(m, Optional<StructDef>.Value(st), !m.is_static));
+            }
+        }
+        for (var c in st.constructors) {
+            var key = _key(c.name, "__ctor");
+            constructors[c.name] = key;
+            _made(key, _LiteralCallee(c, Optional<StructDef>.Value(st), false));
+        }
+    }
+
+    _made(key: String, callee: _LiteralCallee) {
+        callees[key] = callee;
+        if (seeded) {
+            _seed(key, callee);
+            if (refined and kept.contains(key) and !settled.contains(key) and callee.function.body.is_value()) {
+                _late.append(key);
+                if (!_refining_late) {
+                    _refine_late();
+                }
+            }
+        }
+    }
+
+    ## Whether `key` may name a callee made only when a lookup reaches it.
+    lazy_key(key: String): bool {
+        if (checked_functions.contains(key)) {
+            return true;
+        }
+        var dot = key.rfind(".");
+        if (dot < 0) {
+            return false;
+        }
+        var owner = key.substr_bytes(0, dot as ulong);
+        return lazy_structs.contains(owner) or checked_constructors.contains(owner);
+    }
+
+    ## The callee `key` names, made if it is a checked one no lookup reached
+    ## yet.
+    _callee(key: String): _LiteralCallee? {
+        var found = callees.try_get(key);
+        if (found.is_value() or missing.contains(key)) {
+            return found;
+        }
+        var function = checked_functions.try_get(key);
+        if (function.is_value()) {
+            _made(key, _LiteralCallee(function.value(), Optional<StructDef>.Empty, false));
+            return callees.try_get(key);
+        }
+        var dot = key.rfind(".");
+        if (dot >= 0) {
+            var owner = key.substr_bytes(0, dot as ulong);
+            var method = key.substr_bytes(dot as ulong + 1, key.size - dot as ulong - 1);
+            var made = Optional<_LiteralCallee>.Empty;
+            if (lazy_structs.contains(owner)) {
+                var st = structs[owner];
+                for (var m in st.method_members) {
+                    if (!m.is_generic_func and m.name == method) {
+                        made = Optional<_LiteralCallee>.Value(_LiteralCallee(m, Optional<StructDef>.Value(st), !m.is_static));
                     }
                 }
             }
-            kept[key] = out;
+            if (!made.is_value() and method == "__ctor") {
+                var st = checked_constructors.try_get(owner);
+                if (st.is_value()) {
+                    for (var c in st.value().constructors) {
+                        if (c.name == owner) {
+                            constructors[c.name] = key;
+                            made = Optional<_LiteralCallee>.Value(_LiteralCallee(c, st, false));
+                        }
+                    }
+                }
+            }
+            if (made.is_value()) {
+                _made(key, made.value());
+                found = callees.try_get(key);
+            }
         }
+        if (!found.is_value()) {
+            missing.insert(key);
+        }
+        return found;
+    }
+
+    ## Refines every slot to the greatest fixed point.
+    refine_all() {
+        var changed = true;
+        while (changed) {
+            changed = false;
+            var keys = Array<String>();
+            for (var (key, _) in kept) {
+                keys.append(key);
+            }
+            keys.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
+            for (var key in keys) {
+                if (refine(key)) {
+                    changed = true;
+                }
+            }
+            # A refinement may have made callees.
+            if (kept.count != keys.count) {
+                changed = true;
+            }
+        }
+        refined = true;
+    }
+
+    ## Refines the callees made after `refine_all` to their fixed point. No
+    ## fact settled before depends on them: the bodies refined then made
+    ## every callee their uses reach.
+    _refine_late() {
+        _refining_late = true;
+        var changed = true;
+        while (changed) {
+            changed = false;
+            var count = _late.count;
+            ulong i = 0;
+            while (i < _late.count) {
+                if (refine(_late[i])) {
+                    changed = true;
+                }
+                i += 1;
+            }
+            if (_late.count != count) {
+                changed = true;
+            }
+        }
+        _refining_late = false;
     }
 
     ## Whether slot `slot` of `key` is free.
     is_free(key: String, slot: ulong): bool {
+        _callee(key);
         var found = kept.try_get(key);
         return found.is_value() and slot < found.value().count and !found.value()[slot];
     }
@@ -312,10 +484,16 @@ struct _Literals {
             return Optional<String>.Empty;
         }
         var constructor = constructors.try_get(function);
+        if (!constructor.is_value()) {
+            if (checked_constructors.contains(function)) {
+                _callee(_key(function, "__ctor"));
+                constructor = constructors.try_get(function);
+            }
+        }
         if (constructor.is_value()) {
             return constructor;
         }
-        return callees.contains(function) ? Optional<String>.Value(function) : Optional<String>.Empty;
+        return _callee(function).is_value() ? Optional<String>.Value(function) : Optional<String>.Empty;
     }
 
     ## The callee of `this.method(args)`.
@@ -324,7 +502,7 @@ struct _Literals {
         if (this_value is SymbolRef(node)) {
             if (!scope.local(node.id).is_value() and structs.contains(node.id)) {
                 var key = _key(structs[node.id].name, method);
-                var callee = callees.try_get(key);
+                var callee = _callee(key);
                 if (!callee.is_value() or callee.value().has_this) {
                     return none;
                 }
@@ -340,7 +518,7 @@ struct _Literals {
             return none;
         }
         var key = _key(st.value().name, method);
-        var callee = callees.try_get(key);
+        var callee = _callee(key);
         if (!callee.is_value()) {
             return none;
         }
@@ -351,7 +529,7 @@ struct _Literals {
 
     ## Whether the parameter at `slot` of `key` takes over its argument.
     takes_over_at(key: String, slot: ulong): bool {
-        var callee = callees.try_get(key);
+        var callee = _callee(key);
         if (!callee.is_value()) {
             return true;
         }
