@@ -17,7 +17,7 @@ import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
-import [has_stashed, is_checked_function, take_stashed] from "checked";
+import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import [location_of] from "common";
@@ -598,6 +598,9 @@ struct _Confinement {
     var table: StructTable;
     var safe: ThreadSafeStructs;
     var summaries: HashMap<String, _Summary> = HashMap<String, _Summary>();
+    # The recorded summaries of the functions whose bodies were skipped, by
+    # key, decoded on first use.
+    var _recorded_text: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
     ## The functions whose summaries were recorded before.
     var settled: HashSet<String> = HashSet<String>();
     # The checked summaries `_decode_checked` looked for.
@@ -608,6 +611,7 @@ struct _Confinement {
     var structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
     ## Each constructor by the name a call gives it.
     var constructors: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    var constructor_structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
     ## The first non-generic free function of each name.
     var functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
     var externs: HashSet<String> = HashSet<String>();
@@ -619,7 +623,7 @@ struct _Confinement {
     var runtime_files: bool[]? = Optional<bool[]>.Empty;
     # The structs implementing each trait, by trait name, found on first use.
     var _implementors: HashMap<String, StructDef[]>? = Optional<HashMap<String, StructDef[]>>.Empty;
-    # The checked bodies `restore` may bring back, by summary key.
+    # The checked bodies `restore` brought back or looked up, by summary key.
     var _stashed_bodies: HashMap<String, (_Body, String)> = HashMap<String, (_Body, String)>();
     # Every body by key (`_by_key`).
     var _known: HashMap<String, _Body> = HashMap<String, _Body>();
@@ -642,6 +646,7 @@ struct _Confinement {
             structs[st.name] = st;
             for (var c in st.constructors) {
                 constructors[c.name] = c;
+                constructor_structs[c.name] = st;
             }
             if (ast.has_attribute(st.attributes, ISOLATED_ATTRIBUTE)) {
                 isolated.insert(st.name);
@@ -658,10 +663,7 @@ struct _Confinement {
         for (var t in module.traits) {
             traits.insert(t.name);
         }
-        summaries = _recorded(module);
-        for (var (key, _) in summaries) {
-            settled.insert(key);
-        }
+        _recorded_text = _recorded(module);
     }
 
     ## The summary of `key`, as computed or recorded.
@@ -688,6 +690,16 @@ struct _Confinement {
     _decode_checked(key: String) {
         if (summaries.contains(key) or !_tried.insert(key)) {
             return;
+        }
+        var skipped = _recorded_text.try_get(key);
+        if (skipped.is_value()) {
+            var (at, text) = skipped.value();
+            var decoded = _decode(text, at.file);
+            if (decoded.is_value()) {
+                summaries[key] = decoded.value();
+                settled.insert(key);
+                return;
+            }
         }
         var recorded = module.checked.summaries.try_get(key);
         if (!recorded.is_value()) {
@@ -740,10 +752,7 @@ struct _Confinement {
         if (!has_stashed(state)) {
             return none;
         }
-        if (_stashed_bodies.count == 0) {
-            _index_stashed();
-        }
-        var found = _stashed_bodies.try_get(key);
+        var found = _stashed(key);
         if (!found.is_value()) {
             return none;
         }
@@ -759,30 +768,48 @@ struct _Confinement {
         return Optional<_Body>.Value(body);
     }
 
-    # The checked functions' bodies, by summary key, with their stash keys.
-    _index_stashed() {
-        var none = Optional<TypeName>.Empty;
-        for (var f in module.functions) {
-            if (!f.is_generic_func and is_checked_function(module, f)) {
-                _stashed_bodies[f.name] = (_Body(none, f.name, f), $"f {f.name}");
-            }
+    # The checked function `key` names, as a body with its stash key.
+    _stashed(key: String): (_Body, String)? {
+        var none = Optional<(_Body, String)>.Empty;
+        var known = _stashed_bodies.try_get(key);
+        if (known.is_value()) {
+            return known;
         }
-        for (var st in module.structs) {
-            if (!module.checked.structs.contains(st.name) or _is_generic_base(st)) {
-                continue;
+        var newline = key.find("\n");
+        if (newline < 0) {
+            var f = functions.try_get(key);
+            if (!f.is_value() or !is_checked_function(module, f.value())) {
+                return none;
             }
-            var owner = Optional<TypeName>.Value(TypeName.named(st.name));
-            for (var m in st.method_members) {
-                if (!m.is_generic_func) {
-                    var key = method_key(st.name, m.name);
-                    _stashed_bodies[key] = (_Body(owner, key, m), $"m {st.name} method {m.name}");
+            var found = (_Body(Optional<TypeName>.Empty, key, f.value()), $"f {key}");
+            _stashed_bodies[key] = found;
+            return Optional<(_Body, String)>.Value(found);
+        }
+        var owner = key.substr_bytes(0, newline as ulong);
+        var method = key.substr_bytes(newline as ulong + 1, key.size - newline as ulong - 1);
+        var st = method == "__ctor" ? constructor_structs.try_get(owner) : structs.try_get(owner);
+        if (!st.is_value() or !module.checked.structs.contains(st.value().name) or _is_generic_base(st.value())) {
+            return none;
+        }
+        var ty = Optional<TypeName>.Value(TypeName.named(st.value().name));
+        var found = Optional<(_Body, String)>.Empty;
+        if (method == "__ctor") {
+            for (var c in st.value().constructors) {
+                if (c.name == owner) {
+                    found = Optional<(_Body, String)>.Value((_Body(ty, key, c), $"m {st.value().name} constructor {c.name}"));
                 }
             }
-            for (var c in st.constructors) {
-                var key = method_key(c.name, "__ctor");
-                _stashed_bodies[key] = (_Body(owner, key, c), $"m {st.name} constructor {c.name}");
+        } else {
+            for (var m in st.value().method_members) {
+                if (!m.is_generic_func and m.name == method) {
+                    found = Optional<(_Body, String)>.Value((_Body(ty, key, m), $"m {st.value().name} method {m.name}"));
+                }
             }
         }
+        if (found.is_value()) {
+            _stashed_bodies[key] = found.value();
+        }
+        return found;
     }
 
     # Every body by key: the compiled ones and those `restore` brought back.
@@ -1081,23 +1108,23 @@ _bodies(module: Module): Array<_Body> {
 
 ## The recorded summaries of a checked runtime's functions and of the
 ## functions whose bodies were skipped, by summary key.
-_recorded(module: Module): HashMap<String, _Summary> {
-    var out = HashMap<String, _Summary>();
+_recorded(module: Module): HashMap<String, (Loc, String)> {
+    var out = HashMap<String, (Loc, String)>();
     if (module.recorded_summaries.count == 0) {
         return out;
     }
     for (var f in module.functions) {
-        _seed(module, out, f.name, f);
+        _seed(module, out, Optional<String>.Empty, f);
     }
     for (var st in module.structs) {
         for (var m in st.method_members) {
-            _seed(module, out, method_key(st.name, m.name), m);
+            _seed(module, out, Optional<String>.Value(st.name), m);
         }
     }
     return out;
 }
 
-_seed(module: Module, out: HashMap<String, _Summary>, key: String, function: FunctionDef) {
+_seed(module: Module, out: HashMap<String, (Loc, String)>, owner: String?, function: FunctionDef) {
     if (function.body.is_value()) {
         return;
     }
@@ -1105,10 +1132,7 @@ _seed(module: Module, out: HashMap<String, _Summary>, key: String, function: Fun
     if (!text.is_value()) {
         return;
     }
-    var summary = _decode(text.value(), function.loc.file);
-    if (summary.is_value()) {
-        out[key] = summary.value();
-    }
+    out[owner.is_value() ? method_key(owner.value(), function.name) : function.name] = (function.loc, text.value());
 }
 
 ## Records the summary of every function the build cache may skip the
@@ -1708,12 +1732,13 @@ _error_at_known(message: String, loc: Loc): Diagnostic {
 ## on a runtime free function's parameter only. Any other parameter
 ## attribute is an error.
 _check_parameter_attributes(program: _Confinement): bool {
-    var module = program.module;
+    # The declarations checked with a unit below were checked with it.
+    var layer = layer_decls(program.module);
     var functions = Array<(FunctionDef, bool)>();
-    for (var f in module.functions) {
+    for (var f in layer.functions) {
         functions.append((f, true));
     }
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         for (var m in st.method_members) {
             functions.append((m, false));
         }
