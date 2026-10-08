@@ -558,36 +558,85 @@ for b in blocks:
 # that the base declares under its name but that changed is written as a
 # patch on it (tag 2): its member lists element by element the same way.
 
-def _list_delta(expr, et, key, base_list, category=None, index_next=False):
+def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge=False):
     """Write, read and index lines for list `expr` of element type `et`,
     whose elements are referred to by `key` (a Pepper string expression)
     in the base's list `base_list`. `category` names the list in the
-    stats of base elements a delta does not refer to."""
+    stats of base elements a delta does not refer to. With `merge`, a
+    list that holds the base's elements in order is written as its other
+    elements and their places (mode 2), which reading puts back among the
+    base's: no reference into the base but its order."""
     item = fresh('_item')
     hits = fresh('_hits')
     nj = fresh('_nj')
-    w = [f'var {hits} = HashSet<long>();',
-         f'ulong {nj} = 0;',
-         f'out.unsigned({expr}.count);',
-         f'for (var {item} in {expr}) {{',
-         '    var scratch = base.scratch();',
-         f'    {fn(et)}_write(scratch, {item});',
-         '    var hash = base.hash_of(scratch);',
-         f'    var at = base.find_hashed({key}, hash);']
-    if index_next:
-        w += [f'    next.add_hashed({key}, hash, {nj});', f'    {nj} += 1;']
-    w += ['    if (at >= 0) {',
-         f'        {hits}.insert(at);',
-         '        out.unsigned((at as ulong) * 2 + 1);',
-         '    } else {',
-         '        out.unsigned(0);',
-         f'        {fn(et)}_write(out, {item});',
-         '    }',
-         '}',
-         f'base.missed({category or key}, {key}, {hits}.count);']
+    w = []
+    if merge:
+        hs = fresh('_hs'); seq = fresh('_seq'); bj = fresh('_bj'); news = fresh('_news'); i = fresh('_i')
+        w += [f'var {hs} = Array<String>();',
+              f'for (var {item} in {expr}) {{',
+              '    var scratch = base.scratch();',
+              f'    {fn(et)}_write(scratch, {item});',
+              f'    {hs}.append(base.hash_of(scratch));',
+              '}',
+              f'var {seq} = base.sequence({key});',
+              f'ulong {bj} = 0;',
+              f'var {news} = Array<ulong>();',
+              f'for (var {i} in 0..{hs}.count) {{',
+              f'    if ({bj} < {seq}.count and {hs}[{i}] == {seq}[{bj}]) {{',
+              f'        {bj} += 1;',
+              '    } else {',
+              f'        {news}.append({i});',
+              '    }',
+              '}']
+        if index_next:
+            w += [f'for (var {i} in 0..{hs}.count) {{', f'    next.add_hashed({key}, {hs}[{i}], {i});', '}']
+        w += [f'if ({bj} == {seq}.count) {{',
+              '    out.unsigned(2);',
+              f'    out.unsigned({news}.count);',
+              f'    for (var {i} in {news}) {{',
+              f'        out.unsigned({i});',
+              f'        {fn(et)}_write(out, {expr}[{i}]);',
+              '    }',
+              f'    base.count({category or key} + " merged", 0);',
+              '} else {',
+              '    out.unsigned(1);',
+              f'    base.count({category or key} + " by place", 0);']
+        body = [f'var {hits} = HashSet<long>();',
+                f'out.unsigned({expr}.count);',
+                f'for (var {i} in 0..{expr}.count) {{',
+                f'    var at = base.find_hashed({key}, {hs}[{i}]);',
+                '    if (at >= 0) {',
+                f'        {hits}.insert(at);',
+                '        out.unsigned((at as ulong) * 2 + 1);',
+                '    } else {',
+                '        out.unsigned(0);',
+                f'        {fn(et)}_write(out, {expr}[{i}]);',
+                '    }',
+                '}',
+                f'base.missed({category or key}, {key}, {hits}.count);']
+        w += ['    ' + l for l in body] + ['}']
+    else:
+        w += [f'var {hits} = HashSet<long>();',
+             f'ulong {nj} = 0;',
+             f'out.unsigned({expr}.count);',
+             f'for (var {item} in {expr}) {{',
+             '    var scratch = base.scratch();',
+             f'    {fn(et)}_write(scratch, {item});',
+             '    var hash = base.hash_of(scratch);',
+             f'    var at = base.find_hashed({key}, hash);']
+        if index_next:
+            w += [f'    next.add_hashed({key}, hash, {nj});', f'    {nj} += 1;']
+        w += ['    if (at >= 0) {',
+             f'        {hits}.insert(at);',
+             '        out.unsigned((at as ulong) * 2 + 1);',
+             '    } else {',
+             '        out.unsigned(0);',
+             f'        {fn(et)}_write(out, {item});',
+             '    }',
+             '}',
+             f'base.missed({category or key}, {key}, {hits}.count);']
     local = fresh('_f'); count = fresh('_n'); tag = fresh('_tag')
-    r = [f'var {local} = Array<{model_type_name(et)}>();',
-         f'var {count} = input.count();',
+    refs = [f'var {count} = input.count();',
          f'for (var _ in 0..{count}) {{',
          f'    var {tag} = input.unsigned();',
          f'    if ({tag} & 1 == 1) {{',
@@ -596,6 +645,29 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False):
          f'        {local}.append({fn(et)}_read(input));',
          '    }',
          '}']
+    r = [f'var {local} = Array<{model_type_name(et)}>();']
+    if merge:
+        mode = fresh('_mode'); bi = fresh('_bi'); at = fresh('_at')
+        r += [f'var {mode} = input.unsigned();',
+              f'if ({mode} == 2) {{',
+              f'    ulong {bi} = 0;',
+              f'    var {count} = input.count();',
+              f'    for (var _ in 0..{count}) {{',
+              f'        var {at} = input.unsigned();',
+              f'        while ({local}.count < {at}) {{',
+              f'            {local}.append({base_list}[{bi}]);',
+              f'            {bi} += 1;',
+              '        }',
+              f'        {local}.append({fn(et)}_read(input));',
+              '    }',
+              f'    while ({bi} < {base_list}.count) {{',
+              f'        {local}.append({base_list}[{bi}]);',
+              f'        {bi} += 1;',
+              '    }',
+              '} else {']
+        r += ['    ' + l for l in refs] + ['}']
+    else:
+        r += refs
     j = fresh('_j')
     x = [f'ulong {j} = 0;',
          f'for (var {item} in {expr}) {{',
@@ -745,56 +817,126 @@ def _struct_fields():
     return [f for f in model.items['StructDef']['fields'] if not f['skip']]
 
 def struct_list_delta(expr, list_key, base_list):
-    """Lines for a list of StructDef, with the patch form."""
+    """Lines for a list of StructDef, with the patch form. A list that
+    holds the base's structs in order, some patched, is written as the
+    patches and the new structs with their places (mode 2); else each
+    struct as kept, patched or new (mode 1)."""
     st = ('model', 'StructDef')
     item = fresh('_item')
     sh = fresh('_struct_hits')
-    nj = fresh('_nj')
-    w = [f'var {sh} = HashSet<long>();',
-         f'ulong {nj} = 0;',
-         f'out.unsigned({expr}.count);',
+    hs = fresh('_hs'); seq = fresh('_seq'); seqn = fresh('_seqn'); bj = fresh('_bj')
+    news = fresh('_news'); patches = fresh('_patches'); i = fresh('_i')
+    w = [f'var {hs} = Array<String>();',
          f'for (var {item} in {expr}) {{',
          '    var scratch = base.scratch();',
          f'    {fn(st)}_write(scratch, {item});',
-         '    var hash = base.hash_of(scratch);',
-         f'    var at = base.find_hashed("{list_key}", hash);',
-         f'    var named = base.named("{list_key}", {item}.name);',
-         f'    next.add_hashed("{list_key}", hash, {nj});',
-         f'    next.name("{list_key}", {item}.name, {nj});',
-         f'    _patch_{list_key}_index({item}, next, {nj});',
-         f'    {nj} += 1;',
-         '    ulong _before = out.values.count;',
-         f'    if (at >= 0) {{',
-         f'        {sh}.insert(at);',
-         f'    }} else if (named >= 0) {{',
-         f'        {sh}.insert(named);',
-         '    }',
-         '    if (at >= 0) {',
-         '        out.unsigned((at as ulong) * 2 + 1);',
-         '    } else if (named >= 0) {',
-         '        out.unsigned(2);',
-         '        out.unsigned(named as ulong);',
-         f'        _patch_{list_key}_write(out, {item}, base, named as ulong);',
-         f'        base.count("{list_key} patched", out.values.count - _before);',
+         f'    {hs}.append(base.hash_of(scratch));',
+         '}',
+         f'var {seq} = base.sequence("{list_key}");',
+         f'var {seqn} = base.sequence("{list_key}#");',
+         f'ulong {bj} = 0;',
+         f'var {news} = Array<ulong>();',
+         f'var {patches} = Array<(ulong, ulong)>();',
+         f'for (var {i} in 0..{hs}.count) {{',
+         f'    if ({bj} < {seq}.count and {hs}[{i}] == {seq}[{bj}]) {{',
+         f'        {bj} += 1;',
+         f'    }} else if ({bj} < {seq}.count and {bj} < {seqn}.count and {expr}[{i}].name == {seqn}[{bj}]) {{',
+         f'        {patches}.append(({i}, {bj}));',
+         f'        {bj} += 1;',
          '    } else {',
-         '        out.unsigned(0);',
-         f'        {fn(st)}_write(out, {item});',
-         f'        base.count("{list_key} new", out.values.count - _before);',
+         f'        {news}.append({i});',
          '    }',
          '}',
-         f'base.missed("{list_key}", "{list_key}", {sh}.count);']
-    local = fresh('_f'); count = fresh('_n'); tag = fresh('_tag')
+         f'if ({bj} == {seq}.count) {{',
+         '    out.unsigned(2);',
+         f'    out.unsigned({patches}.count);',
+         f'    for (var ({i}, _b) in {patches}) {{',
+         '        ulong _before = out.values.count;',
+         f'        out.text({expr}[{i}].name);',
+         '        out.unsigned(_b);',
+         f'        _patch_{list_key}_write(out, {expr}[{i}], base, _b);',
+         f'        base.count("{list_key} patched", out.values.count - _before);',
+         '    }',
+         f'    out.unsigned({news}.count);',
+         f'    for (var {i} in {news}) {{',
+         '        ulong _before = out.values.count;',
+         f'        out.unsigned({i});',
+         f'        {fn(st)}_write(out, {expr}[{i}]);',
+         f'        base.count("{list_key} new", out.values.count - _before);',
+         '    }',
+         f'    base.count("{list_key} merged", 0);',
+         '} else {',
+         '    out.unsigned(1);',
+         f'    base.count("{list_key} by place", 0);',
+         f'    var {sh} = HashSet<long>();',
+         f'    out.unsigned({expr}.count);',
+         f'    for (var {i} in 0..{expr}.count) {{',
+         f'        var {item} = {expr}[{i}];',
+         f'        var at = base.find_hashed("{list_key}", {hs}[{i}]);',
+         f'        var named = base.named("{list_key}", {item}.name);',
+         '        ulong _before = out.values.count;',
+         '        if (at >= 0) {',
+         f'            {sh}.insert(at);',
+         '            out.unsigned((at as ulong) * 2 + 1);',
+         '        } else if (named >= 0) {',
+         f'            {sh}.insert(named);',
+         '            out.unsigned(2);',
+         '            out.unsigned(named as ulong);',
+         f'            _patch_{list_key}_write(out, {item}, base, named as ulong);',
+         f'            base.count("{list_key} patched", out.values.count - _before);',
+         '        } else {',
+         '            out.unsigned(0);',
+         f'            {fn(st)}_write(out, {item});',
+         f'            base.count("{list_key} new", out.values.count - _before);',
+         '        }',
+         '    }',
+         f'    base.missed("{list_key}", "{list_key}", {sh}.count);',
+         '}',
+         f'for (var {i} in 0..{hs}.count) {{',
+         f'    next.add_hashed("{list_key}", {hs}[{i}], {i});',
+         f'    next.name("{list_key}", {expr}[{i}].name, {i});',
+         f'    _patch_{list_key}_index({expr}[{i}], next, {i});',
+         '}']
+    local = fresh('_f'); count = fresh('_n'); tag = fresh('_tag'); mode = fresh('_mode')
+    bi = fresh('_bi'); at = fresh('_at'); patched = fresh('_patched')
     r = [f'var {local} = Array<StructDef>();',
-         f'var {count} = input.count();',
-         f'for (var _ in 0..{count}) {{',
-         f'    var {tag} = input.unsigned();',
-         f'    if ({tag} & 1 == 1) {{',
-         f'        {local}.append({base_list}[{tag} >> 1]);',
-         f'    }} else if ({tag} == 2) {{',
-         f'        var _was = {base_list}[input.unsigned()];',
-         f'        {local}.append(_patch_{list_key}_read(input, _was));',
-         '    } else {',
+         f'var {mode} = input.unsigned();',
+         f'if ({mode} == 2) {{',
+         f'    var {patched} = HashMap<ulong, StructDef>();',
+         f'    var {count} = input.count();',
+         f'    for (var _ in 0..{count}) {{',
+         '        input.text();',
+         f'        var _slot = input.unsigned();',
+         f'        {patched}[_slot] = _patch_{list_key}_read(input, {base_list}[_slot]);',
+         '    }',
+         f'    ulong {bi} = 0;',
+         f'    var _added = input.count();',
+         f'    for (var _ in 0.._added) {{',
+         f'        var {at} = input.unsigned();',
+         f'        while ({local}.count < {at}) {{',
+         f'            var _p = {patched}.try_get({bi});',
+         f'            {local}.append(_p.is_value() ? _p.value() : {base_list}[{bi}]);',
+         f'            {bi} += 1;',
+         '        }',
          f'        {local}.append({fn(st)}_read(input));',
+         '    }',
+         f'    while ({bi} < {base_list}.count) {{',
+         f'        var _p = {patched}.try_get({bi});',
+         f'        {local}.append(_p.is_value() ? _p.value() : {base_list}[{bi}]);',
+         f'        {bi} += 1;',
+         '    }',
+         '} else {',
+         f'    var {count} = input.count();',
+         f'    for (var _ in 0..{count}) {{',
+         f'        var {tag} = input.unsigned();',
+         f'        if ({tag} & 1 == 1) {{',
+         f'            {local}.append({base_list}[{tag} >> 1]);',
+         f'        }} else if ({tag} == 2) {{',
+         f'            var _was = {base_list}[input.unsigned()];',
+         f'            {local}.append(_patch_{list_key}_read(input, _was));',
+         '        } else {',
+         f'            {local}.append({fn(st)}_read(input));',
+         '        }',
          '    }',
          '}']
     j = fresh('_j')
@@ -857,7 +999,7 @@ def module_delta():
             lr = [_lazy(l) for l in lr]
         elif fname == 'templates':
             tw, tr, tx, tlocal = struct_list_delta('value.templates.structs', 't', 'base.templates.structs')
-            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True)
+            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True, merge=True)
             local = fresh('_f')
             lw = ['out.flag(value.templates.frozen);'] + tw + fw
             # The flag is written first, so it is read first.
@@ -869,7 +1011,7 @@ def module_delta():
             lr = [f'var {local} = DeltaBase.read_checked(input, base.checked);']
             lx = ['base.keep_checked(value.checked);']
         elif tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed)
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed, merge=fname not in resumed)
             if fname == 'functions':
                 lr = [_lazy(l) for l in lr]
         elif fname == 'argument_names':

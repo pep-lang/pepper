@@ -81,3 +81,23 @@ where it sits in the chain.
 - Record size: a layer that references many elements of its closure
   pays one hash per reference, instead of a place index. Measure it with
   `PEPC_RECORD_STATS`.
+
+## How each module field changes across layers (measured 10-08)
+
+From a cold pepc self-build, with the delta writer counting, per layer, the
+base elements that moved, the new elements inserted inside the base's list,
+and the fields written whole:
+
+| Field | Across a layer | Merge |
+|---|---|---|
+| `functions`, `traits`, `extensions`, `static_blocks`, `enums`, `struct_specs`, `func_specs`, `withheld`, `properties`, `constrained_aliases`, `templates` | appended | concatenate in topological order |
+| `structs` | appended; 1-5 base structs patched per layer (methods, specializations added) | concatenate; patches merge by struct name |
+| `globals` | sorted by the program's initialization order (`build_on`) | concatenate, then the same stable sort |
+| `externs` | stable-sorted by file (`build_on`) | concatenate, then the same sort |
+| `trait_types` | rebuilt sorted by name (`convert_to_traits`) | union by name, sorted |
+| `conversions` | rebuilt by `convert_to_traits`; 1-12 change per layer | union; changed ones are the layer's |
+| `type_uses`, `use_contexts` | appended per file with index links (`_join`) | concatenate, offsetting `context` |
+| `imports` | appended per file, some move | concatenate |
+| `argument_names` | rebuilt from scratch, sorted by place; drops entries | the layer's own, merged by place |
+| `type_aliases`, `recorded_summaries`, `summaries_to_record` | replaced by `resume_checked` | as now |
+| sets and maps | only gain entries | union; a key two layers both change is a conflict to detect |

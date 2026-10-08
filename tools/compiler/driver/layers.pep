@@ -18,7 +18,7 @@ import compiler.sema;
 import "cache";
 
 ## The record format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "checked12";
+const _RECORDS_FOLDER = "checked13";
 ## How many keys' records each layer keeps.
 const _KEEP_RECORDS = 4;
 

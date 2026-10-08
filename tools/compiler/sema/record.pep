@@ -294,6 +294,8 @@ export struct DeltaBase {
     var _sizes: HashMap<String, ulong> = HashMap<String, ulong>();
     # Each element's place, by "field:hash" of its record.
     var _places: HashMap<String, ulong> = HashMap<String, ulong>();
+    # Each list's elements' hashes, and its structs' names, in order.
+    var _sequences: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
     # The base's checked names: structs, functions and globals, as indexed.
     var _checked: Array<HashSet<String>> = Array<HashSet<String>>();
     # The base's checked summaries, as indexed.
@@ -478,16 +480,7 @@ export struct DeltaBase {
     ## @param scratch the element, written alone
     ## @param index its place in the list
     add(list: String, scratch: RecordOut, index: ulong) {
-        var had = _sizes.try_get(list);
-        if (!had.is_value() or had.value() < index + 1) {
-            _sizes[list] = index + 1;
-        }
-        var key = _key(list, scratch);
-        if (!_places.contains(key)) {
-            _places[key] = index;
-            var distinct = _distinct.try_get(list);
-            _distinct[list] = (distinct.is_value() ? distinct.value() : 0) + 1;
-        }
+        add_hashed(list, _hash(scratch), index);
     }
 
     ## Returns the place of the element of the base's list `list` whose
@@ -590,6 +583,7 @@ export struct DeltaBase {
         if (!had.is_value() or had.value() < index + 1) {
             _sizes[list] = index + 1;
         }
+        _in_order(list, hash, index);
         var key = $"{list}:{hash}";
         if (!_places.contains(key)) {
             _places[key] = index;
@@ -612,6 +606,7 @@ export struct DeltaBase {
     ## @param name the struct's name
     ## @param index its place in the list
     name(list: String, name: String, index: ulong) {
+        _in_order($"{list}#", name, index);
         var key = $"{list}#{name}";
         if (!_places.contains(key)) {
             _places[key] = index;
@@ -627,6 +622,28 @@ export struct DeltaBase {
     named(list: String, name: String): long {
         var at = _places.try_get($"{list}#{name}");
         return at.is_value() ? at.value() as long : -1;
+    }
+
+    ## Returns the hashes of the elements of the base's list `list`, in
+    ## order; with `list` followed by `#`, its structs' names.
+    ##
+    ## @param list the list
+    ## @returns the hashes, or names; empty when the base has no such list
+    sequence(list: String): Array<String> {
+        var had = _sequences.try_get(list);
+        return had.is_value() ? had.value() : Array<String>();
+    }
+
+    # Keeps `value` as the `index`th of `list`'s sequence: elements are
+    # indexed in order, once each.
+    _in_order(list: String, value: String, index: ulong) {
+        if (!_sequences.contains(list)) {
+            _sequences[list] = Array<String>();
+        }
+        var sequence = _sequences[list];
+        if (sequence.count == index) {
+            sequence.append(value);
+        }
     }
 
     # The key of the element written to `scratch`, in list `list`.
