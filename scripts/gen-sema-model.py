@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
-# Generates tools/compiler/sema/model.pep, the sema model in Pepper, from
-# crates/pepper-sema/src/model.rs and type_name.rs: every type the Rust
-# `Module` reaches, with a constructor, a deep `copy()`, a `fingerprint()`
-# and a `to_json()` that writes what serde writes. Run it after changing the
-# Rust model, then format the result:
+# Regenerates tools/compiler/sema/model.pep, the sema model in Pepper, from
+# its own declarations: each struct's and enum's fields as model.pep
+# declares them, with a constructor, a deep `copy()`, a `fingerprint()` and
+# a `to_json()` (what serde writes for the Rust passes' model, which
+# passes_test compares against). To change the model, change a type's
+# fields in model.pep, run this, then format the result:
 #
 #   python3 scripts/gen-sema-model.py tools/compiler/sema/model.pep
-#   target/release/pep-fmt -w tools/compiler/sema/model.pep
+#   pep-fmt -w tools/compiler/sema/model.pep
+#
+# and regenerate the record codec (scripts/gen-sema-record.py), which reads
+# the model through this script.
 
 import json, os, re, sys
 
-# ---- A small reader of Rust struct and enum declarations.
-
-def strip_comments(src):
-    out=[]
-    for line in src.split('\n'):
-        s=line.strip()
-        if s.startswith('//'):
-            out.append('')
-            continue
-        # strip trailing // comments not in strings (good enough)
-        i=line.find('//')
-        if i>=0 and line.count('"',0,i)%2==0:
-            line=line[:i]
-        out.append(line)
-    return '\n'.join(out)
+# ---- Helpers.
 
 def split_top(s, sep=','):
     parts=[];depth=0;cur=''
@@ -37,69 +27,92 @@ def split_top(s, sep=','):
     if cur.strip(): parts.append(cur)
     return [p.strip() for p in parts if p.strip()]
 
-def match_brace(s,i):
-    # s[i] is opening
-    o=s[i]; c={'{':'}','(':')','[':']'}[o]; d=0
-    for j in range(i,len(s)):
-        if s[j]==o: d+=1
-        elif s[j]==c:
-            d-=1
-            if d==0: return j
-    raise Exception('unbalanced')
-
-def parse_fields(body):
-    fields=[]
-    for part in split_top(body):
-        attrs=re.findall(r'#\[(.*?)\]\s*',part)
-        part=re.sub(r'#\[.*?\]\s*','',part).strip()
-        part=re.sub(r'^pub(\(crate\))?\s+','',part)
-        name,ty=part.split(':',1)
-        fields.append({'name':name.strip(),'type':' '.join(ty.split()),'skip':any('serde(skip' in a for a in attrs)})
-    return fields
-
-def parse(src):
-    src=strip_comments(src)
-    items={}
-    for m in re.finditer(r'#\[derive\(([^)]*)\)\]\s*((?:#\[[^\]]*\]\s*)*)pub\s+(struct|enum)\s+(\w+)(<[^>{(]*>)?',src):
-        derives=m.group(1)
-        kind=m.group(3); name=m.group(4)
-        ser='Serialize' in derives
-        i=m.end()
-        while src[i] in ' \n': i+=1
-        if src[i]=='{':
-            j=match_brace(src,i); body=src[i+1:j]
-        elif src[i]=='(':
-            j=match_brace(src,i); body=src[i+1:j]
-            items[name]={'kind':'tuple_struct','fields':[re.sub(r'^pub\s+','',t) for t in split_top(body)],'ser':ser}
-            continue
-        elif src[i]==';':
-            items[name]={'kind':'unit_struct','ser':ser};continue
-        else:
-            continue
-        if kind=='struct':
-            items[name]={'kind':'struct','fields':parse_fields(body),'ser':ser}
-        else:
-            variants=[]
-            for part in split_top(body):
-                part=re.sub(r'#\[.*?\]\s*','',part).strip()
-                vm=re.match(r'(\w+)\s*(.*)$',part,re.S)
-                vname=vm.group(1); rest=vm.group(2).strip()
-                if rest.startswith('{'):
-                    variants.append({'name':vname,'kind':'struct','fields':parse_fields(rest[1:-1])})
-                elif rest.startswith('('):
-                    variants.append({'name':vname,'kind':'tuple','types':[' '.join(t.split()) for t in split_top(rest[1:-1])]})
-                else:
-                    variants.append({'name':vname,'kind':'unit'})
-            items[name]={'kind':'enum','variants':variants,'ser':ser}
-    return items
-
 # ---- The generator.
 
-ROOT=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','crates','pepper-sema','src')+os.sep
-items={}
-for f in ['model.rs','type_name.rs']:
-    for k,v in parse(open(ROOT+f).read()).items():
-        items[k]=v
+# The declarations come from model.pep itself: each struct's and enum's
+# fields, read back into the Rust-shaped items the generator was written
+# over (`rust_of` undoes `pep`). Change a type there, then run this to
+# regenerate the methods.
+MODEL=os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','tools','compiler','sema','model.pep')
+
+PEP_PRIM={'String':'String','bool':'bool','ulong':'u64','uint':'u32','long':'i64','int':'i32','double':'f64','u8':'u8'}
+
+def rust_of(t):
+    t=t.strip()
+    if t.endswith('?'):
+        return f'Option<{rust_of(t[:-1])}>'
+    if t.startswith('(') and t.endswith(')'):
+        return '('+', '.join(rust_of(x) for x in split_top(t[1:-1]))+')'
+    m=re.match(r'^([\w.]+)<(.*)>$',t)
+    if m:
+        n=m.group(1); args=[rust_of(x) for x in split_top(m.group(2))]
+        rust={'Optional':'Option','Array':'Vec','HashSet':'HashSet','HashMap':'HashMap','Map':'BTreeMap'}[n]
+        return f'{rust}<{", ".join(args)}>'
+    if t in PEP_PRIM: return PEP_PRIM[t]
+    if t.startswith('ast.'): return 'ast::'+t[4:]
+    return t
+
+# Fields whose type is the AST's enum of the same name, which the methods
+# share rather than default or fingerprint.
+AST_FIELDS={('JumpStaticItem','kind'):'ast::LoopBreakKind'}
+
+def parse_pepper(src):
+    lines=src.split('\n')
+    found={}
+    order=[]
+    i=0
+    while i<len(lines):
+        m=re.match(r'^export (struct|enum) (\w+) \{$',lines[i])
+        if not m:
+            i+=1
+            continue
+        kind,name=m.group(1),m.group(2)
+        j=i+1
+        body=[]
+        while lines[j]!='}':
+            body.append(lines[j]); j+=1
+        if kind=='struct':
+            fields=[]
+            for l in body:
+                fm=re.match(r'^    var (\w+): (.*);$',l)
+                if fm:
+                    fn_=fm.group(1)
+                    ty=AST_FIELDS.get((name,fn_)) or rust_of(fm.group(2))
+                    fields.append({'name':{'this_value':'this'}.get(fn_,fn_),'type':ty,'skip':False})
+            found[name]={'kind':'struct','fields':fields,'ser':True}
+        else:
+            variants=[]
+            for l in body:
+                if l.startswith('    ##') or not l.startswith('    ') or l.startswith('     '):
+                    continue
+                vm=re.match(r'^    (\w+)(?:\((.*)\))?,$',l)
+                if not vm:
+                    continue
+                vname,params=vm.group(1),vm.group(2)
+                if params is None:
+                    variants.append({'name':vname,'kind':'unit'})
+                elif params==f'node: {vname}{name}':
+                    variants.append({'name':vname,'kind':'struct','payload':vname+name})
+                else:
+                    variants.append({'name':vname,'kind':'tuple','types':[rust_of(p.split(':',1)[1]) for p in split_top(params)]})
+            found[name]={'kind':'enum','variants':variants,'ser':True}
+        order.append(name)
+        i=j+1
+    out={}
+    payloads=set()
+    for name in order:
+        it=found[name]
+        if it['kind']=='enum':
+            for vv in it['variants']:
+                if vv['kind']=='struct':
+                    vv['fields']=found[vv.pop('payload')]['fields']
+                    payloads.add(vv['name']+name)
+    for name in order:
+        if name not in payloads:
+            out[name]=found[name]
+    return out
+
+items=parse_pepper(open(MODEL).read())
 
 RENAME={'this':'this_value'}
 PRIM={'String':'String','bool':'bool','usize':'ulong','u32':'uint','u64':'ulong','i64':'long','i128':'long','i32':'int','f64':'double','u8':'u8'}
@@ -369,9 +382,9 @@ blocks=[]
 for name in [k for k in items if k in reach]:
     it=items[name]
     if it['kind']=='struct':
-        blocks.append(gen_struct(name,it['fields'],f'`{name}` in `model.rs`.'))
+        blocks.append(gen_struct(name,it['fields'],f'`{name}`, a type of the sema model.'))
     elif it['kind']=='enum':
-        lines=[f'## `{name}` in `model.rs`.', f'export enum {name} {{']
+        lines=[f'## `{name}`, a type of the sema model.', f'export enum {name} {{']
         extra=[]
         for vv in it['variants']:
             if vv['kind']=='unit':
@@ -475,12 +488,15 @@ for name in [k for k in items if k in reach]:
     elif it['kind']=='tuple_struct':
         print('TUPLE STRUCT', name, file=sys.stderr)
 
-header='''## The sema model: `crates/pepper-sema/src/model.rs` and `type_name.rs` in
-## Pepper, the tree the builder makes of the linked program and the passes
-## rewrite. Each Rust enum variant with named fields holds a struct of its
-## own (`SymbolRefExpression` for `Expression::SymbolRef`), so a pass can
+header='''## The sema model: the tree the builder makes of the linked program and
+## the passes rewrite. Each enum variant with named fields holds a struct of
+## its own (`SymbolRefExpression` for `Expression.SymbolRef`), so a pass can
 ## change a node's fields in place. Each type's `to_json()` writes what
-## serde writes for the Rust type.
+## serde writes for the Rust passes' model.
+##
+## The fields declared here are the model; the rest of each type is
+## generated from them: change a type's fields, then run
+## `scripts/gen-sema-model.py` and `scripts/gen-sema-record.py`.
 
 import compiler.ast;
 import json;

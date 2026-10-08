@@ -2,12 +2,12 @@
 # Generates tools/compiler/sema/record_codec.pep: a binary writer and reader
 # for every type the sema model's `Module` reaches, the AST nodes it holds
 # included, so a checked module can be saved and loaded again (a checked
-# unit's record). The model's types come from `crates/pepper-sema` through
-# gen-sema-model.py; the AST's from tools/compiler/ast/ast.pep. Run it after
-# changing either, then format the result:
+# unit's record). The model's types come from tools/compiler/sema/model.pep
+# through gen-sema-model.py; the AST's from tools/compiler/ast/ast.pep. Run
+# it after changing either, then format the result:
 #
 #   python3 scripts/gen-sema-record.py tools/compiler/sema/record_codec.pep
-#   target/release/pep-fmt -w tools/compiler/sema/record_codec.pep
+#   pep-fmt -w tools/compiler/sema/record_codec.pep
 
 import importlib.util, os, re, sys
 
