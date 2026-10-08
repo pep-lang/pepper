@@ -11,6 +11,7 @@ import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "mo
 import [Callees] from "named_arguments";
 import [Member] from "overload_select";
 import [PendingBody] from "pending";
+import [ImplicitTables] from "resolve_implicit_types";
 import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
 
@@ -72,6 +73,9 @@ export struct PassState {
     var trait_memo: TraitTypeMemo = TraitTypeMemo();
     ## The callees of the checked declarations, built once (`Callees`).
     var checked_callees: Callees? = Optional<Callees>.Empty;
+    ## The checked declarations' tables for `resolve_implicit_types`, built
+    ## once per unit.
+    var checked_implicit: ImplicitTables? = Optional<ImplicitTables>.Empty;
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
@@ -289,4 +293,3 @@ export struct ImplicitMemo {
 
     construct() {}
 }
-

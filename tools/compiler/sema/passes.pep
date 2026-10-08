@@ -52,7 +52,7 @@ import [name_overloads] from "overloads";
 import [apply_platform_filters] from "platform";
 import [check_ranges] from "ranges";
 import [release_field_refs] from "release_field_refs";
-import [resolve_implicit_types] from "resolve_implicit_types";
+import [ImplicitTables, resolve_implicit_types] from "resolve_implicit_types";
 import [resolve_operators] from "resolve_operators";
 import [resolve_resolvables] from "resolve_resolvables";
 import [shared_functions] from "shared_functions";
@@ -133,6 +133,9 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
         }
     }
     steps.report();
+    # The checked declarations' tables hold signatures that hold the state:
+    # let them go with the run.
+    state.checked_implicit = Optional<ImplicitTables>.Empty;
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));

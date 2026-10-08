@@ -105,7 +105,9 @@ _takes(arities: Array<(String, ulong, ulong)>, name: String, count: ulong): bool
 # `st`'s methods (name, type) and arities: a checked struct's from `memo`
 # while it is the same struct with as many fields and methods, since its
 # methods' types were final when it was checked.
-_struct_parts(module: Module, st: StructDef, memo: ImplicitMemo): (Array<(String, TypeName)>, Array<(String, ulong, ulong)>) {
+_struct_parts(
+    module: Module, st: StructDef, memo: ImplicitMemo
+): (Array<(String, TypeName)>, Array<(String, ulong, ulong)>) {
     var checked = module.checked.structs.contains(st.name);
     var fields = st.field_members.count;
     var count = st.method_members.count;
@@ -138,10 +140,16 @@ _function_type(ret: TypeName, params: TypeName[]): TypeName {
 
 ## Free functions that can be referenced by name as values:
 ## `function_types::referenceable_functions`.
-_referenceable_functions(module: Module): Array<(String, TypeName)> {
+##
+## With `checked` set, only the checked functions (`true`), or only the
+## others and the externs (`false`).
+_referenceable_functions(module: Module, checked: bool? = Optional<bool>.Empty): Array<(String, TypeName)> {
     var out = Array<(String, TypeName)>();
     for (var f in module.functions) {
         if (f.is_generic_func or f.name.contains("<") or !(f.body.is_value() or module.stripped.contains(f.loc))) {
+            continue;
+        }
+        if (checked.is_value() and is_checked_function(module, f) != checked.value()) {
             continue;
         }
         var params = Array<TypeName>();
@@ -151,7 +159,7 @@ _referenceable_functions(module: Module): Array<(String, TypeName)> {
         out.append((f.name, _function_type(f.ty.is_auto() ? TypeName.void() : f.ty, params)));
     }
     for (var e in module.externs) {
-        if (e.is_variadic) {
+        if (e.is_variadic or (checked.is_value() and checked.value())) {
             continue;
         }
         var params = Array<TypeName>();
@@ -298,13 +306,13 @@ struct _Worklist {
     }
 
     ## Starts walking the callable at `place`.
-    start(tables: _ImplicitTables, scopes: _TypeScopes) {
+    start(tables: ImplicitTables, scopes: _TypeScopes) {
         tables.reads = HashSet<String>();
         scopes.edits = 0;
     }
 
     ## Finishes walking the callable `f` at `place`.
-    finish(place: String, f: FunctionDef, tables: _ImplicitTables, scopes: _TypeScopes) {
+    finish(place: String, f: FunctionDef, tables: ImplicitTables, scopes: _TypeScopes) {
         if (scopes.edits == 0) {
             reads[place] = tables.reads;
             prints[place] = _print(f);
@@ -527,7 +535,7 @@ _names(names: String[]): ulong {
 
 ## Program-wide lookup tables, built once per run of the pass. Where a name
 ## is declared twice, the first declaration wins.
-struct _ImplicitTables {
+export struct ImplicitTables {
     ## What calls with named arguments bind to.
     var callees: Callees;
     ## Struct field tables: struct type string, then fields.
@@ -559,34 +567,35 @@ struct _ImplicitTables {
     ## change: `_type_read`, `_function_read` and `g:<global>` keys.
     var reads: HashSet<String> = HashSet<String>();
 
+    ## The tables of the checked declarations, built once per unit
+    ## (`PassState.checked_implicit`) and read under this run's own.
+    var base: ImplicitTables? = Optional<ImplicitTables>.Empty;
+    ## In a base: each struct entry's declaration (parallel to `structs`),
+    ## and each struct's declaration with how many fields and methods it
+    ## had, by name. An entry holds while its struct is the same, unchanged
+    ## and not extended in this unit.
+    var _struct_defs: Array<StructDef> = Array<StructDef>();
+    var _covered: HashMap<String, (StructDef, ulong, ulong)> = HashMap<String, (StructDef, ulong, ulong)>();
+    ## In a base: its structs by the name before their type arguments.
+    var _by_base: HashMap<String, Array<StructDef>> = HashMap<String, Array<StructDef>>();
+    var _state: PassState;
+
     construct(module: Module, state: PassState, trait_types: TypeName[]) {
+        _state = state;
         callees = Callees(module, state, Optional<TypeName[]>.Value(trait_types));
         properties = Properties(module);
+        bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
+        if (checked) {
+            if (!state.checked_implicit.is_value()) {
+                state.checked_implicit = Optional<ImplicitTables>.Value(ImplicitTables.checked(module, state, callees));
+            }
+            base = state.checked_implicit;
+        }
         for (var st in module.structs) {
-            var key = st.ty.to_string();
-            # A checked unit's fields are final: no copy to keep apart from
-            # what this run types.
-            structs.append(
-                (key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy())
-            );
-            var (own, own_arities) = _struct_parts(module, st, state.implicit);
-            methods.append((key, own));
-            struct_names.insert(key);
-            struct_bases.insert(_before_angle(key));
-            if (!arities.contains(key)) {
-                arities[key] = own_arities;
+            if (checked and base.value().covers(st)) {
+                continue;
             }
-            if (st.generic_methods.count != 0) {
-                var generic = Array<(String, GenericSignature)>();
-                for (var m in st.generic_methods) {
-                    generic.append((m.name, GenericSignature(m, state)));
-                    generic_method_names.insert(m.name);
-                }
-                generic_methods[key] = generic;
-            }
-            if (!struct_types.contains(st.name)) {
-                struct_types[st.name] = st.ty;
-            }
+            _add_struct(module, st, state);
         }
         # Trait types used as values: what `var x = s.take()` returns.
         for (var ty in trait_types_of(module, Optional<TypeName[]>.Value(trait_types))) {
@@ -599,6 +608,107 @@ struct _ImplicitTables {
                 methods.append((ty.to_string(), own));
             }
         }
+        _index();
+        for (var f in module.functions) {
+            if (!checked or !is_checked_function(module, f)) {
+                _first_wins(functions, f.name, f.ty);
+            }
+        }
+        for (var e in module.externs) {
+            _first_wins(functions, e.name, e.ty);
+        }
+        for (var f in module.functions) {
+            if (f.is_generic_func
+                and !generic_functions.contains(f.name)
+                and (!checked or !is_checked_function(module, f))) {
+                generic_functions[f.name] = GenericSignature(f, state);
+            }
+        }
+        var which = checked ? Optional<bool>.Value(false) : Optional<bool>.Empty;
+        for (var (name, ty) in _referenceable_functions(module, which)) {
+            _first_wins(function_types, name, ty);
+        }
+        for (var g in module.globals) {
+            _first_wins(globals, g.name, g.ty);
+        }
+    }
+
+    ## The tables of `module`'s checked declarations alone: the structs no
+    ## extension of this unit changed yet, and the checked functions.
+    static checked(module: Module, state: PassState, callees: Callees): ImplicitTables {
+        var out = ImplicitTables(callees, Properties(module), state);
+        for (var st in module.structs) {
+            if (module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
+                out._add_struct(module, st, state);
+                out._struct_defs.append(st);
+                out._covered[st.name] = (st, st.field_members.count, st.method_members.count);
+                var name = _before_angle(st.ty.to_string());
+                if (!out._by_base.contains(name)) {
+                    out._by_base[name] = Array<StructDef>();
+                }
+                out._by_base[name].append(st);
+            }
+        }
+        out._index();
+        for (var f in module.functions) {
+            if (is_checked_function(module, f)) {
+                _first_wins(out.functions, f.name, f.ty);
+                if (f.is_generic_func and !out.generic_functions.contains(f.name)) {
+                    out.generic_functions[f.name] = GenericSignature(f, state);
+                }
+            }
+        }
+        for (var (name, ty) in _referenceable_functions(module, Optional<bool>.Value(true))) {
+            _first_wins(out.function_types, name, ty);
+        }
+        return out;
+    }
+
+    construct(callees: Callees, properties: Properties, state: PassState) {
+        this.callees = callees;
+        this.properties = properties;
+        _state = state;
+    }
+
+    ## Whether this base's entries stand for `st`.
+    covers(st: StructDef): bool {
+        var found = _covered.try_get(st.name);
+        if (!found.is_value()) {
+            return false;
+        }
+        var (was, fields, count) = found.value();
+        return was === st
+            and fields == st.field_members.count
+            and count == st.method_members.count
+            and !_state.extended_checked.contains(st.name);
+    }
+
+    _add_struct(module: Module, st: StructDef, state: PassState) {
+        var key = st.ty.to_string();
+        # A checked unit's fields are final: no copy to keep apart from
+        # what this run types.
+        structs.append((key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy()));
+        var (own, own_arities) = _struct_parts(module, st, state.implicit);
+        methods.append((key, own));
+        struct_names.insert(key);
+        struct_bases.insert(_before_angle(key));
+        if (!arities.contains(key)) {
+            arities[key] = own_arities;
+        }
+        if (st.generic_methods.count != 0) {
+            var generic = Array<(String, GenericSignature)>();
+            for (var m in st.generic_methods) {
+                generic.append((m.name, GenericSignature(m, state)));
+                generic_method_names.insert(m.name);
+            }
+            generic_methods[key] = generic;
+        }
+        if (!struct_types.contains(st.name)) {
+            struct_types[st.name] = st.ty;
+        }
+    }
+
+    _index() {
         ulong i = 0;
         while (i < structs.count) {
             var (key, _) = structs[i];
@@ -617,23 +727,166 @@ struct _ImplicitTables {
             method_index[key].append(i);
             i += 1;
         }
-        for (var f in module.functions) {
-            _first_wins(functions, f.name, f.ty);
-        }
-        for (var e in module.externs) {
-            _first_wins(functions, e.name, e.ty);
-        }
-        for (var f in module.functions) {
-            if (f.is_generic_func and !generic_functions.contains(f.name)) {
-                generic_functions[f.name] = GenericSignature(f, state);
+    }
+
+    ## The field tables of struct type `key`: the base's first, then this
+    ## run's.
+    field_lists(key: String): Array<Array<VariableDef>> {
+        var out = Array<Array<VariableDef>>();
+        if (base.is_value()) {
+            var b = base.value();
+            var found = b.struct_index.try_get(key);
+            if (found.is_value()) {
+                for (var i in found.value()) {
+                    if (b.covers(b._struct_defs[i])) {
+                        var (_, fields) = b.structs[i];
+                        out.append(fields);
+                    }
+                }
             }
         }
-        for (var (name, ty) in _referenceable_functions(module)) {
-            _first_wins(function_types, name, ty);
+        var found = struct_index.try_get(key);
+        if (found.is_value()) {
+            for (var i in found.value()) {
+                var (_, fields) = structs[i];
+                out.append(fields);
+            }
         }
-        for (var g in module.globals) {
-            _first_wins(globals, g.name, g.ty);
+        return out;
+    }
+
+    ## The method tables of struct or trait type `key`: the base's first,
+    ## then this run's.
+    method_lists(key: String): Array<Array<(String, TypeName)>> {
+        var out = Array<Array<(String, TypeName)>>();
+        if (base.is_value()) {
+            var b = base.value();
+            var found = b.method_index.try_get(key);
+            if (found.is_value()) {
+                for (var i in found.value()) {
+                    if (b.covers(b._struct_defs[i])) {
+                        var (_, methods) = b.methods[i];
+                        out.append(methods);
+                    }
+                }
+            }
         }
+        var found = method_index.try_get(key);
+        if (found.is_value()) {
+            for (var i in found.value()) {
+                var (_, methods) = this.methods[i];
+                out.append(methods);
+            }
+        }
+        return out;
+    }
+
+    ## The base's struct entry under `key` that still stands, if any.
+    _base_struct(key: String): bool {
+        if (!base.is_value()) {
+            return false;
+        }
+        var b = base.value();
+        var found = b.struct_index.try_get(key);
+        if (found.is_value()) {
+            for (var i in found.value()) {
+                if (b.covers(b._struct_defs[i])) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    is_struct_name(key: String): bool {
+        return struct_names.contains(key) or _base_struct(key);
+    }
+
+    is_struct_base(name: String): bool {
+        if (struct_bases.contains(name)) {
+            return true;
+        }
+        if (!base.is_value()) {
+            return false;
+        }
+        var found = base.value()._by_base.try_get(name);
+        if (found.is_value()) {
+            for (var st in found.value()) {
+                if (base.value().covers(st)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    arities_of(key: String): Array<(String, ulong, ulong)>? {
+        if (_base_struct(key)) {
+            return base.value().arities.try_get(key);
+        }
+        return arities.try_get(key);
+    }
+
+    generic_methods_of(key: String): Array<(String, GenericSignature)>? {
+        if (_base_struct(key)) {
+            var found = base.value().generic_methods.try_get(key);
+            if (found.is_value()) {
+                return found;
+            }
+        }
+        return generic_methods.try_get(key);
+    }
+
+    is_generic_method_name(name: String): bool {
+        return generic_method_names.contains(name)
+            or (base.is_value() and base.value().generic_method_names.contains(name));
+    }
+
+    function_of(name: String): TypeName? {
+        if (base.is_value()) {
+            var found = base.value().functions.try_get(name);
+            if (found.is_value()) {
+                return found;
+            }
+        }
+        return functions.try_get(name);
+    }
+
+    function_type_of(name: String): TypeName? {
+        if (base.is_value()) {
+            var found = base.value().function_types.try_get(name);
+            if (found.is_value()) {
+                return found;
+            }
+        }
+        return function_types.try_get(name);
+    }
+
+    generic_function(name: String): GenericSignature? {
+        if (base.is_value()) {
+            var found = base.value().generic_functions.try_get(name);
+            if (found.is_value()) {
+                return found;
+            }
+        }
+        return generic_functions.try_get(name);
+    }
+
+    struct_type_of(name: String): TypeName? {
+        if (base.is_value()) {
+            var b = base.value();
+            var found = b.struct_types.try_get(name);
+            if (found.is_value()) {
+                var st = b._covered.try_get(name);
+                if (st.is_value()) {
+                    var (def, _, _) = st.value();
+                    if (b.covers(def)) {
+                        return found;
+                    }
+                }
+            }
+        }
+        return struct_types.try_get(name);
     }
 
     ## Records that the callable being walked looked up `key`.
@@ -658,7 +911,7 @@ struct _OwnStruct {
 
 ## The scopes of the code being walked, and what typing it needs.
 struct _TypeScopes {
-    var tables: _ImplicitTables;
+    var tables: ImplicitTables;
     var state: PassState;
     var own: _OwnStruct? = Optional<_OwnStruct>.Empty;
     ## Parameters per scope; index 0 holds none.
@@ -683,7 +936,7 @@ struct _TypeScopes {
     ## How many changes the walk made to the code it walked.
     var edits: ulong = 0;
 
-    construct(tables: _ImplicitTables, overloads: Overloads, resolved: Array<(Loc, String)>, state: PassState) {
+    construct(tables: ImplicitTables, overloads: Overloads, resolved: Array<(Loc, String)>, state: PassState) {
         this.tables = tables;
         this.overloads = overloads;
         this.resolved = resolved;
@@ -755,13 +1008,7 @@ struct _TypeScopes {
             out.append(own.value().fields);
             return out;
         }
-        var found = tables.struct_index.try_get(key);
-        if (found.is_value()) {
-            for (var i in found.value()) {
-                var (_, fields) = tables.structs[i];
-                out.append(fields);
-            }
-        }
+        out.append_all(tables.field_lists(key));
         return out;
     }
 
@@ -774,13 +1021,7 @@ struct _TypeScopes {
             out.append(own.value().methods);
             return out;
         }
-        var found = tables.method_index.try_get(key);
-        if (found.is_value()) {
-            for (var i in found.value()) {
-                var (_, methods) = tables.methods[i];
-                out.append(methods);
-            }
-        }
+        out.append_all(tables.method_lists(key));
         return out;
     }
 
@@ -833,13 +1074,13 @@ struct _TypeScopes {
             return false;
         }
         tables.note(_function_read(name));
-        bool free = tables.functions.contains(name)
-            or tables.generic_functions.contains(name)
+        bool free = tables.function_of(name).is_value()
+            or tables.generic_function(name).is_value()
             or overloads.is_set(name);
         if (!free) {
             return true;
         }
-        var arities = tables.arities.try_get(ty.to_string());
+        var arities = tables.arities_of(ty.to_string());
         return !arities.is_value() or _takes(arities.value(), name, count);
     }
 
@@ -855,7 +1096,7 @@ struct _TypeScopes {
             }
         }
         tables.note(_function_read(name));
-        return tables.function_types.try_get(name);
+        return tables.function_type_of(name);
     }
 
     ## When a call `name(args)` calls through a function value, the callee
@@ -1267,7 +1508,7 @@ struct _TypeScopes {
             }
         }
         # The name of a struct.
-        if (tables.struct_names.contains(id)) {
+        if (tables.is_struct_name(id)) {
             return TypeName.named(id);
         }
         # A free function used as a value.
@@ -1398,10 +1639,10 @@ struct _TypeScopes {
         }
         # A generic function called without type arguments has no type
         # until they are inferred.
-        if (!function.contains("<") and tables.generic_functions.contains(function)) {
+        if (!function.contains("<") and tables.generic_function(function).is_value()) {
             return TypeName.auto();
         }
-        var declared = tables.functions.try_get(function);
+        var declared = tables.function_of(function);
         if (declared.is_value()) {
             return declared.value();
         }
@@ -1438,9 +1679,9 @@ struct _TypeScopes {
         # A generic call spelled with its arguments before it is
         # specialized: the base's return type with the arguments
         # substituted.
-        var signature = tables.generic_functions.try_get(name);
+        var signature = tables.generic_function(name);
         if (signature.is_value()) {
-            var base = tables.functions.try_get(name);
+            var base = tables.function_of(name);
             if (base.is_value()) {
                 var args = parse_type_string(function).sub_types;
                 if (args.count > 0) {
@@ -1456,14 +1697,14 @@ struct _TypeScopes {
                 }
             }
         }
-        declared = tables.functions.try_get(name);
+        declared = tables.function_of(name);
         if (declared.is_value()) {
             return declared.value();
         }
         # A constructor-style call `Name<...>(...)`, or one of several
         # overloaded constructors (`Name$2`).
         var constructed = set_name(function);
-        if (tables.struct_bases.contains(_before_angle(constructed).trim())) {
+        if (tables.is_struct_base(_before_angle(constructed).trim())) {
             return parse_type_string(constructed);
         }
         return TypeName.auto();
@@ -1842,7 +2083,7 @@ struct _ImplicitResolver {
                 return;
             }
             var written = parse_type_string(node.method);
-            if (!scopes.tables.generic_method_names.contains(written.name)) {
+            if (!scopes.tables.is_generic_method_name(written.name)) {
                 return;
             }
             var owner = scopes.type_of(node.this_value, current);
@@ -1854,7 +2095,7 @@ struct _ImplicitResolver {
                 key = key.substr_bytes(0, key.size - 1);
             }
             scopes.tables.note(_type_read(key));
-            var methods = scopes.tables.generic_methods.try_get(key);
+            var methods = scopes.tables.generic_methods_of(key);
             if (!methods.is_value()) {
                 return;
             }
@@ -1888,7 +2129,7 @@ struct _ImplicitResolver {
             return;
         }
         scopes.tables.note(_function_read(call.function));
-        var signature = scopes.tables.generic_functions.try_get(call.function);
+        var signature = scopes.tables.generic_function(call.function);
         if (!signature.is_value() or scopes.value_callee(call.function, current).is_value()) {
             return;
         }
@@ -1912,7 +2153,7 @@ struct _ImplicitResolver {
     _complete_type_arguments(call: FunctionCallExpression) {
         var written = parse_type_string(call.function);
         scopes.tables.note(_function_read(written.name));
-        var signature = scopes.tables.generic_functions.try_get(written.name);
+        var signature = scopes.tables.generic_function(written.name);
         if (!signature.is_value()) {
             return;
         }
@@ -2086,7 +2327,7 @@ _resolve_body(function: FunctionDef, scopes: _TypeScopes, current: TypeName?) {
 ## function's return type was inferred or a call resolved.
 _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: TypeName[]): bool {
     bool inferred = false;
-    var tables = _ImplicitTables(module, state, trait_types);
+    var tables = ImplicitTables(module, state, trait_types);
     var overloads = Overloads(module, state, Optional<TypeName[]>.Value(trait_types));
     var resolved = Array<(Loc, String)>();
     # Structs first: methods see field types.
@@ -2165,7 +2406,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
             # A specialization's methods keep the base's name as parent.
             var method_struct = st.ty;
             if (method.parent.is_value() and method.parent.value() != st.ty.name) {
-                var found = tables.struct_types.try_get(method.parent.value());
+                var found = tables.struct_type_of(method.parent.value());
                 if (found.is_value()) {
                     method_struct = found.value();
                 }
