@@ -11,6 +11,7 @@ import [
     merge_by_place,
     RecordIn,
     RecordOut,
+    summary_without_place,
     write_interface_checked_summaries,
     write_interface_summaries
 ] from "record";
@@ -87,6 +88,16 @@ export index_resumed(module: Module, base: DeltaBase) {
 ## @returns (what, hash) pairs
 export interface_fields(module: Module, interface: bool = true): Array<(String, String)> {
     return _m_Module_interface_fields(module, interface);
+}
+
+## Returns the interface hash of each element of `module`'s lists, each
+## entry of its sets and maps, and each other field whole, as (field, hash)
+## pairs: a layer's own interface is what these gain and lose across it.
+##
+## @param module the module
+## @returns (field, hash) pairs
+export interface_elements(module: Module): Array<(String, String)> {
+    return _m_Module_interface_elements(module);
 }
 
 ## Writes a type alias to `out`.
@@ -10328,6 +10339,309 @@ _m_Module_interface_fields(value: Module, interface: bool): Array<(String, Strin
         out.blank_locs = interface;
         _m_FunctionDef_write(out, _item2287);
         found.append(("functions " + _item2287.name, interface_text(out)));
+    }
+    return found;
+}
+
+_m_Module_interface_elements(value: Module): Array<(String, String)> {
+    var found = Array<(String, String)>();
+    for (var _item2288 in value.imports) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _a_Import_write(out, _item2288);
+        found.append(("imports", interface_text(out)));
+    }
+    for (var _item2289 in value.structs) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_StructDef_write(out, _item2289);
+        found.append(("structs", interface_text(out)));
+    }
+    for (var _item2290 in value.traits) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TraitDef_write(out, _item2290);
+        found.append(("traits", interface_text(out)));
+    }
+    for (var _item2291 in value.extensions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_ExtensionDef_write(out, _item2291);
+        found.append(("extensions", interface_text(out)));
+    }
+    for (var _item2292 in value.functions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_FunctionDef_write(out, _item2292);
+        found.append(("functions", interface_text(out)));
+    }
+    for (var _item2293 in value.externs) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_ExternDef_write(out, _item2293);
+        found.append(("externs", interface_text(out)));
+    }
+    for (var _item2294 in value.globals) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_VariableDef_write(out, _item2294);
+        found.append(("globals", interface_text(out)));
+    }
+    for (var _item2295 in value.static_blocks) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_ModuleStaticBlock_write(out, _item2295);
+        found.append(("static_blocks", interface_text(out)));
+    }
+    for (var _item2296 in value.enums) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_EnumDef_write(out, _item2296);
+        found.append(("enums", interface_text(out)));
+    }
+    for (var _item2297 in value.struct_specs) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TypeName_write(out, _item2297);
+        found.append(("struct_specs", interface_text(out)));
+    }
+    for (var _item2298 in value.func_specs) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TypeName_write(out, _item2298);
+        found.append(("func_specs", interface_text(out)));
+    }
+    for (var _item2299 in value.type_aliases) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TypeAliasDef_write(out, _item2299);
+        found.append(("type_aliases", interface_text(out)));
+    }
+    for (var _item2300 in value.withheld) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_Withheld_write(out, _item2300);
+        found.append(("withheld", interface_text(out)));
+    }
+    for (var _item2301 in value.properties) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_PropertyDef_write(out, _item2301);
+        found.append(("properties", interface_text(out)));
+    }
+    for (var _item2302 in value.type_uses) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TypeUse_write(out, _item2302);
+        found.append(("type_uses", interface_text(out)));
+    }
+    for (var _item2303 in value.use_contexts) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_UseContext_write(out, _item2303);
+        found.append(("use_contexts", interface_text(out)));
+    }
+    for (var _item2304 in value.constrained_aliases) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TypeAliasDef_write(out, _item2304);
+        found.append(("constrained_aliases", interface_text(out)));
+    }
+    for (var _item2305 in value.trait_types) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_TraitType_write(out, _item2305);
+        found.append(("trait_types", interface_text(out)));
+    }
+    for (var _item2306 in value.conversions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_Conversion_write(out, _item2306);
+        found.append(("conversions", interface_text(out)));
+    }
+    for (var (_key2307, _) in value.overload_sets) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_key2307);
+        out.unsigned(value.overload_sets[_key2307].count);
+        for (var _item2308 in value.overload_sets[_key2307]) {
+            out.text(_item2308);
+        }
+        found.append(("overload_sets", interface_text(out)));
+    }
+    for (var (_key2309, _) in value.overload_unions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_key2309);
+        out.unsigned(value.overload_unions[_key2309].count);
+        for (var _item2310 in value.overload_unions[_key2309]) {
+            out.unsigned(_item2310.count);
+            for (var _item2311 in _item2310) {
+                out.text(_item2311);
+            }
+        }
+        found.append(("overload_unions", interface_text(out)));
+    }
+    for (var (_key2312, _) in value.method_overload_sets) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_key2312);
+        var _keys2314 = Array<(u8[], u8[], String)>();
+        for (var (_key2313, _) in value.method_overload_sets[_key2312]) {
+            var _scratch2315 = out.scratch();
+            _scratch2315.text(_key2313);
+            var _vscratch2317 = out.scratch();
+            _vscratch2317.unsigned(value.method_overload_sets[_key2312][_key2313].count);
+            for (var _item2318 in value.method_overload_sets[_key2312][_key2313]) {
+                _vscratch2317.text(_item2318);
+            }
+            _keys2314.append((_scratch2315.finish(), _vscratch2317.finish(), _key2313));
+        }
+        _keys2314.sort((a, b) => {
+            var (x, xv, _) = a;
+            var (y, yv, _) = b;
+            var by_key = compare_bytes(x, y);
+            return by_key != 0 ? by_key : compare_bytes(xv, yv);
+        });
+        out.unsigned(_keys2314.count);
+        for (var (_bytes2316, _, _key2313) in _keys2314) {
+            out.text(_key2313);
+            out.unsigned(value.method_overload_sets[_key2312][_key2313].count);
+            for (var _item2319 in value.method_overload_sets[_key2312][_key2313]) {
+                out.text(_item2319);
+            }
+        }
+        found.append(("method_overload_sets", interface_text(out)));
+    }
+    {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        _m_ExtensionScopes_write(out, value.extension_scopes);
+        found.append(("extension_scopes", interface_text(out)));
+    }
+    for (var _item2320 in value.private_functions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.loc(_item2320);
+        found.append(("private_functions", interface_text(out)));
+    }
+    for (var _item2321 in value.file_private_functions) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.loc(_item2321);
+        found.append(("file_private_functions", interface_text(out)));
+    }
+    for (var _item2322 in value.namespaces) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_item2322);
+        found.append(("namespaces", interface_text(out)));
+    }
+    for (var (_, _text2323) in value.recorded_summaries) {
+        var out = RecordOut();
+        out.text(summary_without_place(_text2323));
+        found.append(("recorded_summaries", interface_text(out)));
+    }
+    {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.flag(value.templates.frozen);
+        found.append(("templates frozen", interface_text(out)));
+    }
+    for (var _item2324 in value.templates.structs) {
+        var out = RecordOut();
+        out.blank_bodies = false;
+        out.blank_locs = true;
+        _m_StructDef_write(out, _item2324);
+        found.append(("templates structs", interface_text(out)));
+    }
+    for (var _item2325 in value.templates.functions) {
+        var out = RecordOut();
+        out.blank_bodies = false;
+        out.blank_locs = true;
+        _m_FunctionDef_write(out, _item2325);
+        found.append(("templates functions", interface_text(out)));
+    }
+    for (var _name2326 in value.checked.structs) {
+        var out = RecordOut();
+        out.text(_name2326);
+        found.append(("checked structs", interface_text(out)));
+    }
+    for (var _name2327 in value.checked.functions) {
+        var out = RecordOut();
+        out.text(_name2327);
+        found.append(("checked functions", interface_text(out)));
+    }
+    for (var _name2328 in value.checked.globals) {
+        var out = RecordOut();
+        out.text(_name2328);
+        found.append(("checked globals", interface_text(out)));
+    }
+    for (var (_key2329, (_, _text2330)) in value.checked.summaries) {
+        var out = RecordOut();
+        out.text(_key2329);
+        out.text(summary_without_place(_text2330));
+        found.append(("checked summaries", interface_text(out)));
+    }
+    for (var (_key2331, _) in value.spec_requests) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_key2331);
+        _m_SpecRequest_write(out, value.spec_requests[_key2331]);
+        found.append(("spec_requests", interface_text(out)));
+    }
+    {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.flag(value.record_summaries);
+        found.append(("record_summaries", interface_text(out)));
+    }
+    for (var (_key2332, _) in value.caller_copies) {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.text(_key2332);
+        out.unsigned(value.caller_copies[_key2332].count);
+        for (var _item2333 in value.caller_copies[_key2332]) {
+            out.flag(_item2333);
+        }
+        found.append(("caller_copies", interface_text(out)));
+    }
+    {
+        var out = RecordOut();
+        out.blank_bodies = true;
+        out.blank_locs = true;
+        out.flag(value.linked);
+        found.append(("linked", interface_text(out)));
     }
     return found;
 }

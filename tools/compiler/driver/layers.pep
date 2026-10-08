@@ -30,6 +30,10 @@ export struct Layer {
     var files: ulong[] = Array<ulong>();
     ## Its files' hash: their names, namespaces and texts.
     var files_key: String = "";
+    ## The layers it reads, directly or through others, as indices into
+    ## the layers, in order: the runtime, its units' imports, their modules'
+    ## other files and the extensions they see.
+    var reads: ulong[] = Array<ulong>();
     ## Its record's key: its files' hash and the interface of the layers
     ## before it (`layer_key`), set as the build reaches it.
     var key: String = "";
@@ -98,6 +102,10 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
     }
     var order = _layer_order(reads, runtime_unit);
     var out = Array<Layer>();
+    var layer_of = Array<ulong>();
+    for (var _ in 0..units.count) {
+        layer_of.append(0);
+    }
     var runtime = Layer("runtime");
     for (var u in 0..units.count) {
         if (runtime_unit[u]) {
@@ -111,8 +119,45 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         var layer = Layer(units[group[0]].name);
         for (var u in group) {
             layer.files.append_all(units[u].files);
+            layer_of[u] = out.count;
         }
         out.append(layer);
+    }
+    # A layer comes after every layer it reads, so each one's closure is
+    # complete when a later one takes it in.
+    var closures = Array<HashSet<ulong>>();
+    for (var _ in 0..out.count) {
+        closures.append(HashSet<ulong>());
+    }
+    for (var u in 0..units.count) {
+        if (runtime_unit[u]) {
+            continue;
+        }
+        var k = layer_of[u];
+        if (!runtime.files.is_empty) {
+            closures[k].insert(0);
+        }
+        for (var read in reads[u]) {
+            var d = runtime_unit[read] ? 0 : layer_of[read];
+            if (d != k) {
+                closures[k].insert(d);
+            }
+        }
+    }
+    for (var k in 0..out.count) {
+        var direct = Array<ulong>();
+        for (var d in closures[k]) {
+            direct.append(d);
+        }
+        for (var d in direct) {
+            for (var further in closures[d]) {
+                closures[k].insert(further);
+            }
+        }
+        for (var d in closures[k]) {
+            out[k].reads.append(d);
+        }
+        out[k].reads.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
     }
     for (var layer in out) {
         layer.files.sort((a, b) => _layer_compare(program.files[a].namespace, program.files[b].namespace));

@@ -935,8 +935,65 @@ def module_interface_fields():
     lines += ['    return found;', '}']
     return lines
 
+
+# For own-interface hashes: the interface hash of each element of the
+# module's lists, each entry of its sets and maps, and each other field
+# whole, as ("field", hash) pairs. A layer's own interface is what these
+# gain and lose across it.
+def module_interface_elements():
+    fields = [f for f in model.items['Module']['fields'] if not f['skip']]
+    lines = ['_m_Module_interface_elements(value: Module): Array<(String, String)> {',
+             '    var found = Array<(String, String)>();']
+    def one(fname, body, blank_bodies='true'):
+        return (['    {', '        var out = RecordOut();', f'        out.blank_bodies = {blank_bodies};', '        out.blank_locs = true;']
+                + ['        ' + l for l in body]
+                + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
+    def each(fname, expr, et, blank_bodies='true'):
+        item = fresh('_item')
+        return ([f'    for (var {item} in {expr}) {{', '        var out = RecordOut();', f'        out.blank_bodies = {blank_bodies};', '        out.blank_locs = true;']
+                + ['        ' + l for l in write(item, et)]
+                + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
+    for f in fields:
+        fname = model.fname(f['name'])
+        tree = rust_type(f['type'])
+        if fname in ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files'):
+            continue
+        if fname == 'recorded_summaries':
+            # By text without its place, as `write_interface_summaries`.
+            text = fresh('_text')
+            lines += ([f'    for (var (_, {text}) in value.recorded_summaries) {{', '        var out = RecordOut();',
+                       f'        out.text(summary_without_place({text}));',
+                       '        found.append(("recorded_summaries", interface_text(out)));', '    }'])
+        elif fname == 'checked':
+            # Each name and summary on its own; `extensions` is a count of
+            # the module's extensions, which are elements already.
+            for part in ('structs', 'functions', 'globals'):
+                name = fresh('_name')
+                lines += ([f'    for (var {name} in value.checked.{part}) {{', '        var out = RecordOut();', f'        out.text({name});',
+                           f'        found.append(("checked {part}", interface_text(out)));', '    }'])
+            key = fresh('_key'); text = fresh('_text')
+            lines += ([f'    for (var ({key}, (_, {text})) in value.checked.summaries) {{', '        var out = RecordOut();',
+                       f'        out.text({key});', f'        out.text(summary_without_place({text}));',
+                       '        found.append(("checked summaries", interface_text(out)));', '    }'])
+        elif fname == 'templates':
+            lines += one('templates frozen', ['out.flag(value.templates.frozen);'])
+            lines += each('templates structs', 'value.templates.structs', ('model', 'StructDef'), 'false')
+            lines += each('templates functions', 'value.templates.functions', ('model', 'FunctionDef'), 'false')
+        elif tree[0] in ('vec', 'set'):
+            lines += each(fname, f'value.{fname}', tree[1])
+        elif tree[0] == 'map':
+            key = fresh('_key')
+            lines += ([f'    for (var ({key}, _) in value.{fname}) {{', '        var out = RecordOut();', '        out.blank_bodies = true;', '        out.blank_locs = true;']
+                      + ['        ' + l for l in write(key, tree[1]) + write(f'value.{fname}[{key}]', tree[2])]
+                      + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
+        else:
+            lines += one(fname, write(f'value.{fname}', tree))
+    lines += ['    return found;', '}']
+    return lines
+
 out_blocks.append(module_delta())
 out_blocks.append(module_interface_fields())
+out_blocks.append(module_interface_elements())
 
 header = '''## Saving and loading a checked module: a binary writer and reader for
 ## every type `Module` reaches, the AST nodes it holds included. Generated
@@ -951,6 +1008,7 @@ import [
     merge_by_place,
     RecordIn,
     RecordOut,
+    summary_without_place,
     write_interface_checked_summaries,
     write_interface_summaries
 ] from "record";
@@ -1027,6 +1085,16 @@ export index_resumed(module: Module, base: DeltaBase) {
 ## @returns (what, hash) pairs
 export interface_fields(module: Module, interface: bool = true): Array<(String, String)> {
     return _m_Module_interface_fields(module, interface);
+}
+
+## Returns the interface hash of each element of `module`'s lists, each
+## entry of its sets and maps, and each other field whole, as (field, hash)
+## pairs: a layer's own interface is what these gain and lose across it.
+##
+## @param module the module
+## @returns (field, hash) pairs
+export interface_elements(module: Module): Array<(String, String)> {
+    return _m_Module_interface_elements(module);
 }
 
 ## Writes a type alias to `out`.

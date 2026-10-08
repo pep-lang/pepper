@@ -200,6 +200,25 @@ _verify_cutoff(): bool {
     return named.is_value() and !named.value().is_empty;
 }
 
+## Whether `PEPC_TRACE_LAYERS` prints, for each layer, the layers it
+## reads and the hash of what it changed in the interface
+## (`sema.own_interface`).
+_trace_layers(): bool {
+    var named = os.environment("PEPC_TRACE_LAYERS");
+    return named.is_value() and !named.value().is_empty;
+}
+
+## Prints `layer`'s line of `PEPC_TRACE_LAYERS`.
+_print_layer(layered: Layer[], layer: Layer, before: Array<(String, String)>, after: sema.Module) {
+    var reads = Array<String>();
+    for (var d in layer.reads) {
+        reads.append(layered[d].name);
+    }
+    var own = sema.own_interface(before, sema.interface_elements(after));
+    var listed = ", ".join(reads);
+    File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} reads [{listed}]\n");
+}
+
 ## Whether `PEPC_RECORD_STATS` prints the bytes each field of the module
 ## took in each delta record stored.
 _record_stats(): bool {
@@ -278,6 +297,7 @@ _check_layers(
     var state = sema.PassState(program.target);
     bool verify = _verify_delta();
     bool verify_cutoff = _verify_cutoff();
+    bool trace_layers = _trace_layers();
     # The index of `module` its record's delta built, when it was written.
     var indexed = Optional<sema.DeltaBase>.Empty;
     for (var k in 0..layered.count) {
@@ -297,6 +317,10 @@ _check_layers(
                             $"PEPC_VERIFY_CUTOFF: {wrong.value()}"
                         );
                     }
+                }
+                if (trace_layers) {
+                    var before = have ? sema.interface_elements(module) : Array<(String, String)>();
+                    _print_layer(layered, layered[k], before, unit.module);
                 }
                 module = sema.resume_checked(unit);
                 indexed = Optional<sema.DeltaBase>.Empty;
@@ -346,6 +370,10 @@ _check_layers(
             }
         }
         indexed = Optional<sema.DeltaBase>.Empty;
+        var before = Array<(String, String)>();
+        if (trace_layers and have) {
+            before = sema.interface_elements(module);
+        }
         var checked = _check_layer(program, module, layered[k], reused, sources, warnings);
         if (checked.is_err()) {
             return Result<(sema.Module, sema.PassState), String>.err(checked.error());
@@ -356,9 +384,15 @@ _check_layers(
         checked_any = true;
         clock.lap($"layer {layered[k].name}");
         if (k + 1 == layered.count) {
+            if (trace_layers) {
+                _print_layer(layered, layered[k], before, module);
+            }
             break;
         }
         var unit = sema.finish_checked(module, state, aliases);
+        if (trace_layers) {
+            _print_layer(layered, layered[k], before, unit.module);
+        }
         var interface = sema.interface_hash(unit);
         clock.lap("interface");
         # Writing the delta indexes the module for the next one.

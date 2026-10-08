@@ -492,6 +492,49 @@ export interface_hash(unit: CheckedUnit): String {
     return hash;
 }
 
+## Returns the hash of what a layer changed in the interface: the
+## elements (`interface_elements`) the module it left has and the module it
+## was checked on lacks, and those it lost, each as many times as it
+## differs. Unlike `interface_hash`, it does not depend on the layers
+## before, only on what this one changed.
+##
+## @param before the elements of the module the layer was checked on
+## @param after the elements of the module it left
+## @returns the hash, as hex
+export own_interface(before: Array<(String, String)>, after: Array<(String, String)>): String {
+    var counts = HashMap<String, long>();
+    for (var (what, hash) in after) {
+        var key = $"{what} {hash}";
+        var had = counts.try_get(key);
+        counts[key] = (had.is_value() ? had.value() : 0) + 1;
+    }
+    for (var (what, hash) in before) {
+        var key = $"{what} {hash}";
+        var had = counts.try_get(key);
+        counts[key] = (had.is_value() ? had.value() : 0) - 1;
+    }
+    var changed = Array<String>();
+    for (var (key, count) in counts) {
+        if (count != 0) {
+            changed.append($"{count} {key}");
+        }
+    }
+    changed.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
+    var trace = os.environment("PEPC_TRACE_LAYERS");
+    if (trace.is_value() and trace.value() == "2") {
+        for (var line in changed) {
+            io.File.stderr().write_all($"layers:   {line.substr(0, 60)}\n");
+        }
+    }
+    var hasher = digest.Blake3();
+    hasher.update("pepper own interface 1\n");
+    for (var line in changed) {
+        hasher.update(line);
+        hasher.update("\n");
+    }
+    return hasher.finish_hex();
+}
+
 ## Readies `unit`'s module, just checked or loaded, for the next files:
 ## its aliases as built and its recorded summaries back in place.
 ##
