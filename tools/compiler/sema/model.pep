@@ -13,6 +13,7 @@ import json;
 import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
+import [PendingBody] from "pending";
 
 ## `BinaryOp`, a type of the sema model.
 export enum BinaryOp {
@@ -5111,6 +5112,9 @@ export struct UseContext {
 
 ## `FunctionDef`, a type of the sema model.
 export struct FunctionDef {
+    ## In memory only: kept by `copy()`, not fingerprinted, written as
+    ## JSON or recorded.
+    var pending_body: PendingBody? = Optional<PendingBody>.Empty;
     var name: String;
     var ty: TypeName;
     var generic_params: Array<GenericParam>;
@@ -5173,7 +5177,7 @@ export struct FunctionDef {
         if (this.trait_default.is_value()) {
             _c366 = Optional<Array<String>>.Value(this.trait_default.value().copy());
         }
-        return FunctionDef(
+        var _copy = FunctionDef(
             name = this.name,
             ty = this.ty.copy(),
             generic_params = _c352,
@@ -5188,6 +5192,8 @@ export struct FunctionDef {
             trait_default = _c366,
             owner = this.owner
         );
+        _copy.pending_body = this.pending_body;
+        return _copy;
     }
 
     ## Adds this to `into`: equal values add the same.

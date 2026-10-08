@@ -12,9 +12,10 @@ import digest;
 import [Utf8] from text;
 import [Loc, NO_FILE] from "loc";
 import [Checked] from "model";
+import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
-export const MAGIC = "pepper record 1\n";
+export const MAGIC = "pepper record 2\n";
 
 ## A record being written.
 export struct RecordOut {
@@ -37,6 +38,28 @@ export struct RecordOut {
     var _text: StringBuilder = StringBuilder();
 
     construct() {}
+
+    ## Leaves room for a size, filled in by `size_fill` with how many bytes
+    ## were written after it.
+    ##
+    ## @returns where the size goes
+    size_mark(): ulong {
+        var at = values.count;
+        for (var _ in 0..4) {
+            values.append(0);
+        }
+        return at;
+    }
+
+    ## Fills in the size `size_mark` left room for at `at`.
+    ##
+    ## @param at what `size_mark` returned
+    size_fill(at: ulong) {
+        var size = values.count - at - 4;
+        for (var i in 0..4) {
+            values[at + i] = ((size >> (8 * i as ulong)) & 0xFF) as u8;
+        }
+    }
 
     ## Writes an unsigned number.
     ##
@@ -626,6 +649,9 @@ export struct RecordIn {
     var _end: ulong;
     # The strings, in their order.
     var _strings: String[] = Array<String>();
+    ## Whether the bodies of functions that are not generic are skipped
+    ## (`skip`), decoded when needed.
+    var lazy_bodies: bool = false;
 
     ## Starts reading `data`, a whole record. A record that is not one
     ## leaves `error` set and reads as zeros.
@@ -682,6 +708,54 @@ export struct RecordIn {
             offset += s;
         }
         _end = text_start;
+    }
+
+    ## Reads the size `RecordOut.size_mark` and `size_fill` wrote: four
+    ## bytes, low first.
+    ##
+    ## @returns the size, 0 past the end
+    size(): ulong {
+        if (_next + 4 > _end) {
+            _fail("a truncated record");
+            return 0;
+        }
+        ulong value = 0;
+        for (var i in 0..4) {
+            value = value | ((_data[_next + i] as ulong) << (8 * i as ulong));
+        }
+        _next += 4;
+        return value;
+    }
+
+    ## Skips the next `size` bytes, which hold a function body, and returns
+    ## where they are, to decode later (`decode_body`).
+    ##
+    ## @param size how many bytes
+    ## @returns where the body is
+    skip(size: ulong): PendingBody {
+        if (_next + size > _end) {
+            _fail("a truncated record");
+            return PendingBody(_data, _strings, files, _end, _end);
+        }
+        var out = PendingBody(_data, _strings, files, _next, _next + size);
+        _next += size;
+        return out;
+    }
+
+    ## A reader of the values `pending` spans, in its record.
+    ##
+    ## @param pending where a skipped body is
+    ## @returns the reader
+    static at(pending: PendingBody): RecordIn {
+        var out = RecordIn(Array<u8>());
+        out.error = "";
+        out._data = pending.data;
+        out._strings = pending.strings;
+        out.files = pending.files;
+        out._next = pending.start;
+        out._end = pending.end;
+        out.lazy_bodies = false;
+        return out;
     }
 
     ## Reads an unsigned number.

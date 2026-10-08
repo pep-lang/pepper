@@ -9,9 +9,10 @@ import io;
 import os;
 import [Loc] from "loc";
 import [Block, Checked, FunctionDef, Module, TypeAliasDef] from "model";
+import [PendingBody] from "pending";
 import [DeltaBase, RecordIn, RecordOut, write_interface_summaries] from "record";
 import [
-    read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
+    decode_body, read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
 ] from "record_codec";
 import [method_key, PassState] from "state";
 
@@ -28,8 +29,7 @@ export stash_bodies(module: Module, state: PassState) {
         if (!f.body.is_value() or !is_checked_function(module, f)) {
             continue;
         }
-        state.stashed[$"f {f.name}"] = f.body.value();
-        f.body = Optional<Block>.Empty;
+        _stash(state, $"f {f.name}", f);
     }
     for (var st in module.structs) {
         if (!module.checked.structs.contains(st.name)) {
@@ -52,8 +52,75 @@ _stash(state: PassState, key: String, function: FunctionDef) {
     if (!function.body.is_value()) {
         return;
     }
-    state.stashed[key] = function.body.value();
+    # A body the record's reader skipped stays undecoded.
+    if (function.pending_body.is_value()) {
+        state.stashed_pending[key] = function.pending_body.value();
+        function.pending_body = Optional<PendingBody>.Empty;
+    } else {
+        state.stashed[key] = function.body.value();
+    }
     function.body = Optional<Block>.Empty;
+}
+
+## Takes the body `stash_bodies` stashed under `key` out of the stash,
+## decoding one a record's reader skipped.
+##
+## @param state the passes' state
+## @param key the stash key
+## @returns the body, if one is stashed
+export take_stashed(state: PassState, key: String): Block? {
+    var body = stashed_body(state, key);
+    state.stashed.remove(key);
+    return body;
+}
+
+## The body `stash_bodies` stashed under `key`, decoded if a record's
+## reader skipped it (and kept decoded).
+##
+## @param state the passes' state
+## @param key the stash key
+## @returns the body, if one is stashed
+export stashed_body(state: PassState, key: String): Block? {
+    var found = state.stashed.try_get(key);
+    if (found.is_value()) {
+        return found;
+    }
+    var pending = state.stashed_pending.try_get(key);
+    if (!pending.is_value()) {
+        return Optional<Block>.Empty;
+    }
+    var body = decode_body(pending.value());
+    state.stashed_pending.remove(key);
+    state.stashed[key] = body;
+    return Optional<Block>.Value(body);
+}
+
+## Whether anything is stashed.
+##
+## @param state the passes' state
+## @returns true when a body is
+export has_stashed(state: PassState): bool {
+    return state.stashed.count > 0 or state.stashed_pending.count > 0;
+}
+
+## Takes `function`'s body away, one a record's reader skipped too.
+##
+## @param function the function
+export drop_body(function: FunctionDef) {
+    function.body = Optional<Block>.Empty;
+    function.pending_body = Optional<PendingBody>.Empty;
+}
+
+## Gives `function` its whole body, decoding one a record's reader skipped
+## (`PendingBody`): what codegen and the passes that walk checked bodies
+## after `restore_bodies` need.
+##
+## @param function the function
+export full_body(function: FunctionDef) {
+    if (function.pending_body.is_value()) {
+        function.body = Optional<Block>.Value(decode_body(function.pending_body.value()));
+        function.pending_body = Optional<PendingBody>.Empty;
+    }
 }
 
 ## Whether `function` was checked with a unit below: its name is a checked
@@ -82,7 +149,7 @@ export is_checked_function(module: Module, function: FunctionDef): bool {
 ## @param state the passes' state
 export restore_bodies(module: Module, state: PassState) {
     state.trait_memo.stashed = false;
-    if (state.stashed.count == 0) {
+    if (!has_stashed(state)) {
         return;
     }
     for (var f in module.functions) {
@@ -105,16 +172,26 @@ export restore_bodies(module: Module, state: PassState) {
         _restore(state, $"m {st.name} release {st.release.name}", st.release);
     }
     state.stashed = HashMap<String, Block>();
+    state.stashed_pending = HashMap<String, PendingBody>();
 }
 
+# Puts back the body stashed under `key`: one never decoded goes back
+# undecoded, behind an empty block.
 _restore(state: PassState, key: String, function: FunctionDef) {
     var body = state.stashed.try_get(key);
-    if (!body.is_value()) {
+    if (body.is_value()) {
+        function.body = body;
+        state.stashed.remove(key);
+        state.restored.insert(key);
         return;
     }
-    function.body = body;
-    state.stashed.remove(key);
-    state.restored.insert(key);
+    var pending = state.stashed_pending.try_get(key);
+    if (pending.is_value()) {
+        function.body = Optional<Block>.Value(Block());
+        function.pending_body = pending;
+        state.stashed_pending.remove(key);
+        state.restored.insert(key);
+    }
 }
 
 ## The body `stash_bodies` took from `function`, a free function, if any.
@@ -123,7 +200,7 @@ _restore(state: PassState, key: String, function: FunctionDef) {
 ## @param function the function
 ## @returns its stashed body
 export stashed_function(state: PassState, function: FunctionDef): Block? {
-    return state.stashed.try_get($"f {function.name}");
+    return stashed_body(state, $"f {function.name}");
 }
 
 ## The body `stash_bodies` took from a member of struct `owner`.
@@ -134,7 +211,7 @@ export stashed_function(state: PassState, function: FunctionDef): Block? {
 ## @param name the member's name
 ## @returns its stashed body
 export stashed_member(state: PassState, owner: String, kind: String, name: String): Block? {
-    return state.stashed.try_get($"m {owner} {kind} {name}");
+    return stashed_body(state, $"m {owner} {kind} {name}");
 }
 
 ## Everything `module` declares now, its extensions included: what a
@@ -329,7 +406,7 @@ export finish_checked(module: Module, state: PassState, aliases: TypeAliasDef[])
             continue;
         }
         for (var method in extension.methods) {
-            method.body = Optional<Block>.Empty;
+            drop_body(method);
         }
     }
     var summaries = module.checked.summaries;

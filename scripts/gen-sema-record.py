@@ -281,6 +281,10 @@ def read(tree):
 def default_of(rust_t):
     return model.default_of(model.parse_type(rust_t))
 
+# A read of the module's own structs or functions, lazily.
+def _lazy(line):
+    return line.replace('_m_StructDef_read(input)', '_m_StructDef_read_lazy(input)').replace('_m_FunctionDef_read(input)', '_m_FunctionDef_read_lazy(input)')
+
 def model_struct(name, fields):
     live = [f for f in fields if not f['skip']]
     w = [f'{fn(("model", name))}_write(out: RecordOut, value: {name}) {{']
@@ -288,9 +292,25 @@ def model_struct(name, fields):
         lines = write(f'value.{model.fname(f["name"])}', rust_type(f['type']))
         if name == 'FunctionDef' and f['name'] == 'body':
             # An interface leaves out the bodies of functions that are not
-            # generic: they are not what other units check against.
+            # generic: they are not what other units check against. A body
+            # is written behind its size, so a reader can skip it
+            # (`RecordIn.lazy_bodies`); one skipped is decoded to be written.
             lines = ['if (out.blank_bodies and !value.is_generic_func and value.generic_params.count == 0) {',
-                     '    out.unsigned(0);', '} else {'] + ['    ' + l for l in lines] + ['}']
+                     '    out.unsigned(0);',
+                     '} else {',
+                     '    var _body = value.body;',
+                     '    if (value.pending_body.is_value()) {',
+                     '        _body = Optional<Block>.Value(decode_body(value.pending_body.value()));',
+                     '    }',
+                     '    if (_body.is_value()) {',
+                     '        out.unsigned(1);',
+                     '        var _mark = out.size_mark();',
+                     '        _m_Block_write(out, _body.value());',
+                     '        out.size_fill(_mark);',
+                     '    } else {',
+                     '        out.unsigned(0);',
+                     '    }',
+                     '}']
         elif (name == 'Module' and f['name'] == 'recorded_summaries') or (name == 'Checked' and f['name'] == 'summaries'):
             # A summary names where its error would point: no part of an
             # interface.
@@ -304,17 +324,68 @@ def model_struct(name, fields):
             lines = ['var _blank = out.blank_bodies;', 'out.blank_bodies = false;'] + lines + ['out.blank_bodies = _blank;']
         w += ['    ' + l for l in lines]
     w.append('}')
-    r = [f'{fn(("model", name))}_read(input: RecordIn): {name} {{']
+    # A checked function's body, and a checked struct's members' bodies,
+    # can be read lazily: the stash (`stash_bodies`) holds them, which
+    # decodes one when asked. Elsewhere a body is read whole.
+    lazy_capable = name in ('FunctionDef', 'StructDef')
+    if lazy_capable:
+        r = [f'{fn(("model", name))}_read(input: RecordIn): {name} {{',
+             f'    return {fn(("model", name))}_read_with(input, false);',
+             '}',
+             '',
+             f'{fn(("model", name))}_read_lazy(input: RecordIn): {name} {{',
+             f'    return {fn(("model", name))}_read_with(input, input.lazy_bodies);',
+             '}',
+             '',
+             f'{fn(("model", name))}_read_with(input: RecordIn, lazy: bool): {name} {{']
+    else:
+        r = [f'{fn(("model", name))}_read(input: RecordIn): {name} {{']
     names = {}
     for f in live:
+        if name == 'FunctionDef' and f['name'] == 'body':
+            local = fresh('_f')
+            r += ['    var _pending = Optional<PendingBody>.Empty;',
+                  f'    var {local} = Optional<Block>.Empty;',
+                  '    if (input.unsigned() == 1) {',
+                  '        var _size = input.size();',
+                  '        if (lazy) {',
+                  '            # Present, as an empty block, until decoded.',
+                  '            _pending = Optional<PendingBody>.Value(input.skip(_size));',
+                  f'            {local} = Optional<Block>.Value(Block());',
+                  '        } else {',
+                  f'            {local} = Optional<Block>.Value(_m_Block_read(input));',
+                  '        }',
+                  '    }']
+            names[f['name']] = local
+            continue
         lines, val = read(rust_type(f['type']))
+        if name == 'StructDef' and f['name'] in ('method_members', 'constructors', 'destructor', 'acquire', 'release'):
+            lines = [l.replace('_m_FunctionDef_read(input)', '_m_FunctionDef_read_with(input, lazy)') for l in lines]
+            val = val.replace('_m_FunctionDef_read(input)', '_m_FunctionDef_read_with(input, lazy)')
+        if name == 'Module' and f['name'] in ('structs', 'functions'):
+            lines = [_lazy(l) for l in lines]
+            val = _lazy(val)
         local = fresh('_f')
         r += ['    ' + l for l in lines] + [f'    var {local} = {val};']
         names[f['name']] = local
     # The generated constructor takes the fields without a default first.
     required = [f for f in live if default_of(f['type']) is None]
     optional = [f for f in live if default_of(f['type']) is not None]
-    r.append(f'    return {name}({", ".join(names[f["name"]] for f in required + optional)});')
+    made = f'{name}({", ".join(names[f["name"]] for f in required + optional)})'
+    if name == 'FunctionDef':
+        # A generic function's body is decoded now: specializing it reads
+        # it on any layer.
+        r += [f'    var _function = {made};',
+              '    if (_pending.is_value()) {',
+              '        if (_function.is_generic_func or _function.generic_params.count > 0) {',
+              '            _function.body = Optional<Block>.Value(decode_body(_pending.value()));',
+              '        } else {',
+              '            _function.pending_body = _pending;',
+              '        }',
+              '    }',
+              '    return _function;']
+    else:
+        r.append(f'    return {made};')
     r.append('}')
     return w + [''] + r
 
@@ -783,6 +854,7 @@ def module_delta():
         tree = rust_type(f['type'])
         if fname == 'structs':
             lw, lr, lx, local = struct_list_delta('value.structs', 's', 'base.structs')
+            lr = [_lazy(l) for l in lr]
         elif fname == 'templates':
             tw, tr, tx, tlocal = struct_list_delta('value.templates.structs', 't', 'base.templates.structs')
             fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True)
@@ -798,6 +870,8 @@ def module_delta():
             lx = ['base.keep_checked(value.checked);']
         elif tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
             lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed)
+            if fname == 'functions':
+                lr = [_lazy(l) for l in lr]
         elif fname == 'argument_names':
             lw, lr, lx, local = _sorted_delta(fname, tree)
         elif tree[0] == 'vec':
@@ -880,6 +954,14 @@ import [
     write_interface_checked_summaries,
     write_interface_summaries
 ] from "record";
+
+## Decodes a function body a reader skipped (`RecordIn.lazy_bodies`).
+##
+## @param pending where the body is in its record
+## @returns the body
+export decode_body(pending: PendingBody): Block {
+    return _m_Block_read(RecordIn.at(pending));
+}
 
 ## Writes `module` to `out`.
 ##

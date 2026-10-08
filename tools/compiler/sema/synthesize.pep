@@ -6,6 +6,7 @@
 
 import [Diagnostic] from compiler.diagnostic;
 import [has_bare_attribute, payload_field, SHARED_ATTRIBUTE, TAG_FIELD] from "builder";
+import [drop_body] from "checked";
 import [error_at] from "common";
 import [Loc] from "loc";
 import [
@@ -155,8 +156,8 @@ export zero_for(state: PassState, ty: TypeName): Expression {
 ## @param st the struct, changed in place
 export apply_synthesized(st: StructDef) {
     if (st.is_value()) {
-        st.acquire.body = Optional<Block>.Empty;
-        st.release.body = Optional<Block>.Empty;
+        drop_body(st.acquire);
+        drop_body(st.release);
         return;
     }
     if (!_has_field(st, "__refcount")) {

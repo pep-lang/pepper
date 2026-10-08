@@ -18,7 +18,7 @@ import compiler.sema;
 import "cache";
 
 ## The record format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "checked11";
+const _RECORDS_FOLDER = "checked12";
 ## How many keys' records each layer keeps.
 const _KEEP_RECORDS = 4;
 
@@ -408,6 +408,9 @@ _record_bytes(
 # a whole record.
 _read_record(slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?): (sema.CheckedUnit, String)? {
     var input = sema.RecordIn(bytes);
+    # Most checked bodies are needed by neither the passes nor codegen:
+    # each is decoded when one needs it (`sema.PendingBody`).
+    input.lazy_bodies = true;
     var count = input.count();
     for (var _ in 0..count) {
         var file = slots.try_get(input.text());

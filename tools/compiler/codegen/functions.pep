@@ -407,6 +407,11 @@ extend Generator {
 
     patched_ctor(st: StructDef, constructor: FunctionDef): FunctionDef {
         var ctor = constructor.copy();
+        # Patched below: a body generated, or held back to be, is decoded
+        # first.
+        if (!declared_only(ctor, ctor.name)) {
+            sema.full_body(ctor);
+        }
         var desc = structs.try_get(st.name);
         long struct_size = desc.is_value() ? desc.value().size as long : 0;
         if (ctor.body.is_value()) {
@@ -499,6 +504,9 @@ extend Generator {
         this_may_be_null = ast.has_attribute(function.attributes, sema.READS_ATTRIBUTE);
         var outer_finals = final_reads;
         final_reads = HashSet<SymbolRefExpression>();
+        # A body a checked unit's record held undecoded is decoded only now,
+        # when it is generated.
+        sema.full_body(function);
         var result = codegen_function_unlocated(function);
         final_reads = outer_finals;
         this_may_be_null = outer_reads;

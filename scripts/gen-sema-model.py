@@ -73,13 +73,21 @@ def parse_pepper(src):
             body.append(lines[j]); j+=1
         if kind=='struct':
             fields=[]
+            internal=[]
             for l in body:
+                # A field with its own default is in memory only: declared
+                # as written and kept by `copy()`, but not fingerprinted,
+                # written as JSON or recorded.
+                im=re.match(r'^    var (\w+): (.*) = (.*);$',l)
+                if im:
+                    internal.append({'name':im.group(1),'pep':im.group(2),'default':im.group(3)})
+                    continue
                 fm=re.match(r'^    var (\w+): (.*);$',l)
                 if fm:
                     fn_=fm.group(1)
                     ty=AST_FIELDS.get((name,fn_)) or rust_of(fm.group(2))
                     fields.append({'name':{'this_value':'this'}.get(fn_,fn_),'type':ty,'skip':False})
-            found[name]={'kind':'struct','fields':fields,'ser':True}
+            found[name]={'kind':'struct','fields':fields,'internal':internal,'ser':True}
         else:
             variants=[]
             for l in body:
@@ -321,10 +329,14 @@ while stack:
         for w in re.findall(r'[A-Za-z_][\w:]*',strip_path(t)):
             if not w.startswith('ast::'): stack.append(w)
 
-def gen_struct(name, fields, doc):
+def gen_struct(name, fields, doc, internal=()):
     lines=[]
     lines.append(f'## {doc}')
     lines.append(f'export struct {name} {{')
+    for f in internal:
+        lines.append(f'    ## In memory only: kept by `copy()`, not fingerprinted, written as')
+        lines.append(f'    ## JSON or recorded.')
+        lines.append(f'    var {f["name"]}: {f["pep"]} = {f["default"]};')
     required=[]
     optional=[]
     for f in fields:
@@ -352,7 +364,13 @@ def gen_struct(name, fields, doc):
         setup,val=copy_of(f'this.{fname(f["name"])}',parse_type(f['type']))
         lines+=['        '+l for l in setup]
         vals.append(f'{fname(f["name"])} = {val}')
-    lines.append(f'        return {name}({", ".join(vals)});')
+    if internal:
+        lines.append(f'        var _copy = {name}({", ".join(vals)});')
+        for f in internal:
+            lines.append(f'        _copy.{f["name"]} = this.{f["name"]};')
+        lines.append('        return _copy;')
+    else:
+        lines.append(f'        return {name}({", ".join(vals)});')
     lines.append('    }')
     lines.append('')
     lines.append('    ## Adds this to `into`: equal values add the same.')
@@ -382,7 +400,7 @@ blocks=[]
 for name in [k for k in items if k in reach]:
     it=items[name]
     if it['kind']=='struct':
-        blocks.append(gen_struct(name,it['fields'],f'`{name}`, a type of the sema model.'))
+        blocks.append(gen_struct(name,it['fields'],f'`{name}`, a type of the sema model.',it.get('internal',())))
     elif it['kind']=='enum':
         lines=[f'## `{name}`, a type of the sema model.', f'export enum {name} {{']
         extra=[]
@@ -503,6 +521,7 @@ import json;
 import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
+import [PendingBody] from "pending";
 
 '''
 footer='''

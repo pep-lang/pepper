@@ -2,6 +2,7 @@
 ## in Pepper, as far as the passes ported so far ask about them. A module
 ## with no checked runtime is assumed.
 
+import [drop_body] from "checked";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
 import [TraitTypeMemo] from "state";
 import [parse_type_string] from "type_name";
@@ -86,7 +87,7 @@ export instance(def: TraitDef, ty: TypeName): TraitType {
             continue;
         }
         var method = m.copy();
-        method.body = Optional<Block>.Empty;
+        drop_body(method);
         _substitute_type(method.ty, type_map);
         for (var p in method.parameters) {
             _substitute_type(p.ty, type_map);

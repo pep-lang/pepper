@@ -10,6 +10,7 @@ import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
 import [Callees] from "named_arguments";
 import [Member] from "overload_select";
+import [PendingBody] from "pending";
 import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
 
@@ -74,6 +75,9 @@ export struct PassState {
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
+    ## The stashed bodies a record's reader skipped, not decoded yet
+    ## (`checked.stashed_body`), by the same keys.
+    var stashed_pending: HashMap<String, PendingBody> = HashMap<String, PendingBody>();
     ## The declarations `checked.restore_bodies` put a stashed body back
     ## in, by the same keys.
     var restored: HashSet<String> = HashSet<String>();

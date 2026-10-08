@@ -20,7 +20,7 @@
 ## cache skipped reads them back.
 
 import [is_numeric_type] from "arithmetic";
-import [is_checked_function] from "checked";
+import [full_body, is_checked_function] from "checked";
 import [expression_children] from "closure_sites";
 import [takes_over] from "confinement";
 import [Loc] from "loc";
@@ -250,6 +250,18 @@ struct _Literals {
             }
         }
         if (!reuse) {
+            # Every body is walked: the ones a record's reader skipped too.
+            for (var f in module.functions) {
+                full_body(f);
+            }
+            for (var st in module.structs) {
+                for (var m in st.method_members) {
+                    full_body(m);
+                }
+                for (var c in st.constructors) {
+                    full_body(c);
+                }
+            }
             indirect = _indirectly_called(module, state, true);
         }
         for (var (key, callee) in callees) {
@@ -368,6 +380,8 @@ struct _Literals {
         if (!callee.function.body.is_value() or settled.contains(key)) {
             return false;
         }
+        # A checked body put back undecoded is walked whole.
+        full_body(callee.function);
         var names = Array<String>();
         if (callee.has_this) {
             names.append("this");

@@ -9,6 +9,7 @@
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
+import [drop_body] from "checked";
 import [expression_children] from "closure_sites";
 import [error_at, location_of] from "common";
 import [constraint_spelled, is_shared_bound] from "constraints";
@@ -79,7 +80,7 @@ struct _Constrained {
                     }
                 }
                 var m = method.copy();
-                m.body = Optional<Block>.Empty;
+                drop_body(m);
                 m.ty = _substitute_all(m.ty, own);
                 for (var p in m.parameters) {
                     p.ty = _substitute_all(p.ty, own);

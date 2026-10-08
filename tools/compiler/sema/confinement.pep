@@ -17,7 +17,7 @@ import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
-import [is_checked_function] from "checked";
+import [has_stashed, is_checked_function, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import [location_of] from "common";
@@ -737,7 +737,7 @@ struct _Confinement {
         if (restored.is_value()) {
             return restored;
         }
-        if (state.stashed.count == 0) {
+        if (!has_stashed(state)) {
             return none;
         }
         if (_stashed_bodies.count == 0) {
@@ -748,12 +748,11 @@ struct _Confinement {
             return none;
         }
         var (body, stash_key) = found.value();
-        var stashed = state.stashed.try_get(stash_key);
+        var stashed = take_stashed(state, stash_key);
         if (!stashed.is_value()) {
             return none;
         }
         body.function.body = stashed;
-        state.stashed.remove(stash_key);
         _by_key()[key] = body;
         _restored[key] = body;
         bodies.insert(key);

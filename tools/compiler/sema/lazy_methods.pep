@@ -5,6 +5,7 @@
 ## specialization, and every pass after specializing would walk them.
 ## What is still unused when specializing ends is dropped.
 
+import [drop_body] from "checked";
 import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
@@ -77,7 +78,7 @@ export defer_methods(module: Module, specialized: StructDef, state: PassState) {
     for (var m in specialized.method_members) {
         if (m.body.is_value() and !_needed_at_once(m, trait_methods)) {
             deferred[m.name] = m.body.value();
-            m.body = Optional<Block>.Empty;
+            drop_body(m);
         }
     }
     if (deferred.count > 0) {

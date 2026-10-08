@@ -4,6 +4,7 @@
 ## methods go, with the closure structs lifted out of them; the
 ## declarations stay, so the rest of the program still resolves them.
 
+import [drop_body] from "checked";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Module, StructDef] from "model";
 import [Rewriter, rewrite_block] from "walk";
@@ -53,7 +54,7 @@ export strip_bodies(module: Module) {
             and summaries.contains(loc)
             and function.body.is_value()) {
             dropped.append(function.body.value());
-            function.body = Optional<Block>.Empty;
+            drop_body(function);
             stripped.insert(loc);
         }
     };
@@ -84,7 +85,7 @@ export strip_bodies(module: Module) {
                 for (var method in st.method_members) {
                     if (method.body.is_value()) {
                         dropped.append(method.body.value());
-                        method.body = Optional<Block>.Empty;
+                        drop_body(method);
                     }
                 }
             }
