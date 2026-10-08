@@ -3,6 +3,7 @@
 ## `for_each_site`, `for_each_applied_site_in` and
 ## `for_each_expression_mut` in Pepper.
 
+import [layer_decls] from "checked";
 import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
 import [PassState] from "state";
@@ -43,7 +44,8 @@ extend _Collector with Rewriter;
 ## @param module the model
 ## @param rewriter what to do at each expression
 export rewrite_module(module: Module, rewriter: Rewriter) {
-    for (var st in module.structs) {
+    var layer = layer_decls(module);
+    for (var st in layer.structs) {
         for (var field in st.field_members) {
             if (field.default.is_value()) {
                 field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
@@ -57,7 +59,7 @@ export rewrite_module(module: Module, rewriter: Rewriter) {
         }
         _rewrite_function(st.destructor, rewriter, true);
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         _rewrite_function(function, rewriter, true);
     }
     for (var ext in module.extensions) {
@@ -76,8 +78,9 @@ export rewrite_module(module: Module, rewriter: Rewriter) {
 ## `_select_each`'s order over all of `module`, as `rewrite_module` does to
 ## all of it.
 _rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
+    var layer = layer_decls(module);
     ulong at = 0;
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         for (var field in st.field_members) {
             if (walk[at]) {
                 field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
@@ -101,7 +104,7 @@ _rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
         }
         at += 1;
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         if (walk[at]) {
             _rewrite_function(function, rewriter, true);
         }
@@ -627,8 +630,9 @@ struct _Owned {
 ## extensions' own copies of their methods left out when `applied`): all
 ## of it.
 _select_all(module: Module, applied: bool): Array<bool> {
+    var layer = layer_decls(module);
     var walk = Array<bool>();
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         for (var field in st.field_members) {
             walk.append(field.default.is_value());
         }
@@ -640,7 +644,7 @@ _select_all(module: Module, applied: bool): Array<bool> {
         }
         walk.append(true);
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         walk.append(true);
     }
     if (!applied) {
@@ -671,12 +675,13 @@ _note_found(holder: _Holder, applied: Array<bool>, extension: bool, walks: Array
 ## extensions' own copies of their methods left out where `applied`): the
 ## code holding an expression the filter wants. One walk serves them all.
 _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): Array<Array<bool>> {
+    var layer = layer_decls(module);
     var walks = Array<Array<bool>>();
     for (var filter in filters) {
         walks.append(Array<bool>());
     }
     var holder = _Holder(filters);
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         for (var field in st.field_members) {
             _look_through_default(field.default, holder);
             _note_found(holder, applied, false, walks);
@@ -692,7 +697,7 @@ _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): 
         _look_through_function(st.destructor, holder);
         _note_found(holder, applied, false, walks);
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         _look_through_function(function, holder);
         _note_found(holder, applied, false, walks);
     }
@@ -712,8 +717,9 @@ _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): 
 ## Walks the sites of the code of `module` that `walk` picks, as `_select`
 ## ordered it.
 _sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bool>, visitor: SiteVisitor) {
+    var layer = layer_decls(module);
     ulong at = 0;
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         var current = Optional<TypeName>.Value(st.ty);
         var owned = _Owned(Optional<String>.Value(st.name), visitor);
         for (var field in st.field_members) {
@@ -733,7 +739,7 @@ _sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bo
             at += 1;
         }
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         if (walk[at]) {
             _sites_in_function(
                 function, table, Optional<TypeName>.Empty, _Owned(Optional<String>.Value(function.name), visitor)

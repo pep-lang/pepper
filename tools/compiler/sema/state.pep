@@ -289,3 +289,4 @@ export struct ImplicitMemo {
 
     construct() {}
 }
+

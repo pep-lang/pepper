@@ -5,6 +5,7 @@
 ## `PORTED_STEPS`, then the specialization loop, whose steps a program
 ## runs as many rounds of as it needs.
 
+import [LayerDecls] from "pending";
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import io;
 import [Target] from compiler.link;
@@ -503,7 +504,10 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
         2 => {
             # Enum names are integer types from here on; closure literals
             # become structs, so they get bodies below.
-            # Checked declarations' bodies stay out of the passes.
+            # Checked declarations' bodies stay out of the passes. A new
+            # layer: no checked struct extended yet, nothing found for it.
+            module.extended_checked = HashSet<String>();
+            module.layer = Optional<LayerDecls>.Empty;
             stash_bodies(module, state);
             state.install_enums(module.enums);
             lift_closures(module, state);

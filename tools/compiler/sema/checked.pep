@@ -9,7 +9,7 @@ import io;
 import os;
 import [Loc] from "loc";
 import [Block, Checked, FunctionDef, Module, TypeAliasDef] from "model";
-import [PendingBody] from "pending";
+import [LayerDecls, PendingBody] from "pending";
 import [DeltaBase, RecordIn, RecordOut, write_interface_summaries] from "record";
 import [
     decode_body, read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
@@ -121,6 +121,35 @@ export full_body(function: FunctionDef) {
         function.body = Optional<Block>.Value(decode_body(function.pending_body.value()));
         function.pending_body = Optional<PendingBody>.Empty;
     }
+}
+
+## The declarations the layer at hand adds (`LayerDecls`): every one
+## without checked declarations, as when no unit below was checked. Kept
+## on `module` while its lists stay as they are: a pass that replaces a
+## declaration makes a new list.
+##
+## @param module the module
+## @returns the layer's structs and functions, in the module's order
+export layer_decls(module: Module): LayerDecls {
+    var extended = module.extended_checked.count as ulong;
+    if (module.layer.is_value() and module.layer.value().fits(module.structs, module.functions, extended)) {
+        return module.layer.value();
+    }
+    var out = LayerDecls(
+        module.structs, module.functions, (module.structs.count as ulong, module.functions.count as ulong, extended)
+    );
+    for (var st in module.structs) {
+        if (!module.checked.structs.contains(st.name) or module.extended_checked.contains(st.name)) {
+            out.structs.append(st);
+        }
+    }
+    for (var f in module.functions) {
+        if (!is_checked_function(module, f)) {
+            out.functions.append(f);
+        }
+    }
+    module.layer = Optional<LayerDecls>.Value(out);
+    return out;
 }
 
 ## Whether `function` was checked with a unit below: its name is a checked

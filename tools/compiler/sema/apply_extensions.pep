@@ -67,6 +67,7 @@ export apply_extensions(module: Module, state: PassState) {
                 _apply_to_struct(st, ext, module.traits, state);
                 if (module.checked.structs.contains(st.name)) {
                     state.extended_checked.insert(st.name);
+                    module.extended_checked.insert(st.name);
                     # The checked structs' shared `StructTable` has this one
                     # without the extension's methods.
                     state.trait_memo.checked_table = Optional<StructTable>.Empty;

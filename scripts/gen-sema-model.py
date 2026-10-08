@@ -521,7 +521,7 @@ import json;
 import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
-import [PendingBody] from "pending";
+import [LayerDecls, PendingBody] from "pending";
 
 '''
 footer='''

@@ -13,7 +13,7 @@ import json;
 import [JsonValue] from json;
 import [Fingerprint] from "fingerprint";
 import [Loc] from "loc";
-import [PendingBody] from "pending";
+import [LayerDecls, PendingBody] from "pending";
 
 ## `BinaryOp`, a type of the sema model.
 export enum BinaryOp {
@@ -6232,6 +6232,12 @@ export enum Declaration {
 
 ## `Module`, a type of the sema model.
 export struct Module {
+    ## In memory only: kept by `copy()`, not fingerprinted, written as
+    ## JSON or recorded.
+    var layer: LayerDecls? = Optional<LayerDecls>.Empty;
+    ## In memory only: kept by `copy()`, not fingerprinted, written as
+    ## JSON or recorded.
+    var extended_checked: HashSet<String> = HashSet<String>();
     var imports: Array<ast.Import>;
     var structs: Array<StructDef>;
     var traits: Array<TraitDef>;
@@ -6480,7 +6486,7 @@ export struct Module {
         for (var (_key549, _item549) in this.caller_copies) {
             _c549[_key549] = _item549.copy();
         }
-        return Module(
+        var _copy = Module(
             imports = this.imports.copy(),
             structs = _c467,
             traits = _c469,
@@ -6521,6 +6527,9 @@ export struct Module {
             caller_copies = _c549,
             linked = this.linked
         );
+        _copy.layer = this.layer;
+        _copy.extended_checked = this.extended_checked;
+        return _copy;
     }
 
     ## Adds this to `into`: equal values add the same.

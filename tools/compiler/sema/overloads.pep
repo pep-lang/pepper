@@ -657,13 +657,20 @@ export concrete_overrides(module: Module) {
             rewrites.append((index - 1, $"{function.name}<{", ".join(params)}>"));
         }
     }
+    if (rewrites.is_empty) {
+        return;
+    }
+    # A new list, so what was found from the old one (`layer_decls`) is
+    # found again.
+    var functions = module.functions.clone();
     for (var (i, name) in rewrites) {
-        var concrete = module.functions[i].copy();
+        var concrete = functions[i].copy();
         concrete.name = name;
         concrete.generic_params = Array<GenericParam>();
         concrete.is_generic_func = false;
-        module.functions[i] = concrete;
+        functions[i] = concrete;
     }
+    module.functions = functions;
 }
 
 _names_type(name: String, struct_names: HashSet<String>): bool {
