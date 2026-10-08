@@ -710,10 +710,50 @@ struct _Linker {
             }
             j += 1;
         }
+        # A file is looked at again only once the exports of a file it reads
+        # (a prelude file or an import) have changed since it last was.
+        var reads = Array<Array<ulong>>();
+        ulong r = 0;
+        while (r < n) {
+            var from = Array<ulong>();
+            for (var p in prelude_files) {
+                if (p != r) {
+                    from.append(p);
+                }
+            }
+            for (var t_index in files[r].imports) {
+                if (t_index.is_value()) {
+                    from.append(t_index.value());
+                }
+            }
+            reads.append(from);
+            r += 1;
+        }
+        ulong clock = 1;
+        var exports_changed = Array<ulong>();
+        var looked = Array<ulong>();
+        r = 0;
+        while (r < n) {
+            exports_changed.append(0);
+            looked.append(0);
+            r += 1;
+        }
         while (true) {
             bool changed = false;
             ulong i = 0;
             while (i < n) {
+                if (looked[i] > 0) {
+                    bool stale = false;
+                    for (var t in reads[i]) {
+                        stale = stale or exports_changed[t] > looked[i];
+                    }
+                    if (!stale) {
+                        i += 1;
+                        continue;
+                    }
+                }
+                clock += 1;
+                looked[i] = clock;
                 var seen = _copy_names(own_names[i]);
                 for (var p in prelude_files) {
                     if (p == i) {
@@ -754,6 +794,7 @@ struct _Linker {
                         for (var (k, v) in published) {
                             if (_add_names(exports_of[i], k, v)) {
                                 changed = true;
+                                exports_changed[i] = clock;
                             }
                         }
                         continue;
@@ -806,6 +847,7 @@ struct _Linker {
                     }
                     if (found.is_value() and _add_names(exports_of[i], ea.exported_name(), found.value())) {
                         changed = true;
+                        exports_changed[i] = clock;
                     }
                 }
                 if (!_same_names(seen, visible[i])) {

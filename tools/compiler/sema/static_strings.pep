@@ -123,7 +123,8 @@ _is_checked(module: Module, callee: _LiteralCallee): bool {
 }
 
 _is_string(ty: TypeName): bool {
-    return ty.to_string() == "String";
+    # `to_string` spells a type with arguments with `<`.
+    return ty.sub_types.count == 0 and ty.name == "String";
 }
 
 _key(owner: String, method: String): String {

@@ -73,3 +73,28 @@ Next, by the layer `main` profile: `resolve_implicit_types` step 20
 `share_string_literals` (0.64 s), `check_value_structs`
 (`_mutating_methods` walks checked bodies, 0.55 s), then steps 2-4 above
 (`load_checked` reading checked bodies, parse/link of every file, codegen).
+
+## Done (second pass)
+Same source tree, `main.pep` edit: layer `main` 7.60 → 7.10 s, edit build
+18.82 → 17.90 s, cold 456.9 → 427.4 s (main at 87590ab4 vs this pass).
+Checked structs' method lists and arities memoized in `ImplicitMemo`; no
+array per declaration in the closure-site walk; `visible_names` (link)
+re-walks a file only when the exports it reads change.
+
+Edit build now: front end (parse + link of every file) ~3.5 s, checked
+records 2.4 s (half of it decoding bodies), layer `main` 7.1 s, codegen
+2.2 s, objects 0.3-1.1 s, `ld` 1.5 s.
+
+## Next: front end only for the files that changed
+The files of layers below the first one whose files changed are unchanged,
+and so is everything they import: their linking, visibility and parse
+checks find what they found when the layer was checked. Plan:
+1. Parse every file's declarations, skipping function bodies (brace
+   matching on the tokens), enough for imports and layering.
+2. Find the cached prefix of layers (their records exist for the key
+   chain).
+3. Parse the remaining files in full and link the program with the
+   prefix's bodies left out; `check_visibility` only over those files.
+Left as is: `check_value_structs` walks the checked value structs' bodies
+on each layer; keeping their facts in the record needs a field on
+`Checked`, which comes from the Rust model.

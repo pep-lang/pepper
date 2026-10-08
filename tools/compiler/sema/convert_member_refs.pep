@@ -34,11 +34,11 @@ const _GENERIC_BASE = "generic base";
 ## decides between a method and a free function of one name.
 struct _Methods {
     var names: HashSet<String>;
-    var arities: Array<_Arity>;
+    var arities: Array<(String, ulong, ulong)>;
     ## The free functions and externs a bare call may name instead.
     var free: HashSet<String>;
 
-    construct(names: HashSet<String>, arities: Array<_Arity>, free: HashSet<String>) {
+    construct(names: HashSet<String>, arities: Array<(String, ulong, ulong)>, free: HashSet<String>) {
         this.names = names;
         this.arities = arities;
         this.free = free;
@@ -292,7 +292,7 @@ export convert_member_refs(module: Module, state: PassState) {
                 for (var name in m.trait_default.value()) {
                     trait_names.insert(name);
                 }
-                var trait_methods = _Methods(trait_names, Array<_Arity>(), HashSet<String>());
+                var trait_methods = _Methods(trait_names, Array<(String, ulong, ulong)>(), HashSet<String>());
                 _convert(m, st.name, HashSet<String>(), trait_methods, type_params, globals, state);
             } else {
                 _convert(m, st.name, fields, methods, type_params, globals, state);

@@ -474,9 +474,15 @@ struct _Holder {
 
     ## Starts over on new code, none found.
     clear() {
-        found = Array<bool>();
-        for (var filter in filters) {
-            found.append(false);
+        if (found.count != filters.count) {
+            found = Array<bool>();
+            for (var filter in filters) {
+                found.append(false);
+            }
+        } else {
+            for (var i in 0..found.count) {
+                found[i] = false;
+            }
         }
         missing = filters.count;
     }

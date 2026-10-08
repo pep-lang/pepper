@@ -77,20 +77,9 @@ _number_keys(): String[] {
 
 ## How many arguments the methods of one name take: the name (an overload
 ## set's members share their set's name), and the fewest and most.
-struct _Arity {
-    var name: String;
-    var fewest: ulong;
-    var most: ulong;
-
-    construct(name: String, fewest: ulong, most: ulong) {
-        this.name = name;
-        this.fewest = fewest;
-        this.most = most;
-    }
-}
-
-_method_arities(st: StructDef): Array<_Arity> {
-    var out = Array<_Arity>();
+## Each method's set name and the fewest and most arguments it takes.
+_method_arities(st: StructDef): Array<(String, ulong, ulong)> {
+    var out = Array<(String, ulong, ulong)>();
     for (var m in st.method_members) {
         ulong fewest = 0;
         for (var p in m.parameters) {
@@ -98,19 +87,46 @@ _method_arities(st: StructDef): Array<_Arity> {
                 fewest += 1;
             }
         }
-        out.append(_Arity(set_name(m.name), fewest, m.parameters.count));
+        out.append((set_name(m.name), fewest, m.parameters.count));
     }
     return out;
 }
 
-_takes(arities: Array<_Arity>, name: String, count: ulong): bool {
+_takes(arities: Array<(String, ulong, ulong)>, name: String, count: ulong): bool {
     var set = set_name(name);
-    for (var a in arities) {
-        if (a.name == set and count >= a.fewest and count <= a.most) {
+    for (var (arity, fewest, most) in arities) {
+        if (arity == set and count >= fewest and count <= most) {
             return true;
         }
     }
     return false;
+}
+
+# `st`'s methods (name, type) and arities: a checked struct's from `memo`
+# while it is the same struct with as many fields and methods, since its
+# methods' types were final when it was checked.
+_struct_parts(module: Module, st: StructDef, memo: ImplicitMemo): (Array<(String, TypeName)>, Array<(String, ulong, ulong)>) {
+    var checked = module.checked.structs.contains(st.name);
+    var fields = st.field_members.count;
+    var count = st.method_members.count;
+    if (checked) {
+        var kept = memo.struct_parts.try_get(st.name);
+        if (kept.is_value()) {
+            var (was, kept_fields, kept_methods, methods, arities) = kept.value();
+            if (was === st and kept_fields == fields and kept_methods == count) {
+                return (methods, arities);
+            }
+        }
+    }
+    var own = Array<(String, TypeName)>();
+    for (var m in st.method_members) {
+        own.append((m.name, m.ty));
+    }
+    var arities = _method_arities(st);
+    if (checked) {
+        memo.struct_parts[st.name] = (st, fields, count, own, arities);
+    }
+    return (own, arities);
 }
 
 _function_type(ret: TypeName, params: TypeName[]): TypeName {
@@ -524,7 +540,7 @@ struct _ImplicitTables {
     var methods: Array<(String, Array<(String, TypeName)>)> = Array<(String, Array<(String, TypeName)>)>();
     var method_index: HashMap<String, Array<ulong>> = HashMap<String, Array<ulong>>();
     ## Struct type string to how many arguments each of its methods takes.
-    var arities: HashMap<String, Array<_Arity>> = HashMap<String, Array<_Arity>>();
+    var arities: HashMap<String, Array<(String, ulong, ulong)>> = HashMap<String, Array<(String, ulong, ulong)>>();
     ## Free-function and extern name to return type.
     var functions: HashMap<String, TypeName> = HashMap<String, TypeName>();
     ## Free functions usable as values: name to function type.
@@ -553,15 +569,12 @@ struct _ImplicitTables {
             structs.append(
                 (key, module.checked.structs.contains(st.name) ? st.field_members : st.field_members.copy())
             );
-            var own = Array<(String, TypeName)>();
-            for (var m in st.method_members) {
-                own.append((m.name, m.ty));
-            }
+            var (own, own_arities) = _struct_parts(module, st, state.implicit);
             methods.append((key, own));
             struct_names.insert(key);
             struct_bases.insert(_before_angle(key));
             if (!arities.contains(key)) {
-                arities[key] = _method_arities(st);
+                arities[key] = own_arities;
             }
             if (st.generic_methods.count != 0) {
                 var generic = Array<(String, GenericSignature)>();

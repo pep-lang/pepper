@@ -7,7 +7,7 @@ import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
 import [Exports] from "exports";
 import [Loc] from "loc";
-import [Block, EnumCaseDef, EnumDef, GenericParam, TypeName] from "model";
+import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
 import [Callees] from "named_arguments";
 import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
@@ -255,6 +255,10 @@ export struct TraitTypeMemo {
 export struct ImplicitMemo {
     ## Whether a run has filled this in.
     var kept: bool = false;
+    ## Each checked struct's methods (name, type) and arities (set name,
+    ## fewest and most arguments), for `resolve_implicit_types`' tables, by
+    ## name, with the struct and how many fields and methods it had.
+    var struct_parts: HashMap<String, (StructDef, ulong, ulong, Array<(String, TypeName)>, Array<(String, ulong, ulong)>)> = HashMap<String, (StructDef, ulong, ulong, Array<(String, TypeName)>, Array<(String, ulong, ulong)>)>();
     ## What each callable looked up in its last walk, by its place.
     var reads: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
     ## Each callable's fingerprint after its last walk, by its place.
