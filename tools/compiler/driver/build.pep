@@ -209,6 +209,29 @@ _record_stats(): bool {
 
 ## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
 ## builds with and without them.
+# Every file of `program`, for `Program.link_bodies`.
+_every_file(program: link.Program): bool[] {
+    var out = Array<bool>();
+    for (var _ in program.files) {
+        out.append(true);
+    }
+    return out;
+}
+
+# Whether one of `warnings` is in a file of `layer`.
+_warns(warnings: Diagnostic[], layer: Layer): bool {
+    var files = HashSet<ulong>();
+    for (var file in layer.files) {
+        files.insert(file);
+    }
+    for (var w in warnings) {
+        if (w.location.is_value() and files.contains(w.location.value().file)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 _layers_off(): bool {
     var named = os.environment("PEPC_NO_LAYERS");
     return named.is_value() and !named.value().is_empty;
@@ -231,10 +254,6 @@ _check_layers(
     clock: _Clock,
     trace: bool
 ): Result<(sema.Module, sema.PassState), String> {
-    var errors = program.check();
-    if (errors.is_value()) {
-        return Result<(sema.Module, sema.PassState), String>.err(errors.value());
-    }
     var module = sema.Module();
     # Whether `module` holds the layers before the one at hand.
     bool have = false;
@@ -280,6 +299,24 @@ _check_layers(
                 continue;
             }
         }
+        # The first layer to check: the files from here on are linked and
+        # checked before it. Those of the layers loaded are as they were
+        # when checked, without an error or a warning (see `store`).
+        if (!checked_any) {
+            var bodies = _every_file(program);
+            for (var j in 0..k) {
+                for (var file in layered[j].files) {
+                    bodies[file] = false;
+                }
+            }
+            program.link_bodies(bodies);
+            var errors = program.check();
+            if (errors.is_value()) {
+                return Result<(sema.Module, sema.PassState), String>.err(errors.value());
+            }
+            warnings.append_all(program.warnings());
+            clock.lap("link bodies");
+        }
         # What this layer's record is a delta on: the module the layers
         # before it left, indexed before this layer changes it.
         var base = Optional<sema.DeltaBase>.Empty;
@@ -312,7 +349,9 @@ _check_layers(
         # Writing the delta indexes the module for the next one.
         var next = sema.DeltaBase();
         bool stored = false;
-        if (state.notes.is_empty) {
+        # A layer with a warning is checked again on each build, which
+        # reports it again; so a layer loaded had none.
+        if (state.notes.is_empty and !_warns(warnings, layered[k])) {
             store_checked(cache, program, layered[k], unit, base, interface, next);
             stored = base.is_value();
             clock.lap("store");
@@ -549,10 +588,15 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
 
     var sources = program.sources();
-    var warnings = program.warnings();
     var layered = Array<Layer>();
     if (options.cache.is_value() and !_layers_off()) {
         layered = layers(program, units, keys.value().base());
+    }
+    # Checking layers links the bodies it needs when it gets to them.
+    var warnings = Array<Diagnostic>();
+    if (layered.count <= 1) {
+        program.link_bodies(_every_file(program));
+        warnings = program.warnings();
     }
     var module = sema.Module();
     var state = sema.PassState(program.target);

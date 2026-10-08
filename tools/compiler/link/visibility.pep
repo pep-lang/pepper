@@ -515,7 +515,9 @@ _built_in_type_names(files: ProgramFile[], target: Target): VisibilityError[] {
     return errors;
 }
 
-export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Target): VisibilityError[] {
+export check_visibility(
+    files: ProgramFile[], scopes: FileScope[], target: Target, bodies: bool[] = Array<bool>()
+): VisibilityError[] {
     var decls = HashMap<String, _Decl[]>();
     # Load order of the names in `decls`, so errors come out the same way
     # whatever the map's order.
@@ -869,6 +871,12 @@ export check_visibility(files: ProgramFile[], scopes: FileScope[], target: Targe
     }
     i = 0;
     while (i < files.count) {
+        # A file whose bodies were not linked is as it was when it last
+        # checked clean (`Program.link_bodies`).
+        if (i < bodies.count and !bodies[i]) {
+            i += 1;
+            continue;
+        }
         # An extension declares no name of its own, nor does a concrete
         # override: after linking it may carry an imported generic's name,
         # which it must not make visible. Nor does what platform selection

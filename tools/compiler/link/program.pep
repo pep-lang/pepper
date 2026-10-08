@@ -37,6 +37,8 @@ export struct Setup {
     ## `files.path_key`: a test build's entry with its `main` added, or its
     ## generated entry and test files.
     var sources: HashMap<String, String> = HashMap<String, String>();
+    ## Leave the files' bodies to `Program.link_bodies`: binding only.
+    var defer_bodies: bool = false;
 
     ## Creates the default setup: the runtime, and no other files.
     construct() {}
@@ -54,9 +56,48 @@ export struct Program {
     var overload_unions: Map<String, String[][]> = Map<String, String[][]>();
     ## The target platform selection evaluated against.
     var target: Target = Target();
+    ## Per file, whether its bodies were linked and are checked; empty:
+    ## every file's (`link_bodies`).
+    var bodies: bool[] = Array<bool>();
+    # Linking left to `link_bodies`, when loaded with `defer_bodies`.
+    var _pending: link.PendingLink? = Optional<link.PendingLink>.Empty;
 
     ## Creates an empty program.
     construct() {}
+
+    ## Finishes linking a program loaded with `Setup.defer_bodies`: the
+    ## bodies of the files `bodies` marks are linked, and only theirs are
+    ## checked (`check`, `warnings`). A build leaves out the files whose
+    ## layers its cache holds checked: they and what they import are as
+    ## they were, and checked without an error or a warning then. Without
+    ## pending linking, nothing.
+    ##
+    ## @param bodies per file, whether to link and check its bodies
+    link_bodies(bodies: bool[]) {
+        if (!_pending.is_value()) {
+            return;
+        }
+        var linked = _pending.value().finish(bodies);
+        _pending = Optional<link.PendingLink>.Empty;
+        _take_linked(linked);
+        this.bodies = bodies;
+    }
+
+    # Takes the errors and scopes of finished linking.
+    _take_linked(linked: link.Linked) {
+        errors.append_all(linked.errors);
+        link.sort_errors(errors);
+        scopes = linked.scopes;
+        overload_unions = linked.overload_unions;
+    }
+
+    ## Whether file `file`'s bodies are linked and checked.
+    ##
+    ## @param file the file's index
+    ## @returns true unless `link_bodies` left them out
+    has_bodies(file: ulong): bool {
+        return file >= bodies.count or bodies[file];
+    }
 
     ## Returns each file's name and text, for rendering diagnostics.
     ##
@@ -98,7 +139,7 @@ export struct Program {
             errors = built_in_errors();
         }
         if (errors.count == 0) {
-            for (var e in check_visibility(files, scopes, target)) {
+            for (var e in check_visibility(files, scopes, target, bodies)) {
                 errors.append(e.to_diagnostic(files));
             }
         }
@@ -175,7 +216,7 @@ export struct Program {
             }
             i += 1;
         }
-        out.append_all(check_uses(files, scopes, target));
+        out.append_all(check_uses(files, scopes, target, bodies));
         return out;
     }
 
@@ -312,7 +353,7 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         prelude.append(path.value());
     }
     prelude.append_all(runtime.sources);
-    return load(root, prelude, search_paths, setup.target, setup.sources);
+    return load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies);
 }
 
 # One file waiting to be loaded.
@@ -342,7 +383,8 @@ export load(
     prelude: Path[],
     search_paths: Path[],
     target: Target,
-    sources: HashMap<String, String> = HashMap<String, String>()
+    sources: HashMap<String, String> = HashMap<String, String>(),
+    defer_bodies: bool = false
 ): Result<Program, String> {
     var program = Program();
     var index = HashMap<String, ulong>();
@@ -562,12 +604,16 @@ export load(
             f.namespace = $"{base}#{n}";
         }
     }
-    var linked = link.link(program.files, target);
-    program.errors.append_all(linked.errors);
-    link.sort_errors(program.errors);
-    program.scopes = linked.scopes;
-    program.overload_unions = linked.overload_unions;
     program.target = target;
+    if (defer_bodies) {
+        var pending = link.PendingLink(program.files, target);
+        var bound = pending.bound();
+        program.scopes = bound.scopes;
+        program.overload_unions = bound.overload_unions;
+        program._pending = Optional<link.PendingLink>.Value(pending);
+        return Result<Program, String>.ok(program);
+    }
+    program._take_linked(link.link(program.files, target));
     return Result<Program, String>.ok(program);
 }
 

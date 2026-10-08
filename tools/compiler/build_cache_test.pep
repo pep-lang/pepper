@@ -261,3 +261,65 @@ keeps_string_literals_apart_across_units() {
     );
     build();
 }
+
+# Writes a program whose `a.pep` returns `a_body`, and whose `main.pep`
+# differs with `version`.
+_write_deferred(root: Path, a_body: String, version: int) {
+    File.write_text(
+        root.join(Path("b.pep")),
+        "[Deprecated(\"use b_new\")]\nexport b_old(): int {\n    return 2;\n}\nexport b_new(): int {\n    return 2;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("a.pep")), "import \"b\";\nexport a_value(): int {\n    return " + a_body + ";\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nmain(): int {\n    return a_value() - 2 + " + $"{version} - {version}" + ";\n}\n"
+    );
+}
+
+# Builds the program in `root`, its bodies linked as needed, runs it, and
+# returns whether the build linked `a.pep`'s bodies.
+_build_deferred(root: Path): bool {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    setup.defer_bodies = true;
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).spawn();
+    expect_true(ran.is_ok() and ran.value().wait().value().success());
+    for (var i in 0..program.value().files.count) {
+        if (program.value().files[i].name.ends_with("a.pep")) {
+            return program.value().has_bodies(i);
+        }
+    }
+    return true;
+}
+
+# A build loaded with `defer_bodies` links and checks the bodies of the
+# files it checks, not those of the layers it loads from the cache, unless
+# a file of the layer warned: such a layer is never stored, so each build
+# checks it again and warns again.
+[Test]
+links_only_the_bodies_of_the_layers_it_checks() {
+    var folder = TempFolder("deferred_bodies");
+    var root = folder.path;
+    _write_deferred(root, "b_new()", 1);
+    expect_true(_build_deferred(root));
+    _write_deferred(root, "b_new()", 2);
+    expect_false(_build_deferred(root));
+    # `a.pep` warns: its layer is checked on every build.
+    _write_deferred(root, "b_old()", 3);
+    expect_true(_build_deferred(root));
+    _write_deferred(root, "b_old()", 4);
+    expect_true(_build_deferred(root));
+}

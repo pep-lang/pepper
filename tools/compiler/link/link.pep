@@ -172,6 +172,47 @@ export link(files: ProgramFile[], target: Target): Linked {
     return linker.run();
 }
 
+## A program whose names are bound and whose bodies are not yet rewritten:
+## `link` in two steps, so a build can leave alone the bodies of the files
+## whose layers its cache holds checked.
+export struct PendingLink {
+    # The linker, prepared.
+    var _linker: _Linker;
+
+    ## Binds `files`' names and imports.
+    ##
+    ## @param files the program's files, rewritten in place by `finish`
+    ## @param target the target platform
+    construct(files: ProgramFile[], target: Target) {
+        _linker = _Linker(files, target);
+        _linker.prepare();
+    }
+
+    ## Each file's scope as far as binding goes: the files whose
+    ## extensions it sees, and the overload unions. The imported
+    ## spellings come with `finish`.
+    ##
+    ## @returns what `link` would return, without `imported` and errors
+    bound(): Linked {
+        var out = Linked();
+        for (var extensions in _linker.prepared_extensions) {
+            var scope = FileScope();
+            scope.extensions = extensions;
+            out.scopes.append(scope);
+        }
+        out.overload_unions = _linker.unions.by_module();
+        return out;
+    }
+
+    ## Rewrites the files, the bodies of those `bodies` marks only.
+    ##
+    ## @param bodies per file, whether to rewrite its bodies
+    ## @returns what `link` returns
+    finish(bodies: bool[]): Linked {
+        return _linker.finish(bodies);
+    }
+}
+
 # Names a file declares, exports, or can see, each with the parameter
 # counts of the generics it names (empty for a type).
 type _Names = HashMap<String, HashSet<ulong>>;
@@ -564,6 +605,10 @@ struct _Linker {
     var files: ProgramFile[];
     var target: Target;
     var errors: ModuleError[] = Array<ModuleError>();
+    # What `prepare` bound for `finish`: each file's imports and the files
+    # whose extensions it sees.
+    var prepared_bindings: Array<_Bindings> = Array<_Bindings>();
+    var prepared_extensions: Array<HashSet<ulong>> = Array<HashSet<ulong>>();
     # Per file, the names that denote a type there (struct, alias, trait).
     var types_of: HashSet<String>[] = Array<HashSet<String>>();
     # Per file, the names that denote a struct or type alias there.
@@ -1761,6 +1806,16 @@ struct _Linker {
     }
 
     run(): Linked {
+        prepare();
+        var all = Array<bool>();
+        for (var _ in files) {
+            all.append(true);
+        }
+        return finish(all);
+    }
+
+    # Binds every file's names and imports; `finish` rewrites the files.
+    prepare() {
         ulong n = files.count;
         for (var f in files) {
             file_names.append(f.name);
@@ -2081,11 +2136,22 @@ struct _Linker {
             }
             i += 1;
         }
+        prepared_bindings = bindings;
+        prepared_extensions = extensions;
+    }
+
+    # Rewrites each file's spellings, the bodies only of the files
+    # `bodies` marks, and returns the scopes and every error.
+    finish(bodies: bool[]): Linked {
+        ulong n = files.count;
+        var bindings = prepared_bindings;
+        var extensions = prepared_extensions;
         var linked = Linked();
-        i = 0;
+        ulong i = 0;
         while (i < n) {
             var named = named_bindings(i, bindings[i]);
             var rewriter = _Rewriter(this, i, bindings[i], extensions[i]);
+            rewriter.bodies = bodies[i];
             rewriter.module(files[i].module);
             var scope = FileScope();
             scope.imported = rewriter.imported;
@@ -2170,6 +2236,8 @@ struct _Rewriter {
     # decided before `module` renames them.
     var override_decls: HashSet<ulong> = HashSet<ulong>();
     var imported: HashMap<ulong, String> = HashMap<ulong, String>();
+    # Whether to rewrite the bodies too.
+    var bodies: bool = true;
 
     construct(linker: _Linker, file: ulong, bindings: _Bindings, extensions: HashSet<ulong>) {
         this.linker = linker;
@@ -2181,6 +2249,10 @@ struct _Rewriter {
 
     _error(span: Span, message: String) {
         linker.errors.append(ModuleError(file, span, message));
+    }
+
+    walks_bodies(): bool {
+        return bodies;
     }
 
     module(module: Module) {

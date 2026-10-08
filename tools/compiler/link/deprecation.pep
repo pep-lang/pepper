@@ -238,7 +238,9 @@ struct _Entry {
 ## @param scopes what linking learned about each file
 ## @param target the target platform selection evaluates against
 ## @returns the warnings, file by file
-export check_uses(files: ProgramFile[], scopes: FileScope[], target: Target): Diagnostic[] {
+export check_uses(
+    files: ProgramFile[], scopes: FileScope[], target: Target, bodies: bool[] = Array<bool>()
+): Diagnostic[] {
     var deprecated = HashMap<String, _Entry>();
     var constructors = HashMap<String, _Entry>();
     var members = HashMap<String, HashSet<String>>();
@@ -307,6 +309,12 @@ export check_uses(files: ProgramFile[], scopes: FileScope[], target: Target): Di
     }
     i = 0;
     while (i < files.count) {
+        # A file whose bodies were not linked is as it was when it last
+        # checked without a warning (`Program.link_bodies`).
+        if (i < bodies.count and !bodies[i]) {
+            i += 1;
+            continue;
+        }
         var walker = _Uses(i, files[i].source, deprecated, constructors, members, types, target, warnings);
         for (var d in files[i].module.declarations) {
             if (target.keeps(d.attributes())) {

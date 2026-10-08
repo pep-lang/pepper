@@ -85,6 +85,12 @@ Edit build now: front end (parse + link of every file) ~3.5 s, checked
 records 2.4 s (half of it decoding bodies), layer `main` 7.1 s, codegen
 2.2 s, objects 0.3-1.1 s, `ld` 1.5 s.
 
+## Done: link bodies only for the layers checked
+`main.pep` edit build 17.90 → 16.97 s (main 18.82 s): linking splits into
+binding and rewriting (`link.PendingLink`); a build links and checks
+(visibility, deprecation) the bodies of only the files from the first
+layer it checks on (182 ms). A layer whose files warn is not stored.
+
 ## Next: front end only for the files that changed
 The files of layers below the first one whose files changed are unchanged,
 and so is everything they import: their linking, visibility and parse
@@ -95,6 +101,9 @@ checks find what they found when the layer was checked. Plan:
    chain).
 3. Parse the remaining files in full and link the program with the
    prefix's bodies left out; `check_visibility` only over those files.
+Steps 2-3 are done for linking (above). Left: parsing declarations only
+(~0.6 s), which reports a syntax error in a body from `driver.build`
+instead of `load_program`; how pepc prints that has to stay the same.
 Left as is: `check_value_structs` walks the checked value structs' bodies
 on each layer; keeping their facts in the record needs a field on
 `Checked`, which comes from the Rust model.

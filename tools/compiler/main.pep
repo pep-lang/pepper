@@ -244,6 +244,9 @@ main(args: String[]): int {
                 return 1;
             }
         }
+        # A build links the bodies of only the files it checks
+        # (`driver.build`).
+        setup.defer_bodies = !(ir or model or linked or checked);
         var program = link.load_program(entry, setup);
         if (program.is_err()) {
             print($"pepc: {program.error()}");

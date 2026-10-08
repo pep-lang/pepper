@@ -268,6 +268,15 @@ export trait ScopeWalk {
         walk_type_name(type_name);
     }
 
+    ## Whether the walk goes into function, constructor, destructor and
+    ## accessor bodies. The default does; a walk over a file whose layer
+    ## the build cache holds checked skips them (`Program.link_bodies`).
+    ##
+    ## @returns true to walk bodies
+    walks_bodies(): bool {
+        return true;
+    }
+
     ## Visits a function before its generic parameters are bound.
     ##
     ## @param function the function
@@ -417,7 +426,7 @@ export trait ScopeWalk {
                 for (var c in decl.constructors) {
                     walk_function_body(c);
                 }
-                if (decl.destructor.is_value()) {
+                if (decl.destructor.is_value() and walks_bodies()) {
                     walk_block_body(decl.destructor.value());
                 }
                 for (var method in decl.methods) {
@@ -518,10 +527,10 @@ export trait ScopeWalk {
         scopes().push(Scope(ScopeKind.Values));
         scopes().bind(PROPERTY_FIELD);
         scopes().bind(PROPERTY_VALUE);
-        if (property.getter.is_value() and property.getter.value().function.body.is_value()) {
+        if (property.getter.is_value() and property.getter.value().function.body.is_value() and walks_bodies()) {
             walk_block(property.getter.value().function.body.value());
         }
-        if (property.setter.is_value() and property.setter.value().function.body.is_value()) {
+        if (property.setter.is_value() and property.setter.value().function.body.is_value() and walks_bodies()) {
             walk_block(property.setter.value().function.body.value());
         }
         scopes().pop();
@@ -548,7 +557,7 @@ export trait ScopeWalk {
             }
             scopes().bind_value(parameter.name, visit_binding(parameter.type_name, Optional<Expression>.Empty));
         }
-        if (function.body.is_value()) {
+        if (function.body.is_value() and walks_bodies()) {
             walk_block(function.body.value());
         }
         scopes().pop();
