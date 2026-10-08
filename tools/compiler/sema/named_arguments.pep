@@ -899,6 +899,12 @@ export struct Callees {
     # A unit's checked callees: how many methods and constructors each
     # checked struct had (`covers`).
     var members: HashMap<String, ulong> = HashMap<String, ulong>();
+    # A unit's checked callees, indexed to be made as lookups reach them.
+    var _checked_functions: HashMap<String, FunctionDef[]> = HashMap<String, FunctionDef[]>();
+    var _by_name: HashMap<String, Array<(ulong, StructDef)>> = HashMap<String, Array<(ulong, StructDef)>>();
+    var _by_spelling: HashMap<String, Array<(ulong, StructDef)>> = HashMap<String, Array<(ulong, StructDef)>>();
+    var _made_receivers: HashSet<String> = HashSet<String>();
+    var _made_constructors: HashSet<String> = HashSet<String>();
 
     ## The callees of `module`.
     ##
@@ -933,20 +939,122 @@ export struct Callees {
         _add_trait_types(module, trait_types_of(module, trait_types, state.trait_types_memo()));
     }
 
-    # The callees of `module`'s checked declarations alone.
+    # The callees of `module`'s checked declarations alone, made as lookups
+    # reach them: their structs by name and by spelling and their functions
+    # by overload set, each in the module's order.
     construct(module: Module) {
         literals = Array<(Loc, ulong, Loc)>();
         for (var function in module.functions) {
             if (is_checked_function(module, function)) {
-                _add_function(function);
+                var set = set_name(_before_type_arguments(function.name));
+                if (!_checked_functions.contains(set)) {
+                    _checked_functions[set] = Array<FunctionDef>();
+                }
+                _checked_functions[set].append(function);
             }
         }
+        ulong at = 0;
         for (var st in module.structs) {
             if (module.checked.structs.contains(st.name)) {
-                _add_struct(st);
                 members[st.name] = _members(st);
+                _index(_by_name, st.name, at, st);
+                var spelled = st.ty.to_string();
+                if (spelled != st.name) {
+                    _index(_by_spelling, spelled, at, st);
+                }
+                at += 1;
             }
         }
+    }
+
+    _index(map: HashMap<String, Array<(ulong, StructDef)>>, key: String, at: ulong, st: StructDef) {
+        if (!map.contains(key)) {
+            map[key] = Array<(ulong, StructDef)>();
+        }
+        map[key].append((at, st));
+    }
+
+    # A base's free functions of overload set `set`.
+    _checked_set(set: String): Callee[]? {
+        var made = functions.try_get(set);
+        if (made.is_value()) {
+            return made;
+        }
+        var found = _checked_functions.try_get(set);
+        if (!found.is_value()) {
+            return Optional<Callee[]>.Empty;
+        }
+        for (var function in found.value()) {
+            _add_function(function);
+        }
+        return functions.try_get(set);
+    }
+
+    # A base's checked structs a lookup of `key` reaches: those named, then
+    # spelled, `key`, in the module's order.
+    _checked_structs(key: String): Array<StructDef> {
+        var all = Array<(ulong, StructDef)>();
+        var named = _by_name.try_get(key);
+        if (named.is_value()) {
+            all.append_all(named.value());
+        }
+        var spelled = _by_spelling.try_get(key);
+        if (spelled.is_value()) {
+            all.append_all(spelled.value());
+        }
+        all.sort((a, b) => {
+            var (x, _) = a;
+            var (y, _) = b;
+            return x < y ? -1 : (x > y ? 1 : 0);
+        });
+        var out = Array<StructDef>();
+        for (var (_, st) in all) {
+            out.append(st);
+        }
+        return out;
+    }
+
+    # A base's method sets of receiver `key`: those of the checked structs
+    # spelled `key`, in the module's order.
+    _checked_receiver(key: String): HashMap<String, Callee[]>? {
+        if (!_made_receivers.insert(key)) {
+            return methods.try_get(key);
+        }
+        var sets = HashMap<String, Callee[]>();
+        for (var st in _checked_structs(key)) {
+            if (st.ty.to_string() == key) {
+                _add_methods(st, sets);
+            }
+        }
+        if (sets.count == 0 and !_spelled_by(key)) {
+            return Optional<HashMap<String, Callee[]>>.Empty;
+        }
+        methods[key] = sets;
+        return Optional<HashMap<String, Callee[]>>.Value(sets);
+    }
+
+    # Whether a checked struct is spelled `key`.
+    _spelled_by(key: String): bool {
+        for (var st in _checked_structs(key)) {
+            if (st.ty.to_string() == key) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    # A base's constructors called `key`: those of the checked structs
+    # named or spelled `key`, in the module's order.
+    _checked_constructors(key: String): Callee[]? {
+        if (!_made_constructors.insert(key)) {
+            return constructors.try_get(key);
+        }
+        for (var st in _checked_structs(key)) {
+            for (var c in st.constructors) {
+                _push(constructors, key, Callee.of(c, st.name, 0, _generic_names(st)));
+            }
+        }
+        return constructors.try_get(key);
     }
 
     ## Whether these (a unit's checked callees) cover `st`: it is checked,
@@ -962,12 +1070,7 @@ export struct Callees {
     }
 
     _add_struct(st: StructDef) {
-        var generic = Array<String>();
-        if (!st.name.contains("<")) {
-            for (var p in st.generic_params) {
-                generic.append(p.name);
-            }
-        }
+        var generic = _generic_names(st);
         var made = Array<Callee>();
         for (var c in st.constructors) {
             made.append(Callee.of(c, st.name, 0, generic));
@@ -984,7 +1087,22 @@ export struct Callees {
         if (!methods.contains(spelled)) {
             methods[spelled] = HashMap<String, Callee[]>();
         }
-        var own = methods[spelled];
+        _add_methods(st, methods[spelled]);
+    }
+
+    _generic_names(st: StructDef): Array<String> {
+        var generic = Array<String>();
+        if (!st.name.contains("<")) {
+            for (var p in st.generic_params) {
+                generic.append(p.name);
+            }
+        }
+        return generic;
+    }
+
+    # `st`'s methods, filed under their overload sets in `own`.
+    _add_methods(st: StructDef, own: HashMap<String, Callee[]>) {
+        var generic = _generic_names(st);
         var all = Array<FunctionDef>();
         all.append_all(st.method_members);
         all.append_all(st.generic_methods);
@@ -1031,7 +1149,7 @@ export struct Callees {
     methods_of(receiver: String, method: String): Callee[]? {
         var own = methods.try_get(receiver);
         if (!own.is_value() and base.is_value()) {
-            own = base.value().methods.try_get(receiver);
+            own = base.value()._checked_receiver(receiver);
         }
         if (!own.is_value()) {
             return Optional<Callee[]>.Empty;
@@ -1045,7 +1163,7 @@ export struct Callees {
         if (own.is_value() or !base.is_value()) {
             return own;
         }
-        return base.value().methods.try_get(receiver);
+        return base.value()._checked_receiver(receiver);
     }
 
     ## The free functions named `name` (type arguments ignored).
@@ -1057,7 +1175,7 @@ export struct Callees {
     ## the module declares them.
     function_set(set: String): Callee[]? {
         return _merged(
-            base.is_value() ? base.value().functions.try_get(set) : Optional<Callee[]>.Empty, functions.try_get(set)
+            base.is_value() ? base.value()._checked_set(set) : Optional<Callee[]>.Empty, functions.try_get(set)
         );
     }
 
@@ -1068,7 +1186,7 @@ export struct Callees {
         if (own.is_value() or !base.is_value()) {
             return own;
         }
-        return base.value().constructors.try_get(name);
+        return base.value()._checked_constructors(name);
     }
 }
 
@@ -1154,7 +1272,11 @@ export bind_calls(module: Module, state: PassState) {
     }
     var none = Optional<HashMap<String, Callee[]>>.Empty;
     for (var function in module.functions) {
-        _bind_in(function, none, callees, globals, state);
+        # Only bodies and defaults are bound (a checked runtime's bodies
+        # are stashed).
+        if (function.body.is_value() or _has_default(function)) {
+            _bind_in(function, none, callees, globals, state);
+        }
     }
     for (var st in module.structs) {
         var members = Array<FunctionDef>();
@@ -1198,6 +1320,15 @@ export bind_calls(module: Module, state: PassState) {
             g.default = Optional<Expression>.Value(rewrite_expression(g.default.value(), binder));
         }
     }
+}
+
+_has_default(function: FunctionDef): bool {
+    for (var p in function.parameters) {
+        if (p.default.is_value()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 _bind_in(
