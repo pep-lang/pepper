@@ -101,3 +101,31 @@ and the fields written whole:
 | `argument_names` | rebuilt from scratch, sorted by place; drops entries | the layer's own, merged by place |
 | `type_aliases`, `recorded_summaries`, `summaries_to_record` | replaced by `resume_checked` | as now |
 | sets and maps | only gain entries | union; a key two layers both change is a conflict to detect |
+
+## Status (10-08)
+
+- PR 1 (#772): closures and own interfaces, traced.
+- PR 2 (#773): records hold a layer's new elements and their places.
+- PR 3 (this one): each layer is keyed on its files and its closure's own
+  interfaces, checked on its closure's records merged, and loaded the same
+  way. Merging (`RecordIn.merging`) puts each record's new elements after
+  the base's; a struct or function the layer changed is found by name; a
+  list that does not keep the base's order (a few structs' constructors)
+  is written whole and replaces the base's; `conversions` and
+  `argument_names` are each layer's own. `settle_merged` then sorts
+  externs by file and trait types by name, keeps one copy of a
+  specialization two layers both made, and marks every extension applied;
+  the driver sorts globals by their files' initialization order.
+
+Known limits, for per-file units:
+- A whole list replaces the base's: two layers that both rewrite the same
+  struct's constructors keep the later one's.
+- Each checked layer merges its closure's records again from bytes:
+  O(closure) reads per layer. With ~100 per-file layers this needs a cache
+  of merged modules (copy on check).
+- Each checked layer indexes its merged base for its delta (cold self-build
+  9.1 s in all, structs' member lists 3.9 s of it): it grows with the
+  closure, so per-file units want each record's element hashes kept.
+- A layer's own interface is what its delta adds, changes or drops
+  (`DeltaBase.own`), kept beside its record (`.own`), so keys need no
+  record read and no listing of the module before and after.

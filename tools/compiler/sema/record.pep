@@ -11,7 +11,7 @@ import compiler.ast;
 import digest;
 import [Utf8] from text;
 import [Loc, NO_FILE] from "loc";
-import [Checked] from "model";
+import [Checked, StructDef] from "model";
 import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
@@ -30,6 +30,10 @@ export struct RecordOut {
     ## For an interface: write every location as the same, so moving code
     ## around in a file does not change it.
     var blank_locs: bool = false;
+    ## For a hash compared within one build (a delta's index, an own
+    ## interface): a body still undecoded (`PendingBody`) is written as the
+    ## hash of its bytes in its record, not decoded and written again.
+    var pending_as_bytes: bool = false;
     # Each string's place in the list, by its text.
     var _places: HashMap<String, ulong> = HashMap<String, ulong>();
     # The strings' sizes, in their order.
@@ -38,6 +42,17 @@ export struct RecordOut {
     var _text: StringBuilder = StringBuilder();
 
     construct() {}
+
+    ## Writes `pending`, a body still undecoded, as the hash of its bytes
+    ## in its record and how many strings that record has.
+    ##
+    ## @param pending the body
+    pending(pending: PendingBody) {
+        var hasher = digest.Blake3();
+        hasher.update_range(pending.data, pending.start, pending.end - pending.start);
+        text(hasher.finish_hex());
+        unsigned(pending.strings.count);
+    }
 
     ## Leaves room for a size, filled in by `size_fill` with how many bytes
     ## were written after it.
@@ -139,6 +154,7 @@ export struct RecordOut {
         out.files = files;
         out.blank_bodies = blank_bodies;
         out.blank_locs = blank_locs;
+        out.pending_as_bytes = pending_as_bytes;
         return out;
     }
 
@@ -227,6 +243,21 @@ export write_interface_checked_summaries(out: RecordOut, summaries: HashMap<Stri
     }
 }
 
+## Returns the place of the first struct named `name` in `structs`, or
+## their count when none is.
+##
+## @param structs the structs
+## @param name the name
+## @returns the place, or `structs.count`
+export struct_named(structs: StructDef[], name: String): ulong {
+    for (var i in 0..structs.count) {
+        if (structs[i].name == name) {
+            return i;
+        }
+    }
+    return structs.count;
+}
+
 ## Compares two byte strings, byte by byte, the shorter first on a tie.
 ##
 ## @param a the first
@@ -294,6 +325,9 @@ export struct DeltaBase {
     var _sizes: HashMap<String, ulong> = HashMap<String, ulong>();
     # Each element's place, by "field:hash" of its record.
     var _places: HashMap<String, ulong> = HashMap<String, ulong>();
+    # What the delta written on this base changed in the interface: an
+    # entry for each element, entry or name it added, changed or dropped.
+    var _own: Array<String> = Array<String>();
     # Each list's elements' hashes, and its structs' names, in order.
     var _sequences: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
     # The base's checked names: structs, functions and globals, as indexed.
@@ -343,6 +377,12 @@ export struct DeltaBase {
                     gained.append(name);
                 }
             }
+            for (var name in lost) {
+                own($"checked {i} lost", name);
+            }
+            for (var name in gained) {
+                own($"checked {i}", name);
+            }
             for (var names in [lost, gained]) {
                 names.sort((a, b) => a.compare(b));
                 out.unsigned(names.count);
@@ -364,6 +404,7 @@ export struct DeltaBase {
         out.unsigned(lost.count);
         for (var key in lost) {
             out.text(key);
+            own("checked summary lost", key);
         }
         var changed = Array<String>();
         for (var (key, (loc, text)) in checked.summaries) {
@@ -383,6 +424,7 @@ export struct DeltaBase {
             out.text(key);
             out.loc(loc);
             out.text(text);
+            own("checked summary", $"{key} {summary_without_place(text)}");
         }
     }
 
@@ -469,6 +511,8 @@ export struct DeltaBase {
     scratch(): RecordOut {
         var out = RecordOut();
         out.files = files;
+        # Compared within this build only: undecoded bodies stay so.
+        out.pending_as_bytes = true;
         return out;
     }
 
@@ -624,6 +668,34 @@ export struct DeltaBase {
         return at.is_value() ? at.value() as long : -1;
     }
 
+    ## Adds to the own interface of the delta being written on this base:
+    ## `hash`, the interface of something it added, changed or dropped,
+    ## under `what`.
+    ##
+    ## @param what the field
+    ## @param hash its interface hash, or text
+    own(what: String, hash: String) {
+        _own.append($"{what} {hash}");
+    }
+
+    ## Returns the hash of what the delta written on this base changed in
+    ## the interface (`own`): unlike an interface hash of the whole module,
+    ## it does not depend on the layers before.
+    ##
+    ## @returns the hash, as hex
+    own_hash(): String {
+        var lines = Array<String>();
+        lines.append_all(_own);
+        lines.sort((a, b) => a.compare(b));
+        var hasher = digest.Blake3();
+        hasher.update("pepper own interface 2\n");
+        for (var line in lines) {
+            hasher.update(line);
+            hasher.update("\n");
+        }
+        return hasher.finish_hex();
+    }
+
     ## Returns the hashes of the elements of the base's list `list`, in
     ## order; with `list` followed by `#`, its structs' names.
     ##
@@ -669,6 +741,11 @@ export struct RecordIn {
     ## Whether the bodies of functions that are not generic are skipped
     ## (`skip`), decoded when needed.
     var lazy_bodies: bool = false;
+    ## Whether a delta is read onto a base other than the one it was
+    ## written on: the module of the layers its layer reads, merged. New
+    ## elements go after the base's, a patched struct is found by name, and
+    ## a list written by place cannot be read so (`error`).
+    var merging: bool = false;
 
     ## Starts reading `data`, a whole record. A record that is not one
     ## leaves `error` set and reads as zeros.

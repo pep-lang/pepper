@@ -99,6 +99,19 @@ export build_on(program: Program, base: Module, files: ulong[]): Result<Module, 
         }
         _join(base, built.value());
     }
+    sort_globals(program, base);
+    # Externs are first-wins by C name, in file order, as when the whole
+    # program is merged at once.
+    base.externs.sort((a: ExternDef, b: ExternDef) => a.loc.file < b.loc.file ? -1 : (a.loc.file > b.loc.file ? 1 : 0));
+    return Result<Module, Diagnostic>.Ok(base);
+}
+
+## Sorts `module`'s globals in the order their files' globals are
+## initialized (`initialization_order`), those of one file as they were.
+##
+## @param program the linked program
+## @param module the module
+export sort_globals(program: Program, module: Module) {
     var rank = Array<ulong>();
     for (var _ in program.files) {
         rank.append(0);
@@ -108,15 +121,11 @@ export build_on(program: Program, base: Module, files: ulong[]): Result<Module, 
         rank[file] = position;
         position += 1;
     }
-    base.globals.sort((a: VariableDef, b: VariableDef) => {
+    module.globals.sort((a: VariableDef, b: VariableDef) => {
         var left = _rank_of(rank, a);
         var right = _rank_of(rank, b);
         return left < right ? -1 : (left > right ? 1 : 0);
     });
-    # Externs are first-wins by C name, in file order, as when the whole
-    # program is merged at once.
-    base.externs.sort((a: ExternDef, b: ExternDef) => a.loc.file < b.loc.file ? -1 : (a.loc.file > b.loc.file ? 1 : 0));
-    return Result<Module, Diagnostic>.Ok(base);
 }
 
 ## Returns the order the files' globals are initialized in: each file after

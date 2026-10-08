@@ -141,6 +141,53 @@ rebuilds_only_the_unit_whose_body_changed() {
     expect_true(signature.misses.contains(b) and signature.misses.contains(main));
 }
 
+# How many records the cache holds of the layer whose first unit is
+# `unit`: one for each key it was stored under.
+_records_of(root: Path, unit: String): ulong {
+    return _count_records(root.join(Path("cache")), "", unit.replace(":", "_").replace("#", "_"));
+}
+
+_count_records(dir: Path, name: String, folder: String): ulong {
+    var listing = Directory.open(dir);
+    if (listing.is_err()) {
+        return 0;
+    }
+    ulong count = 0;
+    for (var entry in listing.value().entries().value()) {
+        if (entry.is_directory) {
+            count += _count_records(entry.path, entry.name, folder);
+        } else if (entry.name.ends_with(".rec") and folder.ends_with(name) and !name.is_empty) {
+            count += 1;
+        }
+    }
+    return count;
+}
+
+# A layer is keyed on the layers it reads: an interface edit to `a.pep`
+# keeps the record of `b.pep`'s layer, which does not read it, and an edit
+# to `b.pep` that of `a.pep`'s.
+[Test]
+keeps_the_layers_an_edit_does_not_reach() {
+    var folder = TempFolder("layer_keys");
+    var root = folder.path;
+    _write_program(root);
+    var program = _load(root);
+    var a = _unit_of(program, "a.pep");
+    var b = _unit_of(program, "b.pep");
+    _build(root);
+    expect_true(_records_of(root, a) == 1 and _records_of(root, b) == 1);
+
+    File.write_text(root.join(Path("a.pep")), "export a_value(x: int = 1): int {\n    return x;\n}\n");
+    _build(root);
+    expect_true(_records_of(root, a) == 2);
+    expect_true(_records_of(root, b) == 1);
+
+    File.write_text(root.join(Path("b.pep")), "export b_value(x: int = 2): int {\n    return x;\n}\n");
+    _build(root);
+    expect_true(_records_of(root, a) == 2);
+    expect_true(_records_of(root, b) == 2);
+}
+
 [Test]
 keeps_the_objects_another_build_stored_first() {
     var folder = TempFolder("store_twice");

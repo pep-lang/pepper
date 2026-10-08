@@ -297,6 +297,11 @@ def model_struct(name, fields):
             # (`RecordIn.lazy_bodies`); one skipped is decoded to be written.
             lines = ['if (out.blank_bodies and !value.is_generic_func and value.generic_params.count == 0) {',
                      '    out.unsigned(0);',
+                     '} else if (out.pending_as_bytes and value.pending_body.is_value()) {',
+                     '    # Hashed for a delta or an own interface: a body never',
+                     '    # decoded is as its record wrote it.',
+                     '    out.unsigned(2);',
+                     '    out.pending(value.pending_body.value());',
                      '} else {',
                      '    var _body = value.body;',
                      '    if (value.pending_body.is_value()) {',
@@ -558,15 +563,31 @@ for b in blocks:
 # that the base declares under its name but that changed is written as a
 # patch on it (tag 2): its member lists element by element the same way.
 
-def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge=False):
+# The fields an interface leaves out (`module_interface_fields`): what the
+# passes record for codegen and the build, not declarations.
+NOT_INTERFACE = ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files')
+
+def own_lines(label, expr, tree, blank_bodies='true'):
+    """Lines that add `expr`, of type `tree`, to the layer's own interface
+    (`DeltaBase.own`): its interface hash, under `label`."""
+    o = fresh('_own')
+    return (['{', f'    var {o} = RecordOut();', f'    {o}.blank_bodies = {blank_bodies};', f'    {o}.blank_locs = true;',
+             f'    {o}.pending_as_bytes = true;']
+            + ['    ' + l for l in write_to(o, expr, tree)]
+            + [f'    base.own("{label}", interface_text({o}));', '}'])
+
+def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge=False, named=False, own=None, own_bodies='true'):
     """Write, read and index lines for list `expr` of element type `et`,
     whose elements are referred to by `key` (a Pepper string expression)
     in the base's list `base_list`. `category` names the list in the
     stats of base elements a delta does not refer to. With `merge`, a
     list that holds the base's elements in order is written as its other
     elements and their places (mode 2), which reading puts back among the
-    base's: no reference into the base but its order."""
+    base's: no reference into the base but its order. With `named`, a base
+    element the layer changed is written with its name, which merging
+    finds it by."""
     item = fresh('_item')
+    ch = fresh('_changed'); sn = fresh('_seqn'); nc = fresh('_nc')
     hits = fresh('_hits')
     nj = fresh('_nj')
     w = []
@@ -580,41 +601,58 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
               '}',
               f'var {seq} = base.sequence({key});',
               f'ulong {bj} = 0;',
-              f'var {news} = Array<ulong>();',
-              f'for (var {i} in 0..{hs}.count) {{',
+              f'var {news} = Array<ulong>();']
+        if named:
+            w += [f'var {ch} = Array<(ulong, ulong)>();', f'var {sn} = base.sequence({key} + "#");']
+        w += [f'for (var {i} in 0..{hs}.count) {{',
               f'    if ({bj} < {seq}.count and {hs}[{i}] == {seq}[{bj}]) {{',
-              f'        {bj} += 1;',
-              '    } else {',
+              f'        {bj} += 1;']
+        if named:
+            w += [f'    }} else if ({bj} < {sn}.count and {expr}[{i}].name == {sn}[{bj}]) {{',
+                  f'        {ch}.append(({i}, {bj}));',
+                  f'        {bj} += 1;']
+        w += ['    } else {',
               f'        {news}.append({i});',
               '    }',
               '}']
         if index_next:
-            w += [f'for (var {i} in 0..{hs}.count) {{', f'    next.add_hashed({key}, {hs}[{i}], {i});', '}']
+            w += [f'for (var {i} in 0..{hs}.count) {{', f'    next.add_hashed({key}, {hs}[{i}], {i});']
+            if named:
+                w += [f'    next.name({key}, {expr}[{i}].name, {i});']
+            w += ['}']
         w += [f'if ({bj} == {seq}.count) {{',
-              '    out.unsigned(2);',
+              '    out.unsigned(2);']
+        if named:
+            w += [f'    out.unsigned({ch}.count);',
+                  f'    for (var ({i}, _b) in {ch}) {{',
+                  f'        out.text({expr}[{i}].name);',
+                  '        out.unsigned(_b);',
+                  f'        {fn(et)}_write(out, {expr}[{i}]);']
+            if own:
+                w += ['        ' + l for l in own_lines(own, f'{expr}[{i}]', et, own_bodies)]
+            w += ['    }',
+                  f'    base.count({category or key} + " changed", {ch}.count);']
+        w += [
               f'    out.unsigned({news}.count);',
               f'    for (var {i} in {news}) {{',
               f'        out.unsigned({i});',
-              f'        {fn(et)}_write(out, {expr}[{i}]);',
-              '    }',
+              f'        {fn(et)}_write(out, {expr}[{i}]);']
+        if own:
+            w += ['        ' + l for l in own_lines(own, f'{expr}[{i}]', et, own_bodies)]
+        w += ['    }',
               f'    base.count({category or key} + " merged", 0);',
               '} else {',
-              '    out.unsigned(1);',
-              f'    base.count({category or key} + " by place", 0);']
-        body = [f'var {hits} = HashSet<long>();',
-                f'out.unsigned({expr}.count);',
-                f'for (var {i} in 0..{expr}.count) {{',
-                f'    var at = base.find_hashed({key}, {hs}[{i}]);',
-                '    if (at >= 0) {',
-                f'        {hits}.insert(at);',
-                '        out.unsigned((at as ulong) * 2 + 1);',
-                '    } else {',
-                '        out.unsigned(0);',
-                f'        {fn(et)}_write(out, {expr}[{i}]);',
-                '    }',
-                '}',
-                f'base.missed({category or key}, {key}, {hits}.count);']
-        w += ['    ' + l for l in body] + ['}']
+              '    # Not the base\'s elements in order: whole, which reading takes',
+              '    # in place of the base\'s, whatever the base.',
+              '    out.unsigned(3);',
+              f'    base.count({category or key} + " whole", 0);',
+              f'    out.unsigned({expr}.count);',
+              f'    for (var {i} in 0..{expr}.count) {{',
+              f'        {fn(et)}_write(out, {expr}[{i}]);']
+        if own:
+            w += ['        ' + l for l in own_lines(own, f'{expr}[{i}]', et, own_bodies)]
+        w += ['    }',
+              '}']
     else:
         w += [f'var {hits} = HashSet<long>();',
              f'ulong {nj} = 0;',
@@ -636,13 +674,25 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
              '}',
              f'base.missed({category or key}, {key}, {hits}.count);']
     local = fresh('_f'); count = fresh('_n'); tag = fresh('_tag')
-    refs = [f'var {count} = input.count();',
-         f'for (var _ in 0..{count}) {{',
+    # Merging (`RecordIn.merging`), the base is not the one the delta was
+    # written on: a list written by place cannot merge, and a list
+    # `resume_checked` replaces keeps the base's.
+    refs = [f'var {count} = input.count();']
+    if merge:
+        refs += ['if (input.merging) {', f'    input.error = {category or key} + " written by place";', '}']
+    else:
+        refs += ['if (input.merging) {', f'    for (var _b in {base_list}) {{', f'        {local}.append(_b);', '    }', '}']
+    refs += [f'for (var _ in 0..{count}) {{',
          f'    var {tag} = input.unsigned();',
          f'    if ({tag} & 1 == 1) {{',
-         f'        {local}.append({base_list}[{tag} >> 1]);',
+         '        if (!input.merging) {',
+         f'            {local}.append({base_list}[{tag} >> 1]);',
+         '        }',
          '    } else {',
-         f'        {local}.append({fn(et)}_read(input));',
+         f'        var _read = {fn(et)}_read(input);',
+         '        if (!input.merging or ' + ('true' if merge else 'false') + ') {',
+         f'            {local}.append(_read);',
+         '        }',
          '    }',
          '}']
     r = [f'var {local} = Array<{model_type_name(et)}>();']
@@ -650,19 +700,48 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
         mode = fresh('_mode'); bi = fresh('_bi'); at = fresh('_at')
         r += [f'var {mode} = input.unsigned();',
               f'if ({mode} == 2) {{',
-              f'    ulong {bi} = 0;',
+              f'    var {ch} = HashMap<ulong, {model_type_name(et)}>();']
+        if named:
+            r += [f'    var {nc} = input.count();',
+                  f'    for (var _ in 0..{nc}) {{',
+                  '        var _name = input.text();',
+                  '        var _slot = input.unsigned();',
+                  '        if (input.merging) {',
+                  f'            _slot = {base_list}.count;',
+                  f'            for (var _k in 0..{base_list}.count) {{',
+                  f'                if ({base_list}[_k].name == _name) {{',
+                  '                    _slot = _k;',
+                  '                    break;',
+                  '                }',
+                  '            }',
+                  '        }',
+                  f'        var _el = {fn(et)}_read(input);',
+                  f'        if (_slot < {base_list}.count) {{',
+                  f'            {ch}[_slot] = _el;',
+                  '        } else {',
+                  f'            input.error = $"no {{_name}} to change";',
+                  '        }',
+                  '    }']
+        r += [f'    ulong {bi} = 0;',
               f'    var {count} = input.count();',
               f'    for (var _ in 0..{count}) {{',
               f'        var {at} = input.unsigned();',
-              f'        while ({local}.count < {at}) {{',
-              f'            {local}.append({base_list}[{bi}]);',
+              f'        while ({local}.count < {at} or (input.merging and {bi} < {base_list}.count)) {{',
+              f'            var _c = {ch}.try_get({bi});',
+              f'            {local}.append(_c.is_value() ? _c.value() : {base_list}[{bi}]);',
               f'            {bi} += 1;',
               '        }',
               f'        {local}.append({fn(et)}_read(input));',
               '    }',
               f'    while ({bi} < {base_list}.count) {{',
-              f'        {local}.append({base_list}[{bi}]);',
+              f'        var _c = {ch}.try_get({bi});',
+              f'        {local}.append(_c.is_value() ? _c.value() : {base_list}[{bi}]);',
               f'        {bi} += 1;',
+              '    }',
+              f'}} else if ({mode} == 3) {{',
+              f'    var {count} = input.count();',
+              f'    for (var _ in 0..{count}) {{',
+              f'        {local}.append({fn(et)}_read(input));',
               '    }',
               '} else {']
         r += ['    ' + l for l in refs] + ['}']
@@ -673,8 +752,10 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
          f'for (var {item} in {expr}) {{',
          '    var scratch = base.scratch();',
          f'    {fn(et)}_write(scratch, {item});',
-         f'    base.add({key}, scratch, {j});',
-         f'    {j} += 1;',
+         f'    base.add({key}, scratch, {j});']
+    if named:
+        x += [f'    base.name({key}, {item}.name, {j});']
+    x += [f'    {j} += 1;',
          '}']
     return w, r, x, local
 
@@ -696,8 +777,12 @@ def _prefix_delta(fname, tree):
           f'    out.unsigned(value.{fname}.count - {n});',
           f'    for (var {i} in {n}..value.{fname}.count) {{']
     w += ['        ' + l for l in write(f'value.{fname}[{i}]', et)]
+    if fname not in NOT_INTERFACE:
+        w += ['        ' + l for l in own_lines(fname, f'value.{fname}[{i}]', et)]
     w += ['    }', '} else {', '    out.unsigned(0);']
     w += ['    ' + l for l in write(f'value.{fname}', tree)]
+    if fname not in NOT_INTERFACE:
+        w += [f'    for (var {i} in 0..value.{fname}.count) {{'] + ['        ' + l for l in own_lines(fname, f'value.{fname}[{i}]', et)] + ['    }']
     w += [f'    base.count("{fname} whole", 0);', '}']
     local = fresh('_f'); tag = fresh('_tag'); keep = fresh('_keep'); more = fresh('_more')
     el, ev = read(et)
@@ -760,6 +845,17 @@ def _sorted_delta(fname, tree):
     x += [f'    base.keep_entry("{fname}", {es}, base.scratch());', '}']
     return w, r, x, local
 
+def _own_entries(label, expr, tree):
+    """Lines that add each entry of set or map `expr` to the own interface."""
+    key = fresh('_okey'); o = fresh('_own')
+    loop = f'for (var {key} in {expr}) {{' if tree[0] == 'set' else f'for (var ({key}, _) in {expr}) {{'
+    lines = [loop, f'    var {o} = RecordOut();', f'    {o}.blank_bodies = true;', f'    {o}.blank_locs = true;', f'    {o}.pending_as_bytes = true;']
+    lines += ['    ' + l for l in write_to(o, key, tree[1])]
+    if tree[0] == 'map':
+        lines += ['    ' + l for l in write_to(o, f'{expr}[{key}]', tree[2])]
+    lines += [f'    base.own("{label}", interface_text({o}));', '}']
+    return lines
+
 def _additions_delta(fname, tree):
     """A set or map that only gains entries: when every key of the
     base's is still there, written as the entries added or changed since
@@ -786,8 +882,12 @@ def _additions_delta(fname, tree):
           f'if ({kept} == base.size("{fname}")) {{',
           '    out.unsigned(1);']
     w += ['    ' + l for l in write(news, tree)]
+    if fname not in NOT_INTERFACE and fname not in ('recorded_summaries',):
+        w += ['    ' + l for l in _own_entries(fname, news, tree)]
     w += ['} else {', '    out.unsigned(0);']
     w += ['    ' + l for l in write(f'value.{fname}', tree)]
+    if fname not in NOT_INTERFACE and fname not in ('recorded_summaries',):
+        w += ['    ' + l for l in _own_entries(fname, f'value.{fname}', tree)]
     w += [f'    base.count("{fname} whole", 0);', '}']
     local = fresh('_f'); tag = fresh('_tag'); bk = fresh('_bk')
     added_lines, added_val = read(tree)
@@ -816,7 +916,7 @@ def _additions_delta(fname, tree):
 def _struct_fields():
     return [f for f in model.items['StructDef']['fields'] if not f['skip']]
 
-def struct_list_delta(expr, list_key, base_list):
+def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
     """Lines for a list of StructDef, with the patch form. A list that
     holds the base's structs in order, some patched, is written as the
     patches and the new structs with their places (mode 2); else each
@@ -855,15 +955,19 @@ def struct_list_delta(expr, list_key, base_list):
          f'        out.text({expr}[{i}].name);',
          '        out.unsigned(_b);',
          f'        _patch_{list_key}_write(out, {expr}[{i}], base, _b);',
-         f'        base.count("{list_key} patched", out.values.count - _before);',
-         '    }',
+         f'        base.count("{list_key} patched", out.values.count - _before);']
+    if own:
+        w += ['        ' + l for l in own_lines(own, f'{expr}[{i}]', st, own_bodies)]
+    w += ['    }',
          f'    out.unsigned({news}.count);',
          f'    for (var {i} in {news}) {{',
          '        ulong _before = out.values.count;',
          f'        out.unsigned({i});',
          f'        {fn(st)}_write(out, {expr}[{i}]);',
-         f'        base.count("{list_key} new", out.values.count - _before);',
-         '    }',
+         f'        base.count("{list_key} new", out.values.count - _before);']
+    if own:
+        w += ['        ' + l for l in own_lines(own, f'{expr}[{i}]', st, own_bodies)]
+    w += ['    }',
          f'    base.count("{list_key} merged", 0);',
          '} else {',
          '    out.unsigned(1);',
@@ -905,15 +1009,22 @@ def struct_list_delta(expr, list_key, base_list):
          f'    var {patched} = HashMap<ulong, StructDef>();',
          f'    var {count} = input.count();',
          f'    for (var _ in 0..{count}) {{',
-         '        input.text();',
+         '        var _name = input.text();',
          f'        var _slot = input.unsigned();',
+         '        if (input.merging) {',
+         f'            _slot = struct_named({base_list}, _name);',
+         '        }',
+         f'        if (_slot >= {base_list}.count) {{',
+         f'            input.error = $"no struct {{_name}} to patch";',
+         '            break;',
+         '        }',
          f'        {patched}[_slot] = _patch_{list_key}_read(input, {base_list}[_slot]);',
          '    }',
          f'    ulong {bi} = 0;',
          f'    var _added = input.count();',
          f'    for (var _ in 0.._added) {{',
          f'        var {at} = input.unsigned();',
-         f'        while ({local}.count < {at}) {{',
+         f'        while ({local}.count < {at} or (input.merging and {bi} < {base_list}.count)) {{',
          f'            var _p = {patched}.try_get({bi});',
          f'            {local}.append(_p.is_value() ? _p.value() : {base_list}[{bi}]);',
          f'            {bi} += 1;',
@@ -926,11 +1037,14 @@ def struct_list_delta(expr, list_key, base_list):
          f'        {bi} += 1;',
          '    }',
          '} else {',
+         '    if (input.merging) {',
+         '        input.error = "structs written by place";',
+         '    }',
          f'    var {count} = input.count();',
          f'    for (var _ in 0..{count}) {{',
          f'        var {tag} = input.unsigned();',
          f'        if ({tag} & 1 == 1) {{',
-         f'            {local}.append({base_list}[{tag} >> 1]);',
+         f'            {local}.append({base_list}[({tag} >> 1) < {base_list}.count ? {tag} >> 1 : 0]);',
          f'        }} else if ({tag} == 2) {{',
          f'            var _was = {base_list}[input.unsigned()];',
          f'            {local}.append(_patch_{list_key}_read(input, _was));',
@@ -963,7 +1077,7 @@ def struct_patch(list_key):
         tree = rust_type(f['type'])
         if tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
             key = f'$"{list_key}.{{slot}}.{fname}"'
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], key, f'was.{fname}', f'"{list_key}.*.{fname}"')
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], key, f'was.{fname}', f'"{list_key}.*.{fname}"', merge=True)
             w += ['    ' + l for l in lw]
             r += ['    ' + l for l in lr]
             x += ['    ' + l for l in lx]
@@ -995,11 +1109,11 @@ def module_delta():
         fname = model.fname(f['name'])
         tree = rust_type(f['type'])
         if fname == 'structs':
-            lw, lr, lx, local = struct_list_delta('value.structs', 's', 'base.structs')
+            lw, lr, lx, local = struct_list_delta('value.structs', 's', 'base.structs', own='structs')
             lr = [_lazy(l) for l in lr]
         elif fname == 'templates':
-            tw, tr, tx, tlocal = struct_list_delta('value.templates.structs', 't', 'base.templates.structs')
-            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True, merge=True)
+            tw, tr, tx, tlocal = struct_list_delta('value.templates.structs', 't', 'base.templates.structs', own='templates structs', own_bodies='false')
+            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True, merge=True, named=True, own='templates functions', own_bodies='false')
             local = fresh('_f')
             lw = ['out.flag(value.templates.frozen);'] + tw + fw
             # The flag is written first, so it is read first.
@@ -1010,8 +1124,22 @@ def module_delta():
             lw = ['base.write_checked(out, value.checked);', 'next.keep_checked(value.checked);']
             lr = [f'var {local} = DeltaBase.read_checked(input, base.checked);']
             lx = ['base.keep_checked(value.checked);']
+        elif fname == 'conversions':
+            # Rebuilt by each layer's `convert_to_traits`: written whole;
+            # its own interface is the conversions the base lacks.
+            lw = write(f'value.{fname}', tree)
+            ci = fresh('_conv'); co = fresh('_own'); cj = fresh('_cj')
+            lw += [f'for (var {ci} in value.conversions) {{', f'    var {co} = RecordOut();', f'    {co}.blank_locs = true;']
+            lw += ['    ' + l for l in write_to(co, ci, tree[1])]
+            lw += [f'    var _h = interface_text({co});', '    if (base.find_hashed("conversions", _h) < 0) {', '        base.own("conversions", _h);', '    }', '}']
+            lines, val = read(tree)
+            local = fresh('_f')
+            lr = lines + [f'var {local} = {val};']
+            lx = [f'ulong {cj} = 0;', f'for (var {ci} in value.conversions) {{', f'    var {co} = RecordOut();', f'    {co}.blank_locs = true;']
+            lx += ['    ' + l for l in write_to(co, ci, tree[1])]
+            lx += [f'    base.add_hashed("conversions", interface_text({co}), {cj});', f'    {cj} += 1;', '}']
         elif tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed, merge=fname not in resumed)
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed, merge=fname not in resumed, named=fname == 'functions', own=None if fname in resumed else fname)
             if fname == 'functions':
                 lr = [_lazy(l) for l in lr]
         elif fname == 'argument_names':
@@ -1078,64 +1206,8 @@ def module_interface_fields():
     return lines
 
 
-# For own-interface hashes: the interface hash of each element of the
-# module's lists, each entry of its sets and maps, and each other field
-# whole, as ("field", hash) pairs. A layer's own interface is what these
-# gain and lose across it.
-def module_interface_elements():
-    fields = [f for f in model.items['Module']['fields'] if not f['skip']]
-    lines = ['_m_Module_interface_elements(value: Module): Array<(String, String)> {',
-             '    var found = Array<(String, String)>();']
-    def one(fname, body, blank_bodies='true'):
-        return (['    {', '        var out = RecordOut();', f'        out.blank_bodies = {blank_bodies};', '        out.blank_locs = true;']
-                + ['        ' + l for l in body]
-                + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
-    def each(fname, expr, et, blank_bodies='true'):
-        item = fresh('_item')
-        return ([f'    for (var {item} in {expr}) {{', '        var out = RecordOut();', f'        out.blank_bodies = {blank_bodies};', '        out.blank_locs = true;']
-                + ['        ' + l for l in write(item, et)]
-                + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
-    for f in fields:
-        fname = model.fname(f['name'])
-        tree = rust_type(f['type'])
-        if fname in ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files'):
-            continue
-        if fname == 'recorded_summaries':
-            # By text without its place, as `write_interface_summaries`.
-            text = fresh('_text')
-            lines += ([f'    for (var (_, {text}) in value.recorded_summaries) {{', '        var out = RecordOut();',
-                       f'        out.text(summary_without_place({text}));',
-                       '        found.append(("recorded_summaries", interface_text(out)));', '    }'])
-        elif fname == 'checked':
-            # Each name and summary on its own; `extensions` is a count of
-            # the module's extensions, which are elements already.
-            for part in ('structs', 'functions', 'globals'):
-                name = fresh('_name')
-                lines += ([f'    for (var {name} in value.checked.{part}) {{', '        var out = RecordOut();', f'        out.text({name});',
-                           f'        found.append(("checked {part}", interface_text(out)));', '    }'])
-            key = fresh('_key'); text = fresh('_text')
-            lines += ([f'    for (var ({key}, (_, {text})) in value.checked.summaries) {{', '        var out = RecordOut();',
-                       f'        out.text({key});', f'        out.text(summary_without_place({text}));',
-                       '        found.append(("checked summaries", interface_text(out)));', '    }'])
-        elif fname == 'templates':
-            lines += one('templates frozen', ['out.flag(value.templates.frozen);'])
-            lines += each('templates structs', 'value.templates.structs', ('model', 'StructDef'), 'false')
-            lines += each('templates functions', 'value.templates.functions', ('model', 'FunctionDef'), 'false')
-        elif tree[0] in ('vec', 'set'):
-            lines += each(fname, f'value.{fname}', tree[1])
-        elif tree[0] == 'map':
-            key = fresh('_key')
-            lines += ([f'    for (var ({key}, _) in value.{fname}) {{', '        var out = RecordOut();', '        out.blank_bodies = true;', '        out.blank_locs = true;']
-                      + ['        ' + l for l in write(key, tree[1]) + write(f'value.{fname}[{key}]', tree[2])]
-                      + [f'        found.append(("{fname}", interface_text(out)));', '    }'])
-        else:
-            lines += one(fname, write(f'value.{fname}', tree))
-    lines += ['    return found;', '}']
-    return lines
-
 out_blocks.append(module_delta())
 out_blocks.append(module_interface_fields())
-out_blocks.append(module_interface_elements())
 
 header = '''## Saving and loading a checked module: a binary writer and reader for
 ## every type `Module` reaches, the AST nodes it holds included. Generated
@@ -1150,6 +1222,7 @@ import [
     merge_by_place,
     RecordIn,
     RecordOut,
+    struct_named,
     summary_without_place,
     write_interface_checked_summaries,
     write_interface_summaries
@@ -1227,16 +1300,6 @@ export index_resumed(module: Module, base: DeltaBase) {
 ## @returns (what, hash) pairs
 export interface_fields(module: Module, interface: bool = true): Array<(String, String)> {
     return _m_Module_interface_fields(module, interface);
-}
-
-## Returns the interface hash of each element of `module`'s lists, each
-## entry of its sets and maps, and each other field whole, as (field, hash)
-## pairs: a layer's own interface is what these gain and lose across it.
-##
-## @param module the module
-## @returns (field, hash) pairs
-export interface_elements(module: Module): Array<(String, String)> {
-    return _m_Module_interface_elements(module);
 }
 
 ## Writes a type alias to `out`.

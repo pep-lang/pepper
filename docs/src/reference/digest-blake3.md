@@ -64,6 +64,20 @@ Hashes `bytes` as the next part of the input.
 **Parameters**
 - `bytes` — the bytes to add
 
+#### update_range
+
+```pepper
+update_range(bytes: u8[], start: ulong, count: ulong)
+```
+
+Hashes `count` bytes of `bytes`, from index `start`, as the next part
+of the input; those past the end of `bytes` are left out.
+
+**Parameters**
+- `bytes` — the bytes
+- `start` — the index of the first byte to add
+- `count` — how many bytes to add
+
 #### update
 
 ```pepper

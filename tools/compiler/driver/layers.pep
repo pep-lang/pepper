@@ -18,7 +18,7 @@ import compiler.sema;
 import "cache";
 
 ## The record format's version: a new format gets a new folder.
-const _RECORDS_FOLDER = "checked13";
+const _RECORDS_FOLDER = "checked15";
 ## How many keys' records each layer keeps.
 const _KEEP_RECORDS = 4;
 
@@ -34,8 +34,8 @@ export struct Layer {
     ## the layers, in order: the runtime, its units' imports, their modules'
     ## other files and the extensions they see.
     var reads: ulong[] = Array<ulong>();
-    ## Its record's key: its files' hash and the interface of the layers
-    ## before it (`layer_key`), set as the build reaches it.
+    ## Its record's key: its files' hash and the own interfaces of the
+    ## layers it reads (`layer_key`), set as the build reaches it.
     var key: String = "";
 
     construct(name: String) {
@@ -175,21 +175,53 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
 }
 
 ## Returns the key of `layer`'s record: its files and what it is checked
-## on, the interface of the layers before it (`sema.interface_hash`), or
-## for the first, what every key starts from. A change to an earlier layer
-## that keeps its interface keeps this key: the record is still good
-## (early cutoff).
+## on, the own interface (`sema.DeltaBase.own_hash`) of each layer it reads. A
+## change to a layer it does not read, or one that keeps the own interface
+## of every layer it reads, keeps the key: the record is still good (early
+## cutoff).
 ##
-## @param previous the interface hash of the layers before, or the base
 ## @param layer the layer
+## @param owns each layer's own interface, by index: those `layer` reads set
 ## @returns the key, as hex
-export layer_key(previous: String, layer: Layer): String {
+export layer_key(layer: Layer, owns: String[]): String {
     var hasher = digest.Blake3();
-    hasher.update("pepper checked layer 2\n");
-    hasher.update(previous);
-    hasher.update("\n");
+    hasher.update("pepper checked layer 3\n");
     hasher.update(layer.files_key);
+    hasher.update("\n");
+    for (var d in layer.reads) {
+        hasher.update(owns[d]);
+        hasher.update("\n");
+    }
     return hasher.finish_hex();
+}
+
+## Returns the module the layers `reads` leave, their records merged in
+## order (`sema.RecordIn.merging`), each layer's new declarations after
+## those of the layers before; or why a record does not merge.
+##
+## @param program the program
+## @param records each layer's record, by index: those of `reads` set
+## @param reads the layers, in order
+## @returns the module
+export merged_module(
+    program: link.Program, records: HashMap<ulong, u8[]>, reads: ulong[]
+): Result<sema.Module, String> {
+    var slots = _record_slots(program);
+    var module = sema.Module();
+    for (var d in reads) {
+        var bytes = records.try_get(d);
+        if (!bytes.is_value()) {
+            return Result<sema.Module, String>.err($"no record of layer {d}");
+        }
+        var read = _read_record(slots, bytes.value(), Optional<sema.Module>.Value(module), true);
+        if (read.is_err()) {
+            return Result<sema.Module, String>.err(read.error());
+        }
+        module = sema.resume_checked(read.value());
+    }
+    sema.settle_merged(module);
+    sema.sort_globals(program, module);
+    return Result<sema.Module, String>.ok(module);
 }
 
 ## The units outside the runtime in groups, each group after every group it
@@ -317,68 +349,72 @@ _record_folder(name: String): String {
     return name.replace(":", "_").replace("#", "_");
 }
 
-## Loads the records of the longest run of layers from the first whose
-## records the cache has, and the program's files mapped to their slots.
-## Each record after the first is a delta on the one before it, so they
-## are read in order, each on the module the one before left.
+## Writes `unit`'s record, the record of `layer`: a delta on the module of
+## the layers it reads, merged, which `base` indexes. Returns the record and
+## the layer's own interface, what the delta changed in the interface
+## (`sema.DeltaBase.own_hash`). With `stored`, the build cache keeps both
+## under the layer's key: the record, and beside it its own interface, which
+## the keys of the layers that read it need without reading the record.
 ##
 ## @param cache the build cache
 ## @param program the program
-## @param layers the layers
-## @returns how many layers it covers, and the checked unit of the last;
-##   none when the cache has no record of the first
-export load_checked(cache: Cache, program: link.Program, layers: Layer[]): (ulong, sema.CheckedUnit)? {
-    var slots = _record_slots(program);
-    var found = Optional<(ulong, sema.CheckedUnit)>.Empty;
-    var base = Optional<sema.Module>.Empty;
-    # The last layer is the program's own, checked on every build that
-    # gets this far; a record covering it would mean nothing changed.
-    for (var n in 0..layers.count - 1) {
-        var bytes = File.read_bytes(record_path(cache, layers[n]));
-        if (bytes.is_err()) {
-            break;
-        }
-        var read = _read_record(slots, bytes.value(), base);
-        if (!read.is_value()) {
-            break;
-        }
-        var (unit, _) = read.value();
-        found = Optional<(ulong, sema.CheckedUnit)>.Value((n + 1, unit));
-        base = Optional<sema.Module>.Value(sema.resume_checked(unit));
-    }
-    return found;
-}
-
-## Stores `unit`, the record of the layers up to `layer`: in full, or with
-## `base`, as a delta on the record of the layer before.
-##
-## @param cache the build cache
-## @param program the program
-## @param layer the last layer it covers
+## @param layer the layer
 ## @param unit the checked unit
 ## @param base the index of the module the layer was checked on
-## @param interface the unit's interface hash
+## @param stored whether the cache keeps the record
+## @returns the record and the own interface
 export store_checked(
-    cache: Cache,
-    program: link.Program,
-    layer: Layer,
-    unit: sema.CheckedUnit,
-    base: sema.DeltaBase?,
-    interface: String,
-    next: sema.DeltaBase = sema.DeltaBase()
-) {
-    var bytes = _record_bytes(program, unit, base, interface, next);
+    cache: Cache, program: link.Program, layer: Layer, unit: sema.CheckedUnit, base: sema.DeltaBase, stored: bool
+): (u8[], String) {
+    var bytes = _record_bytes(program, unit, base);
+    var own = base.own_hash();
+    if (!stored) {
+        return (bytes, own);
+    }
     var path = record_path(cache, layer);
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {
-        return;
+        return (bytes, own);
     }
     var partial = Path($"{path}.{process.id()}");
-    if (File.write_bytes(partial, bytes).is_err() or File.rename(partial, path).is_err()) {
+    var own_path = _own_path(path);
+    var own_partial = Path($"{own_path}.{process.id()}");
+    if (File.write_bytes(partial, bytes).is_err()
+        or File.write_text(own_partial, own).is_err()
+        or File.rename(own_partial, own_path).is_err()
+        or File.rename(partial, path).is_err()) {
         File.remove(partial);
-        return;
+        File.remove(own_partial);
+        return (bytes, own);
     }
     _prune_records(folder);
+    return (bytes, own);
+}
+
+## Returns the record of `layer` under its key and its own interface, when
+## the cache has both.
+##
+## @param cache the build cache
+## @param program the program
+## @param layer the layer, its key set
+## @returns the record's bytes and its own interface
+export find_checked(cache: Cache, program: link.Program, layer: Layer): (u8[], String)? {
+    var path = record_path(cache, layer);
+    var own = File.read_to_string(_own_path(path));
+    if (own.is_err() or own.value().is_empty) {
+        return Optional<(u8[], String)>.Empty;
+    }
+    var bytes = File.read_bytes(path);
+    if (bytes.is_err()) {
+        return Optional<(u8[], String)>.Empty;
+    }
+    var found = (bytes.value(), own.value());
+    return Optional<(u8[], String)>.Value(found);
+}
+
+# Where the own interface of the record at `path` is kept.
+_own_path(path: Path): Path {
+    return Path($"{path}.own");
 }
 
 # The program's files by namespace, which a record names its slots by.
@@ -424,15 +460,9 @@ _prune_records(folder: Path) {
     }
 }
 
-# The record of `unit`: the program's files' namespaces, the unit's
-# interface hash, then the unit, in full or as a delta on `base`.
-_record_bytes(
-    program: link.Program,
-    unit: sema.CheckedUnit,
-    base: sema.DeltaBase?,
-    interface: String,
-    next: sema.DeltaBase = sema.DeltaBase()
-): u8[] {
+# The record of `unit`: the program's files' namespaces, then the unit, as
+# a delta on `base`.
+_record_bytes(program: link.Program, unit: sema.CheckedUnit, base: sema.DeltaBase): u8[] {
     var out = sema.RecordOut();
     # Slot i is program file i; the record keeps their names, so it loads
     # into a program whose files sit elsewhere.
@@ -443,92 +473,31 @@ _record_bytes(
     for (var file in program.files) {
         out.text(file.namespace);
     }
-    out.text(interface);
-    unit.write(out, base, next);
+    unit.write(out, Optional<sema.DeltaBase>.Value(base));
     return out.finish();
 }
 
-# Reads the unit in record `bytes` and its interface hash, its slots mapped
-# to the program's files by `slots`; a delta on `base`. None when it is not
-# a whole record.
-_read_record(slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?): (sema.CheckedUnit, String)? {
+# Reads the unit in record `bytes`, its slots mapped to the program's files
+# by `slots`: a delta merged onto `base`, the module of the layers before.
+_read_record(
+    slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?, merging: bool
+): Result<sema.CheckedUnit, String> {
     var input = sema.RecordIn(bytes);
     # Most checked bodies are needed by neither the passes nor codegen:
     # each is decoded when one needs it (`sema.PendingBody`).
     input.lazy_bodies = true;
+    input.merging = merging;
     var count = input.count();
     for (var _ in 0..count) {
         var file = slots.try_get(input.text());
         input.files.append(file.is_value() ? file.value() : sema.NO_FILE);
     }
-    var interface = input.text();
     var unit = sema.CheckedUnit.read(input, base);
+    if (!input.error.is_empty) {
+        return Result<sema.CheckedUnit, String>.err(input.error);
+    }
     if (!input.done()) {
-        return Optional<(sema.CheckedUnit, String)>.Empty;
+        return Result<sema.CheckedUnit, String>.err("the record does not read whole");
     }
-    return Optional<(sema.CheckedUnit, String)>.Value((unit, interface));
-}
-
-## Reads the record of `layer` under its key, when the cache has it: a
-## full one, or a delta on `base`, the module of the layers before as
-## checked or loaded and resumed.
-##
-## @param cache the build cache
-## @param program the program
-## @param layer the layer, its key set
-## @param base the module it is checked on, if any
-## @returns the checked unit and its interface hash
-export read_checked(
-    cache: Cache, program: link.Program, layer: Layer, base: sema.Module?
-): (sema.CheckedUnit, String)? {
-    var bytes = File.read_bytes(record_path(cache, layer));
-    if (bytes.is_err()) {
-        return Optional<(sema.CheckedUnit, String)>.Empty;
-    }
-    return _read_record(_record_slots(program), bytes.value(), base);
-}
-
-# `unit` written in full.
-_full_bytes(unit: sema.CheckedUnit): u8[] {
-    var out = sema.RecordOut();
-    unit.write(out);
-    return out.finish();
-}
-
-## Whether the records of `layers` read back to what a full record of
-## `unit`, the last one's unit as checked, reads back to: both written in
-## full give the same bytes. For `PEPC_VERIFY_DELTA`, which checks each
-## delta record as it is stored.
-##
-## @param cache the build cache
-## @param program the program
-## @param layers the layers up to the one `unit` is the record of, and one more
-## @param unit the checked unit just stored
-## @returns an error naming the layer when they differ
-export verify_checked(cache: Cache, program: link.Program, layers: Layer[], unit: sema.CheckedUnit): String? {
-    var loaded = load_checked(cache, program, layers);
-    var name = layers[layers.count - 2].name;
-    if (!loaded.is_value()) {
-        return Optional<String>.Value($"the record of layer {name} does not load");
-    }
-    var (covered, back) = loaded.value();
-    if (covered != layers.count - 1) {
-        return Optional<String>.Value($"the records load only {covered} of {layers.count - 1} layers");
-    }
-    # Both read from records, so their maps and sets are in the order they
-    # were written in; loading resumes each unit it reads, so this too.
-    var full = _read_record(
-        _record_slots(program),
-        _record_bytes(program, unit, Optional<sema.DeltaBase>.Empty, ""),
-        Optional<sema.Module>.Empty
-    );
-    if (!full.is_value()) {
-        return Optional<String>.Value($"the full record of layer {name} does not read back");
-    }
-    var (full_unit, _) = full.value();
-    sema.resume_checked(full_unit);
-    if (!(_full_bytes(full_unit) == _full_bytes(back))) {
-        return Optional<String>.Value($"the record of layer {name} reads back different from the layer as checked");
-    }
-    return Optional<String>.Empty;
+    return Result<sema.CheckedUnit, String>.ok(unit);
 }

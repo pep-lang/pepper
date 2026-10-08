@@ -184,14 +184,6 @@ export struct Built {
     construct() {}
 }
 
-## Whether `PEPC_VERIFY_DELTA` checks each checked layer's record as it is
-## stored: read back on the records before it, it must be the layer as
-## checked.
-_verify_delta(): bool {
-    var named = os.environment("PEPC_VERIFY_DELTA");
-    return named.is_value() and !named.value().is_empty;
-}
-
 ## Whether `PEPC_VERIFY_CUTOFF` checks every layer loaded by early cutoff
 ## again and compares: its record, written on an earlier check of the
 ## layers below, must be what checking it on them now gives.
@@ -202,21 +194,10 @@ _verify_cutoff(): bool {
 
 ## Whether `PEPC_TRACE_LAYERS` prints, for each layer, the layers it
 ## reads and the hash of what it changed in the interface
-## (`sema.own_interface`).
+## (`sema.DeltaBase.own_hash`).
 _trace_layers(): bool {
     var named = os.environment("PEPC_TRACE_LAYERS");
     return named.is_value() and !named.value().is_empty;
-}
-
-## Prints `layer`'s line of `PEPC_TRACE_LAYERS`.
-_print_layer(layered: Layer[], layer: Layer, before: Array<(String, String)>, after: sema.Module) {
-    var reads = Array<String>();
-    for (var d in layer.reads) {
-        reads.append(layered[d].name);
-    }
-    var own = sema.own_interface(before, sema.interface_elements(after));
-    var listed = ", ".join(reads);
-    File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} reads [{listed}]\n");
 }
 
 ## Whether `PEPC_RECORD_STATS` prints the bytes each field of the module
@@ -268,9 +249,11 @@ _layers_off(): bool {
     return named.is_value() and !named.value().is_empty;
 }
 
-## Checks `program` layer by layer (`layers.pep`): from the record of the
-## longest run of unchanged layers in the cache, each layer after it on top
-## of the ones before, storing each but the last as a record. A layer whose
+## Checks `program` layer by layer (`layers.pep`). Each layer is keyed on
+## its files and the own interfaces of the layers it reads; the cache's
+## record under that key is loaded, else the layer is checked on the module
+## of the layers it reads, their records merged, and its record stored. The
+## last layer, the program's own, is checked on every build. A layer whose
 ## check warned is not stored, so the next build warns again.
 ##
 ## @returns the checked module and the state of the last layer's passes,
@@ -286,61 +269,56 @@ _check_layers(
     trace: bool
 ): Result<(sema.Module, sema.PassState), String> {
     var module = sema.Module();
-    # Whether `module` holds the layers before the one at hand.
-    bool have = false;
-    # What the next layer is checked on: the interface of the layers so far.
-    String previous = "";
-    # Whether a layer was checked in this build, so the records after it
-    # that load are early cutoffs.
-    bool checked_any = false;
-    ulong loaded = 0;
     var state = sema.PassState(program.target);
-    bool verify = _verify_delta();
+    # Each layer's own interface and record, as loaded or checked.
+    var owns = Array<String>();
+    for (var _ in 0..layered.count) {
+        owns.append("");
+    }
+    var records = HashMap<ulong, u8[]>();
+    # The layers loaded, whose files' bodies are not linked.
+    var loaded = HashSet<ulong>();
+    bool checked_any = false;
     bool verify_cutoff = _verify_cutoff();
     bool trace_layers = _trace_layers();
-    # The index of `module` its record's delta built, when it was written.
-    var indexed = Optional<sema.DeltaBase>.Empty;
     for (var k in 0..layered.count) {
-        layered[k].key = layer_key(previous, layered[k]);
+        layered[k].key = layer_key(layered[k], owns);
+        var layer = layered[k];
         # The last layer is the program's own, checked on every build that
         # gets this far.
         if (k + 1 < layered.count) {
-            var found = read_checked(
-                cache, program, layered[k], have ? Optional<sema.Module>.Value(module) : Optional<sema.Module>.Empty
-            );
+            var found = find_checked(cache, program, layer);
             if (found.is_value()) {
-                var (unit, interface) = found.value();
+                var (bytes, own) = found.value();
                 if (verify_cutoff and checked_any) {
-                    var wrong = _verify_reuse(program, module, layered[k], unit, reused, sources, warnings);
+                    var wrong = _verify_reuse_merged(program, layered, records, k, bytes, reused, sources, warnings);
                     if (wrong.is_value()) {
                         return Result<(sema.Module, sema.PassState), String>.err(
                             $"PEPC_VERIFY_CUTOFF: {wrong.value()}"
                         );
                     }
                 }
+                owns[k] = own;
+                records[k] = bytes;
+                loaded.insert(k);
+                clock.lap($"find {layer.name}");
                 if (trace_layers) {
-                    var before = have ? sema.interface_elements(module) : Array<(String, String)>();
-                    _print_layer(layered, layered[k], before, unit.module);
+                    File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} loaded\n");
                 }
-                module = sema.resume_checked(unit);
-                indexed = Optional<sema.DeltaBase>.Empty;
-                have = true;
-                previous = interface;
-                loaded += 1;
-                clock.lap($"load {layered[k].name}");
                 if (trace) {
                     var how = checked_any ? "unchanged interface below" : "checked already";
-                    File.stderr().write_all($"cache: layer {layered[k].name} {how}\n");
+                    File.stderr().write_all($"cache: layer {layer.name} {how}\n");
                 }
                 continue;
             }
         }
-        # The first layer to check: the files from here on are linked and
-        # checked before it. Those of the layers loaded are as they were
-        # when checked, without an error or a warning (see `store`).
+        # The first layer to check: the files of the layers not loaded are
+        # linked and checked before it. Those of the layers loaded are as
+        # they were when checked, without an error or a warning (see
+        # `store`).
         if (!checked_any) {
             var bodies = _every_file(program);
-            for (var j in 0..k) {
+            for (var j in loaded) {
                 for (var file in layered[j].files) {
                     bodies[file] = false;
                 }
@@ -356,25 +334,22 @@ _check_layers(
             warnings.append_all(program.warnings());
             clock.lap("link bodies");
         }
-        # What this layer's record is a delta on: the module the layers
-        # before it left, indexed before this layer changes it.
-        var base = Optional<sema.DeltaBase>.Empty;
-        if (have and k + 1 < layered.count) {
-            if (indexed.is_value()) {
-                base = indexed;
-            } else {
-                var index = sema.DeltaBase();
-                sema.index_module(module, index);
-                base = Optional<sema.DeltaBase>.Value(index);
-                clock.lap("index");
-            }
+        # The layers it reads, their records merged.
+        var merged = merged_module(program, records, layer.reads);
+        if (merged.is_err()) {
+            return Result<(sema.Module, sema.PassState), String>.err(
+                $"the layers layer {layer.name} reads do not merge: {merged.error()}"
+            );
         }
-        indexed = Optional<sema.DeltaBase>.Empty;
-        var before = Array<(String, String)>();
-        if (trace_layers and have) {
-            before = sema.interface_elements(module);
+        module = merged.value();
+        clock.lap($"merge {layer.name}");
+        # What its record is a delta on, indexed before the layer changes it.
+        var base = sema.DeltaBase();
+        if (k + 1 < layered.count) {
+            sema.index_module(module, base);
+            clock.lap("index");
         }
-        var checked = _check_layer(program, module, layered[k], reused, sources, warnings);
+        var checked = _check_layer(program, module, layer, reused, sources, warnings);
         if (checked.is_err()) {
             return Result<(sema.Module, sema.PassState), String>.err(checked.error());
         }
@@ -382,53 +357,27 @@ _check_layers(
         module = after;
         state = ran_state;
         checked_any = true;
-        clock.lap($"layer {layered[k].name}");
+        clock.lap($"layer {layer.name}");
         if (k + 1 == layered.count) {
-            if (trace_layers) {
-                _print_layer(layered, layered[k], before, module);
-            }
             break;
         }
         var unit = sema.finish_checked(module, state, aliases);
-        if (trace_layers) {
-            _print_layer(layered, layered[k], before, unit.module);
-        }
-        var interface = sema.interface_hash(unit);
-        clock.lap("interface");
-        # Writing the delta indexes the module for the next one.
-        var next = sema.DeltaBase();
-        bool stored = false;
         # A layer with a warning is checked again on each build, which
         # reports it again; so a layer loaded had none.
-        if (state.notes.is_empty and !_warns(warnings, layered[k])) {
-            store_checked(cache, program, layered[k], unit, base, interface, next);
-            stored = base.is_value();
-            clock.lap("store");
-            if (base.is_value() and _record_stats()) {
-                _print_record_stats(layered[k].name, base.value());
-            }
-            if (verify) {
-                var upto = Array<Layer>();
-                for (var i in 0..k + 2) {
-                    upto.append(layered[i]);
-                }
-                var wrong = verify_checked(cache, program, upto, unit);
-                if (wrong.is_value()) {
-                    return Result<(sema.Module, sema.PassState), String>.err($"PEPC_VERIFY_DELTA: {wrong.value()}");
-                }
-                clock.lap("verify");
-            }
+        bool stored = state.notes.is_empty and !_warns(warnings, layer);
+        var (bytes, own) = store_checked(cache, program, layer, unit, base, stored);
+        owns[k] = own;
+        records[k] = bytes;
+        clock.lap("store");
+        if (_record_stats()) {
+            _print_record_stats(layer.name, base);
         }
-        module = sema.resume_checked(unit);
-        if (stored) {
-            sema.index_resumed(module, next);
-            indexed = Optional<sema.DeltaBase>.Value(next);
+        if (trace_layers) {
+            File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} checked\n");
         }
-        have = true;
-        previous = interface;
     }
     if (trace) {
-        File.stderr().write_all($"cache: {loaded} of {layered.count} layers checked already\n");
+        File.stderr().write_all($"cache: {loaded.count} of {layered.count} layers checked already\n");
     }
     return Result<(sema.Module, sema.PassState), String>.ok((module, state));
 }
@@ -483,24 +432,51 @@ _check_layer(
     return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.ok((after, state, aliases));
 }
 
-# For `PEPC_VERIFY_CUTOFF`: checks `layer` again on a copy of `module`, the
-# layers before it as checked in this build, and compares the result with
-# `unit`, its record loaded by early cutoff. An error when they differ.
-_verify_reuse(
+# For `PEPC_VERIFY_CUTOFF`: checks layer `k`, loaded by early cutoff, again
+# on the layers it reads, merged, and compares the result with its record.
+_verify_reuse_merged(
     program: link.Program,
-    module: sema.Module,
-    layer: Layer,
-    unit: sema.CheckedUnit,
+    layered: Layer[],
+    records: HashMap<ulong, u8[]>,
+    k: ulong,
+    bytes: u8[],
     reused: Reused?,
     sources: SourceText[],
     warnings: Diagnostic[]
 ): String? {
-    var checked = _check_layer(program, module.copy(), layer, reused, sources, warnings);
+    var merged = merged_module(program, records, layered[k].reads);
+    if (merged.is_err()) {
+        return Optional<String>.Value($"the layers layer {layered[k].name} reads do not merge: {merged.error()}");
+    }
+    var reads = Array<ulong>();
+    reads.append_all(layered[k].reads);
+    reads.append(k);
+    var all = HashMap<ulong, u8[]>();
+    for (var (d, b) in records) {
+        all[d] = b;
+    }
+    all[k] = bytes;
+    var loaded = merged_module(program, all, reads);
+    if (loaded.is_err()) {
+        return Optional<String>.Value($"the record of layer {layered[k].name} does not merge: {loaded.error()}");
+    }
+    # Checked again, then resumed and settled as merging leaves a module.
+    var checked = _check_layer(program, merged.value(), layered[k], reused, sources, warnings);
     if (checked.is_err()) {
-        return Optional<String>.Value($"layer {layer.name} does not check again: {checked.error()}");
+        return Optional<String>.Value($"layer {layered[k].name} does not check again: {checked.error()}");
     }
     var (after, state, aliases) = checked.value();
-    var again = sema.finish_checked(after, state, aliases);
+    var again = sema.resume_checked(sema.finish_checked(after, state, aliases));
+    sema.settle_merged(again);
+    sema.sort_globals(program, again);
+    # Which files' objects the cache holds is this build's, not the layer's.
+    again.cached_files = loaded.value().cached_files;
+    return _differ(layered[k], sema.CheckedUnit(loaded.value()), sema.CheckedUnit(again));
+}
+
+# What differs between `unit`, layer `layer`'s record as loaded, and
+# `again`, the layer checked again; none when nothing does.
+_differ(layer: Layer, unit: sema.CheckedUnit, again: sema.CheckedUnit): String? {
     var expected = sema.RecordOut();
     again.write(expected);
     var actual = sema.RecordOut();

@@ -8,9 +8,11 @@ import digest;
 import io;
 import os;
 import [Loc] from "loc";
-import [Block, Checked, FunctionDef, Module, TypeAliasDef] from "model";
+import [Block, Checked, FunctionDef, Module, StructDef, TraitType, TypeAliasDef] from "model";
 import [LayerDecls, PendingBody] from "pending";
-import [DeltaBase, RecordIn, RecordOut, write_interface_summaries] from "record";
+import [
+    compare_bytes, DeltaBase, interface_text, RecordIn, RecordOut, summary_without_place, write_interface_summaries
+] from "record";
 import [
     decode_body, read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
 ] from "record_codec";
@@ -315,6 +317,9 @@ export struct CheckedUnit {
     write(out: RecordOut, base: DeltaBase? = Optional<DeltaBase>.Empty, next: DeltaBase = DeltaBase()) {
         if (base.is_value()) {
             out.unsigned(1);
+            # How many use contexts the base had: a merge moves the new
+            # type uses' contexts by what it has instead.
+            out.unsigned(base.value().size("use_contexts"));
             write_module_delta(out, module, base.value(), next);
         } else {
             out.unsigned(0);
@@ -355,6 +360,9 @@ export struct CheckedUnit {
             for (var loc in own) {
                 out.loc(loc);
                 out.text(summaries[loc]);
+                if (base.is_value()) {
+                    base.value().own("recorded summary", summary_without_place(summaries[loc]));
+                }
             }
         }
         # A delta refers to the base's aliases, as other list elements.
@@ -369,6 +377,10 @@ export struct CheckedUnit {
                     continue;
                 }
                 out.unsigned(0);
+                var shown = RecordOut();
+                shown.blank_locs = true;
+                write_type_alias(shown, alias);
+                base.value().own("aliases", interface_text(shown));
             }
             write_type_alias(out, alias);
         }
@@ -385,9 +397,20 @@ export struct CheckedUnit {
         var kind = input.unsigned();
         var module = Module();
         if (kind == 0) {
+            if (input.merging) {
+                input.error = "a whole record does not merge";
+            }
             module = read_module(input);
         } else if (kind == 1 and base.is_value()) {
+            var contexts = input.unsigned();
+            var uses = base.value().type_uses.count;
+            var had = base.value().use_contexts.count;
             module = read_module_delta(input, base.value());
+            if (input.merging) {
+                for (var i in uses..module.type_uses.count) {
+                    module.type_uses[i].context = module.type_uses[i].context - contexts + had;
+                }
+            }
         } else {
             input.fail("CheckedUnit", kind);
         }
@@ -405,11 +428,19 @@ export struct CheckedUnit {
             out.summaries[loc] = input.text();
         }
         count = input.count();
+        if (delta and input.merging) {
+            # The base's aliases, then this unit's own.
+            for (var alias in base.value().type_aliases) {
+                out.aliases.append(alias);
+            }
+        }
         for (var _ in 0..count) {
             if (delta) {
                 var tag = input.unsigned();
                 if (tag & 1 == 1) {
-                    out.aliases.append(base.value().type_aliases[tag >> 1]);
+                    if (!input.merging) {
+                        out.aliases.append(base.value().type_aliases[tag >> 1]);
+                    }
                     continue;
                 }
             }
@@ -492,47 +523,60 @@ export interface_hash(unit: CheckedUnit): String {
     return hash;
 }
 
-## Returns the hash of what a layer changed in the interface: the
-## elements (`interface_elements`) the module it left has and the module it
-## was checked on lacks, and those it lost, each as many times as it
-## differs. Unlike `interface_hash`, it does not depend on the layers
-## before, only on what this one changed.
+## Settles `module`, the records of layers merged (`RecordIn.merging`):
+## what each layer's passes kept in order across the whole module, merging
+## puts in order again. Externs are in file order; trait types sorted by
+## name, once each; a struct or function two layers both specialized is
+## kept once, the first; and every extension merged has been applied.
+## Globals are left to the driver, which knows their files' order.
 ##
-## @param before the elements of the module the layer was checked on
-## @param after the elements of the module it left
-## @returns the hash, as hex
-export own_interface(before: Array<(String, String)>, after: Array<(String, String)>): String {
-    var counts = HashMap<String, long>();
-    for (var (what, hash) in after) {
-        var key = $"{what} {hash}";
-        var had = counts.try_get(key);
-        counts[key] = (had.is_value() ? had.value() : 0) + 1;
-    }
-    for (var (what, hash) in before) {
-        var key = $"{what} {hash}";
-        var had = counts.try_get(key);
-        counts[key] = (had.is_value() ? had.value() : 0) - 1;
-    }
-    var changed = Array<String>();
-    for (var (key, count) in counts) {
-        if (count != 0) {
-            changed.append($"{count} {key}");
+## @param module the merged module
+## @returns how many repeated specializations it dropped
+export settle_merged(module: Module): ulong {
+    module.externs.sort((a, b) => a.loc.file < b.loc.file ? -1 : (a.loc.file > b.loc.file ? 1 : 0));
+    var types = HashMap<String, TraitType>();
+    for (var t in module.trait_types) {
+        var name = t.ty.to_string();
+        if (!types.contains(name)) {
+            types[name] = t;
         }
     }
-    changed.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
-    var trace = os.environment("PEPC_TRACE_LAYERS");
-    if (trace.is_value() and trace.value() == "2") {
-        for (var line in changed) {
-            io.File.stderr().write_all($"layers:   {line.substr(0, 60)}\n");
+    var sorted = Array<(String, TraitType)>();
+    for (var (name, t) in types) {
+        sorted.append((name, t));
+    }
+    sorted.sort((a, b) => {
+        var (x, _) = a;
+        var (y, _) = b;
+        return compare_bytes(x.bytes(), y.bytes());
+    });
+    module.trait_types = Array<TraitType>();
+    for (var (_, t) in sorted) {
+        module.trait_types.append(t);
+    }
+    ulong dropped = 0;
+    var seen = HashSet<String>();
+    var structs = Array<StructDef>();
+    for (var st in module.structs) {
+        if (st.name.contains("<") and !seen.insert(st.name)) {
+            dropped += 1;
+            continue;
         }
+        structs.append(st);
     }
-    var hasher = digest.Blake3();
-    hasher.update("pepper own interface 1\n");
-    for (var line in changed) {
-        hasher.update(line);
-        hasher.update("\n");
+    module.structs = structs;
+    seen = HashSet<String>();
+    var functions = Array<FunctionDef>();
+    for (var f in module.functions) {
+        if (f.name.contains("<") and !f.is_generic_func and !seen.insert(f.name)) {
+            dropped += 1;
+            continue;
+        }
+        functions.append(f);
     }
-    return hasher.finish_hex();
+    module.functions = functions;
+    module.checked.extensions = module.extensions.count;
+    return dropped;
 }
 
 ## Readies `unit`'s module, just checked or loaded, for the next files:

@@ -75,6 +75,20 @@ export struct Blake3 {
         _update_raw(bytes._data, bytes.count);
     }
 
+    ## Hashes `count` bytes of `bytes`, from index `start`, as the next part
+    ## of the input; those past the end of `bytes` are left out.
+    ##
+    ## @param bytes the bytes
+    ## @param start the index of the first byte to add
+    ## @param count how many bytes to add
+    update_range(bytes: u8[], start: ulong, count: ulong) {
+        if (start >= bytes.count) {
+            return;
+        }
+        var n = count < bytes.count - start ? count : bytes.count - start;
+        _update_raw(unsafe_cast<__ptr<u8>>(bytes._data) + start, n);
+    }
+
     ## Hashes the UTF-8 bytes of `text` (without a terminating NUL) as the
     ## next part of the input.
     ##
