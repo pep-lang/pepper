@@ -10,11 +10,9 @@
 # must build and run a program, and the binaries must load nothing a user
 # might not have.
 #
-#   linux-x64     ubuntu-latest, inside a manylinux_2_28 container, so the
+#   linux-x64     the self-hosted Linux runner, inside a manylinux_2_28 container, so the
 #                 binaries need only glibc 2.28 (RHEL 8, Debian 10 and later)
 #   macos-arm64   the self-hosted arm64 Mac
-#   macos-x64     a hosted Intel Mac: an arm64 Homebrew's LLVM cannot link
-#                 into an x86_64 pep-build
 #   windows-x64   the self-hosted Windows runner
 #
 # What publishes:
@@ -82,7 +80,7 @@ jobs:
   # The version to build and whether to publish it, as a release or as the
   # prerelease build of main.
   version:
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     timeout-minutes: 5
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -141,14 +139,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: linux-x64, runs-on: ubuntu-latest, container: "quay.io/pypa/manylinux_2_28_x86_64" }
+          - { target: linux-x64, runs-on: pepper-linux, container: "quay.io/pypa/manylinux_2_28_x86_64" }
           - { target: macos-arm64, runs-on: pepper-macos, container: "" }
-          - { target: macos-x64, runs-on: macos-15-intel, container: "" }
+          # No macos-x64 leg: it needs an Intel Mac, and GitHub-hosted runners
+          # spend the account's Actions quota in days. release-build.sh still
+          # builds that target on one by hand.
           - { target: windows-x64, runs-on: pepper-windows, container: "" }
     runs-on: ${{ matrix.runs-on }}
     container: ${{ matrix.container }}
-    # LLVM provisioning plus a release build of the compiler, from cold on
-    # the hosted legs.
+    # LLVM provisioning plus a release build of the compiler, from cold.
     timeout-minutes: 60
 
     steps:
@@ -175,7 +174,12 @@ jobs:
           # releases on Windows.
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ matrix.target }}
-        run: bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist
+          # pep-build is pepc, which depends on the private pepper-llvm
+          # package (scripts/ci-package-auth.sh).
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist
 
       # Install the archive just built with the install script, which then
       # builds and runs a program with it. Without a terminal to ask on,
@@ -205,6 +209,13 @@ jobs:
           .\scripts\install.ps1 -Uninstall -Prefix $prefix
           if (Test-Path $prefix) { throw "$prefix is still there after -Uninstall" }
 
+      # A container job runs as root: the files it leaves in the self-hosted
+      # runner's folders must stay writable by the runner's own jobs.
+      - name: Give the runner its folders back
+        if: always() && matrix.container != ''
+        shell: bash
+        run: chmod -R a+rwX "$GITHUB_WORKSPACE" "${CARGO_TARGET_DIR:-$GITHUB_WORKSPACE/target}" || true
+
       - name: Upload archive
         uses: actions/upload-artifact@v7
         with:
@@ -218,7 +229,7 @@ jobs:
   publish:
     if: needs.version.outputs.publish == 'true'
     needs: [version, build]
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     permissions:
       contents: write
     timeout-minutes: 15
@@ -293,7 +304,7 @@ jobs:
   bump:
     if: needs.version.outputs.publish == 'true' && needs.version.outputs.prerelease != 'true'
     needs: [version, publish]
-    runs-on: ubuntu-latest
+    runs-on: pepper-linux
     permissions:
       actions: write
       contents: write

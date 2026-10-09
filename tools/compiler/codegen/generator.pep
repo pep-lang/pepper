@@ -31,6 +31,7 @@ import "expressions";
 import "functions";
 import [annotate_facts, stamp_cpu] from "globals";
 import "globals";
+import [initialize_host_backend] from "host";
 import "lazy";
 import "operators";
 import "ops";
@@ -699,6 +700,7 @@ export generate(
 export generate_ir(module: Module, state: PassState, namespaces: String[], name: String): Result<String, Diagnostic> {
     var triple = llvm.default_triple();
     var cpu = Cpu.default_for(triple);
+    initialize_host_backend();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, llvm.OptLevel.O0);
     if (machine.is_err()) {
         return Result<String, Diagnostic>.err(Diagnostic.error(machine.error().message));

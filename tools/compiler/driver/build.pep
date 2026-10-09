@@ -701,6 +701,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
 
     var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][options.opt_level];
+    codegen.initialize_host_backend();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
     if (machine.is_err()) {
         return Result<Built, String>.err(machine.error().message);

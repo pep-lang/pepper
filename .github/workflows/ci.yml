@@ -587,15 +587,14 @@ jobs:
   # `changes` posted with the same verdict.
   #
   # When a need was cancelled (a newer push cancels the PR's older runs), the
-  # verdict is a foregone failure, so it runs on a GitHub-hosted runner
-  # instead. On pepper-linux each cancelled run queued behind the long
-  # test-linux jobs: twenty stale runs once sat queued for hours ahead of a
-  # release build. Skipping it instead would be unsafe: a skipped `test` on a
-  # cancelled run of the PR's latest commit would count as passing.
+  # verdict is a foregone failure, but it still runs: a skipped `test` on a
+  # cancelled run of the PR's latest commit would count as passing. It runs
+  # on pepper-linux like the rest (two runners), never on a GitHub-hosted
+  # one, whose Actions quota the account spends in days.
   test:
     if: always()
     needs: [changes, test-windows, test-linux]
-    runs-on: ${{ (needs.changes.result == 'cancelled' || needs.test-windows.result == 'cancelled' || needs.test-linux.result == 'cancelled') && 'ubuntu-latest' || 'pepper-linux' }}
+    runs-on: pepper-linux
     timeout-minutes: 5
     permissions:
       contents: read

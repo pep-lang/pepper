@@ -157,11 +157,20 @@ export link_objects(objects: Path[], output: Path, libraries: String[], library_
     for (var dir in library_dirs) {
         command.argument($"-L{dir}");
     }
+    # GNU ld and lld resolve static archives left to right: in a group, an
+    # archive (a static LLVM) may need one named before it (zlib).
+    bool group = os.system_os() == os.OperatingSystem.Linux;
+    if (group) {
+        command.argument("-Wl,--start-group");
+    }
     for (var library in libraries) {
         command.argument($"-l{library}");
     }
     for (var library in default_system_libraries()) {
         command.argument($"-l{library}");
+    }
+    if (group) {
+        command.argument("-Wl,--end-group");
     }
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
     var ran = command.run();

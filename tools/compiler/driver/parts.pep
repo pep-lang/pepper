@@ -279,6 +279,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
         }
     }
     var levels = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3];
+    codegen.initialize_host_backend();
     var machine = llvm.TargetMachine.create(lines[0], lines[1], lines[2], levels[level.value()]);
     if (machine.is_err()) {
         return Result<void, String>.err(machine.error().message);

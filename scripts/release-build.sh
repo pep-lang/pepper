@@ -16,19 +16,22 @@
 # one folder, `pepper-<version>-<target>`, laid out as an install:
 #
 #   bin/pepper        the entry point, and every `pep-<command>` it runs:
-#   bin/pep-build     the compiler, LLVM linked in (Windows: LLVM-C.dll beside it)
+#   bin/pep-build     the compiler, pepc (tools/compiler), LLVM linked in
+#                     (Windows: LLVM-C.dll beside it)
 #   bin/pep-fmt, pep-test, pep-package, pep-profile, pep-install, pep-lsp, pep-doc
 #   runtime/          the runtime, which the compiler finds from bin/..
 #   LICENSE.md
 #
 # Beside it lands `<archive>.sha256`, in `sha256sum`'s format.
 #
-# LLVM is linked into pep-build (statically on Linux and macOS, as
-# LLVM-C.dll on Windows), so a user needs no LLVM of their own to compile;
-# the libraries LLVM itself pulls in (zstd, libffi, libxml2) are linked
-# statically too, so the binary needs nothing beyond the C and C++ runtimes.
-# Linking a program still needs a clang, which the install scripts find or
-# install (see crates/pepper-driver/src/linker.rs).
+# pep-build is pepc, the compiler written in Pepper: built with the Rust
+# compiler (stage 0, which cargo still builds for pep-lsp), then again with
+# itself, and the second build ships. LLVM is linked into it (statically on
+# Linux and macOS, as LLVM-C.dll on Windows), so a user needs no LLVM of
+# their own to compile; the libraries LLVM itself pulls in (zstd, libffi,
+# libxml2) are linked statically too, so the binary needs nothing beyond the
+# C and C++ runtimes. Linking a program still needs a clang, which the
+# install scripts find or install (see tools/compiler/driver/linker.pep).
 set -euo pipefail
 
 target="${1:?usage: release-build.sh <target> <version> <output-dir>}"
@@ -71,7 +74,8 @@ case "$target" in
     # The manylinux_2_28 image is AlmaLinux 8. Its llvm-static carries the
     # component archives llvm-sys links; clang is the smoke test's link
     # driver, as it is a user's.
-    dnf install -y llvm-devel llvm-static clang libffi-devel libzstd-devel zlib-devel libxml2-devel
+    # openssh-clients: git fetches pepc's pepper-llvm package over SSH.
+    dnf install -y llvm-devel llvm-static clang libffi-devel libzstd-devel zlib-devel libxml2-devel git openssh-clients
     llvm_config=$(command -v llvm-config)
     collect_static "/usr/lib64 /usr/lib" zstd ffi xml2 z
     if [ ! -f "$static_dir/libzstd.a" ]; then
@@ -138,16 +142,71 @@ stage_name="pepper-$version-$target"
 stage="$output/$stage_name"
 rm -rf "$stage"
 mkdir -p "$stage/bin"
-for tool in pep-build pep-lsp; do
-  cp "$release/$tool$exe" "$stage/bin/"
-done
+cp "$release/pep-lsp$exe" "$stage/bin/"
 if [ "$target" = windows-x64 ]; then
-  # pepper-codegen's build script puts the LLVM-C.dll pep-build links
-  # beside it; Windows loads it from the executable's folder.
+  # pepper-codegen's build script puts the LLVM-C.dll the compiler links
+  # beside the Rust one; Windows loads it from the executable's folder.
   cp "$release/LLVM-C.dll" "$stage/bin/"
 fi
 cp -R runtime "$stage/runtime"
 cp LICENSE.md "$stage/"
+
+echo "=== build pepc"
+# How pepc links LLVM (pepper-llvm's llvm_c/link.pep names the library:
+# LLVM-20 on Linux, LLVM on macOS, LLVM-C on Windows). On Linux and macOS
+# LLVM's component archives become one static archive of that name in
+# $static_dir, which the link searches first, followed by what LLVM needs
+# from the system and the C++ runtime.
+llvm_link=()
+case "$target" in
+  linux-x64|macos-arm64|macos-x64)
+    libdir=$("$llvm_config" --libdir)
+    archives=()
+    for name in $("$llvm_config" --link-static --libnames); do
+      archives+=("$libdir/$name")
+    done
+    if [ "$target" = linux-x64 ]; then
+      merged="$static_dir/libLLVM-$major.a"
+      [ "$major" = 20 ] || ln -sf "$merged" "$static_dir/libLLVM-20.a"
+      { echo "create $merged"; for a in "${archives[@]}"; do echo "addlib $a"; done; echo save; echo end; } | ar -M
+      cxx=stdc++
+    else
+      merged="$static_dir/libLLVM.a"
+      libtool -static -o "$merged" "${archives[@]}"
+      cxx=c++
+    fi
+    llvm_link=(-L "$static_dir" -L "$libdir")
+    # The Rust compiler (stage 1) puts these before pepper-llvm's
+    # [Link("LLVM-20")] and links no group, so LLVM is named here first:
+    # GNU ld then resolves its references with the libraries after it.
+    [ "$target" = linux-x64 ] && llvm_link+=(-l "LLVM-20")
+    for flag in $("$llvm_config" --link-static --system-libs) ; do
+      case "$flag" in
+        -l*) llvm_link+=(-l "${flag#-l}") ;;
+        /*.a|/*.so|/*.dylib|/*.tbd)
+          # A library by its path: its folder and name.
+          base=$(basename "$flag"); base=${base#lib}; base=${base%.*}
+          llvm_link+=(-L "$(dirname "$flag")" -l "$base") ;;
+      esac
+    done
+    llvm_link+=(-l "$cxx")
+    ;;
+  windows-x64)
+    llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' .cargo/config.toml | head -1 | sed 's/\\\\/\\/g')"
+    llvm_link=(-L "$llvm_prefix/lib")
+    PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
+    ;;
+esac
+pepc_build="$output/pepc-build"
+mkdir -p "$pepc_build"
+# Stage 1: pepc built by the Rust compiler. Stage 2, which ships: pepc built
+# by stage 1, with the runtime of this checkout.
+PEPPER_RUNTIME="$repo_root/runtime" "$release/pep-build$exe" -O -I tools tools/compiler/main.pep \
+  -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
+[ "$target" = windows-x64 ] && cp "$release/LLVM-C.dll" "$pepc_build/"
+PEPPER_RUNTIME="$repo_root/runtime" "$pepc_build/pepc-stage1$exe" -O -I tools tools/compiler/main.pep \
+  -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
+"$stage/bin/pep-build$exe" --version
 
 echo "=== build the Pepper tools"
 for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc; do
