@@ -67,7 +67,11 @@ _trait_methods(module: Module): HashSet<String> {
 ## @param specialized a struct specialization, just made
 ## @param state the passes' state
 export defer_methods(module: Module, specialized: StructDef, state: PassState) {
-    if (!state.lazy_methods) {
+    # A struct with generic methods keeps its methods' bodies: a call in a
+    # body given back late to one of its generic methods would be bound
+    # without that method's specializations (`describe([u])` to the plain
+    # `describe(bool)` beside `describe<T>(Array<T>)`).
+    if (!state.lazy_methods or specialized.generic_methods.count > 0) {
         return;
     }
     if (!state.trait_method_names.is_value()) {

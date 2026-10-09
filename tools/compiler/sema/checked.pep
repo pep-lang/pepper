@@ -105,6 +105,22 @@ export has_stashed(state: PassState): bool {
     return state.stashed.count > 0 or state.stashed_pending.count > 0;
 }
 
+## Whether `function`, a free function, has a body: its own, one a
+## library's interface stripped, or one `stash_bodies` holds while the
+## passes run (a checked layer's function referenced as a value).
+##
+## @param module the module
+## @param state the passes' state
+## @param function the function
+## @returns true when it has a body
+export has_body(module: Module, state: PassState, function: FunctionDef): bool {
+    if (function.body.is_value() or module.stripped.contains(function.loc)) {
+        return true;
+    }
+    var key = $"f {function.name}";
+    return state.stashed.contains(key) or state.stashed_pending.contains(key);
+}
+
 ## Takes `function`'s body away, one a record's reader skipped too.
 ##
 ## @param function the function
@@ -526,8 +542,8 @@ export interface_hash(unit: CheckedUnit): String {
 ## Settles `module`, the records of layers merged (`RecordIn.merging`):
 ## what each layer's passes kept in order across the whole module, merging
 ## puts in order again. Externs are in file order; trait types sorted by
-## name, once each; a struct or function two layers both specialized is
-## kept once, the first; and every extension merged has been applied.
+## name, once each; a struct, function or method two layers both
+## specialized is kept once, the first; and every extension merged has been applied.
 ## Globals are left to the driver, which knows their files' order.
 ##
 ## @param module the merged module
@@ -562,6 +578,7 @@ export settle_merged(module: Module): ulong {
             dropped += 1;
             continue;
         }
+        dropped += _settle_methods(st);
         structs.append(st);
     }
     module.structs = structs;
@@ -576,6 +593,33 @@ export settle_merged(module: Module): ulong {
     }
     module.functions = functions;
     module.checked.extensions = module.extensions.count;
+    return dropped;
+}
+
+# Keeps once each method of `st` that two layers both added, the first:
+# a specialization of a generic method (`_address<Array<Path>>` of the
+# runtime's `Copies`, from two files that copy an `Array<Path>`) or a
+# method the passes synthesize for a use (`__copy`). Two methods of one
+# name and the same parameter types are one method; overloads differ in
+# their parameters. Returns how many it dropped.
+_settle_methods(st: StructDef): ulong {
+    ulong dropped = 0;
+    var seen = HashSet<String>();
+    var methods = Array<FunctionDef>();
+    for (var m in st.method_members) {
+        var parameters = Array<String>();
+        for (var p in m.parameters) {
+            parameters.append(p.ty.to_string());
+        }
+        if (!seen.insert($"{m.name}({", ".join(parameters)})")) {
+            dropped += 1;
+            continue;
+        }
+        methods.append(m);
+    }
+    if (dropped > 0) {
+        st.method_members = methods;
+    }
     return dropped;
 }
 

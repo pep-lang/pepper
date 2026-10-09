@@ -7,6 +7,7 @@
 import [Location] from compiler.diagnostic;
 import [mangle] from compiler.link;
 import text;
+import [has_body] from "checked";
 import [closure_struct, CLOSURE_PREFIX, field_def] from "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
@@ -124,9 +125,7 @@ struct _Referenceable {
             }
         }
         for (var f in module.functions) {
-            if (!f.is_generic_func
-                and f.name.contains("<")
-                and (f.body.is_value() or module.stripped.contains(f.loc))) {
+            if (!f.is_generic_func and f.name.contains("<") and has_body(module, state, f)) {
                 generic_functions[f.name] = _Signature(f);
             }
         }

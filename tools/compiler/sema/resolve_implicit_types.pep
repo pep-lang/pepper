@@ -10,7 +10,7 @@
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import [enum_method_name, getter_name] from "builder";
-import [is_checked_function] from "checked";
+import [has_body, is_checked_function] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
 ] from "closure_sites";
@@ -144,10 +144,12 @@ _function_type(ret: TypeName, params: TypeName[]): TypeName {
 ##
 ## With `checked` set, only the checked functions (`true`), or only the
 ## others and the externs (`false`).
-_referenceable_functions(module: Module, checked: bool? = Optional<bool>.Empty): Array<(String, TypeName)> {
+_referenceable_functions(
+    module: Module, state: PassState, checked: bool? = Optional<bool>.Empty
+): Array<(String, TypeName)> {
     var out = Array<(String, TypeName)>();
     for (var f in module.functions) {
-        if (f.is_generic_func or f.name.contains("<") or !(f.body.is_value() or module.stripped.contains(f.loc))) {
+        if (f.is_generic_func or f.name.contains("<") or !has_body(module, state, f)) {
             continue;
         }
         if (checked.is_value() and is_checked_function(module, f) != checked.value()) {
@@ -626,7 +628,7 @@ export struct ImplicitTables {
             }
         }
         var which = checked ? Optional<bool>.Value(false) : Optional<bool>.Empty;
-        for (var (name, ty) in _referenceable_functions(module, which)) {
+        for (var (name, ty) in _referenceable_functions(module, state, which)) {
             _first_wins(function_types, name, ty);
         }
         for (var g in module.globals) {
@@ -659,7 +661,7 @@ export struct ImplicitTables {
                 }
             }
         }
-        for (var (name, ty) in _referenceable_functions(module, Optional<bool>.Value(true))) {
+        for (var (name, ty) in _referenceable_functions(module, state, Optional<bool>.Value(true))) {
             _first_wins(out.function_types, name, ty);
         }
         return out;
