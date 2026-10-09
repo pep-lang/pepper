@@ -173,7 +173,21 @@ jobs:
           # A change to the compiler itself (pepc) is tested with a build of
           # it; everything else with the published build of main (#713).
           compiler=false
+          # The runner's checkout persists between runs, and a shallow one
+          # can lack the merge commit's base: fetch it. Without the paths,
+          # everything is tested; classifying no paths would pass the
+          # change untested.
+          if ! git rev-parse -q --verify 'HEAD^1' >/dev/null; then
+            git fetch --no-tags --deepen=1 origin "$GITHUB_SHA" || true
+          fi
+          if ! paths=$(git diff --name-only 'HEAD^1' HEAD); then
+            echo "cannot diff the merge commit against its base: testing everything"
+            paths=""
+            code=true
+            compiler=true
+          fi
           while IFS= read -r path; do
+            [ -n "$path" ] || continue
             case "$path" in
               docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
               .agents/*|.claude/*|*.md) ;;
@@ -183,7 +197,7 @@ jobs:
               tools/compiler/*) compiler=true ;;
             esac
             echo "$path"
-          done < <(git diff --name-only HEAD^1 HEAD)
+          done <<< "$paths"
           echo "code=$code compiler=$compiler"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "compiler=$compiler" >> "$GITHUB_OUTPUT"

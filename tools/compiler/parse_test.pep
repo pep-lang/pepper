@@ -1,52 +1,51 @@
-# The compiler's parser in Pepper builds the same syntax tree as the Rust
-# parser for every source file in the repository: their JSON forms, from
-# `compiler.parse` here and from `pep-build --emit-ast=json`, match byte
-# for byte.
+# The compiler's parser parses every source file in the repository. Until
+# #225's cutover it was held to build the same syntax tree as the Rust
+# parser; the curated programs of link_test, sema_test and passes_test
+# now hold the compiler to its diagnostics.
 
 import io;
 import [Directory, File, Path] from io;
 import compiler.parse;
-import process;
 
 # The files are split in parts, each a test of its own, so they run side
 # by side.
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_1() {
+parses_every_source_file_part_1() {
     parses_sources(0);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_2() {
+parses_every_source_file_part_2() {
     parses_sources(1);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_3() {
+parses_every_source_file_part_3() {
     parses_sources(2);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_4() {
+parses_every_source_file_part_4() {
     parses_sources(3);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_5() {
+parses_every_source_file_part_5() {
     parses_sources(4);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_6() {
+parses_every_source_file_part_6() {
     parses_sources(5);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_7() {
+parses_every_source_file_part_7() {
     parses_sources(6);
 }
 
 [Test]
-parses_every_source_file_as_the_rust_parser_does_part_8() {
+parses_every_source_file_part_8() {
     parses_sources(7);
 }
 
@@ -54,11 +53,6 @@ const PARSE_PARTS: ulong = 8;
 
 # Checks every `PARSE_PARTS`th source file of the repository, from the `part`th.
 parses_sources(part: ulong) {
-    var compiler = process.find_companion("pep-build");
-    expect_true(compiler.is_value(), "pep-build is beside pep-test or on the PATH");
-    if (!compiler.is_value()) {
-        return;
-    }
     var files = Array<Path>();
     # The folders, from the repository's root, whose `.pep` files are
     # checked.
@@ -66,31 +60,19 @@ parses_sources(part: ulong) {
         collect_sources(Path("..").join(folder), files);
     }
     expect_true(files.count > 400, "the repository's sources are found from tools/");
-    ulong mismatches = 0;
+    ulong failed = 0;
     var i = part;
     while (i < files.count) {
-        if (!same_tree(compiler.value(), files[i])) {
-            mismatches += 1;
+        if (!parses(files[i])) {
+            failed += 1;
         }
         i += PARSE_PARTS;
     }
-    expect_equal(mismatches, 0 as ulong);
+    expect_equal(failed, 0 as ulong);
 }
 
-# Whether the two parsers agree on `file`, reporting where they do not. A
-# file the Rust parser rejects is skipped.
-same_tree(compiler: Path, file: Path): bool {
-    var output = process
-        .Command(compiler.to_string())
-        .argument("--emit-ast=json")
-        .argument(file.to_string())
-        .stdout(process.Stream.Pipe)
-        .stderr(process.Stream.Pipe)
-        .run();
-    if (output.is_err() or !output.value().status.success()) {
-        return true;
-    }
-    var expected = output.value().stdout.trim_end();
+# Whether `file` parses, reporting why when it does not.
+parses(file: Path): bool {
     var source = File.read_to_string(file);
     if (source.is_err()) {
         print($"{file}: cannot read it");
@@ -99,14 +81,7 @@ same_tree(compiler: Path, file: Path): bool {
     var module = parse.parse(source.value());
     if (module.is_err()) {
         var error = module.error();
-        print($"{file}:{error.span.start}: the Rust parser accepts it, but: {error.message}");
-        return false;
-    }
-    var actual = module.value().to_json().to_string();
-    if (actual != expected) {
-        print(
-            $"{file}: the syntax tree differs from the Rust parser's at byte {first_difference(actual, expected)} of its JSON"
-        );
+        print($"{file}:{error.span.start}: {error.message}");
         return false;
     }
     return true;
@@ -138,12 +113,4 @@ collect_sources(folder: Path, out: Path[]) {
             out.append(entry.path);
         }
     }
-}
-
-first_difference(a: String, b: String): ulong {
-    ulong i = 0;
-    while (i < a.size and i < b.size and a.byte_at(i) == b.byte_at(i)) {
-        i += 1;
-    }
-    return i;
 }
