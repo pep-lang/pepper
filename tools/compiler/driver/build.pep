@@ -766,7 +766,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var unit_parts = Array<uint[]>();
     uint parts = 0;
     for (var unit in units) {
-        var split = _split(unit, sizes, parts, options.part_size);
+        var split = _split(program, unit, sizes, parts, options.part_size);
         var own = Array<uint>();
         for (var part in split) {
             if (!own.contains(part)) {
@@ -957,10 +957,14 @@ _codegen_options(options: BuildOptions): String {
 const _PART_SIZE = 20000;
 
 ## The part of each of `unit`'s files: as many parts as the unit's size
-## needs (`part_size`), no more than its files, each file (largest first)
-## to the part with the least code so far; the parts are numbered from
-## `first`, with no gaps.
-_split(unit: link.Unit, sizes: ulong[], first: uint, part_size: ulong): uint[] {
+## needs (`part_size`), no more than its files, each a run of the unit's
+## files in namespace order, a file in the part its middle falls in. Each
+## part's object is cached under its files (`Keys.part`), so the split
+## must stay as it is when an edit changes a file's size: a run moves
+## only the files at its ends, and only when the edit is large, where
+## filling the least loaded part first moved files all over the unit. The
+## parts are numbered from `first`, with no gaps.
+_split(program: link.Program, unit: link.Unit, sizes: ulong[], first: uint, part_size: ulong): uint[] {
     var total = _unit_size(unit, sizes);
     var count = (total + part_size - 1) / part_size;
     if (count > unit.files.count) {
@@ -974,35 +978,32 @@ _split(unit: link.Unit, sizes: ulong[], first: uint, part_size: ulong): uint[] {
         order.append(i);
     }
     order.sort((a, b) => {
-        var x = sizes[unit.files[a]];
-        var y = sizes[unit.files[b]];
-        return x != y ? (x > y ? -1 : 1) : (a < b ? -1 : (a > b ? 1 : 0));
+        var x = program.files[unit.files[a]].namespace;
+        var y = program.files[unit.files[b]].namespace;
+        return x < y ? -1 : (x > y ? 1 : 0);
     });
-    var loads = Array<ulong>();
-    for (var _ in 0..count) {
-        loads.append(0);
-    }
     var split = Array<uint>();
     for (var _ in unit.files) {
         split.append(0);
     }
+    ulong before = 0;
     for (var i in order) {
-        ulong least = 0;
-        for (var part in 1..loads.count) {
-            if (loads[part] < loads[least]) {
-                least = part;
-            }
-        }
-        split[i] = least as uint;
-        loads[least] += sizes[unit.files[i]];
+        var size = sizes[unit.files[i]];
+        # Twice the file's middle, against twice each part's share, in
+        # whole numbers.
+        var part = total == 0 ? 0 : ((before * 2 + size) * count) / (total * 2);
+        split[i] = (part < count ? part : count - 1) as uint;
+        before += size;
     }
     # Numbered in the order the parts first appear, from `first`, so a
     # part no file went to takes no number.
     var number = HashMap<uint, uint>();
-    for (var i in 0..split.count) {
+    for (var i in order) {
         if (!number.contains(split[i])) {
             number[split[i]] = first + number.count as uint;
         }
+    }
+    for (var i in 0..split.count) {
         split[i] = number[split[i]];
     }
     return split;
