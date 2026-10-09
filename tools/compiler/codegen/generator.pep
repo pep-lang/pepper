@@ -633,6 +633,8 @@ export struct Build {
     var opt_level: uint = 0;
     ## Which runtime checks the code performs.
     var runtime_checks: RuntimeChecks = RuntimeChecks.all();
+    ## Whether every function keeps its frame pointer (`--frame-pointers`).
+    var frame_pointers: bool = false;
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -674,6 +676,15 @@ export generate(
         return Result<llvm.Module, Diagnostic>.err(generated.error());
     }
     stamp_cpu(generator.ir, context, build.cpu.name, build.cpu.tune, build.cpu.features);
+    if (build.frame_pointers) {
+        # As clang's `-fno-omit-frame-pointer`.
+        var all = context.string_attribute("frame-pointer", "all");
+        for (var function in generator.ir.functions()) {
+            if (function.block_count() > 0) {
+                function.add_function_attribute(all);
+            }
+        }
+    }
     return Result<llvm.Module, Diagnostic>.ok(generator.ir);
 }
 

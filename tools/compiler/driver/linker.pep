@@ -121,7 +121,9 @@ export default_system_libraries(): String[] {
         return ["kernel32", "user32", "shell32"];
     }
     if (system == os.OperatingSystem.Linux) {
-        return ["m"];
+        # glibc before 2.34 keeps threads and `dlopen` in libraries of their
+        # own; later ones keep empty stubs of them.
+        return ["m", "pthread", "dl"];
     }
     return Array<String>();
 }

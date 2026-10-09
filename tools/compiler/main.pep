@@ -1,29 +1,23 @@
-# pepc: the Pepper compiler written in Pepper (#225). For now it parses and
-# links:
+# pepc: the Pepper compiler written in Pepper (#225), built and shipped as
+# `pep-build`: the same command line, `pep-build --help` for the options.
+# The options of the Rust compiler it does not have yet (`--target`,
+# `--lib`, `--lto`, `-m...` and the rest `_not_ported` names) are errors
+# that say so; `-g` builds without debug info, with a warning.
 #
-#     pepc --emit-ast=json file.pep
-#     pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
-#     pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
+# With no `--emit-*` option it builds the program into an executable: `-o
+# out`, else the file's stem in the current directory, or the project of
+# the current directory with no file. `--test` builds the test program of
+# the file (or of several files of one folder) instead
+# (`driver/test_main.pep`). A build keeps each unit's object in the build
+# cache (`driver/cache.pep`): `--cache dir`, else `$PEPPER_CACHE_DIR`, else
+# `.pep/cache`; `--no-cache` compiles everything. `-T time` prints how long
+# each stage took, `-T cache` whether each unit's object came from the
+# cache, `--Tall` both.
 #
-#     pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
-#     pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] file.pep
-#     pepc [--test] [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]]
-#          [--cache dir | --no-cache] [-T time] [-T cache] [--Tall] file.pep
-#
-# print the file's syntax tree, or the whole program after linking, as the
-# JSON that `pep-build` prints with the same options, or what the checks
-# after linking report, or the sema model before any pass (or after the
-# first N steps of the passes, or the error one reports), as `pep-build`
-# prints it, or the LLVM IR of the whole program, unoptimized, as
-# `pep-build --emit-llvm -O0` writes it, so the two can be compared. With
-# no `--emit-*` option it builds the program into an executable, as
-# `pep-build` does: `out`, else the file's stem in the current directory.
-# `--test` builds the test program of the file (or of several files of one
-# folder) instead, as `pep-build --test` does (`driver/test_main.pep`).
-# A build keeps each unit's object in the build cache (`driver/cache.pep`):
-# `--cache dir`, else `$PEPPER_CACHE_DIR`, else `.pep/cache`; `--no-cache`
-# compiles everything. `-T time` prints how long each stage took, `-T
-# cache` whether each unit's object came from the cache, `--Tall` both.
+# `--emit-ast=json`, `--emit-linked`, `--emit-checked`, `--emit-model
+# [--emit-model-step N]` and `--emit-llvm` print the file's syntax tree,
+# the program after linking, what the checks after linking report, the
+# sema model, or the program's LLVM IR, unoptimized, instead.
 
 import compiler.codegen;
 import [render_all] from compiler.diagnostic;
@@ -74,117 +68,138 @@ main(args: String[]): int {
     String? cache_dir;
     var traces = Array<String>();
     var setup = link.Setup();
+    String? build_dir;
+    bool frame_pointers = false;
+    String? without_checks;
+    # Options are matched as `pep-build` matches them: a value after a
+    # space or `=` (`--cache dir`, `--cache=dir`), or attached to a short
+    # option (`-Idir`); after `--`, every argument is a file.
+    bool files_only = false;
     ulong i = 1;
     while (i < args.count) {
         var arg = args[i];
-        if (arg == "--emit-linked") {
-            linked = true;
-        } else if (arg == "--emit-checked") {
-            checked = true;
-        } else if (arg == "--emit-model") {
-            model = true;
-        } else if (arg == "--emit-llvm") {
-            ir = true;
-        } else if (arg == "--test") {
-            test = true;
-        } else if (arg == "--emit-ast=json") {
-            ast = true;
-        } else if (arg == "-O" or arg == "-O0" or arg == "-O1" or arg == "-O2" or arg == "-O3") {
-            # `-O` alone is `-O2`, as in pep-build.
-            opt_level = Optional<uint>.Value(
-                arg == "-O" ?
-                    2 :
-                    arg.substr_bytes(2, 1) == "0" ?
-                        0 :
-                        arg.substr_bytes(2, 1) == "1" ? 1 : arg.substr_bytes(2, 1) == "2" ? 2 : 3
-            );
-        } else if (arg == "-o" or arg == "-l" or arg == "-L") {
-            if (i + 1 >= args.count) {
-                print($"pepc: {arg} needs a value");
-                return 2;
-            }
-            i += 1;
-            if (arg == "-o") {
-                output = Optional<String>.Value(args[i]);
-            } else if (arg == "-l") {
-                libraries.append(args[i]);
-            } else {
-                library_dirs.append(Path(args[i]));
-            }
-        } else if (arg == "--emit-model-step") {
-            if (i + 1 >= args.count) {
-                print($"pepc: {arg} needs a value");
-                return 2;
-            }
-            i += 1;
-            var parsed = ulong.parse(args[i]);
-            if (!parsed.is_value()) {
-                print($"pepc: {arg} needs a number, not '{args[i]}'");
-                return 2;
-            }
-            step = Optional<ulong>.Value(parsed.value());
-        } else if (arg == "--no-runtime") {
-            setup.runtime = false;
-        } else if (arg == "--no-cache") {
-            no_cache = true;
-        } else if (arg == "--cache" or arg == "-T") {
-            if (i + 1 >= args.count) {
-                print($"pepc: {arg} needs a value");
-                return 2;
-            }
-            i += 1;
-            if (arg == "--cache") {
-                cache_dir = Optional<String>.Value(args[i]);
-            } else {
-                traces.append(args[i]);
-            }
-        } else if (arg == "--Tall") {
-            traces.append("time");
-            traces.append("cache");
-        } else if (arg == "-I" or arg == "--import" or arg == "-D" or arg.starts_with("-I") or arg.starts_with("-D")) {
-            # `-I dir` or `-Idir`; `-D NAME` or `-DNAME`.
-            var value = arg.size > 2 and arg != "--import" ? arg.substr_bytes(2, arg.size - 2) : "";
-            if (value.is_empty) {
-                if (i + 1 >= args.count) {
-                    print($"pepc: {arg} needs a value");
-                    return 2;
-                }
-                i += 1;
-                value = args[i];
-            }
-            if (arg.starts_with("-I")) {
-                setup.import_dirs.append(Path(value));
-            } else if (arg == "--import") {
-                setup.forced_imports.append(value);
-            } else {
-                var option = value.split_once("=");
-                if (option.is_value()) {
-                    var (name, defined) = option.value();
-                    setup.target.build_options[name] = defined;
-                } else {
-                    setup.target.build_options[value] = "1";
-                }
-            }
-        } else {
+        i += 1;
+        if (files_only or arg == "-" or !arg.starts_with("-")) {
             if (!path.is_value()) {
                 path = Optional<String>.Value(arg);
             }
             paths.append(arg);
+            continue;
         }
-        i += 1;
+        if (arg == "--") {
+            files_only = true;
+            continue;
+        }
+        # `--name=value` is `--name value`.
+        String? attached;
+        var name = arg;
+        if (arg.starts_with("--")) {
+            var parts = arg.split_once("=");
+            if (parts.is_value()) {
+                var (before, after) = parts.value();
+                name = before;
+                attached = Optional<String>.Value(after);
+            }
+        } else if (arg.size > 2 and !arg.starts_with("-O") and !arg.starts_with("-m")) {
+            name = arg.substr_bytes(0, 2);
+            attached = Optional<String>.Value(arg.substr_bytes(2, arg.size - 2));
+        }
+        if (_value_name(name).is_value() and !attached.is_value()) {
+            if (i >= args.count) {
+                return _usage_error(
+                    $"a value is required for '{name} <{_value_name(name).value()}>' but none was supplied"
+                );
+            }
+            attached = Optional<String>.Value(args[i]);
+            i += 1;
+        }
+        var value = attached.is_value() ? attached.value() : "";
+        if (name == "-h" or name == "--help") {
+            File.stdout().write_all(_HELP);
+            return 0;
+        } else if (name == "-V" or name == "--version") {
+            File.stdout().write_all($"pep-build {version()}\n");
+            return 0;
+        } else if (name == "-v" or name == "--verbose") {
+            # Accepted for compatibility, as by pep-build.
+        } else if (name == "--emit-linked") {
+            linked = true;
+        } else if (name == "--emit-checked") {
+            checked = true;
+        } else if (name == "--emit-model") {
+            model = true;
+        } else if (name == "--emit-llvm") {
+            ir = true;
+        } else if (name == "--test") {
+            test = true;
+        } else if (name == "--emit-ast") {
+            if (value != "json") {
+                return _unsupported($"{arg} (only --emit-ast=json)");
+            }
+            ast = true;
+        } else if (name.starts_with("-O")) {
+            # `-O` alone is `-O2`; `-O2`, or `-O 2`.
+            var level = name.substr_bytes(2, name.size - 2);
+            if (level.is_empty and i < args.count and args[i].size == 1 and uint.parse(args[i]).is_value()) {
+                level = args[i];
+                i += 1;
+            }
+            var parsed = level.is_empty ? Optional<uint>.Value(2) : uint.parse(level);
+            if (!parsed.is_value() or parsed.value() > 3) {
+                return _usage_error($"invalid value '{level}' for '-O <LEVEL>': expected 0, 1, 2 or 3");
+            }
+            opt_level = parsed;
+        } else if (name == "-o") {
+            output = Optional<String>.Value(value);
+        } else if (name == "-l") {
+            libraries.append(value);
+        } else if (name == "-L") {
+            library_dirs.append(Path(value));
+        } else if (name == "-I") {
+            setup.import_dirs.append(Path(value));
+        } else if (name == "--import") {
+            setup.forced_imports.append(value);
+        } else if (name == "-D") {
+            var option = value.split_once("=");
+            if (option.is_value()) {
+                var (defined_name, defined) = option.value();
+                setup.target.build_options[defined_name] = defined;
+            } else {
+                setup.target.build_options[value] = "1";
+            }
+        } else if (name == "--build") {
+            build_dir = Optional<String>.Value(value);
+        } else if (name == "--emit-model-step") {
+            var parsed = ulong.parse(value);
+            if (!parsed.is_value()) {
+                return _usage_error($"invalid value '{value}' for '--emit-model-step <N>': expected a number");
+            }
+            step = Optional<ulong>.Value(parsed.value());
+        } else if (name == "--no-runtime") {
+            setup.runtime = false;
+        } else if (name == "--no-cache") {
+            no_cache = true;
+        } else if (name == "--cache") {
+            cache_dir = Optional<String>.Value(value);
+        } else if (name == "-T") {
+            traces.append(value);
+        } else if (name == "--Tall") {
+            traces.append("time");
+            traces.append("cache");
+        } else if (name == "--frame-pointers") {
+            frame_pointers = true;
+        } else if (name == "--no-runtime-checks") {
+            without_checks = Optional<String>.Value(value);
+        } else if (name == "-g" or name == "--emit-debug") {
+            File.stderr().write_all("warning: this compiler does not emit debug info yet; building without it\n");
+        } else if (_not_ported(name)) {
+            return _unsupported(arg);
+        } else {
+            return _usage_error($"unexpected argument '{arg}' found");
+        }
     }
     if (!path.is_value() and (ast or linked or checked or model or ir)) {
-        print("usage: pepc --emit-ast=json <file.pep>");
-        print("       pepc --emit-linked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
-        print("       pepc --emit-checked [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
-        print(
-            "       pepc --emit-model [--emit-model-step N] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>"
-        );
-        print("       pepc --emit-llvm [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>");
-        print(
-            "       pepc [-O0|-O1|-O2|-O3] [-o out] [-l lib] [-L dir] [-I dir] [--import name] [--no-runtime] [-D NAME[=value]] <file.pep>"
-        );
-        return 2;
+        return _usage_error("the --emit options need the program's entry file");
     }
     # Without `-O`, `PEPPER_OPT_LEVEL` picks the level, as in pep-build, so a
     # whole test suite can run optimized.
@@ -202,7 +217,7 @@ main(args: String[]): int {
         path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty
     );
     if (project.is_err()) {
-        File.stderr().write_all(project.error() + "\n");
+        _report(project.error());
         return 1;
     }
     var entry = project.value().entry;
@@ -220,7 +235,7 @@ main(args: String[]): int {
             }
             var made = driver.test_program(files);
             if (made.is_err()) {
-                File.stderr().write_all(made.error() + "\n");
+                _report(made.error());
                 return 1;
             }
             var (generated, sources) = made.value();
@@ -249,18 +264,18 @@ main(args: String[]): int {
         setup.defer_bodies = !(ir or model or linked or checked);
         var program = link.load_program(entry, setup);
         if (program.is_err()) {
-            print($"pepc: {program.error()}");
+            _report(program.error());
             return 1;
         }
         if (ir) {
             var built = sema.merge(program.value());
             if (built.is_err()) {
-                print(built.error());
+                File.stderr().write_all($"{built.error()}\n");
                 return 1;
             }
             var ran = sema.run_passes(built.value(), program.value().target, program.value().sources());
             if (ran.is_err()) {
-                print(render_all([ran.error()], program.value().sources()));
+                File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
                 return 1;
             }
             var namespaces = Array<String>();
@@ -269,7 +284,7 @@ main(args: String[]): int {
             }
             var generated = codegen.generate_ir(built.value(), ran.value(), namespaces, entry.file_stem().value());
             if (generated.is_err()) {
-                print(render_all([generated.error()], program.value().sources()));
+                File.stderr().write_all(render_all([generated.error()], program.value().sources()) + "\n");
                 return 1;
             }
             # The IR ends with a newline, which `print` adds.
@@ -278,7 +293,7 @@ main(args: String[]): int {
         } else if (model) {
             var built = sema.merge(program.value());
             if (built.is_err()) {
-                print(built.error());
+                File.stderr().write_all($"{built.error()}\n");
                 return 1;
             }
             if (step.is_value()) {
@@ -286,7 +301,7 @@ main(args: String[]): int {
                     built.value(), program.value().target, step.value(), program.value().sources()
                 );
                 if (ran.is_err()) {
-                    print(render_all([ran.error()], program.value().sources()));
+                    File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
                     return 1;
                 }
             }
@@ -306,8 +321,26 @@ main(args: String[]): int {
                 out = project.value().output.value();
             }
             var work = project.value().dir.is_value() ? project.value().dir.value() : here;
-            var options = driver.BuildOptions(out, work.join(Path(".pep")).join(Path("build")));
+            var options = driver.BuildOptions(
+                out, build_dir.is_value() ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"))
+            );
             options.opt_level = opt_level.value();
+            options.frame_pointers = frame_pointers;
+            if (without_checks.is_value()) {
+                var kept = codegen.RuntimeChecks.without(without_checks.value());
+                if (!kept.is_value()) {
+                    return _usage_error(
+                        $"invalid value '{without_checks.value()}' for '--no-runtime-checks <CHECKS>': expected overflow, divide, shift, bounds, null or all"
+                    );
+                }
+                if (options.opt_level == 0) {
+                    File.stderr().write_all(
+                        "warning: --no-runtime-checks is ignored without optimization (-O1 or above)\n"
+                    );
+                } else {
+                    options.runtime_checks = kept.value();
+                }
+            }
             for (var library in project.value().libraries) {
                 if (!libraries.contains(library)) {
                     libraries.append(library);
@@ -326,7 +359,7 @@ main(args: String[]): int {
             if (made.is_err()) {
                 # Empty: printed already (a syntax error read late).
                 if (!made.error().is_empty) {
-                    File.stderr().write_all(made.error() + "\n");
+                    _report(made.error());
                 }
                 return 1;
             }
@@ -335,13 +368,13 @@ main(args: String[]): int {
     }
     var source = File.read_to_string(path.value());
     if (source.is_err()) {
-        print($"pepc: cannot read '{path.value()}'");
+        File.stderr().write_all($"error: cannot read '{path.value()}'\n");
         return 1;
     }
     var module = parse.parse(source.value());
     if (module.is_err()) {
         var error = module.error();
-        print($"{path.value()}:{error.span.start}: error: {error.message}");
+        File.stderr().write_all($"{path.value()}:{error.span.start}: error: {error.message}\n");
         return 1;
     }
     print(module.value().to_json().to_string());
@@ -360,4 +393,80 @@ _env_opt_level(): Result<uint, String> {
         return Result<uint, String>.err($"PEPPER_OPT_LEVEL is '{value.value()}'; expected 0, 1, 2 or 3");
     }
     return Result<uint, String>.ok(level.value());
+}
+
+## The release this compiler belongs to: `scripts/set-version.sh` sets it.
+version(): String {
+    return "0.4.0-dev";
+}
+
+# The name of the value an option takes, as its help shows it: none for an
+# option that takes none.
+_value_name(name: String): String? {
+    match (name) {
+        "-o" => {
+            return Optional<String>.Value("OUT");
+        }
+        "-l" => {
+            return Optional<String>.Value("LIB");
+        }
+        "-L", "-I", "--build", "--cache" => {
+            return Optional<String>.Value("DIR");
+        }
+        "--import" => {
+            return Optional<String>.Value("NAME");
+        }
+        "-D" => {
+            return Optional<String>.Value("NAME[=VALUE]");
+        }
+        "--emit-model-step" => {
+            return Optional<String>.Value("N");
+        }
+        "-T" => {
+            return Optional<String>.Value("CHAN");
+        }
+        "--no-runtime-checks" => {
+            return Optional<String>.Value("CHECKS");
+        }
+        else => {
+            return Optional<String>.Empty;
+        }
+    }
+}
+
+# Whether `name` is an option of the Rust pep-build that this compiler does
+# not have yet.
+_not_ported(name: String): bool {
+    match (name) {
+        "--lib", "--lto", "--target", "--sysroot", "--emit-static", "--debug-static", "--emit-steps", "--verify-cache", "--no-verify-cache", "--MSVC" => {
+            return true;
+        }
+        else => {
+            return name.starts_with("-m");
+        }
+    }
+}
+
+# Reports a command line `pep-build` cannot read, as it reports one; exits 2.
+_usage_error(message: String): int {
+    File.stderr().write_all(
+        $"error: {message}\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nFor more information, try '--help'.\n"
+    );
+    return 2;
+}
+
+# Reports an option this compiler does not have yet; exits 2.
+_unsupported(option: String): int {
+    File.stderr().write_all($"error: {option} is not supported by this compiler yet\n");
+    return 2;
+}
+
+# `--help`: the options this compiler has, as `pep-build --help` lists them.
+const _HELP = "Pepper compiler\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nArguments:\n  [SOURCE_FILES]...  The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it\n\nOptions:\n  -I <DIR>                          Add a directory to the import search path\n      --import <NAME>               Force an import by name\n  -l <LIB>                          Link against a library\n  -L <DIR>                          Add a directory to the linker's library search path\n  -D <NAME[=VALUE]>                 Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins\n  -o <OUT>                          Output path: the executable\n      --build <DIR>                 Build directory\n  -O <LEVEL>                        Optimization level: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set\n      --no-runtime-checks <CHECKS>  Remove kinds of runtime check from an optimized build, as a comma-separated list: `overflow` (integer overflow; arithmetic then wraps), `divide` (division by zero and `MIN / -1`; then undefined), `shift` (a count of at least the width; then masked), `bounds` (array and string indexing) and `null` (calls and matches through a null reference), or `all`. Removing `bounds` or `null` gives up memory safety. Ignored, with a warning, at `-O0`\n      --test                        Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it\n      --emit-llvm                   Print the program's LLVM IR, unoptimized, instead of compiling it\n  -g, --emit-debug                  Accepted, with a warning: this compiler does not emit debug info yet\n      --frame-pointers              Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it\n  -v, --verbose                     Accepted for compatibility; prints nothing more yet\n      --no-runtime                  Skip runtime discovery\n      --emit-ast=json               Dump the parsed AST of the entry file as JSON instead of compiling\n      --emit-linked                 Load and link the program instead of compiling it, and print every file's syntax tree after linking, with the linking errors, as JSON\n      --emit-checked                Load, link and check the program instead of compiling it, and print what the checks before sema report: the errors (linking, then `[__BuiltIn]` misuse, then visibility), then the warnings, rendered\n      --emit-model                  Load, link, check and build the program's sema model instead of compiling it, and print the model before any sema pass, as JSON\n      --emit-model-step <N>         With `--emit-model`: run the first N sema steps (one pass each, in the order the compiler runs them) and print the model after them\n  -T <CHAN>                         Enable a trace channel. `time` prints how long each compile stage took; `cache` prints whether each unit's object came from the build cache; any other name is accepted and ignored\n      --Tall                        Enable all trace channels\n      --no-cache                    Compile every unit without reading or writing the build cache\n      --cache <DIR>                 Build cache directory (default: `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`)\n  -h, --help                        Print help\n  -V, --version                     Print version\n";
+
+# Prints `message` on standard error as an error: with `error:` unless it is
+# a rendered diagnostic that says so already.
+_report(message: String) {
+    var text = message.contains("error:") ? message : $"error: {message}";
+    File.stderr().write_all(text.ends_with("\n") ? text : text + "\n");
 }

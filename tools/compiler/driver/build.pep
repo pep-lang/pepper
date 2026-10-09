@@ -37,6 +37,10 @@ export struct BuildOptions {
     ## Whether to compile every part in this process rather than in
     ## `pepc --compile-part` children (for a program other than `pepc`).
     var in_process: bool = false;
+    ## Whether every function keeps its frame pointer (`--frame-pointers`).
+    var frame_pointers: bool = false;
+    ## Which runtime checks the code performs (`--no-runtime-checks`).
+    var runtime_checks: codegen.RuntimeChecks = codegen.RuntimeChecks.all();
     ## Whether to check every layer loaded by early cutoff again and fail
     ## when its record differs, as `PEPC_VERIFY_CUTOFF` does.
     var verify_cutoff: bool = false;
@@ -595,7 +599,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var keys = Optional<Keys>.Empty;
     String program_key = "";
     if (options.cache.is_value()) {
-        keys = Optional<Keys>.Value(Keys(program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}"));
+        keys = Optional<Keys>.Value(
+            Keys(program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}{_codegen_options(options)}")
+        );
         program_key = keys.value().program(program, _link_text(options));
         if (options.cache.value().is_built(options.output, program_key)) {
             if (options.trace_cache) {
@@ -696,6 +702,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
     var setup = codegen.Build(machine.value(), cpu);
     setup.opt_level = options.opt_level;
+    setup.frame_pointers = options.frame_pointers;
+    setup.runtime_checks = options.runtime_checks;
     var namespaces = Array<String>();
     for (var f in program.files) {
         namespaces.append(f.namespace);
@@ -842,6 +850,16 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     for (var dir in linked_dirs) {
         dirs.append(dir);
     }
+    # Then `$PEPPER_LIBRARY_PATH`'s folders, separated as in `PATH`.
+    var library_path = os.environment("PEPPER_LIBRARY_PATH");
+    if (library_path.is_value()) {
+        var separator = os.system_os() == os.OperatingSystem.Windows ? ";" : ":";
+        for (var dir in library_path.value().split(separator)) {
+            if (!dir.is_empty) {
+                dirs.append(Path(dir));
+            }
+        }
+    }
     var made = link_objects(objects, options.output, libraries, dirs);
     Directory.remove_all(work);
     if (made.is_err()) {
@@ -852,6 +870,16 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         options.cache.value().record(options.output, program_key, !warnings.is_empty);
     }
     return Result<Built, String>.ok(report);
+}
+
+# What else changes the code generated, for the cache's keys.
+_codegen_options(options: BuildOptions): String {
+    var out = options.frame_pointers ? " --frame-pointers" : "";
+    var checks = options.runtime_checks;
+    if (!(checks.overflow and checks.divide and checks.shift and checks.bounds and checks.null)) {
+        out = $"{out} --no-runtime-checks {checks.overflow} {checks.divide} {checks.shift} {checks.bounds} {checks.null}";
+    }
+    return out;
 }
 
 ## The largest part a unit is compiled in, in `codegen.file_sizes`'s
