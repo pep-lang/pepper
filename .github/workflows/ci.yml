@@ -162,7 +162,7 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
             git fetch --depth=1 origin main
             compiler=false
-            if git diff --name-only FETCH_HEAD HEAD -- crates Cargo.toml Cargo.lock | grep -q .; then
+            if git diff --name-only FETCH_HEAD HEAD -- tools/compiler | grep -q .; then
               compiler=true
             fi
             echo "compiler=$compiler"
@@ -170,7 +170,7 @@ jobs:
             exit 0
           fi
           code=false
-          # A change to the compiler itself is tested with a cargo build of
+          # A change to the compiler itself (pepc) is tested with a build of
           # it; everything else with the published build of main (#713).
           compiler=false
           while IFS= read -r path; do
@@ -180,7 +180,7 @@ jobs:
               *) code=true ;;
             esac
             case "$path" in
-              crates/*|Cargo.toml|Cargo.lock) compiler=true ;;
+              tools/compiler/*) compiler=true ;;
             esac
             echo "$path"
           done < <(git diff --name-only HEAD^1 HEAD)
@@ -192,9 +192,10 @@ jobs:
     runs-on: pepper-windows
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
-    # seconds. 45 leaves room for a slow download without hanging forever.
-    timeout-minutes: 45
+    # Provisioning LLVM costs ~5 minutes on a cold cache, and a compiler
+    # change builds pepc (about ten minutes cold); the suite itself is
+    # minutes. 60 leaves room for a slow download without hanging forever.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
@@ -251,14 +252,18 @@ jobs:
         run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts, or, when the PR changes the compiler
+      # itself, pepc built from the PR by it and checked on its own sources
+      # (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -288,7 +293,7 @@ jobs:
     runs-on: pepper-macos
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    timeout-minutes: 30
+    timeout-minutes: 50
 
     steps:
       - uses: actions/checkout@v7
@@ -317,14 +322,18 @@ jobs:
           brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts, or, when the PR changes the compiler
+      # itself, pepc built from the PR by it and checked on its own sources
+      # (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -346,7 +355,7 @@ jobs:
     runs-on: pepper-linux
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    timeout-minutes: 25
+    timeout-minutes: 45
     # build_cache_tests verify the cache (`--verify-cache`) on every
     # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
     # the other tests make too, which doubles the cost of each warm build.
@@ -380,14 +389,18 @@ jobs:
           dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts, or, when the PR changes the compiler
+      # itself, pepc built from the PR by it and checked on its own sources
+      # (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -524,8 +537,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       - name: Cross-link the examples
         timeout-minutes: 10
