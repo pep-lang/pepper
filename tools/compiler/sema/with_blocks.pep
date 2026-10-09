@@ -13,7 +13,7 @@
 
 import [Location] from compiler.diagnostic;
 import "closures";
-import [location_of] from "common";
+import [known_location, location_of] from "common";
 import "confinement";
 import [Loc] from "loc";
 import [

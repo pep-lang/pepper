@@ -17,6 +17,7 @@ import [
     decode_body, read_module, read_module_delta, read_type_alias, write_module, write_module_delta, write_type_alias
 ] from "record_codec";
 import [method_key, PassState] from "state";
+import "type_name";
 
 ## Takes the bodies of `module`'s checked declarations out of it, into
 ## `state.stashed`.

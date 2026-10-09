@@ -7,6 +7,7 @@
 import [error_at] from "common";
 import [Expression, Module] from "model";
 import [PassState] from "state";
+import "type_name";
 import [Rewriter, rewrite_block] from "walk";
 
 ## The name the builder gives a range's call.

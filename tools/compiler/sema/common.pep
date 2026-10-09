@@ -15,6 +15,14 @@ export location_of(loc: Loc): Location {
     return Location(loc.file as ulong, loc.span);
 }
 
+## Where `loc` is, or nothing for a node with no position.
+##
+## @param loc the position
+## @returns its location, if it has one
+export known_location(loc: Loc): Location? {
+    return loc.is_none() ? Optional<Location>.Empty : Optional<Location>.Value(location_of(loc));
+}
+
 ## Returns the error `message` at `loc`.
 ##
 ## @param message the message

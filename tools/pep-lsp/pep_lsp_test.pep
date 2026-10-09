@@ -572,7 +572,7 @@ build_options_come_from_the_initialization_options() {
 # does not hide the rest.
 
 const GEOMETRY_MODULE = "import \"shapes\";\n\nexport struct Point { var x: int; var y: int; }\nexport make(x: int, y: int): Point {\n    var p = Point();\n    p.x = x;\n    p.y = y;\n    return p;\n}\nexport area as rect_area;\nexport Box;\n## Half of `x`.\nhalf(x: int): int { return x / 2; }\n";
-const GEOMETRY_SHAPES = "export area(w: int, h: int): int { return w * h; }\nexport struct Box<T> { var value: T; }\nexport unit(): Point { return make(half(2), 1); }\n";
+const GEOMETRY_SHAPES = "import \"module\";\n\nexport area(w: int, h: int): int { return w * h; }\nexport struct Box<T> { var value: T; }\nexport unit(): Point { return make(half(2), 1); }\n";
 const SOLIDS_MODULE = "export * from \"cube\";\nexport [volume as size] from \"cube\";\n";
 const SOLIDS_CUBE = "export volume(s: int): int { return s * s * s; }\nexport edge(s: int): int { return s; }\n";
 const UTIL = "export twice(x: int): int { return x * 2; }\nstruct Tally { var n: int; }\n## Counts; ask jane@corp.com.\nexport tally(): Tally { return Tally(); }\n";

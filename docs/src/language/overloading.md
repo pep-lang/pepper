@@ -60,11 +60,12 @@ from two files:
 {{#include ../../examples/overloading-modules/main.pep}}
 ```
 
-Every file of the module sees the same set, with no import, since the
-files of a module share their declarations (see
-[Visibility](visibility.md#files-of-a-module-share-their-declarations)).
-That holds for private functions too: functions of one name that several
-files of a module declare, exported or not, are one set there. Members from different files must still differ in their
+A file of the module sees the members its own file and the module's files it
+imports declare (see
+[Visibility](visibility.md#files-of-a-module-see-each-other-through-imports)).
+That holds for unexported functions too: functions of one name that files of
+a module declare, exported or not, are one set wherever those files are
+imported. Members from different files must still differ in their
 parameters (`redefinition of 'area'`). Names that are not all functions,
 such as two structs `Point`, and a renaming re-export
 (`export size as area` beside an `area`) are still `exported twice`.

@@ -77,10 +77,10 @@ main.pep:2:1: error: imports must come before all declarations
 A **module** is a folder that contains a `module.pep` file. The module is named
 after its folder, and its exports are exactly what its `module.pep` exports.
 The other files in the folder are the module's own files: `module.pep` imports
-them and chooses what to pass on to the module's users. The files of a module
-see each other's declarations, exported or not, without importing each other,
+them and chooses what to pass on to the module's users. A file of a module
+sees the declarations of the module's files it imports, exported or not,
 except those marked `private`
-(see [Files of a module share their declarations](visibility.md#files-of-a-module-share-their-declarations)).
+(see [Files of a module see each other through imports](visibility.md#files-of-a-module-see-each-other-through-imports)).
 Loading any file of a module loads its `module.pep`, and with it every file
 the module imports.
 

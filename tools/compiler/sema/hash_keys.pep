@@ -13,6 +13,7 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [VALUE_ATTRIBUTE] from "builder";
+import [known_location] from "common";
 import "confinement";
 import "copies";
 import [EQUATABLE_ATTRIBUTE, HASH_METHOD] from "equatable";
@@ -50,7 +51,7 @@ export check_hash_keys(module: Module, state: PassState) {
                 ).with_note(
                     $"remove this override, or remove '[{EQUATABLE_ATTRIBUTE}]' to declare both '==' and 'hash' by hand",
                     Optional<Location>.Empty
-                ).with_note($"'{st.name}' declared here", _known(st.loc))
+                ).with_note($"'{st.name}' declared here", known_location(st.loc))
             );
         }
     }
@@ -110,7 +111,7 @@ export check_hash_keys(module: Module, state: PassState) {
                     hash.value().loc
                 ).with_note(
                     $"declare '==(other: {key}): bool' comparing the fields the hash uses, or remove the override and mark '{key}' '[{EQUATABLE_ATTRIBUTE}]' to derive both",
-                    _known(st.loc)
+                    known_location(st.loc)
                 )
             );
         }

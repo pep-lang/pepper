@@ -24,6 +24,7 @@ import [
 import [set_name, without_type_arguments] from "names";
 import "resolve_implicit_types";
 import [PassState] from "state";
+import "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## Marks a static method's name in a method list; no identifier contains it.

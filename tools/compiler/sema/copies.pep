@@ -16,7 +16,7 @@ import compiler.ast;
 import [demangle, Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
 import "apply_extensions";
 import [payload_field, TAG_FIELD] from "builder";
-import [location_of] from "common";
+import [known_location, location_of] from "common";
 import "constraints";
 import [Loc, NO_FILE] from "loc";
 import [
@@ -1389,10 +1389,6 @@ _skeleton(ty: TypeName, indent: String): String {
     return "\n".join(out);
 }
 
-_known(loc: Loc): Location? {
-    return loc.is_none() ? Optional<Location>.Empty : Optional<Location>.Value(location_of(loc));
-}
-
 _cannot_copy(
     module: Module, state: PassState, root: TypeName, fallback: Loc, path: Array<_Hop>, blocker: _Blocker
 ): Diagnostic {
@@ -1405,12 +1401,12 @@ _cannot_copy(
     for (var hop in path) {
         if (hop.is_field) {
             var step = hop.owner.is_tuple() ? $"element {hop.field}" : $"field '{hop.field}'";
-            diagnostic = diagnostic.with_note($"'{hop.owner.display()}' reaches it through {step}", _known(hop.loc));
+            diagnostic = diagnostic.with_note($"'{hop.owner.display()}' reaches it through {step}", known_location(hop.loc));
         } else if (at.file == hop.loc.file) {
             # A runtime container's `copy` method is not the program's to
             # change: point only at a `Copyable` method in the error's file.
             diagnostic = diagnostic.with_note(
-                $"'{hop.owner.display()}' copies a '{hop.copied.display()}' here", _known(hop.loc)
+                $"'{hop.owner.display()}' copies a '{hop.copied.display()}' here", known_location(hop.loc)
             );
         } else {
             diagnostic = diagnostic.with_note(
@@ -1423,14 +1419,14 @@ _cannot_copy(
         Destructor => {
             diagnostic = diagnostic.with_note(
                 $"'{blocker.ty.display()}' has a destructor, so copying its fields would release what it owns twice",
-                _known(blocker.loc)
+                known_location(blocker.loc)
             );
             decl = blocker.loc;
         }
         RawPointerField => {
             diagnostic = diagnostic.with_note(
                 $"'{blocker.ty.display()}' has raw pointer field '{blocker.field}' of type '{_pointer_display(blocker.field_ty)}'",
-                _known(blocker.loc)
+                known_location(blocker.loc)
             );
             var st = _struct_named(module, blocker.ty);
             if (st.is_value()) {
@@ -1439,7 +1435,7 @@ _cannot_copy(
         }
         NotCopyable => {
             var why = blocker.why.is_empty ? "cannot be copied" : blocker.why;
-            return diagnostic.with_note($"'{blocker.ty.display()}' {why}", _known(blocker.loc));
+            return diagnostic.with_note($"'{blocker.ty.display()}' {why}", known_location(blocker.loc));
         }
         PlainFunction => {
             var shared = blocker.ty;

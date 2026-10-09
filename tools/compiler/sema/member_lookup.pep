@@ -10,6 +10,7 @@ import [set_name] from "names";
 import "resolve_implicit_types";
 import [PassState] from "state";
 import [StructTable, static_type_of] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## What a member access names.

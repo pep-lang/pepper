@@ -143,6 +143,32 @@ reports_linking_errors() {
             "private helper(): int { return 1; }\nprivate struct Shelf {}\nprivate extend Shelf { shelf_area(): int { return 0; } }\n",
             "deps/shop/b.pep",
             "private struct Shelf {}\nexport use(): int { var s = Shelf(); return helper() + s.shelf_area(); }\n"
+        ],
+        # A file of a module that uses another file's function, struct and
+        # extension method without importing that file.
+        [
+            "main.pep",
+            "# expect: deps/shop/b.pep:1:29: error: 'Shelf' is declared in deps/shop/a.pep, another file of this module, which this file does not import; add an import for it\n# expect: deps/shop/b.pep:1:45: error: 'helper' is declared in deps/shop/a.pep, another file of this module, which this file does not import; add an import for it\nimport [use] from shop;\nmain(): int { return use(); }\n",
+            "deps/shop/module.pep",
+            "import \"a\";\nexport * from \"b\";\n",
+            "deps/shop/a.pep",
+            "helper(): int { return 1; }\nstruct Shelf { var n: int = 0; }\nextend Shelf { shelf_size(): int { return n; } }\n",
+            "deps/shop/b.pep",
+            "export use(): int { var s = Shelf(); return helper() + s.shelf_size(); }\n"
+        ],
+        # The same with an extension's method: the struct's file is
+        # imported, the file of the extension is not.
+        [
+            "main.pep",
+            "# expect: deps/shop/b.pep:2:33: error: 'shelf_room' is declared in an extension in deps/shop/a.pep, which this file does not import; add an import for it\n# expect: deps/shop/a.pep:2:16: note: declared here\nimport [use] from shop;\nmain(): int { return use(); }\n",
+            "deps/shop/module.pep",
+            "import \"a\";\nexport * from \"b\";\n",
+            "deps/shop/c.pep",
+            "struct Shelf { var n: int = 0; }\n",
+            "deps/shop/a.pep",
+            "import \"c\";\nextend Shelf { shelf_room(): int { return n; } }\n",
+            "deps/shop/b.pep",
+            "import \"c\";\ncount(s: Shelf): int { return s.shelf_room(); }\nexport use(): int { return count(Shelf()); }\n"
         ]
     ];
     expect_equal(check_trees(folder, trees, outcome), 0 as ulong);

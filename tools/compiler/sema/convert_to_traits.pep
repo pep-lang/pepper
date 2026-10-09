@@ -38,6 +38,7 @@ import [
     TypeName
 ] from "model";
 import "overload_select";
+import "shared_functions";
 import [PassState] from "state";
 import "static_blocks";
 import [static_type_of, StructTable] from "static_type";

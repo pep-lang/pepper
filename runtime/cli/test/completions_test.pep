@@ -3,8 +3,8 @@
 
 import cli;
 import [Path] from io;
+import "typed_test";
 
-# `Speed` is typed_test.pep's.
 pkg_parser(): cli.Parser {
     var parser = cli.Parser("pkg", "Manages packages");
     parser.flag("verbose", "v", "say more", global = true);

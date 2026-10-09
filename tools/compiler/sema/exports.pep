@@ -13,13 +13,14 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
-import [location_of] from "common";
+import [known_location, location_of] from "common";
 import "confinement";
 import "copies";
 import [Loc] from "loc";
 import [FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
+import "type_name";
 
 ## The attribute that exports a function to C.
 export const EXPORT_ATTRIBUTE = "Export";
@@ -194,7 +195,7 @@ export collect_exports(module: Module, state: PassState) {
                     $"two functions are exported as '{symbol.value()}'",
                     function.loc
                 ).with_note(
-                    "first exported here", _known(first.value())
+                    "first exported here", known_location(first.value())
                 ).with_note("give one a different C name with [Export(name = \"...\")]", Optional<Location>.Empty)
             );
             return;

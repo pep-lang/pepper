@@ -15,6 +15,7 @@ import [Block, Expression, FunctionDef, Kind, Module, StructDef, TypeName, Unary
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
 import "static_blocks";
+import "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## Reports the first `[Shared]` struct field, module-scope variable or

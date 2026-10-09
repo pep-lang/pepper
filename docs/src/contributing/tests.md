@@ -22,8 +22,9 @@ go in Pepper.
 | A Pepper tool, `tools/<tool>/` | `tools/<tool>/<topic>_test.pep`, which imports the tool's files (`import "format";`) |
 
 A `test/` folder holds no `module.pep`, so no program that imports the
-module loads it. Its files are still files of the module, though: they see
-the module's unexported names and each other's. `pep-test` builds each
+module loads it. Its files are still files of the module, though: a test file
+that imports one of the module's files (`import "../atomic";` in `runtime/async/test/`) sees its
+unexported names. `pep-test` builds each
 folder's tests into one program, so a helper (or test name) that two test
 files of one folder declare collides; mark it `private` in each (as
 `runtime/async/test/` does). Prefer it to tests inside a

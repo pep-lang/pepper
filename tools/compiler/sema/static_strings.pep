@@ -42,6 +42,7 @@ import [
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## What the recorded link summary carries after the confinement summary.

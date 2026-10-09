@@ -28,6 +28,7 @@ import [set_name] from "names";
 import [PassState] from "state";
 import [attribute_arguments] from "static_blocks";
 import [instance, trait_def, trait_types_of] from "traits";
+import "type_name";
 import [method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 

@@ -10,6 +10,7 @@ import [Block, Expression, Module, TypeName, VariableDef] from "model";
 import [arg_info, ArgInfo, Failure, has_overloads, Outcome, Overloads] from "overload_select";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 
 ## Reports the first overload call no member fits or two fit equally, one
 ## whose argument types stayed unknown, and the first overload set used as

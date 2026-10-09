@@ -7,6 +7,7 @@
 import [drop_body] from "checked";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Module, StructDef] from "model";
+import "type_name";
 import [Rewriter, rewrite_block] from "walk";
 
 ## Records the closures a body makes.

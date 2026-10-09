@@ -19,6 +19,7 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [op_name] from "operators";
+import "shared_functions";
 import [PassState] from "state";
 import "static_blocks";
 import [static_type_of, StructTable] from "static_type";

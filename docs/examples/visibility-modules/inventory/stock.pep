@@ -1,5 +1,5 @@
-# Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep with no
-# import: files of one module see each other's declarations.
+# Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep, which
+# this file imports: a file of a module sees another through an import.
 import "rules";
 
 export struct Stock {

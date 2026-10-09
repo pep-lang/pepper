@@ -6,6 +6,7 @@ import [error_at] from "common";
 import [Expression, FunctionDef, Module, TypeName] from "model";
 import [PassState] from "state";
 import [StructTable, static_type_of] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Replaces each `Destructure` with the tuple it reads, reporting one that

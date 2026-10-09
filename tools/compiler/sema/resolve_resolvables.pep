@@ -6,6 +6,7 @@ import [error_at] from "common";
 import [Block, Expression, FunctionDef, Module] from "model";
 import "named_arguments";
 import [PassState] from "state";
+import "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## What resolution needs from the module, taken before it changes.

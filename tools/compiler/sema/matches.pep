@@ -8,7 +8,7 @@
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [integer_range, payload_field, TAG_FIELD] from "builder";
-import [location_of] from "common";
+import [known_location, location_of] from "common";
 import "confinement";
 import [install_traits, is_trait, reference_cases] from "enums";
 import [Loc] from "loc";
@@ -997,7 +997,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"a tuple pattern cannot match {shown}", p.loc
-                    ).with_note("the value matched is here", _known(subject_loc))
+                    ).with_note("the value matched is here", known_location(subject_loc))
                 );
                 return none;
             }
@@ -1059,7 +1059,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"{what} '{p.case}' is already handled", p.loc
-                    ).with_note("first handled here", _known(first.value()))
+                    ).with_note("first handled here", known_location(first.value()))
                 );
                 return none;
             }
@@ -1069,7 +1069,7 @@ struct _MatchLowering {
                     _error_at_known(
                         $"a range cannot match a value of '{_shown_type(matched.ty)}': ranges match integers and characters",
                         p.loc
-                    ).with_note("the value matched is here", _known(subject_loc))
+                    ).with_note("the value matched is here", known_location(subject_loc))
                 );
                 return none;
             } else if (matched.is_literal() and p.literal.is_value()) {
@@ -1154,7 +1154,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"type '{_shown_type(to)}' is already handled", p.loc
-                    ).with_note("first handled here", _known(first.value()))
+                    ).with_note("first handled here", known_location(first.value()))
                 );
                 return none;
             }
@@ -1182,7 +1182,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"'{q.to_string()}' is not the type of the value matched, '{matched.name()}'", p.loc
-                    ).with_note("the value matched is here", _known(subject_loc))
+                    ).with_note("the value matched is here", known_location(subject_loc))
                 );
                 return none;
             }
@@ -1203,7 +1203,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"no case named '{p.case}' in '{e.name}'", p.loc
-                    ).with_note($"'{e.name}' declared here", _known(e.loc))
+                    ).with_note($"'{e.name}' declared here", known_location(e.loc))
                 );
             } else {
                 var lookup = _find_case(matched.cases, p.case, matched.ty, matched.declared, p.loc);
@@ -1221,7 +1221,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"case '{c.name}' of '{matched.enum_def.value().name}' carries no values to bind", at
-                    ).with_note($"'{c.name}' declared here", _known(c.loc))
+                    ).with_note($"'{c.name}' declared here", known_location(c.loc))
                 );
                 return none;
             }
@@ -1297,7 +1297,7 @@ struct _MatchLowering {
                     _error_at_known(
                         $"'{p.case}' cannot match a value of '{_shown_type(ty)}': match a tuple with a tuple pattern, such as '(a, _)'",
                         p.loc
-                    ).with_note("the value matched is here", _known(subject_loc))
+                    ).with_note("the value matched is here", known_location(subject_loc))
                 );
                 return none;
             }
@@ -1350,7 +1350,7 @@ struct _MatchLowering {
                 report(
                     _error_at_known(
                         $"'{name.name}' is not bound by '{shown}': every pattern of an arm binds the same names", at
-                    ).with_note($"'{name.name}' is bound here", _known(name.loc))
+                    ).with_note($"'{name.name}' is bound here", known_location(name.loc))
                 );
                 return false;
             }
@@ -1716,7 +1716,7 @@ struct _MatchLowering {
         ).with_note("handle each case, or add an 'else' arm", Optional<Location>.Empty);
         i = 0;
         while (i < missing_cases.count and i < SHOWN) {
-            diagnostic = diagnostic.with_note($"'{missing_cases[i].name}' declared here", _known(missing_cases[i].loc));
+            diagnostic = diagnostic.with_note($"'{missing_cases[i].name}' declared here", known_location(missing_cases[i].loc));
             i += 1;
         }
         report(diagnostic);
@@ -2130,7 +2130,7 @@ struct _ArmTypes {
             );
             var first_loc = _expression_loc(first);
             if (!first_loc.is_none()) {
-                diagnostic = diagnostic.with_note("the first arm's value is here", _known(first_loc));
+                diagnostic = diagnostic.with_note("the first arm's value is here", known_location(first_loc));
             }
             state.report(diagnostic);
             return;

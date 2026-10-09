@@ -10,6 +10,7 @@ import [Block, Expression, FunctionDef, Module, StructDef, TypeName] from "model
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## The methods the passes and code generation call without a use in the

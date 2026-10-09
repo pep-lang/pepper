@@ -71,16 +71,17 @@ lib.pep:29:1: note: declared here
 The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports `'name' is private to file.pep`.
 
-## Files of a module share their declarations
+## Files of a module see each other through imports
 
 Inside a module, `export` is not needed for one file to use another's
-declarations. Every file of the module sees the top-level declarations of
-the module's other files, exported or not, with no import, as if they were
-its own. `export` means visible **outside** the module, through its
+declarations, but an import is: a file sees the top-level declarations of
+another file of its module, exported or not, once it imports that file
+(`import "rules";`), as a C file sees another's declarations through its
+header. `export` means visible **outside** the module, through its
 `module.pep`.
 
 Here the `inventory` module keeps its rules in `rules.pep`, which exports
-nothing, and `stock.pep` uses them freely:
+nothing, and `stock.pep` imports it to use them:
 
 ```pepper
 {{#include ../../examples/visibility-modules/inventory/rules.pep}}
@@ -98,11 +99,23 @@ nothing, and `stock.pep` uses them freely:
 {{#include ../../examples/visibility-modules/main.pep}}
 ```
 
-A file's own declarations come first, then what its imports bring in, then
-the declarations of the module's other files, then the runtime's. A module's
-files are the files of the program in its folder (and in subfolders that are
-not modules themselves): a file joins the program when the module imports
-it, so `module.pep` imports a file with nothing to export, like `rules.pep`,
+A file's own declarations come first, then what its imports bring in (the
+files of its module it imports included), then the runtime's. A file of the
+module that names a declaration of another one it does not import gets an
+error that names the file to import. Without its `import "rules";`,
+`stock.pep` would report:
+
+```text
+inventory/stock.pep:5:17: error: 'Shelf' is declared in inventory/rules.pep, another file of this module, which this file does not import; add an import for it
+    5 |     var _shelf: Shelf;
+      |                 ^~~~~
+```
+
+So a file's dependencies are exactly its imports, and the compiler checks
+and caches each file against what it imports alone. A module's files are
+the files of the program in its folder (and in subfolders that are not
+modules themselves): a file joins the program when the module imports it,
+so `module.pep` imports a file with nothing to export, like `rules.pep`,
 just to include it. A `[Target(...)]` on that import (see
 [Platform-specific imports](modules.md#platform-specific-imports)) includes
 the file only on some platforms.
@@ -119,14 +132,14 @@ inventory/rules.pep:4:8: note: declared here
       |        ^~~~~
 ```
 
-Because the files of a module share one set of names, two of them may not
+The files of a module still share one set of names, so two of them may not
 both declare a struct, enum, type alias, trait, or variable of one name:
 the second is a `redefinition of 'name'`, with a note at the first, unless
 one of them is `private`. Functions are different: functions of one name in
 several files of a module are one [overload set](overloading.md), as they
 are within a file. Extensions are shared the same way: a file sees the
-methods its module's other files add, exported or not, unless the extension
-is `private`.
+methods the files of its module it imports add, exported or not, unless the
+extension is `private`.
 
 ## Keeping a declaration to its file
 
@@ -327,7 +340,7 @@ This holds across modules too: two modules may each have a `util.pep` with a
 private `helper`. Files are told apart by their path inside their module
 (`io/file.pep`), not by their file name alone. Within one module, the files
 share their names instead, except `private` ones (see
-[Files of a module share their declarations](#files-of-a-module-share-their-declarations)).
+[Files of a module see each other through imports](#files-of-a-module-see-each-other-through-imports)).
 
 Exported names work the same way between modules: each module's exports
 are its own, so two modules may export the same name, and importers tell

@@ -22,6 +22,7 @@ import [
     TypeName
 ] from "model";
 import "overload_select";
+import "properties";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [GenericSignature, specialization] from "type_arguments";

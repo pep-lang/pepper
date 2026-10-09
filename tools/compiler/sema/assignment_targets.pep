@@ -10,6 +10,7 @@ import [Block, Expression, FunctionDef, Module, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block] from "walk";
 
 ## Reports the first assignment whose target is a call once the last

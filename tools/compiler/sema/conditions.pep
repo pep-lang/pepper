@@ -8,6 +8,7 @@ import [BinaryOp, Block, Expression, FunctionDef, Module, TypeName, UnaryOp] fro
 import [PassState] from "state";
 import "static_blocks";
 import [StructTable] from "static_type";
+import "type_name";
 import "unary_operators";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 

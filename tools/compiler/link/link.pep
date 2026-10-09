@@ -25,7 +25,6 @@ import [Attribute, Declaration, Expression, FunctionDecl, Module, Pattern, Span,
 import [Diagnostic, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
-import os;
 import "names" as names;
 import [Target] from "platform";
 import [Scope, ScopeKind, ScopeWalk, Scopes] from "walk";
@@ -292,11 +291,14 @@ struct _ModuleDeclaration {
     var function: bool;
     # The declaring file.
     var file: ulong;
+    # Declared `private` to its file.
+    var file_private: bool;
 
-    construct(name: String, function: bool, file: ulong) {
+    construct(name: String, function: bool, file: ulong, file_private: bool) {
         this.name = name;
         this.function = function;
         this.file = file;
+        this.file_private = file_private;
     }
 }
 
@@ -621,17 +623,16 @@ struct _Linker {
     var bases: _Names[] = Array<_Names>();
     # Per file, its own names -> the names their declarations take.
     var own: HashMap<String, String>[] = Array<HashMap<String, String>>();
-    # Per file, the other files of the program in its module.
+    # Per file, the other files of the program in its module that it
+    # imports: the only ones it sees.
     var mates: Array<ulong[]> = Array<ulong[]>();
+    # Per file, every other file of the program in its module.
+    var all_mates: Array<ulong[]> = Array<ulong[]>();
     # Per file, the names its module's other files declare (`_Bindings.module`).
     var module_names: HashMap<String, String>[] = Array<HashMap<String, String>>();
     # Per file, the other files of its module that declare each of those
     # names.
     var module_from: Array<HashMap<String, ulong[]>> = Array<HashMap<String, ulong[]>>();
-    # Whether a file sees another file of its module only through an import
-    # of it (`PEPC_STRICT_IMPORTS`): a name only such files declare is an
-    # error where it is used, which names the file to import.
-    var strict_imports: bool = false;
     var unions: _Unions = _Unions();
     # Every type name declared at top level, in any file.
     var types: HashSet<String> = HashSet<String>();
@@ -652,8 +653,6 @@ struct _Linker {
     construct(files: ProgramFile[], target: Target) {
         this.files = files;
         this.target = target;
-        var strict = os.environment("PEPC_STRICT_IMPORTS");
-        this.strict_imports = strict.is_value() and !strict.value().is_empty;
     }
 
     # Whether file `file` imports file `other`.
@@ -666,26 +665,21 @@ struct _Linker {
         return false;
     }
 
-    # With `strict_imports`, reports a use in `file` of `name`, which its
-    # module's other files declare, when it imports none of them.
-    check_mate_import(file: ulong, name: String, span: Span) {
-        if (!strict_imports) {
-            return;
-        }
+    # Reports a use in `file` of `name`, which it does not bind, when other
+    # files of its module declare it: the file does not import them.
+    #
+    # @returns whether it reported one
+    report_unimported_mate(file: ulong, name: String, span: Span): bool {
         var from = module_from[file].try_get(name);
         if (!from.is_value() or from.value().is_empty) {
-            return;
-        }
-        for (var other in from.value()) {
-            if (imports_file(file, other)) {
-                return;
-            }
+            return false;
         }
         _error(
             file,
             span,
             $"'{name}' is declared in {file_names[from.value()[0]]}, another file of this module, which this file does not import; add an import for it"
         );
+        return true;
     }
 
     # Where an override may go: a module's files share their module, the
@@ -1059,7 +1053,16 @@ struct _Linker {
                     }
                 }
             }
-            mates.append(out);
+            all_mates.append(out);
+            # A file sees another file of its module only through an import
+            # of it.
+            var imported = Array<ulong>();
+            for (var j in out) {
+                if (imports_file(i, j)) {
+                    imported.append(j);
+                }
+            }
+            mates.append(imported);
             i += 1;
         }
     }
@@ -1083,12 +1086,14 @@ struct _Linker {
         return out;
     }
 
-    # Per file, the names its module's other files declare. The functions
-    # several files of a module declare under one name form one overload
-    # set, a union, which the declaring files see too. Externs keep their
-    # names. Any other name declared by two files of one module is the
-    # first one's; the visibility check reports the second. A `private`
-    # declaration is bound for no other file.
+    # Per file, the names the files of its module that it imports declare
+    # (`mates`). The functions it and those files declare under one name form
+    # one overload set, a union. Externs keep their names. Any other name
+    # declared by two files of one module is the first one's; the visibility
+    # check reports the second. A `private` declaration is bound for no other
+    # file. Also, per file, the files of its module that declare each name
+    # it could import (`module_from`), to name the file in the error when it
+    # uses one without importing it.
     compute_module_names() {
         ulong i = 0;
         while (i < files.count) {
@@ -1096,10 +1101,23 @@ struct _Linker {
             module_from.append(HashMap<String, ulong[]>());
             i += 1;
         }
-        var done = HashSet<ulong>();
         i = 0;
         while (i < files.count) {
-            if (done.contains(i) or mates[i].count == 0) {
+            for (var m in all_mates[i]) {
+                for (var d in named_decls(files[m].module)) {
+                    if (d.is_private() or own[i].contains(d.declared_name())) {
+                        continue;
+                    }
+                    var name = d.declared_name();
+                    if (!module_from[i].contains(name)) {
+                        module_from[i][name] = Array<ulong>();
+                    }
+                    if (!module_from[i][name].contains(m)) {
+                        module_from[i][name].append(m);
+                    }
+                }
+            }
+            if (mates[i].count == 0) {
                 i += 1;
                 continue;
             }
@@ -1111,11 +1129,10 @@ struct _Linker {
             # name -> (declaring file, the name it takes, a function).
             var by_name = Map<String, _ModuleDeclaration[]>();
             for (var j in group) {
-                done.insert(j);
                 var seen = HashSet<String>();
                 for (var d in named_decls(files[j].module)) {
                     # A `private` declaration is its file's alone.
-                    if (d.is_private()) {
+                    if (d.is_private() and j != i) {
                         continue;
                     }
                     var name = d.declared_name();
@@ -1133,10 +1150,24 @@ struct _Linker {
                     if (!by_name.contains(name)) {
                         by_name[name] = Array<_ModuleDeclaration>();
                     }
-                    by_name[name].append(_ModuleDeclaration(c.value(), function, j));
+                    by_name[name].append(_ModuleDeclaration(c.value(), function, j, d.is_private()));
                 }
             }
-            for (var (name, declared) in by_name) {
+            for (var (name, all_declared) in by_name) {
+                # A name the file declares only privately is its own alone,
+                # and joins no union.
+                bool only_private = false;
+                var declared = Array<_ModuleDeclaration>();
+                for (var d in all_declared) {
+                    if (d.file == i and d.file_private) {
+                        only_private = true;
+                    } else {
+                        declared.append(d);
+                    }
+                }
+                if (only_private or declared.is_empty) {
+                    continue;
+                }
                 bool all_functions = true;
                 for (var d in declared) {
                     if (!d.function) {
@@ -1157,25 +1188,8 @@ struct _Linker {
                     }
                     canonical = merged.value();
                 }
-                for (var j in group) {
-                    # A file whose only declarations of the name are
-                    # `private` keeps them to itself and joins no union.
-                    bool only_private = own[j].contains(name);
-                    for (var d in declared) {
-                        if (d.file == j) {
-                            only_private = false;
-                        }
-                    }
-                    if ((union and !only_private) or !own[j].contains(name)) {
-                        module_names[j][name] = canonical;
-                        var from = Array<ulong>();
-                        for (var d in declared) {
-                            if (d.file != j) {
-                                from.append(d.file);
-                            }
-                        }
-                        module_from[j][name] = from;
-                    }
+                if (union or !own[i].contains(name)) {
+                    module_names[i][name] = canonical;
                 }
             }
             i += 1;
@@ -2388,15 +2402,14 @@ struct _Rewriter {
         }
         match (_resolve_imported(name, bindings, linker.prelude)) {
             Declared(c, from_import) => {
-                if (!bindings.unqualified.contains(name) and bindings.module.contains(name)) {
-                    linker.check_mate_import(file, name, span);
-                }
                 return _denote(name, c, span, value, from_import);
             }
             Ambiguous => {
                 _error(span, _ambiguous(name));
             }
-            Unknown => {}
+            Unknown => {
+                linker.report_unimported_mate(file, name, span);
+            }
         }
         return Optional<String>.Empty;
     }

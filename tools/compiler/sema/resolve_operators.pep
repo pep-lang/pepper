@@ -32,6 +32,7 @@ import [apply_choice, arg_info, ArgInfo, method_target, Outcome, Overloads] from
 import "properties";
 import [PassState] from "state";
 import [static_type_of, StructInfo, StructTable] from "static_type";
+import "type_name";
 import [dispatch_unary] from "unary_operators";
 import [method_is_static] from "value_types";
 import [Rewriter, rewrite_block] from "walk";

@@ -20,7 +20,7 @@ import [demangle_name, Runtime, Target] from compiler.link;
 import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
-import [location_of] from "common";
+import [known_location, location_of] from "common";
 import [READS_ATTRIBUTE] from "lazy";
 import [Loc] from "loc";
 import [
@@ -2152,7 +2152,7 @@ struct _RegionWalk {
         report(
             _error_at_known(
                 message, _expression_loc(e)
-            ).with_note("locked here", _known(lock_loc)).with_note(advice, Optional<Location>.Empty)
+            ).with_note("locked here", known_location(lock_loc)).with_note(advice, Optional<Location>.Empty)
         );
     }
 
@@ -2421,7 +2421,7 @@ struct _RegionWalk {
                                 $"'{what}' is part of the value locked by '{lock.name}' and cannot be returned from the block",
                                 _expression_loc(e)
                             ).with_note(
-                                "locked here", _known(lock.loc)
+                                "locked here", known_location(lock.loc)
                             ).with_note($"return 'copy({what})' instead", Optional<Location>.Empty)
                         );
                     }
@@ -2707,7 +2707,7 @@ struct _RegionWalk {
                     _expression_loc(arg)
                 ).with_note(
                     "locked here",
-                    _known(lock.loc)
+                    known_location(lock.loc)
                 ).with_note(
                     $"a function value can carry what it captures out of the block; capture 'copy({what})'",
                     Optional<Location>.Empty
@@ -3394,7 +3394,7 @@ struct _Checks {
                         _expression_loc(arg)
                     ).with_note(
                         $"'{parameter.name}' is declared [{LOCKED_ATTRIBUTE}] here",
-                        _known(parameter.loc)
+                        known_location(parameter.loc)
                     ).with_note(
                         "write the function here, as a closure, so the compiler can check that it keeps the value to itself",
                         Optional<Location>.Empty
@@ -3422,11 +3422,11 @@ struct _Checks {
                 var diagnostic = _error_at_known(
                     $"'{what}' is not a new value, but parameter '{parameter.name}' takes a value that nothing else references",
                     _expression_loc(arg)
-                ).with_note($"'{parameter.name}' is declared [Move] here", _known(parameter.loc));
+                ).with_note($"'{parameter.name}' is declared [Move] here", known_location(parameter.loc));
                 var blamed = blame(arg);
                 if (blamed.is_value()) {
                     diagnostic = diagnostic.with_note(
-                        $"'{what}' does not return a new value: this return shares its inputs", _known(blamed.value())
+                        $"'{what}' does not return a new value: this return shares its inputs", known_location(blamed.value())
                     );
                 }
                 # A local can hand its value over instead of copying it.
@@ -3796,7 +3796,7 @@ struct _Moves {
             failure.error = Optional<Diagnostic>.Value(
                 _error_at_known(
                     $"'{name}' is used after its value was moved", at
-                ).with_note($"'{name}' was moved here; assign it a new value before using it again", _known(moved_at))
+                ).with_note($"'{name}' was moved here; assign it a new value before using it again", known_location(moved_at))
             );
         }
     }

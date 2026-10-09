@@ -10,6 +10,7 @@ import [has_bare_attribute, IMPLICIT_ATTRIBUTE, TRY_LOCAL] from "builder";
 import [error_at, location_of] from "common";
 import [Block, FunctionDef, Module, StructDef, TypeName, VariableDef] from "model";
 import [PassState] from "state";
+import "type_name";
 
 const _RESULT = "Result";
 const _OPTIONAL = "Optional";

@@ -35,6 +35,7 @@ import [
     WithSubject
 ] from "model";
 import [PassState] from "state";
+import "type_name";
 
 ## The program's properties, by owner (struct or trait base name).
 export struct Properties {

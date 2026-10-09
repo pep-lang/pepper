@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Adds `import "<sibling>";` wherever a file of a module uses another file of
-its module without importing it, as `pepc` reports under PEPC_STRICT_IMPORTS.
+its module without importing it, as `pepc` reports.
 
 Usage: scripts/add-module-imports.py <repo> <pepc> <pep-fmt>
 
@@ -49,7 +49,7 @@ def runs():
 
 def check(run, tmp):
     kind, path, a, name = run
-    env = dict(os.environ, PEPPER_RUNTIME=runtime, PEPC_STRICT_IMPORTS='1')
+    env = dict(os.environ, PEPPER_RUNTIME=runtime)
     if kind == 'module':
         compiler = os.path.join(repo, 'tools', 'compiler')
         if path.startswith(compiler + os.sep):
@@ -66,7 +66,11 @@ def check(run, tmp):
     else:
         args = [pepc, '--emit-checked', '--test', '-I', os.path.join(repo, 'tools'), path]
         cwd = os.path.dirname(path)
-    r = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=600)
+    try:
+        r = subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, timeout=600)
+    finally:
+        if kind == 'module' and cwd != tmp:
+            os.remove(main)
     return r.stdout + r.stderr, cwd
 
 def add(missing):
