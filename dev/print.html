@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c0455bee.js";
+            window.path_to_searchindex_js = "searchindex-8696238c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -12220,6 +12220,8 @@ needs_restock(shelf: Shelf): bool {
 </code></pre>
 <pre><code class="language-pepper"># Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep with no
 # import: files of one module see each other's declarations.
+import "rules";
+
 export struct Stock {
     var _shelf: Shelf;
 
@@ -12311,6 +12313,8 @@ export summary_line(count: int): String {
 }
 </code></pre>
 <pre><code class="language-pepper"># The same names as summary.pep's private ones, and private here too.
+import "summary";
+
 private const WIDTH: ulong = 12;
 
 private label(name: String): String {
