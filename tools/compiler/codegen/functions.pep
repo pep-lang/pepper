@@ -190,7 +190,15 @@ extend Generator {
             }
             var fn_value = ir.add_function(mangled, fn_type);
             set_private_linkage(fn_value, mangled);
-            own(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
+            # A member the passes synthesize for a use (`__copy`, placed at
+            # the struct) has no owner: a layer that reads the struct's may
+            # make it, and the object of the struct's file, cached without
+            # it, would not define it. Like an instantiation, it is defined
+            # in each part that uses it.
+            bool synthesized = method.name.starts_with("__") and method.owner.is_none() and method.loc == st.loc;
+            if (!synthesized) {
+                own(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
+            }
             functions[mangled] = fn_value;
             var param_names = Array<String>();
             if (!method.is_static) {

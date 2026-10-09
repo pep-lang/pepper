@@ -141,3 +141,49 @@ keeps_once_a_copy_method_two_layers_made() {
         ]
     );
 }
+
+# Builds `main.pep` in `root`, which imports from `imports`, with the
+# cache in `cache`, and runs it.
+_build_with(root: Path, imports: Path, cache: Path) {
+    var setup = link.Setup();
+    setup.import_dirs.append(imports);
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<driver.Cache>.Value(driver.Cache(cache));
+    options.in_process = true;
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).spawn();
+    expect_true(ran.is_ok() and ran.value().wait().value().success());
+}
+
+# A member the passes synthesize for a use (`__copy`) of a struct of a
+# layer below is defined wherever it is used, not in the struct's file's
+# object: that object, cached by a program that never copied the struct,
+# does not have it, and the program that copies it then did not link
+# ("undefined reference to Item@lib/item.____copy").
+[Test]
+links_a_copy_method_the_cached_object_of_its_struct_lacks() {
+    var folder = TempFolder("synthesized_member");
+    var root = folder.path;
+    var lib = root.join(Path("lib"));
+    Directory.create_all(lib);
+    File.write_text(
+        lib.join(Path("item.pep")),
+        "export struct Item {\n    var n: int;\n    var names: String[] = Array<String>();\n    construct(n: int) {\n        this.n = n;\n    }\n}\n"
+    );
+    File.write_text(lib.join(Path("module.pep")), "export [Item] from \"item\";\n");
+    for (var (name, use) in [("plain", "Item(1).n"), ("copies", "copy(Item(1)).n")]) {
+        var program = root.join(Path(name));
+        Directory.create_all(program);
+        File.write_text(
+            program.join(Path("main.pep")), "import [Item] from lib;\nmain(): int {\n    return " + use + " - 1;\n}\n"
+        );
+        _build_with(program, root, root.join(Path("cache")));
+    }
+}
