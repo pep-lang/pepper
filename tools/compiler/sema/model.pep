@@ -5115,6 +5115,12 @@ export struct FunctionDef {
     ## In memory only: kept by `copy()`, not fingerprinted, written as
     ## JSON or recorded.
     var pending_body: PendingBody? = Optional<PendingBody>.Empty;
+    ## In memory only, and not kept by `copy()`: the body as the record
+    ## it was read from wrote it, which hashing a delta's base or an own
+    ## interface uses in place of the body, decoded or not: checked
+    ## bodies don't change, and decoding one is no change. A copy, such
+    ## as a specialization, gets a body of its own.
+    var body_origin: PendingBody? = Optional<PendingBody>.Empty;
     var name: String;
     var ty: TypeName;
     var generic_params: Array<GenericParam>;

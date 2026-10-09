@@ -37,6 +37,9 @@ export struct BuildOptions {
     ## Whether to compile every part in this process rather than in
     ## `pepc --compile-part` children (for a program other than `pepc`).
     var in_process: bool = false;
+    ## Whether to check every layer loaded by early cutoff again and fail
+    ## when its record differs, as `PEPC_VERIFY_CUTOFF` does.
+    var verify_cutoff: bool = false;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -266,7 +269,8 @@ _check_layers(
     sources: SourceText[],
     warnings: Diagnostic[],
     clock: _Clock,
-    trace: bool
+    trace: bool,
+    verify: bool
 ): Result<(sema.Module, sema.PassState), String> {
     var module = sema.Module();
     var state = sema.PassState(program.target);
@@ -279,7 +283,7 @@ _check_layers(
     # The layers loaded, whose files' bodies are not linked.
     var loaded = HashSet<ulong>();
     bool checked_any = false;
-    bool verify_cutoff = _verify_cutoff();
+    bool verify_cutoff = verify or _verify_cutoff();
     bool trace_layers = _trace_layers();
     for (var k in 0..layered.count) {
         layered[k].key = layer_key(layered[k], owns);
@@ -630,7 +634,15 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var state = sema.PassState(program.target);
     if (layered.count > 1) {
         var checked = _check_layers(
-            program, layered, options.cache.value(), reused, sources, warnings, clock, options.trace_cache
+            program,
+            layered,
+            options.cache.value(),
+            reused,
+            sources,
+            warnings,
+            clock,
+            options.trace_cache,
+            options.verify_cutoff
         );
         if (checked.is_err()) {
             report_warnings(warnings, sources);

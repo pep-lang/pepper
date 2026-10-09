@@ -958,11 +958,11 @@ _m_FunctionDef_write(out: RecordOut, value: FunctionDef) {
     }
     if (out.blank_bodies and !value.is_generic_func and value.generic_params.count == 0) {
         out.unsigned(0);
-    } else if (out.pending_as_bytes and value.pending_body.is_value()) {
-        # Hashed for a delta or an own interface: a body never
-        # decoded is as its record wrote it.
+    } else if (out.pending_as_bytes and value.body_origin.is_value()) {
+        # Hashed for a delta or an own interface: a body read from
+        # a record is as the record wrote it, decoded or not.
         out.unsigned(2);
-        out.pending(value.pending_body.value());
+        out.pending(value.body_origin.value());
     } else {
         var _body = value.body;
         if (value.pending_body.is_value()) {
@@ -1072,6 +1072,7 @@ _m_FunctionDef_read_with(input: RecordIn, lazy: bool): FunctionDef {
             _function.body = Optional<Block>.Value(decode_body(_pending.value()));
         } else {
             _function.pending_body = _pending;
+            _function.body_origin = _pending;
         }
     }
     return _function;

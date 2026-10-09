@@ -188,6 +188,60 @@ keeps_the_layers_an_edit_does_not_reach() {
     expect_true(_records_of(root, b) == 2);
 }
 
+# Writes a program whose `b.pep` calls `a.pep`'s `a_count`, which
+# returns `a_body`.
+_write_callee(root: Path, a_body: String) {
+    File.write_text(
+        root.join(Path("a.pep")),
+        "export trait Measure {\n    measure(): int;\n}\nexport a_count(items: Measure[], extra: int = 0): int {\n    var total = extra;\n    for (var m in items) {\n        total += m.measure();\n    }\n    return total + "
+            + a_body
+            + ";\n}\n"
+    );
+    # `b.pep` implements `Measure`, so the confinement summary `a.pep`'s
+    # layer recorded for `a_count`, whose trait calls now reach `_Three`
+    # too, is made again from its body: a call under a lock needs it.
+    File.write_text(
+        root.join(Path("b.pep")),
+        "import async;\nimport \"a\";\n[Shared]\nstruct _Count {\n    const value: async.Atomic<long>;\n    construct() {\n        this.value = async.Atomic<long>(0);\n    }\n}\nstruct _Three {\n    var n: int;\n    construct() {\n        this.n = 3;\n    }\n}\nextend _Three with Measure {\n    measure(): int {\n        return n;\n    }\n}\nexport b_value(): int {\n    var counter = async.Mutex<_Count>(_Count());\n    var items = Array<Measure>();\n    items.append(_Three());\n    var n = 0;\n    with (var c = counter.lock()) {\n        n = a_count(items);\n    }\n    return n;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nimport \"b\";\nmain(): int {\n    return b_value() - a_count(Array<Measure>(), 3);\n}\n"
+    );
+}
+
+# A body a layer decodes from a record below it is not a change of that
+# layer's: its record keeps no copy of the body, which an edit to the body
+# below would leave stale (`PEPC_VERIFY_CUTOFF` finds the copy).
+[Test]
+keeps_no_copy_of_the_bodies_it_decodes() {
+    var folder = TempFolder("decoded_bodies");
+    var root = folder.path;
+    _write_callee(root, "0");
+    var build = () => {
+        var setup = link.Setup();
+        setup.import_dirs.append(root);
+        setup.defer_bodies = true;
+        var output = root.join(Path("main"));
+        var options = driver.BuildOptions(output, root.join(Path("build")));
+        options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+        options.in_process = true;
+        options.verify_cutoff = true;
+        var program = link.load_program(root.join(Path("main.pep")), setup);
+        expect_true(program.is_ok());
+        var built = driver.build(program.value(), options);
+        if (built.is_err()) {
+            print(built.error());
+        }
+        expect_true(built.is_ok());
+        var ran = process.Command(output.to_string()).spawn();
+        expect_true(ran.is_ok() and ran.value().wait().value().success());
+    };
+    build();
+    _write_callee(root, "1 - 1");
+    build();
+}
+
 [Test]
 keeps_the_objects_another_build_stored_first() {
     var folder = TempFolder("store_twice");

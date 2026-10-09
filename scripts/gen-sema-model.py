@@ -329,13 +329,27 @@ while stack:
         for w in re.findall(r'[A-Za-z_][\w:]*',strip_path(t)):
             if not w.startswith('ast::'): stack.append(w)
 
+# In-memory fields `copy()` leaves out, with their documentation.
+NOT_COPIED = {
+    'body_origin': [
+        '## In memory only, and not kept by `copy()`: the body as the record',
+        "## it was read from wrote it, which hashing a delta's base or an own",
+        '## interface uses in place of the body, decoded or not: checked',
+        "## bodies don't change, and decoding one is no change. A copy, such",
+        '## as a specialization, gets a body of its own.',
+    ],
+}
+
 def gen_struct(name, fields, doc, internal=()):
     lines=[]
     lines.append(f'## {doc}')
     lines.append(f'export struct {name} {{')
     for f in internal:
-        lines.append(f'    ## In memory only: kept by `copy()`, not fingerprinted, written as')
-        lines.append(f'    ## JSON or recorded.')
+        if f['name'] in NOT_COPIED:
+            lines += ['    ' + l for l in NOT_COPIED[f['name']]]
+        else:
+            lines.append(f'    ## In memory only: kept by `copy()`, not fingerprinted, written as')
+            lines.append(f'    ## JSON or recorded.')
         lines.append(f'    var {f["name"]}: {f["pep"]} = {f["default"]};')
     required=[]
     optional=[]
@@ -367,7 +381,8 @@ def gen_struct(name, fields, doc, internal=()):
     if internal:
         lines.append(f'        var _copy = {name}({", ".join(vals)});')
         for f in internal:
-            lines.append(f'        _copy.{f["name"]} = this.{f["name"]};')
+            if f['name'] not in NOT_COPIED:
+                lines.append(f'        _copy.{f["name"]} = this.{f["name"]};')
         lines.append('        return _copy;')
     else:
         lines.append(f'        return {name}({", ".join(vals)});')
