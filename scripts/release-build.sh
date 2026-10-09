@@ -7,7 +7,7 @@
 # <target> is one of:
 #
 #   linux-x64     in a manylinux_2_28 container (glibc 2.28: RHEL 8, Debian 10
-#                 and later), with LLVM from its dnf repositories
+#                 and later), with LLVM built from source (cached)
 #   macos-arm64   on an arm64 Mac, with LLVM from Homebrew
 #   macos-x64     on an Intel Mac, with LLVM from Homebrew
 #   windows-x64   under Git bash, with LLVM from scripts/ci-provision-llvm.sh
@@ -71,12 +71,44 @@ collect_static() {
 echo "=== provision ($target)"
 case "$target" in
   linux-x64)
-    # The manylinux_2_28 image is AlmaLinux 8. Its llvm-static carries the
-    # component archives llvm-sys links; clang is the smoke test's link
-    # driver, as it is a user's.
-    # openssh-clients: git fetches pepc's pepper-llvm package over SSH.
-    dnf install -y llvm-devel llvm-static clang libffi-devel libzstd-devel zlib-devel libxml2-devel git openssh-clients
-    llvm_config=$(command -v llvm-config)
+    # The manylinux_2_28 image is AlmaLinux 8. clang is the smoke test's
+    # link driver, as it is a user's. openssh-clients: git fetches pepc's
+    # pepper-llvm package over SSH.
+    dnf install -y clang libffi-devel libzstd-devel zlib-devel libxml2-devel git openssh-clients xz
+    # LLVM is the major pepper-llvm binds, built here from source: dnf
+    # serves only AlmaLinux's current LLVM (21 since 2026-10), whose C API
+    # dropped functions pepper-llvm calls, and upstream's Linux binaries need
+    # a newer glibc than this image's. Only what the builds link: the
+    # libraries with the X86, AArch64 and WebAssembly backends (the Rust
+    # compiler's targets; pepc registers the host's), the headers and
+    # llvm-config. Built once, kept beside the runner's workspace, which
+    # outlives the container.
+    llvm_major=$(sed -nE 's/^DEFAULT_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
+    llvm_version=$(sed -nE "s/^ *$llvm_major\) echo \"([0-9.]+)\" ;;.*/\1/p" scripts/setup-llvm.sh | head -1)
+    llvm_prefix="${RUNNER_WORKSPACE:-$output}/pepper-data/llvm-$llvm_version-manylinux_2_28"
+    if [ ! -x "$llvm_prefix/bin/llvm-config" ]; then
+      python_bin=$(ls -d /opt/python/cp312-*/bin | head -1)
+      "$python_bin/python" -m pip install --quiet cmake ninja
+      llvm_src="$output/llvm-project-$llvm_version.src"
+      rm -rf "$llvm_src" "$output/llvm-build" "$llvm_prefix.partial"
+      curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm_version/llvm-project-$llvm_version.src.tar.xz" \
+        | tar -xJ -C "$output" "llvm-project-$llvm_version.src/llvm" "llvm-project-$llvm_version.src/cmake" "llvm-project-$llvm_version.src/third-party"
+      "$python_bin/cmake" -G Ninja -S "$llvm_src/llvm" -B "$output/llvm-build" \
+        -DCMAKE_MAKE_PROGRAM="$python_bin/ninja" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$llvm_prefix.partial" \
+        -DLLVM_TARGETS_TO_BUILD="X86;AArch64;WebAssembly" \
+        -DLLVM_ENABLE_PROJECTS="" \
+        -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_DOCS=OFF \
+        -DLLVM_INCLUDE_UTILS=OFF \
+        -DLLVM_ENABLE_ZLIB=FORCE_ON -DLLVM_ENABLE_ZSTD=FORCE_ON \
+        -DLLVM_ENABLE_LIBXML2=OFF -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBEDIT=OFF \
+        -DLLVM_DISTRIBUTION_COMPONENTS="llvm-config;llvm-headers;llvm-libraries"
+      "$python_bin/ninja" -C "$output/llvm-build" install-distribution
+      mv "$llvm_prefix.partial" "$llvm_prefix"
+      rm -rf "$llvm_src" "$output/llvm-build"
+    fi
+    llvm_config="$llvm_prefix/bin/llvm-config"
     collect_static "/usr/lib64 /usr/lib" zstd ffi xml2 z
     if [ ! -f "$static_dir/libzstd.a" ]; then
       # AlmaLinux ships no libzstd.a: build one from zstd's own release.
@@ -126,6 +158,12 @@ if [ -n "$llvm_config" ]; then
     18|19|20|21|22) ;;
     *) echo "LLVM $llvm_version from $llvm_config is not one Pepper builds with (18-22)" >&2; exit 1 ;;
   esac
+  # pepc's pepper-llvm binds one major, the setup scripts' default.
+  pepc_major=$(sed -nE 's/^DEFAULT_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
+  if [ "$major" != "$pepc_major" ]; then
+    echo "LLVM $llvm_version from $llvm_config is not LLVM $pepc_major, which pepc (pepper-llvm) binds" >&2
+    exit 1
+  fi
   echo "LLVM $llvm_version at $("$llvm_config" --prefix)"
   export "LLVM_SYS_${major}1_PREFIX=$("$llvm_config" --prefix)"
   features=(--no-default-features --features "llvm$major-1")
@@ -167,7 +205,6 @@ case "$target" in
     done
     if [ "$target" = linux-x64 ]; then
       merged="$static_dir/libLLVM-$major.a"
-      [ "$major" = 20 ] || ln -sf "$merged" "$static_dir/libLLVM-20.a"
       { echo "create $merged"; for a in "${archives[@]}"; do echo "addlib $a"; done; echo save; echo end; } | ar -M
       cxx=stdc++
     else

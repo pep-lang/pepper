@@ -147,8 +147,9 @@ jobs:
           - { target: windows-x64, runs-on: pepper-windows, container: "" }
     runs-on: ${{ matrix.runs-on }}
     container: ${{ matrix.container }}
-    # LLVM provisioning plus a release build of the compiler, from cold.
-    timeout-minutes: 60
+    # LLVM provisioning plus a release build of the compiler, from cold. The
+    # Linux leg builds its LLVM from source the first time (cached after).
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v7
