@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8696238c.js";
+            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -297,7 +297,8 @@ the code it replaces:</p>
 </thead>
 <tbody>
 <tr><td><code>new(...)</code> constructor</td><td><code>construct(...)</code></td></tr>
-<tr><td>A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their declarations)</td><td>one declaration, or two names</td></tr>
+<tr><td>A struct, enum, type alias, trait or variable that two files of one module both declare, privately (now an error: files of a module share their names)</td><td>one declaration, or two names</td></tr>
+<tr><td>A declaration of another file of the module, used without importing that file (now an error)</td><td><code>import "file";</code> in the file that uses it</td></tr>
 <tr><td><code>io.Path.join_str(String)</code></td><td><code>io.Path.join(Path)</code>, which accepts a <code>String</code></td></tr>
 <tr><td><code>String.clone()</code></td><td><code>String.copy()</code></td></tr>
 <tr><td><code>ThreadLocal&lt;T&gt;.get()</code> for a <code>T</code> that is not thread-safe (now an error)</td><td><code>with (var value = local.enter()) { ... }</code></td></tr>

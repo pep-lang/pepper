@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8696238c.js";
+            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -318,14 +318,15 @@ lib.pep:29:1: note: declared here
 </code></pre>
 <p>The same applies to private structs, enums, type aliases, traits, and variables:
 naming one from another file reports <code>'name' is private to file.pep</code>.</p>
-<h2 id="files-of-a-module-share-their-declarations"><a class="header" href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a></h2>
+<h2 id="files-of-a-module-see-each-other-through-imports"><a class="header" href="#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a></h2>
 <p>Inside a module, <code>export</code> is not needed for one file to use another’s
-declarations. Every file of the module sees the top-level declarations of
-the module’s other files, exported or not, with no import, as if they were
-its own. <code>export</code> means visible <strong>outside</strong> the module, through its
+declarations, but an import is: a file sees the top-level declarations of
+another file of its module, exported or not, once it imports that file
+(<code>import "rules";</code>), as a C file sees another’s declarations through its
+header. <code>export</code> means visible <strong>outside</strong> the module, through its
 <code>module.pep</code>.</p>
 <p>Here the <code>inventory</code> module keeps its rules in <code>rules.pep</code>, which exports
-nothing, and <code>stock.pep</code> uses them freely:</p>
+nothing, and <code>stock.pep</code> imports it to use them:</p>
 <pre><code class="language-pepper"># Module-internal: no `export`, yet every file of `inventory` can use these.
 const RESTOCK_LEVEL = 5;
 
@@ -337,8 +338,8 @@ needs_restock(shelf: Shelf): bool {
     return shelf.count &lt; RESTOCK_LEVEL;
 }
 </code></pre>
-<pre><code class="language-pepper"># Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep with no
-# import: files of one module see each other's declarations.
+<pre><code class="language-pepper"># Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep, which
+# this file imports: a file of a module sees another through an import.
 import "rules";
 
 export struct Stock {
@@ -379,11 +380,20 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>A file’s own declarations come first, then what its imports bring in, then
-the declarations of the module’s other files, then the runtime’s. A module’s
-files are the files of the program in its folder (and in subfolders that are
-not modules themselves): a file joins the program when the module imports
-it, so <code>module.pep</code> imports a file with nothing to export, like <code>rules.pep</code>,
+<p>A file’s own declarations come first, then what its imports bring in (the
+files of its module it imports included), then the runtime’s. A file of the
+module that names a declaration of another one it does not import gets an
+error that names the file to import. Without its <code>import "rules";</code>,
+<code>stock.pep</code> would report:</p>
+<pre><code class="language-text">inventory/stock.pep:5:17: error: 'Shelf' is declared in inventory/rules.pep, another file of this module, which this file does not import; add an import for it
+    5 |     var _shelf: Shelf;
+      |                 ^~~~~
+</code></pre>
+<p>So a file’s dependencies are exactly its imports, and the compiler checks
+and caches each file against what it imports alone. A module’s files are
+the files of the program in its folder (and in subfolders that are not
+modules themselves): a file joins the program when the module imports it,
+so <code>module.pep</code> imports a file with nothing to export, like <code>rules.pep</code>,
 just to include it. A <code>[Target(...)]</code> on that import (see
 <a href="modules.html#platform-specific-imports">Platform-specific imports</a>) includes
 the file only on some platforms.</p>
@@ -396,14 +406,14 @@ inventory/rules.pep:4:8: note: declared here
     4 | struct Shelf {
       |        ^~~~~
 </code></pre>
-<p>Because the files of a module share one set of names, two of them may not
+<p>The files of a module still share one set of names, so two of them may not
 both declare a struct, enum, type alias, trait, or variable of one name:
 the second is a <code>redefinition of 'name'</code>, with a note at the first, unless
 one of them is <code>private</code>. Functions are different: functions of one name in
 several files of a module are one <a href="overloading.html">overload set</a>, as they
 are within a file. Extensions are shared the same way: a file sees the
-methods its module’s other files add, exported or not, unless the extension
-is <code>private</code>.</p>
+methods the files of its module it imports add, exported or not, unless the
+extension is <code>private</code>.</p>
 <h2 id="keeping-a-declaration-to-its-file"><a class="header" href="#keeping-a-declaration-to-its-file">Keeping a declaration to its file</a></h2>
 <p>Put <code>private</code> in front of a top-level declaration to keep it to its own
 file: the other files of its module do not see it. You can mark every kind
@@ -647,7 +657,7 @@ main(): int {
 private <code>helper</code>. Files are told apart by their path inside their module
 (<code>io/file.pep</code>), not by their file name alone. Within one module, the files
 share their names instead, except <code>private</code> ones (see
-<a href="#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).</p>
+<a href="#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a>).</p>
 <p>Exported names work the same way between modules: each module’s exports
 are its own, so two modules may export the same name, and importers tell
 them apart by qualifier (<code>a.parse</code> and <code>b.parse</code>) or by an import list

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8696238c.js";
+            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -207,8 +207,9 @@ go in Pepper.</p>
 </table>
 </div>
 <p>A <code>test/</code> folder holds no <code>module.pep</code>, so no program that imports the
-module loads it. Its files are still files of the module, though: they see
-the module’s unexported names and each other’s. <code>pep-test</code> builds each
+module loads it. Its files are still files of the module, though: a test file
+that imports one of the module’s files (<code>import "../atomic";</code> in <code>runtime/async/test/</code>) sees its
+unexported names. <code>pep-test</code> builds each
 folder’s tests into one program, so a helper (or test name) that two test
 files of one folder declare collides; mark it <code>private</code> in each (as
 <code>runtime/async/test/</code> does). Prefer it to tests inside a

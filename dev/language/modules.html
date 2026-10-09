@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8696238c.js";
+            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -267,10 +267,10 @@ import geometry;
 <p>A <strong>module</strong> is a folder that contains a <code>module.pep</code> file. The module is named
 after its folder, and its exports are exactly what its <code>module.pep</code> exports.
 The other files in the folder are the module’s own files: <code>module.pep</code> imports
-them and chooses what to pass on to the module’s users. The files of a module
-see each other’s declarations, exported or not, without importing each other,
+them and chooses what to pass on to the module’s users. A file of a module
+sees the declarations of the module’s files it imports, exported or not,
 except those marked <code>private</code>
-(see <a href="visibility.html#files-of-a-module-share-their-declarations">Files of a module share their declarations</a>).
+(see <a href="visibility.html#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a>).
 Loading any file of a module loads its <code>module.pep</code>, and with it every file
 the module imports.</p>
 <p>This example has a <code>geometry</code> module next to <code>main.pep</code>:</p>

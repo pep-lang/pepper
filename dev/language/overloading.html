@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8696238c.js";
+            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -265,11 +265,12 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>Every file of the module sees the same set, with no import, since the
-files of a module share their declarations (see
-<a href="visibility.html#files-of-a-module-share-their-declarations">Visibility</a>).
-That holds for private functions too: functions of one name that several
-files of a module declare, exported or not, are one set there. Members from different files must still differ in their
+<p>A file of the module sees the members its own file and the module’s files it
+imports declare (see
+<a href="visibility.html#files-of-a-module-see-each-other-through-imports">Visibility</a>).
+That holds for unexported functions too: functions of one name that files of
+a module declare, exported or not, are one set wherever those files are
+imported. Members from different files must still differ in their
 parameters (<code>redefinition of 'area'</code>). Names that are not all functions,
 such as two structs <code>Point</code>, and a renaming re-export
 (<code>export size as area</code> beside an <code>area</code>) are still <code>exported twice</code>.</p>
