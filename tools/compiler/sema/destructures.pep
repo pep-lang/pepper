@@ -1,6 +1,7 @@
 ## Tuple destructures and element references: `tuples::lower_destructures`
 ## in Pepper.
 
+import "closures";
 import [error_at] from "common";
 import [Expression, FunctionDef, Module, TypeName] from "model";
 import [PassState] from "state";

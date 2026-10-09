@@ -6,7 +6,9 @@ import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [BinaryOp, Block, Expression, FunctionDef, Module, TypeName, UnaryOp] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [StructTable] from "static_type";
+import "unary_operators";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Reports the first struct or trait value still in a boolean context (an

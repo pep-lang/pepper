@@ -12,7 +12,9 @@
 ## be null, and assigning to the binding.
 
 import [Location] from compiler.diagnostic;
+import "closures";
 import [location_of] from "common";
+import "confinement";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -27,6 +29,7 @@ import [
     UnaryOp
 ] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [trait_def] from "traits";
 import [VOID] from "type_name";
 import [Rewriter, rewrite_statement] from "walk";

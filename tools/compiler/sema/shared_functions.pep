@@ -40,6 +40,7 @@ import [
 ] from "model";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [apply_synthesized, finish] from "synthesize";
 import [FUNCTION, parse_type_string, SHARED_FUNCTION, VOID] from "type_name";

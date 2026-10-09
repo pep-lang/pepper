@@ -23,6 +23,7 @@ import [
     WeakOp
 ] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [parse_type_string] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 

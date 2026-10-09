@@ -9,6 +9,7 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [integer_range, payload_field, TAG_FIELD] from "builder";
 import [location_of] from "common";
+import "confinement";
 import [install_traits, is_trait, reference_cases] from "enums";
 import [Loc] from "loc";
 import [
@@ -39,6 +40,7 @@ import [
     VariableDef
 ] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [is_integral_name, replace_map] from "type_name";
 import [Rewriter, rewrite_block, rewrite_children, rewrite_expression] from "walk";

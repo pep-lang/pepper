@@ -4,6 +4,7 @@
 ## type is expected, the expected type picks the specialization the value
 ## names.
 
+import "builder";
 import [
     for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
@@ -20,6 +21,7 @@ import [
     SymbolRefExpression,
     TypeName
 ] from "model";
+import "overload_select";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [GenericSignature, specialization] from "type_arguments";

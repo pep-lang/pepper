@@ -8,7 +8,10 @@ import compiler.ast;
 import [Location] from compiler.diagnostic;
 import [is_numeric_type] from "arithmetic";
 import [IMPLICIT_ATTRIBUTE] from "builder";
+import "closure_sites";
+import "closures";
 import [error_at, location_of] from "common";
+import "convert_to_traits";
 import [is_enum] from "enums";
 import [Loc] from "loc";
 import [
@@ -17,9 +20,11 @@ import [
 import [set_name] from "names";
 import [op_name] from "operators";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [trait_def] from "traits";
 import [AUTO, parse_type_string, replace_map, VOID, VOID_PTR] from "type_name";
+import "value_structs";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## Reports the first value whose type does not match its slot. Runs before

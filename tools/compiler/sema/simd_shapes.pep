@@ -7,6 +7,7 @@ import [error_at] from "common";
 import [Loc] from "loc";
 import [Module, TypeName] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [SIMD] from "type_name";
 
 ## The largest lane count: a mask's bits fill a `ulong`.

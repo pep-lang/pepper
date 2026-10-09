@@ -15,6 +15,7 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [Rewriter, rewrite_expression] from "walk";
 

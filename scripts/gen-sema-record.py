@@ -1223,6 +1223,8 @@ header = '''## Saving and loading a checked module: a binary writer and reader f
 
 import compiler.ast;
 import [Loc] from "loc";
+import "model";
+import "pending";
 import [
     compare_bytes,
     DeltaBase,

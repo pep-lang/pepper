@@ -14,6 +14,7 @@ import [Loc] from "loc";
 import [ExternDef, FunctionDef, GenericParam, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
+import "static_blocks";
 import [parse_type_string, replace_map] from "type_name";
 
 ## Whether `function` is a concrete override (`hash<Point>`), which

@@ -2,6 +2,7 @@
 ## check_assignment_targets` in Pepper.
 
 import [Diagnostic, Location] from compiler.diagnostic;
+import "closures";
 import [error_at] from "common";
 import [method_of] from "enums";
 import [Loc] from "loc";

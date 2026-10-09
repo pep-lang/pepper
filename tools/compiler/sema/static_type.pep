@@ -4,6 +4,7 @@
 ## table is not consulted: these passes run over programs without one.)
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
+import "closures";
 import [case_value_type, FieldTypes] from "enums";
 import [BinaryOp, Expression, FunctionDef, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
 import [set_name] from "names";

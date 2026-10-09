@@ -32,6 +32,7 @@
 import compiler.ast;
 import [Attribute, Declaration, Expression, FunctionDecl, Module, Span, StructDecl, TypeName] from compiler.ast;
 import [Diagnostic, Location, SourceText] from compiler.diagnostic;
+import os;
 import [FileScope, ProgramFile] from "link";
 import "names" as names;
 import [Target] from "platform";
@@ -899,6 +900,13 @@ export check_visibility(
         }
         var checker = _Checker(i, own, scopes[i], types, prelude, decls, mangled_private, members, target, errors);
         checker.roots = roots;
+        var strict = os.environment("PEPC_STRICT_IMPORTS");
+        checker.strict_imports = strict.is_value() and !strict.value().is_empty;
+        for (var target in files[i].imports) {
+            if (target.is_value()) {
+                checker.imported_files.insert(target.value());
+            }
+        }
         for (var d in files[i].module.declarations) {
             if (target.keeps(d.attributes())) {
                 checker.walk_declaration(d);
@@ -949,6 +957,10 @@ struct _ModuleFirst {
 
 struct _Checker {
     var file: ulong;
+    # With `PEPC_STRICT_IMPORTS`, another file of the module is seen only
+    # through an import of it: the files this one imports.
+    var strict_imports: bool = false;
+    var imported_files: HashSet<ulong> = HashSet<ulong>();
     var own: HashSet<String>;
     var scope: FileScope;
     # Every type name declared at top level.
@@ -1045,7 +1057,7 @@ struct _Checker {
     # file this one imports.
     _sees_extension(in_file: ulong, exported: bool, file_private: bool): bool {
         return in_file == file
-            or (!file_private and _same_module(in_file))
+            or (!file_private and _same_module(in_file) and (!strict_imports or imported_files.contains(in_file)))
             or (exported and (prelude[in_file] or scope.extensions.contains(in_file)));
     }
 

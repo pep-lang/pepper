@@ -48,6 +48,7 @@ import [
     UnaryOp
 ] from "model";
 import [display_name] from "names";
+import "overload_select";
 import [display_float] from "program";
 import [PassState] from "state";
 import [is_integral_name, parse_type_string, replace_map] from "type_name";

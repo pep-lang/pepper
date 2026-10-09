@@ -2,6 +2,8 @@
 
 import io;
 import process;
+import "../runner";
+import "../temp_folder";
 
 [Test]
 starts_empty_when_an_earlier_run_left_its_folder() {

@@ -26,6 +26,7 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [method_key, PassState] from "state";
+import "static_blocks";
 import [parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 

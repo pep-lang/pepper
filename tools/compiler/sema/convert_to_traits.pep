@@ -15,6 +15,8 @@
 import compiler.ast;
 import [Location] from compiler.diagnostic;
 import [IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
+import "closure_sites";
+import "closures";
 import [error_at, location_of] from "common";
 import [constraint_spelled, Conformance] from "constraints";
 import [Loc] from "loc";
@@ -35,10 +37,13 @@ import [
     TraitType,
     TypeName
 ] from "model";
+import "overload_select";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [instance, trait_def, used_trait_types] from "traits";
 import [parse_type_string, VOID_PTR] from "type_name";
+import "value_structs";
 import [is_value_type, value_type_key] from "value_types";
 import [Rewriter, rewrite_children] from "walk";
 

@@ -14,6 +14,8 @@ import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [location_of] from "common";
+import "confinement";
+import "copies";
 import [Loc] from "loc";
 import [FunctionDef, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";

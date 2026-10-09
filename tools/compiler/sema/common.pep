@@ -3,6 +3,7 @@
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
+import "builder";
 import [Loc] from "loc";
 import [StructDef] from "model";
 

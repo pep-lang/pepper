@@ -8,11 +8,13 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [SHARED_ATTRIBUTE, THREAD_LOCAL_ATTRIBUTE] from "builder";
 import [error_at, location_of] from "common";
+import "constraints";
 import [is_enum] from "enums";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Kind, Module, StructDef, TypeName, UnaryOp, VariableDef] from "model";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
+import "static_blocks";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## Reports the first `[Shared]` struct field, module-scope variable or

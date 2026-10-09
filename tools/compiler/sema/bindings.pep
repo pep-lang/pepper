@@ -4,6 +4,7 @@
 ## constructors).
 
 import [Location] from compiler.diagnostic;
+import "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Module, Statement, UnaryOp, VariableDef] from "model";

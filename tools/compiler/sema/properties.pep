@@ -15,6 +15,7 @@
 
 import [Location] from compiler.diagnostic;
 import [getter_name, SHARED_ATTRIBUTE, setter_name] from "builder";
+import "closures";
 import [error_at, location_of] from "common";
 import [method_of] from "enums";
 import [Loc] from "loc";

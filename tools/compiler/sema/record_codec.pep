@@ -4,6 +4,8 @@
 
 import compiler.ast;
 import [Loc] from "loc";
+import "model";
+import "pending";
 import [
     compare_bytes,
     DeltaBase,

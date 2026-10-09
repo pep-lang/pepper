@@ -4,6 +4,7 @@
 
 import [error_at] from "common";
 import [Block, Expression, FunctionDef, Module] from "model";
+import "named_arguments";
 import [PassState] from "state";
 import [Rewriter, rewrite_expression] from "walk";
 

@@ -5,6 +5,7 @@
 
 import [BinaryOp, TypeName] from "model";
 import [PassState] from "state";
+import "static_blocks";
 
 ## Returns `name`, or the integer type it is stored as when it names an
 ## enum.

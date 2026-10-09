@@ -38,9 +38,11 @@ import [
     VariableDef,
     WeakOp
 ] from "model";
+import "resolve_implicit_types";
 import [use_site] from "shared_type_checks";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [method_key, PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [parse_type_string, TUPLE] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
@@ -796,13 +798,17 @@ struct _Confinement {
         if (method == "__ctor") {
             for (var c in st.value().constructors) {
                 if (c.name == owner) {
-                    found = Optional<(_Body, String)>.Value((_Body(ty, key, c), $"m {st.value().name} constructor {c.name}"));
+                    found = Optional<(_Body, String)>.Value(
+                        (_Body(ty, key, c), $"m {st.value().name} constructor {c.name}")
+                    );
                 }
             }
         } else {
             for (var m in st.value().method_members) {
                 if (!m.is_generic_func and m.name == method) {
-                    found = Optional<(_Body, String)>.Value((_Body(ty, key, m), $"m {st.value().name} method {m.name}"));
+                    found = Optional<(_Body, String)>.Value(
+                        (_Body(ty, key, m), $"m {st.value().name} method {m.name}")
+                    );
                 }
             }
         }

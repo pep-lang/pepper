@@ -3,6 +3,7 @@
 # every value must arrive.
 
 import async;
+import "../atomic";
 
 private enum Event {
     Word(text: String),

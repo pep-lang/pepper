@@ -10,12 +10,15 @@
 import [bit_width, is_float_type] from "arithmetic";
 import [error_at] from "common";
 import [constraint_spelled] from "constraints";
+import "function_types_check";
 import [Loc] from "loc";
 import [CastKind, Expression, FunctionDef, Module, TypeName] from "model";
 import [PassState] from "state";
+import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [trait_def] from "traits";
 import [VOID_PTR] from "type_name";
+import "value_structs";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Reports the first cast that converts what its kind may not. Runs once

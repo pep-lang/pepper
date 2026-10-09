@@ -28,7 +28,9 @@ import [
 import [Callee] from "named_arguments";
 import [set_name] from "names";
 import [group_struct_methods] from "overloads";
+import "resolve_implicit_types";
 import [PassState] from "state";
+import "static_blocks";
 import [StructTable] from "static_type";
 import [trait_def] from "traits";
 import [replace_map, SIMD] from "type_name";

@@ -5,6 +5,7 @@
 ## method, so plain compares (`size == 0`) and raw indexing stay as they are.
 
 import [enum_method_name] from "builder";
+import "closures";
 import [is_enum] from "enums";
 import [Loc] from "loc";
 import [
@@ -28,6 +29,7 @@ import [
 ] from "model";
 import [op_name] from "operators";
 import [apply_choice, arg_info, ArgInfo, method_target, Outcome, Overloads] from "overload_select";
+import "properties";
 import [PassState] from "state";
 import [static_type_of, StructInfo, StructTable] from "static_type";
 import [dispatch_unary] from "unary_operators";

@@ -5,6 +5,7 @@ import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import [location_of] from "common";
 import [NO_FILE] from "loc";
 import [Expression, FunctionDef, Module] from "model";
+import "static_blocks";
 import [parse_type_string] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
 

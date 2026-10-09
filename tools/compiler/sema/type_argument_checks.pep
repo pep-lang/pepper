@@ -7,6 +7,7 @@ import [Loc] from "loc";
 import [Expression, FunctionDef, Module, StructDef, TypeName] from "model";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "synthesize";
 import [parse_type_string] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
 

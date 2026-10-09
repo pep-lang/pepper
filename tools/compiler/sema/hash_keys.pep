@@ -13,6 +13,8 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [VALUE_ATTRIBUTE] from "builder";
+import "confinement";
+import "copies";
 import [EQUATABLE_ATTRIBUTE, HASH_METHOD] from "equatable";
 import [FunctionDef, Module, StructDef] from "model";
 import [PassState] from "state";

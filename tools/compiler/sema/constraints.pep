@@ -29,6 +29,7 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
+import "static_blocks";
 import [is_dispatchable] from "traits";
 import [parse_type_string, replace_map, SHARED_FUNCTION] from "type_name";
 import [is_value_type, value_type_key] from "value_types";

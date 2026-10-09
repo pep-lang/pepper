@@ -1,6 +1,8 @@
 ## Shell completion scripts generated from a `Parser`: `Shell` names the
 ## shells, and `Parser.completions` writes the script.
 
+import "parser";
+
 ## A shell that `Parser.completions` writes a completion script for.
 export enum Shell {
     ## GNU Bash: source the script, or put it in

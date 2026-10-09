@@ -1,5 +1,7 @@
 # Uses `Shelf`, `needs_restock` and `RESTOCK_LEVEL` from rules.pep with no
 # import: files of one module see each other's declarations.
+import "rules";
+
 export struct Stock {
     var _shelf: Shelf;
 

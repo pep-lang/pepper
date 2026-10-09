@@ -4,6 +4,7 @@
 ## struct for a static method, as `S.f()` would be written); parameters and
 ## locals are exempt.
 
+import "closures";
 import [error_at] from "common";
 import [Loc] from "loc";
 import [
@@ -21,6 +22,7 @@ import [
     TypeName
 ] from "model";
 import [set_name, without_type_arguments] from "names";
+import "resolve_implicit_types";
 import [PassState] from "state";
 import [Rewriter, rewrite_expression] from "walk";
 

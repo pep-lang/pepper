@@ -1,6 +1,8 @@
 ## A struct's destructor releases its struct fields:
 ## `release_field_refs` in Pepper.
 
+import "apply_extensions";
+import "function_types";
 import [Loc] from "loc";
 import [Expression, MemberRefExpression, MethodCallExpression, Module, Statement] from "model";
 import [PassState] from "state";

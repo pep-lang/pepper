@@ -14,8 +14,10 @@
 
 import compiler.ast;
 import [demangle, Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
+import "apply_extensions";
 import [payload_field, TAG_FIELD] from "builder";
 import [location_of] from "common";
+import "constraints";
 import [Loc, NO_FILE] from "loc";
 import [
     BinaryExpression,

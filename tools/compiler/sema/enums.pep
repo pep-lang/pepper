@@ -38,6 +38,7 @@ import [
     VariableDef
 ] from "model";
 import [method_key, PassState, ReferenceEnum] from "state";
+import "static_blocks";
 import [is_integral_name, parse_type_string, replace_map, VOID] from "type_name";
 import [lower_extensions, method_is_static, resolve_static_calls, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";

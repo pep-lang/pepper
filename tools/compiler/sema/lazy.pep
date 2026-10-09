@@ -6,6 +6,8 @@
 ## the write or the call.
 
 import [Location] from compiler.diagnostic;
+import "builder";
+import "closures";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module] from "model";

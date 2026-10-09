@@ -22,6 +22,7 @@
 import [is_numeric_type] from "arithmetic";
 import [full_body, is_checked_function] from "checked";
 import [expression_children] from "closure_sites";
+import "closures";
 import [takes_over] from "confinement";
 import [Loc] from "loc";
 import [
@@ -399,7 +400,9 @@ struct _Literals {
                 var st = structs[owner];
                 for (var m in st.method_members) {
                     if (!m.is_generic_func and m.name == method) {
-                        made = Optional<_LiteralCallee>.Value(_LiteralCallee(m, Optional<StructDef>.Value(st), !m.is_static));
+                        made = Optional<_LiteralCallee>.Value(
+                            _LiteralCallee(m, Optional<StructDef>.Value(st), !m.is_static)
+                        );
                     }
                 }
             }

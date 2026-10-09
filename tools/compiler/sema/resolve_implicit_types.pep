@@ -14,6 +14,7 @@ import [is_checked_function] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
 ] from "closure_sites";
+import "closures";
 import [MAIN_WITH_ARGUMENTS] from "entry_point";
 import [call_on_value, case_value_type, FieldTypes, is_enum, method_read] from "enums";
 import [Fingerprint] from "fingerprint";

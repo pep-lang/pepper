@@ -25,6 +25,7 @@ import [Attribute, Declaration, Expression, FunctionDecl, Module, Pattern, Span,
 import [Diagnostic, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
+import os;
 import "names" as names;
 import [Target] from "platform";
 import [Scope, ScopeKind, ScopeWalk, Scopes] from "walk";
@@ -624,6 +625,13 @@ struct _Linker {
     var mates: Array<ulong[]> = Array<ulong[]>();
     # Per file, the names its module's other files declare (`_Bindings.module`).
     var module_names: HashMap<String, String>[] = Array<HashMap<String, String>>();
+    # Per file, the other files of its module that declare each of those
+    # names.
+    var module_from: Array<HashMap<String, ulong[]>> = Array<HashMap<String, ulong[]>>();
+    # Whether a file sees another file of its module only through an import
+    # of it (`PEPC_STRICT_IMPORTS`): a name only such files declare is an
+    # error where it is used, which names the file to import.
+    var strict_imports: bool = false;
     var unions: _Unions = _Unions();
     # Every type name declared at top level, in any file.
     var types: HashSet<String> = HashSet<String>();
@@ -644,6 +652,40 @@ struct _Linker {
     construct(files: ProgramFile[], target: Target) {
         this.files = files;
         this.target = target;
+        var strict = os.environment("PEPC_STRICT_IMPORTS");
+        this.strict_imports = strict.is_value() and !strict.value().is_empty;
+    }
+
+    # Whether file `file` imports file `other`.
+    imports_file(file: ulong, other: ulong): bool {
+        for (var target in files[file].imports) {
+            if (target.is_value() and target.value() == other) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    # With `strict_imports`, reports a use in `file` of `name`, which its
+    # module's other files declare, when it imports none of them.
+    check_mate_import(file: ulong, name: String, span: Span) {
+        if (!strict_imports) {
+            return;
+        }
+        var from = module_from[file].try_get(name);
+        if (!from.is_value() or from.value().is_empty) {
+            return;
+        }
+        for (var other in from.value()) {
+            if (imports_file(file, other)) {
+                return;
+            }
+        }
+        _error(
+            file,
+            span,
+            $"'{name}' is declared in {file_names[from.value()[0]]}, another file of this module, which this file does not import; add an import for it"
+        );
     }
 
     # Where an override may go: a module's files share their module, the
@@ -1051,6 +1093,7 @@ struct _Linker {
         ulong i = 0;
         while (i < files.count) {
             module_names.append(HashMap<String, String>());
+            module_from.append(HashMap<String, ulong[]>());
             i += 1;
         }
         var done = HashSet<ulong>();
@@ -1125,6 +1168,13 @@ struct _Linker {
                     }
                     if ((union and !only_private) or !own[j].contains(name)) {
                         module_names[j][name] = canonical;
+                        var from = Array<ulong>();
+                        for (var d in declared) {
+                            if (d.file != j) {
+                                from.append(d.file);
+                            }
+                        }
+                        module_from[j][name] = from;
                     }
                 }
             }
@@ -2338,6 +2388,9 @@ struct _Rewriter {
         }
         match (_resolve_imported(name, bindings, linker.prelude)) {
             Declared(c, from_import) => {
+                if (!bindings.unqualified.contains(name) and bindings.module.contains(name)) {
+                    linker.check_mate_import(file, name, span);
+                }
                 return _denote(name, c, span, value, from_import);
             }
             Ambiguous => {
