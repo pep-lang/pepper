@@ -564,8 +564,15 @@ for b in blocks:
 # patch on it (tag 2): its member lists element by element the same way.
 
 # The fields an interface leaves out (`module_interface_fields`): what the
-# passes record for codegen and the build, not declarations.
+# passes record for codegen and the build, not declarations. A layer that
+# reads another is checked against its declarations alone, so these stay
+# out of its own interface too, and an edit that changes only them keeps
+# the keys of the layers that read it (early cutoff). A field that can
+# change what a reader checks or generates must not be listed here.
 NOT_INTERFACE = ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files')
+# The fields an own interface leaves out besides: the link summaries of the
+# bodies the build cache skipped, which only that build's codegen reads.
+NOT_OWN = NOT_INTERFACE + ('recorded_summaries',)
 
 def own_lines(label, expr, tree, blank_bodies='true'):
     """Lines that add `expr`, of type `tree`, to the layer's own interface
@@ -882,11 +889,11 @@ def _additions_delta(fname, tree):
           f'if ({kept} == base.size("{fname}")) {{',
           '    out.unsigned(1);']
     w += ['    ' + l for l in write(news, tree)]
-    if fname not in NOT_INTERFACE and fname not in ('recorded_summaries',):
+    if fname not in NOT_OWN:
         w += ['    ' + l for l in _own_entries(fname, news, tree)]
     w += ['} else {', '    out.unsigned(0);']
     w += ['    ' + l for l in write(f'value.{fname}', tree)]
-    if fname not in NOT_INTERFACE and fname not in ('recorded_summaries',):
+    if fname not in NOT_OWN:
         w += ['    ' + l for l in _own_entries(fname, f'value.{fname}', tree)]
     w += [f'    base.count("{fname} whole", 0);', '}']
     local = fresh('_f'); tag = fresh('_tag'); bk = fresh('_bk')

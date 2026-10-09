@@ -1,13 +1,17 @@
-## Checked layers: sema checks a program one layer at a time, each on top of
-## the layers before it, and the build cache keeps each layer's result (a
-## checked unit's record, `sema.CheckedUnit`). A build loads the record of
-## the longest run of unchanged layers and checks only the layers after it,
-## so an edit costs the layers from the edited one on, not the program.
+## Checked layers: sema checks a program one layer at a time, and the build
+## cache keeps each layer's result (a checked unit's record,
+## `sema.CheckedUnit`), so an edit costs the layers it reaches.
 ##
-## The runtime is the first layer: its files depend on nothing else. Each
-## other unit (`link.units`) is a layer of its own, in an order where a unit
-## comes after every unit it reads; units that read each other (through
-## extensions) share one.
+## The runtime is the first layer. Each other unit (`link.units`) is a
+## layer of its own; units that read each other (through extensions) share
+## one. A layer comes after every layer it reads, so the layers are the
+## nodes of a DAG, in a topological order. Each layer is checked on its
+## closure only (`Layer.reads`): the records of the layers it reads, merged
+## (`merged_module`). Its key (`layer_key`) hashes its files and the own
+## interface of each layer it reads (`sema.DeltaBase.own_hash`), so an edit
+## outside its closure, or one that keeps every own interface in it, loads
+## its record rather than checking it again (early cutoff). INTERNALS.md
+## §8.1 describes the whole design.
 
 import [Diagnostic] from compiler.diagnostic;
 import digest;
@@ -22,7 +26,7 @@ const _RECORDS_FOLDER = "checked15";
 ## How many keys' records each layer keeps.
 const _KEEP_RECORDS = 4;
 
-## One layer: files checked together, on top of the layers before.
+## One layer: files checked together, on top of the layers they read.
 export struct Layer {
     ## Its name: `runtime`, or its first unit's.
     var name: String;
