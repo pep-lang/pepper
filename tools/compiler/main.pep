@@ -1,8 +1,9 @@
 # pepc: the Pepper compiler written in Pepper (#225), built and shipped as
 # `pep-build`: the same command line, `pep-build --help` for the options.
-# The options of the Rust compiler it does not have yet (`--target`,
-# `--lib`, `--lto`, `-m...` and the rest `_not_ported` names) are errors
-# that say so; `-g` builds without debug info, with a warning.
+# The options of the Rust compiler it does not have yet (`--lib`, `--lto`,
+# `-m...` and the rest `_not_ported` names) are errors that say so; `-g`
+# builds without debug info, with a warning. `--target` compiles for another
+# platform, and `--sysroot` names its system libraries for the link.
 #
 # With no `--emit-*` option it builds the program into an executable: `-o
 # out`, else the file's stem in the current directory, or the project of
@@ -71,6 +72,8 @@ main(args: String[]): int {
     String? build_dir;
     bool frame_pointers = false;
     String? without_checks;
+    String? triple;
+    String? sysroot;
     # Options are matched as `pep-build` matches them: a value after a
     # space or `=` (`--cache dir`, `--cache=dir`), or attached to a short
     # option (`-Idir`); after `--`, every argument is a file.
@@ -189,6 +192,10 @@ main(args: String[]): int {
             frame_pointers = true;
         } else if (name == "--no-runtime-checks") {
             without_checks = Optional<String>.Value(value);
+        } else if (name == "--target") {
+            triple = Optional<String>.Value(value);
+        } else if (name == "--sysroot") {
+            sysroot = Optional<String>.Value(value);
         } else if (name == "-g" or name == "--emit-debug") {
             File.stderr().write_all("warning: this compiler does not emit debug info yet; building without it\n");
         } else if (_not_ported(name)) {
@@ -199,6 +206,17 @@ main(args: String[]): int {
     }
     if (!path.is_value() and (ast or linked or checked or model or ir)) {
         return _usage_error("the --emit options need the program's entry file");
+    }
+    # The platform to compile for, with the build options `-D` defined.
+    if (triple.is_value()) {
+        var target = link.Target.parse(triple.value());
+        if (target.is_err()) {
+            _report(target.error());
+            return 1;
+        }
+        var parsed = target.value();
+        parsed.build_options = setup.target.build_options;
+        setup.target = parsed;
     }
     # Without `-O`, `PEPPER_OPT_LEVEL` picks the level, as in pep-build, so a
     # whole test suite can run optimized.
@@ -213,7 +231,7 @@ main(args: String[]): int {
     # In a project, the build takes what its `pep.toml` gives: with no file,
     # the entry and output; and `[build]`'s libraries.
     var project = driver.apply_project(
-        path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty
+        path.is_value() ? Optional<Path>.Value(Path(path.value())) : Optional<Path>.Empty, setup.target
     );
     if (project.is_err()) {
         _report(project.error());
@@ -347,6 +365,9 @@ main(args: String[]): int {
             }
             options.libraries = libraries;
             options.library_dirs = library_dirs;
+            options.sysroot = driver.effective_sysroot(
+                setup.target, sysroot.is_value() ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
+            );
             if (!no_cache) {
                 options.cache = Optional<driver.Cache>.Value(
                     cache_dir.is_value() ? driver.Cache(Path(cache_dir.value())) : driver.default_cache(work)
@@ -409,7 +430,7 @@ _value_name(name: String): String? {
         "-l" => {
             return Optional<String>.Value("LIB");
         }
-        "-L", "-I", "--build", "--cache" => {
+        "-L", "-I", "--build", "--cache", "--sysroot" => {
             return Optional<String>.Value("DIR");
         }
         "--import" => {
@@ -427,6 +448,9 @@ _value_name(name: String): String? {
         "--no-runtime-checks" => {
             return Optional<String>.Value("CHECKS");
         }
+        "--target" => {
+            return Optional<String>.Value("TRIPLE");
+        }
         else => {
             return Optional<String>.Empty;
         }
@@ -437,7 +461,7 @@ _value_name(name: String): String? {
 # not have yet.
 _not_ported(name: String): bool {
     match (name) {
-        "--lib", "--lto", "--target", "--sysroot", "--emit-static", "--debug-static", "--emit-steps", "--verify-cache", "--no-verify-cache", "--MSVC" => {
+        "--lib", "--lto", "--emit-static", "--debug-static", "--emit-steps", "--verify-cache", "--no-verify-cache", "--MSVC" => {
             return true;
         }
         else => {
@@ -465,7 +489,7 @@ _unsupported(option: String): int {
 ## them, for `docs/src/tools/pep-build.md`).
 const TRACE_CHANNELS = "time cache";
 
-const _HELP = "Pepper compiler\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nArguments:\n  [SOURCE_FILES]...  The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it\n\nOptions:\n  -I <DIR>                          Add a directory to the import search path\n      --import <NAME>               Force an import by name\n  -l <LIB>                          Link against a library\n  -L <DIR>                          Add a directory to the linker's library search path\n  -D <NAME[=VALUE]>                 Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins\n  -o <OUT>                          Output path: the executable\n      --build <DIR>                 Build directory\n  -O <LEVEL>                        Optimization level: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set\n      --no-runtime-checks <CHECKS>  Remove kinds of runtime check from an optimized build, as a comma-separated list: `overflow` (integer overflow; arithmetic then wraps), `divide` (division by zero and `MIN / -1`; then undefined), `shift` (a count of at least the width; then masked), `bounds` (array and string indexing) and `null` (calls and matches through a null reference), or `all`. Removing `bounds` or `null` gives up memory safety. Ignored, with a warning, at `-O0`\n      --test                        Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it\n      --emit-llvm                   Print the program's LLVM IR, unoptimized, instead of compiling it\n  -g, --emit-debug                  Accepted, with a warning: this compiler does not emit debug info yet\n      --frame-pointers              Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it\n  -v, --verbose                     Accepted for compatibility; prints nothing more yet\n      --no-runtime                  Skip runtime discovery\n      --emit-ast=<FORMAT>           Dump the parsed AST of the entry file instead of compiling [possible values: json]\n      --emit-linked                 Load and link the program instead of compiling it, and print every file's syntax tree after linking, with the linking errors, as JSON\n      --emit-checked                Load, link and check the program instead of compiling it, and print what the checks before sema report: the errors (linking, then `[__BuiltIn]` misuse, then visibility), then the warnings, rendered\n      --emit-model                  Load, link, check and build the program's sema model instead of compiling it, and print the model before any sema pass, as JSON\n      --emit-model-step <N>         With `--emit-model`: run the first N sema steps (one pass each, in the order the compiler runs them) and print the model after them\n  -T <CHAN>                         Enable a trace channel. `time` prints how long each compile stage took; `cache` prints whether each unit's object came from the build cache; any other name is accepted and ignored\n      --Tall                        Enable all trace channels\n      --no-cache                    Compile every unit without reading or writing the build cache\n      --cache <DIR>                 Build cache directory (default: `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`)\n  -h, --help                        Print help\n  -V, --version                     Print version\n";
+const _HELP = "Pepper compiler\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nArguments:\n  [SOURCE_FILES]...  The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it\n\nOptions:\n  -I <DIR>                          Add a directory to the import search path\n      --import <NAME>               Force an import by name\n  -l <LIB>                          Link against a library\n  -L <DIR>                          Add a directory to the linker's library search path\n  -D <NAME[=VALUE]>                 Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins\n  -o <OUT>                          Output path: the executable\n      --build <DIR>                 Build directory\n  -O <LEVEL>                        Optimization level: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set\n      --no-runtime-checks <CHECKS>  Remove kinds of runtime check from an optimized build, as a comma-separated list: `overflow` (integer overflow; arithmetic then wraps), `divide` (division by zero and `MIN / -1`; then undefined), `shift` (a count of at least the width; then masked), `bounds` (array and string indexing) and `null` (calls and matches through a null reference), or `all`. Removing `bounds` or `null` gives up memory safety. Ignored, with a warning, at `-O0`\n      --test                        Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it\n      --emit-llvm                   Print the program's LLVM IR, unoptimized, instead of compiling it\n  -g, --emit-debug                  Accepted, with a warning: this compiler does not emit debug info yet\n      --target <TRIPLE>             The platform to compile for, as an LLVM target triple (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`). The default is the machine the compiler runs on. `[Target(...)]` selects code for it, and linking another platform's executable needs its system libraries (`--sysroot`)\n      --sysroot <DIR>               The directory holding the target's system headers and libraries, passed to the link driver. Without it, `$PEPPER_SYSROOT_<TRIPLE>` (the triple upper-cased, with `_` for `-`) when set\n      --frame-pointers              Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it\n  -v, --verbose                     Accepted for compatibility; prints nothing more yet\n      --no-runtime                  Skip runtime discovery\n      --emit-ast=<FORMAT>           Dump the parsed AST of the entry file instead of compiling [possible values: json]\n      --emit-linked                 Load and link the program instead of compiling it, and print every file's syntax tree after linking, with the linking errors, as JSON\n      --emit-checked                Load, link and check the program instead of compiling it, and print what the checks before sema report: the errors (linking, then `[__BuiltIn]` misuse, then visibility), then the warnings, rendered\n      --emit-model                  Load, link, check and build the program's sema model instead of compiling it, and print the model before any sema pass, as JSON\n      --emit-model-step <N>         With `--emit-model`: run the first N sema steps (one pass each, in the order the compiler runs them) and print the model after them\n  -T <CHAN>                         Enable a trace channel. `time` prints how long each compile stage took; `cache` prints whether each unit's object came from the build cache; any other name is accepted and ignored\n      --Tall                        Enable all trace channels\n      --no-cache                    Compile every unit without reading or writing the build cache\n      --cache <DIR>                 Build cache directory (default: `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`)\n  -h, --help                        Print help\n  -V, --version                     Print version\n";
 
 # Prints `message` on standard error as an error: with `error:` unless it is
 # a rendered diagnostic that says so already.

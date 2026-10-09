@@ -5,7 +5,6 @@
 import io;
 import [Directory, Path] from io;
 import compiler.link;
-import os;
 import process;
 
 ## What a build takes from the project it is in.
@@ -30,8 +29,10 @@ export struct ProjectSetup {
 ## given, and `[build]`'s `link` libraries.
 ##
 ## @param file the file given, if any
+## @param target the compile target: a Windows executable's name ends in
+##   `.exe`
 ## @returns the setup, or why the project cannot be used
-export apply_project(file: Path?): Result<ProjectSetup, String> {
+export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, String> {
     var cwd = process.working_directory();
     var here = cwd.is_ok() ? cwd.value() : Path(".");
     Path? manifest_path;
@@ -67,7 +68,7 @@ export apply_project(file: Path?): Result<ProjectSetup, String> {
         setup.entry = entry;
         var output = manifest.output();
         # A Windows executable needs its extension to run.
-        if (os.system_os() == os.OperatingSystem.Windows and output.extension().is_empty()) {
+        if (target.os == "windows" and output.extension().is_empty()) {
             output = Path(output.to_string() + ".exe");
         }
         setup.output = Optional<Path>.Value(output);

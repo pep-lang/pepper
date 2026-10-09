@@ -46,6 +46,9 @@ export struct BuildOptions {
     ## Whether to check every layer loaded by early cutoff again and fail
     ## when its record differs, as `PEPC_VERIFY_CUTOFF` does.
     var verify_cutoff: bool = false;
+    ## The target's system root, which the link reads its libraries from
+    ## (`--sysroot`, else `$PEPPER_SYSROOT_<TRIPLE>`).
+    var sysroot: Path? = Optional<Path>.Empty;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -136,13 +139,31 @@ export link_inputs(module: sema.Module, program: link.Program): (String[], Path[
 }
 
 ## Puts `ir`'s static constructors where the target runs them: in
-## `.init_array` on ELF (see `use_init_array`).
+## `.init_array` on ELF (see `use_init_array`). WebAssembly keeps them: its
+## object format records `llvm.global_ctors` itself, and `wasm-ld` calls
+## them from `__wasm_call_ctors`. There `main` is also renamed for WASI's
+## startup code (see `use_wasi_main`).
 ##
 ## @param ir the optimized module
 ## @param triple the target triple
 export place_constructors(ir: llvm.Module, triple: String) {
-    if (!triple.contains("-windows") and !triple.contains("-apple-") and !triple.starts_with("wasm")) {
+    if (triple.starts_with("wasm")) {
+        use_wasi_main(ir);
+    } else if (!triple.contains("-windows") and !triple.contains("-apple-")) {
         use_init_array(ir, ir.context);
+    }
+}
+
+## Names `ir`'s `main` (Pepper's `int main()`) `__main_void`, as clang names
+## a C `int main(void)` for WebAssembly: wasi-libc's `_start` calls
+## `__main_void`. Under its own name LLVM would wrap it in a two-argument
+## `main` that nothing calls, and the program would trap on entry.
+##
+## @param ir the module
+export use_wasi_main(ir: llvm.Module) {
+    var main = ir.function("main");
+    if (main.is_value() and main.value().block_count() > 0 and main.value().param_count() == 0) {
+        main.value().set_name("__main_void");
     }
 }
 
@@ -586,7 +607,7 @@ _print_record_stats(name: String, base: sema.DeltaBase) {
 }
 
 ## Builds `program` into an executable: merge, the sema passes, code
-## generation for the host, LLVM's standard pipeline at the `-O` level, one
+## generation for the target (`program.target`), LLVM's standard pipeline at the `-O` level, one
 ## object per compilation unit (from the build cache when its key hits),
 ## then the link. When the cache records that the output is this very
 ## program, unchanged since, nothing is built. Warnings print on standard
@@ -598,7 +619,7 @@ _print_record_stats(name: String, base: sema.DeltaBase) {
 export build(program: link.Program, options: BuildOptions): Result<Built, String> {
     var report = Built();
     var clock = _Clock(options.trace_time);
-    var triple = llvm.default_triple();
+    var triple = codegen.target_triple(program.target);
     var cpu = codegen.Cpu.default_for(triple);
     var units = link.units(program);
     var keys = Optional<Keys>.Empty;
@@ -701,7 +722,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
 
     var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][options.opt_level];
-    codegen.initialize_host_backend();
+    codegen.initialize_backends();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
     if (machine.is_err()) {
         return Result<Built, String>.err(machine.error().message);
@@ -906,7 +927,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
         }
     }
-    var made = link_objects(objects, options.output, libraries, dirs);
+    var made = link_objects(objects, options.output, libraries, dirs, program.target, options.sysroot);
     Directory.remove_all(work);
     if (made.is_err()) {
         return Result<Built, String>.err(made.error());
@@ -997,8 +1018,8 @@ _unit_size(unit: link.Unit, sizes: ulong[]): ulong {
 }
 
 ## What linking a program takes beyond its files, as text for its key: the
-## output, the `-l` libraries, the `-L` folders, and the current folder
-## (`[Link(path = ...)]` folders are relative to it).
+## output, the `-l` libraries, the `-L` folders, the system root, and the
+## current folder (`[Link(path = ...)]` folders are relative to it).
 _link_text(options: BuildOptions): String {
     var cwd = process.working_directory();
     var here = cwd.is_ok() ? cwd.value().to_string() : "";
@@ -1009,6 +1030,9 @@ _link_text(options: BuildOptions): String {
     }
     for (var dir in options.library_dirs) {
         text.append($"-L {dir}\n");
+    }
+    if (options.sysroot.is_value()) {
+        text.append($"--sysroot {options.sysroot.value()}\n");
     }
     return text.to_string();
 }

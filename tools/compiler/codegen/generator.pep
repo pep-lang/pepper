@@ -31,12 +31,12 @@ import "expressions";
 import "functions";
 import [annotate_facts, stamp_cpu] from "globals";
 import "globals";
-import [initialize_host_backend] from "host";
 import "lazy";
 import "operators";
 import "ops";
 import "refs";
 import "simd";
+import [initialize_backends, target_triple] from "target";
 import "traits";
 import [Types, is_object] from "types";
 import "types";
@@ -690,7 +690,7 @@ export generate(
 }
 
 ## The LLVM IR of the whole checked program, unoptimized, as
-## `pep-build --emit-llvm -O0` writes it for the host.
+## `pep-build --emit-llvm -O0` writes it for the target (`state.target`).
 ##
 ## @param module the checked model
 ## @param state the passes' state for it
@@ -698,9 +698,9 @@ export generate(
 ## @param name the module's name: the main file's stem
 ## @returns the IR, or the first error
 export generate_ir(module: Module, state: PassState, namespaces: String[], name: String): Result<String, Diagnostic> {
-    var triple = llvm.default_triple();
+    var triple = target_triple(state.target);
     var cpu = Cpu.default_for(triple);
-    initialize_host_backend();
+    initialize_backends();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, llvm.OptLevel.O0);
     if (machine.is_err()) {
         return Result<String, Diagnostic>.err(Diagnostic.error(machine.error().message));

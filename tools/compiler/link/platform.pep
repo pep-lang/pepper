@@ -15,6 +15,37 @@ export const TEST_ATTRIBUTE = "Test";
 ## only when it is.
 export const TEST_BUILD_OPTION = "TEST";
 
+## The triples `--target` accepts: each supported OS on each supported
+## architecture, as clang spells them, WebAssembly with WASI preview 1, and
+## the mobile platforms (iOS devices and the simulator on Apple silicon and
+## Intel Macs; Android on arm64 and x86_64).
+##
+## @returns the triples
+export supported_triples(): String[] {
+    return [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "aarch64-pc-windows-msvc",
+        "wasm32-wasip1",
+        "aarch64-apple-ios",
+        "aarch64-apple-ios-simulator",
+        "x86_64-apple-ios-simulator",
+        "aarch64-linux-android",
+        "x86_64-linux-android",
+    ];
+}
+
+## The iOS version an `-apple-ios` triple without one targets: the oldest
+## Xcode 16 and later still build for.
+export const DEFAULT_IOS_VERSION = "15.0";
+
+## The Android API level an `-android` triple without one targets, and the
+## oldest the runtime supports: Android 11, the first with `statx`.
+export const DEFAULT_ANDROID_API = "30";
+
 ## What a program is compiled for: the platform `Target(...)` predicates
 ## evaluate against, and the build options `-D` defines.
 export struct Target {
@@ -23,6 +54,10 @@ export struct Target {
     var os: String = "";
     ## The architecture: `"x86_64"`, `"aarch64"` or `"wasm32"`.
     var arch: String = "";
+    ## The LLVM target triple `--target` names, or empty for the host's own
+    ## (LLVM's default triple, which also carries the host OS version on
+    ## macOS).
+    var triple: String = "";
     ## The build options by name, each with its value as written (`"1"`
     ## for a bare `-D NAME`).
     var build_options: HashMap<String, String> = HashMap<String, String>();
@@ -32,6 +67,109 @@ export struct Target {
         os = system_name();
         var name = architecture();
         arch = name == "x64" ? "x86_64" : name;
+    }
+
+    ## The target `triple` names (`aarch64-apple-darwin`,
+    ## `x86_64-pc-windows-msvc`), with no build options, as
+    ## `pepper_sema::Target::parse` reads it: clang's spellings of the
+    ## architectures (`x86_64`, `amd64`; `aarch64`, `arm64`) and operating
+    ## systems (`linux-gnu`, `darwin` or `macosx`, `windows-msvc`), with any
+    ## vendor and an OS version (`arm64-apple-macosx14.0`). WebAssembly is
+    ## `wasm32-wasip1`, also spelled `wasm32-wasi` or `wasm32-unknown-wasi`;
+    ## an iOS or Android triple without a version or API level gets
+    ## `DEFAULT_IOS_VERSION` or `DEFAULT_ANDROID_API`.
+    ##
+    ## @param triple the triple
+    ## @returns the target, or why it is not one Pepper compiles for
+    static parse(triple: String): Result<Target, String> {
+        var unsupported = $"unsupported target '{triple}'; expected one of: {", ".join(supported_triples())}";
+        var target = Target();
+        if (triple == "wasm32-wasi"
+            or triple == "wasm32-wasip1"
+            or triple == "wasm32-unknown-wasi"
+            or triple == "wasm32-unknown-wasip1") {
+            target.os = "wasi";
+            target.arch = "wasm32";
+            target.triple = "wasm32-wasip1";
+            return Result<Target, String>.ok(target);
+        }
+        var parts = triple.split("-");
+        if (parts.count < 3) {
+            return Result<Target, String>.err(unsupported);
+        }
+        for (var part in parts) {
+            if (part.is_empty) {
+                return Result<Target, String>.err(unsupported);
+            }
+        }
+        if (parts[0] == "x86_64" or parts[0] == "amd64") {
+            target.arch = "x86_64";
+        } else if (parts[0] == "aarch64" or parts[0] == "arm64") {
+            target.arch = "aarch64";
+        } else {
+            return Result<Target, String>.err(unsupported);
+        }
+        # The OS and environment follow the vendor (`x86_64-pc-windows-msvc`),
+        # or stand in for it (`x86_64-linux-gnu`).
+        var system = Array<String>();
+        for (var i in 1..parts.count) {
+            system.append(parts[i]);
+        }
+        if (_names(system, "android")) {
+            return _android(target, system, triple);
+        }
+        if (_names(system, "ios")) {
+            var ios = _ios(target, system);
+            if (!ios.is_value()) {
+                return Result<Target, String>.err(unsupported);
+            }
+            return Result<Target, String>.ok(ios.value());
+        }
+        if (_names(system, "linux") and _names(system, "gnu")) {
+            target.os = "linux";
+        } else if (_names(system, "darwin") or _names(system, "macos")) {
+            target.os = "macos";
+        } else if (_names(system, "windows") and system[system.count - 1] == "msvc") {
+            target.os = "windows";
+        } else {
+            return Result<Target, String>.err(unsupported);
+        }
+        target.triple = triple;
+        return Result<Target, String>.ok(target);
+    }
+
+    ## The triple without its OS version, which names the platform's system
+    ## root (`PEPPER_SYSROOT_AARCH64_APPLE_IOS_SIMULATOR` for every
+    ## `aarch64-apple-ios<version>-simulator`): an iOS version or Android API
+    ## level picks what the code may call, not where the SDK is. Empty for
+    ## the host's own.
+    ##
+    ## @returns the triple
+    platform_triple(): String {
+        if (os == "ios") {
+            return _strip_version(triple, "-apple-ios");
+        }
+        if (os == "android") {
+            return _strip_version(triple, "-linux-android");
+        }
+        return triple;
+    }
+
+    ## Whether this is an Apple platform built on Darwin (macOS or iOS):
+    ## Mach-O objects, libSystem, and the SDK's `.tbd` stubs.
+    ##
+    ## @returns true for macOS and iOS
+    is_apple(): bool {
+        return os == "macos" or os == "ios";
+    }
+
+    ## Whether this is the machine the compiler runs on: the code it
+    ## produces can run here.
+    ##
+    ## @returns true for the host's OS and architecture
+    is_host(): bool {
+        var host = Target();
+        return os == host.os and arch == host.arch;
     }
 
     ## Returns whether `attributes` keep their declaration on this target:
@@ -138,6 +276,102 @@ _is_target(id: String): bool {
 
 _is_build_option(id: String): bool {
     return id.lower() == "buildoption";
+}
+
+# Whether one of a triple's `system` parts (after the architecture)
+# starts with `prefix`.
+_names(system: String[], prefix: String): bool {
+    for (var part in system) {
+        if (part.starts_with(prefix)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+# Whether `text` is all decimal digits, and not empty.
+_is_number(text: String): bool {
+    if (text.is_empty) {
+        return false;
+    }
+    for (var i in 0..text.size) {
+        var b = text.byte_at(i);
+        if (b < '0' or b > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+# An Android target: `<arch>-linux-android<api>`, with the API level the
+# triple's `android` part ends in (`android33`), else
+# `DEFAULT_ANDROID_API`, which is also the oldest accepted. Any vendor is
+# accepted (`aarch64-unknown-linux-android`).
+_android(target: Target, system: String[], triple: String): Result<Target, String> {
+    var api = "";
+    for (var part in system) {
+        if (part.starts_with("android") and api.is_empty) {
+            api = part.substr_bytes(7, part.size - 7);
+        }
+    }
+    if (api.is_empty) {
+        api = DEFAULT_ANDROID_API;
+    }
+    if (!_is_number(api)) {
+        return Result<Target, String>.err($"unsupported target '{triple}': '{api}' is not an Android API level");
+    }
+    var level = ulong.parse(api);
+    var oldest = ulong.parse(DEFAULT_ANDROID_API).value();
+    if (!level.is_value() or level.value() < oldest) {
+        return Result<Target, String>.err(
+            $"unsupported target '{triple}': Pepper's runtime needs Android API level {oldest} or later (write 'android{oldest}')"
+        );
+    }
+    target.os = "android";
+    target.triple = $"{target.arch}-linux-android{api}";
+    return Result<Target, String>.ok(target);
+}
+
+# An iOS target: `<arch>-apple-ios<version>`, with `-simulator` for the
+# simulator, which Rust spells `-sim` and an x86_64 triple implies (no
+# iPhone is x86_64). The version is the triple's (`ios17.0`), else
+# `DEFAULT_IOS_VERSION`. None for an environment other than the simulator
+# (`-macabi`).
+_ios(target: Target, system: String[]): Target? {
+    var version = "";
+    for (var part in system) {
+        if (part.starts_with("ios") and version.is_empty) {
+            version = part.substr_bytes(3, part.size - 3);
+        }
+    }
+    if (version.is_empty) {
+        version = DEFAULT_IOS_VERSION;
+    }
+    var last = system[system.count - 1];
+    bool simulator = false;
+    if (last == "simulator" or last == "sim") {
+        simulator = true;
+    } else if (last.starts_with("ios")) {
+        simulator = target.arch == "x86_64";
+    } else {
+        return Optional<Target>.Empty;
+    }
+    target.os = "ios";
+    target.triple = $"{target.arch}-apple-ios{version}{simulator ? "-simulator" : ""}";
+    return Optional<Target>.Value(target);
+}
+
+# `triple` without the version that follows `prefix` in it, up to the next
+# `-` (`aarch64-apple-ios17.0-simulator` is `aarch64-apple-ios-simulator`).
+_strip_version(triple: String, prefix: String): String {
+    var at = triple.find(prefix);
+    if (at < 0) {
+        return triple;
+    }
+    var start = at as ulong + prefix.size;
+    var end = triple.find("-", start);
+    var rest = end < 0 ? "" : triple.substr_bytes(end as ulong, triple.size - end as ulong);
+    return triple.substr_bytes(0, start) + rest;
 }
 
 # Evaluates one attribute against a target; `error` says why it cannot be.
