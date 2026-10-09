@@ -188,6 +188,62 @@ keeps_the_layers_an_edit_does_not_reach() {
     expect_true(_records_of(root, b) == 2);
 }
 
+# Builds the program in `root` as `_build` does, each unit's files in
+# parts of their own (`BuildOptions.part_size`).
+_build_parts(root: Path, setup: link.Setup): driver.Built {
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    options.part_size = 1;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).spawn();
+    expect_true(ran.is_ok() and ran.value().wait().value().success());
+    return built.value();
+}
+
+# A unit's parts are cached each on its own, like a C file's object: a body
+# edit in one file of a module compiles its part again, and the part of the
+# module's other file, which reads the edited file by its interface, comes
+# from the cache.
+[Test]
+reuses_the_parts_an_edit_does_not_reach() {
+    var folder = TempFolder("part_keys");
+    var root = folder.path;
+    _write_program(root);
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.import_dirs.append(root);
+    var program = _load(root);
+    var geo = _unit_of(program, "module.pep");
+    var first = _build_parts(root, setup);
+    expect_true(first.misses.contains(geo));
+    expect_true(first.part_hits.is_empty);
+
+    File.write_text(
+        root.join(Path("geo")).join(Path("math.pep")), "_times(a: int, b: int): int {\n    return b * a;\n}\n"
+    );
+    var edited = _build_parts(root, setup);
+    expect_true(edited.misses.contains(geo));
+    expect_equal(edited.part_hits.count, 1 as ulong);
+    expect_true(edited.part_hits[0].starts_with(geo + "#"));
+
+    # An edit to its interface reaches the other part too.
+    File.write_text(
+        root.join(Path("geo")).join(Path("math.pep")),
+        "_times(a: int, b: int, c: int = 1): int {\n    return b * a * c;\n}\n"
+    );
+    var changed = _build_parts(root, setup);
+    expect_true(changed.misses.contains(geo));
+    expect_true(changed.part_hits.is_empty);
+}
+
 # Writes a program whose `b.pep` calls `a.pep`'s `a_count`, which
 # returns `a_body`.
 _write_callee(root: Path, a_body: String) {

@@ -3244,15 +3244,24 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   only declares them (`Generator.stripped`). After sema,
   `reuse_after_sema` hashes the other files' interfaces from their tokens
   and `summaries_to_record`, keys the remaining units, and a unit that hits
-  then generates no objects. Beside a unit's objects, `interfaces` holds its
-  files' interface hashes and `summaries` its functions' link summaries
-  (none when the build warned about the unit, so it is checked, and
-  warns, again). Its objects are
-  `<cache>/v1/units/<unit>/<key>/<n>.o`, written to the build folder and
-  moved into place as one folder. The same key gives the same objects, so
-  they never change once there, and builds share the cache without locks
-  or copies: a hit is linked where it is. Each unit keeps its newest eight
-  keys. Unlike `Program::units`, the files of a module are one unit, and
+  then generates no objects. A unit's folder,
+  `<cache>/v1/units/<unit>/<key>/`, holds `interfaces`, its files'
+  interface hashes, `summaries`, its functions' link summaries (none when
+  the build warned about the unit, so it is checked, and warns, again), and
+  `parts`, the list of its parts' objects. Each part is cached on its own,
+  `<cache>/v1/units/<unit>#<n>/<key>/0.o`, keyed like a C file's object
+  (`Keys.part`): the part's files by their text, and every other file the
+  unit reads by its interface hash, the module's other files included. So
+  when a body edit misses a unit, only the edited file's part is optimized
+  and emitted again; the others are linked from the cache. A function whose
+  link summary calls through a trait (a dependent summary) has no facts:
+  a later layer that implements the trait summarizes it again, so whether
+  a build has the summary depends on which layers it checked, and its body
+  stands in the interface instead. Each folder is written to the build
+  folder and moved into place as one. The same key gives the same objects,
+  so they never change once there, and builds share the cache without
+  locks or copies: a hit is linked where it is. Each unit, and each part,
+  keeps its newest eight keys. Unlike `Program::units`, the files of a module are one unit, and
   a module's other files are inputs of a file that reads it, since they see
   each other's declarations without imports; an override file is an input
   by its own text only. A program's key (`Keys.program`) hashes every file

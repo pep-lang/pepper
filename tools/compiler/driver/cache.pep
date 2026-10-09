@@ -2,10 +2,17 @@
 ## hashes everything its code can depend on, and a record of each program
 ## built, so an unchanged program is not built again.
 ##
-## A unit's objects (a large unit is compiled as several) are
-## `<cache>/v1/units/<unit>/<key>/<n>.o`: written to a folder of the build
-## and moved into place as one, and never changed after, since the same key
-## gives the same objects. So builds share the cache with no lock, and link
+## A unit is compiled as one part or more (a large unit's files are split
+## by size), and each part's object is kept on its own,
+## `<cache>/v1/units/<unit>#<n>/<key>/0.o`, under a key of its files' text
+## and the interfaces of everything else they read, the other files of
+## their module included (`Keys.part`): like a C file's object, which
+## depends on its text and its headers, so a body edit in one file of a
+## module compiles that file's part again, not the module's. A unit's own
+## key (`<cache>/v1/units/<unit>/<key>/`) keeps what a later build needs to
+## skip its bodies, and the list of its parts' objects (`parts`). Each is
+## written to a folder of the build and moved into place as one, and never
+## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
 ## the objects where they are. Each unit keeps its newest few keys
 ## (`_KEEP`), so switching between builds that differ (`-O` levels,
 ## programs with other overrides) does not rebuild every time; reusing a key
@@ -47,6 +54,17 @@ export struct Cache {
     ## @returns the folder, which need not exist
     objects(unit: String, key: String): Path {
         return dir.join(Path("units")).join(Path(unit)).join(Path(key));
+    }
+
+    ## Returns the folder of the object of part `n` of `unit` built under
+    ## `key` (`Keys.part`).
+    ##
+    ## @param unit the unit's name
+    ## @param n the part's place among the unit's parts
+    ## @param key its key
+    ## @returns the folder, which need not exist
+    part(unit: String, n: ulong, key: String): Path {
+        return objects($"{unit}#{n}", key);
     }
 
     ## Marks the objects in `folder`, a key's, as just reused, so the
@@ -204,6 +222,8 @@ export struct Keys {
     var _files: String[] = Array<String>();
     ## Each unit's input files, and whether each is read by its text.
     var _inputs: Array<Array<(ulong, bool)>> = Array<Array<(ulong, bool)>>();
+    ## Each file's unit, by index.
+    var _unit_of: ulong[] = Array<ulong>();
 
     ## @param program the loaded program
     ## @param units its units
@@ -245,6 +265,7 @@ export struct Keys {
             }
             reads.append(read);
         }
+        _unit_of = unit_of;
         var reaches = _reaches(reads);
         for (var u in 0..units.count) {
             var own = Array<(ulong, bool)>();
@@ -292,6 +313,44 @@ export struct Keys {
             hasher.update($"{_identity[file]}interface {interfaces[file].value()}\n");
         }
         return Optional<String>.Value(hasher.finish_hex());
+    }
+
+    ## Returns the key of the part of unit `u` that compiles `files`, once
+    ## sema has checked the program and every file's interface is known:
+    ## the part's files by their text, and every other file the unit's code
+    ## can depend on by its interface, the unit's other files included,
+    ## those of a unit that reaches this one back by their text. The part's
+    ## object holds the code of its files' own definitions, and copies of
+    ## the generic code they use, which the interfaces hold; another file's
+    ## non-generic bodies reach it only through what the interfaces keep of
+    ## them (return types and link summaries).
+    ##
+    ## @param program the program
+    ## @param units its units
+    ## @param u the unit's index
+    ## @param files the part's files
+    ## @param interfaces each file's interface hash: those the unit reads set
+    ## @returns the key, in hexadecimal
+    part(program: link.Program, units: link.Unit[], u: ulong, files: ulong[], interfaces: Array<String?>): String {
+        var own = HashSet<ulong>();
+        var hasher = digest.Blake3();
+        hasher.update(_base);
+        hasher.update($"part of {units[u].name}\n");
+        for (var file in files) {
+            own.insert(file);
+            hasher.update($"own {_files[file]}\n");
+        }
+        for (var (file, by_text) in _inputs[u]) {
+            if (own.contains(file)) {
+                continue;
+            }
+            if (by_text and _unit_of[file] != u) {
+                hasher.update($"{_files[file]}\n");
+                continue;
+            }
+            hasher.update($"{_identity[file]}interface {interfaces[file].value()}\n");
+        }
+        return hasher.finish_hex();
     }
 
     ## Returns the key of the whole program: every file, in namespace order,
@@ -388,6 +447,9 @@ const _SUMMARIES = "summaries";
 ## The name of the file beside a unit's objects holding its files'
 ## interface hashes, one per line: `<namespace>\t<hash>`.
 const _INTERFACES = "interfaces";
+## The name of the file in a unit's folder listing its parts' objects, one
+## per line, relative to the cache's folder (`Cache.part`).
+const _PARTS = "parts";
 
 ## Finds `units` in `cache` before sema. Units resolve bottom up: a unit's
 ## key is known once the interfaces of the files it reads from other units
@@ -425,7 +487,7 @@ export reuse(program: link.Program, units: link.Unit[], keys: Keys, cache: Cache
             reused.keys[u] = key;
             progress = true;
             var folder = cache.objects(units[u].name, key.value());
-            var found = _objects_in(folder, extension);
+            var found = _objects_in(cache, folder, extension);
             var interfaces = File.read_to_string(folder.join(Path(_INTERFACES)));
             if (found.is_empty or interfaces.is_err()) {
                 continue;
@@ -498,14 +560,30 @@ export reuse_after_sema(
         var folder = cache.objects(units[u].name, key.value());
         if (folder.join(Path(_INTERFACES)).is_file()) {
             cache.used(folder);
-            reused.objects[u] = _objects_in(folder, extension);
+            reused.objects[u] = _objects_in(cache, folder, extension);
         }
     }
 }
 
-## The objects in `folder`, `0.<extension>` on, until one is missing.
-_objects_in(folder: Path, extension: String): Path[] {
+## The objects of the unit whose folder is `folder`: those its parts list
+## names, none when one is missing; else (a folder written before parts
+## were kept on their own) `0.<extension>` on, until one is missing.
+_objects_in(cache: Cache, folder: Path, extension: String): Path[] {
     var found = Array<Path>();
+    var listed = File.read_to_string(folder.join(Path(_PARTS)));
+    if (listed.is_ok()) {
+        for (var line in listed.value().split("\n")) {
+            if (line.is_empty) {
+                continue;
+            }
+            var object = cache.dir.join(Path(line));
+            if (!object.is_file()) {
+                return Array<Path>();
+            }
+            found.append(object);
+        }
+        return found;
+    }
     while (true) {
         var object = folder.join(Path($"{found.count}.{extension}"));
         if (!object.is_file()) {
@@ -554,8 +632,8 @@ _parse_summary(line: String, file_of: HashMap<String, uint>): (sema.Loc, String)
     return Optional<(sema.Loc, String)>.Value((loc, summary));
 }
 
-## Writes what a later build needs of `unit` into `folder`, beside its
-## objects: its files' interface hashes, and the link summaries sema
+## Writes what a later build needs of `unit` into `folder`: its parts'
+## objects, its files' interface hashes, and the link summaries sema
 ## recorded for its functions, so a later build can skip its bodies; no
 ## summaries when the build warned about the unit's code, so a later build
 ## checks it, and warns, again.
@@ -566,9 +644,30 @@ _parse_summary(line: String, file_of: HashMap<String, uint>): (sema.Loc, String)
 ## @param program the program
 ## @param unit the unit
 ## @param warnings the build's warnings
+## @param parts its parts' objects, in the cache (`Cache.part`)
+## @param cache the build cache
 export write_record(
-    folder: Path, reused: Reused, module: sema.Module, program: link.Program, unit: link.Unit, warnings: Diagnostic[]
+    folder: Path,
+    reused: Reused,
+    module: sema.Module,
+    program: link.Program,
+    unit: link.Unit,
+    warnings: Diagnostic[],
+    parts: Path[],
+    cache: Cache
 ) {
+    var listed = StringBuilder();
+    var root = cache.dir.to_string();
+    for (var object in parts) {
+        # Relative to the cache's folder, so the cache can move.
+        var path = object.to_string();
+        if (path.starts_with(root) and path.size > root.size) {
+            path = path.substr_bytes(root.size + 1, path.size - root.size - 1);
+        }
+        listed.append(path);
+        listed.append("\n");
+    }
+    File.write_text(folder.join(Path(_PARTS)), listed.to_string());
     var interfaces = StringBuilder();
     for (var file in unit.files) {
         interfaces.append($"{program.files[file].namespace}\t{reused.interfaces[file].value()}\n");

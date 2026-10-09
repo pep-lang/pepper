@@ -37,6 +37,8 @@ export struct BuildOptions {
     ## Whether to compile every part in this process rather than in
     ## `pepc --compile-part` children (for a program other than `pepc`).
     var in_process: bool = false;
+    ## The largest part a unit is compiled in (`_PART_SIZE`), for a test.
+    var part_size: ulong = _PART_SIZE as ulong;
     ## Whether every function keeps its frame pointer (`--frame-pointers`).
     var frame_pointers: bool = false;
     ## Which runtime checks the code performs (`--no-runtime-checks`).
@@ -187,6 +189,9 @@ export struct Built {
     var hits: String[] = Array<String>();
     ## The units compiled and stored in the build cache, by name.
     var misses: String[] = Array<String>();
+    ## The parts of the units compiled whose objects came from the build
+    ## cache, as `<unit>#<n>`.
+    var part_hits: String[] = Array<String>();
 
     construct() {}
 }
@@ -739,7 +744,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var unit_parts = Array<uint[]>();
     uint parts = 0;
     for (var unit in units) {
-        var split = _split(unit, sizes, parts);
+        var split = _split(unit, sizes, parts, options.part_size);
         var own = Array<uint>();
         for (var part in split) {
             if (!own.contains(part)) {
@@ -763,8 +768,12 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var extension = triple_extension;
     var objects = Array<Path>();
     var jobs = Array<PartJob>();
-    # The units compiled, with their keys, to store in the cache.
-    var stored = Array<(ulong, String)>();
+    # The units compiled, with their keys and their parts' objects, to
+    # store in the cache.
+    var stored = Array<(ulong, String, Path[])>();
+    # The parts compiled, with their places in their units and keys, to
+    # store in the cache.
+    var stored_parts = Array<(ulong, ulong, String)>();
     for (var u in 0..units.count) {
         if (reused.is_value() and reused.value().objects[u].count > 0) {
             if (options.trace_cache) {
@@ -779,21 +788,45 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             continue;
         }
         var folder = work.join(Path($"{u}"));
-        if (reused.is_value()) {
-            var key = reused.value().keys[u].value();
-            if (options.trace_cache) {
-                File.stderr().write_all($"cache: miss {units[u].name} ({own.count} parts)\n");
-            }
-            stored.append((u, key));
-            report.misses.append(units[u].name);
-        }
         Directory.create_all(folder);
-        if (reused.is_value()) {
-            write_record(folder, reused.value(), module, program, units[u], warnings);
+        if (!reused.is_value()) {
+            for (var i in 0..own.count) {
+                jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
+            }
+            continue;
         }
+        var key = reused.value().keys[u].value();
+        report.misses.append(units[u].name);
+        # Each part's object from the cache when its key hits: its files and
+        # what they read are as when it was compiled.
+        var parts = Array<Path>();
+        ulong hits = 0;
         for (var i in 0..own.count) {
-            jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
+            var files = Array<ulong>();
+            for (var file in units[u].files) {
+                if (part_of_file[file] == own[i]) {
+                    files.append(file);
+                }
+            }
+            var part_key = keys.value().part(program, units, u, files, reused.value().interfaces);
+            var cached = options.cache.value().part(units[u].name, i, part_key);
+            var object = cached.join(Path($"0.{extension}"));
+            parts.append(object);
+            if (object.is_file()) {
+                options.cache.value().used(cached);
+                report.part_hits.append($"{units[u].name}#{i}");
+                hits += 1;
+                continue;
+            }
+            var built = folder.join(Path($"{i}"));
+            Directory.create_all(built);
+            jobs.append(PartJob(own[i], built.join(Path($"0.{extension}"))));
+            stored_parts.append((u, i, part_key));
         }
+        if (options.trace_cache) {
+            File.stderr().write_all($"cache: miss {units[u].name} ({own.count - hits} of {own.count} parts)\n");
+        }
+        stored.append((u, key, parts));
     }
     var entry_object = work.join(Path($"{stem}.{extension}"));
     jobs.append(PartJob(entry_part, entry_object));
@@ -807,22 +840,34 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         work,
         options.trace_time,
         options.in_process,
-        !cached_files.is_empty
+        !cached_files.is_empty or !stored_parts.is_empty
     );
     if (compiled.is_err()) {
         # The bitcode and plan stay, so the failed part can be run again.
         return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
     }
     if (keys.is_value()) {
-        for (var (u, key) in stored) {
-            var kept = options.cache.value().store(work.join(Path($"{u}")), units[u].name, key);
+        for (var (u, i, part_key) in stored_parts) {
+            var kept = options.cache.value().store(
+                work.join(Path($"{u}")).join(Path($"{i}")), $"{units[u].name}#{i}", part_key
+            );
             if (kept.is_err()) {
                 Directory.remove_all(work);
                 return Result<Built, String>.err(kept.error());
             }
-            for (var i in 0..unit_parts[u].count) {
-                objects.append(kept.value().join(Path($"{i}.{extension}")));
+        }
+        for (var (u, key, parts) in stored) {
+            var folder = work.join(Path($"{u}"));
+            for (var i in 0..parts.count) {
+                Directory.remove_all(folder.join(Path($"{i}")));
             }
+            write_record(folder, reused.value(), module, program, units[u], warnings, parts, options.cache.value());
+            var kept = options.cache.value().store(folder, units[u].name, key);
+            if (kept.is_err()) {
+                Directory.remove_all(work);
+                return Result<Built, String>.err(kept.error());
+            }
+            objects.append_all(parts);
         }
     } else {
         for (var job in jobs) {
@@ -890,12 +935,12 @@ _codegen_options(options: BuildOptions): String {
 const _PART_SIZE = 20000;
 
 ## The part of each of `unit`'s files: as many parts as the unit's size
-## needs (`_PART_SIZE`), no more than its files, each file (largest first)
+## needs (`part_size`), no more than its files, each file (largest first)
 ## to the part with the least code so far; the parts are numbered from
 ## `first`, with no gaps.
-_split(unit: link.Unit, sizes: ulong[], first: uint): uint[] {
+_split(unit: link.Unit, sizes: ulong[], first: uint, part_size: ulong): uint[] {
     var total = _unit_size(unit, sizes);
-    var count = (total + (_PART_SIZE as ulong) - 1) / (_PART_SIZE as ulong);
+    var count = (total + part_size - 1) / part_size;
     if (count > unit.files.count) {
         count = unit.files.count;
     }

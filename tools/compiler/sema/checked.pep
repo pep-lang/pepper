@@ -600,7 +600,11 @@ export resume_checked(unit: CheckedUnit): Module {
 ## summary, by the function's location. The build cache's interface hash
 ## puts this in place of the body (`driver/interface.pep`), so a body edit
 ## that changes neither leaves the file's interface alone. A function with
-## no summary has no entry; its body stays part of the interface.
+## no summary has no entry; its body stays part of the interface. Nor has
+## one whose summary calls through a trait (a dependent summary): a layer
+## that implements the trait makes it again from the body, and which layers
+## a build checked decides whether one is at hand, so the interface would
+## depend on the cache.
 ##
 ## @param module the checked module
 ## @param state the passes' state that checked its last layer
@@ -622,7 +626,7 @@ export function_facts(module: Module, state: PassState): HashMap<Loc, String> {
         if (!text.is_value()) {
             text = module.recorded_summaries.try_get(function.loc);
         }
-        if (text.is_value()) {
+        if (text.is_value() and !text.value().contains("\n")) {
             out[function.loc] = $"returns {function.ty}\nsummary {_without_blame(text.value())}";
         }
     };
