@@ -357,7 +357,7 @@ export variables_named(text: String): String[] {
     return _sorted_once(names);
 }
 
-# The string literals in the Rust sources under `dir` that name a
+# The string literals in the Pepper sources under `dir` that name a
 # `PEPPER_*` or other environment variable the tools read.
 _variables_read(dir: Path, names: String[]): Result<void> {
     var listing = Directory.open(dir);
@@ -372,10 +372,13 @@ _variables_read(dir: Path, names: String[]): Result<void> {
     sorted.sort((a, b) => a.name.compare(b.name));
     for (var entry in sorted) {
         if (entry.is_directory) {
-            _variables_read(entry.path, names)?;
+            # `.pep` holds fetched packages, not the tool's own sources.
+            if (!entry.name.starts_with(".")) {
+                _variables_read(entry.path, names)?;
+            }
             continue;
         }
-        if (!entry.name.ends_with(".rs")) {
+        if (!entry.name.ends_with(".pep")) {
             continue;
         }
         var text = File.read_to_string(entry.path);
@@ -389,7 +392,9 @@ _variables_read(dir: Path, names: String[]): Result<void> {
             }
             var name = _name_at(source, i + 1);
             bool known = name.starts_with("PEPPER_") or name.starts_with("LLVM_SYS_") or name == "NO_COLOR";
-            if (known and !names.contains(name)) {
+            # A name the source completes (`$"PEPPER_PACKAGE_{host}_URL"`)
+            # is documented by its spellings.
+            if (known and !name.ends_with("_") and !names.contains(name)) {
                 names.append(name);
             }
         }
@@ -397,28 +402,23 @@ _variables_read(dir: Path, names: String[]): Result<void> {
     return Result<void>.ok();
 }
 
-# The trace channels `-T` takes: `TRACE_CHANNELS` in the driver's
-# options.
+# The trace channels `-T` takes: `TRACE_CHANNELS` in the compiler's
+# `main.pep`.
 _trace_channels(root: Path): Result<String[]> {
-    var path = "crates/pepper-driver/src/options.rs";
-    var options = _repository_file(root, path)?;
-    var start = options.find("pub const TRACE_CHANNELS");
+    var path = "tools/compiler/main.pep";
+    var source = _repository_file(root, path)?;
+    var marker = "const TRACE_CHANNELS = \"";
+    var start = source.find(marker);
     if (start < 0) {
         return Result<String[]>.Err($"no TRACE_CHANNELS in {path}");
     }
-    var list = slice_from(options, start as ulong);
-    var open = list.find("= [");
-    if (open < 0) {
-        return Result<String[]>.Err("TRACE_CHANNELS is not an array");
-    }
-    list = slice_from(list, open as ulong + 3);
-    var close = list.find("]");
+    var list = slice_from(source, start as ulong + marker.size);
+    var close = list.find("\"");
     if (close < 0) {
-        return Result<String[]>.Err("TRACE_CHANNELS is not an array");
+        return Result<String[]>.Err($"TRACE_CHANNELS in {path} is not a string");
     }
     var channels = Array<String>();
-    for (var part in list.substr_bytes(0, close as ulong).split(",")) {
-        var channel = part.trim().replace("\"", "");
+    for (var channel in list.substr_bytes(0, close as ulong).split(" ")) {
         if (!channel.is_empty) {
             channels.append(channel);
         }
@@ -474,8 +474,8 @@ _undocumented(
 export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String): Result<String[]> {
     var problems = Array<String>();
 
-    # pep-build: its options and their values, trace channels, and every
-    # environment variable a stage of the compiler reads.
+    # pep-build (pepc, `tools/compiler`): its options and their values,
+    # trace channels, and every environment variable it reads.
     var pep_build = "docs/src/tools/pep-build.md";
     var help = _help_of(tools, "pep-build", Array<String>())?;
     _undocumented(root, "pep-build", pep_build, "option", help_options(help), _Match.Word, problems)?;
@@ -486,23 +486,7 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
     }
     _undocumented(root, "pep-build", pep_build, "trace channel", channels, _Match.Word, problems)?;
     var variables = Array<String>();
-    _variables_read(root.join("src"), variables)?;
-    var crates = Directory.open(root.join("crates"));
-    if (crates.is_err()) {
-        return Result<String[]>.Err($"cannot read crates: {crates.error().message}");
-    }
-    var crate_entries = crates.value().entries();
-    if (crate_entries.is_err()) {
-        return Result<String[]>.Err($"cannot read crates: {crate_entries.error().message}");
-    }
-    var sorted_crates = crate_entries.value();
-    sorted_crates.sort((a, b) => a.name.compare(b.name));
-    for (var entry in sorted_crates) {
-        var source = entry.path.join("src");
-        if (source.is_directory()) {
-            _variables_read(source, variables)?;
-        }
-    }
+    _variables_read(root.join("tools").join("compiler"), variables)?;
     _undocumented(root, "pep-build", pep_build, "environment variable", variables, _Match.Variable, problems)?;
 
     # The Pepper tools, from their --help.
