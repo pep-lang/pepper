@@ -91,12 +91,19 @@ if [ "$build" = 1 ]; then
   # through every check and pass, without the time an object takes.
   echo "=== pepc compiles its own sources"
   "$stage/bin/pep-build$exe" -I tools tools/compiler/main.pep --emit-llvm --build "$stage/self" --no-cache > /dev/null
+  published="$compiler"
   compiler="$stage/bin"
+else
+  published="$compiler"
 fi
 
 "$compiler/pep-build" --version
+# PEPPER_PUBLISHED_DIR: the published build's folder, for what pepc cannot
+# do yet (`--target`), whichever compiler the suite tests.
 if [ -n "${GITHUB_ENV:-}" ]; then
   echo "PEPPER_COMPILER_DIR=$compiler" >> "$GITHUB_ENV"
+  echo "PEPPER_PUBLISHED_DIR=$published" >> "$GITHUB_ENV"
 else
   echo "PEPPER_COMPILER_DIR=$compiler"
+  echo "PEPPER_PUBLISHED_DIR=$published"
 fi

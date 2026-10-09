@@ -431,7 +431,9 @@ jobs:
           # installed pep-build links with the clang on the PATH, which looks
           # for ld.lld there too.
           export PATH="/usr/lib/llvm-20/bin:$PATH"
-          compiler="$PEPPER_COMPILER_DIR/pep-build"
+          # The published build: pepc built from a compiler change has no
+          # `--target` yet (#225).
+          compiler="$PEPPER_PUBLISHED_DIR/pep-build"
           out="$RUNNER_TEMP/cross"
           rm -rf "$out"
           mkdir -p "$out"
