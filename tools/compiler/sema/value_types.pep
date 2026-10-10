@@ -10,8 +10,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [enum_method_name, enum_this_parameter] from "builder";
 import [TRAIT_SELF] from "closures";
-import [error_at, location_of] from "common";
-import [constraint_spelled] from "constraints";
+import "common";
 import [
     Block,
     Declaration,
@@ -25,8 +24,8 @@ import [
     TypeName
 ] from "model";
 import [set_name] from "names";
+import "replace_types";
 import [method_key, PassState] from "state";
-import "static_blocks";
 import [parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
@@ -274,45 +273,6 @@ _number_operator_error(state: PassState, m: FunctionDef, shown: String): Diagnos
 
 _is_ascii_punctuation(b: u8): bool {
     return (b >= 33 and b <= 47) or (b >= 58 and b <= 64) or (b >= 91 and b <= 96) or (b >= 123 and b <= 126);
-}
-
-_rename_sized(ty: TypeName) {
-    match (ty.name) {
-        "i8" => {
-            ty.name = "char";
-        }
-        "u8" => {
-            ty.name = "byte";
-        }
-        "i16" => {
-            ty.name = "short";
-        }
-        "u16" => {
-            ty.name = "ushort";
-        }
-        "i32" => {
-            ty.name = "int";
-        }
-        "u32" => {
-            ty.name = "uint";
-        }
-        "i64" => {
-            ty.name = "long";
-        }
-        "u64" => {
-            ty.name = "ulong";
-        }
-        "f32" => {
-            ty.name = "float";
-        }
-        "f64" => {
-            ty.name = "double";
-        }
-        else => {}
-    }
-    for (var t in ty.sub_types) {
-        _rename_sized(t);
-    }
 }
 
 ## Method `m` of value type `key` as its function `key::m`.

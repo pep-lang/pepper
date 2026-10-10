@@ -13,13 +13,13 @@ import [has_bare_attribute, IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
 import [
     for_each_selected_site, ModuleTables, rewrite_module, SiteFilter, SiteSelection, SiteVisitor
 ] from "closure_sites";
+import "common";
 import [Conformance, has_constraints] from "constraints";
 import [Loc] from "loc";
 import [Expression, ExtensionScopes, FunctionDef, FunctionRefExpression, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import "overloads";
-import [PassState] from "state";
-import "static_blocks";
+import [PassMemo, PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [instance, trait_def, trait_types_of] from "traits";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
@@ -69,6 +69,26 @@ export struct Member {
         return TypeName.with_args("__function", args);
     }
 }
+
+## A checked struct's overloaded methods as `Overloads` files them (the
+## type they are filed under, the set, the member), kept in
+## `TraitTypeMemo.members` with the struct and how many methods and
+## generic methods it had.
+struct _KeptMembers {
+    var st: StructDef;
+    var methods: ulong;
+    var generics: ulong;
+    var members: Array<(String, String, Member)>;
+
+    construct(st: StructDef, methods: ulong, generics: ulong, members: Array<(String, String, Member)>) {
+        this.st = st;
+        this.methods = methods;
+        this.generics = generics;
+        this.members = members;
+    }
+}
+
+extend _KeptMembers with PassMemo;
 
 ## What an argument tells resolution beyond its type.
 export enum ArgKind {
@@ -452,11 +472,12 @@ export struct Overloads {
         var generics = st.generic_methods.count;
         var memo = state.trait_memo;
         if (checked) {
-            var kept = memo.members.try_get(st.name);
+            var found = memo.members.try_get(st.name);
+            var kept = found.is_value() ? found.value() as? _KeptMembers : Optional<_KeptMembers>.Empty;
             if (kept.is_value()) {
-                var (was, kept_methods, kept_generics, members) = kept.value();
-                if (was === st and kept_methods == methods and kept_generics == generics) {
-                    return members;
+                var k = kept.value();
+                if (k.st === st and k.methods == methods and k.generics == generics) {
+                    return k.members;
                 }
             }
         }
@@ -471,7 +492,7 @@ export struct Overloads {
             }
         }
         if (checked) {
-            memo.members[st.name] = (st, methods, generics, out);
+            memo.members[st.name] = _KeptMembers(st, methods, generics, out);
         }
         return out;
     }

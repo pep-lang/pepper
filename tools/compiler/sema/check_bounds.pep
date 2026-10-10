@@ -12,8 +12,8 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [drop_body] from "checked";
 import [expression_children] from "closure_sites";
 import "closures";
-import [error_at, location_of] from "common";
-import [constraint_spelled, is_shared_bound] from "constraints";
+import "common";
+import [is_shared_bound] from "constraints";
 import [Loc] from "loc";
 import [
     BinaryOp, Block, Expression, FunctionDef, GenericParam, Module, Statement, TraitDef, TypeName, UnaryOp
@@ -21,8 +21,8 @@ import [
 import [set_name] from "names";
 import [op_name] from "operators";
 import [PassState] from "state";
-import "static_blocks";
-import [static_type_of, StructInfo, StructTable] from "static_type";
+import [static_type_of, StructTable] from "static_type";
+import [StructInfo] from "struct_info";
 import [parse_type_string, replace_map] from "type_name";
 
 ## A constrained parameter in scope: its constraints and their members.

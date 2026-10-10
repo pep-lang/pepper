@@ -4,9 +4,9 @@
 ## arguments substituted into its signature and body.
 
 import [Module, Statement, StaticItem, TypeName] from "model";
+import "replace_types";
 import [specialization_too_deep, rewrite_static_calls] from "specialize_structs";
 import [PassState] from "state";
-import [replace_expression_types] from "static_blocks";
 import [parse_type_string, replace_map] from "type_name";
 
 ## Clones each requested function specialization from its generic base,

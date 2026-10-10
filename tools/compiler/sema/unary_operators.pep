@@ -6,13 +6,14 @@
 ## context (an `if`/`while` condition, a ternary condition, an operand of
 ## `and`/`or`, the operand of `!`) becomes `x.!!()`.
 
+import "common";
 import [Loc] from "loc";
 import [BinaryOp, Block, Expression, MethodCallExpression, TypeName, UnaryOp] from "model";
 import [op_name] from "operators";
 import "resolve_operators";
 import [PassState] from "state";
-import "static_blocks";
-import [static_type_of, StructInfo, StructTable] from "static_type";
+import [static_type_of, StructTable] from "static_type";
+import [StructInfo] from "struct_info";
 import [Rewriter, rewrite_block] from "walk";
 
 ## The truth-test operator.

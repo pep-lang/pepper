@@ -8,10 +8,10 @@ import [Diagnostic] from compiler.diagnostic;
 import [check_method_call, Conformance, has_constraints] from "constraints";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module, TypeName] from "model";
+import [replace_expression_types] from "replace_types";
 import [replace_body_types] from "specialize_functions";
 import [rewrite_static_calls] from "specialize_structs";
-import [PassState] from "state";
-import [replace_expression_types] from "static_blocks";
+import [PassMemo, PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
@@ -134,7 +134,7 @@ export specialize_methods(module: Module, state: PassState): bool {
             # method's body get their captured types.
             state.extended_checked.insert(st.name);
             module.extended_checked.insert(st.name);
-            state.trait_memo.checked_table = Optional<StructTable>.Empty;
+            state.trait_memo.checked_table = Optional<PassMemo>.Empty;
             state.trait_memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Empty;
         }
     }

@@ -52,7 +52,7 @@ import [LayerDecls] from "pending";
 import [apply_platform_filters] from "platform";
 import [check_ranges] from "ranges";
 import [release_field_refs] from "release_field_refs";
-import [ImplicitTables, resolve_implicit_types] from "resolve_implicit_types";
+import [resolve_implicit_types] from "resolve_implicit_types";
 import [resolve_operators] from "resolve_operators";
 import [resolve_resolvables] from "resolve_resolvables";
 import [shared_functions] from "shared_functions";
@@ -60,7 +60,7 @@ import [check_shared_types] from "shared_type_checks";
 import [check_simd_shapes] from "simd_shapes";
 import [specialize_functions] from "specialize_functions";
 import [freeze_templates, specialize_structs] from "specialize_structs";
-import [PassState] from "state";
+import [PassMemo, PassState] from "state";
 import [check_attributes, expand, expand_module_blocks, remove_from_generic_code] from "static_blocks";
 import [share_string_literals] from "static_strings";
 import [strip_bodies] from "strip_bodies";
@@ -135,7 +135,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
     steps.report();
     # The checked declarations' tables hold signatures that hold the state:
     # let them go with the run.
-    state.checked_implicit = Optional<ImplicitTables>.Empty;
+    state.checked_implicit = Optional<PassMemo>.Empty;
     if (steps.error.is_value()) {
         # An error in a specialization notes the uses that asked for it.
         return Result<ulong, Diagnostic>.Err(with_instantiation(module, steps.error.value()));

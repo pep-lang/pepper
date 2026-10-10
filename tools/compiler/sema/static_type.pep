@@ -6,54 +6,13 @@
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import "closures";
 import [case_value_type, FieldTypes] from "enums";
-import [BinaryOp, Expression, FunctionDef, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
-import [set_name] from "names";
+import [BinaryOp, Expression, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
 import [is_comparison, is_overflow_test, op_name, weak_result] from "operators";
-import [PassState, TraitTypeMemo] from "state";
+import [PassMemo, PassState, TraitTypeMemo] from "state";
+import [StructInfo] from "struct_info";
 import [instance, trait_def, trait_types_of] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels] from "tuple_literals";
 import [parse_type_string] from "type_name";
-
-## What a value of a struct (or trait) type has.
-export struct StructInfo {
-    ## Its fields and their types, in order.
-    var fields: Array<(String, TypeName)> = Array<(String, TypeName)>();
-    ## Its method names; an overloaded method also answers to its set's
-    ## name.
-    var methods: HashSet<String> = HashSet<String>();
-    ## Method name to return type.
-    var returns: HashMap<String, TypeName> = HashMap<String, TypeName>();
-    ## The unary operators declared: `-`, `~`, `!`, `!!` as instance
-    ## methods without parameters.
-    var unary_operators: HashSet<String> = HashSet<String>();
-
-    construct() {}
-
-    ## Returns the type of field `name`, or none.
-    field(name: String): TypeName? {
-        for (var (f, ty) in fields) {
-            if (f == name) {
-                return Optional<TypeName>.Value(ty);
-            }
-        }
-        return Optional<TypeName>.Empty;
-    }
-
-    _add_methods(methods: FunctionDef[]) {
-        for (var m in methods) {
-            this.methods.insert(m.name);
-            this.methods.insert(set_name(m.name));
-            returns[m.name] = m.ty;
-            if (!m.is_static and m.parameters.count == 0) {
-                var at = m.name.find("$");
-                var base = at < 0 ? m.name : m.name.substr_bytes(0, at as ulong);
-                if (base == "-" or base == "~" or base == "!" or base == "!!") {
-                    unary_operators.insert(base);
-                }
-            }
-        }
-    }
-}
 
 _struct_info(st: StructDef): StructInfo {
     var info = StructInfo();
@@ -100,11 +59,14 @@ _checked_table(module: Module, memo: TraitTypeMemo): StructTable {
         }
     }
     var counts = (module.checked.structs.count as ulong, module.checked.functions.count as ulong, fields, methods);
-    if (!memo.checked_table.is_value() or memo.checked_counts != counts) {
-        memo.checked_table = Optional<StructTable>.Value(StructTable._checked(module, memo));
+    var kept = memo.checked_table.is_value() ? memo.checked_table.value() as? StructTable : Optional<StructTable>.Empty;
+    if (!kept.is_value() or memo.checked_counts != counts) {
+        var table = StructTable._checked(module, memo);
+        memo.checked_table = Optional<PassMemo>.Value(table);
         memo.checked_counts = counts;
+        return table;
     }
-    return memo.checked_table.value();
+    return kept.value();
 }
 
 _trait_info(t: TraitType): StructInfo {
@@ -235,6 +197,8 @@ export struct StructTable {
         return get(at < 0 ? text : text.substr_bytes(0, at as ulong));
     }
 }
+
+extend StructTable with PassMemo;
 
 ## The fields of the struct a `match` subject's type names.
 struct _TableFields {

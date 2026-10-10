@@ -8,14 +8,13 @@
 import [Diagnostic, Location] from compiler.diagnostic;
 import [stashed_member] from "checked";
 import [THIS_FIELD] from "closures";
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [
     BinaryOp, Block, Expression, FunctionDef, Module, Statement, StructDef, TypeName, UnaryOp, VariableDef
 ] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
-import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [Rewriter, rewrite_expression] from "walk";
 

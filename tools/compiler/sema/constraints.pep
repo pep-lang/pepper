@@ -10,7 +10,7 @@
 import compiler.ast;
 import [demangle, Diagnostic, Fix, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [
     Block,
@@ -29,7 +29,6 @@ import [
 ] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
-import "static_blocks";
 import [is_dispatchable] from "traits";
 import [parse_type_string, replace_map, SHARED_FUNCTION] from "type_name";
 import [is_value_type, value_type_key] from "value_types";
@@ -97,17 +96,6 @@ _constrained(params: GenericParam[]): bool {
         }
     }
     return false;
-}
-
-## `ty` as the programmer spells it: `int` rather than the `i32` a literal
-## is typed (`constraints::spelled`).
-##
-## @param ty the type
-## @returns its display spelling
-export constraint_spelled(ty: TypeName): String {
-    var copy = ty.copy();
-    _rename_sized(copy);
-    return copy.display();
 }
 
 ## One extension, as conformance needs it.

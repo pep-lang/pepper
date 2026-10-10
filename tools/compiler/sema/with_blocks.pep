@@ -13,7 +13,7 @@
 
 import [Location] from compiler.diagnostic;
 import "closures";
-import [known_location, location_of] from "common";
+import "common";
 import "confinement";
 import [Loc] from "loc";
 import [
@@ -29,7 +29,6 @@ import [
     UnaryOp
 ] from "model";
 import [PassState] from "state";
-import "static_blocks";
 import [trait_def] from "traits";
 import [VOID] from "type_name";
 import [Rewriter, rewrite_statement] from "walk";

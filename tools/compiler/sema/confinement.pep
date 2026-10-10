@@ -25,7 +25,7 @@ import [demangle_name, Runtime, Target] from compiler.link;
 import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
-import [known_location, location_of] from "common";
+import "common";
 import [READS_ATTRIBUTE] from "lazy";
 import [Loc] from "loc";
 import [
@@ -47,7 +47,6 @@ import "resolve_implicit_types";
 import [use_site] from "shared_type_checks";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [method_key, PassState] from "state";
-import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [parse_type_string, TUPLE] from "type_name";
 import [Rewriter, rewrite_block] from "walk";

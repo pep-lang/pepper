@@ -12,7 +12,7 @@ import [Location] from compiler.diagnostic;
 import text;
 import [is_numeric_type] from "arithmetic";
 import [CALL_METHOD, closure_struct, field_def, is_closure_struct, THIS_FIELD] from "closures";
-import [error_at, location_of] from "common";
+import "common";
 import [RECEIVER_FIELD] from "function_references";
 import [Loc] from "loc";
 import [
@@ -40,7 +40,6 @@ import [
 ] from "model";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
-import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [apply_synthesized, finish] from "synthesize";
 import [FUNCTION, is_pointer_name, parse_type_string, SHARED_FUNCTION, VOID] from "type_name";

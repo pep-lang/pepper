@@ -17,8 +17,8 @@ import [Location] from compiler.diagnostic;
 import [IMPLICIT_ATTRIBUTE, STRING_CONSTANT] from "builder";
 import "closure_sites";
 import "closures";
-import [error_at, location_of] from "common";
-import [constraint_spelled, Conformance] from "constraints";
+import "common";
+import [Conformance] from "constraints";
 import [Loc] from "loc";
 import [
     BinaryOp,
@@ -40,7 +40,6 @@ import [
 import "overload_select";
 import "shared_functions";
 import [PassState] from "state";
-import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [instance, trait_def, used_trait_types] from "traits";
 import [parse_type_string, pointee_name] from "type_name";

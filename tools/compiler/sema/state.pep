@@ -5,14 +5,11 @@
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
-import [Exports] from "exports";
+import [Exports] from "export_table";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
-import [Callees] from "named_arguments";
-import [Member] from "overload_select";
 import [CheckedDecls, PendingBody] from "pending";
-import [ImplicitTables] from "resolve_implicit_types";
-import [StructInfo, StructTable] from "static_type";
+import [StructInfo] from "struct_info";
 import [is_integral_name] from "type_name";
 
 ## The passes' state for one program.
@@ -71,14 +68,16 @@ export struct PassState {
     var implicit: ImplicitMemo = ImplicitMemo();
     ## What `used_trait_types` found in the checked declarations.
     var trait_memo: TraitTypeMemo = TraitTypeMemo();
-    ## The callees of the checked declarations, built once (`Callees`).
-    var checked_callees: Callees? = Optional<Callees>.Empty;
+    ## The callees of the checked declarations, built once: a `Callees`,
+    ## as `named_arguments` keeps it.
+    var checked_callees: PassMemo? = Optional<PassMemo>.Empty;
     ## The checked declarations by name (`checked.checked_decls`), found
     ## once per layer.
     var checked_decls: CheckedDecls? = Optional<CheckedDecls>.Empty;
     ## The checked declarations' tables for `resolve_implicit_types`, built
-    ## once per unit.
-    var checked_implicit: ImplicitTables? = Optional<ImplicitTables>.Empty;
+    ## once per unit: an `ImplicitTables`, as `resolve_implicit_types`
+    ## keeps it.
+    var checked_implicit: PassMemo? = Optional<PassMemo>.Empty;
     ## The bodies of checked declarations, taken out while the passes run
     ## (`checked.stash_bodies`), by declaration.
     var stashed: HashMap<String, Block> = HashMap<String, Block>();
@@ -228,6 +227,12 @@ _default_value(e: EnumDef): long {
     return e.cases.count > 0 ? e.cases[0].value : 0;
 }
 
+## What a pass keeps in `PassState` of a type this file cannot name: the
+## file that declares the type extends it with `PassMemo`, and reads it
+## back with `as?`. The state then imports no pass, so the passes that
+## import it are not one import cycle with it.
+export trait PassMemo {}
+
 ## What `used_trait_types` found in the checked declarations whose bodies
 ## are stashed: those stay as they are while the passes run, so each is
 ## looked through once per unit. Each holds the types that may name a
@@ -244,12 +249,12 @@ export struct TraitTypeMemo {
     ## The checked structs' and functions' `StructTable`, which every pass's
     ## table falls back to, with how many checked structs and functions,
     ## and how many fields and methods those structs had, it was built
-    ## from; `apply_extensions` drops it when it changes a checked struct.
-    var checked_table: StructTable? = Optional<StructTable>.Empty;
-    ## Each checked struct's overloaded methods for `Overloads` (the type
-    ## they are filed under, the set, the member), by name, with the struct
-    ## and how many methods and generic methods it had.
-    var members: HashMap<String, (StructDef, ulong, ulong, Array<(String, String, Member)>)> = HashMap<String, (StructDef, ulong, ulong, Array<(String, String, Member)>)>();
+    ## from (a `StructTable`, as `static_type` keeps it); `apply_extensions`
+    ## drops it when it changes a checked struct.
+    var checked_table: PassMemo? = Optional<PassMemo>.Empty;
+    ## Each checked struct's overloaded methods for `Overloads`, by name,
+    ## as `overload_select` keeps them.
+    var members: HashMap<String, PassMemo> = HashMap<String, PassMemo>();
     var checked_counts: (ulong, ulong, ulong, ulong) = (0, 0, 0, 0);
     ## Whether the checked declarations' bodies are stashed: from
     ## `stash_bodies` to `restore_bodies`. While they are, `used_trait_types`

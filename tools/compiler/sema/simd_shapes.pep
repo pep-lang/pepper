@@ -3,11 +3,10 @@
 ## count as an integer type argument; each specialization's count must be
 ## a power of two from 1 to 64, so a mask's lanes fit a `ulong`.
 
-import [error_at] from "common";
+import "common";
 import [Loc] from "loc";
 import [Module, TypeName] from "model";
 import [PassState] from "state";
-import "static_blocks";
 import [SIMD] from "type_name";
 
 ## The largest lane count: a mask's bits fill a `ulong`.

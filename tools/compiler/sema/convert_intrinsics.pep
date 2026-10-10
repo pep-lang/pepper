@@ -5,7 +5,7 @@
 ## `FunctionPointer`. Pointer types need nothing here: `__ptr<T>` is the
 ## only spelling of one, which the parser makes of C's `T*`.
 
-import [error_at] from "common";
+import "common";
 import [Loc] from "loc";
 import [
     AtomicFetchOp,
@@ -21,7 +21,6 @@ import [
     WeakOp
 ] from "model";
 import [PassState] from "state";
-import "static_blocks";
 import [parse_type_string] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 

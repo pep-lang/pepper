@@ -3,9 +3,9 @@
 ## bits, keeping unsignedness only at the promoted width; floats to the
 ## wider float; an enum computes as the integer type it is stored as.
 
+import "common";
 import [BinaryOp, TypeName] from "model";
 import [PassState] from "state";
-import "static_blocks";
 
 ## Returns `name`, or the integer type it is stored as when it names an
 ## enum.

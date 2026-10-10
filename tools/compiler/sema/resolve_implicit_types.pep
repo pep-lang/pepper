@@ -63,7 +63,7 @@ import [
     Overloads
 ] from "overload_select";
 import [lower_property, Properties, PropertySite] from "properties";
-import [ImplicitMemo, PassState] from "state";
+import [ImplicitMemo, PassMemo, PassState] from "state";
 import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
@@ -525,6 +525,20 @@ _names(names: String[]): ulong {
     return into.value;
 }
 
+## The tables of `module`'s checked declarations, built once per unit and
+## kept in `state.checked_implicit`.
+_checked_implicit(module: Module, state: PassState, callees: Callees): ImplicitTables {
+    if (state.checked_implicit.is_value()) {
+        var kept = state.checked_implicit.value() as? ImplicitTables;
+        if (kept.is_value()) {
+            return kept.value();
+        }
+    }
+    var built = ImplicitTables.checked(module, state, callees);
+    state.checked_implicit = Optional<PassMemo>.Value(built);
+    return built;
+}
+
 ## Program-wide lookup tables, built once per run of the pass. Where a name
 ## is declared twice, the first declaration wins.
 export struct ImplicitTables {
@@ -578,10 +592,7 @@ export struct ImplicitTables {
         properties = Properties(module);
         bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         if (checked) {
-            if (!state.checked_implicit.is_value()) {
-                state.checked_implicit = Optional<ImplicitTables>.Value(ImplicitTables.checked(module, state, callees));
-            }
-            base = state.checked_implicit;
+            base = Optional<ImplicitTables>.Value(_checked_implicit(module, state, callees));
         }
         for (var st in module.structs) {
             if (checked and base.value().covers(st)) {
@@ -886,6 +897,8 @@ export struct ImplicitTables {
         reads.insert(key);
     }
 }
+
+extend ImplicitTables with PassMemo;
 
 ## The struct whose methods are being resolved: its fields with resolved
 ## types, and its methods. It stands in for the struct's table entries.

@@ -5,9 +5,10 @@
 
 import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
+import [attribute_arguments, attribute_name] from "attributes";
 import [enum_method_name] from "builder";
 import [is_checked_function] from "checked";
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [
     Block,
@@ -25,8 +26,7 @@ import [
     WithSubject
 ] from "model";
 import [set_name] from "names";
-import [PassState] from "state";
-import [attribute_arguments] from "static_blocks";
+import [PassMemo, PassState] from "state";
 import [instance, trait_def, trait_types_of] from "traits";
 import "type_name";
 import [method_is_static, value_type_key] from "value_types";
@@ -857,6 +857,20 @@ _hoist(value: Expression, at: Loc, hoisted: Array<(ulong, Expression, Loc)>, sta
     return Expression.Subject(SubjectExpression(id, TypeName.auto(), loc));
 }
 
+## The callees of `module`'s checked declarations, built once per unit
+## and kept in `state.checked_callees`.
+_checked_callees(module: Module, state: PassState): Callees {
+    if (state.checked_callees.is_value()) {
+        var kept = state.checked_callees.value() as? Callees;
+        if (kept.is_value()) {
+            return kept.value();
+        }
+    }
+    var built = Callees(module);
+    state.checked_callees = Optional<PassMemo>.Value(built);
+    return built;
+}
+
 ## The callees of a module, by how calls name them:
 ## `named_arguments::Callees` over a module with no checked runtime.
 ## Trait types' methods are not gathered: only `bind_method_call` reads
@@ -898,10 +912,7 @@ export struct Callees {
         literals = module.literal_args;
         bool checked = module.checked.structs.count > 0 or module.checked.functions.count > 0;
         if (checked) {
-            if (!state.checked_callees.is_value()) {
-                state.checked_callees = Optional<Callees>.Value(Callees(module));
-            }
-            base = state.checked_callees;
+            base = Optional<Callees>.Value(_checked_callees(module, state));
         }
         for (var function in module.functions) {
             if (checked and is_checked_function(module, function)) {
@@ -1171,6 +1182,8 @@ export struct Callees {
         return base.value()._checked_constructors(name);
     }
 }
+
+extend Callees with PassMemo;
 
 ## `first`'s callees, then `then`'s.
 _merged(first: Callee[]?, then: Callee[]?): Callee[]? {

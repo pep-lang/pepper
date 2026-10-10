@@ -2,8 +2,7 @@
 ## extension: `constraints::check_withheld` in Pepper.
 
 import [Diagnostic, Location] from compiler.diagnostic;
-import [error_at, location_of] from "common";
-import [constraint_spelled] from "constraints";
+import [constraint_spelled, error_at, location_of] from "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module, TypeName, Withheld] from "model";
 import [set_name] from "names";

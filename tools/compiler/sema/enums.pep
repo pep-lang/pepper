@@ -9,7 +9,7 @@ import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [CAST_VALUE, enum_method_name, enum_this_parameter, payload_field] from "builder";
 import [is_checked_function] from "checked";
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [
     BinaryExpression,
@@ -38,7 +38,6 @@ import [
     VariableDef
 ] from "model";
 import [method_key, PassState, ReferenceEnum] from "state";
-import "static_blocks";
 import [is_integral_name, parse_type_string, replace_map, VOID] from "type_name";
 import [lower_extensions, method_is_static, resolve_static_calls, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";

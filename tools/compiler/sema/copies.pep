@@ -15,8 +15,9 @@
 import compiler.ast;
 import [demangle, Diagnostic, Edit, Fix, Location] from compiler.diagnostic;
 import "apply_extensions";
+import [attribute_name] from "attributes";
 import [payload_field, TAG_FIELD] from "builder";
-import [known_location, location_of] from "common";
+import "common";
 import "constraints";
 import [Loc, NO_FILE] from "loc";
 import [
@@ -42,9 +43,8 @@ import [
     VariableDef
 ] from "model";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
-import [PassState] from "state";
-import [attribute_name, attribute_string] from "static_blocks";
-import [StructTable] from "static_type";
+import [PassMemo, PassState] from "state";
+import [attribute_string] from "static_blocks";
 import [trait_def] from "traits";
 import [FUNCTION, parse_type_string, SHARED_FUNCTION] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
@@ -1016,7 +1016,7 @@ _extended(module: Module, state: PassState, st: StructDef) {
     }
     state.extended_checked.insert(st.name);
     module.extended_checked.insert(st.name);
-    state.trait_memo.checked_table = Optional<StructTable>.Empty;
+    state.trait_memo.checked_table = Optional<PassMemo>.Empty;
     state.trait_memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Empty;
 }
 

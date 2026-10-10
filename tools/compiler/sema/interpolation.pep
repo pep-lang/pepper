@@ -8,13 +8,12 @@
 
 import [demangle, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [Expression, FunctionDef, Module] from "model";
 import [set_name] from "names";
 import "resolve_implicit_types";
 import [PassState] from "state";
-import "static_blocks";
 import [parse_type_string] from "type_name";
 import [rewrite_block, Rewriter] from "walk";
 

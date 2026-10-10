@@ -9,12 +9,11 @@
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name, is_concrete_override, is_override, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR] from compiler.link;
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [ExternDef, FunctionDef, GenericParam, Module, StructDef, TypeName] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
-import "static_blocks";
 import [parse_type_string, replace_map] from "type_name";
 
 ## Whether `function` is a concrete override (`hash<Point>`), which

@@ -11,9 +11,11 @@
 import compiler.ast;
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name, is_build_option_name, NAMESPACE_SEPARATOR] from compiler.link;
+import [attribute_arguments, attribute_name] from "attributes";
 import [getter_name, has_bare_attribute, INTERPOLATE, payload_field, REFLECT, TAG_FIELD] from "builder";
 import [is_checked_function] from "checked";
-import [error_at, location_of] from "common";
+import "common";
+import "instantiation";
 import [convert_string_literal] from "literals";
 import [Loc] from "loc";
 import [
@@ -50,6 +52,7 @@ import [
 import [display_name] from "names";
 import "overload_select";
 import [display_float] from "program";
+import [replace_statement_types] from "replace_types";
 import [PassState] from "state";
 import [is_integral_name, parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_statement] from "walk";
@@ -60,9 +63,6 @@ export const ATTRIBUTE_ATTRIBUTE = "Attribute";
 ## How many times a compile-time `while` may run before it is taken to be
 ## endless.
 const _MAX_ITERATIONS: long = 100000;
-
-## How many specializations an error's notes trace back.
-const _MAX_SPECIALIZATION_DEPTH: ulong = 64;
 
 ## Whether the compiler gives attribute `name` a meaning. Any other
 ## attribute must name an `[Attribute]` struct.
@@ -110,11 +110,6 @@ _has_static(block: Block): bool {
 
 _body_has_static(function: FunctionDef): bool {
     return function.body.is_value() and _has_static(function.body.value());
-}
-
-## A generic struct as declared, not one of its specializations.
-_is_generic_base(st: StructDef): bool {
-    return st.ty.sub_types.count > 0 and st.name == st.ty.name;
 }
 
 ## Expands every `static` block in concrete code: free functions that are
@@ -720,23 +715,6 @@ _char_count(text: String): long {
         i += 1;
     }
     return count;
-}
-
-## Compares two strings byte by byte: negative, 0 or positive.
-_compare_bytes(a: String, b: String): long {
-    ulong i = 0;
-    while (i < a.size and i < b.size) {
-        var x = a.byte_at(i);
-        var y = b.byte_at(i);
-        if (x != y) {
-            return x < y ? -1 : 1;
-        }
-        i += 1;
-    }
-    if (a.size == b.size) {
-        return 0;
-    }
-    return a.size < b.size ? -1 : 1;
 }
 
 _as_float(value: _CtValue): double {
@@ -2612,51 +2590,6 @@ _fmod(a: double, b: double): double {
     return a % b;
 }
 
-## `ty` spelled one way, its integer types by their sized names (`i32` for
-## `int`), a pointer `__ptr<T>` among them: `check_function_types::canonical`.
-_canonical(ty: TypeName): TypeName {
-    var parsed = parse_type_string(ty.to_string());
-    var name = parsed.name;
-    match (name) {
-        "int" => {
-            name = "i32";
-        }
-        "uint" => {
-            name = "u32";
-        }
-        "long" => {
-            name = "i64";
-        }
-        "ulong" => {
-            name = "u64";
-        }
-        "short" => {
-            name = "i16";
-        }
-        "ushort" => {
-            name = "u16";
-        }
-        "char" => {
-            name = "i8";
-        }
-        "byte" => {
-            name = "u8";
-        }
-        "float" => {
-            name = "f32";
-        }
-        "double" => {
-            name = "f64";
-        }
-        else => {}
-    }
-    var args = Array<TypeName>();
-    for (var t in parsed.sub_types) {
-        args.append(_canonical(t));
-    }
-    return TypeName.with_args(name, args);
-}
-
 _find_enum(module: Module, name: String, file: uint): EnumDef? {
     for (var e in module.enums) {
         if (e.name == name) {
@@ -2672,271 +2605,7 @@ _find_enum(module: Module, name: String, file: uint): EnumDef? {
     return _prefer_file(candidates, (e) => e.loc.file, file);
 }
 
-# ── Types in emitted code ───────────────────────────────────────────────────
-
-## Replaces the types `type_map` names in `statement`, as
-## `specialize_functions::replace_body_types` does for one statement.
-##
-## @param statement the statement, changed in place
-## @param type_map the types to replace
-export replace_statement_types(statement: Statement, type_map: Array<(String, TypeName)>) {
-    match (statement) {
-        Expression(value) => {
-            replace_expression_types(value, type_map);
-        }
-        Block(inner) => {
-            for (var item in inner.items) {
-                replace_statement_types(item, type_map);
-            }
-        }
-        Declaration(declaration) => {
-            if (declaration is Variable(variable)) {
-                replace_map(variable.ty, type_map);
-                if (variable.default.is_value()) {
-                    replace_expression_types(variable.default.value(), type_map);
-                }
-            }
-        }
-        Branch(branch) => {
-            replace_expression_types(branch.condition, type_map);
-            for (var item in branch.if_block.items) {
-                replace_statement_types(item, type_map);
-            }
-            if (branch.else_block.is_value()) {
-                for (var item in branch.else_block.value().items) {
-                    replace_statement_types(item, type_map);
-                }
-            }
-        }
-        While(loop) => {
-            replace_expression_types(loop.condition, type_map);
-            for (var item in loop.block.items) {
-                replace_statement_types(item, type_map);
-            }
-        }
-        Return(ret) => {
-            if (ret.expr.is_value()) {
-                replace_expression_types(ret.expr.value(), type_map);
-            }
-        }
-        Static(block) => {
-            _substitute(block, type_map);
-            _replace_static_items(block.items, type_map);
-        }
-        else => {}
-    }
-}
-
-_replace_static_items(items: StaticItem[], type_map: Array<(String, TypeName)>) {
-    for (var item in items) {
-        match (item) {
-            For(node) => {
-                _replace_static_items(node.body, type_map);
-            }
-            While(node) => {
-                _replace_static_items(node.body, type_map);
-            }
-            Block(body) => {
-                _replace_static_items(body, type_map);
-            }
-            If(node) => {
-                _replace_static_items(node.then_items, type_map);
-                _replace_static_items(node.else_items, type_map);
-            }
-            EmitIf(node) => {
-                replace_expression_types(node.condition, type_map);
-                _replace_static_items(node.then_items, type_map);
-                _replace_static_items(node.else_items, type_map);
-            }
-            Emit(statement, _) => {
-                replace_statement_types(statement, type_map);
-            }
-            else => {}
-        }
-    }
-}
-
-## Records a specialization's type arguments in `block`, applying them to
-## those recorded by an outer one.
-_substitute(block: StaticBlock, type_map: Array<(String, TypeName)>) {
-    for (var (_, ty) in block.type_map) {
-        replace_map(ty, type_map);
-    }
-    for (var (param, ty) in type_map) {
-        bool known = false;
-        for (var (k, _) in block.type_map) {
-            if (k == param) {
-                known = true;
-            }
-        }
-        if (!known) {
-            block.type_map.append((param, ty.copy()));
-        }
-    }
-}
-
-## Replaces the types in `e` and what it holds.
-struct _TypeReplacer {
-    var type_map: Array<(String, TypeName)>;
-
-    construct(type_map: Array<(String, TypeName)>) {
-        this.type_map = type_map;
-    }
-
-    rewrite(e: Expression): Expression {
-        match (e) {
-            SizeOf(ty) => {
-                replace_map(ty, type_map);
-            }
-            ArrayIndex(node) => {
-                replace_map(node.ty, type_map);
-            }
-            IsPod(ty) => {
-                replace_map(ty, type_map);
-            }
-            Default(ty) => {
-                replace_map(ty, type_map);
-            }
-            StaticCase(node) => {
-                replace_map(node.ty, type_map);
-            }
-            Subject(node) => {
-                replace_map(node.ty, type_map);
-            }
-            Allocate(ty) => {
-                replace_map(ty, type_map);
-            }
-            Cast(node) => {
-                replace_map(node.ty, type_map);
-            }
-            RefCount(ty, _) => {
-                replace_map(ty, type_map);
-            }
-            Weak(_, ty, _) => {
-                replace_map(ty, type_map);
-            }
-            Address(ty, _) => {
-                replace_map(ty, type_map);
-            }
-            AtomicLoad(ty, _) => {
-                replace_map(ty, type_map);
-            }
-            AtomicStore(ty, _, _) => {
-                replace_map(ty, type_map);
-            }
-            AtomicCmpXchg(ty, _, _, _) => {
-                replace_map(ty, type_map);
-            }
-            AtomicFetch(_, ty, _, _) => {
-                replace_map(ty, type_map);
-            }
-            Simd(node) => {
-                replace_map(node.ty, type_map);
-            }
-            MakeClosure(node) => {
-                replace_map(node.ty, type_map);
-                var parsed = parse_type_string(node.closure);
-                replace_map(parsed, type_map);
-                node.closure = parsed.to_string();
-            }
-            FunctionCall(node) => {
-                if (node.function.contains("<")) {
-                    var parsed = parse_type_string(node.function);
-                    replace_map(parsed, type_map);
-                    node.function = parsed.to_string();
-                }
-            }
-            MethodCall(node) => {
-                if (node.method.contains("<")) {
-                    var parsed = parse_type_string(node.method);
-                    replace_map(parsed, type_map);
-                    node.method = parsed.to_string();
-                }
-            }
-            SymbolRef(node) => {
-                replace_map(node.ty, type_map);
-            }
-            else => {}
-        }
-        return e;
-    }
-}
-
-extend _TypeReplacer with Rewriter;
-
-## Replaces the types `type_map` names in `e` and what it holds.
-##
-## @param e the expression, changed in place
-## @param type_map the types to replace
-export replace_expression_types(e: Expression, type_map: Array<(String, TypeName)>) {
-    rewrite_statement(Statement.Expression(e), _TypeReplacer(type_map));
-}
-
 # ── Attributes ──────────────────────────────────────────────────────────────
-
-## An argument of an attribute call: its label and the label's span, if it
-## has one, and its value.
-export struct AttributeArgument {
-    var name: (String, ast.Span)?;
-    var value: ast.Expression;
-
-    construct(name: (String, ast.Span)?, value: ast.Expression) {
-        this.name = name;
-        this.value = value;
-    }
-}
-
-## Returns the attribute's arguments in the order written; none for a bare
-## `[Name]`.
-##
-## @param attribute the attribute
-## @returns the arguments
-export attribute_arguments(attribute: ast.Attribute): AttributeArgument[] {
-    var out = Array<AttributeArgument>();
-    if (attribute.body is FunctionCall(_, arguments, _)) {
-        for (var argument in arguments) {
-            if (argument is NamedArgument(name, name_span, value, _)) {
-                out.append(AttributeArgument(Optional<(String, ast.Span)>.Value((name, name_span)), value));
-            } else {
-                out.append(AttributeArgument(Optional<(String, ast.Span)>.Empty, argument));
-            }
-        }
-    }
-    return out;
-}
-
-_spelled(e: ast.Expression): String? {
-    match (e) {
-        SymbolRef(id, _) => {
-            return Optional<String>.Value(id);
-        }
-        MemberAccess(lhs, name, _, _) => {
-            var head = _spelled(lhs);
-            if (!head.is_value()) {
-                return head;
-            }
-            return Optional<String>.Value($"{head.value()}.{name}");
-        }
-        TypeLiteral(ty) => {
-            return Optional<String>.Value(ty.name);
-        }
-        else => {
-            return Optional<String>.Empty;
-        }
-    }
-}
-
-## Returns the name an attribute is written with: `Option` in
-## `[Option("o")]`, and `json.Name` in `[json.Name("id")]`.
-##
-## @param attribute the attribute
-## @returns the name, if it has one
-export attribute_name(attribute: ast.Attribute): String? {
-    if (attribute.body is FunctionCall(function, _, _)) {
-        return _spelled(function);
-    }
-    return _spelled(attribute.body);
-}
 
 ## `st` declares a built-in attribute: an `[Attribute]` struct named like
 ## one, as `runtime/attributes.pep` declares them.
@@ -3245,89 +2914,6 @@ _default_constant(module: Module, default: Expression?): _CtValue? {
         return Optional<_CtValue>.Empty;
     }
     return _model_constant(module, default.value());
-}
-
-## Returns the location of an expression in the model: `Expression::loc`.
-##
-## @param e the expression
-## @returns its location, `Loc.none()` for one with none
-export expression_loc(e: Expression): Loc {
-    return _expression_loc(e);
-}
-
-## `expression_loc`, by the name the passes use.
-_expression_loc(e: Expression): Loc {
-    match (e) {
-        SymbolRef(node) => {
-            return node.loc;
-        }
-        MemberRef(node) => {
-            return node.loc;
-        }
-        Binary(node) => {
-            return node.loc;
-        }
-        Unary(node) => {
-            return node.loc;
-        }
-        Cast(node) => {
-            return node.loc;
-        }
-        Index(node) => {
-            return node.loc;
-        }
-        ArrayIndex(node) => {
-            return node.loc;
-        }
-        FunctionCall(node) => {
-            return node.loc;
-        }
-        FunctionPointer(node) => {
-            return node.loc;
-        }
-        FunctionRef(node) => {
-            return node.loc;
-        }
-        MethodCall(node) => {
-            return node.loc;
-        }
-        MakeClosure(node) => {
-            return node.loc;
-        }
-        ToTrait(node) => {
-            return node.loc;
-        }
-        FromTrait(node) => {
-            return node.loc;
-        }
-        Destructure(node) => {
-            return node.loc;
-        }
-        Move(node) => {
-            return node.loc;
-        }
-        StringLiteral(node) => {
-            return node.loc;
-        }
-        StaticString(node) => {
-            return node.loc;
-        }
-        Simd(node) => {
-            return node.loc;
-        }
-        ClosureLiteral(c) => {
-            return c.loc;
-        }
-        StaticValue(v) => {
-            return v.loc;
-        }
-        StaticMember(m) => {
-            return m.loc;
-        }
-        else => {
-            return Loc.none();
-        }
-    }
 }
 
 ## What an attribute struct's arguments set: with a constructor that takes

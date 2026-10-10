@@ -3162,7 +3162,19 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   representations and methods, reference enums, value structs,
   `reflect.print`'s notes and deprecation warnings, the next
   `WithSubject` id) is a `PassState`
-  (`state.pep`). `compiler/passes_test.pep` requires the
+  (`state.pep`). Nearly every pass imports it, so it imports no pass:
+  otherwise those passes would be one import cycle, checked as one layer
+  (§8.1). The types it holds of a pass are data in files of their own
+  (`Exports` in `export_table.pep`, `StructInfo` in `struct_info.pep`);
+  what a pass keeps there of its own heavier types (the checked
+  declarations' `StructTable`, `Callees` and `ImplicitTables`, the checked
+  structs' overload members) is a `PassMemo` value, which the pass
+  declares its type to be and reads back with `as?`. Likewise the helpers
+  many passes share live in files that import no pass (`common.pep`:
+  `_expression_loc`, `_canonical`, `constraint_spelled`, ...;
+  `attributes.pep`: `attribute_name`, `attribute_arguments`;
+  `replace_types.pep`), not in `static_blocks.pep`, whose evaluator
+  imports overload resolution. `compiler/passes_test.pep` requires the
   model JSON, or the rendered error, to match after every step ported so
   far (the Rust side runs as many steps as the Pepper side ran) on the
   corpus, the documentation's programs of several modules and

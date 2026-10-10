@@ -2,11 +2,10 @@
 ## check_conditions` in Pepper.
 
 import [Location] from compiler.diagnostic;
-import [error_at, location_of] from "common";
+import "common";
 import [Loc] from "loc";
 import [BinaryOp, Block, Expression, FunctionDef, Module, TypeName, UnaryOp] from "model";
 import [PassState] from "state";
-import "static_blocks";
 import [StructTable] from "static_type";
 import "type_name";
 import "unary_operators";

@@ -2,12 +2,14 @@
 ## `with_instantiation` and `with_requests` in Pepper.
 
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
-import [location_of] from "common";
+import "common";
 import [NO_FILE] from "loc";
 import [Expression, FunctionDef, Module] from "model";
-import "static_blocks";
 import [parse_type_string] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
+
+## How many specializations an error's notes trace back.
+const _MAX_SPECIALIZATION_DEPTH: ulong = 64;
 
 ## `error` with a note for each specialization that led to `symbol`'s, back
 ## to the code that is not generic.

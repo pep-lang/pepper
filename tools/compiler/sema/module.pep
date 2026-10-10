@@ -12,13 +12,13 @@ export [
     conditional_result, is_float_type, is_numeric_type, is_unsigned_int_type, result_type, stored_as
 ] from "arithmetic";
 export [check_cast] from "casts";
-export [constraint_spelled] from "constraints";
+export [constraint_spelled] from "common";
 export [error_at] from "common";
 export [returns_fresh, takes_over] from "confinement";
 export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";
 export [is_enum, is_trait, method_of] from "enums";
 export [HASH_METHOD] from "equatable";
-export [STRING_FREE, is_export_string] from "exports";
+export [STRING_FREE, is_export_string] from "export_table";
 export [defaulted_params, fill_defaults] from "function_types_check";
 export [set_name] from "names";
 export [is_comparison, is_overflow_test, op_name, simd_result, weak_result] from "operators";
@@ -31,7 +31,8 @@ export [
 export [DeltaBase, RecordIn, RecordOut] from "record";
 export [index_module, index_resumed, interface_fields, read_module, write_module] from "record_codec";
 export [PassState] from "state";
-export [attribute_arguments, attribute_name, expression_loc] from "static_blocks";
+export [attribute_arguments, attribute_name] from "attributes";
+export [expression_loc] from "common";
 export [STATIC_REFCOUNT] from "synthesize";
 export [method_is_static] from "value_types";
 ## What the language server asks of a checked model.

@@ -7,14 +7,13 @@ import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
 import [SHARED_ATTRIBUTE, THREAD_LOCAL_ATTRIBUTE] from "builder";
-import [error_at, location_of] from "common";
+import "common";
 import "constraints";
 import [is_enum] from "enums";
 import [Loc] from "loc";
 import [Block, Expression, FunctionDef, Kind, Module, StructDef, TypeName, UnaryOp, VariableDef] from "model";
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
-import "static_blocks";
 import "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
