@@ -125,14 +125,7 @@ struct _Constrained {
 ## `ty` with every name in `map` replaced by its type at once, so a
 ## replacement is never replaced again.
 _substitute_all(ty: TypeName, map: Array<(String, TypeName)>): TypeName {
-    bool pointer = ty.sub_types.count == 0 and ty.name.ends_with("*");
-    var pointee = pointer ? ty.name.substr_bytes(0, ty.name.size - 1) : "";
     for (var (name, replacement) in map) {
-        if (pointer and name == pointee) {
-            var out = ty.copy();
-            out.name = $"{replacement.to_string()}*";
-            return out;
-        }
         if (ty.sub_types.count == 0 and name == ty.name) {
             return replacement.copy();
         }
@@ -170,23 +163,11 @@ _resolve_signature_type(member: FunctionDef, ty: TypeName, map: Array<(String, T
         return Optional<TypeName>.Empty;
     }
     for (var p in member.generic_params) {
-        if (_mentions_param(out, p.name)) {
+        if (out.mentions(p.name)) {
             return Optional<TypeName>.Empty;
         }
     }
     return Optional<TypeName>.Value(out);
-}
-
-_mentions_param(ty: TypeName, name: String): bool {
-    if (ty.name == name or (ty.name.ends_with("*") and ty.name.substr_bytes(0, ty.name.size - 1) == name)) {
-        return true;
-    }
-    for (var t in ty.sub_types) {
-        if (_mentions_param(t, name)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 ## A method's name without the type arguments a generic method call spells

@@ -11,7 +11,8 @@ export * from "passes";
 export [
     conditional_result, is_float_type, is_numeric_type, is_unsigned_int_type, result_type, stored_as
 ] from "arithmetic";
-export [cast_spelled, check_cast] from "casts";
+export [check_cast] from "casts";
+export [constraint_spelled] from "constraints";
 export [error_at] from "common";
 export [returns_fresh, takes_over] from "confinement";
 export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";

@@ -43,7 +43,7 @@ import [PassState] from "state";
 import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [instance, trait_def, used_trait_types] from "traits";
-import [parse_type_string, VOID_PTR] from "type_name";
+import [parse_type_string, pointee_name] from "type_name";
 import "value_structs";
 import [is_value_type, value_type_key] from "value_types";
 import [Rewriter, rewrite_children] from "walk";
@@ -296,7 +296,7 @@ struct _TraitConversions {
         if (!to_trait) {
             return convert_implicit(value, expected, loc);
         }
-        TypeName from = TypeName.named(VOID_PTR);
+        TypeName from = TypeName.void_pointer();
         if (!_is_null(value)) {
             var found = static_type_of(value, table, current, state);
             if (!found.is_value()) {
@@ -816,16 +816,11 @@ _converts_children(e: Expression): bool {
 ## A pointer to characters, bytes, or `void`: a slot a string literal fills
 ## with its NUL-terminated bytes rather than a `String`.
 _is_c_string_type(ty: TypeName): bool {
-    var text = ty.to_string();
-    String pointee = "";
-    if (text.starts_with("__ptr<") and text.ends_with(">")) {
-        pointee = text.substr_bytes(6, text.size - 7);
-    } else if (text.ends_with("*")) {
-        pointee = text.substr_bytes(0, text.size - 1);
-    } else {
+    var pointee = pointee_name(ty.to_string());
+    if (!pointee.is_value()) {
         return false;
     }
-    match (pointee.trim()) {
+    match (pointee.value()) {
         "char", "i8", "byte", "u8", "void" => {
             return true;
         }

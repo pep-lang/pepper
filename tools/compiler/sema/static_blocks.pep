@@ -2612,18 +2612,10 @@ _fmod(a: double, b: double): double {
     return a % b;
 }
 
-## `__ptr<T>` and `T*` as one type, the integer types by their sized names:
-## `check_function_types::canonical`.
+## `ty` spelled one way, its integer types by their sized names (`i32` for
+## `int`), a pointer `__ptr<T>` among them: `check_function_types::canonical`.
 _canonical(ty: TypeName): TypeName {
     var parsed = parse_type_string(ty.to_string());
-    if (parsed.name == "__ptr" and parsed.sub_types.count == 1) {
-        return TypeName.named($"{_canonical(parsed.sub_types[0]).to_string()}*");
-    }
-    if (parsed.name.ends_with("*") and parsed.sub_types.count == 0) {
-        return TypeName.named(
-            $"{_canonical(TypeName.named(parsed.name.substr_bytes(0, parsed.name.size - 1))).to_string()}*"
-        );
-    }
     var name = parsed.name;
     match (name) {
         "int" => {

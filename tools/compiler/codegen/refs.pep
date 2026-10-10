@@ -29,24 +29,6 @@ _some(text: String): String? {
     return Optional<String>.Value(text);
 }
 
-## `name` without one trailing `*`, or none when it has none
-## (`strip_suffix('*')`).
-_pointee_of(name: String): String? {
-    if (!name.ends_with("*")) {
-        return Optional<String>.Empty;
-    }
-    return _some(name.substr_bytes(0, name.size - 1));
-}
-
-## `name` without every trailing `*` (`trim_end_matches('*')`).
-_trim_stars(name: String): String {
-    var trimmed = name;
-    while (trimmed.ends_with("*")) {
-        trimmed = trimmed.substr_bytes(0, trimmed.size - 1);
-    }
-    return trimmed;
-}
-
 ## The part of `name` before its first `<` (`split('<').next()`): the whole
 ## name when it has none.
 _base_name(name: String): String {
@@ -109,15 +91,16 @@ export binary_result_type(state: PassState, op: BinaryOp, lhs_name: String, rhs_
     if (op == BinaryOp.LShift or op == BinaryOp.RShift) {
         return sema.result_type(state, lhs_name, lhs_name);
     }
-    if ((op == BinaryOp.Add or op == BinaryOp.Sub) and (lhs_name.ends_with("*") or rhs_name.ends_with("*"))) {
+    if ((op == BinaryOp.Add or op == BinaryOp.Sub)
+        and (sema.is_pointer_name(lhs_name) or sema.is_pointer_name(rhs_name))) {
         # Pointer arithmetic produces a pointer: name the pointer operand so
         # `coerce` does not ptrtoint the result into an integer.
-        return lhs_name.ends_with("*") ? lhs_name : rhs_name;
+        return sema.is_pointer_name(lhs_name) ? lhs_name : rhs_name;
     }
-    if (sema.is_comparison(op) and lhs_name.ends_with("*") != rhs_name.ends_with("*")) {
+    if (sema.is_comparison(op) and sema.is_pointer_name(lhs_name) != sema.is_pointer_name(rhs_name)) {
         # Pointer against integer: name the integer operand, so `coerce`
         # leaves it at its own width and signedness.
-        return lhs_name.ends_with("*") ? rhs_name : lhs_name;
+        return sema.is_pointer_name(lhs_name) ? rhs_name : lhs_name;
     }
     return sema.result_type(state, lhs_name, rhs_name);
 }
@@ -376,7 +359,7 @@ extend Generator {
                 return _some("u32");
             }
             FunctionPointer(_) => {
-                return _some("void*");
+                return _some(sema.VOID_PTR);
             }
             AtomicLoad(ty, _) => {
                 return _some(ty.to_string());
@@ -413,7 +396,7 @@ extend Generator {
         if (!found.is_value()) {
             return found;
         }
-        var ty = _trim_stars(found.value());
+        var ty = sema.without_pointer_names(found.value());
         if (structs.contains(ty) or is_trait_name(ty) or tuples.contains(ty)) {
             return _some(ty);
         }
@@ -463,7 +446,7 @@ extend Generator {
                     return false;
                 }
                 var receiver = value_sema_type(node.this_value);
-                if (receiver.is_value() and receiver.value().ends_with("*")) {
+                if (receiver.is_value() and sema.is_pointer_name(receiver.value())) {
                     return false;
                 }
                 var struct_name = struct_name_of(node.this_value);
@@ -778,11 +761,11 @@ extend Generator {
             # (`a[i]` on an Array) returns a copy instead.
             Index(node) => {
                 var ty = value_sema_type(node.lhs);
-                return ty.is_value() and ty.value().ends_with("*");
+                return ty.is_value() and sema.is_pointer_name(ty.value());
             }
             ArrayIndex(node) => {
                 var ty = value_sema_type(node.lhs);
-                return ty.is_value() and ty.value().ends_with("*");
+                return ty.is_value() and sema.is_pointer_name(ty.value());
             }
             MemberRef(node) => {
                 var found = struct_name_of(node.lhs);
@@ -908,8 +891,8 @@ extend Generator {
 
     # Indexed receivers
 
-    ## LLVM element type behind a pointer/Array receiver (`char*` to i8,
-    ## `int*` to i32); i32 when the receiver's type is unknown. The exact
+    ## LLVM element type behind a pointer/Array receiver (`__ptr<char>` to
+    ## i8, `__ptr<int>` to i32); i32 when the receiver's type is unknown. The exact
     ## name resolves first; unregistered names fall back to their base.
     index_element_type(receiver: Expression): llvm.Type {
         # `outer._data[0][0]`: resolve the element type from the base
@@ -927,7 +910,7 @@ extend Generator {
         var base = Optional<String>.Empty;
         var base_type = value_sema_type(r);
         if (base_type.is_value()) {
-            base = _pointee_of(base_type.value());
+            base = sema.pointee_name(base_type.value());
         }
         if (!base.is_value()) {
             base = value_sema_type(receiver);
@@ -985,7 +968,7 @@ extend Generator {
         if (!ty.is_value()) {
             return ty;
         }
-        var pointee = _pointee_of(ty.value());
+        var pointee = sema.pointee_name(ty.value());
         if (!pointee.is_value()) {
             return pointee;
         }
@@ -1009,10 +992,11 @@ extend Generator {
         if (!nested) {
             return Result<Optional<(llvm.Value, String)>>.ok(Optional<(llvm.Value, String)>.Empty);
         }
-        # A pointer element (`rows[0]` of an `int**`) is itself the buffer.
+        # A pointer element (`rows[0]` of a `__ptr<__ptr<int>>`) is itself
+        # the buffer.
         var lhs_type = value_sema_type(lhs);
         if (lhs_type.is_value()) {
-            var pointee = _pointee_of(lhs_type.value());
+            var pointee = sema.pointee_name(lhs_type.value());
             if (pointee.is_value()) {
                 return Result<Optional<(llvm.Value, String)>>.ok(
                     Optional<(llvm.Value, String)>.Value((slot_ptr, pointee.value()))
@@ -1036,7 +1020,7 @@ extend Generator {
                 data_idx = i as long;
                 # The `_data` field is a raw pointer buffer: its element is
                 # the pointee. Non-pointer fields use their own type name.
-                var pointee = _pointee_of(field_ty);
+                var pointee = sema.pointee_name(field_ty);
                 data_name = pointee.is_value() ? pointee.value() : field_ty;
                 break;
             }

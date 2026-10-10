@@ -127,17 +127,11 @@ export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
 }
 
 ## `ty` spelled one way: every omitted type argument filled in from the
-## generic parameter's default, and `__ptr<T>` as `T*`:
-## `value_structs::fill_defaults`. Type names nest only as deep as the
+## generic parameter's default: `value_structs::fill_defaults`. Type names nest only as deep as the
 ## program spells them.
 export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
     for (var arg in ty.sub_types) {
         fill_defaults(arg, params);
-    }
-    if (ty.name == "__ptr" and ty.sub_types.count == 1) {
-        ty.name = $"{ty.sub_types[0].to_string()}*";
-        ty.sub_types = Array<TypeName>();
-        return;
     }
     var generic = params.try_get(ty.name);
     if (!generic.is_value()) {
@@ -163,14 +157,6 @@ export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>)
         ty.sub_types.append(arg);
         i += 1;
     }
-}
-
-## A type as Pepper code spells it: `T*` is `__ptr<T>`.
-_pepper_spelling(ty: TypeName): String {
-    if (ty.name.ends_with("*") and ty.sub_types.count == 0) {
-        return $"__ptr<{_pepper_spelling(TypeName.named(ty.name.substr_bytes(0, ty.name.size - 1)))}>";
-    }
-    return ty.display();
 }
 
 _is_void_ptr(ty: TypeName): bool {
@@ -406,7 +392,7 @@ struct _FunctionTypes {
         if (name == AUTO or name.size == 0 or ty.is_function_type()) {
             return Optional<_TypeKind>.Empty;
         }
-        if (name.ends_with("*") or (ty.name == "__ptr" and ty.sub_types.count == 1)) {
+        if (ty.is_pointer()) {
             return Optional<_TypeKind>.Value(_TypeKind.Pointer);
         }
         for (var p in unbound) {
@@ -431,7 +417,7 @@ struct _FunctionTypes {
     value_flows_into(value: Expression, expected: TypeName, slot: _FlowSlot) {
         # A tuple is a value, never a null reference.
         if (_is_null(value) and expected.is_tuple()) {
-            report(slot.mismatch(_pepper_spelling(expected), "__null"), value, slot);
+            report(slot.mismatch(expected.display(), "__null"), value, slot);
             return;
         }
         # Raw buffer reads (`Data[i]`) carry no reliable static type.
@@ -454,7 +440,7 @@ struct _FunctionTypes {
         if (!expected_kind.is_value()) {
             return;
         }
-        # A raw literal is the `char*` global a `String` is built from.
+        # A raw literal is the `__ptr<char>` global a `String` is built from.
         bool literal = false;
         bool string_literal = false;
         match (value) {
@@ -469,7 +455,7 @@ struct _FunctionTypes {
         }
         TypeName? found = Optional<TypeName>.Empty;
         if (literal and (string_literal or expected_kind.value() is Pointer)) {
-            found = Optional<TypeName>.Value(TypeName.named("char*"));
+            found = Optional<TypeName>.Value(TypeName.pointer_to(TypeName.named("char")));
         } else {
             found = static_type_of(value, table, current, state);
         }
@@ -481,7 +467,7 @@ struct _FunctionTypes {
         # number, enum or struct.
         var function = parse_type_string(actual.to_string());
         if (function.is_function_type() and !(expected_kind.value() is Pointer)) {
-            var message = slot.mismatch(_pepper_spelling(expected), function.display());
+            var message = slot.mismatch(expected.display(), function.display());
             var returned = function.function_return();
             if (function.function_params().count == 0
                 and returned.is_value()
@@ -535,7 +521,7 @@ struct _FunctionTypes {
         if (!mismatch) {
             return;
         }
-        var message = slot.mismatch(_pepper_spelling(expected), _pepper_spelling(actual));
+        var message = slot.mismatch(expected.display(), actual.display());
         var c_string = actual_kind.value() is Pointer and expected.to_string() == "String";
         if (c_string) {
             message = $"{message}; use 'String(...)' to copy a C string";
@@ -687,7 +673,7 @@ struct _FunctionTypes {
 
     ## A C function pointer holds a bare address: only a value of the same
     ## C function pointer type fills one, and one converts to nothing but
-    ## `void*`. Returns true when either side is a C function pointer.
+    ## `__ptr<void>`. Returns true when either side is a C function pointer.
     extern_flows_into(value: Expression, expected_type: TypeName, slot: _FlowSlot): bool {
         var expected = _parsed_if(expected_type, "__extern_function<");
         if (_is_null(value)) {

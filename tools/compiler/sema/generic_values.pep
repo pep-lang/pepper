@@ -340,10 +340,7 @@ struct _MethodValueBinder {
         if (!owner_type.is_value() or owner_type.value().contains_auto()) {
             return;
         }
-        var key = owner_type.value().to_string();
-        while (key.ends_with("*")) {
-            key = key.substr_bytes(0, key.size - 1);
-        }
+        var key = owner_type.value().without_pointers().to_string();
         for (var st in module.structs) {
             if (st.ty.to_string() != key) {
                 continue;

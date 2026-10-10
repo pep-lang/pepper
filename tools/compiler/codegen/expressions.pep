@@ -1016,7 +1016,7 @@ extend Generator {
             # `_data` on `Array<Array<int>>`) must GEP the slot; dispatching
             # would call the pointee's indexer on the element's own data.
             var receiver_ty = value_sema_type(this_expr);
-            bool receiver_is_ptr = receiver_ty.is_value() and receiver_ty.value().ends_with("*");
+            bool receiver_is_ptr = receiver_ty.is_value() and sema.is_pointer_name(receiver_ty.value());
             bool has_indexer = false;
             if (!receiver_is_ptr) {
                 var desc = structs.try_get(struct_name);

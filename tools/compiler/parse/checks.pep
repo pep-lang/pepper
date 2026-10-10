@@ -83,15 +83,15 @@ struct _PointerCheck {
         if (error.is_value()) {
             return;
         }
+        # The parser makes `__ptr<T>` of `T*`, marking each layer it made.
         ulong stars = 0;
-        while (stars < t.name.size and t.name.byte_at(t.name.size - 1 - stars) == '*') {
+        var base = t;
+        while (base.c_pointer and base.generic_types.count == 1) {
             stars += 1;
+            base = base.generic_types[0];
         }
         if (stars > 0) {
-            var base = TypeName(t.name.substr_bytes(0, t.name.size - stars), t.span);
-            base.generic_types = t.generic_types;
-            base.labels = t.labels;
-            var text = base.to_string();
+            var text = base.as_written();
             var written = text + "*".repeat(stars);
             var suggested = "__ptr<".repeat(stars) + text + ">".repeat(stars);
             error = Optional<CheckError>.Value(

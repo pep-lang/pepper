@@ -456,14 +456,15 @@ export c_type(
         var listed = parameters.count == 0 ? "void" : ", ".join(parameters);
         return Optional<String>.Value(declarator(result.value(), "(*{})(" + listed + ")"));
     }
-    if (!ty.is_scalar() or ty.sub_types.count > 0) {
-        return none;
-    }
-    if (ty.name.ends_with("*")) {
-        # A pointer to anything C has no name for is a `void*`.
-        var target = c_type(TypeName.named(ty.name.substr_bytes(0, ty.name.size - 1)), representations);
+    if (ty.is_pointer()) {
+        # C writes `__ptr<T>` as `T*`, and a pointer to anything it has no
+        # name for as a `void*`.
+        var target = c_type(ty.sub_types[0], representations);
         var spelled = target.is_value() and target.value().find("{") < 0 ? target.value() : "void";
         return Optional<String>.Value($"{spelled}*");
+    }
+    if (!ty.is_scalar() or ty.sub_types.count > 0) {
+        return none;
     }
     var name = ty.name;
     var stored = representations.try_get(name);

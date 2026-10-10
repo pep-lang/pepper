@@ -244,7 +244,9 @@ _blank_line(text: String, offset: ulong): String? {
 
 # Parses `source`, desugared or as written; with `checked`, the errors in
 # nodes that parse and the checks after parsing are errors too.
-_parse(source: String, desugared: bool, checked: bool = true, skip_bodies: bool = false): Result<ast.Module, ParseError> {
+_parse(
+    source: String, desugared: bool, checked: bool = true, skip_bodies: bool = false
+): Result<ast.Module, ParseError> {
     # Only the written tree keeps the comments.
     var tokens = syntax.lex(source, !desugared);
     if (tokens.is_err()) {
@@ -953,8 +955,9 @@ struct Parser {
     }
 
     # `[]` array suffixes, `?` optional suffixes, then `*` pointer suffixes,
-    # after the named type `out`. `[]` and `*` extend its name, and `?`
-    # wraps it in `Optional`.
+    # after the named type `out`. `[]` extends its name, `?` wraps it in
+    # `Optional`, and each `*` wraps it in `__ptr`: C's `T*` is rewritten
+    # here, so nothing after the parser sees a star in a type's name.
     _type_suffixes(out: TypeName): TypeName {
         ulong end = out.span.end;
         while (true) {
@@ -975,17 +978,26 @@ struct Parser {
             out = wrapped;
             end = end.max(question_end);
         }
-        while (true) {
-            if (_at("*") or _at("**")) {
-                var stars = _text(_position);
-                _advance();
-                out.name = out.name + stars;
-                end = _last_end();
-                continue;
-            }
-            break;
-        }
         out.span = Span(out.span.start, end);
+        while (_at("*") or _at("**")) {
+            ulong stars = _text(_position).size;
+            _advance();
+            ulong star_end = _last_end();
+            ulong i = 0;
+            while (i < stars) {
+                out = _c_pointer_to(out, star_end);
+                i += 1;
+            }
+        }
+        return out;
+    }
+
+    # `pointee*` as the one pointer type there is, `__ptr<pointee>`, ending
+    # at `end` and marked as written with C's star.
+    _c_pointer_to(pointee: TypeName, end: ulong): TypeName {
+        var out = TypeName(ast.POINTER_TYPE, Span(pointee.span.start, end));
+        out.generic_types.append(pointee);
+        out.c_pointer = true;
         return out;
     }
 

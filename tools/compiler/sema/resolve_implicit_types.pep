@@ -67,7 +67,7 @@ import [ImplicitMemo, PassState] from "state";
 import [instance, trait_def, trait_types_of, used_trait_types] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels, tuple_literal_type] from "tuple_literals";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
-import [FUNCTION, parse_type_string, replace_map, VOID] from "type_name";
+import [FUNCTION, parse_type_string, replace_map, VOID, without_pointer_names] from "type_name";
 import [is_value_type, method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_expression] from "walk";
 
@@ -187,24 +187,17 @@ _before_angle(text: String): String {
 
 ## The key under which a lookup of struct or trait type `key`'s fields
 ## is noted, and under which a change to them is announced: its spelling,
-## without pointer stars. Methods have their own keys (`_method_read`).
+## under any pointer. Methods have their own keys (`_method_read`).
 _type_read(key: String): String {
-    var base = key;
-    while (base.ends_with("*")) {
-        base = base.substr_bytes(0, base.size - 1);
-    }
-    return $"t:{base}";
+    return $"t:{without_pointer_names(key)}";
 }
 
 ## The key under which a lookup of method `name` of struct or trait type
 ## `key` is noted, and under which a change to its return type is
-## announced: the type without pointer stars, and the name before any `$`
-## or `@`, so an overload set and its members share it.
+## announced: the type under any pointer, and the name before any `$` or
+## `@`, so an overload set and its members share it.
 _method_read(key: String, name: String): String {
-    var base = key;
-    while (base.ends_with("*")) {
-        base = base.substr_bytes(0, base.size - 1);
-    }
+    var base = without_pointer_names(key);
     var bytes = name.bytes();
     ulong end = 0;
     while (end < bytes.count and bytes[end] != '$' as u8 and bytes[end] != '@' as u8) {
@@ -217,11 +210,7 @@ _method_read(key: String, name: String): String {
 ## spell their receivers their own way, so a lookup of one notes this key
 ## too, and a change to any specialization announces it.
 _base_read(key: String): String {
-    var base = _before_angle(key);
-    while (base.ends_with("*")) {
-        base = base.substr_bytes(0, base.size - 1);
-    }
-    return $"b:{base}";
+    return $"b:{_before_angle(without_pointer_names(key))}";
 }
 
 ## The key under which a lookup of free function `name` (or the overload
@@ -1409,7 +1398,7 @@ struct _TypeScopes {
                 return TypeName.named("u32");
             }
             FunctionPointer(_) => {
-                return TypeName.named("void*");
+                return TypeName.void_pointer();
             }
             Weak(op, ty, _) => {
                 return weak_result(op, ty);
@@ -1669,7 +1658,7 @@ struct _TypeScopes {
                 return TypeName.boolean();
             }
             "__caller_location" => {
-                return TypeName.named("char*");
+                return TypeName.pointer_to(TypeName.named("char"));
             }
             "__atomic_store", "__construct_at" => {
                 return TypeName.named("void");
@@ -1750,18 +1739,11 @@ struct _ScopeFields {
 
 extend _ScopeFields with FieldTypes;
 
-## The element type of a raw pointer, `__ptr<T>` or `T*`; none for any
-## other type, and for a `void` pointer.
+## The element type of a raw pointer; none for any other type, and for a
+## `void` pointer.
 _pointee(ty: TypeName): TypeName? {
-    var element = TypeName();
-    if (ty.name == "__ptr" and ty.sub_types.count == 1) {
-        element = ty.sub_types[0];
-    } else if (ty.sub_types.count == 0 and ty.name.ends_with("*")) {
-        element = parse_type_string(ty.name.substr_bytes(0, ty.name.size - 1));
-    } else {
-        return Optional<TypeName>.Empty;
-    }
-    return element.to_string() != VOID ? Optional<TypeName>.Value(element) : Optional<TypeName>.Empty;
+    var element = ty.pointee();
+    return element.is_value() and element.value().to_string() != VOID ? element : Optional<TypeName>.Empty;
 }
 
 ## Where a property access is written, for `lower_property`.
@@ -2093,10 +2075,7 @@ struct _ImplicitResolver {
             if (owner.contains_auto() or scopes.has_method(owner, node.method)) {
                 return;
             }
-            var key = owner.to_string();
-            while (key.ends_with("*")) {
-                key = key.substr_bytes(0, key.size - 1);
-            }
+            var key = owner.without_pointers().to_string();
             scopes.tables.note(_type_read(key));
             var methods = scopes.tables.generic_methods_of(key);
             if (!methods.is_value()) {

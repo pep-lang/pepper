@@ -104,14 +104,6 @@ _is_pointer(value: llvm.Value): bool {
     return value.value_type().kind() == llvm.TypeKind.Pointer;
 }
 
-## `name` without its trailing `*`, or none when it has none.
-_strip_pointer(name: String): String? {
-    if (name.ends_with("*")) {
-        return Optional<String>.Value(name.substr_bytes(0, name.size - 1));
-    }
-    return Optional<String>.Empty;
-}
-
 extend Generator {
     ## The sema type of `expr`, or the best-effort name of its value.
     operand_sema_name(expr: Expression, value: llvm.Value): String {
@@ -333,18 +325,18 @@ extend Generator {
         # signedness: coercing it to the pointer's type cut it to 32 bits
         # (#524).
         bool pointer_arithmetic = (op == BinaryOp.Add or op == BinaryOp.Sub)
-            and lhs_name.ends_with("*") != rhs_name.ends_with("*");
-        var lhs_operand_ty = pointer_arithmetic and !lhs_name.ends_with("*") ? "long" : result_ty;
-        var rhs_operand_ty = pointer_arithmetic and !rhs_name.ends_with("*") ? "long" : result_ty;
+            and sema.is_pointer_name(lhs_name) != sema.is_pointer_name(rhs_name);
+        var lhs_operand_ty = pointer_arithmetic and !sema.is_pointer_name(lhs_name) ? "long" : result_ty;
+        var rhs_operand_ty = pointer_arithmetic and !sema.is_pointer_name(rhs_name) ? "long" : result_ty;
         var lhs_c = coerce(lhs_val, lhs_name, lhs_operand_ty);
         var rhs_c = coerce(rhs_val, rhs_name, rhs_operand_ty);
-        # Pointer arithmetic needs the pointer's element type (`char*`
-        # strides i8): use the sema type of the lhs expression for that.
+        # Pointer arithmetic needs the pointer's element type
+        # (`__ptr<char>` strides i8): use the sema type of the lhs expression for that.
         var ptr_elem = Optional<llvm.Type>.Empty;
         var ptr_elem_name = Optional<String>.Empty;
         var lhs_sema = value_sema_type(lhs);
         if (lhs_sema.is_value()) {
-            ptr_elem_name = _strip_pointer(lhs_sema.value());
+            ptr_elem_name = sema.pointee_name(lhs_sema.value());
             if (ptr_elem_name.is_value() and ptr_elem_name.value() != "void") {
                 ptr_elem = types.get(ptr_elem_name.value());
             }
@@ -359,8 +351,8 @@ extend Generator {
             } else {
                 var applied = apply_op(op, lhs_c, rhs_c, result_ty, ptr_elem, ptr_elem_name);
                 if (applied.is_err() and applied.error().message.starts_with("unsupported op")) {
-                    var lhs_display = sema.cast_spelled(TypeName.named(lhs_name));
-                    var rhs_display = sema.cast_spelled(TypeName.named(rhs_name));
+                    var lhs_display = sema.constraint_spelled(sema.parse_type_string(lhs_name));
+                    var rhs_display = sema.constraint_spelled(sema.parse_type_string(rhs_name));
                     applied = fail<llvm.Value>(
                         $"invalid operands to binary expression ('{lhs_display}' and '{rhs_display}')"
                     );
@@ -711,7 +703,7 @@ extend Generator {
                 result = val;
             } else if (from.int_width() < target.int_width()) {
                 # 1-bit bool values and unsigned sources widen zero-extended;
-                # signed types sign-extend. `void*` indexes load one byte
+                # signed types sign-extend. `__ptr<void>` indexes load one byte
                 # (unsigned char in C).
                 bool unsigned = source_name.is_value()
                     and (sema.is_unsigned_int_type(state, source_name.value())
@@ -977,9 +969,10 @@ extend Generator {
         # Other ops (`ptr == int`) fall through to the mixed comparison.
         if (_is_pointer(lhs) and _is_int(rhs) and (op == BinaryOp.Add or op == BinaryOp.Sub)) {
             var idx = op == BinaryOp.Add ? rhs : builder.negate(rhs, "negidx");
-            # Stride by the pointer's element type (`char*` is i8, `int*`
-            # i32); opaque (`void*`) pointers stride by byte, as does a
-            # declared pointer result whose element type did not resolve.
+            # Stride by the pointer's element type (`__ptr<char>` is i8,
+            # `__ptr<int>` i32); opaque (`__ptr<void>`) pointers stride by
+            # byte, as does a declared pointer result whose element type did
+            # not resolve.
             llvm.Type element_ty;
             var elem_kind = ptr_elem.is_value() ? ptr_elem.value().kind() : llvm.TypeKind.Void;
             if (ptr_elem.is_value()
@@ -989,10 +982,11 @@ extend Generator {
                 element_ty = ptr_elem.value();
             } else if (ptr_elem_name.is_value() and ptr_elem_name.value() == "void") {
                 element_ty = context.int8_type();
-            } else if (ptr_elem_name.is_value() and ptr_elem_name.value().ends_with("*")) {
-                # A pointer to pointers (`void**`) strides by a pointer.
+            } else if (ptr_elem_name.is_value() and sema.is_pointer_name(ptr_elem_name.value())) {
+                # A pointer to pointers (`__ptr<__ptr<void>>`) strides by a
+                # pointer.
                 element_ty = context.pointer_type();
-            } else if (ty_name.ends_with("*")) {
+            } else if (sema.is_pointer_name(ty_name)) {
                 element_ty = context.int8_type();
             } else {
                 element_ty = context.int32_type();

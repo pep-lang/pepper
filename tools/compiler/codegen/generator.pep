@@ -583,7 +583,7 @@ value_type_name(value: llvm.Value): String {
             return "f64";
         }
         Pointer => {
-            return "void*";
+            return sema.VOID_PTR;
         }
         else => {
             return "unknown";

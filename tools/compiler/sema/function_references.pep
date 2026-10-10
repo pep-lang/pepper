@@ -137,7 +137,7 @@ struct _Referenceable {
     }
 
     method(owner: TypeName, name: String): _Signature? {
-        var own = methods.try_get(_without_stars(owner.to_string()));
+        var own = methods.try_get(owner.without_pointers().to_string());
         if (!own.is_value()) {
             return Optional<_Signature>.Empty;
         }
@@ -145,7 +145,7 @@ struct _Referenceable {
     }
 
     has_field(owner: TypeName, name: String): bool {
-        var names = fields.try_get(_without_stars(owner.to_string()));
+        var names = fields.try_get(owner.without_pointers().to_string());
         return names.is_value() and names.value().contains(name);
     }
 
@@ -163,14 +163,6 @@ struct _Referenceable {
         }
         return Optional<TypeName>.Empty;
     }
-}
-
-_without_stars(text: String): String {
-    var out = text;
-    while (out.ends_with("*")) {
-        out = out.substr_bytes(0, out.size - 1);
-    }
-    return out;
 }
 
 ## What a reference names.

@@ -11,8 +11,10 @@ export const AUTO = "__auto";
 export const VOID = "void";
 ## The type of a condition.
 export const BOOL = "bool";
-## The untyped pointer.
-export const VOID_PTR = "void*";
+## The raw pointer type: `__ptr<T>`, which C's `T*` is parsed as.
+export const POINTER = "__ptr";
+## The untyped pointer, `__ptr<void>`, as `to_string` spells it.
+export const VOID_PTR = "__ptr<void>";
 ## Function types: `(P1, P2) => R` is `__function<R, P1, P2>`.
 export const FUNCTION = "__function";
 ## Thread-safe function types: `shared (P1, P2) => R` is
@@ -28,13 +30,14 @@ export const TUPLE = "__tuple";
 ## The built-in vector type `__simd<T, N>`.
 export const SIMD = "__simd";
 
-## Returns whether `name` is a primitive type (`int`, `bool`, `void*`, ...).
+## Returns whether `name` is a primitive type (`int`, `bool`, `__ptr<void>`,
+## ...).
 ##
 ## @param name the type's name
 ## @returns true for a primitive
 export is_integral_name(name: String): bool {
     match (name) {
-        "void", "__auto", "bool", "void*", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64", "ulong", "f64", "double", "f32", "float" => {
+        "void", "__auto", "bool", "__ptr<void>", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64", "ulong", "f64", "double", "f32", "float" => {
             return true;
         }
         else => {
@@ -82,11 +85,19 @@ export extend TypeName {
         return TypeName(name = BOOL);
     }
 
-    ## Returns `void*`.
+    ## Returns `__ptr<pointee>`.
+    ##
+    ## @param pointee the type pointed at
+    ## @returns the type
+    static pointer_to(pointee: TypeName): TypeName {
+        return TypeName(name = POINTER, sub_types = [pointee]);
+    }
+
+    ## Returns `__ptr<void>`.
     ##
     ## @returns the type
     static void_pointer(): TypeName {
-        return TypeName(name = VOID_PTR);
+        return TypeName.pointer_to(TypeName.void());
     }
 
     ## Returns whether this is a plain (scalar) type rather than a pointer
@@ -112,20 +123,13 @@ export extend TypeName {
         return is_function_type() or is_extern_function_type();
     }
 
-    ## Returns whether this type, or a type nested in it, is `name` (or a
-    ## pointer to it).
+    ## Returns whether this type, or a type nested in it (a pointer's
+    ## pointee included), is `name`.
     ##
     ## @param name the type name
     ## @returns true when it appears
     mentions(name: String): bool {
         if (this.name == name) {
-            return true;
-        }
-        var bare = this.name;
-        while (bare.ends_with("*")) {
-            bare = bare.substr_bytes(0, bare.size - 1);
-        }
-        if (bare == name) {
             return true;
         }
         for (var t in sub_types) {
@@ -250,11 +254,37 @@ export extend TypeName {
         return false;
     }
 
-    ## Returns whether this is a plain pointer type.
+    ## Returns whether this is a raw pointer type.
     ##
-    ## @returns true for `int*`, `void*`, ...
+    ## @returns true for `__ptr<int>`, `__ptr<void>`, ...
     is_pointer(): bool {
-        return flags == TypeFlags.Scalar and name.ends_with("*");
+        return name == POINTER and sub_types.count == 1;
+    }
+
+    ## Returns the type a raw pointer points at.
+    ##
+    ## @returns `T` for `__ptr<T>`; none for any other type
+    pointee(): TypeName? {
+        return is_pointer() ? Optional<TypeName>.Value(sub_types[0]) : Optional<TypeName>.Empty;
+    }
+
+    ## Returns the type under every pointer layer: `int` for
+    ## `__ptr<__ptr<int>>`, and the type itself when it is no pointer.
+    ##
+    ## @returns the type
+    without_pointers(): TypeName {
+        var out = this;
+        while (out.is_pointer()) {
+            out = out.sub_types[0];
+        }
+        return out;
+    }
+
+    ## Returns whether this is the untyped pointer.
+    ##
+    ## @returns true for `__ptr<void>`
+    is_void_pointer(): bool {
+        return is_pointer() and sub_types[0].name == VOID and sub_types[0].sub_types.count == 0;
     }
 
     ## Returns whether this type has type arguments.
@@ -274,9 +304,9 @@ export extend TypeName {
     ## Returns whether this is a primitive type. An enum, which sema also
     ## stores as an integer, is not known here.
     ##
-    ## @returns true for `int`, `bool`, `void*`, ...
+    ## @returns true for `int`, `bool`, `__ptr<void>`, ...
     is_integral(): bool {
-        return flags == TypeFlags.Scalar and is_integral_name(name);
+        return flags == TypeFlags.Scalar and (is_integral_name(name) or is_void_pointer());
     }
 
     ## Returns the type as the programmer writes it, for error messages:
@@ -367,7 +397,7 @@ export extend TypeName {
     }
 
     ## Replaces generic parameter `param_name` with `type_arg` throughout
-    ## this type, a pointer to it (`T*`) included.
+    ## this type, a pointer to it (`__ptr<T>`) included.
     ##
     ## @param param_name the parameter's name
     ## @param type_arg the type it stands for
@@ -377,8 +407,6 @@ export extend TypeName {
             # same (`Twin<T>` with `T` = `Box<T>`), which is not this one.
             assign(type_arg.copy());
             return;
-        } else if (name.ends_with("*") and name.substr_bytes(0, name.size - 1) == param_name) {
-            name = $"{type_arg.to_string()}*";
         }
         for (var arg in sub_types) {
             arg.replace(param_name, type_arg);
@@ -398,8 +426,8 @@ export replace_map(ty: TypeName, type_map: Array<(String, TypeName)>) {
 }
 
 ## Returns the type a call's function string spells (`Result<int>.ok`'s
-## receiver `Result<int>`, `g<I>`), its arguments parsed; a pointer type or
-## an operator's name is one name.
+## receiver `Result<int>`, `g<I>`), its arguments parsed; an operator's
+## name is one name.
 ##
 ## @param text the string
 ## @returns the type
@@ -408,9 +436,6 @@ export parse_type_string(text: String): TypeName {
     var set = set_name(text);
     if (set.ends_with(">")) {
         s = set;
-    }
-    if (s.ends_with("*")) {
-        return TypeName.named(s);
     }
     var open = s.find("<");
     if (open <= 0 or !s.ends_with(">") or s.size <= open as ulong + 1) {
@@ -446,4 +471,56 @@ export parse_type_string(text: String): TypeName {
         }
     }
     return TypeName.with_args(name, args);
+}
+
+## Returns whether `text`, a type as `TypeName.to_string` spells it, is a
+## raw pointer: `__ptr<T>`.
+##
+## @param text the type's text
+## @returns true for a pointer
+export is_pointer_name(text: String): bool {
+    if (!text.starts_with("__ptr<") or !text.ends_with(">")) {
+        return false;
+    }
+    # The last `>` must close the first `<`, not end `__ptr<A>.f<B>`.
+    ulong depth = 1;
+    ulong i = 6;
+    while (i + 1 < text.size) {
+        var b = text.byte_at(i);
+        if (b == '<') {
+            depth += 1;
+        } else if (b == '>') {
+            depth -= 1;
+            if (depth == 0) {
+                return false;
+            }
+        }
+        i += 1;
+    }
+    return true;
+}
+
+## Returns the type a raw pointer spelled `text` points at: `int` for
+## `__ptr<int>`.
+##
+## @param text the type's text
+## @returns the pointee's text; none when `text` is no pointer
+export pointee_name(text: String): String? {
+    if (!is_pointer_name(text)) {
+        return Optional<String>.Empty;
+    }
+    return Optional<String>.Value(text.substr_bytes(6, text.size - 7));
+}
+
+## Returns `text`, a type's spelling, under every pointer layer: `int` for
+## `__ptr<__ptr<int>>`.
+##
+## @param text the type's text
+## @returns the innermost pointee's text, or `text` when it is no pointer
+export without_pointer_names(text: String): String {
+    var out = text;
+    while (is_pointer_name(out)) {
+        out = out.substr_bytes(6, out.size - 7);
+    }
+    return out;
 }

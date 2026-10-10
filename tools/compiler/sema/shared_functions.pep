@@ -43,7 +43,7 @@ import [PassState] from "state";
 import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [apply_synthesized, finish] from "synthesize";
-import [FUNCTION, parse_type_string, SHARED_FUNCTION, VOID] from "type_name";
+import [FUNCTION, is_pointer_name, parse_type_string, SHARED_FUNCTION, VOID] from "type_name";
 import [Rewriter, rewrite_children] from "walk";
 
 ## The field of an adapter holding the `shared` value it forwards to.
@@ -581,7 +581,7 @@ _spelled(name: String): String {
 ## `bool`, a pointer, or another C function pointer.
 _is_c_type(ty: TypeName, state: PassState): bool {
     var name = _canonical(ty).to_string();
-    return is_numeric_type(state, name) or name.ends_with("*") or _parsed(ty).is_extern_function_type();
+    return is_numeric_type(state, name) or is_pointer_name(name) or _parsed(ty).is_extern_function_type();
 }
 
 ## The first part of a C function pointer type nested anywhere in `ty`

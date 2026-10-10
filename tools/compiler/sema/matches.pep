@@ -1716,7 +1716,9 @@ struct _MatchLowering {
         ).with_note("handle each case, or add an 'else' arm", Optional<Location>.Empty);
         i = 0;
         while (i < missing_cases.count and i < SHOWN) {
-            diagnostic = diagnostic.with_note($"'{missing_cases[i].name}' declared here", known_location(missing_cases[i].loc));
+            diagnostic = diagnostic.with_note(
+                $"'{missing_cases[i].name}' declared here", known_location(missing_cases[i].loc)
+            );
             i += 1;
         }
         report(diagnostic);

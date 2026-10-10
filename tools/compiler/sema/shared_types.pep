@@ -79,10 +79,7 @@ export unsafe_part_in(ty: TypeName, safe: ThreadSafeStructs): TypeName? {
     if (ty.is_function_type()) {
         return Optional<TypeName>.Value(ty);
     }
-    if (name.ends_with("*")) {
-        return unsafe_part_in(parse_type_string(name.substr_bytes(0, name.size - 1)), safe);
-    }
-    if (ty.is_weak()) {
+    if (ty.is_pointer() or ty.is_weak()) {
         return unsafe_part_in(ty.sub_types[0], safe);
     }
     # A tuple is its elements, held by value.

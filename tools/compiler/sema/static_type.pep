@@ -273,7 +273,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             return current;
         }
         StringLiteral(node) => {
-            return _known(TypeName.named(node.is_raw ? "char*" : "String"));
+            return _known(node.is_raw ? TypeName.pointer_to(TypeName.named("char")) : TypeName.named("String"));
         }
         StaticString(_) => {
             return _known(TypeName.named("String"));
@@ -347,9 +347,9 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             }
             for (var lhs_type in candidates) {
                 var keys = Array<TypeName>();
-                var text = lhs_type.to_string();
-                if (text.ends_with("*")) {
-                    keys.append(TypeName.named(text.substr_bytes(0, text.size - 1)));
+                var pointee = lhs_type.pointee();
+                if (pointee.is_value()) {
+                    keys.append(pointee.value());
                 }
                 keys.append(lhs_type);
                 for (var key in keys) {
@@ -382,7 +382,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             return _known(TypeName.named("u32"));
         }
         FunctionPointer(_) => {
-            return _known(TypeName.named("void*"));
+            return _known(TypeName.void_pointer());
         }
         ForIterator(source) => {
             var source_type = static_type_of(source, table, current, state);
@@ -402,9 +402,9 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
                 return none;
             }
             # A pointer receiver indexes raw: the element is the pointee.
-            var text = lhs.value().to_string();
-            if (text.ends_with("*")) {
-                return _known(parse_type_string(text.substr_bytes(0, text.size - 1)));
+            var pointee = lhs.value().pointee();
+            if (pointee.is_value()) {
+                return _known(pointee.value().copy());
             }
             var info = table.lookup(lhs.value());
             return info.is_value() ? info.value().returns.try_get("__index_get") : none;
@@ -417,8 +417,8 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (!lhs.is_value()) {
                 return none;
             }
-            var text = lhs.value().to_string();
-            return text.ends_with("*") ? _known(parse_type_string(text.substr_bytes(0, text.size - 1))) : none;
+            var pointee = lhs.value().pointee();
+            return pointee.is_value() ? _known(pointee.value().copy()) : none;
         }
         FunctionCall(node) => {
             if (tuple_constructor_labels(node.function).is_value()) {

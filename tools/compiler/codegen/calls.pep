@@ -1237,7 +1237,7 @@ extend Generator {
             return Result<void>.ok();
         }
         var arg_ty = found.value();
-        if (!structs.contains(arg_ty) or !(param.ends_with("*") or param.starts_with("__ptr<"))) {
+        if (!structs.contains(arg_ty) or !sema.is_pointer_name(param)) {
             return Result<void>.ok();
         }
         var hint = arg_ty == "String" ? "; pass its 'c_str()'" : "";

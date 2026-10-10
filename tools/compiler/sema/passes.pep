@@ -5,7 +5,6 @@
 ## `PORTED_STEPS`, then the specialization loop, whose steps a program
 ## runs as many rounds of as it needs.
 
-import [LayerDecls] from "pending";
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import io;
 import [Target] from compiler.link;
@@ -49,6 +48,7 @@ import [bind_calls, check_link_attributes, check_named_attributes] from "named_a
 import [check_overloads] from "overload_checks";
 import [has_overloads] from "overload_select";
 import [name_overloads] from "overloads";
+import [LayerDecls] from "pending";
 import [apply_platform_filters] from "platform";
 import [check_ranges] from "ranges";
 import [release_field_refs] from "release_field_refs";

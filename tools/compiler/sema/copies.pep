@@ -229,19 +229,6 @@ _struct_named(module: Module, ty: TypeName): StructDef? {
     return Optional<StructDef>.Empty;
 }
 
-_is_raw_pointer(ty: TypeName): bool {
-    return ty.is_pointer() or (ty.name == "__ptr" and ty.sub_types.count == 1);
-}
-
-## A raw pointer type as the programmer writes it (`__ptr<char>`).
-_pointer_display(ty: TypeName): String {
-    var text = ty.to_string();
-    if (text.ends_with("*")) {
-        return $"__ptr<{_pointer_display(parse_type_string(text.substr_bytes(0, text.size - 1)))}>";
-    }
-    return ty.display();
-}
-
 ## The reason of `[NotCopyable("why")]`, when the struct has one: empty for
 ## a bare `[NotCopyable]`.
 _not_copyable(module: Module, st: StructDef): String? {
@@ -364,7 +351,7 @@ _plan(module: Module, safe: ThreadSafeStructs, ty: TypeName): _CopyPlan {
     if (ty.is_function_type()) {
         return _CopyPlan.Blocked(_Blocker(_BlockerKind.PlainFunction, ty));
     }
-    if (_is_raw_pointer(ty)) {
+    if (ty.is_pointer()) {
         return _CopyPlan.Blocked(_Blocker(_BlockerKind.RawPointer, ty));
     }
     if (trait_def(module.traits, ty).is_value()) {
@@ -395,7 +382,7 @@ _plan(module: Module, safe: ThreadSafeStructs, ty: TypeName): _CopyPlan {
         return _CopyPlan.Blocked(blocker);
     }
     for (var field in st.field_members) {
-        if (_is_raw_pointer(field.ty)) {
+        if (field.ty.is_pointer()) {
             var blocker = _Blocker(_BlockerKind.RawPointerField, ty);
             blocker.field = field.name;
             blocker.field_ty = field.ty;
@@ -1401,7 +1388,9 @@ _cannot_copy(
     for (var hop in path) {
         if (hop.is_field) {
             var step = hop.owner.is_tuple() ? $"element {hop.field}" : $"field '{hop.field}'";
-            diagnostic = diagnostic.with_note($"'{hop.owner.display()}' reaches it through {step}", known_location(hop.loc));
+            diagnostic = diagnostic.with_note(
+                $"'{hop.owner.display()}' reaches it through {step}", known_location(hop.loc)
+            );
         } else if (at.file == hop.loc.file) {
             # A runtime container's `copy` method is not the program's to
             # change: point only at a `Copyable` method in the error's file.
@@ -1425,7 +1414,7 @@ _cannot_copy(
         }
         RawPointerField => {
             diagnostic = diagnostic.with_note(
-                $"'{blocker.ty.display()}' has raw pointer field '{blocker.field}' of type '{_pointer_display(blocker.field_ty)}'",
+                $"'{blocker.ty.display()}' has raw pointer field '{blocker.field}' of type '{blocker.field_ty.display()}'",
                 known_location(blocker.loc)
             );
             var st = _struct_named(module, blocker.ty);

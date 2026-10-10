@@ -383,7 +383,7 @@ export struct Callee {
             var p = function.parameters[i];
             bool erased = p.ty.contains_auto();
             for (var g in names) {
-                if (_mentions(p.ty, g)) {
+                if (p.ty.mentions(g)) {
                     erased = true;
                 }
             }
@@ -419,25 +419,6 @@ export struct Callee {
         }
         return Optional<(ulong, bool)>.Empty;
     }
-}
-
-_mentions(ty: TypeName, name: String): bool {
-    if (ty.name == name) {
-        return true;
-    }
-    var bare = ty.name;
-    while (bare.ends_with("*")) {
-        bare = bare.substr_bytes(0, bare.size - 1);
-    }
-    if (bare == name) {
-        return true;
-    }
-    for (var t in ty.sub_types) {
-        if (_mentions(t, name)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 ## The location of argument `index` of `args` (its name, if named).

@@ -237,10 +237,7 @@ export struct Conformance {
         if (ty.is_function_type()) {
             return Optional<TypeName>.Value(ty);
         }
-        if (name.ends_with("*")) {
-            return _unshared_part(parse_type_string(name.substr_bytes(0, name.size - 1)), scope);
-        }
-        if ((ty.name == "__ptr" or ty.is_weak()) and ty.sub_types.count == 1) {
+        if (ty.is_pointer() or ty.is_weak()) {
             return _unshared_part(ty.sub_types[0], scope);
         }
         if (ty.is_tuple()) {

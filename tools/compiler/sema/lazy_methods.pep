@@ -310,10 +310,7 @@ struct _MethodUses {
             anywhere.insert(name);
             return;
         }
-        var key = ty.value().to_string();
-        while (key.ends_with("*")) {
-            key = key.substr_bytes(0, key.size - 1);
-        }
+        var key = ty.value().without_pointers().to_string();
         on.insert($"{key}\n{name}");
     }
 }

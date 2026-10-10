@@ -17,7 +17,7 @@ import [PassState] from "state";
 import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [trait_def] from "traits";
-import [VOID_PTR] from "type_name";
+import [POINTER] from "type_name";
 import "value_structs";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
@@ -91,7 +91,7 @@ struct _Casts {
         if (kind == CastKind.Synthesized) {
             return;
         }
-        TypeName from = TypeName.named(VOID_PTR);
+        TypeName from = TypeName.void_pointer();
         if (!_is_null(operand)) {
             var found = static_type_of(operand, table, current, state);
             if (!found.is_value() or found.value().contains_auto()) {
@@ -111,7 +111,7 @@ struct _Casts {
         # A trait value may hold something else: its conversion can fail.
         var text = message.value();
         if (kind == CastKind.Static and trait_def(module.traits, from).is_value()) {
-            text = $"{text}; use 'as?' to convert a trait value, which gives '{cast_spelled(ty)}?'";
+            text = $"{text}; use 'as?' to convert a trait value, which gives '{constraint_spelled(ty)}?'";
         }
         state.report(error_at(text, loc));
     }
@@ -140,10 +140,10 @@ _category(ty: TypeName, state: PassState): _CastCategory {
     if (ty.is_extern_function_type()) {
         return _CastCategory.Pointer;
     }
-    if (name == VOID_PTR or (ty.name == "__ptr" and ty.sub_types.count > 0 and ty.sub_types[0].to_string() == "void")) {
+    if (ty.is_void_pointer()) {
         return _CastCategory.VoidPointer;
     }
-    if ((ty.is_scalar() and name.ends_with("*")) or ty.name == "__ptr") {
+    if (ty.name == POINTER) {
         return _CastCategory.Pointer;
     }
     # Indexing a `void` pointer reads one byte.
@@ -164,18 +164,6 @@ _category(ty: TypeName, state: PassState): _CastCategory {
         return _CastCategory.Float(width.value());
     }
     return _CastCategory.Integer(width.value());
-}
-
-## The type as written in source: `__ptr<int>` for sema's `int*`.
-##
-## @param ty the type
-## @returns its spelling
-export cast_spelled(ty: TypeName): String {
-    var name = ty.to_string();
-    if (ty.is_scalar() and name.ends_with("*")) {
-        return $"__ptr<{cast_spelled(TypeName.named(name.substr_bytes(0, name.size - 1)))}>";
-    }
-    return constraint_spelled(ty);
 }
 
 _is_number(c: _CastCategory): bool {
@@ -311,8 +299,8 @@ export check_cast(from: TypeName, to: TypeName, kind: CastKind, state: PassState
     }
     var source = _category(from, state);
     var target = _category(to, state);
-    var from_text = cast_spelled(from);
-    var to_text = cast_spelled(to);
+    var from_text = constraint_spelled(from);
+    var to_text = constraint_spelled(to);
     if (kind == CastKind.Static) {
         if (_is_static(source, target)) {
             return ok;

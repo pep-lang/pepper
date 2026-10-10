@@ -170,9 +170,6 @@ export struct PassState {
     ## @param name the type's spelling
     ## @returns true for a `[Value]` struct
     is_value_struct(name: String): bool {
-        if (name.ends_with("*")) {
-            return false;
-        }
         var open = name.find("<");
         var base = open < 0 ? name : name.substr_bytes(0, open as ulong);
         return value_structs.contains(base);

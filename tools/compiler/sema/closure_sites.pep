@@ -224,10 +224,7 @@ export struct SiteTable {
     }
 
     _field(owner: TypeName, name: String): TypeName? {
-        var key = owner.to_string();
-        while (key.ends_with("*")) {
-            key = key.substr_bytes(0, key.size - 1);
-        }
+        var key = owner.without_pointers().to_string();
         var found = fields.try_get(key);
         return found.is_value() ? found.value().try_get(name) : Optional<TypeName>.Empty;
     }

@@ -135,7 +135,7 @@ export zero_for(state: PassState, ty: TypeName): Expression {
     if (ty.is_tuple() or ty.name == SIMD or state.is_value_struct(spelled)) {
         return Expression.Default(ty.copy());
     }
-    bool pointer = scalar and ty.name.ends_with("*");
+    bool pointer = ty.is_pointer();
     bool is_struct = scalar and !state.is_integral(ty.name) and ty.name != SIMD;
     if (pointer or is_struct) {
         return Expression.PointerLiteral;

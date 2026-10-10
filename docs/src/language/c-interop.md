@@ -117,7 +117,7 @@ a C string, so a `String` value cannot be passed where C expects `char*`.
 Passing a `String` value directly to an extern's `char*` parameter is an error:
 
 ```text
-main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type '__ptr<char>'; pass its 'c_str()'
     4 |     return strlen(name) as int;
       |                   ^~~~
 ```
@@ -260,7 +260,7 @@ and pass a named function, or a closure that captures nothing:
   convert:
 
   ```text
-  main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) => int' captures 'bias'; a C function pointer cannot hold captured values
+  main.pep:4:43: error: closure passed as C function pointer type 'extern (__ptr<void>, __ptr<void>) => int' captures 'bias'; a C function pointer cannot hold captured values
       4 |     qsort(_pep_malloc(4), 0, 4, (a, b) => bias);
         |                                           ^~~~
   main.pep:3:9: note: pass what the callback needs through the C function's context argument instead

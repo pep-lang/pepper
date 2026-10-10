@@ -210,10 +210,7 @@ _all_params(base: FunctionDef): String {
 
 ## The struct `owner` (or a pointer to it) spells.
 _struct_spelled(module: Module, owner: TypeName): StructDef? {
-    var key = owner.to_string();
-    while (key.ends_with("*")) {
-        key = key.substr_bytes(0, key.size - 1);
-    }
+    var key = owner.without_pointers().to_string();
     for (var st in module.structs) {
         if (st.ty.to_string() == key) {
             return Optional<StructDef>.Value(st);

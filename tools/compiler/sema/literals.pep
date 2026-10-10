@@ -69,7 +69,7 @@ extend _NegationFolder with Rewriter;
 ## @returns the expression, converted if it is a string literal
 export convert_string_literal(e: Expression): Expression {
     if (e is StringLiteral(literal)) {
-        # Raw literals are `char*` globals; they stay as they are.
+        # Raw literals are `__ptr<char>` globals; they stay as they are.
         if (literal.is_raw) {
             return e;
         }

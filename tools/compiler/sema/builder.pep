@@ -75,7 +75,7 @@ import [
     WhileStaticItem,
     WithSubject
 ] from "model";
-import [AUTO, TUPLE] from "type_name";
+import [AUTO, POINTER, TUPLE] from "type_name";
 import [Rewriter, rewrite_block, rewrite_expression, rewrite_children] from "walk";
 
 ## What a build step makes, or the error that stops the build.
@@ -142,8 +142,8 @@ const _LITERAL_THEN = "_literal_then";
 export build_file(module: ast.Module, file: uint): Result<Module, Diagnostic> {
     var builder = _Builder(file);
     var built = builder.build_module(module);
-    if (builder.label_error.is_value()) {
-        return Result<Module, Diagnostic>.Err(builder.label_error.value());
+    if (builder.type_error.is_value()) {
+        return Result<Module, Diagnostic>.Err(builder.type_error.value());
     }
     if (built.is_ok()) {
         var out = built.value();
@@ -1429,9 +1429,10 @@ _key_with(key: String[], part: String): String[] {
 struct _Builder {
     ## The file being built, whose index every location carries.
     var file: uint;
-    ## The first bad tuple label `type_name_from` met, reported when the
-    ## build finishes.
-    var label_error: Diagnostic? = Optional<Diagnostic>.Empty;
+    ## The first bad type `type_name_from` met (a tuple's labels, or
+    ## `__ptr` without exactly one argument), reported when the build
+    ## finishes.
+    var type_error: Diagnostic? = Optional<Diagnostic>.Empty;
     ## The declared return type of the function or closure being built.
     var return_type: ast.TypeName? = Optional<ast.TypeName>.Empty;
     ## The generic types written with arguments so far.
@@ -1599,7 +1600,9 @@ struct _Builder {
     }
 
     ## The sema type of the type written `t`: `int[]` is `Array<int>`,
-    ## `Tuple<A, B>` is `(A, B)`, and a generic type's use is recorded.
+    ## `Tuple<A, B>` is `(A, B)`, and a generic type's use is recorded. A
+    ## pointer is `__ptr<T>` however it is written, since the parser makes
+    ## that of `T*`.
     type_name_from(t: ast.TypeName): TypeName {
         var args = Array<TypeName>();
         for (var a in t.generic_types) {
@@ -1614,6 +1617,13 @@ struct _Builder {
         }
         if (t.name == "Tuple" and args.count >= 2) {
             return TypeName.with_args(TUPLE, args);
+        }
+        if (t.name == POINTER and args.count != 1 and type_error.is_empty()) {
+            type_error = Optional<Diagnostic>.Value(
+                _error(
+                    $"__ptr<T> takes exactly one type argument, {args.count} given in '{t.to_string()}'", loc(t.span)
+                )
+            );
         }
         if (args.count == 0) {
             return TypeName.named(t.name);
@@ -1670,8 +1680,8 @@ struct _Builder {
                 k += 1;
             }
         }
-        if (error.is_value() and label_error.is_empty()) {
-            label_error = error;
+        if (error.is_value() and type_error.is_empty()) {
+            type_error = error;
         }
     }
 

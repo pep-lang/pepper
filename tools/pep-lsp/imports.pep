@@ -277,7 +277,7 @@ export named_type(program: link.Program, document: Module, offset: ulong): Found
     return _found(base, linked.is_value() ? linked : declaration_named(program, base));
 }
 
-## A type's name without the pointer stars and array brackets after it.
+## A type's name without the array brackets after it.
 ##
 ## @param name the type's name
 ## @returns the base name
@@ -285,7 +285,7 @@ export base_type_name(name: String): String {
     var end = name.size;
     while (end > 0) {
         var b = name.byte_at(end - 1);
-        if (b != '*' and b != '[' and b != ']') {
+        if (b != '[' and b != ']') {
             break;
         }
         end -= 1;

@@ -1,15 +1,14 @@
 ## The compiler's intrinsics: `pepper_sema::passes::convert_intrinsics` in
-## Pepper. `__ptr<T>` types become `T*`, and calls such as `__is_pod<T>()`,
-## `__address<T>(v)`, the atomics, the weak-reference operations and
-## `__simd_<op>` become the intrinsic nodes codegen lowers;
-## `__function_pointer(f)` becomes a `FunctionPointer`.
+## Pepper. Calls such as `__is_pod<T>()`, `__address<T>(v)`, the atomics,
+## the weak-reference operations and `__simd_<op>` become the intrinsic
+## nodes codegen lowers; `__function_pointer(f)` becomes a
+## `FunctionPointer`. Pointer types need nothing here: `__ptr<T>` is the
+## only spelling of one, which the parser makes of C's `T*`.
 
-import [Diagnostic] from compiler.diagnostic;
 import [error_at] from "common";
 import [Loc] from "loc";
 import [
     AtomicFetchOp,
-    Block,
     Expression,
     FunctionCallExpression,
     FunctionDef,
@@ -17,7 +16,6 @@ import [
     Module,
     SimdExpression,
     SimdOp,
-    Statement,
     StructDef,
     TypeName,
     WeakOp
@@ -113,82 +111,6 @@ _simd_arity(op: SimdOp): ulong {
     return 2;
 }
 
-## `ty` with each `__ptr<T>` written `T*`, inner first, so `__ptr<__ptr<int>>`
-## is `int**` and `Array<__ptr<char>>` is `Array<char*>`.
-_convert_pointer_type(ty: TypeName, state: PassState) {
-    for (var sub in ty.sub_types) {
-        _convert_pointer_type(sub, state);
-    }
-    if (ty.name == "__ptr") {
-        if (ty.sub_types.count != 1) {
-            state.report(
-                Diagnostic.error(
-                    $"__ptr<T> takes exactly one type argument, {ty.sub_types.count} given in '{ty.to_string()}'"
-                )
-            );
-            return;
-        }
-        var pointee = ty.sub_types[0].to_string();
-        var converted = TypeName.named($"{pointee}*");
-        ty.name = converted.name;
-        ty.sub_types = converted.sub_types;
-        ty.flags = converted.flags;
-        ty.labels = converted.labels;
-    }
-}
-
-## Converts the types an expression node carries.
-_convert_node_types(e: Expression, state: PassState) {
-    match (e) {
-        Cast(node) => {
-            _convert_pointer_type(node.ty, state);
-        }
-        SizeOf(ty) => {
-            _convert_pointer_type(ty, state);
-        }
-        IsPod(ty) => {
-            _convert_pointer_type(ty, state);
-        }
-        Default(ty) => {
-            _convert_pointer_type(ty, state);
-        }
-        StaticCase(node) => {
-            _convert_pointer_type(node.ty, state);
-        }
-        Subject(node) => {
-            _convert_pointer_type(node.ty, state);
-        }
-        Allocate(ty) => {
-            _convert_pointer_type(ty, state);
-        }
-        RefCount(ty, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        Address(ty, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        Weak(_, ty, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        AtomicLoad(ty, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        AtomicStore(ty, _, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        AtomicCmpXchg(ty, _, _, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        AtomicFetch(_, ty, _, _) => {
-            _convert_pointer_type(ty, state);
-        }
-        Simd(node) => {
-            _convert_pointer_type(node.ty, state);
-        }
-        else => {}
-    }
-}
-
 ## The type argument a call spells (`T` of `__address<T>`), else its name.
 _intrinsic_type(function: String): TypeName {
     var parsed = parse_type_string(function);
@@ -206,12 +128,9 @@ struct _IntrinsicConverter {
     }
 
     rewrite(e: Expression): Expression {
-        _convert_node_types(e, state);
         if (e is FunctionCall(node)) {
             var out = _convert_call(node.function, node.args, node.loc);
             if (out.is_value()) {
-                # The intrinsic node the call became.
-                _convert_node_types(out.value(), state);
                 return out.value();
             }
         }
@@ -304,45 +223,9 @@ struct _IntrinsicConverter {
 
 extend _IntrinsicConverter with Rewriter;
 
-## Converts the types of the locals `block` declares, anywhere in it.
-_convert_block_declarations(block: Block, converter: _IntrinsicConverter, state: PassState) {
-    for (var item in block.items) {
-        match (item) {
-            Declaration(declaration) => {
-                if (declaration is Variable(variable)) {
-                    _convert_pointer_type(variable.ty, state);
-                    if (variable.default.is_value()) {
-                        variable.default = Optional<Expression>.Value(
-                            rewrite_expression(variable.default.value(), converter)
-                        );
-                    }
-                }
-            }
-            Block(inner) => {
-                _convert_block_declarations(inner, converter, state);
-            }
-            Branch(branch) => {
-                _convert_block_declarations(branch.if_block, converter, state);
-                if (branch.else_block.is_value()) {
-                    _convert_block_declarations(branch.else_block.value(), converter, state);
-                }
-            }
-            While(loop) => {
-                _convert_block_declarations(loop.block, converter, state);
-            }
-            else => {}
-        }
-    }
-}
-
-_convert_intrinsics_of(function: FunctionDef, converter: _IntrinsicConverter, state: PassState) {
-    _convert_pointer_type(function.ty, state);
-    for (var p in function.parameters) {
-        _convert_pointer_type(p.ty, state);
-    }
+_convert_intrinsics_of(function: FunctionDef, converter: _IntrinsicConverter) {
     if (function.body.is_value()) {
         rewrite_block(function.body.value(), converter);
-        _convert_block_declarations(function.body.value(), converter, state);
     }
 }
 
@@ -447,38 +330,24 @@ export convert_intrinsics(module: Module, state: PassState) {
     }
     var converter = _IntrinsicConverter(state);
     for (var f in module.functions) {
-        _convert_intrinsics_of(f, converter, state);
+        _convert_intrinsics_of(f, converter);
     }
     for (var g in module.globals) {
-        _convert_pointer_type(g.ty, state);
         if (g.default.is_value()) {
             g.default = Optional<Expression>.Value(rewrite_expression(g.default.value(), converter));
         }
     }
-    # A trait's signatures, which its instances copy for the calls through a
-    # value. The bodies of default methods are converted in the structs
+    # The bodies of a trait's default methods are converted in the structs
     # they are copied into.
-    for (var t in module.traits) {
-        for (var m in t.methods) {
-            _convert_pointer_type(m.ty, state);
-            for (var p in m.parameters) {
-                _convert_pointer_type(p.ty, state);
-            }
-        }
-    }
     for (var st in module.structs) {
-        for (var f in st.field_members) {
-            _convert_pointer_type(f.ty, state);
-        }
         for (var m in st.method_members) {
-            _convert_intrinsics_of(m, converter, state);
+            _convert_intrinsics_of(m, converter);
         }
         for (var c in st.constructors) {
-            _convert_intrinsics_of(c, converter, state);
+            _convert_intrinsics_of(c, converter);
         }
-        _convert_intrinsics_of(st.destructor, converter, state);
+        _convert_intrinsics_of(st.destructor, converter);
     }
-    _convert_trait_references(module, state);
 }
 
 _bodies_of(st: StructDef): FunctionDef[] {
@@ -488,51 +357,3 @@ _bodies_of(st: StructDef): FunctionDef[] {
     out.append(st.destructor);
     return out;
 }
-
-## The type a reference to a trait-typed variable carries, converted like
-## the variable's declaration: only trait types, since elsewhere a
-## reference's `__ptr<S>` spelling tells a raw pointer from a reference to
-## struct `S`.
-_convert_trait_references(module: Module, state: PassState) {
-    var traits = HashSet<String>();
-    for (var t in module.traits) {
-        traits.insert(t.name);
-    }
-    if (traits.count == 0) {
-        return;
-    }
-    var converter = _TraitReferenceConverter(traits, state);
-    for (var f in module.functions) {
-        if (f.body.is_value()) {
-            rewrite_block(f.body.value(), converter);
-        }
-    }
-    for (var st in module.structs) {
-        for (var m in _bodies_of(st)) {
-            if (m.body.is_value()) {
-                rewrite_block(m.body.value(), converter);
-            }
-        }
-    }
-}
-
-struct _TraitReferenceConverter {
-    var traits: HashSet<String>;
-    var state: PassState;
-
-    construct(traits: HashSet<String>, state: PassState) {
-        this.traits = traits;
-        this.state = state;
-    }
-
-    rewrite(e: Expression): Expression {
-        if (e is SymbolRef(node)) {
-            if (traits.contains(node.ty.name)) {
-                _convert_pointer_type(node.ty, state);
-            }
-        }
-        return e;
-    }
-}
-
-extend _TraitReferenceConverter with Rewriter;

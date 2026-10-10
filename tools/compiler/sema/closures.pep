@@ -753,12 +753,12 @@ export closure_struct(
     var fields = [
         field_def(
             INVOKE_FIELD,
-            TypeName.named("void*"),
+            TypeName.void_pointer(),
             Optional<Expression>.Value(Expression.MethodAddress(CALL_METHOD)),
             loc
         ),
         field_def(
-            DESTROY_FIELD, TypeName.named("void*"), Optional<Expression>.Value(Expression.MethodAddress("__dtor")), loc
+            DESTROY_FIELD, TypeName.void_pointer(), Optional<Expression>.Value(Expression.MethodAddress("__dtor")), loc
         )
     ];
     fields.append_all(captures);

@@ -103,10 +103,7 @@ export member_at(module: Module, state: PassState, file: uint, source: String, o
             return none;
         }
     }
-    var pointee = ty.value().to_string();
-    while (pointee.ends_with("*")) {
-        pointee = pointee.substr_bytes(0, pointee.size - 1);
-    }
+    var pointee = ty.value().without_pointers().to_string();
     var angle = pointee.find("<");
     var base = angle < 0 ? pointee : pointee.substr_bytes(0, angle as ulong);
     # A generic method's specialization (`pick<int>`) is `pick`; an

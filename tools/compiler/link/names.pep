@@ -38,8 +38,8 @@ export demangle_name(name: String): String {
     return name;
 }
 
-## Returns a type's name without the pointer stars and array brackets
-## after it: `Point` for `Point*` and `Point[]`.
+## Returns a type's name without the array brackets after it: `Point` for
+## `Point[]`.
 ##
 ## @param name a type's name
 ## @returns the base name
@@ -47,7 +47,7 @@ export base_type_name(name: String): String {
     ulong size = name.size;
     while (size > 0) {
         var b = name.byte_at(size - 1);
-        if (b != '*' and b != '[' and b != ']') {
+        if (b != '[' and b != ']') {
             break;
         }
         size -= 1;
@@ -55,13 +55,14 @@ export base_type_name(name: String): String {
     return name.substr_bytes(0, size);
 }
 
-## Returns whether `name` names a primitive type (`int`, `bool`, `void*`).
+## Returns whether `name` names a primitive type (`int`, `bool`,
+## `__ptr<void>`).
 ##
 ## @param name a type's name
 ## @returns true for a primitive
 export is_integral_type(name: String): bool {
     match (name) {
-        "void", "__auto", "bool", "void*", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64", "ulong", "f64", "double", "f32", "float" => {
+        "void", "__auto", "bool", "__ptr<void>", "i8", "char", "u8", "byte", "i16", "short", "u16", "ushort", "i32", "int", "u32", "uint", "i64", "long", "u64", "ulong", "f64", "double", "f32", "float" => {
             return true;
         }
         else => {
@@ -94,16 +95,12 @@ export is_override(params: String[]): bool {
 }
 
 ## Returns the type `text` spells (`Box<Pair<int, S>>`), every part at
-## `span`. A pointer keeps its stars in its name, and an operator's name
-## (`<=`) is a name.
+## `span`. An operator's name (`<=`) is a name.
 ##
 ## @param text the type's text
 ## @param span where every part is
 ## @returns the type
 export parse_type_string(text: String, span: Span): TypeName {
-    if (text.ends_with("*")) {
-        return TypeName(text, span);
-    }
     var found = text.find("<");
     if (found <= 0 or !text.ends_with(">") or text.size <= found as ulong + 1) {
         return TypeName(text, span);

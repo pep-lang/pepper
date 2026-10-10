@@ -55,6 +55,9 @@ export const SHARED_FUNCTION_TYPE = "__shared_function";
 export const EXTERN_FUNCTION_TYPE = "__extern_function";
 ## The runtime type `T?` stands for.
 export const OPTIONAL_TYPE = "Optional";
+## The raw pointer type: `__ptr<T>`, which the parser also makes of C's
+## `T*`.
+export const POINTER_TYPE = "__ptr";
 
 ## A literal value.
 ## The printable ASCII characters, from the space on.
@@ -207,6 +210,9 @@ export struct TypeName {
     ## A tuple type's element labels, one per element (empty when the
     ## element has none); empty when no element is labeled.
     var labels: String[] = Array<String>();
+    ## Whether this `__ptr<T>` was written in C's syntax, `T*`, which only
+    ## `extern` declarations may use.
+    var c_pointer: bool = false;
 
     ## Creates a type name.
     ##
@@ -230,6 +236,7 @@ export struct TypeName {
             out.generic_types.append(argument.copy());
         }
         out.labels = labels.copy();
+        out.c_pointer = c_pointer;
         return out;
     }
 
@@ -238,6 +245,23 @@ export struct TypeName {
     ##
     ## @returns the text
     to_string(): String {
+        return _text(false);
+    }
+
+    ## Returns the type with each pointer written in C's syntax spelled
+    ## that way (`int*` rather than `__ptr<int>`), for a message about
+    ## that syntax.
+    ##
+    ## @returns the text
+    as_written(): String {
+        return _text(true);
+    }
+
+    # The type as text, with C pointers as stars when `stars` is set.
+    _text(stars: bool): String {
+        if (stars and c_pointer and generic_types.count == 1) {
+            return generic_types[0]._text(true) + "*";
+        }
         bool function = name == FUNCTION_TYPE or name == SHARED_FUNCTION_TYPE or name == EXTERN_FUNCTION_TYPE;
         if (function and generic_types.count > 0) {
             var prefix = "";
@@ -249,16 +273,16 @@ export struct TypeName {
             var parameters = Array<String>();
             ulong i = 1;
             while (i < generic_types.count) {
-                parameters.append(generic_types[i].to_string());
+                parameters.append(generic_types[i]._text(stars));
                 i += 1;
             }
-            return $"{prefix}({", ".join(parameters)}) => {generic_types[0].to_string()}";
+            return $"{prefix}({", ".join(parameters)}) => {generic_types[0]._text(stars)}";
         }
         if (name == TUPLE_TYPE and generic_types.count > 0) {
             var elements = Array<String>();
             ulong i = 0;
             while (i < generic_types.count) {
-                var element = generic_types[i].to_string();
+                var element = generic_types[i]._text(stars);
                 if (i < labels.count and !labels[i].is_empty) {
                     element = labels[i] + ": " + element;
                 }
@@ -272,7 +296,7 @@ export struct TypeName {
         }
         var arguments = Array<String>();
         for (var argument in generic_types) {
-            arguments.append(argument.to_string());
+            arguments.append(argument._text(stars));
         }
         return $"{name}<{", ".join(arguments)}>";
     }

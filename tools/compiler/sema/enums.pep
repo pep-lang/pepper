@@ -764,7 +764,7 @@ _is_literal_type(ty: TypeName): bool {
             return false;
         }
         else => {
-            return is_integral_name(ty.name) and !ty.name.ends_with("*");
+            return is_integral_name(ty.name);
         }
     }
 }

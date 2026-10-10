@@ -9,6 +9,7 @@ import [Expression, FunctionDef, Module, TypeName, Withheld] from "model";
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Reports a call of a member a specialization did not get from a
@@ -109,10 +110,7 @@ struct _WithheldCalls {
     }
 
     check(receiver: TypeName, method: String, count: ulong, loc: Loc) {
-        var owner = receiver.to_string();
-        while (owner.ends_with("*")) {
-            owner = owner.substr_bytes(0, owner.size - 1);
-        }
+        var owner = receiver.without_pointers().to_string();
         var member = set_name(method);
         for (var st in module.structs) {
             if (st.name != owner) {

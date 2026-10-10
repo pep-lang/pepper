@@ -145,9 +145,6 @@ struct _TypesFound {
         for (var sub in ty.sub_types) {
             add(sub);
         }
-        if (ty.name.ends_with("*")) {
-            add(TypeName.named(ty.name.substr_bytes(0, ty.name.size - 1)));
-        }
         if ((ty.is_function_type() or ty.is_weak() or ty.is_tuple()) and !ty.contains_auto()) {
             var spelled = ty.to_string();
             if (!seen.contains(spelled)) {
@@ -270,7 +267,7 @@ _weak_result(op: WeakOp, ty: TypeName): TypeName {
 }
 
 _pointer_field(name: String): VariableDef {
-    return field_def(name, TypeName.named("void*"), Optional<Expression>.Empty, Loc.none());
+    return field_def(name, TypeName.void_pointer(), Optional<Expression>.Empty, Loc.none());
 }
 
 ## The struct for one function type, before `apply_synthesized` and

@@ -2902,10 +2902,7 @@ struct _RegionWalk {
             return _ResolvedMethod(_Callee.Unknown, false);
         }
         var receiver = found.value();
-        var owner = receiver.to_string();
-        while (owner.ends_with("*")) {
-            owner = owner.substr_bytes(0, owner.size - 1);
-        }
+        var owner = receiver.without_pointers().to_string();
         var st = program.struct_named(owner);
         if (st.is_value()) {
             var m = _method_named(st.value(), method);
@@ -3056,14 +3053,8 @@ struct _RegionWalk {
 }
 
 _pointee(pointer: TypeName?): TypeName? {
-    if (!pointer.is_value()) {
-        return Optional<TypeName>.Empty;
-    }
-    var text = pointer.value().to_string();
-    if (!text.ends_with("*")) {
-        return Optional<TypeName>.Empty;
-    }
-    return Optional<TypeName>.Value(parse_type_string(text.substr_bytes(0, text.size - 1)));
+    var pointee = pointer.is_value() ? pointer.value().pointee() : Optional<TypeName>.Empty;
+    return pointee.is_value() ? Optional<TypeName>.Value(pointee.value().copy()) : pointee;
 }
 
 _is_tuple_call(function: String): bool {
@@ -3426,7 +3417,8 @@ struct _Checks {
                 var blamed = blame(arg);
                 if (blamed.is_value()) {
                     diagnostic = diagnostic.with_note(
-                        $"'{what}' does not return a new value: this return shares its inputs", known_location(blamed.value())
+                        $"'{what}' does not return a new value: this return shares its inputs",
+                        known_location(blamed.value())
                     );
                 }
                 # A local can hand its value over instead of copying it.
@@ -3795,8 +3787,11 @@ struct _Moves {
         if (!failure.error.is_value()) {
             failure.error = Optional<Diagnostic>.Value(
                 _error_at_known(
-                    $"'{name}' is used after its value was moved", at
-                ).with_note($"'{name}' was moved here; assign it a new value before using it again", known_location(moved_at))
+                    $"'{name}' is used after its value was moved",
+                    at
+                ).with_note(
+                    $"'{name}' was moved here; assign it a new value before using it again", known_location(moved_at)
+                )
             );
         }
     }

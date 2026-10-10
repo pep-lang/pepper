@@ -21,6 +21,7 @@ import [Expression, FunctionDef, Module, SymbolRefExpression, TypeName] from "mo
 import [set_name] from "names";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
+import "type_name";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## The owner under which overloaded constructors are listed, by function
@@ -251,10 +252,7 @@ struct _DeprecatedUses {
                 return Optional<_Member>.Empty;
             }
         }
-        var pointee = ty.value().to_string();
-        while (pointee.ends_with("*")) {
-            pointee = pointee.substr_bytes(0, pointee.size - 1);
-        }
+        var pointee = ty.value().without_pointers().to_string();
         var open = pointee.find("<");
         var base = open < 0 ? pointee : pointee.substr_bytes(0, open as ulong);
         var found = members.get(pointee, name);

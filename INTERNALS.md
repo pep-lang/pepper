@@ -2845,7 +2845,13 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
 
 - `compiler.ast` (`ast/ast.pep`) is `crates/pepper-parser/src/ast.rs` in
   Pepper: the same nodes, fields and spans, each with a `to_json()` that
-  writes what serde writes for the Rust node.
+  writes what serde writes for the Rust node. One departure: the parser
+  rewrites C's `T*` as `__ptr<T>` (`int**` is `__ptr<__ptr<int>>`), marking
+  each layer it made `c_pointer` for the check that keeps C syntax in
+  `extern` declarations, so `__ptr<T>` is the only pointer type sema and
+  codegen ever see (`TypeName.is_pointer`, `pointee`, `without_pointers`,
+  and `is_pointer_name` / `pointee_name` for a type's text); pepc's
+  `convert_intrinsics` converts no types.
 - `compiler.parse` (`parse/parser.pep`) is a recursive descent over the
   tokens `syntax.lex` reads that builds `compiler.ast` directly, as
   `parsers.rs` builds it, span for span, including property accessors and

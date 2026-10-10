@@ -68,10 +68,7 @@ export specialize_methods(module: Module, state: PassState): bool {
     var conformance = Optional<Conformance>.Empty;
     bool added = false;
     for (var (owner, method, loc, args) in finder.wanted) {
-        var key = owner.to_string();
-        while (key.ends_with("*")) {
-            key = key.substr_bytes(0, key.size - 1);
-        }
+        var key = owner.without_pointers().to_string();
         var index = Optional<ulong>.Empty;
         ulong i = 0;
         while (i < module.structs.count) {

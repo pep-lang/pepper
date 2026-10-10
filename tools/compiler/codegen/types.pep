@@ -2,7 +2,7 @@
 ## in Pepper.
 
 import llvm;
-import [parse_type_string, PassState, stored_as] from compiler.sema;
+import [is_pointer_name, parse_type_string, PassState, stored_as] from compiler.sema;
 import "address";
 import "calls";
 import "checks";
@@ -102,8 +102,8 @@ export struct Types {
             }
             else => {}
         }
-        # Pointer types: `T*`, `void*`, and C function pointers.
-        if (stored.ends_with("*") or stored.starts_with("__extern_function<")) {
+        # Pointer types: `__ptr<T>`, and C function pointers.
+        if (is_pointer_name(stored) or stored.starts_with("__extern_function<")) {
             return Optional<llvm.Type>.Value(context.pointer_type());
         }
         # `__simd<T, N>`: `<N x T>`.

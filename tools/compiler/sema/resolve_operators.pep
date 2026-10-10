@@ -156,10 +156,11 @@ struct _OperatorResolver {
         return info.is_value() and info.value().methods.contains(method);
     }
 
-    ## Whether `e`'s type is a raw buffer (`T*`): indexing it stays raw.
+    ## Whether `e`'s type is a raw buffer (`__ptr<T>`): indexing it stays
+    ## raw.
     is_raw_buffer_field(e: Expression): bool {
         var ty = type_of(e);
-        return ty.is_value() and ty.value().to_string().ends_with("*");
+        return ty.is_value() and ty.value().is_pointer();
     }
 
     ## Whether `e` is an element of a raw buffer (`_data[i]`): an index into
@@ -179,7 +180,7 @@ struct _OperatorResolver {
     }
 
     ## Whether the receiver of the index `e` (`recv[i] == x`) is a buffer
-    ## (`String*`) whose pointee declares `method`.
+    ## (`__ptr<String>`) whose pointee declares `method`.
     index_pointee_declares(e: Expression, method: String): bool {
         var receiver: Expression;
         match (e) {
@@ -197,11 +198,11 @@ struct _OperatorResolver {
         if (!ty.is_value()) {
             return false;
         }
-        var text = ty.value().to_string();
-        if (!text.ends_with("*")) {
+        var pointee = ty.value().pointee();
+        if (!pointee.is_value()) {
             return false;
         }
-        var info = table.lookup(TypeName.named(text.substr_bytes(0, text.size - 1)));
+        var info = table.lookup(pointee.value());
         return info.is_value() and info.value().methods.contains(method);
     }
 

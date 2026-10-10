@@ -23,7 +23,7 @@ import "static_blocks";
 import [static_type_of, StructTable] from "static_type";
 import [instance, trait_def, trait_types_of] from "traits";
 import [GenericSignature, record_conformances, specialization] from "type_arguments";
-import [AUTO, parse_type_string, replace_map] from "type_name";
+import [AUTO, parse_type_string, replace_map, VOID_PTR] from "type_name";
 import [Rewriter] from "walk";
 
 ## One member of an overload set, as resolution needs it.
@@ -676,13 +676,13 @@ export struct Overloads {
             }
             Null => {
                 # `__null` is exact for a raw pointer.
-                if (p_name.ends_with("*")) {
+                if (p.is_pointer()) {
                     return Optional<int>.Value(0);
                 }
                 return Optional<int>.Value(is_numeric_type(state, p_name) ? 2 : 1);
             }
             StringLiteral => {
-                if (p_name == "i8*" or p_name == STRING_CONSTANT) {
+                if (p_name == "__ptr<i8>" or p_name == STRING_CONSTANT) {
                     return Optional<int>.Value(0);
                 }
             }
@@ -722,15 +722,15 @@ export struct Overloads {
             return _same_types(a.sub_types, p.sub_types) ? Optional<int>.Value(1) : Optional<int>.Empty;
         }
         # Pointers convert among themselves and to and from numbers, and any
-        # struct reference passes as `void*`.
-        bool a_scalar = a_name.ends_with("*") or is_numeric_type(state, a_name);
-        bool p_scalar = p_name.ends_with("*") or is_numeric_type(state, p_name);
-        if ((a_scalar and p_scalar) or p_name == "void*") {
+        # struct reference passes as `__ptr<void>`.
+        bool a_scalar = a.is_pointer() or is_numeric_type(state, a_name);
+        bool p_scalar = p.is_pointer() or is_numeric_type(state, p_name);
+        if ((a_scalar and p_scalar) or p_name == VOID_PTR) {
             return Optional<int>.Value(2);
         }
         # A `StringConstant` converts to a `String` and to a C string.
         if (a_name == STRING_CONSTANT) {
-            if (p_name == "i8*") {
+            if (p_name == "__ptr<i8>") {
                 return Optional<int>.Value(2);
             }
             if (p_name == "String" and implicit_allowed) {
@@ -1095,7 +1095,7 @@ export struct Overloads {
                 var raw = Array<ulong>();
                 ulong a = 0;
                 while (a < args.count and a < chosen.params.count) {
-                    if (args[a].kind is StringLiteral and _canonical(chosen.params[a]).to_string() == "i8*") {
+                    if (args[a].kind is StringLiteral and _canonical(chosen.params[a]).to_string() == "__ptr<i8>") {
                         raw.append(a);
                     }
                     a += 1;

@@ -11,6 +11,7 @@ import [demangle_name] from compiler.link;
 import [enum_method_name, enum_this_parameter] from "builder";
 import [TRAIT_SELF] from "closures";
 import [error_at, location_of] from "common";
+import [constraint_spelled] from "constraints";
 import [
     Block,
     Declaration,
@@ -21,7 +22,6 @@ import [
     Statement,
     StaticItem,
     TraitDef,
-    TypeFlags,
     TypeName
 ] from "model";
 import [set_name] from "names";
@@ -92,11 +92,6 @@ export value_type_key(state: PassState, name: String): String? {
 ## @returns true for a number type, `char`, `bool` or a value enum
 export is_value_type(state: PassState, ty: TypeName): bool {
     return ty.sub_types.count == 0 and value_type_key(state, ty.name).is_value();
-}
-
-## Returns whether `ty` is a pointer type, `T*`.
-_is_pointer(ty: TypeName): bool {
-    return ty.flags == TypeFlags.Scalar and ty.name.ends_with("*");
 }
 
 ## Turns every extension of a value type into functions, as
@@ -263,13 +258,13 @@ _number_operator_error(state: PassState, m: FunctionDef, shown: String): Diagnos
         );
     }
     var operand = m.parameters[0];
-    if (_is_pointer(operand.ty)
+    if (operand.ty.is_pointer()
         or is_value_type(state, operand.ty)
         or state.enum_representations.contains(operand.ty.to_string())) {
         var at = operand.type_loc.is_none() ? m.loc : operand.type_loc;
         return Optional<Diagnostic>.Value(
             error_at(
-                $"operator '{name}' of '{shown}' cannot take an operand of type '{spelled(operand.ty)}': the built-in operator applies",
+                $"operator '{name}' of '{shown}' cannot take an operand of type '{constraint_spelled(operand.ty)}': the built-in operator applies",
                 at
             )
         );
@@ -279,22 +274,6 @@ _number_operator_error(state: PassState, m: FunctionDef, shown: String): Diagnos
 
 _is_ascii_punctuation(b: u8): bool {
     return (b >= 33 and b <= 47) or (b >= 58 and b <= 64) or (b >= 91 and b <= 96) or (b >= 123 and b <= 126);
-}
-
-## Returns a type as Pepper code spells it: a pointer `T*` as `__ptr<T>`,
-## and the sized integer names by their Pepper names (`int` for `i32`):
-## `casts::spelled`.
-##
-## @param ty the type
-## @returns the text
-export spelled(ty: TypeName): String {
-    var name = ty.to_string();
-    if (name.ends_with("*") and ty.flags == TypeFlags.Scalar) {
-        return $"__ptr<{spelled(TypeName.named(name.substr_bytes(0, name.size - 1)))}>";
-    }
-    var renamed = ty.copy();
-    _rename_sized(renamed);
-    return renamed.display();
 }
 
 _rename_sized(ty: TypeName) {
@@ -624,7 +603,7 @@ struct _Substituter {
                 var set = set_name(node.function);
                 bool plain = !set.contains("<");
                 for (var (param, _) in type_map) {
-                    if (set == param or set == param + "*") {
+                    if (set == param) {
                         plain = false;
                     }
                 }

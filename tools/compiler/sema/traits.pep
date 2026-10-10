@@ -25,26 +25,6 @@ export trait_def(traits: TraitDef[], ty: TypeName): TraitDef? {
     return Optional<TraitDef>.Empty;
 }
 
-## Whether a signature type names the implementing type (`this`).
-_mentions_this(ty: TypeName): bool {
-    if (ty.name == "this") {
-        return true;
-    }
-    var bare = ty.name;
-    while (bare.ends_with("*")) {
-        bare = bare.substr_bytes(0, bare.size - 1);
-    }
-    if (bare == "this") {
-        return true;
-    }
-    for (var sub in ty.sub_types) {
-        if (_mentions_this(sub)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 ## Returns whether a trait member can be called through a value of the
 ## trait type: an instance method whose signature does not name `this`
 ## and that has no type parameters of its own.
@@ -52,11 +32,11 @@ _mentions_this(ty: TypeName): bool {
 ## @param method the member
 ## @returns true when a vtable can hold it
 export is_dispatchable(method: FunctionDef): bool {
-    if (method.is_static or method.is_generic_func or _mentions_this(method.ty)) {
+    if (method.is_static or method.is_generic_func or method.ty.mentions("this")) {
         return false;
     }
     for (var p in method.parameters) {
-        if (_mentions_this(p.ty)) {
+        if (p.ty.mentions("this")) {
             return false;
         }
     }
@@ -304,9 +284,6 @@ struct _TraitTypes {
     ## Whether `ty` could name a trait: most types are spelled without one.
     _mentions_trait(ty: TypeName): bool {
         var name = ty.name;
-        while (name.ends_with("*")) {
-            name = name.substr_bytes(0, name.size - 1);
-        }
         # A type carried as a flat name is looked through as written.
         if (names.contains(name) or name.contains("<")) {
             return true;
@@ -389,15 +366,13 @@ struct _TraitTypes {
 
     # `add` for a type that may name a trait.
     _look_through(ty: TypeName) {
-        # Pointers carry their stars in the name (`Shape*`).
+        # A pointer (`__ptr<Shape>`) is looked through below, as a type
+        # argument.
         var text = ty.to_string();
         if (visited.contains(text)) {
             return;
         }
         visited.insert(text);
-        while (text.ends_with("*")) {
-            text = text.substr_bytes(0, text.size - 1);
-        }
         var pointee = parse_type_string(text);
         var def = trait_def(traits, pointee);
         if (def.is_value()) {
