@@ -3,7 +3,6 @@
 ## statement half of the codegen pass in `crates/pepper-codegen/src/lib.rs`.
 
 import compiler.ast;
-import compiler.link;
 import llvm;
 import compiler.sema;
 import [
@@ -491,7 +490,7 @@ extend Generator {
             return true;
         }
         if (declared.is_value()) {
-            return declared.value().contains(link.symbol_name(name));
+            return declared.value().contains(name);
         }
         return is_cached(name);
     }

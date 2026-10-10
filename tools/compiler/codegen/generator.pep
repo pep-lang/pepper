@@ -199,8 +199,8 @@ export struct Generator {
     ## The files whose units' objects come from the build cache: the bodies
     ## they own are only declared.
     var cached_files: HashSet<uint> = HashSet<uint>();
-    ## Compiling one layer's object: the functions declared only, by linker
-    ## spelling (`link.symbol_name`), whoever owns them, which the objects
+    ## Compiling one layer's object: the functions declared only, by name,
+    ## whoever owns them, which the objects
     ## of the layers below define (instantiations among them). Every other
     ## function with a body is defined here, and one whose file is another
     ## layer's (a method a pass of this layer added to a struct below, such
@@ -680,7 +680,7 @@ export struct Build {
 ## @param cached_files the files whose units' objects come from the build
 ##   cache, or another layer's object: the bodies they own are only declared
 ## @param declared compiling one layer's object: the functions only
-##   declared, by linker spelling, whoever owns them, which the objects of
+##   declared, by name, whoever owns them, which the objects of
 ##   the layers below define (`Generator.declared`)
 ## @returns the module, or the first error
 export generate(

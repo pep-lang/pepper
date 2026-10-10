@@ -41,6 +41,9 @@ export struct Partition {
     ## How much code each part defines (blocks and definitions); 0 for a
     ## part that defines nothing.
     var sizes: ulong[];
+    ## The Pepper name of each definition `prepare` gave another linker
+    ## spelling, by that spelling.
+    var names: HashMap<String, String> = HashMap<String, String>();
 
     construct(part_of: HashMap<String, uint>, sizes: ulong[] = Array<ulong>()) {
         this.part_of = part_of;
@@ -109,6 +112,7 @@ export prepare(
     bool comdats = !ir.target_triple().contains("apple");
     var functions = ir.functions();
     var part_of = HashMap<String, uint>();
+    var names = HashMap<String, String>();
     var values = Array<llvm.Value>();
     values.append_all(functions);
     for (var global in ir.globals()) {
@@ -136,6 +140,9 @@ export prepare(
             value.set_linkage(llvm.Linkage.External);
             value.set_visibility(llvm.Visibility.Hidden);
             var spelled = _respell(value, name);
+            if (spelled != name) {
+                names[spelled] = name;
+            }
             var file = owner.value() as ulong;
             var part = file < part_of_file.count ? part_of_file[file] : entry_part;
             part_of[spelled] = part;
@@ -151,11 +158,16 @@ export prepare(
         value.set_linkage(llvm.Linkage.LinkOnceOdr);
         value.set_visibility(llvm.Visibility.Hidden);
         var spelled = _respell(value, name);
+        if (spelled != name) {
+            names[spelled] = name;
+        }
         if (comdats) {
             value.set_comdat(spelled);
         }
     }
-    return Partition(part_of, sizes);
+    var out = Partition(part_of, sizes);
+    out.names = names;
+    return out;
 }
 
 ## How much code `value` is, to balance parts: a function's blocks, plus

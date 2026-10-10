@@ -191,12 +191,8 @@ _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName
     }
     var (types, seen, visited, unsettled) = memo.checked_types.value();
     found.types.append_all(types);
-    for (var name in seen) {
-        found.seen.insert(name);
-    }
-    for (var name in visited) {
-        found.visited.insert(name);
-    }
+    found.base_seen = seen;
+    found.base_visited = visited;
     for (var st in module.structs) {
         if (st.ty.is_generic() and st.name == st.ty.name) {
             continue;
@@ -266,6 +262,10 @@ struct _TraitTypes {
     var seen: HashSet<String> = HashSet<String>();
     ## The types already looked through, as written: one adds nothing more.
     var visited: HashSet<String> = HashSet<String>();
+    ## What the checked declarations found (`_with_checked`), read without
+    ## a copy: `seen` and `visited` hold only what is found beyond them.
+    var base_seen: HashSet<String> = HashSet<String>();
+    var base_visited: HashSet<String> = HashSet<String>();
 
     ## The traits' names.
     var names: HashSet<String> = HashSet<String>();
@@ -369,7 +369,7 @@ struct _TraitTypes {
         # A pointer (`__ptr<Shape>`) is looked through below, as a type
         # argument.
         var text = ty.to_string();
-        if (visited.contains(text)) {
+        if (base_visited.contains(text) or visited.contains(text)) {
             return;
         }
         visited.insert(text);
@@ -393,7 +393,7 @@ struct _TraitTypes {
                 }
             }
             var spelled = pointee.to_string();
-            if (applied and !seen.contains(spelled)) {
+            if (applied and !base_seen.contains(spelled) and !seen.contains(spelled)) {
                 seen.insert(spelled);
                 types.append(pointee);
             }

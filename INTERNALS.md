@@ -3359,11 +3359,27 @@ come to it as their `<k>.rec` and `<k>.defines`. A rebuild (its build folder
 exists) starts its first worker before loading the program
 (`start_layer_worker`), so the worker loads the program while the build
 does, as Gradle and Bazel keep workers ready; a build that checks no layer
-in workers stops it. `<dir>` is `<build>/layers.<pid>`, the build's own: builds
+in workers stops it.
+
+**Pipelining.** A layer's dependents need its record to be checked, and its
+object's `defines` only to compile their own: as cargo starts a crate's
+dependents on its metadata while rustc generates its code, a worker leaves
+the record (`<k>.rec`, `<k>.own`, `<k>.warn`) and `<k>.checked` as soon as
+the layer is stored, then waits for the `defines` of the layers it reads,
+leaves `<k>.compiling`, compiles, and leaves `<k>.defines` and `<k>.done`.
+The scheduler starts a layer once the layers it reads are checked, and
+counts toward `jobs` only workers checking or compiling: one waiting for the
+objects below uses no processor (there are at most half again as many
+workers as jobs, and two more, since each holds the program). Workers' stages
+then include `wait`. `<dir>` is `<build>/layers.<pid>`, the build's own: builds
 in one folder at once (`pepper test` builds its test programs side by side)
 must not share it. It is removed after the build, but kept with `-T time`,
 where each worker also leaves the time its layer's stages took
-(`<k>.stages`: merge, index, check, finish, store, object). `_check_layers` then
+(`<k>.stages`: merge, index, check, finish, store, object), and the build
+leaves `schedule`: for each layer a worker checked, its number, name, when
+it began and ended (milliseconds from the start) and the layers it reads,
+as Ninja's `.ninja_log`, to find the chain of layers that bounds the
+build. `_check_layers` then
 finds every layer checked, and checks the last one in the build's process.
 
 **Objects per layer.** A worker that checked a layer also compiles it
@@ -3372,8 +3388,8 @@ generates IR for the layer's own files and for what the layers below do not
 define, and only declares what they do. Each layer's object lists the
 symbols it defines once optimized (`defines`, `_defines`: not local, so not
 an instantiation every use inlined); a layer declares exactly the symbols the
-objects of the layers it reads list (`Generator.declared`, by linker
-spelling), and defines any other function it gives a body: an instantiation
+objects of the layers it reads list (`Generator.declared`, by Pepper
+name, which `Partition.names` gives back for each respelled one), and defines any other function it gives a body: an instantiation
 the layers below made but dropped, or a method a pass of this layer added to
 a struct below (`_pep_copy_value`), which has no owner there
 (`own_function`), so it is `linkonce_odr`, as C++ emits an implicit special

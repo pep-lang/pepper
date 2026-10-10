@@ -509,13 +509,14 @@ _check_layers(
     return Result<_Checked, String>.ok(out);
 }
 
-# The symbols `ir`, a layer's module just compiled, defines for other
-# objects, a line each: what survived optimization, not local. The cache
+# The symbols `ir`, a layer's module just compiled with `partition`,
+# defines for other objects, a line each, by Pepper name: what survived
+# optimization, not local. The cache
 # keeps them beside the layer's object (`defines`), and a layer above only
 # declares these (`codegen.generate`'s `declared`); an instantiation the
 # layer's object dropped (`linkonce_odr`, inlined everywhere) it defines
 # itself, as Rust shares the generics a crate exports.
-_defines(ir: llvm.Module): String {
+_defines(ir: llvm.Module, partition: codegen.Partition): String {
     var out = StringBuilder();
     var values = ir.functions();
     for (var global in ir.globals()) {
@@ -526,7 +527,9 @@ _defines(ir: llvm.Module): String {
         if (value.is_declaration() or linkage == llvm.Linkage.Internal or linkage == llvm.Linkage.Private) {
             continue;
         }
-        out.append(value.name());
+        var name = value.name();
+        var pepper = partition.names.try_get(name);
+        out.append(pepper.is_value() ? pepper.value() : name);
         out.append("\n");
     }
     return out.to_string();
@@ -537,7 +540,9 @@ _defines(ir: llvm.Module): String {
 # read it.
 _copy_defines(cache: Cache, layer: Layer, dir: Path, k: ulong) {
     var text = File.read_to_string(cache.objects($"layer {layer.name}", layer.key).join(Path("defines")));
-    File.write_text(_layer_file(dir, k, "defines"), text.is_ok() ? text.value() : "");
+    var partial = _layer_file(dir, k, $"defines.{process.id()}");
+    File.write_text(partial, text.is_ok() ? text.value() : "");
+    File.rename(partial, _layer_file(dir, k, "defines"));
 }
 
 # The symbols the objects of the layers numbered `ks` define (`_defines`),
@@ -650,7 +655,7 @@ _compile_layer(
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
     }
-    if (File.write_text(folder.join(Path("defines")), _defines(generated.value())).is_err()) {
+    if (File.write_text(folder.join(Path("defines")), _defines(generated.value(), partition)).is_err()) {
         return Optional<String>.Value($"cannot write to {folder}");
     }
     var kept = cache.store(folder, $"layer {layer.name}", layer.key);
@@ -782,10 +787,19 @@ _check_in_workers_at(
     }
     var count = layered.count - 1;
     var owns = Array<String>();
+    # A layer's record is ready (`checked`), then its object (`done`).
+    var checked = Array<bool>();
     var done = Array<bool>();
     var started = Array<bool>();
+    # With `-T time`, when each layer a worker checked began and ended, in
+    # milliseconds from the start, with the layers it reads (`schedule`, as
+    # Ninja's `.ninja_log`): the chain of layers that bounds the build.
+    var clock_start = os.Instant.now();
+    var schedule = StringBuilder();
+    var began = HashMap<ulong, ulong>();
     for (var _ in 0..layered.count) {
         owns.append("");
+        checked.append(false);
         done.append(false);
         started.append(false);
     }
@@ -802,9 +816,10 @@ _check_in_workers_at(
             if (started[k]) {
                 continue;
             }
+            # A layer is checked on the records of the layers it reads.
             bool reads_done = true;
             for (var d in layered[k].reads) {
-                reads_done = reads_done and done[d];
+                reads_done = reads_done and checked[d];
             }
             if (!reads_done) {
                 continue;
@@ -824,24 +839,35 @@ _check_in_workers_at(
                 _copy_defines(cache, layered[k], dir, k);
                 owns[k] = own;
                 prechecked[k] = (bytes, own, warned);
+                checked[k] = true;
                 done[k] = true;
                 left -= 1;
             } else {
                 ready.append(k);
             }
         }
-        # Each ready layer to an idle worker, starting one while there are
-        # fewer than `jobs`.
+        # Each ready layer to an idle worker, starting one while fewer than
+        # `jobs` are checking or compiling: one waiting for the objects of
+        # the layers it reads uses no processor, but holds the program in
+        # memory (at most half again as many workers, and two more).
         while (!ready.is_empty) {
             var idle = Optional<ulong>.Empty;
+            ulong active = 0;
             for (var w in 0..workers.count) {
-                if (workers[w].layer < 0) {
-                    idle = Optional<ulong>.Value(w);
-                    break;
+                var at = workers[w].layer;
+                if (at < 0) {
+                    if (!idle.is_value()) {
+                        idle = Optional<ulong>.Value(w);
+                    }
+                } else if (!checked[at as ulong] or _layer_file(dir, at as ulong, "compiling").is_file()) {
+                    active += 1;
                 }
             }
+            if (active >= jobs) {
+                break;
+            }
             if (!idle.is_value()) {
-                if (workers.count as ulong >= jobs) {
+                if (workers.count as ulong >= jobs + jobs / 2 + 2) {
                     break;
                 }
                 var command = process.Command(executable.value().to_string());
@@ -866,7 +892,7 @@ _check_in_workers_at(
                 # need not read, as the build's own process does not.
                 line.append("done");
                 for (var d in 0..layered.count) {
-                    if (done[d]) {
+                    if (checked[d]) {
                         line.append($" {d}");
                     }
                 }
@@ -880,6 +906,7 @@ _check_in_workers_at(
                 break;
             }
             worker.layer = k as long;
+            began[k] = (os.Instant.now() - clock_start).milliseconds() as ulong;
             progressed = true;
         }
         for (var worker in workers) {
@@ -887,6 +914,18 @@ _check_in_workers_at(
                 continue;
             }
             var k = worker.layer as ulong;
+            if (!checked[k] and _layer_file(dir, k, "checked").is_file()) {
+                var record = _read_worker_record(dir, k, layered[k]);
+                if (record.is_err()) {
+                    failure = Optional<String>.Value(record.error());
+                    continue;
+                }
+                var (bytes, own, warned) = record.value();
+                owns[k] = own;
+                prechecked[k] = (bytes, own, warned);
+                checked[k] = true;
+                progressed = true;
+            }
             if (!_layer_file(dir, k, "done").is_file()) {
                 var ended = worker.child.try_wait();
                 if (ended.is_err() or ended.value().is_value()) {
@@ -896,27 +935,32 @@ _check_in_workers_at(
             }
             worker.layer = -1;
             progressed = true;
+            if (options.trace_time) {
+                var reads = StringBuilder();
+                for (var d in layered[k].reads) {
+                    reads.append($" {d}");
+                }
+                var ended = (os.Instant.now() - clock_start).milliseconds();
+                schedule.append($"{k} {layered[k].name} {began[k]} {ended}{reads.to_string()}\n");
+            }
             var error = File.read_to_string(_layer_file(dir, k, "err"));
             if (error.is_ok()) {
                 failure = Optional<String>.Value(error.value());
                 continue;
             }
-            var bytes = File.read_bytes(_layer_file(dir, k, "rec"));
-            var own = File.read_to_string(_layer_file(dir, k, "own"));
-            if (bytes.is_err() or own.is_err()) {
+            if (!checked[k]) {
                 failure = Optional<String>.Value($"the worker checking layer {layered[k].name} left no record");
                 continue;
             }
-            owns[k] = own.value();
-            # Its warnings `_check_layers` prints, with the record.
-            var warned = File.read_to_string(_layer_file(dir, k, "warn"));
-            prechecked[k] = (bytes.value(), own.value(), warned.is_ok() ? warned.value() : "");
             done[k] = true;
             left -= 1;
         }
         if (!progressed and !failure.is_value()) {
             async.Thread.sleep(2);
         }
+    }
+    if (options.trace_time) {
+        File.write_text(dir.join(Path("schedule")), schedule.to_string());
     }
     for (var worker in workers) {
         worker.child.stdin().close();
@@ -1057,8 +1101,6 @@ _work_on(
     sema.index_module(module, base);
     var t2 = os.Instant.now();
     stages = stages + $"index {(t2 - t1).milliseconds()}\n";
-    # What the objects of the layers it reads define.
-    var below = _defined_by(cache, Array<Layer>(), layer.reads, Optional<Path>.Value(dir));
     var warnings = Array<Diagnostic>();
     var checked = _check_layer(program, module, layer, reused, sources, warnings);
     if (checked.is_err()) {
@@ -1074,23 +1116,58 @@ _work_on(
     var (bytes, own) = store_checked(cache, program, layer, unit, base, warned);
     var t5 = os.Instant.now();
     stages = stages + $"store {(t5 - t4).milliseconds()}\n";
+    # The record first: the layers that read this one are checked on it
+    # while its object compiles, as cargo starts a crate's dependents on
+    # its metadata while rustc generates its code (pipelining).
+    File.write_bytes(_layer_file(dir, k, "rec"), bytes);
+    File.write_text(_layer_file(dir, k, "own"), own);
+    if (!warned.is_empty) {
+        File.write_text(_layer_file(dir, k, "warn"), warned);
+    }
+    _mark(dir, k, "checked");
+    # Its object declares what the objects of the layers it reads define:
+    # it waits for them.
+    for (var d in layer.reads) {
+        while (!_layer_file(dir, d, "defines").is_file()) {
+            async.Thread.sleep(2);
+        }
+    }
+    var below = _defined_by(cache, Array<Layer>(), layer.reads, Optional<Path>.Value(dir));
+    var t6 = os.Instant.now();
+    stages = stages + $"wait {(t6 - t5).milliseconds()}\n";
+    _mark(dir, k, "compiling");
     # Its object, which code generation of the program does not make again.
     var compiled = _compile_layer(program, layer, after, state, below, options, cache, dir);
     if (compiled.is_value()) {
         return compiled;
     }
     _copy_defines(cache, layer, dir, k);
-    var t6 = os.Instant.now();
-    stages = stages + $"object {(t6 - t5).milliseconds()}\nreads {layer.reads.count}\n";
+    var t7 = os.Instant.now();
+    stages = stages + $"object {(t7 - t6).milliseconds()}\nreads {layer.reads.count}\n";
     if (trace) {
         File.write_text(_layer_file(dir, k, "stages"), stages);
     }
-    File.write_bytes(_layer_file(dir, k, "rec"), bytes);
-    File.write_text(_layer_file(dir, k, "own"), own);
-    if (!warned.is_empty) {
-        File.write_text(_layer_file(dir, k, "warn"), warned);
-    }
     return Optional<String>.Empty;
+}
+
+# The record, own interface and warnings a worker left for layer `k` in
+# `dir`.
+_read_worker_record(dir: Path, k: ulong, layer: Layer): Result<(u8[], String, String), String> {
+    var bytes = File.read_bytes(_layer_file(dir, k, "rec"));
+    var own = File.read_to_string(_layer_file(dir, k, "own"));
+    if (bytes.is_err() or own.is_err()) {
+        return Result<(u8[], String, String), String>.err($"the worker checking layer {layer.name} left no record");
+    }
+    # Its warnings `_check_layers` prints, with the record.
+    var warned = File.read_to_string(_layer_file(dir, k, "warn"));
+    return Result<(u8[], String, String), String>.ok((bytes.value(), own.value(), warned.is_ok() ? warned.value() : ""));
+}
+
+# Leaves the empty file `<k>.<what>` in `dir`, whole, by a rename.
+_mark(dir: Path, k: ulong, what: String) {
+    var partial = _layer_file(dir, k, $"{what}.{process.id()}");
+    File.write_text(partial, "");
+    File.rename(partial, _layer_file(dir, k, what));
 }
 
 # Checks layer `layer`'s files on top of `module`, the layers before it:
