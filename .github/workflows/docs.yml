@@ -2,7 +2,7 @@
 # to the gh-pages branch, one folder per version:
 #
 #   push to main       -> dev/      (the unreleased docs, replaced each time)
-#   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match Cargo.toml)
+#   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match VERSION)
 #
 # A tag first runs the suite against every supported LLVM major
 # (llvm-versions.yml), as vsix.yml does, and publishes nothing unless all pass.
@@ -62,9 +62,9 @@ jobs:
         run: |
           if [ "$REF_TYPE" = tag ]; then
             version="${REF_NAME#v}"
-            crate_version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
-            if [ "$version" != "$crate_version" ]; then
-              echo "::error::tag $REF_NAME does not match the workspace version $crate_version in Cargo.toml"
+            held="$(tr -d '\r' < VERSION)"
+            if [ "$version" != "$held" ]; then
+              echo "::error::tag $REF_NAME does not match the version $held in VERSION"
               exit 1
             fi
           else

@@ -462,9 +462,10 @@ pepper build main.pep -L libs -l foo        # links libs/libfoo
 Reserved for linking with Microsoft's linker. It is not ported, so it is an
 error on every platform; Windows executables link with clang and lld.
 
-The link driver is clang. When `LLVM_SYS_<major>1_PREFIX` (for the LLVM the
-compiler was built with, such as `LLVM_SYS_201_PREFIX` for LLVM 20) names an
-LLVM install, its `bin/clang` and `lld` are used; else a `clang` beside
+The link driver is clang. When `PEPPER_LLVM_PREFIX`, else
+`LLVM_SYS_<major>1_PREFIX` (for the LLVM the compiler was built with, such
+as `LLVM_SYS_201_PREFIX` for LLVM 20), names an LLVM install, its
+`bin/clang` and `lld` are used; else a `clang` beside
 `pep-build`, then one on the `PATH` (`clang`, then `clang-<major>`), then one
 where LLVM's packages install it off the `PATH`. With none, the link fails
 with an error naming what to install. [Installing Pepper](install.md#what-linking-needs)
@@ -586,7 +587,8 @@ a terminal; set `NO_COLOR` to turn color off. See
 | `WASI_SDK_PATH` | The wasi-sdk for linking with `--target wasm32-wasip1`, when neither `--sysroot` nor `PEPPER_SYSROOT_WASM32_WASIP1` names one | `--sysroot` |
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
-| `LLVM_SYS_<major>1_PREFIX` | The LLVM install whose `clang` and `lld` link the program (`LLVM_SYS_201_PREFIX` for LLVM 20); `cargo setup` writes it for builds | |
+| `PEPPER_LLVM_PREFIX` | The LLVM install whose `clang` and `lld` link the program | |
+| `LLVM_SYS_<major>1_PREFIX` | The same, when `PEPPER_LLVM_PREFIX` is not set (`LLVM_SYS_201_PREFIX` for LLVM 20); `cargo setup` records the LLVM it provisions in `.pep/llvm-prefix` and in cargo's config, and in CI exports this variable | |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Where a build fetching a project's locked dependencies clones that host's repositories from, when `pep-package` is not installed (see [pep-package](pep-package.md#environment-variables)) | |
 | `NO_COLOR` | Set and not empty: errors are not colored | |
 

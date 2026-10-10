@@ -135,7 +135,7 @@ ends without a usable answer costs another round. So:
   (progress bars, `Reading database …`) by pattern, not by position.
 - **Collect the state a failure is about in the same run.** The workflow has
   an `if: failure() || cancelled()` diagnostics step (toolchain, host, the
-  LLVM cargo actually sees, which `clang` answered, build artifacts) —
+  LLVM setup recorded, which `clang` answered, build artifacts) —
   cancellation is included because a job killed by its timeout is exactly
   when that state is wanted, and `failure()` is false then. Extend it rather
   than re-dispatching to ask a follow-up question.

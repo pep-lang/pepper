@@ -29,7 +29,7 @@ usage: pep-doc [<command>] [options]
 
 Commands:
   reference   regenerate docs/src/reference/ from the runtime's doc comments
-  check       fail if the reference is stale, a chapter is broken, or an API or tool option is undocumented
+  check       fail if the reference is stale, a chapter is broken, an API or tool option is undocumented, or a tool's version differs from VERSION
   build       regenerate the reference and render the book (the default)
   serve       regenerate the reference and serve the book locally
   help        show this help
@@ -167,6 +167,8 @@ _check(root: Path, tools: String?): Result<void> {
     _report(undocumented);
     var unlisted = undocumented_tool_options(root, tools_dir(root, tools), HELP)?;
     _report(unlisted);
+    var versions = stale_versions(root)?;
+    _report(versions);
     var errors = Array<String>();
     if (!undocumented.is_empty) {
         errors.append($"{undocumented.count} public runtime declaration(s) without a doc comment");
@@ -176,6 +178,9 @@ _check(root: Path, tools: String?): Result<void> {
     }
     if (!broken.is_empty) {
         errors.append($"{broken.count} problem(s) in the book's chapters");
+    }
+    if (!versions.is_empty) {
+        errors.append($"{versions.count} tool version(s) differ from VERSION");
     }
     if (!stale.is_empty) {
         errors.append($"the standard library reference is out of date: {", ".join(stale)}\nrun `{REGENERATE}`");

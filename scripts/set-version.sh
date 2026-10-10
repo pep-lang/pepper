@@ -2,9 +2,12 @@
 # Stamps a release version into the checkout, in every place a tool reads
 # its own version from:
 #
-#   Cargo.toml        [workspace.package] version (pep-build, pep-lsp)
-#   Cargo.lock        the workspace packages' entries, so --locked builds
+#   VERSION           the version, one line: what the scripts and workflows
+#                     read, and what `pep-doc check` holds the tools to
 #   tools/*/main.pep  each Pepper tool's `version()`
+#   Cargo.toml        [workspace.package] version (the Rust build), while
+#                     it exists
+#   Cargo.lock        the workspace packages' entries, so --locked builds
 #
 #   scripts/set-version.sh <version>
 #
@@ -26,11 +29,9 @@ fi
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-current="$(awk '/^\[workspace\.package\]/ { in_package = 1; next }
-  /^\[/ { in_package = 0 }
-  in_package && /^version *=/ { gsub(/.*= *"|".*/, ""); print; exit }' Cargo.toml)"
+current="$(tr -d '\r' < VERSION)"
 if [ -z "$current" ]; then
-  echo "error: no [workspace.package] version in Cargo.toml" >&2
+  echo "error: VERSION holds no version" >&2
   exit 1
 fi
 echo "version $current -> $version"
@@ -58,21 +59,34 @@ replace() {
   mv "$temp" "$file"
 }
 
-# Cargo.toml: only the [workspace.package] line.
-awk -v from="$current" -v to="$version" '
-  /^\[workspace\.package\]/ { in_package = 1 }
-  /^\[/ && !/^\[workspace\.package\]/ { in_package = 0 }
-  in_package && /^version *=/ { sub("\"" from "\"", "\"" to "\"") }
-  { print }' Cargo.toml > Cargo.toml.set-version
-mv Cargo.toml.set-version Cargo.toml
+# The Rust build's files, until it is deleted (#225).
+if [ -f Cargo.toml ]; then
+  # Cargo.toml: only the [workspace.package] line.
+  held="$(awk '/^\[workspace\.package\]/ { in_package = 1; next }
+    /^\[/ { in_package = 0 }
+    in_package && /^version *=/ { gsub(/.*= *"|".*/, ""); print; exit }' Cargo.toml)"
+  if [ "$held" != "$current" ]; then
+    echo "error: Cargo.toml's [workspace.package] version is '$held', not VERSION's $current" >&2
+    exit 1
+  fi
+  awk -v from="$current" -v to="$version" '
+    /^\[workspace\.package\]/ { in_package = 1 }
+    /^\[/ && !/^\[workspace\.package\]/ { in_package = 0 }
+    in_package && /^version *=/ { sub("\"" from "\"", "\"" to "\"") }
+    { print }' Cargo.toml > Cargo.toml.set-version
+  mv Cargo.toml.set-version Cargo.toml
+fi
+if [ -f Cargo.lock ]; then
+  # Cargo.lock: the workspace's own packages, which have no `source` line.
+  workspace_packages=" pepper pepper-codegen pepper-driver pepper-files pepper-lsp pepper-parser pepper-sema xtask "
+  awk -v from="$current" -v to="$version" -v names="$workspace_packages" '
+    /^name = / { name = $3; gsub(/"/, "", name) }
+    /^version = / && index(names, " " name " ") > 0 { sub("\"" from "\"", "\"" to "\"") }
+    { print }' Cargo.lock > Cargo.lock.set-version
+  mv Cargo.lock.set-version Cargo.lock
+fi
 
-# Cargo.lock: the workspace's own packages, which have no `source` line.
-workspace_packages=" pepper pepper-codegen pepper-driver pepper-files pepper-lsp pepper-parser pepper-sema xtask "
-awk -v from="$current" -v to="$version" -v names="$workspace_packages" '
-  /^name = / { name = $3; gsub(/"/, "", name) }
-  /^version = / && index(names, " " name " ") > 0 { sub("\"" from "\"", "\"" to "\"") }
-  { print }' Cargo.lock > Cargo.lock.set-version
-mv Cargo.lock.set-version Cargo.lock
+printf '%s\n' "$version" > VERSION
 
 # The Pepper tools: each `version()` returns the release it belongs to.
 for main in tools/*/main.pep; do
@@ -87,4 +101,8 @@ if [ -n "$stale" ]; then
   echo "error: still at $current: $stale" >&2
   exit 1
 fi
-grep -n "^version = \"$version\"" Cargo.toml
+if [ -f Cargo.toml ] && ! grep -q "^version = \"$version\"" Cargo.toml; then
+  echo "error: Cargo.toml is not at $version" >&2
+  exit 1
+fi
+echo "VERSION: $(cat VERSION)"

@@ -31,7 +31,7 @@ names and the pass order come from that implementation.
 | `crates/pepper-sema` | Program loading and module linking (`program.rs`, `modules.rs`, `visibility.rs`, `deprecation.rs`, and the scope walk they share, `scope_walk.rs`), AST → model builder (`builder.rs`), the sema model (`model.rs`), struct synthesis (`struct_body.rs`), and the transform passes (`passes/`). No LLVM. |
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), `simd.rs` (SIMD vectors, see 4.7), `exports.rs` (the C entry points of `[Export]`ed functions, see 4.1), `thread_locals.rs` (`[ThreadLocal]` globals, see 4), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), the test `main` of `--test` (`test_main.rs`, see [2.1](#21-cli-options-cratespepper-driversrcoptionsrs)), `--emit-static` (`emit_static.rs`, see [2.8](#28-static-blocks-and-reflection-builderstatic_itemsrs-passesstatic_blocksrs)). Holds nearly all integration tests (`tests/*.rs`). |
-| `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}` and writes `.cargo/config.toml`. Has no dependencies, so it builds before LLVM exists. |
+| `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}`, which write `.cargo/config.toml` for cargo and `.pep/llvm-prefix` for the scripts. Has no dependencies, so it builds before LLVM exists. |
 | `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
 | `tools/pep-lsp` | The Pepper rewrite of `pep-lsp` (#225), on the `lsp` package (justinboswell/pepper-lsp) and the Pepper front end (`tools/compiler`). It replaces `tools/lsp` once it does all that one does. |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
@@ -3276,7 +3276,8 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   hash, the build stops before sema. A build that warned records nothing,
   so the next one warns again. `-T time` prints each stage's time, `-T
   cache` each unit's hit or miss. **Checked layers**: sema checks the program a layer at a time and the cache keeps each layer's result; see [8.1](#81-pepcs-checked-layers). `linker.pep`
-  finds clang (as `find_link_driver` does) and links with the `[Link]`
+  finds clang (as `find_link_driver` does, but in `$PEPPER_LLVM_PREFIX`
+  before `$LLVM_SYS_201_PREFIX`) and links with the `[Link]`
   libraries and folders, `-l` and `-L`, and the OS's default system libraries;
   `project.pep` builds a project as `apply_project` and `fetch.rs` do:
   with no file, the `pep.toml`'s entry and output (and `.pep/build` in the
@@ -3706,8 +3707,9 @@ there. `RUST_TEST_THREADS=16` caps each suite's test threads (and
   `main`. There is no arm64 Windows or Linux runner, so those platforms get
   no bundled server.
 - **`release.yml`**: on each merge into main that changes `crates/`,
-  `runtime/`, `tools/` or `Cargo.*`, publishes the build of main: the
-  version main holds (`0.4.0-dev`, set by `scripts/set-version.sh`) on that
+  `runtime/`, `tools/`, `VERSION` or `Cargo.*`, publishes the build of
+  main: the version main holds (`0.4.0-dev` in `VERSION`, set with each
+  tool's `version()` by `scripts/set-version.sh`) on that
   prerelease, whose tag moves to the merge and whose assets are replaced
   (#713); CI installs it. On a `vX.Y.Z` tag (which must hold that version),
   it publishes a release, then its `bump` job opens a pull request setting

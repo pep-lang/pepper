@@ -248,3 +248,24 @@ the_index_keeps_every_version_and_opens_the_newest_release() {
     expect_true(File.read_to_string(folder.path.join("index.html")).value().contains("url=0.2.0/"));
     expect_true(folder.path.join(".nojekyll").is_file());
 }
+
+[Test]
+tool_versions_are_held_to_the_version_file() {
+    expect_equal(tool_version("import x;\n\nversion(): String {\n    return \"1.2.3-dev\";\n}\n").value(), "1.2.3-dev");
+    expect_true(tool_version("main(): int { return 0; }\n").is_empty());
+
+    var folder = TempFolder("pep_doc_versions");
+    File.write_text(folder.path.join("VERSION"), "1.2.3\n");
+    for (var tool in ["a", "b", "c"]) {
+        Directory.create_all(folder.path.join("tools").join(tool));
+    }
+    File.write_text(folder.path.join("tools").join("a").join("main.pep"), "\nversion(): String {\n    return \"1.2.3\";\n}\n");
+    File.write_text(folder.path.join("tools").join("b").join("main.pep"), "\nversion(): String {\n    return \"1.2.2\";\n}\n");
+    # A tool without a version() is not checked.
+    File.write_text(folder.path.join("tools").join("c").join("main.pep"), "main(): int { return 0; }\n");
+    var stale = stale_versions(folder.path).value();
+    expect_equal(stale.count, 1 as ulong);
+    expect_equal(
+        stale[0], "tools/b/main.pep: version() returns '1.2.2', but VERSION holds '1.2.3'; run scripts/set-version.sh"
+    );
+}

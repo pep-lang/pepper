@@ -35,12 +35,11 @@ path_file=${GITHUB_PATH:-/dev/stdout}
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 
 # The compiler finds clang in the LLVM it was built against through
-# LLVM_SYS_<NN>_PREFIX, which cargo sets from .cargo/config.toml only for
-# the processes it runs. The cross links run the compiler directly.
-prefix_line=$(tr -d '\r' < "$repo_root/.cargo/config.toml" | grep -E '^LLVM_SYS_[0-9]+_PREFIX = ' | head -1)
-prefix_name=${prefix_line%% =*}
-prefix=$(printf '%s' "$prefix_line" | sed -E 's/^[^"]*"(.*)"$/\1/; s|\\\\|\\|g')
-echo "$prefix_name=$prefix" >> "$env_file"
+# LLVM_SYS_<NN>1_PREFIX. The cross links run the compiler directly, so it
+# gets the prefix the setup script recorded in .pep/llvm-prefix.
+prefix=$(tr -d '\r' < "$repo_root/.pep/llvm-prefix" | head -1)
+[ -n "$prefix" ] || { echo "error: no LLVM prefix in .pep/llvm-prefix; run scripts/setup-llvm.sh" >&2; exit 1; }
+echo "LLVM_SYS_${LLVM_MAJOR}1_PREFIX=$prefix" >> "$env_file"
 
 case "$(uname -s)" in
   Linux)

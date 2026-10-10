@@ -47,7 +47,7 @@ chapter.
 ## Versions
 
 Documentation is versioned with the compiler's [semantic version](https://semver.org)
-(`version` in the root `Cargo.toml`). `pep-doc build --version X.Y.Z`
+(the one line of the root `VERSION` file). `pep-doc build --version X.Y.Z`
 renders the book into `<site>/X.Y.Z/` and leaves every other version in the
 site alone; `versions.json` lists them for the version picker, and the site's
 `index.html` opens the newest release. Builds from `main` publish as `dev`.

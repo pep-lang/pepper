@@ -94,8 +94,8 @@ says so when it finds none, and on macOS offers `brew install openssl@3`.
 
 `pep-build` looks for `clang` in this order, and uses the first it finds:
 
-1. in the LLVM named by `LLVM_SYS_<major>1_PREFIX`, which a development
-   checkout sets;
+1. in the LLVM named by `PEPPER_LLVM_PREFIX`, else by
+   `LLVM_SYS_<major>1_PREFIX` (`LLVM_SYS_201_PREFIX` for LLVM 20);
 2. beside `pep-build` itself;
 3. on the `PATH`, as `clang`, then as `clang-<major>` for the LLVM it is
    built with (what Ubuntu's `clang-20` package installs);
@@ -164,7 +164,7 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
 
 - **the build of main**, on each merge into main that changes the compiler,
   the runtime or the tools: main holds the version being developed as a
-  prerelease (`0.4.0-dev` in `Cargo.toml` and each tool's `version()`), and
+  prerelease (`0.4.0-dev` in `VERSION` and each tool's `version()`), and
   the workflow publishes it on the prerelease `v0.4.0-dev`, moving its tag
   to the merge and replacing its archives. CI and the workers install it
   (`--version 0.4.0-dev`) instead of building the compiler. The newest

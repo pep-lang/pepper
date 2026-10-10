@@ -193,7 +193,10 @@ Either way the script:
   scripts, so from then on plain `cargo` commands work with no shell setup, no
   environment variables, and no Developer Prompt. That file is generated and
   gitignored — re-run the script on a new machine rather than copying it;
-- is idempotent: with a valid install present it only rewrites the cargo config.
+- records the same prefix, one line, in `.pep/llvm-prefix` (also gitignored),
+  which the test, release and CI scripts read instead of cargo's config, and
+  in CI also exports `LLVM_SYS_<major>1_PREFIX` through `$GITHUB_ENV`;
+- is idempotent: with a valid install present it only rewrites those files.
 
 #### Choosing an LLVM version
 
@@ -273,7 +276,7 @@ target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
 
 The tests are Pepper `[Test]` functions, built with the installed build of
 main: each merge that changes the compiler, the runtime or the tools
-publishes it as the prerelease named by `Cargo.toml`'s version
+publishes it as the prerelease named by the version in `VERSION`
 (`0.4.0-dev`), and CI installs it rather than building the compiler:
 
 ```bash

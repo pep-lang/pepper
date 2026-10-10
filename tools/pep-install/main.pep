@@ -25,8 +25,8 @@ import toolchain;
 import "commands";
 import "releases";
 
-# The release this tool belongs to. A test keeps it equal to the workspace
-# version in Cargo.toml.
+# The release this tool belongs to. `pep-doc check` keeps it equal to the
+# version in VERSION.
 version(): String {
     return "0.4.0-dev";
 }

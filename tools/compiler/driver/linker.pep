@@ -22,8 +22,25 @@ import process;
 ## The LLVM major the compiler is built against, whose clang links.
 export const LLVM_MAJOR = "20";
 
-## The environment variable that names the LLVM install.
+## The environment variable that names the LLVM install, as llvm-sys
+## (and so the Rust build) spells it.
 export const LLVM_PREFIX_ENV = "LLVM_SYS_201_PREFIX";
+
+## Pepper's own name for the LLVM install, which wins over
+## `LLVM_PREFIX_ENV`.
+export const PEPPER_LLVM_PREFIX_ENV = "PEPPER_LLVM_PREFIX";
+
+## The LLVM install whose tools link: `$PEPPER_LLVM_PREFIX`, else
+## `$LLVM_SYS_201_PREFIX`.
+##
+## @returns its folder, or Empty when neither is set
+export llvm_prefix(): String? {
+    var prefix = os.environment(PEPPER_LLVM_PREFIX_ENV);
+    if (prefix.is_value() and !prefix.value().is_empty) {
+        return prefix;
+    }
+    return os.environment(LLVM_PREFIX_ENV);
+}
 
 ## `name` as an executable's file name on the host: `name.exe` on Windows.
 executable_name(name: String): String {
@@ -120,7 +137,8 @@ llvm_install_dirs(): Path[] {
     return dirs;
 }
 
-## Finds clang, the link driver: in `$LLVM_SYS_201_PREFIX/bin`, beside the
+## Finds clang, the link driver: in the `bin` folder of `llvm_prefix()`
+## (`$PEPPER_LLVM_PREFIX`, else `$LLVM_SYS_201_PREFIX`), beside the
 ## running compiler, on the PATH (plain, then with this LLVM's major), then
 ## in the folders LLVM's packages install it in.
 ##
@@ -128,7 +146,7 @@ llvm_install_dirs(): Path[] {
 export find_link_driver(): Path? {
     var exe = executable_name("clang");
     var candidates = Array<Path>();
-    var prefix = os.environment(LLVM_PREFIX_ENV);
+    var prefix = llvm_prefix();
     if (prefix.is_value()) {
         candidates.append(Path(prefix.value()).join(Path("bin")).join(Path(exe)));
     }
@@ -264,7 +282,7 @@ export find_lld(system: String, driver: Path): Path? {
     if (parent.is_value() and !parent.value().to_string().is_empty) {
         dirs.append(parent.value());
     }
-    var prefix = os.environment(LLVM_PREFIX_ENV);
+    var prefix = llvm_prefix();
     if (prefix.is_value()) {
         dirs.append(Path(prefix.value()).join(Path("bin")));
     }

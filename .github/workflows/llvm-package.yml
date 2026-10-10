@@ -210,7 +210,7 @@ jobs:
           set -euo pipefail
 
           # The platform only names the asset. The prefix is read back out of
-          # the config the setup script just wrote, rather than re-derived: the
+          # the file the setup script just wrote, rather than re-derived: the
           # script may settle on a system LLVM (an apt or Homebrew prefix, or a
           # different major than the one asked for) and then never populate
           # ~/.local/share/pepper/llvm/<version> at all, so a re-derived path
@@ -224,16 +224,10 @@ jobs:
           asset="llvm-$VERSION-$platform.tar.xz"
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
-          config=.cargo/config.toml
-          [ -f "$config" ] || { echo "::error::$config was not generated"; exit 1; }
-          # Two transformations, both required: setup-llvm.ps1 writes this file
-          # with Set-Content, whose line endings are CRLF, so an anchored match
-          # fails without stripping CR; and TOML escapes Windows separators, so
-          # the doubled backslashes have to be collapsed for the shell.
-          prefix=$(tr -d '\r' < "$config" \
-                   | sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX = "(.*)"$/\1/p' \
-                   | head -1 | sed 's|\\\\|\\|g')
-          [ -n "$prefix" ] || { echo "::error::no LLVM_SYS_*_PREFIX in $config"; exit 1; }
+          recorded=.pep/llvm-prefix
+          [ -f "$recorded" ] || { echo "::error::$recorded was not generated"; exit 1; }
+          prefix=$(tr -d '\r' < "$recorded" | head -1)
+          [ -n "$prefix" ] || { echo "::error::no LLVM prefix in $recorded"; exit 1; }
           echo "  prefix: $prefix"
 
           # The asset is named from the requested major's version, but the

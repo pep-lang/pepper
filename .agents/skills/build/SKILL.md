@@ -21,7 +21,7 @@ cargo setup --check              # what is configured, and how to build it
 
 Where LLVM comes from, cheapest source first: an install of the wanted major already on the machine, then the platform's package manager (`apt install llvm-<major>-dev` plus `libpolly-<major>-dev`, 4–8s; `brew install llvm@<major>`, 13–17s), then the upstream release archive, from which only the members the build consumes are unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries.
 
-Setup writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX` plus the `cargo setup` alias. That file is generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. It is the *only* mechanism that reaches `llvm-sys` without shell state, which is why provisioning cannot live in a build script. Re-running is cheap and idempotent.
+Setup writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX` plus the `cargo setup` alias, and the same prefix, one line, to `.pep/llvm-prefix`, which the scripts and workflows read (in CI it also exports `LLVM_SYS_<major>1_PREFIX` through `$GITHUB_ENV`). Both are generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. It is the *only* mechanism that reaches `llvm-sys` without shell state, which is why provisioning cannot live in a build script. Re-running is cheap and idempotent.
 
 ### LLVM version
 

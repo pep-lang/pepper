@@ -46,7 +46,7 @@ scripts/pepper-tests.sh target/release           # with a cargo build instead
 The tests build with the installed toolchain's `pep-build`, the one
 `pepper install which` names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
-prerelease named by the version `Cargo.toml` holds (`0.4.0-dev`), replacing
+prerelease named by the version the `VERSION` file holds (`0.4.0-dev`), replacing
 the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
 refresh it). Only a change to the Rust compiler itself (`crates/`) needs its

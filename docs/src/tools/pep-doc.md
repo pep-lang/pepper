@@ -43,7 +43,10 @@ Changes nothing, and fails (exit status 1) when:
   clang-style error at the declaration;
 - a tool's option, command, option value, trace channel, environment
   variable or setting is missing from the tool's page in this book, naming
-  the tool and the page.
+  the tool and the page;
+- a Pepper tool's `version()` (in `tools/<tool>/main.pep`) is not the
+  version in the repository's `VERSION` file, which
+  `scripts/set-version.sh` sets them all to.
 
 The tools' options come from their `--help`: `pep-build`'s and the Pepper
 tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,

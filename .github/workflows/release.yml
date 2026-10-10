@@ -40,6 +40,7 @@ on:
     # Paths do not filter tag pushes: every vX.Y.Z tag publishes.
     tags: ['v*.*.*']
     paths:
+      - VERSION
       - Cargo.toml
       - Cargo.lock
       - crates/**
@@ -99,7 +100,7 @@ jobs:
           PUBLISH_INPUT: ${{ inputs.publish }}
         run: |
           set -euo pipefail
-          held=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)
+          held=$(tr -d '\r' < VERSION)
           echo "the checkout holds $held"
           version=dev
           publish=false
@@ -326,7 +327,7 @@ jobs:
           RELEASED: ${{ needs.version.outputs.version }}
         run: |
           set -euxo pipefail
-          held=$(sed -nE 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1)
+          held=$(tr -d '\r' < VERSION)
           if [ "$held" != "$RELEASED" ]; then
             echo "main holds $held, not $RELEASED: nothing to start"
             exit 0

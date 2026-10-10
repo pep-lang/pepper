@@ -231,8 +231,9 @@ locations_of(symbols: json.JsonValue): Array<Location> {
 
 # The llvm-symbolizer to use: `requested` when given, else the first found
 # on the PATH (`llvm-symbolizer`, then a versioned one such as
-# `llvm-symbolizer-20`), in `$LLVM_SYS_<major>1_PREFIX/bin`, or in the
-# usual LLVM install directories. None when there is none.
+# `llvm-symbolizer-20`), in `$PEPPER_LLVM_PREFIX/bin` or
+# `$LLVM_SYS_<major>1_PREFIX/bin`, or in the usual LLVM install
+# directories. None when there is none.
 export find_symbolizer(requested: String): String? {
     if (!requested.is_empty) {
         var given = process.find_executable(requested);
@@ -250,6 +251,10 @@ export find_symbolizer(requested: String): String? {
         }
     }
     var directories = Array<String>();
+    var pepper_prefix = os.environment("PEPPER_LLVM_PREFIX");
+    if (pepper_prefix.is_value()) {
+        directories.append(pepper_prefix.value() + "/bin");
+    }
     for (var major in 14..>30) {
         var prefix = os.environment($"LLVM_SYS_{44 - major}1_PREFIX");
         if (prefix.is_value()) {

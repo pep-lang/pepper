@@ -129,7 +129,8 @@ These names come from the program's debug info, read by
 [`llvm-symbolizer`](https://llvm.org/docs/CommandGuide/llvm-symbolizer.html),
 which LLVM installs: `pep-profile` looks for `llvm-symbolizer` and its
 versioned names (`llvm-symbolizer-20`) on the `PATH`, then in
-`$LLVM_SYS_<major>1_PREFIX/bin` and the usual LLVM install folders.
+`$PEPPER_LLVM_PREFIX/bin`, `$LLVM_SYS_<major>1_PREFIX/bin` and the usual
+LLVM install folders.
 `--symbolizer` names one, and `--symbolizer none` skips it. Without one,
 frames take the profiler's symbol names, which `pep-profile` demangles:
 Pepper's linker name `_PArray_3cint_3e.count` shows as `Array<int>.count`,

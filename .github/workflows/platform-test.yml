@@ -210,11 +210,9 @@ jobs:
           df -m . | tail -2
           echo "::endgroup::"
 
-          echo "::group::LLVM as cargo sees it"
+          echo "::group::LLVM as setup recorded it"
           cat .cargo/config.toml 2>/dev/null || echo "no .cargo/config.toml"
-          prefix=$(tr -d '\r' < .cargo/config.toml 2>/dev/null \
-                   | sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX = "(.*)"$/\1/p' \
-                   | head -1 | sed 's|\\\\|\\|g')
+          prefix=$(tr -d '\r' < .pep/llvm-prefix 2>/dev/null | head -1)
           if [ -n "$prefix" ]; then
             echo "prefix: $prefix"
             "$prefix/bin/llvm-config" --version --targets-built --libdir 2>&1 | sed 's/^/  /'

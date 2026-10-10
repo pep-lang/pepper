@@ -15,12 +15,14 @@
     and the clang/lld/llc/lli/opt tools. This script downloads it (cached),
     extracts it under $env:LOCALAPPDATA\pepper\llvm, and writes
     .cargo/config.toml so cargo sees LLVM_SYS_<major>_PREFIX with no shell setup.
+    It also records the prefix in .pep/llvm-prefix (one line, read by the
+    scripts and workflows).
 
     Note that Pepper links LLVM-C.dll rather than the static libraries on
     Windows, because those are built against the static CRT; see
     crates/pepper-codegen/build.rs.
 
-    Idempotent: re-running with a valid install only rewrites the cargo config.
+    Idempotent: re-running with a valid install only rewrites those.
 
 .PARAMETER DevTools
     Also install the debugger (lldb, lldb-dap, lldb-server). Equivalent to
@@ -259,6 +261,16 @@ LLVM_SYS_${LlvmSysMajor}_PREFIX = "$EscapedPrefix"
 "@ | Set-Content -Path $CargoConfig -Encoding utf8
 
 Write-Host "Wrote $CargoConfig (LLVM_SYS_${LlvmSysMajor}_PREFIX)"
+
+# The prefix for everything that is not cargo: the scripts and workflows
+# read .pep/llvm-prefix (gitignored, like all of .pep/), and a CI job's
+# later steps, the compiler among them, get the variable. Written without a
+# byte order mark or CR, so a shell reads it as is.
+$PepDir = Join-Path $RepoRoot '.pep'
+New-Item -ItemType Directory -Force -Path $PepDir | Out-Null
+$PrefixFile = Join-Path $PepDir 'llvm-prefix'
+[System.IO.File]::WriteAllText($PrefixFile, "$Prefix`n")
+Write-Host "Wrote $PrefixFile"
 if ($LlvmMajor -eq $DefaultLlvmMajor) {
     Write-Host "Run 'cargo build' to verify."
 } else {

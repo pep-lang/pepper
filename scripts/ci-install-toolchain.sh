@@ -6,8 +6,9 @@
 #   scripts/ci-install-toolchain.sh [--build]
 #
 # By default it installs the build of main, the prerelease named by the
-# version this checkout holds (`0.4.0-dev`, which release.yml publishes on
-# every merge that changes the compiler, the runtime or the tools), with
+# version this checkout's VERSION file holds (`0.4.0-dev`, which
+# release.yml publishes on every merge that changes the compiler, the
+# runtime or the tools), with
 # the install scripts, as a user would: install.sh, or install.ps1 on
 # Windows, into a fresh home under $RUNNER_TEMP. No job builds the
 # compiler.
@@ -42,8 +43,8 @@ if [ "$build" = 1 ]; then
   cargo build --workspace --release --locked
   compiler="$target/release"
 else
-  version="$(sed -nE '/^\[workspace\.package\]/,/^\[/s/^version = "([^"]+)"/\1/p' Cargo.toml)"
-  [ -n "$version" ] || { echo "error: no [workspace.package] version in Cargo.toml" >&2; exit 1; }
+  version="$(tr -d '\r' < VERSION)"
+  [ -n "$version" ] || { echo "error: no version in VERSION" >&2; exit 1; }
   home="${RUNNER_TEMP:-$target}/pepper-home"
   rm -rf "$home"
   echo "=== installing Pepper $version into $home"

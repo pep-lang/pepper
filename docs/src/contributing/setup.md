@@ -11,7 +11,9 @@ cargo setup --devtools                     # afterwards
 
 The first run writes `.cargo/config.toml`, which points the build at the
 LLVM it settled on (`LLVM_SYS_<major>1_PREFIX`) and defines the `cargo setup`
-alias. Run it again on each new machine rather than copying that file. The
+alias, and `.pep/llvm-prefix`, which holds the same prefix for everything
+that is not cargo. Run it again on each new machine rather than copying
+those files. The
 README's
 [Setting up a development environment](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
 says what each platform needs first and how the versions are chosen.
@@ -32,6 +34,9 @@ and macOS, `scripts/setup-llvm.ps1` on Windows), which:
   free);
 - writes `.cargo/config.toml`, so plain `cargo` commands build against it
   with no environment variables set;
+- writes the prefix, one line, to `.pep/llvm-prefix` in the checkout
+  (gitignored), where `scripts/pepper-tests.sh`, the release scripts and
+  the workflows read it;
 - does nothing more when a valid install is already there.
 
 When it provisions an LLVM other than the default (20), it prints the

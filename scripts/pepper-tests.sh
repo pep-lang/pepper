@@ -50,7 +50,7 @@ else
   fi
   if [ -z "$compiler" ]; then
     echo "error: no installed Pepper toolchain; install the build of main with" >&2
-    echo "  sh scripts/install.sh --version $(sed -nE 's/^version = "([^"]+)"/\1/p' "$root/Cargo.toml" | head -n 1)" >&2
+    echo "  sh scripts/install.sh --version $(tr -d '\r' < "$root/VERSION")" >&2
     echo "or pass the folder of a pep-build to test with (target/release after 'cargo build --release')" >&2
     exit 2
   fi
@@ -107,14 +107,14 @@ tools_log="$bin/pepper-tests-tools.log"
   cd "$root/tools"
   # The compiler's tests (tools/compiler) import pepper-llvm, which links the
   # LLVM library. Linux finds it on the default search path; macOS and
-  # Windows need its folder (see pepper-llvm's llvm_c/link.pep): the prefix
-  # scripts/setup-llvm.sh or .ps1 wrote to .cargo/config.toml, or
-  # LLVM_SYS_201_PREFIX. Windows also needs its DLL's folder on PATH to run
-  # the tests.
+  # Windows need its folder (see pepper-llvm's llvm_c/link.pep):
+  # PEPPER_LLVM_PREFIX or LLVM_SYS_201_PREFIX, else the prefix
+  # scripts/setup-llvm.sh or .ps1 wrote to .pep/llvm-prefix. Windows also
+  # needs its DLL's folder on PATH to run the tests.
   llvm=()
-  llvm_prefix="${LLVM_SYS_201_PREFIX:-}"
-  if [ -z "$llvm_prefix" ] && [ -f "$root/.cargo/config.toml" ]; then
-    llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' "$root/.cargo/config.toml" | head -1 | sed 's/\\\\/\\/g')"
+  llvm_prefix="${PEPPER_LLVM_PREFIX:-${LLVM_SYS_201_PREFIX:-}}"
+  if [ -z "$llvm_prefix" ] && [ -f "$root/.pep/llvm-prefix" ]; then
+    llvm_prefix="$(tr -d '\r' < "$root/.pep/llvm-prefix" | head -1)"
   fi
   if [ -n "$llvm_prefix" ] && [ "$(uname -s)" != Linux ]; then
     llvm=(-L "$llvm_prefix/lib")

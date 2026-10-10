@@ -18,8 +18,8 @@
 # here downloads an 11.6 GB tarball any more.
 #
 # Either way this ends by running the normal setup script, which validates the
-# prefix and writes .cargo/config.toml, so there is one source of truth for how
-# cargo finds LLVM.
+# prefix and writes .cargo/config.toml and .pep/llvm-prefix, so there is one
+# source of truth for how cargo and the scripts find LLVM.
 #
 # The LLVM major comes from PEPPER_LLVM_MAJOR when set, else each setup
 # script's own default. Needs GH_TOKEN on Windows to read release assets from a
@@ -119,5 +119,6 @@ else
 fi
 
 # Validates whatever is now in the prefix, installs from the archive if the
-# download did not happen, and writes .cargo/config.toml either way.
+# download did not happen, and writes .cargo/config.toml and .pep/llvm-prefix
+# either way.
 pwsh -File scripts/setup-llvm.ps1 -Llvm "$major"

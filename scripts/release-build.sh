@@ -148,8 +148,9 @@ esac
 ls -l "$static_dir"
 
 # The cargo feature for the LLVM provisioned: on Windows the setup script
-# provisioned the default one and wrote .cargo/config.toml; elsewhere the
-# LLVM the platform serves, which must be one this workspace supports.
+# provisioned the default one and wrote .cargo/config.toml and
+# .pep/llvm-prefix; elsewhere the LLVM the platform serves, which must be
+# one this workspace supports.
 features=()
 if [ -n "$llvm_config" ]; then
   llvm_version=$("$llvm_config" --version)
@@ -229,7 +230,8 @@ case "$target" in
     llvm_link+=(-l "$cxx")
     ;;
   windows-x64)
-    llvm_prefix="$(sed -nE 's/^LLVM_SYS_[0-9]+_PREFIX *= *"(.*)".*/\1/p' .cargo/config.toml | head -1 | sed 's/\\\\/\\/g')"
+    # The prefix setup-llvm.ps1 settled on.
+    llvm_prefix="$(tr -d '\r' < .pep/llvm-prefix | head -1)"
     llvm_link=(-L "$llvm_prefix/lib")
     PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
     ;;

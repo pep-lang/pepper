@@ -17,6 +17,10 @@
 # | `install.sh` | its `usage` text | `docs/src/tools/install.md` |
 # | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
 #
+# It also holds each Pepper tool's `version()` to the version in the
+# repository's `VERSION` file (`stale_versions`), which
+# `scripts/set-version.sh` sets them all to.
+#
 # The tools' `--help` comes from the built tools in one folder (`--tools`,
 # else `target/pepper-tests/bin`, where `scripts/pepper-tests.sh` builds the
 # Pepper tools beside its `pep-build`, when it holds `pep-build`, else the
@@ -623,4 +627,67 @@ _install_scripts(root: Path, problems: String[]): Result<void> {
     }
     _undocumented(root, "install.ps1", page, "parameter", parameters, _Match.Word, problems)?;
     return Result<void>.ok();
+}
+
+# The version `version()` returns in the `main.pep` source of a tool: the
+# string literal of the `return` after `version(): String {`. None when
+# the source has no such function.
+export tool_version(source: String): String? {
+    var start = source.find("\nversion(): String {");
+    if (start < 0) {
+        return Optional<String>.Empty;
+    }
+    var marker = "return \"";
+    var at = source.find(marker, start as ulong);
+    if (at < 0) {
+        return Optional<String>.Empty;
+    }
+    var from = at as ulong + marker.size;
+    var end = find_byte(source, '"', from, source.size);
+    if (end == source.size) {
+        return Optional<String>.Empty;
+    }
+    return Optional<String>.Value(slice(source, from, end));
+}
+
+# Each Pepper tool (`tools/<tool>/main.pep`) whose `version()` is not the
+# version in `VERSION`, one line each.
+export stale_versions(root: Path): Result<String[]> {
+    var held = _repository_file(root, "VERSION")?.trim();
+    if (held.is_empty) {
+        return Result<String[]>.Err("VERSION holds no version");
+    }
+    var tools = root.join("tools");
+    var listing = Directory.open(tools);
+    if (listing.is_err()) {
+        return Result<String[]>.Err($"cannot read tools/: {listing.error().message}");
+    }
+    var entries = listing.value().entries();
+    if (entries.is_err()) {
+        return Result<String[]>.Err($"cannot read tools/: {entries.error().message}");
+    }
+    var sorted = entries.value();
+    sorted.sort((a, b) => a.name.compare(b.name));
+    var problems = Array<String>();
+    ulong checked = 0;
+    for (var entry in sorted) {
+        var path = $"tools/{entry.name}/main.pep";
+        if (!entry.is_directory or !root.join(path).is_file()) {
+            continue;
+        }
+        var version = tool_version(_repository_file(root, path)?);
+        if (version.is_empty()) {
+            continue;
+        }
+        checked += 1;
+        if (version.value() != held) {
+            problems.append(
+                $"{path}: version() returns '{version.value()}', but VERSION holds '{held}'; run scripts/set-version.sh"
+            );
+        }
+    }
+    if (checked == 0) {
+        return Result<String[]>.Err("found no tools/<tool>/main.pep with a version() to check against VERSION");
+    }
+    return Result<String[]>.ok(problems);
 }

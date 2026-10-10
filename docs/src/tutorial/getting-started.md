@@ -57,7 +57,8 @@ has the full details for each platform; this is the short version.
 
    This installs a development build of LLVM (from apt, Homebrew, or the
    official release archive on Windows) and writes `.cargo/config.toml` so
-   that plain `cargo` commands find it. `--devtools` also sets up the `lldb`
+   that plain `cargo` commands find it (and `.pep/llvm-prefix`, for the
+   scripts). `--devtools` also sets up the `lldb`
    debugger; you can leave it out. Run `cargo setup --check` at any time to see
    what is configured.
 

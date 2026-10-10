@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Prove a release archive works as installed: unpack it outside the
-# checkout, with no LLVM_SYS_*_PREFIX or PEPPER_RUNTIME set, and build and
-# run a program through `pepper`. Then check what the binaries load: on
-# Linux only the C and C++ runtimes and libz, from glibc 2.28 or older; on
-# macOS only the system's libraries; on Windows, pep-build starts with
-# nothing but the system folder on the PATH (LLVM-C.dll beside it).
+# checkout, with no LLVM_SYS_*_PREFIX, PEPPER_LLVM_PREFIX or PEPPER_RUNTIME
+# set, and build and run a program through `pepper`. Then check what the
+# binaries load: on Linux only the C and C++ runtimes and libz, from glibc
+# 2.28 or older; on macOS only the system's libraries; on Windows,
+# pep-build starts with nothing but the system folder on the PATH
+# (LLVM-C.dll beside it).
 #
 #   scripts/release-smoke-test.sh <archive> <target>
 set -euo pipefail
@@ -29,7 +30,7 @@ install=$(echo "$work"/pepper-*)
 bin="$install/bin"
 ls -l "$bin"
 
-for variable in $(env | sed -nE 's/^(LLVM_SYS_[0-9]+_PREFIX|PEPPER_RUNTIME)=.*/\1/p'); do
+for variable in $(env | sed -nE 's/^(LLVM_SYS_[0-9]+_PREFIX|PEPPER_LLVM_PREFIX|PEPPER_RUNTIME)=.*/\1/p'); do
   unset "$variable"
 done
 

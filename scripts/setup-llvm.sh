@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Provision the LLVM toolchain that llvm-sys (via inkwell) links against, and
-# point cargo at it. macOS / Linux counterpart of scripts/setup-llvm.ps1.
+# point cargo and the scripts at it. macOS / Linux counterpart of
+# scripts/setup-llvm.ps1.
 #
 # Order of preference, cheapest first:
 #
@@ -21,7 +22,10 @@
 #                   PEPPER_SETUP_DEVTOOLS=1. Off by default: the build does not
 #                   need it.
 #
-# Idempotent: re-running with a usable toolchain only rewrites .cargo/config.toml.
+# It records the prefix it settles on in .pep/llvm-prefix (one line, read by
+# the scripts and workflows) and in .cargo/config.toml for cargo.
+#
+# Idempotent: re-running with a usable toolchain only rewrites those.
 set -euo pipefail
 
 # The majors this workspace can build against, newest first. Dictated by the
@@ -89,7 +93,7 @@ while [[ $# -gt 0 ]]; do
             MAJOR_EXPLICIT=1
             ;;
         -h|--help)
-            sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -659,6 +663,12 @@ LLVM_SYS_${install_major}1_PREFIX = "$install_prefix"
 EOF
 
 echo "Wrote $REPO_ROOT/.cargo/config.toml (LLVM_SYS_${install_major}1_PREFIX)"
+
+# The prefix for everything that is not cargo: the scripts and workflows
+# read .pep/llvm-prefix (gitignored, like all of .pep/).
+mkdir -p "$REPO_ROOT/.pep"
+printf '%s\n' "$install_prefix" > "$REPO_ROOT/.pep/llvm-prefix"
+echo "Wrote $REPO_ROOT/.pep/llvm-prefix"
 if [[ "$install_major" == "$DEFAULT_MAJOR" ]]; then
     echo "Run 'cargo build' to verify."
 else

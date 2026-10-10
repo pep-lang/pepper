@@ -10,8 +10,10 @@
       bin/llvm-config.exe   llvm-sys discovery
       lib/LLVM-C.lib        import library
       bin/LLVM-C.dll        the LLVM implementation (Windows links the DLL --
-                            see crates/pepper-codegen/build.rs for why)
-      bin/clang.exe         link driver (crates/pepper-driver/src/linker.rs)
+                            see crates/pepper-codegen/build.rs for why; pepc,
+                            through pepper-llvm, links it too)
+      bin/clang.exe         link driver (tools/compiler/driver/linker.pep,
+                            crates/pepper-driver/src/linker.rs)
 
     That is roughly 175 MB. clang is kept here, unlike the Unix package, because
     a windows-latest runner has no clang of its own to fall back to.
