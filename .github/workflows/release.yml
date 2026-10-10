@@ -177,8 +177,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ matrix.target }}
           # pep-build is pepc, which depends on the private pepper-llvm
-          # package (scripts/ci-package-auth.sh).
+          # package, and pep-lsp on the private pepper-lsp package
+          # (scripts/ci-package-auth.sh).
           PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
           source scripts/ci-package-auth.sh
           bash -euxo pipefail scripts/release-build.sh "$TARGET" "$PEPPER_VERSION" dist

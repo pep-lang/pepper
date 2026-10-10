@@ -1,11 +1,13 @@
-# Builds the pep-lsp server (release) for every supported platform and
-# packages it with the VSCode extension into a single downloadable .vsix.
+# Builds the pep-lsp server (tools/pep-lsp, written in Pepper; release
+# build) for every supported platform and packages it with the VSCode
+# extension into a single downloadable .vsix.
 #
-# The LSP crate depends only on pepper-parser, pepper-sema and pepper-files,
-# none of which link LLVM, so each matrix leg needs no LLVM provisioning:
-# unlike the CI workflow it runs in seconds after checkout. Each leg builds
-# natively on its own runner (no cross-compilation toolchains) and smoke-
-# tests the binary it produced before uploading it.
+# Each leg installs the Pepper toolchain of this checkout's VERSION with the
+# install scripts (scripts/ci-install-toolchain.sh, as CI does) and builds
+# pep-lsp with its pep-build against this checkout's runtime. The server
+# never links LLVM. Each leg builds natively on its own runner, except
+# darwin-x64, which the arm64 Mac builds with `--target`, and smoke-tests
+# the binary it produced before uploading it.
 #
 # The vsix is published as a GitHub release asset, not a run artifact, so it
 # stays available after the run's artifacts expire. The tag carries the
@@ -16,7 +18,8 @@
 # It runs only for a release (pushing a vX.Y.Z tag, the same tags that
 # publish the docs) or when dispatched by hand (`gh workflow run vsix.yml`).
 # A release tag first runs the suite against every supported LLVM major
-# (llvm-versions.yml) and builds nothing unless all pass.
+# (llvm-versions.yml) and builds nothing unless all pass; its toolchain is
+# the one release.yml publishes for the same tag, which each leg waits for.
 # A release tag or a dispatch on main publishes; a dispatch on any other
 # branch uploads the vsix as a run artifact instead, so a branch can be
 # tested without replacing the released extension.
@@ -40,10 +43,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-
 jobs:
   # A release tag first runs the suite against every supported LLVM major
   # (llvm-versions.yml); nothing is built or published unless all pass. A
@@ -61,17 +60,18 @@ jobs:
       matrix:
         # One native runner per target, except macOS: both darwin legs run
         # on the self-hosted arm64 pepper-macos runner, and the x64 one names
-        # its Rust target explicitly. Apple's toolchain links either arch
+        # its target triple explicitly. Apple's toolchain links either arch
         # without extra setup, and Rosetta runs the x64 binary for the smoke
-        # test. `rust-target` empty means the host target.
+        # test. `triple` empty means the host.
         include:
-          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", rust-target: "" }
-          - { target: linux-x64, runs-on: pepper-linux, exe: "", rust-target: "" }
-          - { target: darwin-x64, runs-on: pepper-macos, exe: "", rust-target: x86_64-apple-darwin }
-          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", rust-target: "" }
+          - { target: win32-x64, runs-on: pepper-windows, exe: ".exe", triple: "" }
+          - { target: linux-x64, runs-on: pepper-linux, exe: "", triple: "" }
+          - { target: darwin-x64, runs-on: pepper-macos, exe: "", triple: x86_64-apple-darwin }
+          - { target: darwin-arm64, runs-on: pepper-macos, exe: "", triple: "" }
     runs-on: ${{ matrix.runs-on }}
-    # No LLVM download, so the budget is dominated by cargo.
-    timeout-minutes: 20
+    # Installing the toolchain and an optimized build of pep-lsp; a tag also
+    # waits for release.yml to publish that toolchain.
+    timeout-minutes: 200
 
     steps:
       - uses: actions/checkout@v7
@@ -82,50 +82,45 @@ jobs:
         with:
           node-version: 22
 
-      - name: Show toolchain
-        run: |
-          rustc --version
-          cargo --version
-          node --version
-
-      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
-      - name: Cache cargo registry
-        if: runner.environment == 'github-hosted'
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: cargo-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ matrix.target }}-
-
-      # Checkout's clean step deletes target/, so a self-hosted runner builds
-      # beside the checkout instead, as in the CI workflow. One directory per
-      # target keeps the two darwin legs, which share a runner, apart.
-      - name: Use persistent target dir (self-hosted)
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-vsix-${{ matrix.target }}" >> "$GITHUB_ENV"
-
-      # Where the release binary lands: under CARGO_TARGET_DIR when set, and
-      # under a per-triple directory when a Rust target is named.
-      - name: Locate server binary
+      # The toolchain of this checkout's VERSION (scripts/ci-install-toolchain.sh
+      # names its folder in PEPPER_COMPILER_DIR). For a tag, release.yml
+      # publishes it from the same push: retry until it has.
+      - name: Install the toolchain
         shell: bash
         env:
-          RUST_TARGET: ${{ matrix.rust-target }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
-          dir="${CARGO_TARGET_DIR:-target}"
-          [ -n "$RUST_TARGET" ] && dir="$dir/$RUST_TARGET"
-          echo "PEPPER_LSP_BIN=$dir/release/pep-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          tries=1
+          [ "$TAG" = true ] && tries=36
+          for i in $(seq "$tries"); do
+            if bash -euxo pipefail scripts/ci-install-toolchain.sh; then
+              exit 0
+            fi
+            [ "$i" = "$tries" ] || { echo "toolchain not published yet; retrying in 5 minutes"; sleep 300; }
+          done
+          exit 1
 
-      # Release build, as required for the bundled server. No features: the
-      # LSP crate never links LLVM, so -p selects exactly what to build.
+      # Release build, as required for the bundled server, of this
+      # checkout's tools/pep-lsp against this checkout's runtime. pep-lsp
+      # depends on the private pepper-lsp package (scripts/ci-package-auth.sh).
       - name: Build pep-lsp (release)
         shell: bash
         env:
-          RUST_TARGET: ${{ matrix.rust-target }}
-        run: cargo build --release -p pepper-lsp --locked ${RUST_TARGET:+--target "$RUST_TARGET"}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
+          PEPPER_RUNTIME: ${{ github.workspace }}/runtime
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          source scripts/ci-package-auth.sh
+          set -euxo pipefail
+          out="$RUNNER_TEMP/pep-lsp-${{ matrix.target }}"
+          rm -rf "$out"
+          mkdir -p "$out"
+          "$PEPPER_COMPILER_DIR/pep-build${{ matrix.exe }}" -O -I tools tools/pep-lsp/main.pep \
+            -o "$out/pep-lsp${{ matrix.exe }}" --build "$out/build" ${TRIPLE:+--target "$TRIPLE"}
+          rm -f "$out"/*.pdb "$out"/*.ilk
+          echo "PEPPER_LSP_BIN=$out/pep-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"
 
       # Prove the binary that ships actually serves LSP requests before it is
       # packaged; the smoke test spawns it over stdio and exercises diagnostics,
@@ -134,7 +129,7 @@ jobs:
         shell: bash
         env:
           PEPPER_REPO_ROOT: ${{ github.workspace }}
-        run: node tools/lsp/smoke-test.mjs tests/String.Methods/test.pep
+        run: node tools/pep-lsp/smoke-test.mjs tests/String.Methods/test.pep
 
       - name: Upload server binary
         uses: actions/upload-artifact@v7

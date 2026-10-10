@@ -25,8 +25,9 @@
 # Beside it lands `<archive>.sha256`, in `sha256sum`'s format.
 #
 # pep-build is pepc, the compiler written in Pepper: built with the Rust
-# compiler (stage 0, which cargo still builds for pep-lsp), then again with
-# itself, and the second build ships. LLVM is linked into it (statically on
+# compiler (stage 0), then again with itself, and the second build ships.
+# Every other tool, the language server pep-lsp (tools/pep-lsp) among them,
+# is Pepper built by that pep-build. LLVM is linked into it (statically on
 # Linux and macOS, as LLVM-C.dll on Windows), so a user needs no LLVM of
 # their own to compile; the libraries LLVM itself pulls in (zstd, libffi,
 # libxml2) are linked statically too, so the binary needs nothing beyond the
@@ -174,14 +175,12 @@ echo "=== build the Rust tools"
 export RUSTFLAGS="${RUSTFLAGS:-} -L native=$static_dir"
 cargo --version
 cargo build --release --locked -p pepper "${features[@]}"
-cargo build --release --locked -p pepper-lsp
 release="${CARGO_TARGET_DIR:-target}/release"
 
 stage_name="pepper-$version-$target"
 stage="$output/$stage_name"
 rm -rf "$stage"
 mkdir -p "$stage/bin"
-cp "$release/pep-lsp$exe" "$stage/bin/"
 if [ "$target" = windows-x64 ]; then
   # pepper-codegen's build script puts the LLVM-C.dll the compiler links
   # beside the Rust one; Windows loads it from the executable's folder.
@@ -248,7 +247,9 @@ PEPPER_RUNTIME="$repo_root/runtime" "$pepc_build/pepc-stage1$exe" -O -I tools to
 "$stage/bin/pep-build$exe" --version
 
 echo "=== build the Pepper tools"
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc; do
+# pep-lsp depends on the private pepper-lsp package, which the build fetches
+# (scripts/ci-package-auth.sh in CI).
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-lsp pep-doc; do
   "$stage/bin/pep-build$exe" -O -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
 # Windows builds write a .pdb beside each program; the archive does not

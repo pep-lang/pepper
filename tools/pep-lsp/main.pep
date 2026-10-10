@@ -2,10 +2,10 @@
 # package (github.com/justinboswell/pepper-lsp). Editors start it, through
 # `pepper lsp`, and talk to it over standard input and output.
 #
-# It replaces the Rust server in tools/lsp once it does all that one does
-# (#225). Build it from the repository root, next to the compiler:
+# It replaced the Rust server in tools/lsp (#225): releases and the VS Code
+# extension ship it. Build it from the repository root with a pep-build:
 #
-#     target/release/pep-build -O -I tools tools/pep-lsp/main.pep -o pep-lsp
+#     PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o pep-lsp
 
 import [File] from io;
 import lsp;

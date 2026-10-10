@@ -16,19 +16,17 @@ folder uses, as `pepper install which` reports it there, so the editor
 checks code with the same compiler and standard library as `pepper build`.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run **Pepper: Restart
-Language Server** after switching toolchains. For another editor, build it with
-`cargo build --release -p pepper-lsp` (it is
-`target/release/pep-lsp`) and configure the editor to run it for `.pep`
-files.
+Language Server** after switching toolchains. For another editor, run the
+toolchain's `pep-lsp` (or `pepper lsp`) for `.pep` files.
 
-A rewrite of the server in Pepper is under way in `tools/pep-lsp` (#225).
-It's built on the [`lsp` package](https://github.com/justinboswell/pepper-lsp),
-a framework for writing a language server for any language in Pepper.
-So far it reports diagnostics and the document outline, answers hover, go
-to definition and completion (generic code nothing instantiates and
-`match` bindings included), shows inlay hints, offers quick fixes, and
-dims code for other platforms. It reads the initialization options below. The server
-described here is still the Rust one until the rewrite does all it does.
+The server is written in Pepper, in `tools/pep-lsp`, on the
+[`lsp` package](https://github.com/justinboswell/pepper-lsp), a framework
+for writing a language server for any language in Pepper. To build it from
+a checkout of the repository, with this checkout's standard library:
+
+```bash
+PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+```
 
 ## Command-line options
 

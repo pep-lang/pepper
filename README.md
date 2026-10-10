@@ -4,7 +4,7 @@ Pepper is a compiled programming language. This repository holds the compiler,
 written in Rust: the root `pepper` crate builds the compiler CLI, `pep-build`,
 and the stages live in `crates/` as `pepper-parser`, `pepper-sema`,
 `pepper-codegen`, `pepper-driver` and `pepper-files` (source and runtime
-discovery). `tools/lsp` (`pep-lsp`) is the language server, and
+discovery). `tools/pep-lsp` (`pep-lsp`, written in Pepper) is the language server, and
 `tools/pep-doc` (`pep-doc`, written in Pepper) the book builder. Codegen goes through LLVM via `inkwell`.
 
 See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; build it with `pep-doc serve`) for the language itself, and [`INTERNALS.md`](INTERNALS.md) for how the compiler works.
@@ -521,9 +521,12 @@ scripts/install-vscode-extension.ps1 -Watch   # follow the branch: pull and rein
 
 The extension restarts its language server by itself when the installed server
 changes; a change to the extension's own code needs **Developer: Reload
-Window**. When editing the server, setting `pepper.lspPath` to
-`target/release/pep-lsp.exe` skips the install: each
-`cargo build --release -p pepper-lsp` restarts the server in place.
+Window**. The script builds the server (`tools/pep-lsp`) with the installed
+toolchain's `pep-build`. When editing the server, setting `pepper.lspPath` to
+`target/pep-lsp/pep-lsp.exe` skips the install: each
+`pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe`
+(with `PEPPER_RUNTIME` set to the checkout's `runtime`) restarts the server
+in place.
 **Pepper: Restart Language Server** restarts it on demand. The **Pepper
 Language Server** output channel logs each background analysis (the file,
 how many files its program has, and how long sema took) and every request

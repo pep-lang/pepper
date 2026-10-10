@@ -233,9 +233,10 @@ A few things are useful once it is installed:
   `match` arm's case and the names it binds (`Circle(r) => ...`), and on
   the values an enum case declares.
 - The `pepper.lspPath` setting points the extension at a language server you
-  built yourself (`cargo build --release -p pepper-lsp` builds
-  `target/release/pep-lsp`). The server restarts whenever that file
-  changes.
+  built yourself (`pep-build -O -I tools tools/pep-lsp/main.pep -o
+  target/pep-lsp/pep-lsp` in a checkout of the repository; see
+  [The language server: pep-lsp](../tools/pep-lsp.md)). The server
+  restarts whenever that file changes.
 
 To install the extension from the branch you have checked out instead of the
 release, see

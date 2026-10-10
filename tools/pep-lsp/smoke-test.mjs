@@ -1,9 +1,10 @@
 // Smoke test for pep-lsp: raw JSON-RPC over stdio.
-// Usage: node tools/lsp/smoke-test.mjs <path-to-pep-file>
+// Usage: node tools/pep-lsp/smoke-test.mjs <path-to-pep-file>
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const BIN = process.env.PEPPER_LSP_BIN || (process.platform === "win32" ? "target/debug/pep-lsp.exe" : "target/debug/pep-lsp");
+// The server to test: PEPPER_LSP_BIN, else the `pep-lsp` on the PATH.
+const BIN = process.env.PEPPER_LSP_BIN || (process.platform === "win32" ? "pep-lsp.exe" : "pep-lsp");
 const REPO_ROOT = process.env.PEPPER_REPO_ROOT || "D:/pepper";
 const targetFile = process.argv[2];
 const text = readFileSync(targetFile, "utf8");
@@ -106,12 +107,14 @@ const def = await request("textDocument/definition", { textDocument: { uri }, po
 check("go-to-definition of s finds declaration on line 3", Array.isArray(def) && def.length === 1 && def[0].range.start.line === 2, def);
 
 // Completion inside the function body.
-const comp = await request("textDocument/completion", { textDocument: { uri }, position: { line: 3, character: 4 } });
-check("completion includes keyword `var`", Array.isArray(comp) && comp.some((c) => c.label === "var"), comp?.slice(0, 5));
-check("completion includes local `s`", Array.isArray(comp) && comp.some((c) => c.label === "s"), comp);
+// The answer is a CompletionList, or (in LSP's other form) its items alone.
+const compResult = await request("textDocument/completion", { textDocument: { uri }, position: { line: 3, character: 4 } });
+const comp = Array.isArray(compResult) ? compResult : compResult?.items;
+check("completion includes keyword `var`", Array.isArray(comp) && comp.some((c) => c.label === "var"), comp?.slice(0, 5) ?? compResult);
+check("completion includes local `s`", Array.isArray(comp) && comp.some((c) => c.label === "s"), comp ?? compResult);
 
 // ── Case 2: file with a syntax error → diagnostic at the right line/col ───────
-const badUri = "file:///D:/pepper/tools/lsp/smoke-bad.pep";
+const badUri = "file:///D:/pepper/tools/pep-lsp/smoke-bad.pep";
 const badText = 'main(): int {\n    var x = ;\n}\n';
 notify("textDocument/didOpen", { textDocument: { uri: badUri, languageId: "pep", version: 1, text: badText } });
 const badDiags = await diagnosticsFor(badUri);

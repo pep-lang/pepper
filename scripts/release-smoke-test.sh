@@ -36,6 +36,8 @@ done
 
 echo "=== version"
 "$bin/pepper$exe" --version -v
+# The language server is Pepper too (tools/pep-lsp): it starts.
+"$bin/pep-lsp$exe" --version
 
 echo "=== build and run"
 printf 'main(): int {\n    print("Hello world!");\n    return 0;\n}\n' > hello.pep

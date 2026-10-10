@@ -57,9 +57,8 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | `pepper lsp` | `pep-lsp` | Runs the language server, which editors start ([The language server: pep-lsp](pep-lsp.md)) |
 | `pepper doc` | `pep-doc` | Generates the library reference and builds this book ([The documentation builder: pep-doc](pep-doc.md)) |
 
-`cargo build --release --workspace` builds `pep-build`, `pep-lsp` and `pep-doc` into
-`target/release`; `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,
-`pep-test` and `pepper` are Pepper programs, built with `pep-build`.
+Every one of them but `pep-build` is a Pepper program, built with
+`pep-build`; `pep-build` itself is too (`tools/compiler`).
 
 ## Building it
 

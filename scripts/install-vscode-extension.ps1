@@ -9,9 +9,17 @@
 # restarts its language server on its own once the new build lands; a change
 # to the extension's own code still needs "Developer: Reload Window".
 #
+# The server is tools/pep-lsp, built with the installed toolchain's
+# pep-build (the one `pepper install which` names, else the pep-build on the
+# PATH) against this checkout's runtime, into target/pep-lsp/.
+#
 # For a tighter loop while editing the server, set `pepper.lspPath` to
-# target/release/pep-lsp.exe instead: every `cargo build --release -p
-# pepper-lsp` then restarts the server with no install step at all.
+# target/pep-lsp/pep-lsp.exe instead: every rebuild
+#
+#   $env:PEPPER_RUNTIME = "$PWD/runtime"
+#   pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe
+#
+# then restarts the server with no install step at all.
 param(
     [switch]$Watch,
     [int]$IntervalSeconds = 60,
@@ -24,9 +32,9 @@ Set-StrictMode -Version Latest
 
 $repo = Split-Path -Parent $PSScriptRoot
 $ext = Join-Path $repo "tools/vscode-pepper"
-# Sources the vsix is built from; mirrors the path filter in vsix.yml.
-$sources = @("crates/pepper-parser", "crates/pepper-sema", "crates/pepper-files",
-    "tools/lsp", "tools/vscode-pepper", "Cargo.lock")
+# Sources the vsix is built from.
+# The server reads the Pepper front end (tools/compiler) and the runtime.
+$sources = @("tools/pep-lsp", "tools/compiler", "runtime", "tools/vscode-pepper")
 
 # Native commands don't throw on failure; check the exit code of each.
 function Invoke-Native([scriptblock]$Command) {
@@ -34,10 +42,27 @@ function Invoke-Native([scriptblock]$Command) {
     if ($LASTEXITCODE -ne 0) { throw "'$Command' failed with exit code $LASTEXITCODE" }
 }
 
+# The pep-build to build the server with: the installed toolchain's, else
+# the one on the PATH.
+function Find-PepBuild {
+    $pepper = Get-Command pepper -ErrorAction SilentlyContinue
+    if ($pepper) {
+        $which = & $pepper.Source install which 2>$null
+        if ($LASTEXITCODE -eq 0 -and @($which).Count -ge 2 -and (Test-Path $which[1])) { return $which[1] }
+    }
+    $pepBuild = Get-Command pep-build -ErrorAction SilentlyContinue
+    if ($pepBuild) { return $pepBuild.Source }
+    throw "no pep-build: install the Pepper toolchain (scripts/install.ps1) or put a pep-build on the PATH"
+}
+
 function Install-PepperExtension {
     Push-Location $repo
     try {
-        Invoke-Native { cargo build --release -p pepper-lsp --locked }
+        $pepBuild = Find-PepBuild
+        $out = Join-Path $repo "target/pep-lsp"
+        New-Item -ItemType Directory -Force $out | Out-Null
+        $env:PEPPER_RUNTIME = Join-Path $repo "runtime"
+        Invoke-Native { & $pepBuild -O -I tools tools/pep-lsp/main.pep -o (Join-Path $out "pep-lsp.exe") --build (Join-Path $out "build") }
 
         # The extension looks for server/<platform>-<arch>/ matching the VS Code
         # process, which follows the OS architecture.
@@ -45,7 +70,7 @@ function Install-PepperExtension {
         $target = if ($arch -eq "Arm64") { "win32-arm64" } else { "win32-x64" }
         $serverDir = Join-Path $ext "server/$target"
         New-Item -ItemType Directory -Force $serverDir | Out-Null
-        Copy-Item (Join-Path $repo "target/release/pep-lsp.exe") $serverDir -Force
+        Copy-Item (Join-Path $out "pep-lsp.exe") $serverDir -Force
 
         Push-Location $ext
         try {

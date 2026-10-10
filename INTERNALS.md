@@ -32,8 +32,8 @@ names and the pass order come from that implementation.
 | `crates/pepper-codegen` | Sema model → LLVM IR through `inkwell` (`lib.rs`, plus `types.rs`, `address.rs`, `ops.rs`, `checks.rs` (runtime checks, see 4), `target.rs`, `facts.rs` (the IR facts, see 4.1), `jit_memory.rs`, `intrinsics.rs` (externs bound to LLVM intrinsics, see 4), `simd.rs` (SIMD vectors, see 4.7), `exports.rs` (the C entry points of `[Export]`ed functions, see 4.1), `thread_locals.rs` (`[ThreadLocal]` globals, see 4), and `context.rs`, the naked-assembly context-switch intrinsics). Also hosts the MCJIT entry points the tests use. |
 | `crates/pepper-driver` | Glues the stages together (`compiler.rs`), CLI options (`options.rs`), object emission and linking (`lib.rs`, `linker.rs`), libraries for C (`library.rs`, see [4.1](#41-object-emission-linking-running-driversrclibrs-linkerrs)), the test `main` of `--test` (`test_main.rs`, see [2.1](#21-cli-options-cratespepper-driversrcoptionsrs)), `--emit-static` (`emit_static.rs`, see [2.8](#28-static-blocks-and-reflection-builderstatic_itemsrs-passesstatic_blocksrs)). Holds nearly all integration tests (`tests/*.rs`). |
 | `xtask/` | `cargo setup` (`cargo run -p xtask -- setup`): picks and runs `scripts/setup-llvm.{sh,ps1}`, which write `.cargo/config.toml` for cargo and `.pep/llvm-prefix` for the scripts. Has no dependencies, so it builds before LLVM exists. |
-| `tools/lsp` | `pep-lsp`, a tower-lsp language server. Parser and sema only, so it never links LLVM. |
-| `tools/pep-lsp` | The Pepper rewrite of `pep-lsp` (#225), on the `lsp` package (justinboswell/pepper-lsp) and the Pepper front end (`tools/compiler`). It replaces `tools/lsp` once it does all that one does. |
+| `tools/pep-lsp` | `pep-lsp`, the language server, written in Pepper on the `lsp` package (justinboswell/pepper-lsp) and the Pepper front end (`tools/compiler`). It never links LLVM. Releases and the VS Code extension ship it. |
+| `tools/lsp` | The former Rust `pep-lsp` (tower-lsp). Nothing builds, ships or tests it; it goes with the rest of the Rust (#225). |
 | `tools/vscode-pepper` | VS Code extension: TextMate grammar, language configuration, and a client that launches `pep-lsp`. |
 | `tools/pep-doc` | `pep-doc`, written in Pepper on the compiler's parser (`tools/compiler`): generates `docs/src/reference/` from runtime doc comments (`reference.pep`, with the doc comments read by `compiler.doc`, `tools/compiler/doc/`, which the language server shares), runs `pep-doc check` (`checks.pep`, `book.pep`), and builds the versioned mdBook site (`site.pep`). |
 | `tools/syntax` | A Pepper library (written in Pepper): the lexer for Pepper source, which keeps each token's comments, for `compiler.parse` and tools. See [section 8](#8-language-server-and-vs-code-extension). |
@@ -53,7 +53,7 @@ names and the pass order come from that implementation.
 | `.agents/skills/` | Agent workflows: `build`, `test`, `platform-test`, `finish-pr`. Read `build` and `test` before diagnosing a failure; they record failures this project has already hit. |
 
 Dependency direction: `parser ← files ← sema ← codegen ← driver ← pep-build`.
-`lsp` depends on the parser, sema and files, and nothing that links LLVM.
+`tools/pep-lsp` depends on `tools/compiler`'s front end (`compiler.parse`, `compiler.link`, `compiler.sema`) and the `lsp` package, and nothing that links LLVM.
 
 ---
 
@@ -2393,7 +2393,7 @@ diagnostics"). The mechanics:
   passes append the member warnings, and `compiler::compile` prints
   `module.render_warnings()` (sorted by location) after the passes, whether
   or not they failed. The LSP publishes the ones located in the open
-  document (`deprecation_warnings` in `tools/lsp/src/main.rs`).
+  document (`tools/pep-lsp/analysis.pep`).
 
 ---
 
@@ -2479,13 +2479,16 @@ diagnostics"). The mechanics:
 
 ## 8. Language server and VS Code extension
 
-**`tools/pep-lsp`** is the server's rewrite in Pepper (#225). It's built
+**`tools/pep-lsp`** is the language server, written in Pepper (#225); releases
+(`scripts/release-build.sh`) and the VS Code extension (`vsix.yml`) ship
+it. It's built
 on the `lsp` package (justinboswell/pepper-lsp), a tower-lsp style
 framework: `serve_stdio` runs the `LanguageServer` methods on one thread,
 in message order. It checks code with the Pepper front end
 (`compiler.parse`, `compiler.link`, `compiler.sema`). So far it does
 diagnostics, the document outline, hover, go to definition, completion,
-inlay hints, quick fixes and dimmed code for other platforms:
+inlay hints, quick fixes and dimmed code for other platforms. A request
+slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
 
 - `analysis.pep`: one analysis thread (`analyze_documents`) takes each
   document's newest text once edits settle (250 ms). It loads the
@@ -2501,7 +2504,7 @@ inlay hints, quick fixes and dimmed code for other platforms:
   it analyzed, the linked `Program`, and the checked `sema.Module` and
   `PassState` when the passes passed) to the server thread through a
   channel and `Client.wake`s it; `woken` keeps the last one per document.
-- `symbols.pep`: the outline, as `tools/lsp` builds it.
+- `symbols.pep`: the outline, as the Rust server (`tools/lsp`) built it.
 - `navigate.pep`: hover and definition, ported from `tools/lsp`'s
   `main.rs`. A `Context` is the current text's parse, plus the last
   analysis's program and model when that analysis is of the same text;
@@ -2572,10 +2575,13 @@ inlay hints, quick fixes and dimmed code for other platforms:
   the log line says `as linux`. `initializationOptions.buildOptions`
   reaches the analysis thread as `Job.Configure`.
 - Pepper sema takes seconds per analysis (1.5 s for a program that is only
-  the runtime, 20 s for pep-doc), so the Rust server stays the one
-  editors run until the rewrite does everything and sema is faster.
+  the runtime, 20 s for pep-doc); requests never wait for it (`edits.pep`).
+- `smoke-test.mjs` exercises raw JSON-RPC against a built server
+  (`PEPPER_LSP_BIN`); `vsix.yml` runs it on each server it bundles.
 
-**`tools/lsp/src/main.rs`** (`pep-lsp`, stdio, tower-lsp):
+**`tools/lsp/src/main.rs`**, the former Rust server (stdio, tower-lsp), which
+`tools/pep-lsp` was ported from. Nothing builds or ships it any more; it
+is removed with the rest of the Rust (#225):
 
 - **Properties.** Hover and definition find a property by name
   (`infer::Kind::Property`); its accessor bodies are walked as methods
@@ -2766,21 +2772,25 @@ inlay hints, quick fixes and dimmed code for other platforms:
   shows or goes to itself; a type name anywhere goes to its declaration in
   any file (`imports::named_type`); a call of a function another file
   declares goes there (`imports::in_expression`); locals inside closures
-  include the closures' parameters (`closure_in_block`). `tools/lsp/smoke-test.mjs`
-  exercises raw JSON-RPC.
+  include the closures' parameters (`closure_in_block`).
 
 **`tools/vscode-pepper`**: `src/extension.js` launches the server. It runs
 a *shadow copy* of the binary because Windows locks a running exe (copied
 under a temporary name, then renamed), polls the binary and restarts on
 change, and registers `pepper.restartServer`. Restarts are serialized,
 retry a failed start, and reuse one output channel.
-The server comes from `pepper.lspPath` or from the bundled
+The server is the Pepper `pep-lsp` (`tools/pep-lsp`): `pepper.lspPath`,
+else the toolchain's `pep-lsp` (`pepper install which`, run with
+`PEPPER_RUNTIME` set to that toolchain's runtime), else the bundled
 `server/<platform-arch>/` (`serverPath.js`). Syntax highlighting is
 `syntaxes/pepper.tmLanguage.json`. `vsix.yml` builds the VSIX for four
 targets (x64 Windows and Linux, x64 and arm64 macOS) and publishes it as
 a `vsix-v*` release; it runs only for a `vX.Y.Z` tag or a manual dispatch.
-`scripts/install-vscode-extension.ps1 [-Watch]` builds `pep-lsp` in
-release mode, packages the VSIX with `npx @vscode/vsce`, and runs
+Each leg installs the toolchain of `VERSION` (`ci-install-toolchain.sh`;
+a tag waits for `release.yml` to publish it) and builds `tools/pep-lsp`
+with its `pep-build -O` against the checkout's runtime.
+`scripts/install-vscode-extension.ps1 [-Watch]` builds `tools/pep-lsp` the
+same way with the installed toolchain's `pep-build`, packages the VSIX with `npx @vscode/vsce`, and runs
 `code --install-extension` from the current branch.
 
 **`tools/syntax` and `tools/pep-fmt`** are Pepper programs, built with
@@ -3621,13 +3631,13 @@ root package's test runs. Neither CI nor the pre-merge checks run them any more 
 | Diagnostics | `crates/pepper-driver/tests/integration/diagnostic_tests.rs` | `error_of(name, src)` returns the full rendered error (header, source line, caret). Add one for every new error. |
 | Corpus | `tests/*/test.pep` | `corpus_tests.rs::corpus_files_compile_and_run` checks (visibility included), compiles, links, and runs each fixture with `-I tests`; `corpus_files_run_under_wasmtime` builds each for `wasm32-wasip1` and runs it under wasmtime (`support::run_under_wasmtime`, when `support::wasi_tools` finds `WASI_SDK_PATH` and wasmtime; `NOT_ON_WASI` lists what needs threads or tasks). `pep_fmt_tests.rs` parses and formats every file under `tests/`. |
 | Runtime discovery | `crates/pepper-files/src/runtime.rs` (`mod tests`) | Calls `discover_from` with a cwd outside the checkout and an executable directory inside it. |
-| Runtime docs, tool docs | `tools/pep-doc/checks.pep`, run by `pep-doc check` | `check_documented` over every `runtime/**/*.pep` and `tools/syntax`. Each tool's options (`--help` of `pep-build` and of the Pepper tools, built by `scripts/pepper-tests.sh` beside it; `HELP` in `tools/pep-doc/main.pep`, `tools/lsp/src/help.txt`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s option values, trace channels and environment variables and `pep-lsp`'s initialization options and VS Code settings. |
+| Runtime docs, tool docs | `tools/pep-doc/checks.pep`, run by `pep-doc check` | `check_documented` over every `runtime/**/*.pep` and `tools/syntax`. Each tool's options (`--help` of `pep-build` and of the Pepper tools, built by `scripts/pepper-tests.sh` beside it; `HELP` in `tools/pep-doc/main.pep` and `tools/pep-lsp/main.pep`, `xtask/src/usage.txt`, which those tools print) must each appear in its page under `docs/src/tools/` (`cargo setup`'s in `docs/src/contributing/setup.md`), as must `pep-build`'s option values, trace channels and environment variables and `pep-lsp`'s initialization options (read from `tools/pep-lsp/server.pep`) and VS Code settings. |
 | Docs examples | `tools/pep-doc/examples_test.pep` (a Pepper test, run by `scripts/pepper-tests.sh`) | Builds every `docs/examples/*.pep` (or `name/main.pep`) with `pep-build` and runs it, and builds a sample of them (`sample()`) again at `-O2 -g`. Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Determinism | `crates/pepper-driver/tests/integration/determinism_tests.rs` | Compiles every docs example twice (the second round in reverse order, across threads) and requires identical IR. |
 | Build cache | `crates/pepper-driver/tests/integration/build_cache_tests.rs` | Emits programs as unit objects through a scratch cache, verifying every hit: unchanged units hit and are byte-identical, the runtime unit is shared between programs, a mismatched record misses, an edit rebuilds only its unit (importers reuse their objects when their code is the same), a comment edit reuses the object, an override in a file a unit never imports is in its key, and concurrent builds share one cache. Without verifying, sema skips hit units' bodies (not one whose return type is inferred), a unit that warned keeps its bodies and warns again, skipping the runtime's bodies changes no other unit's code, and a skipped body's recorded link summary stands in for it. |
 | Built binaries | `tests/*.rs` (root package: `pep_build.rs`, `pep_test_tool.rs`) | Run the `pep-build` cargo builds from this source (`CARGO_BIN_EXE_pep-build`), for a tool that runs the compiler (`pep-test`). A `pep-build` found beside a pepper-driver test binary may be left over from an older build. |
 | Runtime | `runtime/<module>/test/*_test.pep`, `runtime/test/*_test.pep` (the prelude's) | `[Test]` functions in Pepper, run by `pepper test` in `runtime/` (`scripts/pepper-tests.sh`, which also runs the `-D USE_ZLIB` and `-D USE_LIBCRYPTO` variants and the tools' tests); each fails when it leaks (the `TestRunner` compares `_pep_live_allocs` before and after). Runtime and library behaviour is tested here, not in the driver's Rust suite; see `docs/src/contributing/tests.md`. |
-| LSP | `tools/lsp/src/tests.rs` | See section 8. |
+| LSP | `tools/pep-lsp/pep_lsp_test.pep`, and `tools/pep-lsp/smoke-test.mjs` (JSON-RPC against a built server, in `vsix.yml`) | See section 8. |
 | xtask | `xtask/src/main.rs` | Unit tests. |
 | pep-doc | `tools/pep-doc/pep_doc_test.pep` (a Pepper test, run by `scripts/pepper-tests.sh`) | Doc comments and the documentation standard, signatures and re-exports in the reference, the help parsing behind the tool-option check, the chapter lint, and site versions. |
 

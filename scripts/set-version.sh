@@ -78,7 +78,7 @@ if [ -f Cargo.toml ]; then
 fi
 if [ -f Cargo.lock ]; then
   # Cargo.lock: the workspace's own packages, which have no `source` line.
-  workspace_packages=" pepper pepper-codegen pepper-driver pepper-files pepper-lsp pepper-parser pepper-sema xtask "
+  workspace_packages=" pepper pepper-codegen pepper-driver pepper-files pepper-parser pepper-sema xtask "
   awk -v from="$current" -v to="$version" -v names="$workspace_packages" '
     /^name = / { name = $3; gsub(/"/, "", name) }
     /^version = / && index(names, " " name " ") > 0 { sub("\"" from "\"", "\"" to "\"") }

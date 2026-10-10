@@ -11,6 +11,7 @@ import compiler.link;
 import lsp;
 import [ResponseError] from lsp;
 import compiler.parse;
+import os;
 import "actions";
 import "analysis";
 import "completion";
@@ -70,7 +71,19 @@ export struct PepperServer {
     _analyze(document: lsp.TextDocument) {
         _jobs.send(copy(Job.Analyze(document.uri, document.text)));
     }
+
+    # Logs a request that took longer than `SLOW_REQUEST_MS` since `start`
+    # to the editor's output (the "Pepper Language Server" channel).
+    _answered(method: String, start: os.Instant) {
+        var took = (os.Instant.now() - start).nanoseconds() / 1000000;
+        if (took > SLOW_REQUEST_MS) {
+            client.log_message(lsp.MESSAGE_WARNING, $"{method} took {took} ms");
+        }
+    }
 }
+
+# A request that takes longer than this many milliseconds is logged.
+const SLOW_REQUEST_MS = 200;
 
 extend PepperServer with lsp.LanguageServer {
     initialize(params: lsp.InitializeParams): Result<lsp.InitializeResult, ResponseError> {
@@ -171,6 +184,7 @@ extend PepperServer with lsp.LanguageServer {
     }
 
     hover(params: lsp.TextDocumentPositionParams): Result<lsp.Hover?, ResponseError> {
+        var start = os.Instant.now();
         var uri = params.text_document.uri;
         var document = documents.try_get(uri);
         if (document.is_empty()) {
@@ -178,10 +192,12 @@ extend PepperServer with lsp.LanguageServer {
         }
         var offset = document.value().offset_at(params.position);
         var hover = hover_across_edits(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        _answered("hover", start);
         return Result<lsp.Hover?, ResponseError>.ok(hover);
     }
 
     definition(params: lsp.TextDocumentPositionParams): Result<Array<lsp.Location>, ResponseError> {
+        var start = os.Instant.now();
         var uri = params.text_document.uri;
         var document = documents.try_get(uri);
         if (document.is_empty()) {
@@ -189,10 +205,12 @@ extend PepperServer with lsp.LanguageServer {
         }
         var offset = document.value().offset_at(params.position);
         var found = definition_across_edits(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        _answered("definition", start);
         return Result<Array<lsp.Location>, ResponseError>.ok(found);
     }
 
     completion(params: lsp.CompletionParams): Result<lsp.CompletionList?, ResponseError> {
+        var start = os.Instant.now();
         var uri = params.text_document.uri;
         var document = documents.try_get(uri);
         if (document.is_empty()) {
@@ -200,22 +218,26 @@ extend PepperServer with lsp.LanguageServer {
         }
         var offset = document.value().offset_at(params.position);
         var items = completion_at(document.value(), _analyses.try_get(uri), _ready.try_get(uri), offset);
+        _answered("completion", start);
         return Result<lsp.CompletionList?, ResponseError>.ok(
             Optional<lsp.CompletionList>.Value(lsp.CompletionList(items))
         );
     }
 
     inlay_hint(params: lsp.InlayHintParams): Result<Array<lsp.InlayHint>, ResponseError> {
+        var start = os.Instant.now();
         var uri = params.text_document.uri;
         var document = documents.try_get(uri);
         if (document.is_empty()) {
             return Result<Array<lsp.InlayHint>, ResponseError>.ok(Array<lsp.InlayHint>());
         }
         var hints = inlay_hints(document.value(), _ready.try_get(uri), params.range, conversion_hints, parameter_hints);
+        _answered("inlayHint", start);
         return Result<Array<lsp.InlayHint>, ResponseError>.ok(hints);
     }
 
     code_action(params: lsp.CodeActionParams): Result<Array<lsp.CodeAction>, ResponseError> {
+        var start = os.Instant.now();
         var uri = params.text_document.uri;
         var document = documents.try_get(uri);
         if (document.is_empty()) {
@@ -228,12 +250,13 @@ extend PepperServer with lsp.LanguageServer {
             analyzed = Optional<String>.Value(l.text);
             actions = l.actions;
         }
-        return Result<Array<lsp.CodeAction>, ResponseError>.ok(
-            code_actions(document.value(), analyzed, actions, params.range)
-        );
+        var found = code_actions(document.value(), analyzed, actions, params.range);
+        _answered("codeAction", start);
+        return Result<Array<lsp.CodeAction>, ResponseError>.ok(found);
     }
 
     document_symbol(params: lsp.DocumentSymbolParams): Result<Array<lsp.DocumentSymbol>, ResponseError> {
+        var start = os.Instant.now();
         var document = documents.try_get(params.text_document.uri);
         if (document.is_empty()) {
             return Result<Array<lsp.DocumentSymbol>, ResponseError>.ok(Array<lsp.DocumentSymbol>());
@@ -242,7 +265,9 @@ extend PepperServer with lsp.LanguageServer {
         if (module.is_err()) {
             return Result<Array<lsp.DocumentSymbol>, ResponseError>.ok(Array<lsp.DocumentSymbol>());
         }
-        return Result<Array<lsp.DocumentSymbol>, ResponseError>.ok(document_symbols(document.value(), module.value()));
+        var symbols = document_symbols(document.value(), module.value());
+        _answered("documentSymbol", start);
+        return Result<Array<lsp.DocumentSymbol>, ResponseError>.ok(symbols);
     }
 }
 

@@ -12,7 +12,7 @@
 # | `pepper`, `pep-fmt`, `pep-profile`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-doc` | its own help (`HELP` in main.pep) | `docs/src/tools/pep-doc.md` |
-# | `pep-lsp` | `tools/lsp/src/help.txt`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
+# | `pep-lsp` | `HELP` in `tools/pep-lsp/main.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 # | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
 # | `install.sh` | its `usage` text | `docs/src/tools/install.md` |
 # | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
@@ -530,32 +530,61 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
     return Result<String[]>.ok(problems);
 }
 
-# pep-lsp: its options, the initialization options the server reads (as
-# JSON pointers, `/inlayHints/parameterNames`, spelled with dots), and the
-# VS Code extension's settings and commands (`pepper.lspPath`).
+# pep-lsp: its options (`HELP` in tools/pep-lsp/main.pep), the
+# initialization options the server reads (`json_flag(params.
+# initialization_options, ["inlayHints", "parameterNames"], ...)` and
+# `options.value().contains("buildOptions")` in tools/pep-lsp/server.pep,
+# spelled with dots), and the VS Code extension's settings and commands
+# (`pepper.lspPath`).
 _lsp(root: Path, problems: String[]): Result<void> {
     var page = "docs/src/tools/pep-lsp.md";
-    var help = _repository_file(root, "tools/lsp/src/help.txt")?;
-    var server = _repository_file(root, "tools/lsp/src/main.rs")?;
+    var main = _repository_file(root, "tools/pep-lsp/main.pep")?;
+    var help_start = "const HELP = \"";
+    var help_at = main.find(help_start);
+    if (help_at < 0) {
+        return Result<void>.Err("tools/pep-lsp/main.pep declares no HELP");
+    }
+    var help_from = help_at as ulong + help_start.size;
+    var help = slice(main, help_from, find_byte(main, '"', help_from, main.size));
+    var server = _repository_file(root, "tools/pep-lsp/server.pep")?;
     var initialization = Array<String>();
-    var pointer = "pointer(\"/";
+    var flag = "json_flag(params.initialization_options, [";
     ulong from = 0;
     while (true) {
-        var found = server.find(pointer, from);
+        var found = server.find(flag, from);
         if (found < 0) {
             break;
         }
-        var start = found as ulong + pointer.size;
+        var start = found as ulong + flag.size;
+        var end = find_byte(server, ']', start, server.size);
+        from = end;
+        # The quoted keys of the path, joined with dots.
+        var name = String();
+        var at = start;
+        while (at < end) {
+            var open = find_byte(server, '"', at, end);
+            if (open == end) {
+                break;
+            }
+            var close = find_byte(server, '"', open + 1, end);
+            if (!name.is_empty) {
+                name.append(".");
+            }
+            name.append(slice(server, open + 1, close));
+            at = close + 1;
+        }
+        initialization.append(name);
+    }
+    var contains = "options.value().contains(\"";
+    from = 0;
+    while (true) {
+        var found = server.find(contains, from);
+        if (found < 0) {
+            break;
+        }
+        var start = found as ulong + contains.size;
         from = start;
-        var end = find_byte(server, '"', start, server.size);
-        if (end == server.size) {
-            continue;
-        }
-        var name = slice(server, start, end).replace("/", ".");
-        # Only a repeat of the one before is dropped.
-        if (initialization.is_empty or initialization.last() != name) {
-            initialization.append(name);
-        }
+        initialization.append(slice(server, start, find_byte(server, '"', start, server.size)));
     }
     var package = _repository_file(root, "tools/vscode-pepper/package.json")?;
     var settings = Array<String>();
@@ -570,7 +599,7 @@ _lsp(root: Path, problems: String[]): Result<void> {
         settings.append(slice(package, start, find_byte(package, '"', start, package.size)));
     }
     _undocumented(root, "pep-lsp", page, "option", help_options(help), _Match.Word, problems)?;
-    _undocumented(root, "pep-lsp", page, "initialization option", initialization, _Match.Word, problems)?;
+    _undocumented(root, "pep-lsp", page, "initialization option", _sorted_once(initialization), _Match.Word, problems)?;
     _undocumented(root, "pep-lsp", page, "VS Code setting or command", _sorted_once(settings), _Match.Word, problems)?;
     return Result<void>.ok();
 }
