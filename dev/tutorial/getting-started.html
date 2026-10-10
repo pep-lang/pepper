@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -231,7 +231,8 @@ cargo run -p xtask -- setup --devtools
 </code></pre>
 <p>This installs a development build of LLVM (from apt, Homebrew, or the
 official release archive on Windows) and writes <code>.cargo/config.toml</code> so
-that plain <code>cargo</code> commands find it. <code>--devtools</code> also sets up the <code>lldb</code>
+that plain <code>cargo</code> commands find it (and <code>.pep/llvm-prefix</code>, for the
+scripts). <code>--devtools</code> also sets up the <code>lldb</code>
 debugger; you can leave it out. Run <code>cargo setup --check</code> at any time to see
 what is configured.</p>
 </li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -190,7 +190,9 @@ cargo setup --devtools                     # afterwards
 </code></pre>
 <p>The first run writes <code>.cargo/config.toml</code>, which points the build at the
 LLVM it settled on (<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>) and defines the <code>cargo setup</code>
-alias. Run it again on each new machine rather than copying that file. The
+alias, and <code>.pep/llvm-prefix</code>, which holds the same prefix for everything
+that is not cargo. Run it again on each new machine rather than copying
+those files. The
 README’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">Setting up a development environment</a>
 says what each platform needs first and how the versions are chosen.</p>
@@ -207,6 +209,9 @@ Homebrew), else the LLVM release archive (cached, so a second run is
 free);</li>
 <li>writes <code>.cargo/config.toml</code>, so plain <code>cargo</code> commands build against it
 with no environment variables set;</li>
+<li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout
+(gitignored), where <code>scripts/pepper-tests.sh</code>, the release scripts and
+the workflows read it;</li>
 <li>does nothing more when a valid install is already there.</li>
 </ul>
 <p>When it provisions an LLVM other than the default (20), it prints the

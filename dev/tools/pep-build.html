@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -559,9 +559,10 @@ come first, then those of <code>[Link(path = ...)]</code>, then those in
 <h3 id="--msvc"><a class="header" href="#--msvc"><code>--MSVC</code></a></h3>
 <p>Reserved for linking with Microsoft’s linker. It is not ported, so it is an
 error on every platform; Windows executables link with clang and lld.</p>
-<p>The link driver is clang. When <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the
-compiler was built with, such as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20) names an
-LLVM install, its <code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
+<p>The link driver is clang. When <code>PEPPER_LLVM_PREFIX</code>, else
+<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the compiler was built with, such
+as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20), names an LLVM install, its
+<code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
 <code>pep-build</code>, then one on the <code>PATH</code> (<code>clang</code>, then <code>clang-&lt;major&gt;</code>), then one
 where LLVM’s packages install it off the <code>PATH</code>. With none, the link fails
 with an error naming what to install. <a href="install.html#what-linking-needs">Installing Pepper</a>
@@ -666,7 +667,8 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
-<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
+<tr><td><code>PEPPER_LLVM_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program</td><td></td></tr>
+<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> records the LLVM it provisions in <code>.pep/llvm-prefix</code> and in cargo’s config, and in CI exports this variable</td><td></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project’s locked dependencies clones that host’s repositories from, when <code>pep-package</code> is not installed (see <a href="pep-package.html#environment-variables">pep-package</a>)</td><td></td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
 </tbody>

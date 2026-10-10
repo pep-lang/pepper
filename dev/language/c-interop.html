@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -341,7 +341,7 @@ main(): int {
 }
 </code></pre>
 <p>Passing a <code>String</code> value directly to an extern’s <code>char*</code> parameter is an error:</p>
-<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type '__ptr&lt;char&gt;'; pass its 'c_str()'
     4 |     return strlen(name) as int;
       |                   ^~~~
 </code></pre>
@@ -632,7 +632,7 @@ any function type.</p>
 <p><strong>Nothing captured.</strong> C calls the function with its arguments alone, so a
 closure that captures a value, or a bound method (<code>p.get</code>), cannot
 convert:</p>
-<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
+<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
     4 |     qsort(_pep_malloc(4), 0, 4, (a, b) =&gt; bias);
       |                                           ^~~~
 main.pep:3:9: note: pass what the callback needs through the C function's context argument instead

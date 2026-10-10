@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -379,7 +379,8 @@ cargo run -p xtask -- setup --devtools
 </code></pre>
 <p>This installs a development build of LLVM (from apt, Homebrew, or the
 official release archive on Windows) and writes <code>.cargo/config.toml</code> so
-that plain <code>cargo</code> commands find it. <code>--devtools</code> also sets up the <code>lldb</code>
+that plain <code>cargo</code> commands find it (and <code>.pep/llvm-prefix</code>, for the
+scripts). <code>--devtools</code> also sets up the <code>lldb</code>
 debugger; you can leave it out. Run <code>cargo setup --check</code> at any time to see
 what is configured.</p>
 </li>
@@ -17784,7 +17785,7 @@ main(): int {
 }
 </code></pre>
 <p>Passing a <code>String</code> value directly to an extern’s <code>char*</code> parameter is an error:</p>
-<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type 'char*'; pass its 'c_str()'
+<pre><code class="language-text">main.pep:4:19: error: cannot pass 'String' to parameter 1 of extern 'strlen' of type '__ptr&lt;char&gt;'; pass its 'c_str()'
     4 |     return strlen(name) as int;
       |                   ^~~~
 </code></pre>
@@ -18075,7 +18076,7 @@ any function type.</p>
 <p><strong>Nothing captured.</strong> C calls the function with its arguments alone, so a
 closure that captures a value, or a bound method (<code>p.get</code>), cannot
 convert:</p>
-<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (void*, void*) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
+<pre><code class="language-text">main.pep:4:43: error: closure passed as C function pointer type 'extern (__ptr&lt;void&gt;, __ptr&lt;void&gt;) =&gt; int' captures 'bias'; a C function pointer cannot hold captured values
     4 |     qsort(_pep_malloc(4), 0, 4, (a, b) =&gt; bias);
       |                                           ^~~~
 main.pep:3:9: note: pass what the callback needs through the C function's context argument instead
@@ -20132,8 +20133,8 @@ Linux, Homebrew’s <code>openssl@3</code> on macOS; Windows uses SChannel). The
 says so when it finds none, and on macOS offers <code>brew install openssl@3</code>.</p>
 <p><code>pep-build</code> looks for <code>clang</code> in this order, and uses the first it finds:</p>
 <ol>
-<li>in the LLVM named by <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>, which a development
-checkout sets;</li>
+<li>in the LLVM named by <code>PEPPER_LLVM_PREFIX</code>, else by
+<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20);</li>
 <li>beside <code>pep-build</code> itself;</li>
 <li>on the <code>PATH</code>, as <code>clang</code>, then as <code>clang-&lt;major&gt;</code> for the LLVM it is
 built with (what Ubuntu’s <code>clang-20</code> package installs);</li>
@@ -20199,7 +20200,7 @@ stay.</p>
 <ul>
 <li><strong>the build of main</strong>, on each merge into main that changes the compiler,
 the runtime or the tools: main holds the version being developed as a
-prerelease (<code>0.4.0-dev</code> in <code>Cargo.toml</code> and each tool’s <code>version()</code>), and
+prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool’s <code>version()</code>), and
 the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
 to the merge and replacing its archives. CI and the workers install it
 (<code>--version 0.4.0-dev</code>) instead of building the compiler. The newest
@@ -20835,9 +20836,10 @@ come first, then those of <code>[Link(path = ...)]</code>, then those in
 <h3 id="--msvc"><a class="header" href="#--msvc"><code>--MSVC</code></a></h3>
 <p>Reserved for linking with Microsoft’s linker. It is not ported, so it is an
 error on every platform; Windows executables link with clang and lld.</p>
-<p>The link driver is clang. When <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the
-compiler was built with, such as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20) names an
-LLVM install, its <code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
+<p>The link driver is clang. When <code>PEPPER_LLVM_PREFIX</code>, else
+<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (for the LLVM the compiler was built with, such
+as <code>LLVM_SYS_201_PREFIX</code> for LLVM 20), names an LLVM install, its
+<code>bin/clang</code> and <code>lld</code> are used; else a <code>clang</code> beside
 <code>pep-build</code>, then one on the <code>PATH</code> (<code>clang</code>, then <code>clang-&lt;major&gt;</code>), then one
 where LLVM’s packages install it off the <code>PATH</code>. With none, the link fails
 with an error naming what to install. <a href="#what-linking-needs">Installing Pepper</a>
@@ -20942,7 +20944,8 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>WASI_SDK_PATH</code></td><td>The wasi-sdk for linking with <code>--target wasm32-wasip1</code>, when neither <code>--sysroot</code> nor <code>PEPPER_SYSROOT_WASM32_WASIP1</code> names one</td><td><code>--sysroot</code></td></tr>
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
-<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> writes it for builds</td><td></td></tr>
+<tr><td><code>PEPPER_LLVM_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program</td><td></td></tr>
+<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> records the LLVM it provisions in <code>.pep/llvm-prefix</code> and in cargo’s config, and in CI exports this variable</td><td></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project’s locked dependencies clones that host’s repositories from, when <code>pep-package</code> is not installed (see <a href="#environment-variables-2">pep-package</a>)</td><td></td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
 </tbody>
@@ -21562,7 +21565,8 @@ running, which shows where in a long function the time goes.</li>
 <a href="https://llvm.org/docs/CommandGuide/llvm-symbolizer.html"><code>llvm-symbolizer</code></a>,
 which LLVM installs: <code>pep-profile</code> looks for <code>llvm-symbolizer</code> and its
 versioned names (<code>llvm-symbolizer-20</code>) on the <code>PATH</code>, then in
-<code>$LLVM_SYS_&lt;major&gt;1_PREFIX/bin</code> and the usual LLVM install folders.
+<code>$PEPPER_LLVM_PREFIX/bin</code>, <code>$LLVM_SYS_&lt;major&gt;1_PREFIX/bin</code> and the usual
+LLVM install folders.
 <code>--symbolizer</code> names one, and <code>--symbolizer none</code> skips it. Without one,
 frames take the profiler’s symbol names, which <code>pep-profile</code> demangles:
 Pepper’s linker name <code>_PArray_3cint_3e.count</code> shows as <code>Array&lt;int&gt;.count</code>,
@@ -21816,7 +21820,10 @@ or one without a description or a tag the
 clang-style error at the declaration;</li>
 <li>a tool’s option, command, option value, trace channel, environment
 variable or setting is missing from the tool’s page in this book, naming
-the tool and the page.</li>
+the tool and the page;</li>
+<li>a Pepper tool’s <code>version()</code> (in <code>tools/&lt;tool&gt;/main.pep</code>) is not the
+version in the repository’s <code>VERSION</code> file, which
+<code>scripts/set-version.sh</code> sets them all to.</li>
 </ul>
 <p>The tools’ options come from their <code>--help</code>: <code>pep-build</code>‘s and the Pepper
 tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
@@ -51280,7 +51287,9 @@ cargo setup --devtools                     # afterwards
 </code></pre>
 <p>The first run writes <code>.cargo/config.toml</code>, which points the build at the
 LLVM it settled on (<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>) and defines the <code>cargo setup</code>
-alias. Run it again on each new machine rather than copying that file. The
+alias, and <code>.pep/llvm-prefix</code>, which holds the same prefix for everything
+that is not cargo. Run it again on each new machine rather than copying
+those files. The
 README’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">Setting up a development environment</a>
 says what each platform needs first and how the versions are chosen.</p>
@@ -51297,6 +51306,9 @@ Homebrew), else the LLVM release archive (cached, so a second run is
 free);</li>
 <li>writes <code>.cargo/config.toml</code>, so plain <code>cargo</code> commands build against it
 with no environment variables set;</li>
+<li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout
+(gitignored), where <code>scripts/pepper-tests.sh</code>, the release scripts and
+the workflows read it;</li>
 <li>does nothing more when a valid install is already there.</li>
 </ul>
 <p>When it provisions an LLVM other than the default (20), it prints the
@@ -51369,7 +51381,7 @@ also built at <code>-O2 -g</code>, where LLVM checks the debug info. Short fragm
 chapter.</p>
 <h2 id="versions"><a class="header" href="#versions">Versions</a></h2>
 <p>Documentation is versioned with the compiler’s <a href="https://semver.org">semantic version</a>
-(<code>version</code> in the root <code>Cargo.toml</code>). <code>pep-doc build --version X.Y.Z</code>
+(the one line of the root <code>VERSION</code> file). <code>pep-doc build --version X.Y.Z</code>
 renders the book into <code>&lt;site&gt;/X.Y.Z/</code> and leaves every other version in the
 site alone; <code>versions.json</code> lists them for the version picker, and the site’s
 <code>index.html</code> opens the newest release. Builds from <code>main</code> publish as <code>dev</code>.</p>
@@ -51458,7 +51470,7 @@ scripts/pepper-tests.sh target/release           # with a cargo build instead
 <p>The tests build with the installed toolchain’s <code>pep-build</code>, the one
 <code>pepper install which</code> names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
-prerelease named by the version <code>Cargo.toml</code> holds (<code>0.4.0-dev</code>), replacing
+prerelease named by the version the <code>VERSION</code> file holds (<code>0.4.0-dev</code>), replacing
 the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
 refresh it). Only a change to the Rust compiler itself (<code>crates/</code>) needs its

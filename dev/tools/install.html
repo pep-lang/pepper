@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -264,8 +264,8 @@ Linux, Homebrew’s <code>openssl@3</code> on macOS; Windows uses SChannel). The
 says so when it finds none, and on macOS offers <code>brew install openssl@3</code>.</p>
 <p><code>pep-build</code> looks for <code>clang</code> in this order, and uses the first it finds:</p>
 <ol>
-<li>in the LLVM named by <code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>, which a development
-checkout sets;</li>
+<li>in the LLVM named by <code>PEPPER_LLVM_PREFIX</code>, else by
+<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code> (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20);</li>
 <li>beside <code>pep-build</code> itself;</li>
 <li>on the <code>PATH</code>, as <code>clang</code>, then as <code>clang-&lt;major&gt;</code> for the LLVM it is
 built with (what Ubuntu’s <code>clang-20</code> package installs);</li>
@@ -331,7 +331,7 @@ stay.</p>
 <ul>
 <li><strong>the build of main</strong>, on each merge into main that changes the compiler,
 the runtime or the tools: main holds the version being developed as a
-prerelease (<code>0.4.0-dev</code> in <code>Cargo.toml</code> and each tool’s <code>version()</code>), and
+prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool’s <code>version()</code>), and
 the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
 to the merge and replacing its archives. CI and the workers install it
 (<code>--version 0.4.0-dev</code>) instead of building the compiler. The newest

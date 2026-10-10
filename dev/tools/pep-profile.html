@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-ffce7bd6.js";
+            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -301,7 +301,8 @@ running, which shows where in a long function the time goes.</li>
 <a href="https://llvm.org/docs/CommandGuide/llvm-symbolizer.html"><code>llvm-symbolizer</code></a>,
 which LLVM installs: <code>pep-profile</code> looks for <code>llvm-symbolizer</code> and its
 versioned names (<code>llvm-symbolizer-20</code>) on the <code>PATH</code>, then in
-<code>$LLVM_SYS_&lt;major&gt;1_PREFIX/bin</code> and the usual LLVM install folders.
+<code>$PEPPER_LLVM_PREFIX/bin</code>, <code>$LLVM_SYS_&lt;major&gt;1_PREFIX/bin</code> and the usual
+LLVM install folders.
 <code>--symbolizer</code> names one, and <code>--symbolizer none</code> skips it. Without one,
 frames take the profiler’s symbol names, which <code>pep-profile</code> demangles:
 Pepper’s linker name <code>_PArray_3cint_3e.count</code> shows as <code>Array&lt;int&gt;.count</code>,
