@@ -1,8 +1,8 @@
 ## The sema model: the tree the builder makes of the linked program and
 ## the passes rewrite. Each enum variant with named fields holds a struct of
 ## its own (`SymbolRefExpression` for `Expression.SymbolRef`), so a pass can
-## change a node's fields in place. Each type's `to_json()` writes what
-## serde writes for the Rust passes' model.
+## change a node's fields in place. Each type's `to_json()` writes it as
+## `pep-build --emit-model` prints it.
 ##
 ## The fields declared here are the model; the rest of each type is
 ## generated from them: change a type's fields, then run

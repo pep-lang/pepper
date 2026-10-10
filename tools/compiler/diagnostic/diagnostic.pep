@@ -1,5 +1,4 @@
-## Compiler diagnostics, rendered in clang's format, as the Rust compiler
-## renders them:
+## Compiler diagnostics, rendered in clang's format:
 ##
 ##     main.pep:2:13: error: expected expression
 ##         2 |     var x = ;

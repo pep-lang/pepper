@@ -28,14 +28,16 @@ it installs, and uninstalling.
 ## Building from source
 
 To work on Pepper itself, or on a platform with no prebuilt binaries, build
-the compiler from source. The compiler is a Rust program that generates code
-through LLVM. Building it takes three steps on every platform. The
-repository's
+the toolchain from source. Pepper is written in Pepper: the compiler,
+`pep-build`, is the Pepper program in `tools/compiler`, and it generates code
+through LLVM. Building it takes a Pepper compiler, so the first one comes from
+a published toolchain. The repository's
 [README](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
 has the full details for each platform; this is the short version.
 
-1. **Install Rust** with [rustup](https://rustup.rs). You need Rust 1.85 or
-   newer. On Windows, use the default `x86_64-pc-windows-msvc` toolchain.
+1. **Install Pepper** as above, the build of main: `sh scripts/install.sh
+   --version 0.4.0-dev` from a clone of the repository (the version its
+   `VERSION` file holds; `install.ps1 -Version 0.4.0-dev` on Windows).
 
 2. **Install the platform prerequisites**, which provide the C toolchain that
    links your programs:
@@ -46,37 +48,36 @@ has the full details for each platform; this is the short version.
    - **Linux** (Debian and Ubuntu package names):
      `sudo apt install build-essential clang curl xz-utils`.
 
-3. **Set up LLVM.** Clone the repository, then run the setup command from its
-   root:
+3. **Set up LLVM 20**, which the compiler links. From the repository's root:
 
    ```sh
-   git clone https://github.com/justinboswell/pepper
-   cd pepper
-   cargo run -p xtask -- setup --devtools
+   ./scripts/setup-llvm.sh --devtools            # Linux and macOS
+   pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
    ```
 
-   This installs a development build of LLVM (from apt, Homebrew, or the
-   official release archive on Windows) and writes `.cargo/config.toml` so
-   that plain `cargo` commands find it (and `.pep/llvm-prefix`, for the
-   scripts). `--devtools` also sets up the `lldb`
-   debugger; you can leave it out. Run `cargo setup --check` at any time to see
-   what is configured.
+   This installs a development build of LLVM 20 (from apt, Homebrew, or the
+   official release archive on Windows) and records where in
+   `.pep/llvm-prefix`. `--devtools` also sets up the `lldb` debugger; you
+   can leave it out. Run `./scripts/setup-llvm.sh --check` at any time to
+   see what is configured.
 
-Now build the compiler, then the `pepper` command with it:
+Now build the compiler with the installed one, then the `pepper` command with
+the compiler you built:
 
 ```sh
-cargo build --release
-target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
+export PEPPER_RUNTIME="$PWD/runtime"
+pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build
+target/bin/pep-build -O -I tools tools/pepper/main.pep -o target/bin/pepper
 ```
 
-On Windows, name the output `target\release\pepper.exe`. The compiler is
-`target/release/pep-build`; `pepper` is the entry point to every Pepper tool,
-so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
+On macOS and Windows the compiler's build also needs LLVM's library folder:
+add `-L "$(head -1 .pep/llvm-prefix)/lib"`. On Windows, name the outputs
+`.exe` and copy `LLVM-C.dll` from the LLVM's `bin` folder beside
+`pep-build.exe`. The compiler depends on the `pepper-llvm` package, which the
+first build fetches with git. `pepper` is the entry point to every Pepper
+tool, so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
 [The pepper command](../tools/pepper.md)). To check that everything works,
-run the tests with `scripts/pepper-tests.sh`. Add `target/release` to
-your `PATH` to run `pepper` from anywhere; from the repository root, you can
-also run the compiler through cargo: `cargo run --release -- hello.pep -o hello`
-runs `pep-build` directly.
+run the tests with `scripts/pepper-tests.sh target/bin`.
 
 ## Your first program
 
@@ -125,7 +126,7 @@ Every program is compiled together with Pepper's standard library, the
    `runtime/` beside it, then in each parent directory, up to five levels up.
 
 So an installed compiler, in `~/.pepper/bin`, finds `~/.pepper/runtime`, and
-one built in `target/release` finds the runtime of the clone it was built
+one built in `target/bin` finds the runtime of the clone it was built
 from, wherever you run it. To use a different runtime, set
 `PEPPER_RUNTIME` or link the runtime into a project's `.pep` folder:
 

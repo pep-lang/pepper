@@ -1,9 +1,7 @@
-## The builder: `crates/pepper-sema/src/builder.rs` (with its
-## `static_items.rs` and `tries.rs`) in Pepper. It makes the sema model of one
-## linked file's syntax tree: `for`, `with`, `match`, `is`, `?`,
-## destructuring, ranges, collection literals and properties lower to
-## simpler statements and expressions, and the checks that need only the
-## syntax report the same errors, at the same places, as the Rust builder.
+## The builder. It makes the sema model of one linked file's syntax tree:
+## `for`, `with`, `match`, `is`, `?`, destructuring, ranges, collection
+## literals and properties lower to simpler statements and expressions, and
+## the checks that need only the syntax report their errors.
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
@@ -608,8 +606,8 @@ _literal_subject_id(at: Loc): ulong {
 
 ## The collection literal `start` followed by `steps`, each the arguments of
 ## one call of method `step`, at `at`: one chain of calls, or for more than
-## `_LITERAL_CHUNK` steps a balanced tree of short chains over one subject
-## (`crates/pepper-sema/src/literals.rs`).
+## `_LITERAL_CHUNK` steps a balanced tree of short chains over one
+## subject.
 _build_literal(start: Expression, steps: Expression[][], step: String, subject: TypeName, at: Loc): Expression {
     if (steps.count <= _LITERAL_CHUNK) {
         return _chain(start, steps, 0, steps.count, step, at);

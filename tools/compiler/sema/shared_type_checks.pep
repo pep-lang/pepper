@@ -297,7 +297,7 @@ _pair_name(pair: (String, Loc)): String {
 
 ## Where the program names type `spec` (a variable, field or parameter
 ## type, or a constructor call), with the name of the free function it is
-## in, if any: `check_shared_types::find_use_site`.
+## in, if any.
 _find_use_site(module: Module, spec: String): _UseSite? {
     for (var g in module.globals) {
         var at = _var_site(g, spec);

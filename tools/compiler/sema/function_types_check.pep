@@ -110,8 +110,7 @@ struct _Bases {
     }
 }
 
-## Each generic struct with a defaulted parameter, by base name:
-## `value_structs::defaulted_params`.
+## Each generic struct with a defaulted parameter, by base name.
 export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
     var out = HashMap<String, Array<GenericParam>>();
     for (var st in module.structs) {
@@ -126,7 +125,7 @@ export defaulted_params(module: Module): HashMap<String, Array<GenericParam>> {
 }
 
 ## `ty` spelled one way: every omitted type argument filled in from the
-## generic parameter's default: `value_structs::fill_defaults`. Type names nest only as deep as the
+## generic parameter's default. Type names nest only as deep as the
 ## program spells them.
 export fill_defaults(ty: TypeName, params: HashMap<String, Array<GenericParam>>) {
     for (var arg in ty.sub_types) {
@@ -162,7 +161,7 @@ _is_void_ptr(ty: TypeName): bool {
     return _canonical(ty).to_string() == VOID_PTR;
 }
 
-## A `match` arm's test, when `condition` is one: `enums::arm_test`.
+## A `match` arm's test, when `condition` is one.
 _is_arm_test(condition: Expression): bool {
     match (condition) {
         MatchArm(test) => {

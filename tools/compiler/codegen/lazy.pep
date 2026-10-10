@@ -1,5 +1,5 @@
-## Empty Arrays are null (#652): the `[__Lazy]` half of
-## `crates/pepper-codegen/src/lib.rs` in Pepper. An object of a `[__Lazy]`
+## Empty Arrays are null (#652): the `[__Lazy]` half of code generation. An
+## object of a `[__Lazy]`
 ## struct (`Array<T>`) is null while it is empty, until a place holding it
 ## is written through or shared. This file finds the reads that may leave
 ## a local null because nothing follows them (`final_reads_of`), fills a
@@ -43,8 +43,7 @@ export struct LazyFill {
 }
 
 ## Collects every variable read of the expressions it walks, in the order
-## `rewrite_expression` visits them: each before what it contains, as
-## `pepper_sema::passes::visit_expression` does.
+## `rewrite_expression` visits them: each before what it contains.
 struct _SymbolRefs {
     var found: SymbolRefExpression[] = Array<SymbolRefExpression>();
 

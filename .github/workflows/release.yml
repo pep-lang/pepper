@@ -2,8 +2,12 @@
 # release, for the install scripts (scripts/install.sh, scripts/install.ps1)
 # to download.
 #
-# Each leg runs scripts/release-build.sh, which builds `pep-build` and the
-# other tools, lays them out as an install (bin/, runtime/), archives that as
+# Each leg runs scripts/release-build.sh, which provisions LLVM and clang,
+# installs stage 0, the previously published toolchain
+# (scripts/ci-install-toolchain.sh), builds `pep-build` (pepc,
+# tools/compiler) with it, then with itself, builds
+# the other tools with the result, lays them out as an install (bin/,
+# runtime/), archives that as
 # `pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`
 # beside it, and smoke-tests the archive with scripts/release-smoke-test.sh:
 # unpacked outside the checkout with no LLVM variables set, `pepper build`
@@ -41,9 +45,6 @@ on:
     tags: ['v*.*.*']
     paths:
       - VERSION
-      - Cargo.toml
-      - Cargo.lock
-      - crates/**
       - runtime/**
       - tools/**
       - scripts/release-build.sh
@@ -72,14 +73,12 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
-  CARGO_INCREMENTAL: 0
-
 jobs:
   # The version to build and whether to publish it, as a release or as the
-  # prerelease build of main.
+  # prerelease build of main, and the published toolchain that builds it
+  # (stage 0): the build of main when the checkout holds a prerelease
+  # (0.4.0-dev builds with the v0.4.0-dev of the merge before), and for a
+  # release X.Y.Z the X.Y.Z-dev build of main that preceded it.
   version:
     runs-on: pepper-linux
     timeout-minutes: 5
@@ -87,6 +86,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       publish: ${{ steps.version.outputs.publish }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      stage0: ${{ steps.version.outputs.stage0 }}
     steps:
       - uses: actions/checkout@v7
 
@@ -127,11 +127,16 @@ jobs:
                 ;;
             esac
           fi
-          echo "version=$version publish=$publish prerelease=$prerelease"
+          case "$held" in
+            *-*) stage0="$held" ;;
+            *) stage0="$held-dev" ;;
+          esac
+          echo "version=$version publish=$publish prerelease=$prerelease stage0=$stage0"
           {
             echo "version=$version"
             echo "publish=$publish"
             echo "prerelease=$prerelease"
+            echo "stage0=$stage0"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -148,19 +153,13 @@ jobs:
           - { target: windows-x64, runs-on: pepper-windows, container: "" }
     runs-on: ${{ matrix.runs-on }}
     container: ${{ matrix.container }}
-    # LLVM provisioning plus a release build of the compiler, from cold. The
+    # LLVM provisioning plus two builds of the compiler, from cold. The
     # Linux leg builds its LLVM from source the first time (cached after).
     timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v7
 
-      # Checkout's clean step deletes target/, so a self-hosted runner builds
-      # beside the checkout instead, as in the CI workflow.
-      - name: Use persistent target dir (self-hosted)
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-release" >> "$GITHUB_ENV"
 
       # The version, or `dev` for a build that publishes nothing.
       - name: Version
@@ -176,6 +175,10 @@ jobs:
           # releases on Windows.
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ matrix.target }}
+          # Stage 0: the published toolchain that builds pepc, which
+          # release-build.sh installs with the install scripts (as CI
+          # installs the build of main) once it has provisioned clang.
+          PEPPER_STAGE0_VERSION: ${{ needs.version.outputs.stage0 }}
           # pep-build is pepc, which depends on the private pepper-llvm
           # package, and pep-lsp on the private pepper-lsp package
           # (scripts/ci-package-auth.sh).
@@ -218,7 +221,7 @@ jobs:
       - name: Give the runner its folders back
         if: always() && matrix.container != ''
         shell: bash
-        run: chmod -R a+rwX "$GITHUB_WORKSPACE" "${CARGO_TARGET_DIR:-$GITHUB_WORKSPACE/target}" || true
+        run: chmod -R a+rwX "$GITHUB_WORKSPACE" "$RUNNER_WORKSPACE/pepper-data" "$RUNNER_TEMP" || true
 
       - name: Upload archive
         uses: actions/upload-artifact@v7

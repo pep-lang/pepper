@@ -1,4 +1,4 @@
-## Property accesses: `pepper_sema::passes::properties` in Pepper. The
+## Property accesses. The
 ## builder lowers each property to plain members (its storage field, a
 ## getter and, with a `set`, a setter); this rewrites the accesses once the
 ## receiver's type is known:
@@ -127,7 +127,7 @@ _is_own_storage(site: PropertySite, receiver: Expression, property: PropertyDef)
 }
 
 ## Rewrites the property access `e`, if it is one, and returns what
-## replaces it. As `properties::lower` does.
+## replaces it.
 ##
 ## @param e the expression
 ## @param properties the program's properties

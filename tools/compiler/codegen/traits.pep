@@ -1,7 +1,6 @@
 ## Traits used as types, tuples and boxed value structs: trait
 ## instantiation, the vtables and their thunks, tuple layout, equality and
-## hashing, and the `ToTrait`/`FromTrait` conversions, as
-## `crates/pepper-codegen/src/lib.rs` makes them.
+## hashing, and the `ToTrait`/`FromTrait` conversions.
 
 import llvm;
 import compiler.sema;

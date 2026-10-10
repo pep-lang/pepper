@@ -199,6 +199,6 @@
 
 # Contributing
 
-- [Setting up LLVM: cargo setup](contributing/setup.md)
+- [Setting up LLVM: setup-llvm.sh](contributing/setup.md)
 - [Building this documentation](contributing/docs.md)
 - [Testing the runtime and the compiler](contributing/tests.md)

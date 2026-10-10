@@ -7,13 +7,12 @@
     The official release tree is 4.1 GB on Windows, 3.4 GB of it tools this
     project never invokes. What the build actually needs is:
 
-      bin/llvm-config.exe   llvm-sys discovery
+      bin/llvm-config.exe   discovery (scripts/setup-llvm.ps1)
       lib/LLVM-C.lib        import library
-      bin/LLVM-C.dll        the LLVM implementation (Windows links the DLL --
-                            see crates/pepper-codegen/build.rs for why; pepc,
-                            through pepper-llvm, links it too)
-      bin/clang.exe         link driver (tools/compiler/driver/linker.pep,
-                            crates/pepper-driver/src/linker.rs)
+      bin/LLVM-C.dll        the LLVM implementation (pepc, through
+                            pepper-llvm, links the DLL on Windows: the static
+                            libraries are built against the static CRT)
+      bin/clang.exe         link driver (tools/compiler/driver/linker.pep)
 
     That is roughly 175 MB. clang is kept here, unlike the Unix package, because
     a windows-latest runner has no clang of its own to fall back to.
@@ -54,19 +53,19 @@ try {
         Copy-Item (Join-Path $Prefix $item) (Join-Path $staging $item) -Force
     }
 
-    # llvm-sys's build script runs `llvm-config --libs`, and llvm-config fails
-    # outright ("component libraries and shared library") unless every
-    # component .lib it would name is present -- even though Windows links
-    # LLVM-C.dll and never consumes these archives. 145 files, ~277 MB.
+    # llvm-config fails outright ("component libraries and shared library")
+    # unless every component .lib it would name is present -- even though
+    # Windows links LLVM-C.dll and never consumes these archives -- and the
+    # setup script asks it for them. 145 files, ~277 MB.
     $components = Get-ChildItem (Join-Path $Prefix 'lib') -Filter 'LLVM*.lib'
     if ($components.Count -eq 0) { throw "no LLVM*.lib component libraries in $Prefix\lib" }
     Copy-Item $components.FullName (Join-Path $staging 'lib') -Force
     Write-Host ("  component libraries: {0}" -f $components.Count)
 
-    # llvm-sys also compiles a small C shim (wrappers/*.c) against the C API,
-    # so the C headers have to travel with the package: llvm-c itself plus
-    # llvm/Config, which llvm-c/Target.h pulls in for the target .def lists.
-    # ~2 MB of the 78 MB include tree; the C++ headers are not needed.
+    # The C headers travel with the package, so the prefix is a complete C API
+    # install: llvm-c itself plus llvm/Config, which llvm-c/Target.h pulls in
+    # for the target .def lists. ~2 MB of the 78 MB include tree; the C++
+    # headers are not needed.
     foreach ($headers in @('include\llvm-c', 'include\llvm\Config')) {
         $source = Join-Path $Prefix $headers
         if (-not (Test-Path $source)) { throw "$Prefix is missing $headers" }

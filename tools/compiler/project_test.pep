@@ -1,6 +1,5 @@
-# The compiler's linker reads `pep.toml` as the Rust compiler does
-# (`crates/pepper-files/src/project.rs`): the same manifest, the same
-# errors at the same keys, and imports of a project's dependencies
+# The compiler's linker reads `pep.toml`: the manifest, its errors at the
+# keys they are about, and imports of a project's dependencies
 # resolved in the project.
 
 import io;

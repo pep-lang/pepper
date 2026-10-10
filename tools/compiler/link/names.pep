@@ -134,8 +134,7 @@ export parse_type_string(text: String, span: Span): TypeName {
     return out;
 }
 
-## The linker spelling of a Pepper symbol, as `symbol_name` in
-## `crates/pepper-codegen/src/partition.rs`. `main`, and a member name of
+## The linker spelling of a Pepper symbol. `main`, and a member name of
 ## letters, digits, `_` and `.` (`Point.length`), is its own spelling; any
 ## other name is `_P` followed by the name with `_` doubled and every other
 ## byte written as `_` and two hex digits (`Array<int>.count` is

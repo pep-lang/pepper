@@ -1,5 +1,5 @@
-## Unary operators and truth tests on structs:
-## `pepper_sema::passes::unary_operators` in Pepper. A struct may declare
+## Unary operators and truth tests on structs.
+## A struct may declare
 ## `-()`, `~()`, `!()` and the truth test `!!()` as instance methods without
 ## parameters; `-x`, `~x` and `!x` on such a struct become zero-argument
 ## method calls named after the operator, and a struct value in a boolean
@@ -20,7 +20,7 @@ import [Rewriter, rewrite_block] from "walk";
 const _TRUTH_TEST = "!!";
 
 ## Rewrites the unary operators and truth tests on structs in `body` into
-## method calls, as `unary_operators::dispatch` does. The call names the
+## method calls. The call names the
 ## operator (`-`), so an overload set holding both a unary and a binary `-`
 ## resolves to the member by its arity.
 ##

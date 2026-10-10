@@ -1,7 +1,6 @@
 ## Calls: free functions, externs and C function pointers, function values
 ## and their static objects, argument passing and default arguments, weak
-## references, `move`, shared literals and enum cases, as
-## `crates/pepper-codegen/src/lib.rs` generates them.
+## references, `move`, shared literals and enum cases.
 
 import digest;
 import llvm;
@@ -420,7 +419,7 @@ extend Generator {
         return Result<llvm.Value>.ok(moved);
     }
 
-    ## Weak reference intrinsics (`passes::weak_types`). The argument is
+    ## Weak reference intrinsics. The argument is
     ## read like a method receiver; an owned-rvalue argument is a temporary
     ## released once the result exists (so `__weak_from<T>(T())` leaves a
     ## weak reference to an already destroyed object, as in C++).

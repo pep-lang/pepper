@@ -32,8 +32,9 @@ export dir_of(path: Path): Path {
     return parent.value();
 }
 
-## Returns `path` resolved as Rust's `std::fs::canonicalize` resolves it,
-## so file names match the Rust compiler's byte for byte: on Windows the
+## Returns `path` made absolute with its links resolved (the system's
+## canonical path), so a file has one name however it is reached: on
+## Windows the
 ## result keeps the verbatim prefix (`\\?\C:\x`, `\\?\UNC\server\share`)
 ## that `Path.canonicalize` removes.
 ##

@@ -1,5 +1,5 @@
-## Building a program: the checked model to an object file, linked into an
-## executable, as `crates/pepper-driver/src/lib.rs` does for one unit.
+## Building a program: the checked model to object files, linked into an
+## executable.
 
 import async;
 import compiler.ast;
@@ -515,7 +515,7 @@ _check_layers(
 # keeps them beside the layer's object (`defines`), and a layer above only
 # declares these (`codegen.generate`'s `declared`); an instantiation the
 # layer's object dropped (`linkonce_odr`, inlined everywhere) it defines
-# itself, as Rust shares the generics a crate exports.
+# itself, as a compiler shares the generics a library exports.
 _defines(ir: llvm.Module, partition: codegen.Partition): String {
     var out = StringBuilder();
     var values = ir.functions();
@@ -1117,8 +1117,8 @@ _work_on(
     var t5 = os.Instant.now();
     stages = stages + $"store {(t5 - t4).milliseconds()}\n";
     # The record first: the layers that read this one are checked on it
-    # while its object compiles, as cargo starts a crate's dependents on
-    # its metadata while rustc generates its code (pipelining).
+    # while its object compiles (pipelining, as a build system starts a
+    # library's dependents on its interface while its code generates).
     File.write_bytes(_layer_file(dir, k, "rec"), bytes);
     File.write_text(_layer_file(dir, k, "own"), own);
     if (!warned.is_empty) {

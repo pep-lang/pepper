@@ -423,8 +423,7 @@ _names_parameter(ty: TypeName, name: String): bool {
     return false;
 }
 
-## Each struct's synthesized members and constructor bodies, as
-## `struct_body::synthesize` does; a checked struct's are already there.
+## Each struct's synthesized members and constructor bodies; a checked struct's are already there.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

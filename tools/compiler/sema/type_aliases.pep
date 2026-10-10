@@ -1,5 +1,5 @@
-## Type aliases (`type Name<P1, P2 = Default> = Target;`), resolved:
-## `pepper_sema::passes::resolve_type_aliases` in Pepper. Each use of an
+## Type aliases (`type Name<P1, P2 = Default> = Target;`), resolved.
+## Each use of an
 ## alias name is expanded into its target, the alias's parameters replaced
 ## by the use's arguments (or their defaults), so no alias name remains in
 ## the model.

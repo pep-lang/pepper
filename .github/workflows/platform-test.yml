@@ -1,7 +1,12 @@
 # One-off cross-platform runs, for checking a change on an operating system
 # other than the one you develop on.
 #
-#   gh workflow run platform-test.yml -f platforms=macos -f script="cargo test --workspace"
+#   gh workflow run platform-test.yml -f platforms=macos -f script='bash scripts/mobile-test.sh "$PEPPER_COMPILER_DIR/pep-build" "$RUNNER_TEMP/mobile" ios'
+#
+# The script runs with the published build of main installed (as CI installs
+# it), its pep-build's folder in PEPPER_COMPILER_DIR, and the private
+# packages' deploy keys in the environment for scripts/ci-package-auth.sh;
+# the default script sources it and runs the whole Pepper test suite.
 #
 # Add `--ref <branch>` to test un-merged work. `workflow_dispatch` only
 # registers once this file is on the default branch, but the run then executes
@@ -29,7 +34,7 @@ on:
       script:
         description: "Command to run (bash, from the repo root)"
         required: false
-        default: cargo test --workspace
+        default: source scripts/ci-package-auth.sh && bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
       provision:
         description: "Provision LLVM before running the script (false to probe the bare image)"
         required: false
@@ -43,10 +48,6 @@ concurrency:
 # here needs to write to the repository.
 permissions:
   contents: read
-
-env:
-  CARGO_TERM_COLOR: always
-  RUST_BACKTRACE: 1
 
 jobs:
   # Turns the platform list into a matrix, rejecting anything unrecognized so a
@@ -119,17 +120,14 @@ jobs:
     # before either of them fires: a cancelled job reports neither which phase
     # stalled nor the diagnostics below, since `failure()` is false under
     # cancellation.
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Show toolchain
+      - name: Show host
         shell: bash
-        run: |
-          rustc --version
-          cargo --version
-          uname -a || true
+        run: uname -a || true
 
       # Keying on the setup script's hash rather than a hardcoded version:
       # a hardcoded key still hits exactly after the pinned LLVM version is
@@ -160,13 +158,22 @@ jobs:
       # enough to build with.
       - name: Provision LLVM
         if: inputs.provision != 'false'
-        # 10 + 15 < the job's 30, so a stall trips the step -- naming the
+        # 10 + 5 + 40 < the job's 60, so a stall trips the step -- naming the
         # phase and running diagnostics -- rather than cancelling the job.
         timeout-minutes: 10
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci-provision-llvm.sh
+
+      # The published build of main, as CI installs it (#713); its pep-build's
+      # folder lands in PEPPER_COMPILER_DIR.
+      - name: Install the toolchain
+        timeout-minutes: 5
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
 
       # The command is supplied by someone with write access (dispatch requires
       # it), and reaches the shell through the environment rather than template
@@ -179,11 +186,15 @@ jobs:
       # rounds. A script that genuinely needs to continue past a failure can
       # say so with `|| true`.
       - name: Run requested script
-        timeout-minutes: 15
+        timeout-minutes: 40
         shell: bash
         env:
           SCRIPT: ${{ inputs.script }}
           PLATFORM: ${{ matrix.os }}
+          # tools/compiler and tools/pep-lsp depend on the private pepper-llvm
+          # and pepper-lsp packages (scripts/ci-package-auth.sh).
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+          PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
         run: |
           echo "Running on $PLATFORM: $SCRIPT"
           bash -euxo pipefail -c "$SCRIPT"
@@ -200,7 +211,7 @@ jobs:
         run: |
           set +e
           echo "::group::toolchain"
-          rustc -vV; cargo -V
+          "$PEPPER_COMPILER_DIR/pep-build" --version
           echo "::endgroup::"
 
           echo "::group::host"
@@ -211,13 +222,12 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::LLVM as setup recorded it"
-          cat .cargo/config.toml 2>/dev/null || echo "no .cargo/config.toml"
           prefix=$(tr -d '\r' < .pep/llvm-prefix 2>/dev/null | head -1)
           if [ -n "$prefix" ]; then
             echo "prefix: $prefix"
             "$prefix/bin/llvm-config" --version --targets-built --libdir 2>&1 | sed 's/^/  /'
           fi
-          for cfg in llvm-config llvm-config-20 llvm-config-19 llvm-config-18; do
+          for cfg in llvm-config llvm-config-20; do
             path=$(command -v "$cfg" 2>/dev/null) && echo "PATH $cfg: $path ($("$cfg" --version 2>&1))"
           done
           echo "::endgroup::"
@@ -230,6 +240,6 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::build artifacts"
-          ls -l target/debug 2>/dev/null | head -20
+          ls -l "${PEPPER_TARGET_DIR:-target}/pepper-tests/bin" 2>/dev/null | head -20
           ls -l .pep/build 2>/dev/null | head -20
           echo "::endgroup::"

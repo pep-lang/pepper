@@ -1,4 +1,4 @@
-## Range bounds must be integers: `pepper_sema::passes::ranges` in Pepper.
+## Range bounds must be integers.
 ## The builder lowers `a..b` to `_range(a, b, inclusive)`, whose `T` is
 ## inferred from the bounds; once each call is specialized
 ## (`_range<String>`), a bound that is not an integer is reported at the
@@ -13,8 +13,7 @@ import [Rewriter, rewrite_block] from "walk";
 ## The name the builder gives a range's call.
 const _RANGE_FUNCTION = "_range";
 
-## Reports the first range whose bounds are not integers, as
-## `ranges::check_ranges` does.
+## Reports the first range whose bounds are not integers.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error

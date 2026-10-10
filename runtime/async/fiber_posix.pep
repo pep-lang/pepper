@@ -14,7 +14,7 @@
 #
 # The switch itself is the `__switch_context` intrinsic, which the code
 # generator defines as a few instructions of assembly (see
-# crates/pepper-codegen/src/context.rs); `__prepare_context` lays out a new
+# tools/compiler/codegen/globals.pep); `__prepare_context` lays out a new
 # stack so that the first switch into it calls `entry(null)`.
 
 import "sys_posix";

@@ -1,5 +1,4 @@
-## Addresses and the frame of the function being generated:
-## `crates/pepper-codegen/src/address.rs` in Pepper.
+## Addresses and the frame of the function being generated.
 
 import llvm;
 import [AUTO] from compiler.sema;

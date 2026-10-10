@@ -59,8 +59,7 @@ export freeze_templates(module: Module): Templates {
     return templates;
 }
 
-## Clones each requested struct specialization from its generic base, as
-## `specialize_structs::specialize_structs` does.
+## Clones each requested struct specialization from its generic base.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
@@ -143,7 +142,7 @@ export specialize_structs(module: Module, state: PassState) {
 }
 
 ## Reports a specialization whose chain of requests is longer than the
-## limit, as `gather_generics::specialization_too_deep` does.
+## limit.
 ##
 ## @param module the model
 ## @param spec the specialization
@@ -301,8 +300,7 @@ _substitute_function(f: FunctionDef, type_map: Array<(String, TypeName)>) {
 }
 
 ## Rewrites each static call through a type parameter in `function`'s body
-## (`T.unit()`) to name its type argument, as
-## `specialize_functions::rewrite_static_calls` does: `Square.unit()`, and
+## (`T.unit()`) to name its type argument: `Square.unit()`, and
 ## `Box<int>.make()` as a type literal. A parameter, local or field
 ## (`fields`) of that name is a value, not the type, anywhere in the
 ## function.
@@ -428,8 +426,7 @@ _is_void(ty: TypeName): bool {
     return ty.name == VOID and ty.sub_types.count == 0;
 }
 
-## A `void` type argument (`Result<void>`) erases what it types, as
-## `specialize_structs::erase_void` does: fields and parameters of type
+## A `void` type argument (`Result<void>`) erases what it types: fields and parameters of type
 ## `void`, the statements that only move them, an enum case's value of that
 ## type with its field, and the arguments that pass one.
 _erase_void(st: StructDef) {

@@ -1,66 +1,57 @@
-# Setting up LLVM: cargo setup
+# Setting up LLVM: setup-llvm.sh
 
-The compiler links against LLVM, which cargo cannot build. `xtask`, a small
-program in this repository with no dependencies, provisions it, so it works
-on a fresh clone with nothing else installed:
+The compiler, `pep-build` (`tools/compiler`), links LLVM 20 through the
+`pepper-llvm` package, so building it from source needs an LLVM 20
+development install. The setup scripts provision one:
 
 ```bash
-cargo run -p xtask -- setup --devtools     # the first time
-cargo setup --devtools                     # afterwards
+./scripts/setup-llvm.sh --devtools            # Linux and macOS
+pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 ```
 
-The first run writes `.cargo/config.toml`, which points the build at the
-LLVM it settled on (`LLVM_SYS_<major>1_PREFIX`) and defines the `cargo setup`
-alias, and `.pep/llvm-prefix`, which holds the same prefix for everything
-that is not cargo. Run it again on each new machine rather than copying
-those files. The
+They record the LLVM they settled on in `.pep/llvm-prefix` (gitignored),
+which `scripts/pepper-tests.sh`, the release scripts and the workflows read.
+Run them again on each new machine rather than copying that file. The
 README's
 [Setting up a development environment](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
-says what each platform needs first and how the versions are chosen.
+says what each platform needs first.
 
 ```text
-cargo setup [options]
-cargo run -p xtask -- setup [options]
+scripts/setup-llvm.sh [options]
+pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
 ```
 
 ## What it does
 
-`cargo setup` runs the platform's script (`scripts/setup-llvm.sh` on Linux
-and macOS, `scripts/setup-llvm.ps1` on Windows), which:
-
-- provisions LLVM, cheapest source first: an LLVM of the wanted major that
-  is already installed, else the platform's package manager (apt or
-  Homebrew), else the LLVM release archive (cached, so a second run is
-  free);
-- writes `.cargo/config.toml`, so plain `cargo` commands build against it
-  with no environment variables set;
-- writes the prefix, one line, to `.pep/llvm-prefix` in the checkout
-  (gitignored), where `scripts/pepper-tests.sh`, the release scripts and
-  the workflows read it;
+- provisions LLVM 20, the one LLVM major Pepper builds with, cheapest source
+  first: an LLVM 20 that is already installed, else the platform's package
+  manager (apt `llvm-20-dev` or Homebrew `llvm@20`), else the LLVM release
+  archive (cached, so a second run is free). Windows always uses the archive:
+  no Windows package ships `llvm-config` and the component libraries;
+- writes the prefix, one line, to `.pep/llvm-prefix` in the checkout;
 - does nothing more when a valid install is already there.
-
-When it provisions an LLVM other than the default (20), it prints the
-`--features` flag cargo needs for it, such as
-`cargo build --no-default-features --features llvm19-1`.
 
 ## Options
 
+`scripts/setup-llvm.sh` takes these; `--help` prints them.
+
 | Option | What it does |
 | --- | --- |
-| `--llvm <major>`, `--llvm=<major>` | Provision this LLVM major (18 to 22) instead of the default, 20 |
-| `--devtools` | Also set up the `lldb` debugger: installed into the same prefix on Windows; on Linux and macOS, checked for, with instructions when it is missing |
+| `--devtools` | Also check for the `lldb` debugger, with instructions when it is missing |
 | `--no-devtools` | Skip the debugger, even when `PEPPER_SETUP_DEVTOOLS` is set |
 | `--no-packages` | Do not use apt or Homebrew: use an LLVM already installed, or the release archive |
-| `--check` | Report what is configured and the command to build with it, changing nothing |
+| `--check` | Report the LLVM it would use and what `.pep/llvm-prefix` records, changing nothing; the status is 0 only when they agree |
 | `-h`, `--help` | Print the options |
 
-Of `--devtools` and `--no-devtools`, the last one given wins. `--check` wins
-over everything else. An unknown argument is an error that prints the
-options and exits with status 1.
+Of `--devtools` and `--no-devtools`, the last one given wins. An unknown
+argument is an error that exits with status 2.
+
+`scripts/setup-llvm.ps1` takes `-DevTools`, which installs `lldb`,
+`lldb-dap` and `lldb-server` into the same prefix, and `-Force`, which
+downloads and extracts the archive again even when a valid install is there.
 
 ## Environment variables
 
 | Variable | What it does |
 | --- | --- |
-| `PEPPER_LLVM_MAJOR` | The LLVM major to provision, as `--llvm` gives it |
 | `PEPPER_SETUP_DEVTOOLS` | `1` sets up the debugger on every run, as `--devtools` does, so it can be turned on once per machine |

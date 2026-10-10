@@ -37,8 +37,7 @@ import [parse_type_string, WEAK] from "type_name";
 import [Rewriter, rewrite_expression] from "walk";
 
 ## Adds a struct for every function type, tuple type and weak reference
-## type the module uses that has none yet, as
-## `function_types::synthesize_function_types` does.
+## type the module uses that has none yet.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -312,7 +311,7 @@ _destructor(parent: String): FunctionDef {
 
 ## Returns the struct sema uses for tuple type `ty`: a `const` field per
 ## element, named by its position, and a constructor that takes them in
-## order, as `tuples::tuple_struct` does.
+## order.
 ##
 ## @param ty the tuple type
 ## @param state the passes' state
@@ -404,8 +403,7 @@ _is_digits(text: String): bool {
     return true;
 }
 
-## Returns the struct for `ty` (`__weak<T>`), as `weak_types::weak_struct`
-## does: its `__acquire` steps the weak count up and its `__release` steps
+## Returns the struct for `ty` (`__weak<T>`): its `__acquire` steps the weak count up and its `__release` steps
 ## it down, freeing the memory at 0.
 ##
 ## @param ty the weak reference type

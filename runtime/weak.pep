@@ -3,7 +3,8 @@
 # `Weak<T>` wraps the `__weak<T>` intrinsic type (a `std::weak_ptr<T>`):
 # every struct object carries a weak count next to its reference count, the
 # last strong release destroys the object, and its memory is freed once no
-# weak reference remains (passes/weak_types.rs, struct_body.rs).
+# weak reference remains (tools/compiler/sema/function_types.pep and
+# synthesize.pep).
 
 import "scoped";
 

@@ -191,6 +191,5 @@ edits `pep.toml` and `pep.lock` with the runtime's
 network:
 
 ```bash
-cargo build --release
-target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
+pepper build tools/pep-package/main.pep -o pep-package
 ```

@@ -17,7 +17,7 @@
 #
 # Build it from the repository root, next to the compiler:
 #
-#     target/release/pep-build tools/pep-test/main.pep -o target/release/pep-test
+#     pep-build tools/pep-test/main.pep -o target/bin/pep-test
 
 import async;
 import cli;

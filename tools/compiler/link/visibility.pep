@@ -1,8 +1,7 @@
 ## Module visibility: every top-level declaration (functions and externs,
 ## structs, type aliases, traits, extensions, and module variables) is
 ## private to the file that declares it unless marked `export`. Checked on
-## the linked files, as the Rust compiler checks them, before they are
-## merged into one program.
+## the linked files, before they are merged into one program.
 ##
 ## A name is resolved by spelling, program-wide, with two refinements: a
 ## name the referencing file declares itself (or binds locally: parameters,

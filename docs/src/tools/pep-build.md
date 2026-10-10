@@ -588,7 +588,7 @@ a terminal; set `NO_COLOR` to turn color off. See
 | `PEPPER_CACHE_DIR` | The build cache folder | `--cache`, `--no-cache` |
 | `PEPPER_CACHE_VERIFY` | Anything but empty or `0` checks the build cache | `--no-verify-cache` |
 | `PEPPER_LLVM_PREFIX` | The LLVM install whose `clang` and `lld` link the program | |
-| `LLVM_SYS_<major>1_PREFIX` | The same, when `PEPPER_LLVM_PREFIX` is not set (`LLVM_SYS_201_PREFIX` for LLVM 20); `cargo setup` records the LLVM it provisions in `.pep/llvm-prefix` and in cargo's config, and in CI exports this variable | |
+| `LLVM_SYS_<major>1_PREFIX` | The same, when `PEPPER_LLVM_PREFIX` is not set (`LLVM_SYS_201_PREFIX` for LLVM 20) | |
 | `PEPPER_PACKAGE_GITHUB_URL`, `PEPPER_PACKAGE_GITLAB_URL`, `PEPPER_PACKAGE_CODEBERG_URL` | Where a build fetching a project's locked dependencies clones that host's repositories from, when `pep-package` is not installed (see [pep-package](pep-package.md#environment-variables)) | |
 | `NO_COLOR` | Set and not empty: errors are not colored | |
 

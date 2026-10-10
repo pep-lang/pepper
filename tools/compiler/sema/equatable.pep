@@ -1,4 +1,4 @@
-## `[Equatable]`: `pepper_sema::equatable` in Pepper. A struct marked
+## `[Equatable]`. A struct marked
 ## `[Equatable]` gets an `==` that compares the tuple of its fields with
 ## another's, and a `__hash` that hashes that tuple, before any pass runs.
 ## A field marked `[Equatable(exclude = true)]` (or `include = false`) is

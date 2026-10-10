@@ -77,8 +77,7 @@ export instance(def: TraitDef, ty: TypeName): TraitType {
     return TraitType(ty.copy(), methods);
 }
 
-## Substitutes each parameter in turn, as `specialize_structs::substitute`
-## does.
+## Substitutes each parameter in turn.
 _substitute_type(ty: TypeName, type_map: Array<(String, TypeName)>) {
     for (var (param, arg) in type_map) {
         ty.replace(param, arg);

@@ -1,5 +1,5 @@
-## `static (captures) { ... }` blocks, run at compile time:
-## `pepper_sema::passes::static_blocks` in Pepper. `expand` replaces each
+## `static (captures) { ... }` blocks, run at compile time.
+## `expand` replaces each
 ## block in concrete code with what it emits, running its compile-time
 ## steps (a `for` over `reflect.properties<T>()`, a compile-time `if`) and
 ## filling in each emitted statement's placeholders; `expand_module_blocks`
@@ -114,7 +114,7 @@ _body_has_static(function: FunctionDef): bool {
 
 ## Expands every `static` block in concrete code: free functions that are
 ## not generic, and the methods, constructors and destructors of structs
-## that are not, as `static_blocks::expand` does. Errors go to `state`.
+## that are not. Errors go to `state`.
 ## `lowered` says the bodies have been through the passes that lower string
 ## literals, so a string a block emits is lowered too.
 ##
@@ -229,7 +229,7 @@ _strip_static(block: Block) {
 
 ## Runs the module-scope `static` blocks and gives each constant one
 ## declares the value the block computed, in place of the initializer the
-## parser gave it, as `static_blocks::expand_module_blocks` does.
+## parser gave it.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -589,7 +589,7 @@ enum _CtValue {
         }
     }
 
-    # `display`, with a string in quotes as Rust's `Debug` writes it.
+    # `display`, with a string in quotes (`quote_debug`).
     quoted(): String {
         if (this is Text(value)) {
             return _debug_string(value);
@@ -659,8 +659,8 @@ _record(name: String, fields: Array<(String, StaticConstant)>): StaticConstant {
     return StaticConstant.Record(RecordStaticConstant(name, fields));
 }
 
-## `text` as Rust's `{:?}` writes a string: in double quotes, with quotes,
-## backslashes and control characters escaped.
+## `text` quoted for display: in double quotes, with quotes, backslashes
+## and control characters escaped.
 _debug_string(text: String): String {
     var out = StringBuilder();
     out.append("\"");
@@ -3027,8 +3027,7 @@ _slots(module: Module, st: StructDef): Result<_Slot[], Diagnostic> {
 }
 
 ## The string field `field` of `attribute` (written in `file`), an
-## `[Attribute]` struct's value, read as `reflect.attribute<A>()` would:
-## `static_blocks::attribute_string`.
+## `[Attribute]` struct's value, read as `reflect.attribute<A>()` would.
 ##
 ## @param module the model
 ## @param attribute the attribute
@@ -3256,8 +3255,7 @@ _is_attribute_field_type(module: Module, ty: TypeName): bool {
 
 ## Reports an attribute that names neither a built-in attribute nor an
 ## `[Attribute]` struct, an argument an attribute struct cannot take, and an
-## `[Attribute]` struct that cannot be one, as
-## `static_blocks::check_attributes` does.
+## `[Attribute]` struct that cannot be one.
 ##
 ## @param module the model
 ## @param state the passes' state, which keeps the first error

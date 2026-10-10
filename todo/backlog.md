@@ -30,7 +30,7 @@ Read a ticket AND all its comments before starting it. Follow its approach. Chec
 - Decisions (Justin 10-02, ticket comment): the Rust compiler stays stage 0 until the Pepper compiler passes everything, then builds switch to the previous release; a separate rewrite checked against the same test corpus, no glue between the two; `pep-doc` is ported to Pepper too (done, #693); LLVM pinned to 20.
 - Acceptance (Justin 11:39 PT 10-05): compile AND link, full and incremental/editing builds, as fast or faster than rustc/clang on comparable work; measure against rustc/clang baselines and post numbers; run final timings on the Windows Worker once separate compilation lands; tests pass at least as fast as main. Every speedup with a measured gain lands (gains stack); never park one for being small; do not burn hours on a stuck sub-problem. Plans: `todo/pepc-build-speed/proposal.md`, `per-unit-sema-plan.md`, `sema-survey.md`; codegen plan in memory (pepc-codegen-plan).
 - Remaining plan: parallel sema (tasks or a process per unit), modular overload naming, scheduler, Windows timings, cutover, then #709 last.
-- Last step of the cutover (Justin 10-04/10-05): one straight-to-AST parser shared by the compiler, pep-fmt and a Pepper LSP; rewrite the LSP in Pepper on a generic Tower-style framework (repo `justinboswell/pepper-lsp`: LanguageServer trait, serve_stdio, Client, TextDocument UTF-16), pep-lsp built on it. Plan: `/mnt/project-files/shared-parser/plan.md` (steps 1-6 done, step 7 after cutover). The Pepper pep-lsp (tools/pep-lsp) is now the editor server that releases and the vsix ship; the Rust tools/lsp is built nowhere (Pepper sema speed at last measurement, front-end ms load/merge/sema at last measurement: hello 104/37/1516; compiler main.pep 1175/629/102859, since improved).
+- Last step of the cutover (Justin 10-04/10-05): one straight-to-AST parser shared by the compiler, pep-fmt and a Pepper LSP; rewrite the LSP in Pepper on a generic Tower-style framework (repo `justinboswell/pepper-lsp`: LanguageServer trait, serve_stdio, Client, TextDocument UTF-16), pep-lsp built on it. Plan: `/mnt/project-files/shared-parser/plan.md` (steps 1-6 done, step 7 after cutover). The Rust LSP stays the editor server until Pepper sema is fast enough (front-end ms load/merge/sema at last measurement: hello 104/37/1516; compiler main.pep 1175/629/102859, since improved).
 - Ticket comment (error recovery): speed is not the blocker for the LSP (full parse 789 ms for 666 files); error recovery on half-typed code was the risk, now covered by #731.
 - Rule: parse no slower than main.
 
@@ -107,17 +107,16 @@ Read a ticket AND all its comments before starting it. Follow its approach. Chec
 
 ## Pre-merge checks
 
-No `cargo test` (removed by #666). Run, in the owner's container:
-1. `cargo build --release`
-2. `scripts/pepper-tests.sh`
-3. `target/release/pep-doc check`
-4. After runtime changes: `target/release/pep-fmt --check runtime tools` (run `pep-fmt -w runtime tools` first when formatting is needed)
+Run, in the owner's container, with the build of main installed (`sh scripts/install.sh --version "$(cat VERSION)"`):
+1. `scripts/pepper-tests.sh` (for a `tools/compiler` change, also build pepc from it and pass its folder: see the README's "Build and test")
+2. `target/pepper-tests/bin/pep-doc check`
+3. After runtime changes: `target/pepper-tests/bin/pep-fmt --check runtime tools` (run `pep-fmt -w runtime tools` first when formatting is needed)
 
-About 4 min warm, 10 min after a `tools/compiler` change, 12 min cold. Cloud threads need `justinboswell/pepper-llvm` and `justinboswell/pepper-lsp` attached (`add_repo`, read access) or tests fail with "could not read Username". If `tools/compiler` tests fail with "'Visibility' is not exported by 'llvm'", the container's `tools/compiler/.pep/deps` pepper-llvm is older than `pep.lock`: check out the locked commit or run `pep-package -C tools/compiler fetch`. Cloud container setup: `apt-get install llvm-20-dev libpolly-20-dev`, `LLVM_SYS_201_PREFIX=/usr/lib/llvm-20`; perf: `linux-tools-generic`. Each worktree needs its own `CARGO_TARGET_DIR`.
+About 4 min warm, 10 min after a `tools/compiler` change, 12 min cold. Cloud threads need `justinboswell/pepper-llvm` and `justinboswell/pepper-lsp` attached (`add_repo`, read access) or tests fail with "could not read Username". If `tools/compiler` tests fail with "'Visibility' is not exported by 'llvm'", the container's `tools/compiler/.pep/deps` pepper-llvm is older than `pep.lock`: check out the locked commit or run `pep-package -C tools/compiler fetch`. Cloud container setup: `apt-get install llvm-20-dev libpolly-20-dev` (or `scripts/setup-llvm.sh`); perf: `linux-tools-generic`. Each worktree needs its own `PEPPER_TARGET_DIR` (or its own checkout's `target/`).
 
 ## Extension-reinstall rule
 
-- The VS Code extension runs the Pepper `tools/pep-lsp`, built from `tools/pep-lsp`, `tools/compiler` and the runtime, so reinstall it when a merge touches those or the extension. Check with: `git diff --stat <prev> origin/main | grep -E 'tools/pep-lsp/|tools/compiler/|runtime/|vscode'`.
+- The VS Code extension runs `tools/pep-lsp`, which builds on the compiler's front end, so reinstall it when a merge touches `tools/pep-lsp`, `tools/compiler`, `tools/syntax`, `runtime/` or the extension (`tools/vscode-pepper`). Check with: `git diff --stat <prev> origin/main | grep -E 'tools/(pep-lsp|compiler|syntax|vscode-pepper)/|runtime/'`.
 - The reinstall (`scripts/install-vscode-extension.ps1`) runs ONLY from main, via the Windows Worker through the coordinator, after the change has merged. Last reinstalled at 8d227af2 (#708, 16:25 PT 10-05, pepper-language 0.3.0).
 
 ## Other standing rules

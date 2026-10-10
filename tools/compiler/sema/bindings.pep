@@ -102,7 +102,7 @@ _find_last(bindings: _LocalBinding[], name: String): _LocalBinding? {
 }
 
 ## Reports a name declared twice in one scope and an assignment to a
-## `const` binding, as `check_bindings::check_bindings` does.
+## `const` binding.
 ##
 ## @param module the model
 ## @param state the passes' state, which keeps the first error

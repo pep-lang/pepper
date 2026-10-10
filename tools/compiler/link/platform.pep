@@ -333,7 +333,7 @@ _android(target: Target, system: String[], triple: String): Result<Target, Strin
 }
 
 # An iOS target: `<arch>-apple-ios<version>`, with `-simulator` for the
-# simulator, which Rust spells `-sim` and an x86_64 triple implies (no
+# simulator, which some spell `-sim` and an x86_64 triple implies (no
 # iPhone is x86_64). The version is the triple's (`ios17.0`), else
 # `DEFAULT_IOS_VERSION`. None for an environment other than the simulator
 # (`-macabi`).
@@ -1010,8 +1010,8 @@ export attribute_text(attribute: Attribute): String {
     return $"[{expression_text(attribute.body)}]";
 }
 
-## Returns an expression of the kinds an attribute holds as the Rust
-## compiler writes it: every binary in parentheses.
+## Returns an expression of the kinds an attribute holds, written with
+## every binary in parentheses.
 ##
 ## @param e the expression
 ## @returns the text

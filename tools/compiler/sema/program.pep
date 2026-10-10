@@ -1,6 +1,5 @@
-## The linked program's model: `merge` in `crates/pepper-sema/src/program.rs`
-## in Pepper. Builds each file's model and joins them into one, then writes
-## it as `pep-build --emit-model` prints it.
+## The linked program's model: `merge` builds each file's model and joins
+## them into one, then writes it as `pep-build --emit-model` prints it.
 
 import [render_all, Diagnostic] from compiler.diagnostic;
 import json;
@@ -73,8 +72,8 @@ export build(program: Program): Result<Module, Diagnostic> {
 ## Builds the model of `files`, some of `program`'s, on top of `base`, a
 ## module whose declarations are checked already (a checked unit's record,
 ## loaded): `base` takes `program`'s file list, namespaces, extension
-## scopes and overload unions, then the files' declarations, as
-## `checked::on_checked_runtime` does in Rust. Without a base, a new module.
+## scopes and overload unions, then the files' declarations. Without a
+## base, a new module.
 ##
 ## @param program the linked program
 ## @param base the checked module, changed in place
@@ -303,9 +302,9 @@ enum _Step {
     Text(text: String),
 }
 
-## Returns `value` as compact JSON, as serde_json writes it: object keys
-## sorted by their bytes, and numbers as Rust's `ryu` lays them out (`1.0`,
-## `1e+20`, `1.5e-7`; `null` for one that is not finite), and an
+## Returns `value` as compact JSON: object keys sorted by their bytes,
+## numbers in their shortest form (`_shortest_json`: `1.0`, `1e+20`,
+## `1.5e-7`; `null` for one that is not finite), and an
 ## `unsigned_json` value past `long`'s range as its digits.
 ##
 ## @param value the value
@@ -395,10 +394,10 @@ _quoted(text: String): String {
     return $"\"{text}\"";
 }
 
-## Returns `value` as Rust's `ryu` writes a `f64`: the shortest digits that
+## Returns `value` as JSON writes a `double`: the shortest digits that
 ## read back as it, in plain notation when its decimal exponent is within
 ## -5 to 16 (`1.0`, `0.001`), else in scientific notation (`1e+20`,
-## `1.5e-7`); `null` when it is not finite, as serde_json writes it.
+## `1.5e-7`); `null` when it is not finite.
 ##
 ## @param value the number
 ## @returns the text
@@ -472,8 +471,8 @@ _shortest_digits(value: double): (String, String, long)? {
     return Optional<(String, String, long)>.Value((sign, digits, exponent));
 }
 
-## Returns `value` as Rust's `Display` writes a `f64`: the shortest digits
-## that read back as it, always in plain notation, with no `.0` for a whole
+## Returns `value` in plain notation: the shortest digits that read back
+## as it, always in plain notation, with no `.0` for a whole
 ## number (`1`, `0.5`, `100000000000000000000`); `NaN`, `inf` and `-inf`
 ## for the special values.
 ##

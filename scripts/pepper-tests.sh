@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # Runs the Pepper tests: the `[Test]` functions of the runtime
 # (`runtime/**/test/`, `runtime/test/`) and of the Pepper tools
-# (`tools/<tool>/*_test.pep`), with `pepper test`. These are the tests CI
-# and the pre-merge checks run; the Rust compiler's own `cargo test` suite
-# no longer runs there (#662).
+# (`tools/<tool>/*_test.pep`), the compiler's among them, with `pepper
+# test`. These are the tests CI and the pre-merge checks run.
 #
 #   scripts/pepper-tests.sh [compiler-dir] [pep-test options...]
 #
 # compiler-dir holds the `pep-build` to test with. By default it is the
 # installed toolchain's, the one `pepper install which` names: CI and the
 # workers install the build of main (`scripts/install.sh --version
-# <x.y.z-dev>`, #713) rather than building the compiler. Pass a cargo
-# build's folder (target/release) to test a change to the compiler itself.
+# <x.y.z-dev>`, #713) rather than building the compiler. To test a change
+# to the compiler itself with the compiler it builds, build pep-build from
+# tools/compiler with the installed one and pass its folder (README.md,
+# "Building from source").
 #
 # The script builds the Pepper tools (`pepper`, `pep-test`, `pep-fmt`,
 # `pep-profile`, `pep-package`, `pep-install`, `pep-doc`) from this
 # checkout with that `pep-build`, into target/pepper-tests/bin (under
-# $CARGO_TARGET_DIR when it is set), beside a link to the `pep-build`, so
+# $PEPPER_TARGET_DIR when it is set), beside a link to the `pep-build`, so
 # `pepper test` finds `pep-test`, `pep-test` finds `pep-build`, and
 # `pep-doc check` finds every tool's `--help` there. Further arguments go
 # to every `pepper test` (`-f name`, `-j 1`, ...).
@@ -32,7 +33,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-target="${CARGO_TARGET_DIR:-$root/target}"
+target="${PEPPER_TARGET_DIR:-$root/target}"
 exe=""
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) exe=".exe" ;;
@@ -51,7 +52,7 @@ else
   if [ -z "$compiler" ]; then
     echo "error: no installed Pepper toolchain; install the build of main with" >&2
     echo "  sh scripts/install.sh --version $(tr -d '\r' < "$root/VERSION")" >&2
-    echo "or pass the folder of a pep-build to test with (target/release after 'cargo build --release')" >&2
+    echo "or pass the folder of a pep-build to test with" >&2
     exit 2
   fi
 fi

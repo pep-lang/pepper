@@ -1,4 +1,4 @@
-## `?` checks: `pepper_sema::passes::check_tries` in Pepper. Checks each
+## `?` checks. Checks each
 ## `?` (lowered by the builder) once its operand's type is known: the operand
 ## is a `Result` or an `Optional`, the enclosing function returns the same
 ## kind, and a `Result`'s error converts to the function's error type.
@@ -15,8 +15,7 @@ import "type_name";
 const _RESULT = "Result";
 const _OPTIONAL = "Optional";
 
-## Checks each `?` in the concrete code, as `check_tries::check_tries`
-## does: generic bases are checked in their specializations.
+## Checks each `?` in the concrete code: generic bases are checked in their specializations.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error

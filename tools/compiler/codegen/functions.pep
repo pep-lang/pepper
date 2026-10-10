@@ -1,6 +1,6 @@
 ## Declaring structs, methods, externs and functions, and generating
 ## function bodies, blocks and statements: the instantiation pass and the
-## statement half of the codegen pass in `crates/pepper-codegen/src/lib.rs`.
+## statement half of the codegen pass.
 
 import compiler.ast;
 import llvm;

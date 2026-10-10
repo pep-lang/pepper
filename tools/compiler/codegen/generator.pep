@@ -1,8 +1,7 @@
-## The LLVM module for a checked model: `CodeGenerator` in
-## `crates/pepper-codegen/src/lib.rs`, in Pepper. The generator declares
-## every struct, method, extern and function first (the instantiation
-## pass), then emits the globals and every body (the codegen pass), in the
-## order the Rust generator does, so the two print the same IR.
+## The LLVM module for a checked model. The generator declares every
+## struct, method, extern and function first (the instantiation pass), then
+## emits the globals and every body (the codegen pass), in a fixed order, so
+## the same model always prints the same IR.
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
@@ -54,7 +53,7 @@ const VTABLE_RELEASE: ulong = 0;
 const VTABLE_ACQUIRE: ulong = 1;
 const VTABLE_METHODS: ulong = 2;
 
-## The separator in a file's private names (`pepper_parser::namespace`).
+## The separator in a file's private names.
 const NAMESPACE_SEPARATOR = "@";
 
 ## One struct the generator laid out: its LLVM type, size and methods.
@@ -332,7 +331,7 @@ export struct Generator {
         error_loc = Optional<(String, Loc)>.Value((error, loc));
     }
 
-    ## Instantiates and generates `module`, in the Rust generator's order.
+    ## Instantiates and generates `module`.
     generate(module: Module): Result<void, Diagnostic> {
         error_loc = Optional<(String, Loc)>.Empty;
         var generated = generate_module(module);
@@ -385,7 +384,7 @@ export struct Generator {
     }
 
     generate_items(module: Module): Result<void> {
-        # The value structs' canonical spellings (`value_structs::install`).
+        # The value structs' canonical spellings.
         var defaulted = sema.defaulted_params(module);
         for (var st in module.structs) {
             if (!is_value_struct(st) or (st.ty.is_generic() and st.name == st.ty.name)) {

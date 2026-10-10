@@ -1,28 +1,28 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Provision the LLVM toolchain that llvm-sys (via inkwell) links against, and
-    point cargo at it. Windows counterpart of scripts/setup-llvm.sh.
+    Provision LLVM 20, the LLVM the compiler (pepc, through the pepper-llvm
+    package) links against, and point the scripts at it. Windows counterpart
+    of scripts/setup-llvm.sh.
 
 .DESCRIPTION
-    llvm-sys finds LLVM by running `<prefix>/bin/llvm-config` and matching its
-    major version. The LLVM builds shipped by winget/scoop/chocolatey and the
-    llvm.org .exe/.msi installers contain neither llvm-config nor the component
-    libraries -- only LLVM-C.dll and its import lib -- so they cannot satisfy it.
+    The LLVM builds shipped by winget/scoop/chocolatey and the llvm.org
+    .exe/.msi installers contain neither llvm-config nor the component
+    libraries -- only LLVM-C.dll and its import lib -- and leave out the
+    tools the release build and CI look for, so this script does not use them.
 
     The official `clang+llvm-<ver>-x86_64-pc-windows-msvc.tar.xz` release asset
     is a complete install tree: llvm-config.exe, every LLVM*.lib, LLVM-C.dll,
     and the clang/lld/llc/lli/opt tools. This script downloads it (cached),
-    extracts it under $env:LOCALAPPDATA\pepper\llvm, and writes
-    .cargo/config.toml so cargo sees LLVM_SYS_<major>_PREFIX with no shell setup.
-    It also records the prefix in .pep/llvm-prefix (one line, read by the
-    scripts and workflows).
+    extracts it under $env:LOCALAPPDATA\pepper\llvm, and records the prefix in
+    .pep/llvm-prefix (one line, read by scripts/pepper-tests.sh, the release
+    build and the workflows).
 
-    Note that Pepper links LLVM-C.dll rather than the static libraries on
-    Windows, because those are built against the static CRT; see
-    crates/pepper-codegen/build.rs.
+    Note that pepc links LLVM-C.dll (pepper-llvm's `[Link("LLVM-C")]`) rather
+    than the static libraries on Windows, because those are built against the
+    static CRT; the DLL ships beside pep-build.
 
-    Idempotent: re-running with a valid install only rewrites those.
+    Idempotent: re-running with a valid install only rewrites that.
 
 .PARAMETER DevTools
     Also install the debugger (lldb, lldb-dap, lldb-server). Equivalent to
@@ -41,53 +41,27 @@
 [CmdletBinding()]
 param(
     [switch]$DevTools,
-    [switch]$Force,
-    # LLVM major to provision. Defaults to the `default` feature in Cargo.toml,
-    # so plain `cargo build` works after a default run.
-    [ValidateSet('18', '19', '20', '21', '22')]
-    [string]$Llvm = $env:PEPPER_LLVM_MAJOR
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
 
-# The majors this workspace can build against, and the newest patch release
-# upstream published for each. Dictated by the feature table in
-# crates/*/Cargo.toml -- inkwell needs exactly one llvmNN-1 feature -- so the
-# two move together.
+# The one LLVM major Pepper builds with (the one pepper-llvm binds), and the
+# newest patch release upstream published for it. setup-llvm.sh pins the same.
 #
 # Unlike Linux and macOS, no Windows package manager ships a usable LLVM: the
 # llvm.org installer and the winget/choco packages carry neither llvm-config
 # nor the component libraries (verified on windows-latest: 2.4 GB of LLVM 20
-# with no llvm-config.exe and one LLVM*.lib), so every version here comes from
-# the release archive.
+# with no llvm-config.exe and one LLVM*.lib), so it comes from the release
+# archive.
 #
-# This table is parsed by ci-provision-llvm.sh to locate the prefix, so keep
-# the `'<major>' = '<version>'` shape.
+# These lines are parsed by ci-provision-llvm.sh and llvm-package.yml, so keep
+# their shapes.
+$LlvmMajor = '20'
 $LlvmVersions = @{
-    '22' = '22.1.8'
-    '21' = '21.1.8'
     '20' = '20.1.8'
-    '19' = '19.1.7'
-    '18' = '18.1.8'
 }
-
-# Matches `default` in Cargo.toml's [features].
-$DefaultLlvmMajor = '20'
-
-if (-not $Llvm) { $Llvm = $DefaultLlvmMajor }
-
-# [ValidateSet] applies to a bound argument, not to a parameter's default, so
-# PEPPER_LLVM_MAJOR reaches here unchecked. Without this, an unsupported value
-# produces $null from the table and the failure surfaces as a 404 on
-# `clang+llvm--x86_64-pc-windows-msvc.tar.xz`, naming neither the variable nor
-# the supported set.
-if (-not $LlvmVersions.ContainsKey($Llvm)) {
-    throw "unsupported LLVM major '$Llvm' (supported: $(($LlvmVersions.Keys | Sort-Object) -join ', '))"
-}
-
-$LlvmMajor = $Llvm
 $LlvmVersion = $LlvmVersions[$LlvmMajor]
-$LlvmSysMajor = "${LlvmMajor}1"
 
 # liblldb.dll is linked against this exact CPython minor version and the
 # llvm.org installer does not bundle it, so the embeddable runtime is placed
@@ -239,43 +213,11 @@ if ($DevTools) {
     Write-Host "Skipping debugger install; re-run with -DevTools (or PEPPER_SETUP_DEVTOOLS=1) to add lldb."
 }
 
-# Point cargo at the prefix. `.cargo/config.toml` [env] reaches build scripts,
-# so llvm-sys sees it with no shell state -- `cargo build` just works.
-$CargoDir = Join-Path $RepoRoot '.cargo'
-New-Item -ItemType Directory -Force -Path $CargoDir | Out-Null
-$CargoConfig = Join-Path $CargoDir 'config.toml'
-$EscapedPrefix = $Prefix -replace '\\', '\\'
-# The alias is generated rather than committed: cargo reads one config file
-# per directory, so a committed one carrying the alias could not also carry
-# this machine-specific [env], and `include` of the generated file is a hard
-# error before it exists. First run is `cargo run -p xtask -- setup`; after
-# that, `cargo setup`.
-@"
-# Generated by scripts/setup-llvm.ps1 -- do not edit, do not commit.
-# The path is machine-specific; re-run the script on a new machine.
-[alias]
-setup = "run -q -p xtask --"
-
-[env]
-LLVM_SYS_${LlvmSysMajor}_PREFIX = "$EscapedPrefix"
-"@ | Set-Content -Path $CargoConfig -Encoding utf8
-
-Write-Host "Wrote $CargoConfig (LLVM_SYS_${LlvmSysMajor}_PREFIX)"
-
-# The prefix for everything that is not cargo: the scripts and workflows
-# read .pep/llvm-prefix (gitignored, like all of .pep/), and a CI job's
-# later steps, the compiler among them, get the variable. Written without a
-# byte order mark or CR, so a shell reads it as is.
+# The scripts and workflows read the prefix from .pep/llvm-prefix
+# (gitignored, like all of .pep/). Written without a byte order mark or CR,
+# so a shell reads it as is.
 $PepDir = Join-Path $RepoRoot '.pep'
 New-Item -ItemType Directory -Force -Path $PepDir | Out-Null
 $PrefixFile = Join-Path $PepDir 'llvm-prefix'
 [System.IO.File]::WriteAllText($PrefixFile, "$Prefix`n")
 Write-Host "Wrote $PrefixFile"
-if ($LlvmMajor -eq $DefaultLlvmMajor) {
-    Write-Host "Run 'cargo build' to verify."
-} else {
-    # The version is a cargo feature and only the default one is implied.
-    Write-Host "LLVM $LlvmMajor is not the default ($DefaultLlvmMajor), so name it when building:"
-    Write-Host "  cargo build --no-default-features --features llvm$LlvmMajor-1"
-    Write-Host "  cargo test --workspace --no-default-features --features llvm$LlvmMajor-1"
-}

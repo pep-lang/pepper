@@ -13,7 +13,7 @@
 # | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-doc` | its own help (`HELP` in main.pep) | `docs/src/tools/pep-doc.md` |
 # | `pep-lsp` | `HELP` in `tools/pep-lsp/main.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
-# | `cargo setup` | `xtask/src/usage.txt`, which it prints | `docs/src/contributing/setup.md` |
+# | `setup-llvm.sh` | its usage text, which `--help` prints | `docs/src/contributing/setup.md` |
 # | `install.sh` | its `usage` text | `docs/src/tools/install.md` |
 # | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
 #
@@ -23,8 +23,7 @@
 #
 # The tools' `--help` comes from the built tools in one folder (`--tools`,
 # else `target/pepper-tests/bin`, where `scripts/pepper-tests.sh` builds the
-# Pepper tools beside its `pep-build`, when it holds `pep-build`, else the
-# release build's folder, else the debug build's).
+# Pepper tools beside its `pep-build`).
 
 import [check_documented] from compiler.doc;
 import [Directory, File, Path] from io;
@@ -104,23 +103,15 @@ _executable(name: String): String {
 }
 
 # The folder holding the built tools: `explicit`, else the one
-# `scripts/pepper-tests.sh` builds them in when it holds `pep-build`, else
-# the release build's folder when it does, else the debug build's.
+# `scripts/pepper-tests.sh` builds them in, `target/pepper-tests/bin` (under
+# `$PEPPER_TARGET_DIR` when it is set).
 export tools_dir(root: Path, explicit: String?): Path {
     if (explicit.is_value()) {
         return Path(explicit.value());
     }
-    var variable = os.environment("CARGO_TARGET_DIR");
+    var variable = os.environment("PEPPER_TARGET_DIR");
     var target = variable.is_value() ? Path(variable.value()) : root.join("target");
-    var tested = target.join("pepper-tests").join("bin");
-    if (tested.join(_executable("pep-build")).is_file()) {
-        return tested;
-    }
-    var release = target.join("release");
-    if (release.join(_executable("pep-build")).is_file()) {
-        return release;
-    }
-    return target.join("debug");
+    return target.join("pepper-tests").join("bin");
 }
 
 # What `tool --help` (with `arguments` before `--help`) prints, from the
@@ -520,11 +511,22 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
 
     _lsp(root, problems)?;
 
-    # cargo setup, from the usage it prints.
+    # setup-llvm.sh, from the usage at its top, which `--help` prints.
     var setup = "docs/src/contributing/setup.md";
-    var usage = _repository_file(root, "xtask/src/usage.txt")?;
-    _undocumented(root, "cargo setup", setup, "option", help_options(usage), _Match.Word, problems)?;
-    _undocumented(root, "cargo setup", setup, "environment variable", variables_named(usage), _Match.Word, problems)?;
+    var script = _repository_file(root, "scripts/setup-llvm.sh")?;
+    var usage = "";
+    for (var line in script.lines()) {
+        if (line.starts_with("set -euo pipefail")) {
+            break;
+        }
+        if (line.starts_with("# ")) {
+            usage += line.substr_bytes(2, line.size - 2) + "\n";
+        } else {
+            usage += "\n";
+        }
+    }
+    _undocumented(root, "setup-llvm.sh", setup, "option", help_options(usage), _Match.Word, problems)?;
+    _undocumented(root, "setup-llvm.sh", setup, "environment variable", variables_named(usage), _Match.Word, problems)?;
 
     _install_scripts(root, problems)?;
     return Result<String[]>.ok(problems);

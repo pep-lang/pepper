@@ -2,7 +2,11 @@
 # Build one platform's release archive of the Pepper toolchain, then prove
 # the archive works with scripts/release-smoke-test.sh.
 #
-#   scripts/release-build.sh <target> <version> <output-dir>
+#   scripts/release-build.sh <target> <version> <output-dir> [<stage0-dir>]
+#
+# <stage0-dir> holds the stage 0 pep-build (default: $PEPPER_COMPILER_DIR,
+# else the release PEPPER_STAGE0_VERSION names, installed, else the
+# installed toolchain's, the one `pepper install which` names).
 #
 # <target> is one of:
 #
@@ -24,10 +28,10 @@
 #
 # Beside it lands `<archive>.sha256`, in `sha256sum`'s format.
 #
-# pep-build is pepc, the compiler written in Pepper: built with the Rust
-# compiler (stage 0), then again with itself, and the second build ships.
-# Every other tool, the language server pep-lsp (tools/pep-lsp) among them,
-# is Pepper built by that pep-build. LLVM is linked into it (statically on
+# pep-build is pepc, the compiler written in Pepper (tools/compiler): built
+# by stage 0, the pep-build of a previously published toolchain (stage 1),
+# then again by itself (stage 2), and the second build ships. Every other
+# tool, pep-lsp among them, is built by that stage 2. LLVM is linked into it (statically on
 # Linux and macOS, as LLVM-C.dll on Windows), so a user needs no LLVM of
 # their own to compile; the libraries LLVM itself pulls in (zstd, libffi,
 # libxml2) are linked statically too, so the binary needs nothing beyond the
@@ -48,7 +52,7 @@ exe=""
 [ "$target" = windows-x64 ] && exe=".exe"
 
 # A folder holding only static archives of LLVM's own dependencies. It is
-# searched before LLVM's library folder (RUSTFLAGS' -L comes first), and the
+# searched before LLVM's library folder (its -L comes first), and the
 # linkers take the first folder that has a library in either form, so
 # `-lzstd` picks up libzstd.a here instead of libzstd.so beside LLVM's libs.
 static_dir="$output/.static-libs"
@@ -80,11 +84,11 @@ case "$target" in
     # serves only AlmaLinux's current LLVM (21 since 2026-10), whose C API
     # dropped functions pepper-llvm calls, and upstream's Linux binaries need
     # a newer glibc than this image's. Only what the builds link: the
-    # libraries with the X86, AArch64 and WebAssembly backends (the Rust
-    # compiler's targets; pepc registers the host's), the headers and
+    # libraries with the X86, AArch64 and WebAssembly backends (the targets
+    # pepc's --target names; it registers the host's), the headers and
     # llvm-config. Built once, kept beside the runner's workspace, which
     # outlives the container.
-    llvm_major=$(sed -nE 's/^DEFAULT_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
+    llvm_major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
     llvm_version=$(sed -nE "s/^ *$llvm_major\) echo \"([0-9.]+)\" ;;.*/\1/p" scripts/setup-llvm.sh | head -1)
     llvm_prefix="${RUNNER_WORKSPACE:-$output}/pepper-data/llvm-$llvm_version-manylinux_2_28"
     if [ ! -x "$llvm_prefix/bin/llvm-config" ]; then
@@ -125,13 +129,9 @@ case "$target" in
       (cd "$output/libffi-$ffi_version" && ./configure --disable-shared --enable-static --with-pic --disable-docs --prefix="$output/libffi" && make -j"$(nproc)" install)
       cp "$output"/libffi/lib*/libffi.a "$static_dir/"
     fi
-    if ! command -v cargo >/dev/null 2>&1; then
-      curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
-      export PATH="$HOME/.cargo/bin:$PATH"
-    fi
     ;;
   macos-arm64|macos-x64)
-    major=$(sed -nE 's/^DEFAULT_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
+    major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
     brew list --formula "llvm@$major" >/dev/null 2>&1 || brew install "llvm@$major"
     brew list --formula zstd >/dev/null 2>&1 || brew install zstd
     llvm_config="$(brew --prefix "llvm@$major")/bin/llvm-config"
@@ -148,44 +148,49 @@ case "$target" in
 esac
 ls -l "$static_dir"
 
-# The cargo feature for the LLVM provisioned: on Windows the setup script
-# provisioned the default one and wrote .cargo/config.toml and
-# .pep/llvm-prefix; elsewhere the LLVM the platform serves, which must be
-# one this workspace supports.
-features=()
+# The LLVM provisioned must be the one pepper-llvm binds, which the setup
+# scripts pin (LLVM_MAJOR). On Windows the setup script provisioned it and
+# wrote .pep/llvm-prefix.
+llvm_major=$(sed -nE 's/^LLVM_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
 if [ -n "$llvm_config" ]; then
   llvm_version=$("$llvm_config" --version)
   major=${llvm_version%%.*}
-  case "$major" in
-    18|19|20|21|22) ;;
-    *) echo "LLVM $llvm_version from $llvm_config is not one Pepper builds with (18-22)" >&2; exit 1 ;;
-  esac
-  # pepc's pepper-llvm binds one major, the setup scripts' default.
-  pepc_major=$(sed -nE 's/^DEFAULT_MAJOR="([0-9]+)".*/\1/p' scripts/setup-llvm.sh)
-  if [ "$major" != "$pepc_major" ]; then
-    echo "LLVM $llvm_version from $llvm_config is not LLVM $pepc_major, which pepc (pepper-llvm) binds" >&2
+  if [ "$major" != "$llvm_major" ]; then
+    echo "LLVM $llvm_version from $llvm_config is not LLVM $llvm_major, which pepc (pepper-llvm) binds" >&2
     exit 1
   fi
   echo "LLVM $llvm_version at $("$llvm_config" --prefix)"
-  export "LLVM_SYS_${major}1_PREFIX=$("$llvm_config" --prefix)"
-  features=(--no-default-features --features "llvm$major-1")
+  # The link driver: the clang of this LLVM when it has one, as the
+  # compiler finds it (tools/compiler/driver/linker.pep), else the PATH's.
+  export PEPPER_LLVM_PREFIX="$("$llvm_config" --prefix)"
 fi
 
-echo "=== build the Rust tools"
-export RUSTFLAGS="${RUSTFLAGS:-} -L native=$static_dir"
-cargo --version
-cargo build --release --locked -p pepper "${features[@]}"
-release="${CARGO_TARGET_DIR:-target}/release"
+# Stage 0, the compiler that builds pepc: the previously published
+# toolchain's pep-build, from <stage0-dir>, else $PEPPER_COMPILER_DIR; else,
+# with PEPPER_STAGE0_VERSION set (release.yml), that release installed here
+# by scripts/ci-install-toolchain.sh, now that the provisioning above has
+# put clang on the PATH (the install builds a program to check itself);
+# else the installed toolchain's.
+stage0="${4:-${PEPPER_COMPILER_DIR:-}}"
+if [ -z "$stage0" ] && [ -n "${PEPPER_STAGE0_VERSION:-}" ]; then
+  stage0="$(GITHUB_ENV= bash scripts/ci-install-toolchain.sh --version "$PEPPER_STAGE0_VERSION" | sed -n 's/^PEPPER_COMPILER_DIR=//p' | tail -1)"
+fi
+if [ -z "$stage0" ] && command -v pepper >/dev/null 2>&1; then
+  installed="$(pepper install which 2>/dev/null | sed -n 2p | tr -d '\r' || true)"
+  [ -z "$installed" ] || stage0="$(dirname "$installed")"
+fi
+if [ -z "$stage0" ] || [ ! -x "$stage0/pep-build$exe" ]; then
+  echo "no stage 0 pep-build: pass the folder of a published toolchain's pep-build," >&2
+  echo "set PEPPER_COMPILER_DIR, or install one (scripts/ci-install-toolchain.sh --version <x.y.z-dev>)" >&2
+  exit 1
+fi
+[ "$target" != windows-x64 ] || stage0="$(cygpath -u "$stage0")"
+echo "stage 0: $("$stage0/pep-build$exe" --version)"
 
 stage_name="pepper-$version-$target"
 stage="$output/$stage_name"
 rm -rf "$stage"
 mkdir -p "$stage/bin"
-if [ "$target" = windows-x64 ]; then
-  # pepper-codegen's build script puts the LLVM-C.dll the compiler links
-  # beside the Rust one; Windows loads it from the executable's folder.
-  cp "$release/LLVM-C.dll" "$stage/bin/"
-fi
 cp -R runtime "$stage/runtime"
 cp LICENSE.md "$stage/"
 
@@ -213,10 +218,10 @@ case "$target" in
       cxx=c++
     fi
     llvm_link=(-L "$static_dir" -L "$libdir")
-    # The Rust compiler (stage 1) puts these before pepper-llvm's
-    # [Link("LLVM-20")] and links no group, so LLVM is named here first:
-    # GNU ld then resolves its references with the libraries after it.
-    [ "$target" = linux-x64 ] && llvm_link+=(-l "LLVM-20")
+    # The link names no group, so LLVM is named here first, ahead of
+    # pepper-llvm's [Link("LLVM-20")]: GNU ld then resolves its references
+    # with the libraries after it.
+    [ "$target" = linux-x64 ] && llvm_link+=(-l "LLVM-$llvm_major")
     for flag in $("$llvm_config" --link-static --system-libs) ; do
       case "$flag" in
         -l*) llvm_link+=(-l "${flag#-l}") ;;
@@ -229,29 +234,44 @@ case "$target" in
     llvm_link+=(-l "$cxx")
     ;;
   windows-x64)
-    # The prefix setup-llvm.ps1 settled on.
+    # The prefix setup-llvm.ps1 settled on. pepc loads LLVM-C.dll from its
+    # own folder.
     llvm_prefix="$(tr -d '\r' < .pep/llvm-prefix | head -1)"
     llvm_link=(-L "$llvm_prefix/lib")
     PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
+    cp "$(cygpath -u "$llvm_prefix")/bin/LLVM-C.dll" "$stage/bin/"
     ;;
 esac
 pepc_build="$output/pepc-build"
 mkdir -p "$pepc_build"
-# Stage 1: pepc built by the Rust compiler. Stage 2, which ships: pepc built
-# by stage 1, with the runtime of this checkout.
-PEPPER_RUNTIME="$repo_root/runtime" "$release/pep-build$exe" -O -I tools tools/compiler/main.pep \
+# Stage 1: pepc built by stage 0. Stage 2, which ships: pepc built by
+# stage 1. Both with the runtime of this checkout.
+export PEPPER_RUNTIME="$repo_root/runtime"
+# The private packages pepc and pep-lsp depend on, fetched up front, so
+# pep-package's output (which package, and git's error) is in the log when
+# a fetch fails. The fetch uses a pep-package stage 0 builds from this
+# checkout, with its runtime: stage 0's own may predate a runtime fix it
+# needs (#804: on glibc before 2.29 it could not start git in a folder).
+# pep-build fetches only what is missing, so the builds below fetch nothing.
+"$stage0/pep-build$exe" -O -I tools tools/pep-package/main.pep \
+  -o "$pepc_build/pep-package$exe" --build "$pepc_build/pep-package-build"
+for project in tools/compiler tools/pep-lsp; do
+  "$pepc_build/pep-package$exe" -C "$project" fetch
+done
+"$stage0/pep-build$exe" -O -I tools tools/compiler/main.pep \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
-[ "$target" = windows-x64 ] && cp "$release/LLVM-C.dll" "$pepc_build/"
-PEPPER_RUNTIME="$repo_root/runtime" "$pepc_build/pepc-stage1$exe" -O -I tools tools/compiler/main.pep \
+[ "$target" = windows-x64 ] && cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
+"$pepc_build/pepc-stage1$exe" -O -I tools tools/compiler/main.pep \
   -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
 "$stage/bin/pep-build$exe" --version
 
 echo "=== build the Pepper tools"
-# pep-lsp depends on the private pepper-lsp package, which the build fetches
-# (scripts/ci-package-auth.sh in CI).
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-lsp pep-doc; do
+# With the pep-build that ships. pep-lsp depends on the private pepper-lsp
+# package (scripts/ci-package-auth.sh).
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc pep-lsp; do
   "$stage/bin/pep-build$exe" -O -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
+unset PEPPER_RUNTIME
 # Windows builds write a .pdb beside each program; the archive does not
 # need them.
 rm -f "$stage"/bin/*.pdb "$stage"/bin/*.ilk

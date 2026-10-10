@@ -1,4 +1,4 @@
-## Resolvables: `pepper_sema::passes::resolve_resolvables` in Pepper. Each
+## Resolvables. Each
 ## extension finds the struct it extends, and, on the last run, each call
 ## that names no function, extern or struct is reported.
 
@@ -41,8 +41,7 @@ struct _Known {
 }
 
 ## Resolves each extension's struct and, with `report_missing`, reports
-## calls to undeclared functions, as
-## `resolve_resolvables::resolve_resolvables` does.
+## calls to undeclared functions.
 ##
 ## @param module the model, changed in place
 ## @param report_missing whether to report what does not resolve
@@ -132,7 +131,7 @@ _check_calls_in(function: FunctionDef, known: _Known, type_params: HashSet<Strin
     }
 }
 
-## Declarations' initializers are not read: the Rust pass skips them.
+## Declarations' initializers are not read: this check skips them.
 _check_calls_in_block(block: Block, checker: _CallChecker) {
     for (var item in block.items) {
         match (item) {

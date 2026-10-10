@@ -1,9 +1,6 @@
 ## File-scope globals and their initializers, thread-local release, the
 ## context-switch intrinsics, `[Export]` entry points, LLVM intrinsic
-## externs, the language's facts for LLVM's optimizer, and the CPU stamp:
-## `emit_globals` in `crates/pepper-codegen/src/lib.rs`, and
-## `thread_locals.rs`, `context.rs`, `exports.rs`, `intrinsics.rs`,
-## `facts.rs` and `target.rs`'s `Cpu::stamp`, in Pepper.
+## externs, the language's facts for LLVM's optimizer, and the CPU stamp.
 
 import compiler.ast;
 import [NAMESPACE_SEPARATOR] from compiler.link;
@@ -87,7 +84,7 @@ const OPCODE_LOAD: int = 27;
 const OPCODE_STORE: int = 28;
 const OPCODE_GET_ELEMENT_PTR: int = 29;
 
-## Whether `kind` is a floating-point type (inkwell's `FloatType`).
+## Whether `kind` is a floating-point type.
 is_float_type_kind(kind: llvm.TypeKind): bool {
     return kind == llvm.TypeKind.Float
         or kind == llvm.TypeKind.Double
@@ -98,7 +95,7 @@ is_float_type_kind(kind: llvm.TypeKind): bool {
         or kind == llvm.TypeKind.PpcFp128;
 }
 
-## Whether `ty` is a first-class value type (inkwell's `BasicTypeEnum`).
+## Whether `ty` is a first-class value type: one a register can hold.
 is_basic_type(ty: llvm.Type): bool {
     var kind = ty.kind();
     return kind == llvm.TypeKind.Integer

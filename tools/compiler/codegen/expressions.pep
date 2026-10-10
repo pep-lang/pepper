@@ -1,6 +1,6 @@
 ## Generating expressions: `codegen_expr` and its dispatch over every
 ## `Expression` case, the identity hash folding behind `__address<T>`, and
-## raw buffer indexing, as `crates/pepper-codegen/src/lib.rs` makes them.
+## raw buffer indexing.
 
 import llvm;
 import compiler.sema;
@@ -24,11 +24,10 @@ import "traits";
 import [is_object] from "types";
 import "types";
 
-## The call that reports its caller's location (`passes::CALLER_LOCATION`).
+## The call that reports its caller's location.
 const _CALLER_LOCATION = "__caller_location";
 
-## The synthesized hash method of an `[Equatable]` struct
-## (`equatable::HASH_METHOD`).
+## The synthesized hash method of an `[Equatable]` struct.
 const _HASH_METHOD = "__hash";
 
 # `LLVMAtomicOrdering` values.

@@ -10,7 +10,7 @@
 # - the value is reached only in a `with` block over `lock()`: `enter()`
 #   takes its reference under the lock, and the binding is released before
 #   the guard unlocks (see `lower_with_blocks`);
-# - `MutexGuard` is `[Isolated]`, so `passes/check_confinement.rs` keeps the
+# - `MutexGuard` is `[Isolated]`, so `check_confinement` (sema/confinement.pep) keeps the
 #   block from letting a reference into the value outlive the lock, or a
 #   reference from outside into it;
 # - the constructor and `replace` take `[Move]` values: the caller hands

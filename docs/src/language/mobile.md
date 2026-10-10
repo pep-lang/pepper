@@ -224,7 +224,7 @@ runs each in the simulator (`xcrun simctl spawn`) and in the emulator
 (`adb shell`), then builds and runs the two apps.
 
 ```sh
-bash scripts/mobile-test.sh target/debug/pep-build /tmp/mobile all
+bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 ```
 
 ## Not supported yet

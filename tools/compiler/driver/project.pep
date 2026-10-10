@@ -1,6 +1,5 @@
 ## Projects: what building in a folder with a `pep.toml` takes from it, and
-## fetching its dependencies, as `crates/pepper-driver/src/options.rs`
-## (`apply_project`) and `fetch.rs` do.
+## fetching its dependencies.
 
 import io;
 import [Directory, Path] from io;
@@ -139,7 +138,13 @@ export fetch_dependencies(entry: Path): Result<void, String> {
             return Result<void, String>.err($"cannot run {tool.value()}: {ran.error().message}");
         }
         if (!ran.value().status.success()) {
-            return Result<void, String>.err("fetching the project's dependencies failed");
+            # What pep-package said names the dependency and git's error.
+            var said = (ran.value().stderr + ran.value().stdout).trim();
+            var manifest_path = project.value().join(Path(link.MANIFEST_FILE));
+            return Result<void, String>.err(
+                $"fetching the dependencies of {manifest_path} failed ({tool.value()} -C {project.value()} fetch exited with {ran.value().status.to_string()})"
+                    + (said.is_empty ? "" : $":\n{said}")
+            );
         }
         return Result<void, String>.ok();
     }

@@ -142,7 +142,7 @@ function Test-OnPath([string]$Path, [string]$Folder) {
     return @($Path -split ';' | Where-Object { $_.TrimEnd('\') -ieq $Folder.TrimEnd('\') }).Count -gt 0
 }
 
-# A clang where pep-build looks for one (crates/pepper-driver/src/linker.rs):
+# A clang where pep-build looks for one (tools/compiler/driver/linker.pep):
 # on the PATH, or in the folders LLVM's installers use.
 function Find-Clang {
     $command = Get-Command clang.exe -ErrorAction SilentlyContinue

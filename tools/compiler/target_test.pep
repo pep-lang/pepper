@@ -1,7 +1,7 @@
 # Compiling for another platform (`--target`): the triples the compiler
 # accepts, `[Target(...)]` selecting the target's code, the target's
 # machine in the IR and objects, and the link driver's options for it, as
-# the Rust compiler's `pepper_sema::Target` and `linker.rs` have them.
+# the compiler has always had them.
 
 import compiler.codegen;
 import compiler.driver;

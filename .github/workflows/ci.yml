@@ -1,22 +1,24 @@
 # Required check for merging into main: `test`, a gate that passes only when
-# `test-windows` -- the workspace build and test suite on Windows, the platform
-# the compiler is developed against, against the default LLVM version -- and
+# `test-windows` -- the Pepper test suite (scripts/pepper-tests.sh) on
+# Windows, the platform the compiler is developed against -- and
 # `test-linux`, the same suite on Linux, both ran and passed on this commit (or
 # the PR changes only prose; see `changes`). `test-macos` runs the suite on
 # macOS too but does not gate merging for now: it takes twice as long as the
-# others and held up the merge queue. The
-# suite against every other LLVM major runs before a release, not on PRs: see
-# llvm-versions.yml.
+# others and held up the merge queue. Every job uses LLVM 20, the one the
+# compiler binds (scripts/setup-llvm.sh).
 #
-# Linux and macOS both work end to end -- the suite passes for the 18, 19 and
-# 20 that apt serves and for all five majors via Homebrew, and each compiles,
-# links and runs a program.
+# Every job tests with the published build of main (#713): the toolchain
+# release.yml builds on each merge, installed with the install scripts as a
+# user installs it (scripts/ci-install-toolchain.sh). A PR that changes the
+# compiler (tools/compiler/) is tested with that compiler instead: each job
+# builds it with the installed pep-build (scripts/ci-build-compiler.sh, the
+# release's stage 1), and every later step uses it.
 #
 # Every job runs on a self-hosted runner: pepper-windows and pepper-linux (a
 # Windows service and a WSL systemd service on the maintainer's machine) and
-# pepper-macos (a launchd service on an arm64 Mac, with rustup and Homebrew
-# llvm@20). The Linux runner has LLVM 18-20 preinstalled and may
-# `sudo apt-get` to add others; the Mac adds other majors with brew.
+# pepper-macos (a launchd service on an arm64 Mac, with Homebrew llvm@20).
+# The Linux runner has LLVM 20 preinstalled and may `sudo apt-get` to add
+# packages.
 #
 # Draft PRs run no build or tests (only `changes` and `test`, seconds each on
 # pepper-linux) until the PR is marked ready for review, which starts a full
@@ -62,25 +64,6 @@ concurrency:
 
 permissions:
   contents: read
-
-env:
-  CARGO_TERM_COLOR: always
-  # The build is warning-free; warnings are not made errors (a new rustc or
-  # dependency release can add one), but a new one should be fixed, not left.
-  RUST_BACKTRACE: 1
-  # The self-hosted jobs build into a target dir that persists across runs of
-  # every PR (see "Use persistent target dir"). Cargo's per-crate fingerprints
-  # handle that, but rustc's incremental cache does not: switching between PR
-  # branches, and runs cancelled mid-build by a newer push, left object files
-  # referencing symbols from another branch (LNK1120 on #148, naming a function
-  # that exists only in #140). Dependencies are still reused; only the
-  # workspace crates rebuild in full, which is seconds.
-  CARGO_INCREMENTAL: 0
-  # The runners share hosts: pepper-windows and both pepper-linux runners are
-  # one 32-core machine, and both pepper-macos runners one Mac. Left to
-  # default, each test binary (and each test's parallel_map) runs one thread
-  # per core, so concurrent jobs oversubscribe the host several times over.
-  RUST_TEST_THREADS: 16
 
 jobs:
   # Whether the PR touches anything the build or the tests read. A PR that
@@ -156,22 +139,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT" != "pull_request" ]; then
-            # A dispatch tests everything. The compiler is built when the
-            # branch changes it against main, as release.yml's version bump
-            # does, since the published build of main cannot test it.
+            # A dispatch tests everything, with main's published compiler.
             echo "code=true" >> "$GITHUB_OUTPUT"
-            git fetch --depth=1 origin main
-            compiler=false
-            if git diff --name-only FETCH_HEAD HEAD -- crates Cargo.toml Cargo.lock | grep -q .; then
-              compiler=true
-            fi
-            echo "compiler=$compiler"
-            echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
+            echo "compiler=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           code=false
-          # A change to the compiler itself is tested with a cargo build of
-          # it; everything else with the published build of main (#713).
           compiler=false
           # The runner's checkout persists between runs, and a shallow one
           # can lack the merge commit's base: fetch it. Without the paths,
@@ -189,12 +162,10 @@ jobs:
           while IFS= read -r path; do
             [ -n "$path" ] || continue
             case "$path" in
+              tools/compiler/*) code=true; compiler=true ;;
               docs/src/SUMMARY.md|docs/src/reference/*) code=true ;;
               .agents/*|.claude/*|*.md) ;;
               *) code=true ;;
-            esac
-            case "$path" in
-              crates/*|Cargo.toml|Cargo.lock) compiler=true ;;
             esac
             echo "$path"
           done <<< "$paths"
@@ -206,17 +177,12 @@ jobs:
     runs-on: pepper-windows
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    # Provisioning LLVM costs ~5 minutes on a cold cache; the suite itself is
-    # seconds. 45 leaves room for a slow download without hanging forever.
+    # Provisioning LLVM costs ~5 minutes on a cold cache. 45 leaves room for
+    # a slow download without hanging forever.
     timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Show toolchain
-        run: |
-          rustc --version
-          cargo --version
 
       # Windows is the one platform with no package manager that ships a usable
       # LLVM, so it installs the minimal package published by the llvm-package
@@ -241,38 +207,34 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/ci-provision-llvm.sh
 
-      # ~/.cargo persists on self-hosted runners; only hosted ones need this.
-      - name: Cache cargo registry
-        if: runner.environment == 'github-hosted'
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
-
       # Self-hosted runners keep their disk between jobs, but checkout's clean
-      # step deletes target/, so every job rebuilt every dependency from scratch.
-      # Build beside the checkout instead, where the clean cannot reach; cargo
-      # then rebuilds only what changed. One directory per job keeps jobs that
-      # build with different features from invalidating each other. Deleting
-      # it is always safe: the next job just builds from scratch.
+      # step deletes target/, where scripts/pepper-tests.sh builds the tools
+      # and the tests. Build beside the checkout instead, where the clean
+      # cannot reach. Deleting it is always safe: the next job just builds
+      # from scratch.
       - name: Use persistent target dir (self-hosted)
         if: runner.environment == 'self-hosted'
         shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+
+      # A change to the compiler is tested with that compiler: built here
+      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
+      - name: Build the changed compiler
+        if: needs.changes.outputs.compiler == 'true'
+        shell: bash
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -294,7 +256,7 @@ jobs:
       # tools the Pepper tests step built, pep-doc among them.
       - name: Documentation is current
         shell: bash
-        run: '"${CARGO_TARGET_DIR:-target}/pepper-tests/bin/pep-doc" check'
+        run: '"${PEPPER_TARGET_DIR:-target}/pepper-tests/bin/pep-doc" check'
 
   # The suite on macOS against the default LLVM, from Homebrew. Not required
   # for now: `test` does not wait for it (see the top of this file).
@@ -302,25 +264,21 @@ jobs:
     runs-on: pepper-macos
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    timeout-minutes: 30
+    # 10 more for building a changed compiler.
+    timeout-minutes: 40
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Show toolchain
-        run: |
-          rustc --version
-          cargo --version
 
       - name: Provision LLVM
         shell: bash
         run: bash scripts/ci-provision-llvm.sh
 
       # See test-windows: build beside the checkout, where its clean step
-      # cannot reach, so cargo rebuilds only what changed.
+      # cannot reach.
       - name: Use persistent target dir
         shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The digest tests link Homebrew's libcrypto under `-D USE_LIBCRYPTO`
       # (#370, scripts/pepper-tests.sh); zlib comes with macOS.
@@ -331,14 +289,23 @@ jobs:
           brew list openssl@3 >/dev/null 2>&1 || brew install openssl@3
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+
+      # A change to the compiler is tested with that compiler: built here
+      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
+      - name: Build the changed compiler
+        if: needs.changes.outputs.compiler == 'true'
+        shell: bash
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -353,14 +320,13 @@ jobs:
           source scripts/ci-package-auth.sh
           bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
 
-  # The suite on Linux against the default LLVM. Required: `test` gates on it.
-  # The other LLVM majors run before a release, in llvm-versions.yml, not on
-  # every PR.
+  # The suite on Linux. Required: `test` gates on it.
   test-linux:
     runs-on: pepper-linux
     needs: changes
     if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
-    timeout-minutes: 25
+    # 10 more for building a changed compiler.
+    timeout-minutes: 35
     # build_cache_tests verify the cache (`--verify-cache`) on every
     # platform. Setting PEPPER_CACHE_VERIFY here would verify every build
     # the other tests make too, which doubles the cost of each warm build.
@@ -369,20 +335,16 @@ jobs:
       - uses: actions/checkout@v7
 
       # apt serves a complete LLVM dev install in seconds, so there is nothing
-      # to cache and no archive to download. The major is named because the
-      # build's default features expect it: left unset, setup would quietly
-      # fall back to another installed major and the build would fail later.
+      # to cache and no archive to download.
       - name: Provision LLVM
         shell: bash
-        env:
-          PEPPER_LLVM_MAJOR: 20
         run: bash scripts/ci-provision-llvm.sh
 
       # See test-windows: build beside the checkout, where its clean step
-      # cannot reach, so cargo rebuilds only what changed.
+      # cannot reach.
       - name: Use persistent target dir
         shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       # The digest and compress tests also run with `-D USE_LIBCRYPTO` and
       # `-D USE_ZLIB` (#370, scripts/pepper-tests.sh), which link libcrypto
@@ -394,14 +356,23 @@ jobs:
           dpkg -s libssl-dev zlib1g-dev >/dev/null 2>&1 || sudo apt-get -o DPkg::Lock::Timeout=300 install -y --no-install-recommends libssl-dev zlib1g-dev
 
       # The toolchain to test with: the published build of main, installed
-      # with the install scripts, or a cargo build when the PR changes the
-      # compiler itself (#713).
+      # with the install scripts (#713).
       - name: Install the toolchain
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+
+      # A change to the compiler is tested with that compiler: built here
+      # with the installed one, it replaces it in PEPPER_COMPILER_DIR.
+      - name: Build the changed compiler
+        if: needs.changes.outputs.compiler == 'true'
+        shell: bash
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-build-compiler.sh
 
       # The runtime's and the Pepper tools' own tests, `[Test]` functions run
       # by `pepper test`.
@@ -509,14 +480,13 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PEPPER_LLVM_MAJOR: 20
         run: bash scripts/ci-provision-llvm.sh
 
       # See test-windows: build beside the checkout, where its clean step
       # cannot reach. The test jobs' directory, so a runner builds once.
       - name: Use persistent target dir
         shell: bash
-        run: echo "CARGO_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
+        run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@v8
         with:
@@ -527,8 +497,6 @@ jobs:
       - name: Provision lld, the Windows SDK and the system roots
         timeout-minutes: 15
         shell: bash
-        env:
-          PEPPER_LLVM_MAJOR: 20
         run: |
           set -euxo pipefail
           bash scripts/ci-provision-cross.sh "$RUNNER_WORKSPACE/cross-cache" "$RUNNER_TEMP/sysroots"
@@ -538,8 +506,18 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD: ${{ needs.changes.outputs.compiler }}
-        run: bash -euxo pipefail scripts/ci-install-toolchain.sh $([ "$BUILD" = true ] && echo --build)
+        run: bash -euxo pipefail scripts/ci-install-toolchain.sh
+
+      # See test-windows.
+      - name: Build the changed compiler
+        if: needs.changes.outputs.compiler == 'true'
+        timeout-minutes: 20
+        shell: bash
+        env:
+          PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
+        run: |
+          source scripts/ci-package-auth.sh
+          bash -euxo pipefail scripts/ci-build-compiler.sh
 
       - name: Cross-link the examples
         timeout-minutes: 10
@@ -561,7 +539,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          env | grep -E '^(PEPPER_SYSROOT_|LLVM_SYS_|PATH=)' | sort
+          env | grep -E '^(PEPPER_SYSROOT_|PEPPER_LLVM_PREFIX|PATH=)' | sort
           for tool in clang ld.lld ld64.lld lld-link; do
             echo "$tool: $(command -v "$tool" || echo missing)"
           done

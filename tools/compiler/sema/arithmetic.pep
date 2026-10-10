@@ -1,4 +1,4 @@
-## The usual arithmetic conversions: `pepper_sema::arithmetic` in Pepper.
+## The usual arithmetic conversions.
 ## The type a `var` infers from `a + b`: integers promote to at least 32
 ## bits, keeping unsignedness only at the promoted width; floats to the
 ## wider float; an enum computes as the integer type it is stored as.
@@ -94,8 +94,7 @@ _width(name: String): uint {
     return w.is_value() ? w.value() : 32;
 }
 
-## Returns the result type of a mixed-type arithmetic operation, as
-## `arithmetic::result_type` does.
+## Returns the result type of a mixed-type arithmetic operation.
 ##
 ## @param state the passes' state, which knows the enums
 ## @param left the left operand's type

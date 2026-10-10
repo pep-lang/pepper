@@ -1,5 +1,5 @@
-## Finishes lowering `with` blocks once types are known:
-## `passes::lower_with_blocks` in Pepper. The builder leaves
+## Finishes lowering `with` blocks once types are known.
+## The builder leaves
 ##
 ##     var x = __with_scope_N.enter();
 ##     if (<WithEntered(x)>) { body } else { other }

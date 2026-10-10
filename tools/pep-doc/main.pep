@@ -4,11 +4,11 @@
 # that it does (`checks.pep`).
 #
 # It works on the Pepper checkout that holds the current folder. mdBook
-# must be on PATH (`cargo install mdbook --locked`).
+# must be on PATH (a binary from github.com/rust-lang/mdBook/releases).
 #
 # Build it from the repository root, next to the compiler:
 #
-#     target/release/pep-build -I tools tools/pep-doc/main.pep -o target/release/pep-doc
+#     pep-build -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
 
 import [Directory, File, Path] from io;
 import process;
@@ -233,7 +233,7 @@ _mdbook(arguments: String[], root: Path): Result<void> {
         .run();
     if (ran.is_err()) {
         return Result<void>.Err(
-            $"cannot run mdbook ({ran.error().message}); install it with `cargo install mdbook --locked`"
+            $"cannot run mdbook ({ran.error().message}); install it from https://github.com/rust-lang/mdBook/releases"
         );
     }
     if (!ran.value().status.success()) {

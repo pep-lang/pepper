@@ -1,4 +1,4 @@
-## Generic constraints: `pepper_sema::passes::constraints` in Pepper, as far
+## Generic constraints, as far
 ## as overload resolution needs it. A constraint names a trait, and every
 ## type argument of the parameter must conform to it nominally: a struct
 ## through an `extend S with Trait` (for a generic struct, `extend Box<T>
@@ -34,7 +34,7 @@ import [parse_type_string, replace_map, SHARED_FUNCTION] from "type_name";
 import [is_value_type, value_type_key] from "value_types";
 import [Rewriter, rewrite_expression] from "walk";
 
-## The built-in constraint `T: Shared`: `constraints::SHARED`.
+## The built-in constraint `T: Shared`.
 export const SHARED = "Shared";
 
 ## Returns whether constraint `ty` is the built-in `Shared`.
@@ -45,8 +45,7 @@ export is_shared_bound(ty: TypeName): bool {
     return ty.name == SHARED and ty.sub_types.count == 0;
 }
 
-## Returns whether any generic parameter in the module is constrained:
-## `constraints::has_constraints`.
+## Returns whether any generic parameter in the module is constrained.
 ##
 ## @param module the model
 ## @returns true when a constraint is written anywhere
@@ -127,7 +126,7 @@ struct _InScope {
     }
 }
 
-## A constraint an argument does not meet: `constraints::Unmet`.
+## A constraint an argument does not meet.
 export struct Unmet {
     ## The position of the parameter.
     var index: ulong;
@@ -584,8 +583,7 @@ export struct Conformance {
     }
 }
 
-## `diagnostic` with a note saying why `ty` is not thread-safe:
-## `check_shared_types::not_shared_note`.
+## `diagnostic` with a note saying why `ty` is not thread-safe.
 _not_shared_note(diagnostic: Diagnostic, ty: TypeName, module: Module): Diagnostic {
     if (ty.is_function_type()) {
         var shared = ty.copy();
@@ -608,8 +606,7 @@ _not_shared_note(diagnostic: Diagnostic, ty: TypeName, module: Module): Diagnost
     return diagnostic;
 }
 
-## Where the struct declared at `loc` ends, just past its `}`:
-## `copies::struct_end`. Needs the program's source text.
+## Where the struct declared at `loc` ends, just past its `}`. Needs the program's source text.
 _struct_end(state: PassState, loc: Loc): ulong? {
     var none = Optional<ulong>.Empty;
     if ((loc.file as ulong) >= state.sources.count) {
@@ -669,7 +666,7 @@ _constrained_extensions(module: Module, name: String): Array<(ExtensionDef, Arra
 }
 
 ## The constraints an extension adds to its struct's parameters, beyond
-## the struct's own: `constraints::added_constraints`.
+## the struct's own.
 _added_bounds(module: Module, target: TypeName, restated: Array<(ulong, Bound)>): Array<(ulong, Bound)> {
     var out = Array<(ulong, Bound)>();
     if (restated.count == 0) {
@@ -828,8 +825,7 @@ _declarations(module: Module): Array<_Declared> {
 }
 
 ## Checks the constraints themselves, the uses written in the source, and
-## the concrete overrides, then the specializations gathered so far, as
-## `constraints::check_constraints` does.
+## the concrete overrides, then the specializations gathered so far.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
@@ -1088,7 +1084,7 @@ _needs(
 }
 
 ## Checks the struct and function specializations gathered so far, before
-## they are cloned, as `constraints::check_specializations` does: one that
+## they are cloned: one that
 ## fails comes from an inferred call, so it is reported at the call's
 ## argument that fixed the failing type argument.
 ##
@@ -1182,8 +1178,7 @@ _spec_site(module: Module, spec: TypeName, unmet: Unmet, state: PassState): Loc 
 }
 
 ## The argument of a call to `base` that fixes `param`: the first whose
-## parameter's declared type mentions it, as
-## `constraints::argument_site` does.
+## parameter's declared type mentions it.
 ##
 ## @param module the model
 ## @param base the generic function called, if known
@@ -1328,7 +1323,7 @@ _visit_body_block(block: Block, visitor: Rewriter) {
 
 ## Removes from `specialized`, a specialization of `base`, the members and
 ## conformances of each constrained extension whose added constraints its
-## type arguments do not meet, as `constraints::withhold` does.
+## type arguments do not meet.
 ##
 ## @param module the model
 ## @param conformance the program's conformances

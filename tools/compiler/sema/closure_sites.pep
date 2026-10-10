@@ -38,8 +38,7 @@ struct _Collector {
 
 extend _Collector with Rewriter;
 
-## Applies `rewriter` to every expression in `module`, as
-## `closures::for_each_expression_mut` does: fields' and parameters'
+## Applies `rewriter` to every expression in `module`: fields' and parameters'
 ## defaults, bodies, extensions' bodies and globals' initializers.
 ##
 ## @param module the model
@@ -147,7 +146,7 @@ export trait SiteVisitor {
     visit(owner: String?, e: Expression, expected: TypeName?, current: TypeName?);
 }
 
-## Declared types the expected-type walk needs: `closures::Table`. The
+## Declared types the expected-type walk needs. The
 ## layer's own declarations are taken in when it is built; a checked one is
 ## looked up when the walk first names it (`CheckedDecls`).
 export struct SiteTable {
@@ -444,7 +443,7 @@ export trait SiteFilter {
 }
 
 ## Calls `visitor` at every expression of `module` with the type of the
-## slot it flows into when known, as `closures::for_each_site` does.
+## slot it flows into when known.
 ##
 ## @param module the model
 ## @param state the passes' state
@@ -454,8 +453,7 @@ export for_each_site(module: Module, state: PassState, visitor: SiteVisitor) {
 }
 
 ## Calls `visitor` at every expression site of `module`, skipping the
-## extensions' own copies of their methods, as
-## `closures::for_each_applied_site_in` does.
+## extensions' own copies of their methods.
 ##
 ## @param module the model
 ## @param state the passes' state
@@ -1279,8 +1277,7 @@ struct _Signatures {
 extend _Signatures with Rewriter;
 
 ## Fills in closure types the literals left out, and keeps each
-## `MakeClosure`'s function type in step with its `__call`, as
-## `closures::sync_closures` does.
+## `MakeClosure`'s function type in step with its `__call`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

@@ -6,10 +6,11 @@
 # Homebrew in seconds. So the default is windows alone; linux and macos remain
 # available for a platform that ever loses that.
 #
-# Run this once per LLVM major that Windows CI should not have to download an
-# archive for:
+# Run this once for the LLVM the setup scripts pin (LLVM 20), and again when
+# they move to another patch release, so Windows CI does not have to download
+# an archive:
 #
-#   gh workflow run llvm-package.yml -f llvm=20
+#   gh workflow run llvm-package.yml
 #
 # Each platform provisions a full upstream LLVM, strips it to the pieces this
 # project actually consumes (see scripts/package-llvm.*), and uploads the
@@ -23,10 +24,6 @@ name: llvm-package
 on:
   workflow_dispatch:
     inputs:
-      llvm:
-        description: "LLVM major to package (blank: the setup scripts' default)"
-        required: false
-        default: ""
       platforms:
         description: "Comma-separated: linux, macos, windows"
         required: false
@@ -53,7 +50,6 @@ jobs:
       - id: resolve
         env:
           PLATFORMS: ${{ inputs.platforms }}
-          LLVM: ${{ inputs.llvm }}
         run: |
           # Versions live in the setup scripts, next to the code that installs
           # them; never duplicate them here. Strip CR first: a Windows checkout
@@ -61,19 +57,14 @@ jobs:
           read_sh() { tr -d '\r' < scripts/setup-llvm.sh | sed -nE "$1" | head -1; }
           read_ps1() { tr -d '\r' < scripts/setup-llvm.ps1 | sed -nE "$1" | head -1; }
 
-          major="$LLVM"
-          if [ -z "$major" ]; then
-            major=$(read_ps1 "s/^\\\$DefaultLlvmMajor = '([^']+)'.*/\\1/p")
-            [ -n "$major" ] || { echo "::error::cannot read \$DefaultLlvmMajor from setup-llvm.ps1"; exit 1; }
+          # The major both setup scripts pin.
+          major=$(read_sh 's/^LLVM_MAJOR="([0-9]+)".*/\1/p')
+          win_major=$(read_ps1 "s/^\\\$LlvmMajor = '([0-9]+)'.*/\\1/p")
+          [ -n "$major" ] || { echo "::error::cannot read LLVM_MAJOR from setup-llvm.sh"; exit 1; }
+          if [ "$major" != "$win_major" ]; then
+            echo "::error::the setup scripts pin different majors: setup-llvm.sh=$major setup-llvm.ps1=$win_major"
+            exit 1
           fi
-
-          # Digits only. The value is interpolated into the sed expressions
-          # below, where anything else is matched as a regex rather than a
-          # literal: `llvm=.*` would otherwise match the first row of both
-          # tables, agree with itself, and be passed on to the setup scripts.
-          case "$major" in
-            ''|*[!0-9]*) echo "::error::llvm must be a major version number, got '$major'"; exit 1 ;;
-          esac
 
           # Both scripts carry a major -> patch table, and each installs from
           # its own. ci-provision-llvm.sh asks for the asset named by the
@@ -186,20 +177,13 @@ jobs:
       # package; it does not stop one already on the image from being adopted
       # (the pepper-macos runner has Homebrew llvm@20), which is what the version
       # assertion in the next step is for.
-      # $env:MAJOR, not "$MAJOR": this step has no `shell:`, so on windows it
-      # runs under pwsh, where a bare $MAJOR is an undefined PowerShell
-      # variable and would expand to nothing.
       - name: Provision full LLVM (Windows)
         if: runner.os == 'Windows'
-        env:
-          MAJOR: ${{ needs.prepare.outputs.major }}
-        run: pwsh -File scripts/setup-llvm.ps1 -Llvm $env:MAJOR
+        run: pwsh -File scripts/setup-llvm.ps1
 
       - name: Provision full LLVM (Unix)
         if: runner.os != 'Windows'
-        env:
-          MAJOR: ${{ needs.prepare.outputs.major }}
-        run: bash scripts/setup-llvm.sh --llvm "$MAJOR" --no-packages
+        run: bash scripts/setup-llvm.sh --no-packages
 
       - name: Build package
         id: build
@@ -211,8 +195,8 @@ jobs:
 
           # The platform only names the asset. The prefix is read back out of
           # the file the setup script just wrote, rather than re-derived: the
-          # script may settle on a system LLVM (an apt or Homebrew prefix, or a
-          # different major than the one asked for) and then never populate
+          # script may settle on a system LLVM (an apt or Homebrew prefix) and
+          # then never populate
           # ~/.local/share/pepper/llvm/<version> at all, so a re-derived path
           # would fail below at `du` with nothing explaining why.
           case "$(uname -s)" in
@@ -230,12 +214,12 @@ jobs:
           [ -n "$prefix" ] || { echo "::error::no LLVM prefix in $recorded"; exit 1; }
           echo "  prefix: $prefix"
 
-          # The asset is named from the requested major's version, but the
-          # prefix is whatever provisioning settled on, and those can differ:
-          # setup-llvm.sh adopts an already-installed supported major when the
-          # requested one cannot be had, and the pepper-macos runner has Homebrew
-          # llvm@20 preinstalled. Publishing LLVM 20 as llvm-18.1.8-* would be
-          # undetectable afterwards, so compare before packaging.
+          # The asset is named from the pinned version, but the prefix is
+          # whatever provisioning settled on, and those can differ: an
+          # installed LLVM 20 of another patch release (the pepper-macos
+          # runner has Homebrew llvm@20 preinstalled) is adopted as is.
+          # Publishing it under the pinned version would be undetectable
+          # afterwards, so compare before packaging.
           actual=$("$prefix/bin/llvm-config" --version)
           if [ "$actual" != "$VERSION" ]; then
             echo "::error::provisioned LLVM $actual at $prefix, but the asset would be named for $VERSION"

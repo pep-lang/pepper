@@ -1,9 +1,0 @@
-[package]
-name = "pepper-files"
-version.workspace = true
-edition.workspace = true
-
-# File-level helpers shared by the driver and tooling (LSP server).
-# Kept light (only `toml`, for pep.toml) so consumers never pull in LLVM.
-[dependencies]
-toml = { version = "0.9", default-features = false, features = ["parse", "preserve_order"] }

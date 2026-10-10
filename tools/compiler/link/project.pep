@@ -1,4 +1,4 @@
-## Projects, as `crates/pepper-files/src/project.rs` reads them: a
+## Projects: a
 ## `pep.toml` marks the root of a project (or of a package, a project other
 ## projects depend on) and declares its metadata, how it is built, and its
 ## dependencies. Each key of `[dependencies]` is the name source code
@@ -745,7 +745,7 @@ export parse_manifest(path: Path, text: String): Result<Manifest, ManifestError[
         var message = e.message;
         var span = Span(e.offset, e.offset);
         if (message.starts_with("duplicate key '")) {
-            # Named by the key as written, as the Rust compiler names it.
+            # Named by the key as written.
             var end = e.offset;
             while (end < text.size
                 and text.byte_at(end) != ' '

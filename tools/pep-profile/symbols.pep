@@ -16,7 +16,7 @@ const SYMBOLIZER_BATCH = 400;
 
 # The readable name of a symbol. A Pepper linker name (`_P` and the name
 # with `_` doubled and other bytes as `_xx`, see `symbol_name` in
-# pepper-codegen's partition.rs) is decoded, then its file namespaces
+# tools/compiler/link/names.pep) is decoded, then its file namespaces
 # (`helper@io/file`) and overload numbers (`f$2`) are dropped:
 # `_PArray_3cint_3e.count` is `Array<int>.count`. A closure's body,
 # `__closure_3@main.__call`, is `closure #3 in main`. Any other name is

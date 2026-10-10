@@ -1,5 +1,5 @@
-# The rules the Rust parser enforces on the finished tree rather than in
-# its grammar: `T*` belongs only in `extern` declarations, and imports come
+# The rules the parser enforces on the finished tree rather than in its
+# grammar: `T*` belongs only in `extern` declarations, and imports come
 # before every declaration and re-export.
 
 import compiler.ast;

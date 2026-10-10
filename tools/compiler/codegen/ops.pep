@@ -1,5 +1,4 @@
-## Per-type operations, as `crates/pepper-codegen/src/ops.rs` makes them:
-## numeric conversions with C's rules, integer, float and pointer binary
+## Per-type operations: numeric conversions with C's rules, integer, float and pointer binary
 ## operators, and truth tests.
 
 import llvm;

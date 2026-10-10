@@ -16,7 +16,7 @@ export struct Loc {
     ## The bytes.
     var span: ast.Span = ast.Span();
 
-    ## Creates a location in file 0 at offset 0, as Rust's default.
+    ## Creates a location in file 0 at offset 0.
     construct() {}
 
     ## Creates a location.
@@ -71,7 +71,7 @@ export struct Loc {
         return same(other);
     }
 
-    ## Returns the location as serde writes it: `[file, start, end]`.
+    ## Returns the location as JSON: `[file, start, end]`.
     ##
     ## @returns the JSON value
     to_json(): JsonValue {

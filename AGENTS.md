@@ -34,11 +34,11 @@ opening a PR, check each of these against the diff:
   [the standard](#library-code-is-documented-with--doc-comments)), then run
   `pep-doc reference` and commit the regenerated
   `docs/src/reference/`.
-- **Compiler structure** (a crate, stage, pass, file, or pattern that
+- **Compiler structure** (a module, stage, pass, file, or pattern that
   INTERNALS.md names moves, is added, or changes): update INTERNALS.md.
 - **CLI, setup, or tooling**: document every option, command and
   environment variable in the tool's page, `docs/src/tools/<tool>.md`
-  (`cargo setup`'s is `docs/src/contributing/setup.md`); update README.md
+  (`scripts/setup-llvm.sh`'s is `docs/src/contributing/setup.md`); update README.md
   and, when it affects writing the docs, `docs/src/contributing/docs.md`.
 
 CI enforces what it can: `pep-doc check` fails on an undocumented public
@@ -62,11 +62,6 @@ second place needs a helper, move it somewhere both can share rather than
 pasting a copy. Copies drift: an audit once found 20 identical copies of one
 test helper, and near-copies that had quietly diverged.
 
-- **Rust integration tests** (`crates/pepper-driver/tests/integration/`):
-  shared helpers live in `support/mod.rs` (`compile_jit_with_runtime`,
-  `jit_census`, `sema`, `compile_error`, `repo_root`, `parallel_map`, ...).
-  Import them (`use crate::support::jit_census;`); a helper a second test
-  file needs moves there.
 - **Pepper code** (`runtime/`, `tools/`, examples): use the runtime's API
   (`String.find`, `split`, `replace`, interpolation, `math.parse_int`, ...)
   instead of a hand-rolled byte loop, and add a missing function to the
@@ -232,33 +227,35 @@ main.pep:1:1: note: declared here
   - `expected ';'`
 - **Report errors; never panic** on anything a user can write. Each layer has
   its own way to do this:
-  - **Parser:** record what was expected at the failure with `expected()` or
-    `cut_expecting()`. The furthest failure wins. `parse_source_diag` turns it
-    into the diagnostic.
-  - **Sema builder:** return `Diagnostic` with `.at(loc(span))`. `loc` stamps
-    the file being built.
-  - **Sema passes:** call `errors::report(diagnostic)` and carry on.
-    `transform_pass` stops after the pass that reported and returns the first
-    error.
-  - **Codegen:** return `Err(String)` from inside a located node.
-    `locate`/`error_loc` attach the innermost node's location, so a new model
-    node that can fail must carry a `loc` and go through the `*_unlocated`
-    wrapper pattern.
+  - **Parser** (`tools/compiler/parse/parser.pep`): fail with what was
+    expected (`_expect`, `_expect_name`, `_fail("expected ...")`). The
+    furthest failure wins, and `parse` returns it as a `ParseError`.
+  - **Sema builder** (`sema/builder.pep`): return the `Diagnostic` as the
+    `Err` of a `Built<T>`, made with `_error(message, loc(span))`
+    (`_noted` adds a note). `loc` stamps the file being built.
+  - **Sema passes:** call `state.report(diagnostic)` and carry on. The pass
+    runner (`sema/passes.pep`) stops after the pass that reported and
+    returns the first error.
+  - **Codegen:** return an `Err` from inside a located node.
+    `Generator.locate` keeps the innermost node's location (`error_loc`),
+    so a new model node that can fail must carry a `loc` and pass its
+    result through `locate`.
 - **Every model node that names something carries a `Loc`.** That covers
   references, calls, operators and declarations. Nodes that sema synthesizes
   copy the `Loc` of the source they stand for (a `for` loop's hidden iterator
-  uses the iterable's). Use `Loc::NONE` only when no source exists.
-- **Render only at the boundary.** Driver entry points and test harnesses
-  return `String`s rendered with `module.sources` (or `Program`). Nothing
-  below that formats `file:line:col` by hand.
-- **Test the rendered output** for a new error in
-  `crates/pepper-driver/tests/integration/diagnostic_tests.rs`: the header line, the
-  source line, and the caret.
+  uses the iterable's). Use `Loc.none()` only when no source exists.
+- **Render only at the boundary.** The driver and the test harnesses render
+  diagnostics with `compiler.diagnostic`'s `render_all` against the
+  program's sources. Nothing below that formats `file:line:col` by hand.
+- **Test a new error** in the compiler's Pepper tests
+  (`tools/compiler/*_test.pep`): a test program states, in its `# expect:`
+  lines, the header line of each diagnostic it gets
+  (`expected_outcomes.pep`).
 
 ## Names follow the Pepper naming conventions
 
 All Pepper code here (the runtime, `tools/`, `docs/examples/`, `tests/`, and
-Pepper source embedded in Rust tests) follows
+Pepper source embedded in tests) follows
 [`docs/src/language/naming.md`](docs/src/language/naming.md):
 
 - Types (structs, traits, type aliases) are `PascalCase`; acronyms are words
@@ -300,12 +297,12 @@ it (`construct([Sending] T value)`).
 ## Run pep-fmt over runtime/ and tools/ before committing
 
 Every `.pep` file under `runtime/` and `tools/` is kept in `pep-fmt`'s
-style, and `pep_fmt_sources_are_formatted` fails CI on any file that is
+style, and `tools/pep-fmt/repository_test.pep` fails CI on any file that is
 not. So any change there, a new file or an edit, goes through `pep-fmt`
 before it is committed:
 
 ```bash
-cargo run --release -- -I tools tools/pep-fmt/main.pep -o pep-fmt
+pepper build -O -I tools tools/pep-fmt/main.pep -o pep-fmt
 ./pep-fmt -w runtime tools     # rewrite what is not formatted
 ./pep-fmt --check runtime tools  # lists nothing when all is formatted
 ```

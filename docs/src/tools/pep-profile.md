@@ -38,7 +38,7 @@ compiler, with `tools/` on the import path, and put it next to `pepper` so
 that `pepper profile` finds it:
 
 ```bash
-target/release/pep-build -I tools tools/pep-profile/main.pep -o target/release/pep-profile
+target/bin/pep-build -I tools tools/pep-profile/main.pep -o target/bin/pep-profile
 ```
 
 ## Usage and options

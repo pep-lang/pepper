@@ -1,5 +1,5 @@
-## Methods with type parameters of their own (`map<U>(f: (T) => U)`):
-## `generic_methods::specialize_methods` in Pepper. A call `x.map<long>(f)`,
+## Methods with type parameters of their own (`map<U>(f: (T) => U)`).
+## A call `x.map<long>(f)`,
 ## or the method as a value (`x.map<long>`), adds `map<long>`, the method
 ## with `U` replaced, to `method_members` of `x`'s struct, where it is
 ## compiled like any method.
@@ -29,8 +29,7 @@ export has_generic_methods(module: Module): bool {
     return false;
 }
 
-## Adds the method specializations that calls name, as
-## `generic_methods::specialize_methods` does.
+## Adds the method specializations that calls name.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error

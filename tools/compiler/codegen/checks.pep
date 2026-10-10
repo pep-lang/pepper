@@ -1,5 +1,4 @@
-## Runtime checks (#265), as `crates/pepper-codegen/src/checks.rs` makes
-## them: integer arithmetic that overflows, a division by zero (or
+## Runtime checks (#265): integer arithmetic that overflows, a division by zero (or
 ## `MIN / -1`), and a shift by at least the type's width panic with a
 ## located message. Each checked operation branches to its own cold block
 ## that calls `_pep_panic`; two constant operands that overflow are a

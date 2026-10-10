@@ -1,5 +1,5 @@
-## Deep copies for `copy(value)` (`runtime/copy.pep`):
-## `pepper_sema::passes::copies` in Pepper. Once `T` is concrete, each
+## Deep copies for `copy(value)` (`runtime/copy.pep`).
+## Once `T` is concrete, each
 ## `__copy<T>(value, copies)` call the runtime's `_Copies.copy<T>` makes
 ## becomes what copying a `T` means: the value itself for a thread-safe `T`,
 ## `copies._copy_object<T>(value)` for a struct (which gets a synthesized
@@ -817,7 +817,7 @@ _needs(needed: Array<(String, Optional<_CopyMethod>)>, name: String, copyable: _
 }
 
 ## Lowers every concrete `__copy<T>` call and synthesizes the `__copy()`
-## methods they need, as `copies::synthesize_copies` does. Reports a copy
+## methods they need. Reports a copy
 ## the program asks for that cannot be made.
 ##
 ## @param module the model, changed in place

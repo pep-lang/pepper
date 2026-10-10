@@ -1,5 +1,4 @@
-## The sema type name's helpers: `crates/pepper-sema/src/type_name.rs` in
-## Pepper. `TypeName` itself is generated in `model.pep`; this file adds what
+## The sema type name's helpers. `TypeName` itself is generated in `model.pep`; this file adds what
 ## the builder and the passes ask of one.
 
 import [TypeFlags, TypeName] from "model";

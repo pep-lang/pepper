@@ -1,5 +1,5 @@
 ## Linking: the objects and libraries into an executable, with clang as
-## the link driver, as `crates/pepper-driver/src/linker.rs` does.
+## the link driver.
 ##
 ## For another platform (`--target`), clang links with `--target=<triple>`,
 ## LLVM's own linker (`lld`, since the host's system linker knows only the
@@ -22,8 +22,9 @@ import process;
 ## The LLVM major the compiler is built against, whose clang links.
 export const LLVM_MAJOR = "20";
 
-## The environment variable that names the LLVM install, as llvm-sys
-## (and so the Rust build) spells it.
+## The environment variable that names the LLVM install, besides
+## `PEPPER_LLVM_PREFIX`: the name LLVM's Rust bindings read, which the
+## setup scripts once exported.
 export const LLVM_PREFIX_ENV = "LLVM_SYS_201_PREFIX";
 
 ## Pepper's own name for the LLVM install, which wins over
@@ -586,7 +587,7 @@ export windows_library_dirs(sysroot: Path, arch: String): Path[] {
 
 ## The link driver's options that choose the platform: for the host, none
 ## but LLVM's linker on Linux when `lld` is found (much faster than the
-## system's BFD `ld`; rustc links with it on Linux too); for another target,
+## system's BFD `ld`); for another target,
 ## its triple, LLVM's linker (`lld`, the one at `lld` when given), and its
 ## system root.
 ##

@@ -42,8 +42,7 @@ import [is_integral_name, parse_type_string, replace_map, VOID] from "type_name"
 import [lower_extensions, method_is_static, resolve_static_calls, value_type_key] from "value_types";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
-## Resolves the enum cases and methods written in code, as
-## `enums::resolve_enum_cases` does. Errors go to `state`.
+## Resolves the enum cases and methods written in code. Errors go to `state`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -212,8 +211,7 @@ _case_expression(e: EnumDef, c: EnumCaseDef, loc: Loc): Expression {
     );
 }
 
-## Records the reference enums among `structs`, as
-## `enums::install_reference_enums` does.
+## Records the reference enums among `structs`.
 ##
 ## @param state the passes' state
 ## @param structs the program's structs
@@ -320,8 +318,7 @@ _shown_type(ty: TypeName): String {
     return demangle_name(ty.to_string());
 }
 
-## Records every value type's methods (the functions named `X::m`), as
-## `enums::install_methods` does.
+## Records every value type's methods (the functions named `X::m`).
 ##
 ## @param module the model
 ## @param state the passes' state
@@ -709,7 +706,7 @@ export method_read(state: PassState, owner: String, method: String, loc: Loc): D
 }
 
 ## Records the program's traits and which struct declares which, for a
-## `match` on a trait value, as `enums::install_traits` does.
+## `match` on a trait value.
 ##
 ## @param module the model
 ## @param state the passes' state
@@ -815,7 +812,7 @@ export trait FieldTypes {
 
 ## Returns the type of a value a pattern binds, once the `match`'s subject
 ## has type `subject`: none while that type is unknown, the error when the
-## patterns do not fit the enum. As `enums::case_value_type` does.
+## patterns do not fit the enum.
 ##
 ## @param state the passes' state
 ## @param value the bound value
@@ -946,7 +943,7 @@ export case_value_type(
 ## Returns the call of method `method` on a value of value type `owner` as
 ## a call of its function: `c.name()` is `Color::name(c)`. Reports a
 ## method the type lacks, or a static one called on a value, and returns
-## none then. As `enums::call_on_value` does.
+## none then.
 ##
 ## @param state the passes' state
 ## @param owner the value type's key

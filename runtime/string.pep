@@ -2399,7 +2399,7 @@ extend String with ToString;
 extend StringBuilder with ToString;
 
 # The String an `[Export]`ed function receives from C: a copy of the `size`
-# UTF-8 bytes at `bytes` (see the compiler's codegen/src/exports.rs).
+# UTF-8 bytes at `bytes` (see the compiler's tools/compiler/codegen/globals.pep).
 export _pep_string_from_c(bytes: __ptr<char>, size: ulong): String {
     if (size == 0 || bytes == __null) {
         return String();

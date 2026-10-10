@@ -1,5 +1,5 @@
-## What a member access names, for the language server:
-## `pepper_sema::member_lookup` in Pepper. The field or method that
+## What a member access names, for the language server.
+## The field or method that
 ## `lhs.name` (or `lhs.name(...)`) reaches, found by the static type of
 ## `lhs` in the checked model. Chains need nothing special: `x.y.z` types
 ## `x.y` first, as codegen would.

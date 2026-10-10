@@ -208,7 +208,7 @@ sha256_of() {
 }
 
 # A clang to link with, where pep-build looks for one (see
-# crates/pepper-driver/src/linker.rs): on the PATH, or in an LLVM install
+# tools/compiler/driver/linker.pep): on the PATH, or in an LLVM install
 # folder off it.
 have_clang() {
   command -v clang >/dev/null 2>&1 && return 0

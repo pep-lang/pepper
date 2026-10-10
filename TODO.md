@@ -6,7 +6,7 @@ Written 2026-10-06 (US Pacific times). Sources: `backlog.md` (ticket backlog, is
 
 - Self-hosting pause (Justin 07:56 PT 10-05): only #225 work and bugs run; every other ticket waits for the #225 cutover. No new Rust-compiler work. Bugs go ahead of everything. Exception: the pause is lifted for #662 only (662.md, 19:25 PT 10-06). Details: [backlog.md](todo/backlog.md#the-225-self-hosting-pause-justin-0756-pt-10-05).
 - Merge queue lives in the Tickets thread (cmsg_012Zh7b8ZDj18Ad9iEy5pFgNREA47wPgk1ipqFeaYrnYz1); never resolve it; one merge at a time, bugs first; owners merge only after GO naming the main SHA. Details: [backlog.md](todo/backlog.md#merge-queue-rules).
-- Pre-merge checks (no `cargo test`): `cargo build --release`; `scripts/pepper-tests.sh`; `target/release/pep-doc check`; after runtime changes `target/release/pep-fmt --check runtime tools`. Details: [backlog.md](todo/backlog.md#pre-merge-checks).
+- Pre-merge checks: `scripts/pepper-tests.sh` (with the installed build of main, or `target/bin` after building pepc from `tools/compiler`); `target/pepper-tests/bin/pep-doc check`; after runtime changes `target/pepper-tests/bin/pep-fmt --check runtime tools`. Details: [backlog.md](todo/backlog.md#pre-merge-checks).
 - Perf and profiling runs go on the Windows Worker (SDG-JBOSWELL), -O builds; state baseline SHA, build level, warm/cold.
 - No new work assigned (Justin 12:20 PT 10-06, per 662.md): the #225 and #662 threads are both STOPPED, with no work in progress and nothing assigned. The merge queue is empty. Remaining work is recorded as backlog for a fresh session.
 

@@ -1550,7 +1550,7 @@ export function_value_search(module: Module, state: PassState, tables: ModuleTab
 
 ## Binds each overloaded name used as a value to the member whose function
 ## type is the type of the slot it flows into (`var f: (int) => int =
-## scale;`), as `overloads::bind_function_values` does.
+## scale;`).
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

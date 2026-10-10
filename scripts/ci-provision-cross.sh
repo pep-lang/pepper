@@ -9,7 +9,8 @@
 #   LLVM release archive, copied as `ld.lld.exe` and `ld64.lld.exe` (lld
 #   picks its flavor from its own name).
 # - A Windows SDK and MSVC CRT, from Microsoft's servers by `xwin splat`, in
-#   the `/winsysroot` layout lld-link reads (Linux and macOS only).
+#   the `/winsysroot` layout lld-link reads (Linux and macOS only). xwin
+#   itself is its prebuilt release binary.
 # - The Linux and macOS system roots another job packed with
 #   ci-export-sysroot.sh, unpacked from <sysroot-archive-dir>.
 #
@@ -20,7 +21,8 @@
 set -euo pipefail
 
 XWIN_VERSION=0.6.5
-LLVM_MAJOR=${PEPPER_LLVM_MAJOR:-20}
+# The LLVM major the setup scripts pin.
+LLVM_MAJOR=20
 
 cache=${1:?usage: ci-provision-cross.sh <cache-dir> <sysroot-archive-dir>}
 archives=${2:?usage: ci-provision-cross.sh <cache-dir> <sysroot-archive-dir>}
@@ -34,12 +36,12 @@ path_file=${GITHUB_PATH:-/dev/stdout}
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
 
-# The compiler finds clang in the LLVM it was built against through
-# LLVM_SYS_<NN>1_PREFIX. The cross links run the compiler directly, so it
-# gets the prefix the setup script recorded in .pep/llvm-prefix.
+# The compiler finds clang in the LLVM PEPPER_LLVM_PREFIX names. The cross
+# links run the compiler directly, so it gets the prefix the setup script
+# recorded in .pep/llvm-prefix.
 prefix=$(tr -d '\r' < "$repo_root/.pep/llvm-prefix" | head -1)
 [ -n "$prefix" ] || { echo "error: no LLVM prefix in .pep/llvm-prefix; run scripts/setup-llvm.sh" >&2; exit 1; }
-echo "LLVM_SYS_${LLVM_MAJOR}1_PREFIX=$prefix" >> "$env_file"
+echo "PEPPER_LLVM_PREFIX=$prefix" >> "$env_file"
 
 case "$(uname -s)" in
   Linux)
@@ -92,11 +94,25 @@ case "$(uname -s)" in
     ;;
 esac
 
-# The Windows SDK and CRT. xwin builds from source on any host with cargo.
+# The Windows SDK and CRT, by xwin's release binary for this host.
 if [ "$host" != windows ]; then
   xwin="$cache/xwin-$XWIN_VERSION/bin/xwin"
   if [ ! -x "$xwin" ]; then
-    cargo install xwin --version "$XWIN_VERSION" --locked --root "$cache/xwin-$XWIN_VERSION" >&2
+    case "$host/$(uname -m)" in
+      linux/x86_64) xwin_target=x86_64-unknown-linux-musl ;;
+      linux/aarch64) xwin_target=aarch64-unknown-linux-musl ;;
+      macos/arm64) xwin_target=aarch64-apple-darwin ;;
+      macos/x86_64) xwin_target=x86_64-apple-darwin ;;
+      *) echo "no xwin release for $host/$(uname -m)" >&2; exit 1 ;;
+    esac
+    xwin_name="xwin-$XWIN_VERSION-$xwin_target"
+    rm -rf "$cache/$xwin_name"
+    curl --fail --location --silent --show-error --retry 3 \
+      "https://github.com/Jake-Shadle/xwin/releases/download/$XWIN_VERSION/$xwin_name.tar.gz" \
+      | tar -xz -C "$cache"
+    mkdir -p "$(dirname "$xwin")"
+    mv "$cache/$xwin_name/xwin" "$xwin"
+    rm -rf "$cache/$xwin_name"
   fi
   winsysroot="$cache/winsysroot-$XWIN_VERSION"
   if [ ! -f "$winsysroot/.complete" ]; then

@@ -1,6 +1,6 @@
 ## Named arguments' attributes: `[Alias("alias", "parameter")]` gives a
 ## parameter a second name and `[Rename("old", "new")]` keeps a former name
-## working. The checks of `pepper_sema::passes::named_arguments` in Pepper;
+## working. The checks of;
 ## binding calls comes later.
 
 import compiler.ast;
@@ -159,8 +159,7 @@ _other_name(
     return Result<(String, ulong), Diagnostic>.Ok((name, index.value()));
 }
 
-## Reports a wrong `[Alias]` or `[Rename]` on any function, as
-## `named_arguments::check_attributes` does.
+## Reports a wrong `[Alias]` or `[Rename]` on any function.
 ##
 ## @param module the model
 ## @param state the passes' state, which keeps the first error
@@ -207,8 +206,7 @@ _check_names(function: FunctionDef, state: PassState) {
     }
 }
 
-## Reports the first extern whose `[Link]` attributes are wrong, as
-## `passes::check_link_attributes` does.
+## Reports the first extern whose `[Link]` attributes are wrong.
 ##
 ## @param module the model
 ## @param state the passes' state, which keeps the first error
@@ -673,7 +671,7 @@ _is_string_literal(e: Expression): bool {
 
 ## Binds the call `call` (a `FunctionCall` or `MethodCall` with named
 ## arguments) to the one of `callees` its names fit, reporting an error
-## when none does: `named_arguments::bind`.
+## when none does.
 ##
 ## @param call the call
 ## @param callees the functions it may call
@@ -1254,8 +1252,7 @@ _declared_in(block: Block, names: HashSet<String>) {
 }
 
 ## Binds the calls whose callee a name decides (free functions,
-## constructors, and a method called bare inside its struct), as
-## `named_arguments::bind_calls` does.
+## constructors, and a method called bare inside its struct).
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -1468,8 +1465,7 @@ export report_function_value(state: PassState, ty: TypeName, args: Expression[])
     );
 }
 
-## Binds `receiver.method(args)` given the receiver's type, as
-## `named_arguments::bind_method_call` does.
+## Binds `receiver.method(args)` given the receiver's type.
 ##
 ## @param e the call
 ## @param receiver the receiver's type

@@ -1,4 +1,4 @@
-## Operators on structs: `pepper_sema::passes::resolve_operators` in Pepper.
+## Operators on structs.
 ## Index operations become `__index_get`/`__index_set` method calls or raw
 ## array indexing; binary operator overloads become method calls. Each is
 ## gated on the left side's static type naming a struct that declares the
@@ -42,7 +42,7 @@ import [Rewriter, rewrite_block] from "walk";
 const _INDEX_TEMPORARY = "_idx_tmp_";
 
 ## Rewrites the operators on structs in every concrete body and global
-## initializer, as `resolve_operators::resolve_operators` does, recording
+## initializer, recording
 ## the overloaded members it picks in `module.call_targets`.
 ##
 ## @param module the model, changed in place
@@ -484,7 +484,7 @@ _index_assignment(resolver: _OperatorResolver, e: Expression): Expression? {
 }
 
 ## Whether `ty` is an enum whose own instance method `operator` an operator
-## on its value calls: `enums::declares_operator`.
+## on its value calls.
 _declares_enum_operator(state: PassState, ty: TypeName, operator: String): bool {
     if (ty.sub_types.count > 0 or ty.is_pointer() or !is_enum(state, ty.name)) {
         return false;

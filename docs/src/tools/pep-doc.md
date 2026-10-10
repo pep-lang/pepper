@@ -4,7 +4,8 @@
 [standard library reference](../reference/README.md) from the runtime's
 [documentation comments](../language/doc-comments.md), checks the book, and
 renders it with [mdBook](https://rust-lang.github.io/mdBook/), which must be
-on the `PATH` (`cargo install mdbook --locked`).
+on the `PATH` (a binary from
+[its releases](https://github.com/rust-lang/mdBook/releases)).
 
 It is a Pepper program (`tools/pep-doc`), and it works on the Pepper
 checkout that holds the folder it is run in. `scripts/pepper-tests.sh`
@@ -12,8 +13,8 @@ builds it beside `pep-build`, with the other Pepper tools, and `pepper doc`
 runs it. To build it alone, from the repository root:
 
 ```bash
-target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
-target/release/pep-doc reference
+pepper build -O -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
+target/bin/pep-doc reference
 ```
 
 ```text
@@ -55,9 +56,7 @@ tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,
 first.
 
 - `--tools <DIR>`: the folder holding the built tools (default:
-  `target/pepper-tests/bin` under `$CARGO_TARGET_DIR` or `target/` when it
-  holds `pep-build`, else the release build's folder when it does, else the
-  debug build's).
+  `target/pepper-tests/bin` under `$PEPPER_TARGET_DIR` or `target/`).
 
 CI runs it, after the tests.
 

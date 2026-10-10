@@ -1,5 +1,4 @@
-## Overload calls and values that resolution could not settle:
-## `overloads::check_overloads` in Pepper.
+## Overload calls and values that resolution could not settle.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;

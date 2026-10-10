@@ -21,7 +21,7 @@
 #
 # For a `T` that is not thread-safe, a thread's value is reached only through
 # `with (var value = local.enter())`: `ThreadLocalGuard` is `[Isolated]`, so
-# `passes/check_confinement.rs` keeps references into the value inside the
+# `check_confinement` (sema/confinement.pep) keeps references into the value inside the
 # block, `get()` is a compile error, and `set` takes a new value (`[Move]`).
 # Otherwise a function called under a lock could park part of the locked
 # value in a thread-local, and a later `get()` would hand it out after the

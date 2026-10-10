@@ -1,5 +1,5 @@
-## Generic uses recorded as specializations to make:
-## `pepper_sema::passes::gather_generics::gather_generics` in Pepper. Each
+## Generic uses recorded as specializations to make.
+## Each
 ## concrete generic type a declaration names (`Array<int>`) becomes a
 ## struct spec, and each generic call (`max<int>(a, b)`) a function spec,
 ## or a struct spec when it constructs one; who asked first is kept for
@@ -177,8 +177,7 @@ _gather_locals(block: Block, structs: _Requests, params: String[], owner: String
     }
 }
 
-## Records the module's generic uses as struct and function specs, as
-## `gather_generics::gather_generics` does.
+## Records the module's generic uses as struct and function specs.
 ##
 ## @param module the model, changed in place
 export gather_generics(module: Module) {

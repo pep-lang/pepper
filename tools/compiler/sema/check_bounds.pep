@@ -1,4 +1,4 @@
-## Constrained generic code: `pepper_sema::passes::check_bounds` in Pepper.
+## Constrained generic code.
 ## Inside `total_area<T: Shape>`, a value of type `T` offers exactly what
 ## `Shape` offers, checked in the generic itself: the instance methods and
 ## operators its constraints' traits declare, their static members through
@@ -186,8 +186,7 @@ _has_bounds(params: GenericParam[]): bool {
     return false;
 }
 
-## Checks every generic base with a constrained parameter, as
-## `check_bounds::check_bounds` does. Runs before anything is specialized.
+## Checks every generic base with a constrained parameter. Runs before anything is specialized.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error

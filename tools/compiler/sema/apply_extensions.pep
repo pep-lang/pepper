@@ -1,4 +1,4 @@
-## Extensions: `pepper_sema::passes::apply_extensions` in Pepper. Each
+## Extensions. Each
 ## extension's methods are cloned onto the structs it extends, and each trait
 ## it declares is recorded: the struct must have every member the trait
 ## declares, a trait member with a body is the struct's default when it has
@@ -40,8 +40,7 @@ const _COPYABLE_TRAIT = "Copyable";
 ## The synthesized trait member that copies the struct behind a trait value.
 const _COPY_TRAIT_METHOD = "_pep_copy_trait";
 
-## Applies each resolved extension to the structs it extends, once each, as
-## `apply_extensions::apply_extensions` does: an instance specialized after
+## Applies each resolved extension to the structs it extends, once each: an instance specialized after
 ## an extension first ran gets it too.
 ##
 ## @param module the model, changed in place
@@ -392,8 +391,7 @@ _check_signature(
 }
 
 ## Warns where a method that implements a trait's member names a parameter
-## differently from the trait, with a fix that renames it and its uses, as
-## `apply_extensions::check_parameter_names` does: a call names the
+## differently from the trait, with a fix that renames it and its uses: a call names the
 ## arguments of whichever it reaches.
 ##
 ## @param module the model

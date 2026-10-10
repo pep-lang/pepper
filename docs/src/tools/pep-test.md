@@ -25,7 +25,7 @@ compiler and put it next to `pepper` and `pep-build`, so that `pepper test`
 finds it and it finds the compiler:
 
 ```bash
-target/release/pep-build tools/pep-test/main.pep -o target/release/pep-test
+target/bin/pep-build tools/pep-test/main.pep -o target/bin/pep-test
 ```
 
 ## Usage and options

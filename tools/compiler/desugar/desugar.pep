@@ -1,5 +1,5 @@
-## Rewrites a module as the source wrote it into the shape the Rust parser
-## (`crates/pepper-parser`) builds, which the rest of the compiler reads:
+## Rewrites a module as the source wrote it into the desugared shape the
+## rest of the compiler reads:
 ##
 ## - an interpolated string (`Expression.Interpolated`) becomes the
 ##   concatenation of its text and the `_pep_interpolate` / `_pep_format*`
@@ -35,8 +35,7 @@ import [
     VariableDecl
 ] from compiler.ast;
 
-# The runtime functions an interpolated string calls (see the Rust
-# parser's INTERPOLATE_FUNCTION and friends).
+# The runtime functions an interpolated string calls.
 const INTERPOLATE_FUNCTION = "_pep_interpolate";
 const FORMAT_FUNCTION = "_pep_format";
 const FORMAT_INTEGER_FUNCTION = "_pep_format_integer";
@@ -87,8 +86,7 @@ export desugar(module: ast.Module): Result<ast.Module, DesugarError> {
 }
 
 ## Returns the span `e` has once desugared, which the parser derives the
-## spans around it from, as the Rust parser derives them from the lowered
-## node: an interpolated string of one hole and no text, and a
+## spans around it from, as it derives them from the lowered node: an interpolated string of one hole and no text, and a
 ## `String.format` whose format is just `{0}`, become the call that
 ## converts the value, which spans the braces (or the specification's
 ## `.`, type, `+` or `0`). Parentheses give way to their value, and so

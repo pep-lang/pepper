@@ -1,6 +1,5 @@
 ## Assignments, binary and unary operators, casts, `&&`/`||` and `?:`: the
-## operator half of the expression codegen in
-## `crates/pepper-codegen/src/lib.rs`, with `apply_op`.
+## operator half of the expression codegen, with `apply_op`.
 
 import compiler.ast;
 import llvm;
@@ -86,7 +85,7 @@ _identity_as_equality(op: BinaryOp): BinaryOp {
     return op;
 }
 
-## The operator's variant name, as Rust's `{:?}` prints it (`Add`).
+## The operator's variant name (`Add`).
 _op_debug(op: BinaryOp): String {
     if (op.to_json() is String(text)) {
         return text;

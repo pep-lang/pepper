@@ -1,5 +1,5 @@
-## Bodies a cached unit does not need, dropped:
-## `pepper_sema::passes::strip_bodies` in Pepper. After closures are
+## Bodies a cached unit does not need, dropped.
+## After closures are
 ## lifted, the bodies of the cached files' non-generic functions and
 ## methods go, with the closure structs lifted out of them; the
 ## declarations stay, so the rest of the program still resolves them.

@@ -1,8 +1,6 @@
 ## The syntax tree the compiler works on: one `Module` per source file,
-## built by `parse` from Pepper source. It matches the Rust compiler's
-## `pepper_parser::ast` node for node, and `to_json` writes it in the same
-## JSON shape as `pep-build --emit-ast=json`, so the two parsers can be
-## checked against each other.
+## built by `parse` from Pepper source. `to_json` writes it as
+## `pep-build --emit-ast=json` prints it.
 
 import json;
 import [JsonValue] from json;
@@ -170,7 +168,7 @@ export enum Literal {
         return "";
     }
 
-    ## Returns the literal as JSON, externally tagged like serde.
+    ## Returns the literal as JSON, externally tagged (`{"Case": value}`).
     ##
     ## @returns the JSON value
     to_json(): JsonValue {
@@ -406,7 +404,7 @@ export struct Label {
         this.span = span;
     }
 
-    ## Returns the label as JSON: `[name, span]`, as serde writes a tuple.
+    ## Returns the label as JSON: `[name, span]`, a tuple as an array.
     ##
     ## @returns the JSON array
     to_json(): JsonValue {
@@ -547,7 +545,7 @@ export enum StringPart {
         return "";
     }
 
-    ## Returns the part as JSON, externally tagged like serde.
+    ## Returns the part as JSON, externally tagged (`{"Case": value}`).
     ##
     ## @returns the JSON value
     to_json(): JsonValue {
@@ -923,7 +921,7 @@ export enum Expression {
         return "";
     }
 
-    ## Returns the expression as JSON, externally tagged like serde.
+    ## Returns the expression as JSON, externally tagged (`{"Case": value}`).
     ##
     ## @returns the JSON value
     to_json(): JsonValue {
@@ -1868,7 +1866,7 @@ export enum Declaration {
         return Span();
     }
 
-    ## Returns the declaration as JSON, externally tagged like serde.
+    ## Returns the declaration as JSON, externally tagged (`{"Case": value}`).
     ##
     ## @returns the JSON value
     to_json(): JsonValue {
@@ -2347,7 +2345,7 @@ export enum Statement {
         return Span();
     }
 
-    ## Returns the statement as JSON, externally tagged like serde.
+    ## Returns the statement as JSON, externally tagged (`{"Case": value}`).
     ##
     ## @returns the JSON value
     to_json(): JsonValue {
@@ -2770,7 +2768,7 @@ export struct Module {
     }
 }
 
-# serde's externally tagged form of an enum case: `{"Case": value}`.
+# The externally tagged form of an enum case: `{"Case": value}`.
 tagged(name: String, value: JsonValue): JsonValue {
     var out = JsonValue.object();
     out[name] = value;

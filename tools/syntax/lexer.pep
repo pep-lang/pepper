@@ -172,7 +172,8 @@ interpolated_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
 # `start`, just after the `{`: the offset of the `}` that closes it, or of the
 # line break, `#` or end of source that stops the scan first. Brackets nest,
 # and literals are skipped whole, so `{f("}")}` ends at its last `}`.
-# Mirrors `interpolation_end` in crates/pepper-parser/src/parser/parsers.rs.
+# The parser's `interpolation_end` (tools/compiler/parse/parser.pep) scans
+# the same way.
 interpolation_end(data: __ptr<char>, size: ulong, start: ulong): ulong {
     ulong i = start;
     ulong depth = 0;

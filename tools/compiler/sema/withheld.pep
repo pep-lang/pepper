@@ -1,5 +1,5 @@
 ## Calls of members a specialization did not get from a constrained
-## extension: `constraints::check_withheld` in Pepper.
+## extension.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [constraint_spelled, error_at, location_of] from "common";

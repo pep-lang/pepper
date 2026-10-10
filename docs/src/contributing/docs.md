@@ -5,8 +5,10 @@ The standard library reference (`docs/src/reference/`) is generated from the
 runtime's doc comments by `pep-doc`, a Pepper tool in this repository
 (`tools/pep-doc`), which `scripts/pepper-tests.sh` builds beside `pep-build`.
 
+Install mdBook once, from [its releases](https://github.com/rust-lang/mdBook/releases)
+(a single binary to put on the `PATH`), then:
+
 ```sh
-cargo install mdbook --locked                 # once
 
 pep-doc serve                                 # live preview while writing
 pep-doc reference                             # regenerate the reference after changing runtime docs
@@ -14,7 +16,8 @@ pep-doc build                                 # render into target/docs-site/dev
 pep-doc build --version 0.2.0 --site <dir>
 ```
 
-Run it as `target/release/pep-doc`, or as `pepper doc`.
+Run it as `target/pepper-tests/bin/pep-doc` after `scripts/pepper-tests.sh`,
+or as `pepper doc`.
 
 `pep-doc`'s commands and options are described in
 [The documentation builder: pep-doc](../tools/pep-doc.md).
@@ -90,11 +93,11 @@ comment standard in `AGENTS.md`, which `pep-doc check` enforces.
 
 Every command-line option of every tool has its place in the book:
 `docs/src/tools/<tool>.md` for `pep-build`, `pepper`, `pep-fmt`, `pep-lsp`
-and `pep-doc`, and [Setting up LLVM](setup.md) for `cargo setup`.
+and `pep-doc`, and [Setting up LLVM](setup.md) for `scripts/setup-llvm.sh`.
 `pep-doc check` takes each tool's options from the tool itself (its
 `--help` text, from the tools that `scripts/pepper-tests.sh` builds beside
 `pep-build`) and fails, naming the tool, the option and the page, when a
 page does not mention one. It also checks `pep-build`'s option values,
 trace channels and environment variables, and `pep-lsp`'s initialization
 options and VS Code settings. A new option goes in the tool's `--help` (or
-`help.txt` / `usage.txt`) and on its page in the same PR.
+the usage text at the top of `setup-llvm.sh`) and on its page in the same PR.

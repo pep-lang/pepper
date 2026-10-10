@@ -4,9 +4,6 @@
 #   push to main       -> dev/      (the unreleased docs, replaced each time)
 #   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match VERSION)
 #
-# A tag first runs the suite against every supported LLVM major
-# (llvm-versions.yml), as vsix.yml does, and publishes nothing unless all pass.
-#
 # Only the folder being built is replaced; every other version already on
 # gh-pages is kept, so the docs of every release stay available. versions.json
 # and index.html are regenerated from the folders present.
@@ -31,14 +28,7 @@ permissions:
   contents: write
 
 jobs:
-  llvm-versions:
-    if: github.ref_type == 'tag'
-    uses: ./.github/workflows/llvm-versions.yml
-
   publish:
-    needs: llvm-versions
-    # Runs when the matrix passed, or was skipped because this is not a tag.
-    if: ${{ !cancelled() && (needs.llvm-versions.result == 'success' || needs.llvm-versions.result == 'skipped') }}
     runs-on: pepper-linux
     timeout-minutes: 30
     defaults:
@@ -48,10 +38,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # mdBook's own release binary, unless the runner has one.
       - name: Install mdBook
+        env:
+          MDBOOK_VERSION: v0.4.52
         run: |
           if ! command -v mdbook; then
-            cargo install mdbook --locked
+            mkdir -p "$RUNNER_TEMP/mdbook"
+            curl --fail --location --silent --show-error --retry 3 \
+              "https://github.com/rust-lang/mdBook/releases/download/$MDBOOK_VERSION/mdbook-$MDBOOK_VERSION-x86_64-unknown-linux-gnu.tar.gz" \
+              | tar -xz -C "$RUNNER_TEMP/mdbook"
+            echo "$RUNNER_TEMP/mdbook" >> "$GITHUB_PATH"
+            export PATH="$RUNNER_TEMP/mdbook:$PATH"
           fi
           mdbook --version
 
@@ -87,13 +85,19 @@ jobs:
           fi
 
       # pep-doc is a Pepper program, built against this checkout's runtime
-      # with the published build of main (#713). A release tag builds the
-      # compiler instead, since its release may not be published yet.
+      # with the published build of main (#713). A release tag X.Y.Z, whose
+      # own release may not be published yet, uses the X.Y.Z-dev build of
+      # main that preceded it, as release.yml's stage 0 does.
       - name: Install the toolchain
         env:
           GH_TOKEN: ${{ github.token }}
           REF_TYPE: ${{ github.ref_type }}
-        run: bash scripts/ci-install-toolchain.sh $([ "$REF_TYPE" = tag ] && echo --build)
+        run: |
+          if [ "$REF_TYPE" = tag ]; then
+            bash scripts/ci-install-toolchain.sh --version "$DOCS_VERSION-dev"
+          else
+            bash scripts/ci-install-toolchain.sh
+          fi
 
       - name: Build pep-doc
         env:

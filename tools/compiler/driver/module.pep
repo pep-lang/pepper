@@ -1,6 +1,5 @@
 ## The driver of the Pepper compiler written in Pepper (#225): builds a
-## program to an executable (generate, optimize, emit an object, link),
-## as `crates/pepper-driver` does for the Rust compiler.
+## program to an executable (generate, optimize, emit objects, link).
 
 export * from "build";
 export * from "cache";

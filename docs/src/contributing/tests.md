@@ -6,11 +6,8 @@ The tests are written in Pepper: `[Test]` functions (see
 runtime and the Pepper tools, the compiler written in Pepper
 (`tools/compiler`) among them.
 
-The Rust compiler's own tests (`crates/*/tests/`, the root package's
-`tests/*.rs`; see `INTERNALS.md`, section 9) are still in the repository,
-and `cargo test --workspace` runs them, but neither CI nor the pre-merge
-checks do: the Rust compiler is not expected to change much, and new tests
-go in Pepper.
+They are the whole suite: Pepper is written in Pepper, and so are its
+tests.
 
 ## Where runtime tests live
 
@@ -40,7 +37,7 @@ needs no `##` comments.
 sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
-scripts/pepper-tests.sh target/release           # with a cargo build instead
+scripts/pepper-tests.sh target/bin               # with a pep-build you built
 ```
 
 The tests build with the installed toolchain's `pep-build`, the one
@@ -49,9 +46,12 @@ compiler, the runtime or the tools publishes the build of main as a
 prerelease named by the version the `VERSION` file holds (`0.4.0-dev`), replacing
 the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
-refresh it). Only a change to the Rust compiler itself (`crates/`) needs its
-own build: pass its folder as the first argument, as CI does for a pull
-request that changes `crates/`.
+refresh it). The compiler's own tests (`tools/compiler/*_test.pep`) build
+the compiler's sources into their test programs, so they test a change to
+it. To run the whole suite with the changed compiler too, build it from
+`tools/compiler` (see the README's
+[Build and test](https://github.com/justinboswell/pepper#build-and-test))
+and pass its folder as the first argument.
 
 The script builds the Pepper tools (`pepper`, `pep-test`, `pep-doc` and the
 others) from the checkout with that `pep-build`, against the checkout's
@@ -84,8 +84,10 @@ The builds go to `runtime/.pep/`, which git ignores. A test that writes
 files uses a fresh folder under the system's temporary folder
 (`TempFolder` in the `testing` module makes and removes one).
 
-CI runs `scripts/pepper-tests.sh` after `cargo build --release` on
-Linux, macOS and Windows.
+CI runs `scripts/pepper-tests.sh` with the installed build of main on
+Linux, macOS and Windows. A PR that changes the compiler (`tools/compiler/`)
+is tested with that compiler instead: CI builds it with the build of main
+first (`scripts/ci-build-compiler.sh`) and runs the suite with it.
 
 Two Pepper tools depend on private repositories. The compiler written in
 Pepper, `tools/compiler`, depends on `justinboswell/pepper-llvm`, and the

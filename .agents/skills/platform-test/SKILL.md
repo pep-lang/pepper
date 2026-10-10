@@ -28,14 +28,17 @@ platform gap, not an expected failure (see Interpreting results).
 ## Invoke it
 
 ```bash
-gh workflow run platform-test.yml -f platforms=macos -f script="cargo test --workspace"
+gh workflow run platform-test.yml -f platforms=macos    # the Pepper tests (the default script)
 ```
 
 - `platforms`: comma-separated `linux`, `macos`, `windows` (aliases: `ubuntu`,
   `mac`/`osx`, `win`). Defaults to all three. An unknown platform fails the
   run rather than falling back to the default.
 - `script`: any command, run with bash from the repo root. Defaults to
-  `cargo test --workspace`.
+  `source scripts/ci-package-auth.sh && bash scripts/pepper-tests.sh
+  "$PEPPER_COMPILER_DIR"`: the whole Pepper suite with the build of main,
+  which the job installs first (its `pep-build`'s folder is in
+  `PEPPER_COMPILER_DIR`), and the private packages' deploy keys.
 
 - `provision`: `false` skips LLVM provisioning, for questions about what the
   bare runner image already has.
@@ -116,13 +119,14 @@ missing symbol, not "the macos job failed".
 A dispatch costs minutes, and **GitHub serves no partial log for a step that
 is still running** — a hung job looks exactly like a working one. So the
 workflow runs the requested command under `bash -euxo pipefail`, caps the job
-at 30 minutes (provision 10, script 15 — the step caps must sum to less than
-the job cap, or the job is cancelled before either fires and a cancelled job
-reports nothing), and dumps a diagnostics block on failure *or cancellation*:
-toolchain, host, the LLVM cargo actually sees with `--targets-built`, which
-`clang` answered, and the build artifacts.
+at 60 minutes (provision 10, toolchain install 5, script 40 — the step caps
+must sum to less than the job cap, or the job is cancelled before any fires
+and a cancelled job reports nothing), and dumps a diagnostics block on
+failure *or cancellation*: the installed `pep-build`, host, the LLVM the
+setup recorded with `--targets-built`, which `clang` answered, and the built
+tools.
 
-A probe that needs longer than 15 minutes should be split across dispatches
+A probe that needs longer than 40 minutes should be split across dispatches
 rather than raised — smaller questions come back sooner.
 
 Two traps that each cost a run here:
@@ -139,14 +143,12 @@ pipe the interesting command through `tail`/`head` — filter noise by pattern.
 ## Interpreting results
 
 - **All three platforms work end to end**, so a failure is a real finding, not
-  an expected gap: the suite passes on Windows x64, Linux x64 (apt LLVM 18-20)
-  and macOS arm64 (Homebrew 18-22), and each compiles, links and runs a `.pep`
-  program. Codegen registers the *host's* backend
-  (`crates/pepper-codegen/src/target.rs`); if a CLI run reports "No available
+  an expected gap: the suite passes on Windows x64, Linux x64 (apt LLVM 20)
+  and macOS arm64 (Homebrew `llvm@20`), and each compiles, links and runs a
+  `.pep` program. Codegen registers the backends of the targets it compiles
+  for (`tools/compiler/codegen/target.pep`); if a run reports "No available
   targets are compatible with triple …", that registration is wrong for the
-  host. The suite may not tell you: inkwell's JIT registers the host backend
-  as a side effect, so whichever test creates an execution engine first can
-  mask a wrong explicit registration.
+  target, or the LLVM lacks the backend (`llvm-config --targets-built`).
 - A failure inside `scripts/setup-llvm.sh` is about provisioning, not your
   change. On Linux and macOS that means apt or Homebrew; only Windows, and the
   last-resort fallback, involve a release asset.

@@ -1,9 +1,8 @@
-## The sema passes, in the order the Rust compiler runs them
-## (`pepper_sema::checked::run_steps`): one step per pass run, so each can
-## be compared with `pep-build --emit-model-step N`, the Rust model after
-## its first N steps. The passes ported so far are the first
-## `PORTED_STEPS`, then the specialization loop, whose steps a program
-## runs as many rounds of as it needs.
+## The sema passes, in the order the compiler runs them: one step per pass
+## run, so `pep-build --emit-model --emit-model-step N` prints the model
+## after the first N steps. The first `PORTED_STEPS` run once each, then the
+## specialization loop, whose steps a program runs as many rounds of as it
+## needs.
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import io;
@@ -71,8 +70,7 @@ import [check_value_structs] from "value_structs";
 import [lower_with_blocks] from "with_blocks";
 import [check_withheld] from "withheld";
 
-## How many of the Rust compiler's steps come before the specialization
-## loop.
+## How many steps come before the specialization loop.
 export const PORTED_STEPS: ulong = 39;
 
 ## Runs the first `limit` steps of the passes over `module` (all those

@@ -8,22 +8,17 @@
 # minimal package, falling back to the upstream archive when none is published.
 #
 # Linux and macOS need none of that: apt and Homebrew both carry complete LLVM
-# dev packages, and setup-llvm.sh prefers them. Measured on the runner images,
-# per LLVM major:
+# dev packages, and setup-llvm.sh prefers them. Measured on the runner images:
 #
-#   ubuntu-24.04   apt llvm-{18,19,20}-dev + libpolly   4-8s, 400-750 MB
-#   macos-latest   brew llvm@{18..22}                   13-17s (llvm@20 preinstalled)
+#   ubuntu-24.04   apt llvm-20-dev + libpolly   4-8s, 400-750 MB
+#   macos-latest   brew llvm@20                 preinstalled
 #
-# All of those build the workspace and pass the suite, which is why nothing
-# here downloads an 11.6 GB tarball any more.
+# which is why nothing here downloads an 11.6 GB tarball any more.
 #
 # Either way this ends by running the normal setup script, which validates the
-# prefix and writes .cargo/config.toml and .pep/llvm-prefix, so there is one
-# source of truth for how cargo and the scripts find LLVM.
-#
-# The LLVM major comes from PEPPER_LLVM_MAJOR when set, else each setup
-# script's own default. Needs GH_TOKEN on Windows to read release assets from a
-# private repo.
+# prefix and writes .pep/llvm-prefix, so there is one source of truth for how
+# the scripts find LLVM. The LLVM is the one the setup scripts pin (LLVM 20).
+# Needs GH_TOKEN on Windows to read release assets from a private repo.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
@@ -51,8 +46,8 @@ read_pin() {
   tr -d '\r' < scripts/setup-llvm.ps1 | sed -nE "$1" | head -1
 }
 
-major="${PEPPER_LLVM_MAJOR:-$(read_pin "s/^\\\$DefaultLlvmMajor = '([^']+)'.*/\\1/p")}"
-[ -n "$major" ] || { echo "cannot read \$DefaultLlvmMajor from scripts/setup-llvm.ps1" >&2; exit 1; }
+major="$(read_pin "s/^\\\$LlvmMajor = '([^']+)'.*/\\1/p")"
+[ -n "$major" ] || { echo "cannot read \$LlvmMajor from scripts/setup-llvm.ps1" >&2; exit 1; }
 
 # The version table is `'<major>' = '<version>'`, one per line.
 version=$(read_pin "s/^ *'$major' = '([^']+)'.*/\\1/p")
@@ -77,7 +72,7 @@ asset="llvm-$version-$platform.tar.xz"
 marker="$prefix/.pepper-ci-installed"
 if [ -f "$marker" ]; then
   echo "LLVM $version already installed at $prefix; skipping download"
-  exec pwsh -File scripts/setup-llvm.ps1 -Llvm "$major"
+  exec pwsh -File scripts/setup-llvm.ps1
 fi
 
 echo "Looking for prebuilt $asset in release $tag"
@@ -119,6 +114,5 @@ else
 fi
 
 # Validates whatever is now in the prefix, installs from the archive if the
-# download did not happen, and writes .cargo/config.toml and .pep/llvm-prefix
-# either way.
-pwsh -File scripts/setup-llvm.ps1 -Llvm "$major"
+# download did not happen, and writes .pep/llvm-prefix either way.
+pwsh -File scripts/setup-llvm.ps1

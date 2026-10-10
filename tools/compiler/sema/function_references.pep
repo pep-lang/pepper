@@ -1,5 +1,5 @@
-## Methods, structs and generic functions used as values become closures:
-## `function_references::reference_functions` in Pepper. `p.area` is a
+## Methods, structs and generic functions used as values become closures.
+## `p.area` is a
 ## closure capturing `p` that calls `area` on it, `Shape.area` one taking
 ## the receiver as its first argument, and a struct's name (`Point`) or a
 ## specialization (`pick<int>`) one calling it.

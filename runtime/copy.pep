@@ -3,7 +3,7 @@
 ## `Copyable<T>` lets a type say how it is copied.
 
 # `_Copies.copy<T>` is the `__copy<T>` intrinsic, which the compiler lowers
-# once `T` is known (passes/copies.rs): to the value itself for a
+# once `T` is known (tools/compiler/sema/copies.pep): to the value itself for a
 # thread-safe `T`, and for a struct to `_copy_object<T>`, which calls the
 # struct's `__copy()` method. The compiler synthesizes `__copy()`: it forwards
 # to the struct's own `copy()` when it implements `Copyable<T>`, and
@@ -355,7 +355,7 @@ export struct _Copies {
             return made;
         }
         # `__copy_object<T>(value)` is `value.__copy()`, the method the
-        # compiler synthesizes (passes/copies.rs).
+        # compiler synthesizes (tools/compiler/sema/copies.pep).
         made = __copy_object<T>(value);
         this.register<T>(value, made);
         return made;
@@ -426,7 +426,7 @@ struct DeferredFix {
 }
 
 # What `__census<T>(slot, waiting)` lowers to in `MutexGuard.exit` for a `T` that can
-# be copied (passes/copies.rs; for any other `T` it lowers to nothing). With
+# be copied (sema/copies.pep; for any other `T` it lowers to nothing). With
 # `PEP_CHECK_SYNC` set (`_PEP_CHECK_SYNC_ON`), it copies the value in `slot`
 # with a census that counts, for each original object, the references the copy passes through:
 # each field and element that holds it, and the slot itself for the root.

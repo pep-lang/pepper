@@ -430,7 +430,7 @@ struct _Unions {
     }
 }
 
-# Orders two paths as the Rust compiler does: component by component.
+# Orders two paths component by component.
 _compare_paths(a: String, b: String): int {
     var left = Path(a).components();
     var right = Path(b).components();
@@ -462,8 +462,8 @@ _compare_paths(a: String, b: String): int {
     return left.count == right.count ? 0 : (left.count < right.count ? -1 : 1);
 }
 
-# Where a component sorts among a path's kinds of component, as Rust's
-# `Component` orders them: a Windows prefix (`C:`, `\\server\share`), a
+# Where a component sorts among a path's kinds of component: a Windows
+# prefix (`C:`, `\\server\share`), a
 # root, `.`, `..`, then a name. Only the first component can be a prefix.
 _component_rank(component: String, index: ulong): int {
     if (index == 0 and _is_prefix(component)) {
@@ -493,7 +493,7 @@ _is_prefix(component: String): bool {
     return component.ends_with(":") or component.starts_with("\\\\") or component.starts_with("//");
 }
 
-# How Rust's `Prefix` orders a prefix: by kind (`\\?\x`, `\\?\UNC\x`,
+# How a Windows prefix sorts: by kind (`\\?\x`, `\\?\UNC\x`,
 # `\\?\C:`, `\\.\x`, `\\server\share`, then `C:`), then by what it names,
 # a drive by its upper-case letter.
 _prefix_order(component: String): (int, String) {

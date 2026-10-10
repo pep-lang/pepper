@@ -16,7 +16,7 @@
 #
 # Build it from the repository root, next to the compiler:
 #
-#     target/release/pep-build -I tools tools/pep-install/main.pep -o target/release/pep-install
+#     pep-build -I tools tools/pep-install/main.pep -o target/bin/pep-install
 
 import cli;
 import [Directory, File] from io;

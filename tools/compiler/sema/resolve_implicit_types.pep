@@ -1,4 +1,4 @@
-## Implicit types: `pepper_sema::passes::resolve_implicit_types` in Pepper.
+## Implicit types.
 ## Each `auto` variable takes the type of its initializer, each unresolved
 ## name the type of what it names, each function declared without a return
 ## type the type its returns agree on, and calls to overload sets and
@@ -71,7 +71,7 @@ import [FUNCTION, parse_type_string, replace_map, VOID, without_pointer_names] f
 import [is_value_type, method_is_static, value_type_key] from "value_types";
 import [Rewriter, rewrite_expression] from "walk";
 
-## The keys of the number types and `bool`: `value_types::NUMBER_KEYS`.
+## The keys of the number types and `bool`.
 _number_keys(): String[] {
     return ["i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64", "bool"];
 }
@@ -139,8 +139,7 @@ _function_type(ret: TypeName, params: TypeName[]): TypeName {
     return TypeName.with_args(FUNCTION, args);
 }
 
-## Free functions that can be referenced by name as values:
-## `function_types::referenceable_functions`.
+## Free functions that can be referenced by name as values.
 ##
 ## With `checked` set, only the checked functions (`true`), or only the
 ## others and the externs (`false`).
@@ -2605,8 +2604,7 @@ _bind_values(module: Module, state: PassState): _Bindings {
 }
 
 ## Resolves `auto` variable types, unresolved names, inferred return types
-## and overloaded and generic calls, as
-## `resolve_implicit_types::resolve_implicit_types` does.
+## and overloaded and generic calls.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

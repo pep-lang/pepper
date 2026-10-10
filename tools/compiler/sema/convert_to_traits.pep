@@ -892,7 +892,7 @@ _is_map_literal(value: Expression): bool {
 
 ## Whether `value` is a collection literal made from a call of `start` (or
 ## of a specialization `start<...>`) with `arity` arguments and steps
-## `step`: `literals::is`.
+## `step`.
 _literal_is(value: Expression, start: String, step: String, arity: ulong): bool {
     Expression first = value;
     Expression? body = Optional<Expression>.Empty;
@@ -954,7 +954,7 @@ _chain_steps(value: Expression): (Expression, Array<Array<Expression>>) {
 }
 
 ## The start call of a literal `_literal_is` accepts, its steps' arguments
-## in order, and its location: `literals::parts`.
+## in order, and its location.
 _literal_parts(value: Expression): (Expression, Array<Array<Expression>>, Loc) {
     if (value is WithSubject(subject)) {
         var steps = Array<Array<Expression>>();

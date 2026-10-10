@@ -22,7 +22,7 @@ const _ARGUMENTS = "_pep_arguments";
 export const TEST_MAIN_ATTRIBUTE = "TestMain";
 
 ## Rewrites a `main(args: String[])`, and reports any other parameter list
-## on `main`, as `entry_point::lower_main_arguments` does.
+## on `main`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

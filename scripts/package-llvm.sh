@@ -4,10 +4,10 @@
 # The official releases are enormous -- 11.6 GB extracted on Linux, 9 GB of
 # that being unstripped tools this project never invokes -- which is what
 # exhausts a GitHub runner's disk. What the build actually consumes is
-# llvm-config (for llvm-sys discovery), the component libraries (for linking)
-# and the C headers: 83 MB compressed on Windows, 123 MB on macOS arm64.
+# llvm-config (for discovery), the libraries (for linking) and the C
+# headers: 83 MB compressed on Windows, 123 MB on macOS arm64.
 #
-# clang is deliberately excluded: crates/pepper-driver/src/linker.rs prefers
+# clang is deliberately excluded: tools/compiler/driver/linker.pep prefers
 # the prefix's clang but falls back to clang on PATH, and both the Linux and
 # macOS runners ship one. Including it would add gigabytes to package a
 # compiler we only use as a link driver.
@@ -53,18 +53,18 @@ archives="${#members[@]}"
 # Anything else llvm-config reports as a link dependency of the components.
 #
 # libPolly is named by `llvm-config --libnames --link-static` on prefixes that
-# ship it -- Debian splits it into libpolly-N-dev -- and llvm-sys hands every
-# name it gets to the linker. Leaving it out produced a package that
+# ship it -- Debian splits it into libpolly-N-dev -- and a static link of LLVM
+# hands every name it gets to the linker. Leaving it out produced a package that
 # setup-llvm.sh's own usable_llvm check would reject, with the failure
 # surfacing as "could not find native static library Polly" at link time.
 # Keep this set in step with archive_members() in scripts/setup-llvm.sh.
 members+=(lib/libLLVM*.so* lib/libLLVM*.dylib lib/libPolly*.a)
 members+=(bin/llvm-config)
 
-# llvm-sys also compiles a small C shim (wrappers/*.c) against the C API, so
-# the C headers travel with the package: llvm-c itself plus llvm/Config, which
-# llvm-c/Target.h pulls in for the target .def lists. A couple of MB; the C++
-# headers are not needed.
+# The C headers travel with the package, so the prefix is a complete C API
+# install (setup-llvm.sh's usable_llvm checks for them): llvm-c itself plus
+# llvm/Config, which llvm-c/Target.h pulls in for the target .def lists. A
+# couple of MB; the C++ headers are not needed.
 for headers in include/llvm-c include/llvm/Config; do
   [ -d "$headers" ] || { echo "no $headers in $prefix" >&2; exit 1; }
   members+=("$headers")

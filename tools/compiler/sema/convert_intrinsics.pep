@@ -297,8 +297,7 @@ struct _FunctionPointers {
 
 extend _FunctionPointers with Rewriter;
 
-## Converts the intrinsics of every function, global and struct, as
-## `convert_intrinsics::convert_intrinsics` does.
+## Converts the intrinsics of every function, global and struct.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state, which takes the first error

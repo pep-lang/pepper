@@ -52,6 +52,18 @@ extern int waitpid(int pid, int* status, int options);
 extern int fork();
 [Target(OS(Linux) || OS(Mac))]
 extern int fflush(void* stream);
+[Target(OS(Linux))]
+extern int dup2(int from, int to);
+[Target(OS(Linux))]
+extern int chdir(char* path);
+[Target(OS(Linux))]
+extern int open(char* path, int flags, ...);
+[Target(OS(Linux))]
+extern long read(int descriptor, void* buffer, ulong count);
+[Target(OS(Linux))]
+extern long write(int descriptor, void* buffer, ulong count);
+[Target(OS(Linux))]
+extern void _exit(int status);
 [Target(OS(Linux) || OS(Mac))]
 extern int kill(int pid, int signal);
 [Target(OS(Linux) || OS(Mac))]
@@ -221,6 +233,12 @@ _process_c_strings(values: Array<String>): __ptr<__ptr<char>> {
 
 [Target(OS(Linux) || OS(Mac))]
 _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
+    # posix_spawn cannot change the child's folder without
+    # posix_spawn_file_actions_addchdir_np: fork and exec then, as Rust's
+    # standard library does.
+    if (command._working_directory.is_value() and !_process_spawn_changes_folder()) {
+        return _process_fork_spawn(command, stdin, stdout, stderr);
+    }
     __ptr<void> actions = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     __ptr<void> attributes = _pep_malloc(_PROCESS_SPAWN_STATE_SIZE);
     posix_spawn_file_actions_init(actions);
@@ -430,6 +448,176 @@ _process_sys_kill(handle: _ProcessHandle): io.IoResult<void> {
 
 [Target(OS(Linux) || OS(Mac))]
 _process_sys_release(handle: _ProcessHandle) {}
+
+# Whether posix_spawn can start a child in another folder.
+# `PEPPER_PROCESS_FORK_SPAWN` set says no, so the tests reach the fork path
+# on a glibc that has posix_spawn_file_actions_addchdir_np.
+[Target(OS(Linux))]
+_process_spawn_changes_folder(): bool {
+    var forced = os.environment("PEPPER_PROCESS_FORK_SPAWN");
+    if (forced.is_value() and !forced.value().is_empty) {
+        return false;
+    }
+    var name = "posix_spawn_file_actions_addchdir_np";
+    return dlsym(__null, name.c_str()) != __null;
+}
+
+[Target(OS(Mac))]
+_process_spawn_changes_folder(): bool {
+    return true;
+}
+
+# Starts `command` with fork and exec, for a working directory posix_spawn
+# cannot set (glibc before 2.29). Everything the child needs is made before
+# the fork: between fork and exec it only duplicates descriptors, changes
+# folder and execs, and reports a failure through a close-on-exec pipe, as
+# Rust's standard library does.
+[Target(OS(Linux))]
+_process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
+    var streams = [stdin, stdout, stderr];
+    # What the child does with each stream, read without Pepper code:
+    # 0 keep, 1 /dev/null, 2 the pipe's child end.
+    __ptr<int> kinds = _pep_malloc(12);
+    # [parent, child] ends for stdin, stdout and stderr; -1 when unused.
+    __ptr<int> ends = _pep_malloc(24);
+    var index = 0;
+    while (index < 6) {
+        ends[index] = -1;
+        index = index + 1;
+    }
+    var code = 0;
+    index = 0;
+    while (index < 3) {
+        kinds[index] = streams[index] == Stream.Pipe ? 2 : (streams[index] == Stream.Null ? 1 : 0);
+        index = index + 1;
+    }
+    index = 0;
+    while (index < 3 and code == 0) {
+        if (kinds[index] == 2) {
+            __ptr<int> pair = _pep_malloc(8);
+            if (_process_pipe(pair)) {
+                ends[index * 2] = index == 0 ? pair[1] : pair[0];
+                ends[index * 2 + 1] = index == 0 ? pair[0] : pair[1];
+            } else {
+                code = io.IoError.last().code;
+            }
+            _pep_free(pair);
+        }
+        index = index + 1;
+    }
+    # The pipe the child writes errno to when it cannot exec.
+    __ptr<int> report = _pep_malloc(8);
+    if (code == 0 and pipe2(report, 524288) != 0) {  # O_CLOEXEC
+        code = io.IoError.last().code;
+    }
+    if (code != 0) {
+        _process_close_ends(ends, 0);
+        _pep_free(ends);
+        _pep_free(kinds);
+        _pep_free(report);
+        var message = _process_sys_error_message(code);
+        return io.IoResult<Child>.err(io.IoError(code, $"cannot start '{command.program}': {message}"));
+    }
+    var argument_values = Array<String>();
+    argument_values.append(command.program);
+    for (var argument in command._arguments) {
+        argument_values.append(argument);
+    }
+    var argv = _process_c_strings(argument_values);
+    var environment_values = Array<String>();
+    __ptr<__ptr<char>> envp = os._os_environ();
+    var built_environment = command._changes_environment();
+    if (built_environment) {
+        environment_values = command._environment_entries();
+        envp = _process_c_strings(environment_values);
+    }
+    var directory = command._working_directory.value().to_string();
+    var program = command.program;
+    var device = "/dev/null";
+    __ptr<char> directory_text = directory.c_str();
+    __ptr<char> program_text = program.c_str();
+    __ptr<char> device_text = device.c_str();
+    __ptr<int> failed = _pep_malloc(4);
+    var process_id = fork();
+    if (process_id == 0) {
+        # The child: nothing here allocates.
+        var at = 0;
+        while (at < 3) {
+            if (kinds[at] == 2) {
+                dup2(ends[at * 2 + 1], at);
+            } else if (kinds[at] == 1) {
+                var opened = open(device_text, at == 0 ? 0 : 1);
+                if (opened >= 0) {
+                    dup2(opened, at);
+                }
+            }
+            at = at + 1;
+        }
+        if (chdir(directory_text) == 0) {
+            execvpe(program_text, argv, envp);
+        }
+        failed[0] = io.IoError.last().code;
+        write(report[1], failed, 4);
+        _exit(127);
+    }
+    close(report[1]);
+    _process_close_ends(ends, 1);
+    if (process_id < 0) {
+        code = io.IoError.last().code;
+    } else {
+        failed[0] = 0;
+        # Four bytes: the child's errno, it did not exec; none: it did.
+        if (read(report[0], failed, 4) == 4) {
+            code = failed[0];
+            __ptr<int> status = _pep_malloc(4);
+            waitpid(process_id, status, 0);
+            _pep_free(status);
+        }
+    }
+    close(report[0]);
+    _pep_free(report);
+    _pep_free(failed);
+    _pep_free(kinds);
+    _pep_free(argv);
+    if (built_environment) {
+        _pep_free(envp);
+    }
+    if (code != 0) {
+        _process_close_ends(ends, 0);
+        _pep_free(ends);
+        var message = _process_sys_error_message(code);
+        return io.IoResult<Child>.err(io.IoError(code, $"cannot start '{command.program}': {message}"));
+    }
+    var child = Child();
+    child._handle = process_id;
+    child._id = process_id as ulong;
+    child._stdin = _process_pipe_file(ends[0], "<child stdin>");
+    child._stdout = _process_pipe_file(ends[2], "<child stdout>");
+    child._stderr = _process_pipe_file(ends[4], "<child stderr>");
+    _pep_free(ends);
+    return io.IoResult<Child>.ok(child);
+}
+
+# macOS's posix_spawn always changes folder, so it never forks to start a
+# child.
+[Target(OS(Mac))]
+_process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stream): io.IoResult<Child> {
+    return io.IoResult<Child>.err(io.IoError(78, "fork and exec spawning is Linux-only"));
+}
+
+# Closes the open ends of `ends` on side `side`: 0, the parent's; 1, the
+# child's.
+[Target(OS(Linux))]
+_process_close_ends(ends: __ptr<int>, side: int) {
+    var index = 0;
+    while (index < 3) {
+        if (ends[index * 2 + side] >= 0) {
+            close(ends[index * 2 + side]);
+            ends[index * 2 + side] = -1;
+        }
+        index = index + 1;
+    }
+}
 
 # Adds a change of folder to `actions`. glibc has
 # posix_spawn_file_actions_addchdir_np from 2.29 on, and the prebuilt

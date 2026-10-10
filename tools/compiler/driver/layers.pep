@@ -419,7 +419,7 @@ _record_folder(name: String): String {
 ## key: the record, and beside it its own interface, which the keys of the
 ## layers that read it need without reading the record, and the warnings
 ## checking it gave, rendered, which a build that loads the record prints
-## again (as rustc's incremental cache and ccache replay a unit's
+## again (as incremental compilers and ccache replay a unit's
 ## diagnostics).
 ##
 ## @param cache the build cache

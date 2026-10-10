@@ -9,8 +9,7 @@ import [specialization_too_deep, rewrite_static_calls] from "specialize_structs"
 import [PassState] from "state";
 import [parse_type_string, replace_map] from "type_name";
 
-## Clones each requested function specialization from its generic base,
-## as `specialize_functions::specialize_functions` does.
+## Clones each requested function specialization from its generic base.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error
@@ -85,7 +84,7 @@ export specialize_functions(module: Module, state: PassState) {
 }
 
 ## Replaces the types of `type_map` in `block`, as a function
-## specialization does: `specialize_functions::replace_body_types`.
+## specialization does.
 ##
 ## @param block the block, changed in place
 ## @param type_map the parameters and their types

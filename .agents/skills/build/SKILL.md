@@ -1,113 +1,82 @@
 ---
 name: build
-description: Build the Pepper compiler with cargo. Use when asked to build, compile, or check the project, when a build fails and you need to iterate on errors, or when LLVM/llvm-sys/inkwell linkage errors appear.
+description: Build the Pepper compiler (pepc, tools/compiler) and the Pepper tools from source. Use when asked to build, compile, or check the project, when a build fails and you need to iterate on errors, or when LLVM linkage or package-fetch errors appear.
 ---
 
 # Building Pepper
 
-Pepper is a Rust workspace: root crate `pepper` (lib + `main.rs` CLI) plus the crates `pepper-parser`, `pepper-sema`, `pepper-codegen`, and `pepper-driver` under `crates/`.
+Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper program in `tools/compiler` (pepc); every other tool is a Pepper program under `tools/` (`pepper`, `pep-fmt`, `pep-test`, `pep-package`, `pep-install`, `pep-profile`, `pep-doc`, `pep-lsp`). Building any of them takes a `pep-build`: the first one comes from a published toolchain (stage 0).
 
-## First time on a machine: provision LLVM
+## First time on a machine
 
-`pepper-codegen` and `pepper-driver` use `inkwell`, which links LLVM through `llvm-sys`. `llvm-sys` locates LLVM by running `<prefix>/bin/llvm-config`, asks it which component libraries to link, and compiles a C shim against the `llvm-c` headers — so a full LLVM *development* install is required.
+1. **Stage 0**, the build of main, the prerelease named by `VERSION` (`0.4.0-dev`):
 
-```bash
-cargo run -p xtask -- setup      # first time: works with no LLVM installed
-cargo setup                      # afterwards, via the alias setup writes
-cargo setup --check              # what is configured, and how to build it
-```
+   ```bash
+   sh scripts/install.sh --version 0.4.0-dev     # .\scripts\install.ps1 -Version 0.4.0-dev on Windows
+   ```
 
-`xtask` is dependency-free precisely so this works on a fresh clone: `llvm-sys` fails to *compile* when no LLVM is configured (`compile_error!` in its lib.rs), and it builds before `pepper-codegen`'s build script exists — so nothing inside the build can discover LLVM in time to configure it. `cargo run -p xtask` never pulls it in. It runs the platform's script (`scripts/setup-llvm.{sh,ps1}`, also usable directly, which is what CI does) and finds a shell for it: `pwsh`, else Windows PowerShell 5.1.
+   `pepper build` then runs its `pep-build`; `pepper install which` prints where it is (second line).
 
-Where LLVM comes from, cheapest source first: an install of the wanted major already on the machine, then the platform's package manager (`apt install llvm-<major>-dev` plus `libpolly-<major>-dev`, 4–8s; `brew install llvm@<major>`, 13–17s), then the upstream release archive, from which only the members the build consumes are unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries.
+2. **LLVM 20.** pepc links LLVM through the `pepper-llvm` package, which binds LLVM 20 (`[Link("LLVM-20")]` on Linux, `LLVM` on macOS, `LLVM-C` on Windows). Provision it:
 
-Setup writes `.cargo/config.toml` with `LLVM_SYS_<major>1_PREFIX` plus the `cargo setup` alias, and the same prefix, one line, to `.pep/llvm-prefix`, which the scripts and workflows read (in CI it also exports `LLVM_SYS_<major>1_PREFIX` through `$GITHUB_ENV`). Both are generated and gitignored; cargo's `[env]` reaches build scripts, so afterwards plain `cargo` commands work with no shell setup. It is the *only* mechanism that reaches `llvm-sys` without shell state, which is why provisioning cannot live in a build script. Re-running is cheap and idempotent.
+   ```bash
+   ./scripts/setup-llvm.sh                       # macOS / Linux
+   pwsh -File scripts/setup-llvm.ps1             # Windows
+   ./scripts/setup-llvm.sh --check               # what it would use, changing nothing
+   ```
 
-### LLVM version
+   Cheapest source first: an LLVM 20 already on the machine, then the package manager (`apt install llvm-20-dev` plus `libpolly-20-dev`, 4–8s; `brew install llvm@20`), then the upstream release archive, of which only what the build consumes is unpacked. Windows always takes the archive: its image LLVM and the winget/scoop/choco packages ship neither `llvm-config` nor the component libraries. The prefix goes to `.pep/llvm-prefix` (gitignored), which `scripts/pepper-tests.sh`, the release build and CI read.
 
-The workspace builds against **LLVM 18–22**, chosen by a cargo feature on the root package and forwarded to `pepper-driver` and `pepper-codegen`. LLVM 20 is the default (`cargo build` needs no flag); anything else is named explicitly, and the setup script prints the command when it provisions a non-default version:
-
-```bash
-cargo setup --llvm 19                  # or PEPPER_LLVM_MAJOR=19
-cargo build --release --no-default-features --features llvm19-1
-```
-
-Verified coverage: 18, 19 and 20 pass the suite on Linux — those are what `apt` on `ubuntu-24.04` serves — and all five pass on macOS, where Homebrew has `llvm@18` through `llvm@22`. Only the *Windows* archive install is a full LLVM tree with `clang`, `lld`, `llc`, `lli` and `opt`; the Unix archive path unpacks just `llvm-config`, the libraries and the `llvm-c` headers, so with either that or an apt prefix the driver falls back to `clang` on PATH (`crates/pepper-driver/src/linker.rs`). Homebrew prefixes do carry clang.
-
-### Debugger (opt-in)
-
-Add `lldb` for debugging native faults in the compiler or its JIT'd code:
-
-```bash
-pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
-./scripts/setup-llvm.sh --devtools            # macOS / Linux
-```
-
-`PEPPER_SETUP_DEVTOOLS=1` in the environment does the same, so it can be opted into once per machine or in CI. It is off by default because the build does not need it and it costs an extra download.
-
-Windows specifics worth knowing, since they are not obvious: `lldb` is **absent** from the `clang+llvm` tarball and ships only in the llvm.org NSIS installer, so the script extracts it (7-Zip required — `winget install 7zip.7zip`) rather than running the installer, which keeps the registry and system PATH untouched. `liblldb.dll` is also linked against one exact CPython minor version and the installer bundles no Python, so the script drops Python's embeddable runtime next to `lldb.exe`; without it `lldb` aborts with `unable to find python311.dll`. On Unix, lldb normally lives in the same LLVM prefix or the distro package, so the script only reports what it finds.
-
-`lldb` resolves Rust symbols, source lines, and frame arguments on these builds, which is the fastest way to localize an access violation. Since the script leaves PATH untouched (see above), invoke it by full path on Windows — a bare `lldb` only appears to work on a machine that happens to have an unrelated LLVM installed:
-
-```powershell
-& "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
-  -k "thread backtrace" -- target/debug/pep-build.exe tests/hello.pep
-```
-
-The `20.1.8` in that path is the default major's version from `$LlvmVersions` in `scripts/setup-llvm.ps1`; with `-Llvm <major>` it is that major's version instead.
-
-On macOS and Linux, with `lldb` on PATH:
-
-```bash
-lldb --batch -o run -k "thread backtrace" -- target/debug/pep-build tests/hello.pep
-```
+3. **The private packages.** `tools/compiler` depends on `justinboswell/pepper-llvm` and `tools/pep-lsp` on `justinboswell/pepper-lsp` (their `pep.toml`). The first build fetches each into the tool's `.pep/deps` with git, so git needs read access. Cloud sessions need both repositories attached (`add_repo`); CI uses deploy keys (`scripts/ci-package-auth.sh`).
 
 ## Build
 
-```bash
-cargo build              # debug → target/debug/pep-build(.exe)
-cargo build --release    # → target/release/pep-build(.exe), the compiler
-cargo check              # fast type-check; use while iterating on errors
-cargo build -p pepper-parser   # single crate
-```
-
-Errors are `rustc` diagnostics in `crates/*/src` — fix top-down, since later errors are usually fallout from the first.
-
-## When LLVM linkage breaks
-
-Symptoms and causes worth knowing before you start guessing:
-
-- **`No suitable version of LLVM was found ... LLVM_SYS_<major>1_PREFIX`** — no usable install for the *selected* version. Either run the setup script for that major, or name the major you do have: the variable in the message tells you which one cargo is looking for.
-- **`no LLVM version feature enabled`** from `build.rs` — `--no-default-features` without a `--features llvmNN-1`.
-- **`could not find native static library Polly`** — a Debian `llvm-N-dev` without `libpolly-N-dev`: `llvm-config --libnames --link-static` names Polly's archives whether or not they are installed, and llvm-sys prefers static, falling back to shared only when that command *fails* rather than when the files it names are missing. So `usable_llvm()` in the setup script checks the mode llvm-sys will actually choose and rejects such a prefix, which both catches this at provisioning and makes the script install `libpolly-N-dev`. The preinstalled `/usr/lib/llvm-18` on `ubuntu-24.04` is exactly this case.
-- **Unresolved `LLVMInitialize<Target>*` at link time** — `inkwell`'s default `target-all` feature wants initializers for every LLVM target, including ones a given LLVM build omits (`llvm-config --targets-built` lists them). The crates therefore set `default-features = false` and request one backend per host architecture, in the `cfg(target_arch = …)` dependency tables of `crates/pepper-{codegen,driver}/Cargo.toml`: `target-x86` on x86_64, `target-aarch64` on aarch64. `crates/pepper-codegen/src/target.rs` registers that backend and builds the machine everything emits for; registering the wrong one breaks every CLI invocation with *"No available targets are compatible with triple …"* while the suite can stay green, since inkwell's JIT registers the host backend as a side effect and whichever test does that first masks it for the rest. `target.rs`'s own unit test asks the question directly instead.
-- **Random access violations inside LLVM (verifier, printer) on Windows** — LLVM's release libs are built against the *static* CRT (`DEFAULTLIB:libcmt.lib`) while Rust MSVC uses the dynamic one; two CRTs in one process corrupt the heap, and `LNK4098` warns about it. Windows therefore links `LLVM-C.dll` instead: each supported `llvm-sys` major is a windows-only optional dependency carrying `no-llvm-linking`, and `crates/pepper-codegen/build.rs` emits the DLL link and copies it next to the built artifacts. Don't "fix" this by re-enabling static linking.
-
-## Adding or changing an LLVM version
-
-Supported majors are listed in six places that must agree, and `inkwell` must publish a matching `llvmNN-1` feature:
-
-- the `[features]` tables in `Cargo.toml`, `crates/pepper-driver/Cargo.toml` and `crates/pepper-codegen/Cargo.toml`, plus the windows-only `llvm-sys-<major>1` dependency in the latter two;
-- `LLVM_SYS_MAJORS` in `crates/pepper-codegen/build.rs`;
-- the `LLVM_PREFIX_ENV` cfg cascade in `crates/pepper-driver/src/linker.rs` — a *missing* arm stops the build at the `compile_error!` there, but an arm naming the *wrong* variable is silent: `link_driver()` just falls back to `clang` on PATH;
-- `SUPPORTED_MAJORS` and `archive_version()` in `scripts/setup-llvm.sh`;
-- `$LlvmVersions` **and** the `-Llvm` `[ValidateSet]` in `scripts/setup-llvm.ps1`, which rejects any major not enumerated in it.
-
-A new *host architecture* is a separate list: the `cfg(target_arch)` inkwell tables in both crate manifests, and `initialize_host`, its `compile_error!`, and the expected-triple list in that module's test, all in `crates/pepper-codegen/src/target.rs`.
-
-CI discovers its version matrix from `SUPPORTED_MAJORS` intersected with what apt offers, so a new major is tested as soon as both carry it.
-
-**Republish the Windows CI package for a new default:**
+From the repository root, against this checkout's runtime:
 
 ```bash
-gh workflow run llvm-package.yml -f llvm=20
+export PEPPER_RUNTIME="$PWD/runtime"
+llvm="$(head -1 .pep/llvm-prefix)"
+pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build   # + -L "$llvm/lib" on macOS and Windows
+target/bin/pep-build -O -I tools tools/pep-fmt/main.pep -o target/bin/pep-fmt
 ```
 
-Windows CI installs a prebuilt minimal LLVM published as an asset on the `llvm-<version>` release (see `.github/workflows/llvm-package.yml`); Linux and macOS install from apt or Homebrew and need no package. Those assets are per-version, so a bump leaves no package for the new one — and nothing fails loudly when that happens: `scripts/ci-provision-llvm.sh` falls back to the upstream archive, so the Windows job quietly starts paying an ~900 MB download and extraction again. The only signal is a line in the provisioning log: *"No prebuilt package published for &lt;platform&gt;"*.
+- Windows: name outputs `.exe`, and copy `"$llvm/bin/LLVM-C.dll"` beside `pep-build.exe` (it loads the DLL from its own folder).
+- A cold build of pepc takes several minutes on 4 cores; the build cache (`.pep/cache`, or `--cache <dir>` / `PEPPER_CACHE_DIR`) makes an edit rebuild in seconds. `-T time` prints each stage's time, `-T cache` what came from the cache.
+- `scripts/pepper-tests.sh [dir]` builds the other tools with the `pep-build` in `dir` (default: the installed one) into `target/pepper-tests/bin`, then runs the tests (see the **test** skill).
+- The release build (`scripts/release-build.sh`) builds pepc with stage 0, then again with itself (stage 2), and builds every tool with stage 2. To check that a compiler change compiles itself, do the same: build pepc with the pepc you just built.
 
-Run the workflow after the pins are updated and merged: it builds from the version the setup scripts name, so it has to see the new value. The LLVM caches invalidate themselves, since their keys hash the setup scripts.
+Errors are pepc's clang-style diagnostics (`file.pep:line:col: error: ...`). Fix top-down: later errors are usually fallout from the first.
 
-## Notes
+### Debugger (opt-in)
 
-- There is no configure step; `Cargo.toml`/`Cargo.lock` are the only build configuration.
-- Never edit `Cargo.lock` by hand; change `Cargo.toml` and let cargo resolve.
+```bash
+./scripts/setup-llvm.sh --devtools            # macOS / Linux: checks for lldb
+pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows: installs lldb into the prefix
+```
+
+`PEPPER_SETUP_DEVTOOLS=1` does the same once per machine. On Windows `lldb` is absent from the `clang+llvm` tarball and ships only in the llvm.org installer, so the script extracts it with 7-Zip (`winget install 7zip.7zip`); `liblldb.dll` needs one exact CPython minor, so the script drops Python's embeddable runtime beside `lldb.exe` (without it: `unable to find python311.dll`). The script leaves PATH alone, so invoke lldb by full path there. pepc accepts `-g` but emits no debug info yet, so expect symbols without source lines:
+
+```powershell
+& "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
+  -k "thread backtrace" -- target/bin/pep-build.exe tests/hello.pep
+```
+
+## When the build breaks
+
+- **`'<Name>' is not exported by 'llvm'`** (or another missing name of a package): the copy in `tools/compiler/.pep/deps` is older than `tools/compiler/pep.lock`. Refresh it: `pepper package -C tools/compiler fetch`.
+- **A package fetch fails** (`Permission denied (publickey)`, `Repository not found`): git cannot read `pepper-llvm` / `pepper-lsp`. Attach the repository (cloud session) or set up access; in CI, the deploy key secret is missing.
+- **`cannot find -lLLVM-20`** (Linux) or **`library 'LLVM' not found`** (macOS): no LLVM 20 on the link's search path. On Linux `llvm-20-dev` puts `libLLVM-20.so` on the default path; on macOS and Windows pass `-L "$(head -1 .pep/llvm-prefix)/lib"`.
+- **`could not find native static library Polly`** or a missing `libPolly*.a` in a static link of LLVM (the release build): a Debian `llvm-20-dev` without `libpolly-20-dev`. `llvm-config --libnames --link-static` names Polly's archives whether or not they are installed, so `usable_llvm()` in `setup-llvm.sh` rejects such a prefix and installs `libpolly-20-dev`.
+- **Random access violations inside LLVM on Windows**: LLVM's release static libraries are built against the static CRT; two CRTs in one process corrupt the heap. pepc therefore links `LLVM-C.dll` on Windows (pepper-llvm's `[Link("LLVM-C")]`). Don't "fix" this by linking the static libraries.
+- **"No available targets are compatible with triple …"**: codegen registers the backends of the targets it compiles for (`tools/compiler/codegen/target.pep`); the LLVM it links must have them (`llvm-config --targets-built`).
+- **No `clang`**: the link driver is the LLVM prefix's `clang` (`PEPPER_LLVM_PREFIX`), then one beside `pep-build`, then the PATH's (`tools/compiler/driver/linker.pep`). apt's `llvm-20-dev` has no `bin/clang`: install `clang`.
+
+## Changing the LLVM version
+
+LLVM 20 is pinned in: `pepper-llvm` (its bindings and `[Link("LLVM-20")]`), `LLVM_MAJOR` and `archive_version()` in `scripts/setup-llvm.sh`, `$LlvmMajor` and `$LlvmVersions` in `scripts/setup-llvm.ps1`, `LLVM_MAJOR` in `scripts/ci-provision-cross.sh`, and the `20`s of `ci.yml`'s cross-compile step. `release-build.sh`, `ci-provision-llvm.sh` and `llvm-package.yml` read the setup scripts.
+
+Windows CI installs a prebuilt minimal LLVM published on the `llvm-<version>` release (`.github/workflows/llvm-package.yml`). A new version leaves no package, and nothing fails loudly: `scripts/ci-provision-llvm.sh` falls back to the upstream archive (~900 MB) and logs *"No prebuilt package published for &lt;platform&gt;"*. After the pins merge, publish it:
+
+```bash
+gh workflow run llvm-package.yml
+```

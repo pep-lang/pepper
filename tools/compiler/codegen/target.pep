@@ -2,9 +2,8 @@
 ## target `--target` names. pepper-llvm's `TargetMachine.create` finds each
 ## backend's `LLVMInitialize*` functions by name, which a pep-build that
 ## links LLVM statically does not export: these calls link in every backend
-## `--target` can name (x86, AArch64 and WebAssembly), as
-## `crates/pepper-codegen/src/target.rs` registers them, with their
-## assembly parsers, which inline assembly needs.
+## `--target` can name (x86, AArch64 and WebAssembly), with their assembly
+## parsers, which inline assembly needs.
 
 import [Target] from compiler.link;
 import llvm;

@@ -1,8 +1,7 @@
 ## Expression types and reference counting: what an expression's value is
 ## (`value_sema_type`), whether it reads or owns a reference, and the
-## acquire, release and store steps of a reference slot, as
-## `crates/pepper-codegen/src/lib.rs` makes them; also the element types of
-## indexed receivers, and the head counts every object starts with.
+## acquire, release and store steps of a reference slot; also the element
+## types of indexed receivers, and the head counts every object starts with.
 
 import llvm;
 import compiler.sema;

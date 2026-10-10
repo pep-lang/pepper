@@ -1,5 +1,5 @@
-## Struct keys whose `==` and `hash<T>` disagree:
-## `passes::check_hash_keys` in Pepper. `HashMap` and `HashSet` find a key
+## Struct keys whose `==` and `hash<T>` disagree.
+## `HashMap` and `HashSet` find a key
 ## by `hash<K>` and then `==`, so keys that are `==` must hash equally. A
 ## struct used as a key (any specialization of the runtime's
 ## `_HashTable<K, V>`, which both containers hold) that declares an `==`

@@ -1,7 +1,6 @@
 ## What the passes keep between steps besides the model: the first error
 ## a pass reported, the closure numbering, and the facts some passes
-## install for the later ones, as the Rust passes keep them in
-## thread-locals.
+## install for the later ones.
 
 import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
@@ -29,7 +28,7 @@ export struct PassState {
     ## records them.
     var value_structs: HashSet<String> = HashSet<String>();
     ## The notes the passes report besides errors (`reflect.print`), in
-    ## order: the Rust module's `warnings`.
+    ## order.
     var notes: Diagnostic[] = Array<Diagnostic>();
     ## Each value type's methods (`Color::name`, `i32::doubled`): whether
     ## each is static, keyed by `method_key`, as `enums::install_methods`
@@ -102,8 +101,8 @@ export struct PassState {
     ## a checked unit's record keeps them (`Checked.summaries`).
     var settled_summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
     ## Whether struct specializations get a method's body only once a use
-    ## names it (`lazy_methods`). Off when the passes are compared with the
-    ## Rust compiler's, which specializes every method.
+    ## names it (`lazy_methods`). Off to specialize every method, as the
+    ## passes' expected models were recorded.
     var lazy_methods: bool = false;
     ## The bodies of the specializations' methods no use has named yet, by
     ## struct and method name.
@@ -142,8 +141,7 @@ export struct PassState {
         return out;
     }
 
-    ## Records each enum's representation and default value, as
-    ## `enums::install` does: enum names are integer types from here on.
+    ## Records each enum's representation and default value: enum names are integer types from here on.
     ##
     ## @param enums the program's enums
     install_enums(enums: EnumDef[]) {

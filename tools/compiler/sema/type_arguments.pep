@@ -1,5 +1,5 @@
-## Inferring a generic function's type arguments from a call's arguments:
-## `pepper_sema::passes::type_arguments` in Pepper. `larger(3, 9)` is
+## Inferring a generic function's type arguments from a call's arguments.
+## `larger(3, 9)` is
 ## `larger<int>(3, 9)`: each parameter's declared type is matched against
 ## its argument's type, binding the generic parameters it mentions.
 
@@ -8,7 +8,7 @@ import [PassState] from "state";
 import [replace_map] from "type_name";
 
 ## Records the trait conformances of `module`'s structs for inference to
-## see through, as `type_arguments::record_conformances` does.
+## see through.
 ##
 ## @param module the model
 ## @param state the passes' state, which keeps them

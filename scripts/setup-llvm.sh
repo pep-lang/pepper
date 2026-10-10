@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Provision the LLVM toolchain that llvm-sys (via inkwell) links against, and
-# point cargo and the scripts at it. macOS / Linux counterpart of
-# scripts/setup-llvm.ps1.
+# Provision LLVM 20, the LLVM the compiler (pepc, through the pepper-llvm
+# package) links against, and point the scripts at it. macOS / Linux
+# counterpart of scripts/setup-llvm.ps1.
 #
 # Order of preference, cheapest first:
 #
@@ -14,42 +14,39 @@
 #      project never invokes, which is what used to exhaust a CI runner's disk.
 #
 # Usage:
-#   ./scripts/setup-llvm.sh [--devtools] [--llvm <major>] [--no-packages]
+#   ./scripts/setup-llvm.sh [options]
 #
-#   --llvm <major>  provision this LLVM major (18-22) instead of the default.
-#   --no-packages   never invoke apt/brew; use what is installed or the archive.
+# Options:
 #   --devtools      also make sure a debugger (lldb) is available; equivalent to
 #                   PEPPER_SETUP_DEVTOOLS=1. Off by default: the build does not
 #                   need it.
+#   --no-devtools   skip that, overriding PEPPER_SETUP_DEVTOOLS.
+#   --no-packages   never invoke apt/brew; use what is installed or the archive.
+#   --check         report the LLVM it would use and what .pep/llvm-prefix
+#                   records, and exit (non-zero unless they agree) without
+#                   changing anything.
+#   -h, --help      this text.
 #
 # It records the prefix it settles on in .pep/llvm-prefix (one line, read by
-# the scripts and workflows) and in .cargo/config.toml for cargo.
+# scripts/pepper-tests.sh, the release build and the workflows).
 #
-# Idempotent: re-running with a usable toolchain only rewrites those.
+# Idempotent: re-running with a usable toolchain only rewrites that.
 set -euo pipefail
 
-# The majors this workspace can build against, newest first. Dictated by the
-# feature table in Cargo.toml -- inkwell needs exactly one llvmNN-1 feature and
-# only publishes these -- so the two lists move together.
-SUPPORTED_MAJORS="22 21 20 19 18"
+# The one LLVM major Pepper builds with: the one pepper-llvm binds
+# (`[Link("LLVM-20")]`). apt and Homebrew both serve it cheaply.
+# scripts/release-build.sh, ci-provision-llvm.sh and llvm-package.yml read
+# this line, so keep its shape.
+LLVM_MAJOR="20"
 
-# Matches `default` in Cargo.toml's [features]: with this major provisioned,
-# plain `cargo build` works with no extra flags. LLVM 20 because apt and
-# Homebrew both serve it cheaply.
-DEFAULT_MAJOR="20"
-
-# Patch version per major, used only when falling back to the release archive.
-# Each is the newest patch release upstream published for that major.
+# The patch version, used only when falling back to the release archive: the
+# newest patch release upstream published for LLVM_MAJOR.
 #
-# These lines are parsed by ci-provision-llvm.sh and llvm-package.yml, so keep
-# the `<major>) echo <version>` shape.
+# This line is parsed by release-build.sh and llvm-package.yml, so keep the
+# `<major>) echo <version>` shape.
 archive_version() {
     case "$1" in
-        22) echo "22.1.8" ;;
-        21) echo "21.1.8" ;;
         20) echo "20.1.8" ;;
-        19) echo "19.1.7" ;;
-        18) echo "18.1.8" ;;
         *) return 1 ;;
     esac
 }
@@ -66,34 +63,17 @@ case "${PEPPER_SETUP_DEVTOOLS:-}" in
     *) DEVTOOLS=1 ;;
 esac
 
-# MAJOR_EXPLICIT distinguishes "this exact major" from "whatever is cheapest".
-# A named version is a requirement: substituting another one would have CI
-# testing a feature it never provisioned for, and llvm-package publishing an
-# asset under a version it does not contain.
-WANT_MAJOR="$DEFAULT_MAJOR"
-MAJOR_EXPLICIT=0
-if [[ -n "${PEPPER_LLVM_MAJOR:-}" ]]; then
-    WANT_MAJOR="$PEPPER_LLVM_MAJOR"
-    MAJOR_EXPLICIT=1
-fi
+WANT_MAJOR="$LLVM_MAJOR"
 USE_PACKAGES=1
+CHECK=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --devtools) DEVTOOLS=1 ;;
         --no-devtools) DEVTOOLS=0 ;;
         --no-packages) USE_PACKAGES=0 ;;
-        --llvm)
-            WANT_MAJOR="${2:-}"
-            [[ -n "$WANT_MAJOR" ]] || { echo "--llvm needs a major version" >&2; exit 2; }
-            MAJOR_EXPLICIT=1
-            shift
-            ;;
-        --llvm=*)
-            WANT_MAJOR="${1#*=}"
-            MAJOR_EXPLICIT=1
-            ;;
+        --check) CHECK=1 ;;
         -h|--help)
-            sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,/^set -euo pipefail/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -104,38 +84,31 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-case " $SUPPORTED_MAJORS " in
-    *" $WANT_MAJOR "*) ;;
-    *)
-        echo "unsupported LLVM major '$WANT_MAJOR' (supported: $SUPPORTED_MAJORS)" >&2
-        exit 2
-        ;;
-esac
-
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/pepper"
 CACHE_DIR="$ROOT/cache"
 
 # --- what "usable" means ----------------------------------------------------
 
-# llvm-sys does not just need llvm-config: it asks llvm-config for the library
-# names to link and hands them straight to the linker, and it compiles a C shim
-# against the llvm-c headers. So check the prefix the way llvm-sys will consume
-# it, not merely that llvm-config exists.
+# The compiler does not just need llvm-config: pepc links the LLVM library
+# (the shared one in a development build, and in the release build every
+# static component library `llvm-config --link-static --libnames` names,
+# scripts/release-build.sh), and the headers come with a complete install.
+# So check the prefix the way those builds consume it, not merely that
+# llvm-config exists.
 #
-# Which link mode matters is subtle and was got wrong once. llvm-sys prefers
-# static, and only falls back to shared when `llvm-config --libnames
-# --link-static` *fails*, not when the files it names are missing. Debian's
-# llvm-N-dev is exactly that trap: --link-static succeeds and names Polly's
-# archives, which live in libpolly-N-dev, so a prefix that looks fine by any
-# "some link mode works" test dies with
+# Which link mode matters is subtle. Static is checked first, and shared
+# only when `llvm-config --libnames --link-static` *fails*, not when the
+# files it names are missing. Debian's llvm-N-dev is exactly that trap:
+# --link-static succeeds and names Polly's archives, which live in
+# libpolly-N-dev, so a prefix that looks fine by any "some link mode works"
+# test fails a static link with
 #
 #   error: could not find native static library `Polly`
 #
-# Accepting such a prefix also skips the apt install that would have fixed it,
-# which is how the preinstalled /usr/lib/llvm-18 on ubuntu-24.04 broke the CI
-# matrix. Rejecting it makes the script install llvm-18-dev and
-# libpolly-18-dev and try again.
+# Accepting such a prefix also skips the apt install that would have fixed it.
+# Rejecting it makes the script install llvm-20-dev and libpolly-20-dev and
+# try again.
 #
 # Prints nothing and returns 1 if unusable; prints the prefix if usable.
 usable_llvm() {
@@ -145,11 +118,7 @@ usable_llvm() {
     local version major prefix libdir includedir
     version="$("$config" --version 2>/dev/null)" || return 1
     major="${version%%.*}"
-    [[ -n "$want" && "$major" != "$want" ]] && return 1
-    case " $SUPPORTED_MAJORS " in
-        *" $major "*) ;;
-        *) return 1 ;;
-    esac
+    [[ "$major" == "$want" ]] || return 1
 
     prefix="$("$config" --prefix 2>/dev/null)" || return 1
     libdir="$("$config" --libdir 2>/dev/null)" || return 1
@@ -158,7 +127,7 @@ usable_llvm() {
     [[ -e "$includedir/llvm-c/Core.h" ]] || return 1
     [[ -e "$includedir/llvm/Config/llvm-config.h" ]] || return 1
 
-    # Mirror llvm-sys's choice: static unless llvm-config cannot report it.
+    # Static unless llvm-config cannot report it.
     local names
     if ! names="$("$config" --libnames --link-static 2>/dev/null)" || [[ -z "$names" ]]; then
         names="$("$config" --libnames --link-shared 2>/dev/null)" || return 1
@@ -295,16 +264,10 @@ install_via_packages() {
 
 # --- release archive (last resort) ------------------------------------------
 
-# Asset naming is not consistent across the versions this workspace supports:
-#
-#   18.1.8   clang+llvm-18.1.8-x86_64-linux-gnu-ubuntu-18.04.tar.xz  (old scheme
-#            only; every LLVM-18.1.8-*.tar.xz is a 404)
-#   19.1.7   LLVM-19.1.7-Linux-X64 / macOS-X64 / macOS-ARM64, but Linux ARM64
-#            only as clang+llvm-19.1.7-aarch64-linux-gnu
-#   20-22    LLVM-<v>-Linux-X64 / Linux-ARM64 / macOS-ARM64, no macOS-X64
-#
-# so a hardcoded name 404s for some major/platform pairs. Both schemes encode
-# the platform differently; this matches either.
+# Asset naming is not consistent across LLVM releases: 20.x names its
+# archives LLVM-<v>-Linux-X64 / Linux-ARM64 / macOS-ARM64 (no macOS-X64),
+# while older releases used clang+llvm-<v>-<triple>. Both schemes encode the
+# platform differently; this matches either.
 platform_pattern() {
     local os arch
     os="$(uname -s)"
@@ -316,7 +279,7 @@ platform_pattern() {
         Linux/aarch64|Linux/arm64) printf 'Linux-ARM64|aarch64-linux-gnu' ;;
         *)
             echo "no prebuilt LLVM for $os/$arch." >&2
-            echo "Install LLVM with llvm-config yourself (e.g. 'brew install llvm@$DEFAULT_MAJOR'" >&2
+            echo "Install LLVM with llvm-config yourself (e.g. 'brew install llvm@$LLVM_MAJOR'" >&2
             echo "or https://apt.llvm.org) and re-run this script." >&2
             return 1
             ;;
@@ -417,19 +380,18 @@ resolve_release_asset() {
         printf '%s' "${legacy%%$'\n'*}"
     else
         echo "LLVM $version publishes no build for $(uname -s)/$(uname -m)." >&2
-        echo "Pick a different major (--llvm <major>), or install LLVM $version" >&2
-        echo "from your package manager instead." >&2
+        echo "Install LLVM $version from your package manager instead." >&2
         return 1
     fi
 }
 
-# Only the members the build consumes: llvm-config for discovery, the component
-# libraries for linking, and the llvm-c headers for llvm-sys's C shim. Same set
-# as scripts/package-llvm.sh, which prebuilds this for CI.
+# Only the members the build consumes: llvm-config for discovery, the
+# libraries for linking, and the headers. Same set as scripts/package-llvm.sh,
+# which prebuilds this for CI.
 #
-# clang is skipped on purpose -- crates/pepper-driver/src/linker.rs prefers the
-# prefix's clang but falls back to PATH, and every platform that gets this far
-# has one.
+# clang is skipped on purpose -- the compiler's link driver
+# (tools/compiler/driver/linker.pep) prefers the prefix's clang but falls back
+# to PATH, and every platform that gets this far has one.
 archive_members() {
     printf '%s\n' \
         '*/bin/llvm-config' \
@@ -543,13 +505,13 @@ install_from_archive() {
     # without brew, or with --no-packages. The prefix's own clang could read
     # the bitcode, but the keep-set deliberately excludes clang (gigabytes to
     # ship a compiler used only as a link driver), so there is nothing local
-    # to point cargo at. Warn rather than fail: a future Xcode whose libLTO is
+    # to link with. Warn rather than fail: a future Xcode whose libLTO is
     # newer than the archive's producer would work.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         echo "warning: these release libraries are LTO bitcode, which Apple's linker" >&2
         echo "  usually cannot read ('could not parse bitcode object file' at link time)." >&2
         echo "  If that happens, install LLVM $major with Homebrew instead:" >&2
-        echo "    brew install llvm@$major && ./scripts/setup-llvm.sh --llvm $major" >&2
+        echo "    brew install llvm@$major && ./scripts/setup-llvm.sh" >&2
     fi
 
     ARCHIVE_PREFIX="$prefix"
@@ -560,6 +522,18 @@ install_from_archive() {
 install_prefix=""
 install_major=""
 
+if [[ "$CHECK" == "1" ]]; then
+    if install_prefix="$(find_llvm "$WANT_MAJOR")"; then
+        echo "LLVM $WANT_MAJOR: $install_prefix"
+    else
+        echo "LLVM $WANT_MAJOR: not found (run scripts/setup-llvm.sh to install it)"
+    fi
+    recorded="$(head -1 "$REPO_ROOT/.pep/llvm-prefix" 2>/dev/null || true)"
+    echo ".pep/llvm-prefix: ${recorded:-(none)}"
+    [[ -n "$install_prefix" && "$recorded" == "$install_prefix" ]]
+    exit $?
+fi
+
 if install_prefix="$(find_llvm "$WANT_MAJOR")"; then
     install_major="$WANT_MAJOR"
     echo "Using LLVM $WANT_MAJOR at $install_prefix"
@@ -568,34 +542,14 @@ elif [[ "$USE_PACKAGES" == "1" ]] && install_via_packages "$WANT_MAJOR" \
     install_major="$WANT_MAJOR"
     echo "Installed LLVM $WANT_MAJOR at $install_prefix"
 else
-    # Anything else supported and already present beats a multi-hundred-MB
-    # download; the build just has to be told which version to use.
-    #
-    # Only when the caller did not name a version. `--llvm N` is a requirement:
-    # CI's matrix builds --features llvmN-1 against whatever this provisions,
-    # and llvm-package publishes it under N's version, so substituting a
-    # different major there tests and ships something other than what it says.
-    if [[ "$MAJOR_EXPLICIT" == "0" ]]; then
-        for major in $SUPPORTED_MAJORS; do
-            [[ "$major" == "$WANT_MAJOR" ]] && continue
-            if install_prefix="$(find_llvm "$major")"; then
-                install_major="$major"
-                echo "LLVM $WANT_MAJOR is not available, but LLVM $major is, at $install_prefix"
-                break
-            fi
-        done
-    fi
-
-    if [[ -z "$install_major" ]]; then
-        install_from_archive "$WANT_MAJOR"
-        install_prefix="$ARCHIVE_PREFIX"
-        install_major="$WANT_MAJOR"
-        usable_llvm "$install_prefix/bin/llvm-config" "$WANT_MAJOR" >/dev/null || {
-            echo "unpacked tree at $install_prefix is missing pieces llvm-sys needs" >&2
-            exit 1
-        }
-        echo "Installed LLVM $WANT_MAJOR to $install_prefix"
-    fi
+    install_from_archive "$WANT_MAJOR"
+    install_prefix="$ARCHIVE_PREFIX"
+    install_major="$WANT_MAJOR"
+    usable_llvm "$install_prefix/bin/llvm-config" "$WANT_MAJOR" >/dev/null || {
+        echo "unpacked tree at $install_prefix is missing pieces the build needs" >&2
+        exit 1
+    }
+    echo "Installed LLVM $WANT_MAJOR to $install_prefix"
 fi
 
 # Unlike Windows -- where lldb has to be pulled out of a separate installer --
@@ -644,36 +598,8 @@ else
     echo "Devtools: skipped (--devtools to check for a debugger)"
 fi
 
-# Point cargo at the prefix. `.cargo/config.toml` [env] reaches build scripts,
-# so llvm-sys sees it with no shell state -- `cargo build` just works.
-#
-# The alias is written here too, rather than committed, because cargo reads
-# exactly one config file per directory: a committed one carrying the alias
-# could not also carry this machine-specific [env], and `include` of the
-# generated file is a hard error when it does not exist yet. So the first run
-# is `cargo run -p xtask -- setup` and every later one can be `cargo setup`.
-mkdir -p "$REPO_ROOT/.cargo"
-cat > "$REPO_ROOT/.cargo/config.toml" <<EOF
-# Generated by scripts/setup-llvm.sh -- do not edit, do not commit.
-[alias]
-setup = "run -q -p xtask --"
-
-[env]
-LLVM_SYS_${install_major}1_PREFIX = "$install_prefix"
-EOF
-
-echo "Wrote $REPO_ROOT/.cargo/config.toml (LLVM_SYS_${install_major}1_PREFIX)"
-
-# The prefix for everything that is not cargo: the scripts and workflows
-# read .pep/llvm-prefix (gitignored, like all of .pep/).
+# The scripts and workflows read the prefix from .pep/llvm-prefix (gitignored,
+# like all of .pep/).
 mkdir -p "$REPO_ROOT/.pep"
 printf '%s\n' "$install_prefix" > "$REPO_ROOT/.pep/llvm-prefix"
 echo "Wrote $REPO_ROOT/.pep/llvm-prefix"
-if [[ "$install_major" == "$DEFAULT_MAJOR" ]]; then
-    echo "Run 'cargo build' to verify."
-else
-    # The version is a cargo feature, and only the default one is implied.
-    echo "LLVM $install_major is not the default ($DEFAULT_MAJOR), so name it when building:"
-    echo "  cargo build --no-default-features --features llvm$install_major-1"
-    echo "  cargo test --workspace --no-default-features --features llvm$install_major-1"
-fi

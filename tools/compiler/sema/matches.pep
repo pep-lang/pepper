@@ -1,4 +1,4 @@
-## Lowering `match`: `enums::lower_matches` in Pepper. Each arm test
+## Lowering `match`. Each arm test
 ## becomes `==` tests on the `match`'s subject (a value enum's case value,
 ## a reference enum's tag, a literal), a binding reads the payload field of
 ## its case, and each `match` is checked to handle every value of what it

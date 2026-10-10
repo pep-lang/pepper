@@ -1,16 +1,14 @@
 ## The compiler's parser: reads the tokens of one source file straight into
-## `compiler.ast`, the nodes and spans the Rust parser
-## (`crates/pepper-parser`) builds, with the same lowering of properties.
+## `compiler.ast`, with properties lowered to their accessors.
 ## Interpolated strings, `print` and `String.format` formats, module-scope
 ## `static` blocks and parentheses stay as the source writes them
 ## (`parse_written`), which also keeps every token and its comments;
-## `parse` rewrites them as the Rust parser does with `compiler.desugar`,
-## and keeps no tokens.
+## `parse` rewrites them with `compiler.desugar`, and keeps no tokens.
 ##
 ## The grammar is the one place Pepper's syntax is read in Pepper (pep-fmt
-## lays out what `parse_written` returns). It follows the Rust parser
-## decision for decision: the same lookahead, the same readings tried and
-## abandoned, and the same syntax error, the one furthest into the source
+## lays out what `parse_written` returns). It decides by a fixed
+## lookahead, with readings tried and abandoned, and reports one syntax
+## error, the one furthest into the source
 ## unless a `;` is missing first. An error in a node that parses (a literal too large, an
 ## unknown escape, a bad format) is reported only when the file has no
 ## syntax error, and the first one is the one the compiler meets first.
@@ -80,8 +78,8 @@ export struct ParseError {
     }
 }
 
-## Parses Pepper source into the compiler's syntax tree, in the shape the
-## Rust parser builds: interpolated strings and `print` and `String.format`
+## Parses Pepper source into the compiler's syntax tree, desugared:
+## interpolated strings and `print` and `String.format`
 ## formats lowered to calls, and each module-scope `static` block followed
 ## by the constants it declares (see `compiler.desugar`).
 ##
@@ -873,8 +871,7 @@ struct Parser {
     }
 
     # Where the token after the last one taken starts: the end of a span
-    # that the Rust parser takes after skipping the whitespace that
-    # follows. Inside an interpolated string's braces, the end of the last
+    # that runs on over the whitespace after it. Inside an interpolated string's braces, the end of the last
     # token.
     _after(): ulong {
         if (_in_hole) {
@@ -1675,7 +1672,7 @@ struct Parser {
 
     # A call of `function`. `print("{0}", x)` and `String.format("{0}", x)`
     # take their format as an `Expression.FormatString`, which `parse`
-    # lowers as the Rust parser does; any other call's `name = value`
+    # lowers; any other call's `name = value`
     # arguments are named.
     _call(function: Expression, callee: Callee, arguments: ArgumentList): Expression {
         if (_failed) {
@@ -4946,7 +4943,7 @@ top_level_colons(text: String): ulong[] {
 }
 
 # The offset of the `}` that closes the braces opened just before `from`
-# (the Rust parser's `interpolation_end`).
+# (`interpolation_end`).
 interpolation_end(text: String, from: ulong): ulong {
     long depth = 0;
     ulong i = from;

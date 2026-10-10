@@ -1,5 +1,5 @@
 ## Extensions of value types (numbers, `char`, `bool` and enums whose
-## cases carry no values): `pepper_sema::value_types` in Pepper. A value
+## cases carry no values). A value
 ## type's methods are free functions `X::m`, as an enum's own are; an
 ## instance method takes the value as a first parameter `this`.
 ## `lower_extensions` turns each such extension's methods, and the trait
@@ -93,8 +93,7 @@ export is_value_type(state: PassState, ty: TypeName): bool {
     return ty.sub_types.count == 0 and value_type_key(state, ty.name).is_value();
 }
 
-## Turns every extension of a value type into functions, as
-## `value_types::lower_extensions` does. Errors go to `state`.
+## Turns every extension of a value type into functions. Errors go to `state`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -287,8 +286,7 @@ _as_function(m: FunctionDef, key: String): FunctionDef {
 }
 
 ## Turns a static call on a value type written by its name (`int.zero()`)
-## into its function, `i32::zero()`, as `value_types::resolve_static_calls`
-## does; an enum's are turned by `resolve_enum_cases`.
+## into its function, `i32::zero()`; an enum's are turned by `resolve_enum_cases`.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -387,7 +385,7 @@ _walk_function(function: FunctionDef, rewriter: Rewriter, defaults: bool) {
 }
 
 ## Returns whether value type `owner` has method `method`, and if so
-## whether it is static: `enums::method_is_static`.
+## whether it is static.
 ##
 ## @param state the passes' state
 ## @param owner the value type's key
@@ -405,8 +403,7 @@ export method_is_static(state: PassState, owner: String, method: String): bool? 
     return state.enum_methods.try_get(method_key(owner, name));
 }
 
-## Replaces the types of `type_map` in `block`, as a specialization does:
-## `specialize_structs::substitute_block`.
+## Replaces the types of `type_map` in `block`, as a specialization does.
 ##
 ## @param block the block, changed in place
 ## @param type_map the parameters and their types

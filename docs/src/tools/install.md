@@ -2,7 +2,7 @@
 
 Each release publishes the Pepper toolchain prebuilt for Linux, macOS and
 Windows, with an install script that downloads the right one. You need no
-Rust, cargo or LLVM development install to use it; building from source is
+LLVM development install to use it; building from source is
 for working on Pepper itself (see [Getting started](../tutorial/getting-started.md#building-from-source)).
 
 ```sh

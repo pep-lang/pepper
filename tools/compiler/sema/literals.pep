@@ -6,7 +6,7 @@ import [Expression, FunctionCallExpression, FunctionDef, Module, StringLiteralEx
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 
 ## Folds each `-<literal>` in function bodies and global initializers into
-## a negated literal, as `resolve_literals::resolve_literals` does.
+## a negated literal.
 ## Parameter defaults are left as written.
 ##
 ## @param module the model, changed in place
@@ -83,8 +83,7 @@ export convert_string_literal(e: Expression): Expression {
 }
 
 ## Converts each string literal of every body, global initializer and
-## `String` parameter default, as
-## `convert_string_literals::convert_string_literals` does.
+## `String` parameter default.
 ##
 ## @param module the model, changed in place
 export convert_string_literals(module: Module) {

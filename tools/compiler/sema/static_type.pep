@@ -1,4 +1,4 @@
-## Static types: `pepper_sema::static_type` in Pepper. A table of the
+## Static types. A table of the
 ## module's struct fields and methods, and `static_type_of`, which computes
 ## an expression's static type as well as it can. (A checked runtime's
 ## table is not consulted: these passes run over programs without one.)
@@ -219,8 +219,7 @@ _known(ty: TypeName): TypeName? {
     return Optional<TypeName>.Value(ty);
 }
 
-## Returns the static type of `e` as well as it can be told, or none, as
-## `static_type::of` does.
+## Returns the static type of `e` as well as it can be told, or none.
 ##
 ## @param e the expression
 ## @param table the module's struct table

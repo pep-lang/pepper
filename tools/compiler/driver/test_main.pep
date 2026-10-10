@@ -1,5 +1,4 @@
-## `pepc --test`: the `main` a test build adds to the entry file, as
-## `crates/pepper-driver/src/test_main.rs` adds it.
+## `pep-build --test`: the `main` a test build adds to the entry file.
 ##
 ## A test build defines the build option `TEST`, which keeps the `[Test]`
 ## functions every other build drops, loads the runtime's `testing` module

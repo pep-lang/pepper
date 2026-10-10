@@ -1,5 +1,4 @@
-## Generic calls and values whose type arguments nothing gave:
-## `type_arguments::check_type_arguments` in Pepper.
+## Generic calls and values whose type arguments nothing gave.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [error_at, location_of] from "common";

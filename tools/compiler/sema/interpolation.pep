@@ -1,4 +1,4 @@
-## Interpolated values: `pepper_sema::passes::interpolation` in Pepper. The
+## Interpolated values. The
 ## parser lowers `$"n = {n}"` to `"n = " + _pep_interpolate(n)`, which the
 ## runtime converts with `to_string(value)`: a number or `bool` overload, a
 ## concrete override `to_string<T>`, or the generic one, which calls
@@ -63,7 +63,7 @@ _base_of(ty: String): String {
 }
 
 ## Checks each value an interpolated string, a format specification or
-## `print` converts, as `interpolation::check_interpolations` does.
+## `print` converts.
 ##
 ## @param module the model
 ## @param state the passes' state, which takes the first error

@@ -1,6 +1,6 @@
-## What the passes share: diagnostics at model locations, the facts the
-## Rust model's methods give about its declarations and expressions, and
-## how types and names compare.
+## What the passes share: diagnostics at model locations, the facts about
+## the model's declarations and expressions, and how types and names
+## compare.
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
@@ -34,7 +34,7 @@ export error_at(message: String, loc: Loc): Diagnostic {
     return Diagnostic.error(message).at(location_of(loc));
 }
 
-## The facts `StructDef`'s methods give in the Rust model.
+## Facts about a struct definition.
 export extend StructDef {
     ## Returns whether this is a value type (`[Value]`): copied, not
     ## counted.
@@ -143,7 +143,7 @@ _expression_loc(e: Expression): Loc {
 }
 
 ## `ty` spelled one way, its integer types by their sized names (`i32` for
-## `int`), a pointer `__ptr<T>` among them: `check_function_types::canonical`.
+## `int`), a pointer `__ptr<T>` among them.
 _canonical(ty: TypeName): TypeName {
     var parsed = parse_type_string(ty.to_string());
     var name = parsed.name;
@@ -205,7 +205,7 @@ _compare_bytes(a: String, b: String): long {
 }
 
 ## `ty` as the programmer spells it: `int` rather than the `i32` a literal
-## is typed (`constraints::spelled`).
+## is typed.
 ##
 ## @param ty the type
 ## @returns its display spelling

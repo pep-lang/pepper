@@ -1,8 +1,7 @@
 ## Checking a program against declarations already checked (a checked
 ## unit's record, the runtime's first): their bodies are kept out of the
 ## passes, which walk bodies, until the checks that read callee bodies
-## (`check_confinement`, `share_string_literals`) run, then put back. Port
-## of `crates/pepper-sema/src/checked.rs`.
+## (`check_confinement`, `share_string_literals`) run, then put back.
 
 import digest;
 import io;

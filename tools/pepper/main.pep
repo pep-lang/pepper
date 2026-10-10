@@ -33,7 +33,7 @@
 #
 # Build it from the repository root, next to the compiler:
 #
-#     target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
+#     pep-build -I tools tools/pepper/main.pep -o target/bin/pepper
 
 import cli;
 import [Directory, File, Path] from io;

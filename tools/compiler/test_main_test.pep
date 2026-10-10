@@ -1,5 +1,5 @@
-# `pepc --test` adds the same test `main` to a test file as pep-build does
-# (`crates/pepper-driver/src/test_main.rs`).
+# `pep-build --test` adds a test `main` to a test file that registers and
+# runs its `[Test]` functions.
 
 import compiler.driver;
 import [Path] from io;

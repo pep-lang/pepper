@@ -1,5 +1,5 @@
-## Overloaded free functions and methods, named:
-## `pepper_sema::passes::overloads::name_overloads` in Pepper. Each file's
+## Overloaded free functions and methods, named.
+## Each file's
 ## same-name free functions are checked against one another, and the
 ## members of each set of two or more are renamed `name$1`, `name$2`, … in
 ## declaration order and recorded in `Module.overload_sets`; methods the
@@ -131,7 +131,7 @@ struct _Groups {
 }
 
 ## Checks each file's same-name free functions and renames the members of
-## every overload set, as `overloads::name_overloads` does.
+## every overload set.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -418,7 +418,7 @@ _name_method_overloads(module: Module, state: PassState): bool {
 ## Groups a struct's methods into overload sets as `group_methods` does,
 ## its generic methods included: `f(bool)` and `f<T>(T?)` are members of
 ## one set, which resolution chooses among as it does for free functions.
-## As `overloads::group_struct_methods` does.
+##
 ##
 ## @param st the struct, whose methods are renamed in place
 ## @param state the passes' state
@@ -433,7 +433,7 @@ export group_struct_methods(st: StructDef, state: PassState): Map<String, Array<
 ## Groups the methods of struct or trait `owner` into overload sets by set
 ## name, checks each set, and names the members of every set of two or
 ## more: a member already named (`get$1`) keeps its name and a new one
-## takes the next ordinal, as `overloads::group_methods` does.
+## takes the next ordinal.
 ##
 ## @param methods the methods, renamed in place
 ## @param owner the struct or trait
@@ -610,8 +610,7 @@ _overrides(module: Module, member: String, args: TypeName[], params: String[]): 
 
 ## Concrete specializations written as definitions override generic bases:
 ## each free function whose generic parameters are all concrete types
-## (`hash<String>`) becomes its specialization (`name<args>`), as
-## `gather_generics::concrete_overrides` does.
+## (`hash<String>`) becomes its specialization (`name<args>`).
 ##
 ## @param module the model, changed in place
 export concrete_overrides(module: Module) {

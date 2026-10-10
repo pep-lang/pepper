@@ -1,6 +1,5 @@
 ## What operators mean for typing: `BinaryOp::op_name`, `is_comparison`,
-## `is_overflow_test`, and the result types of `WeakOp` and `SimdOp`, from
-## `model.rs`, in Pepper.
+## `is_overflow_test`, and the result types of `WeakOp` and `SimdOp`.
 
 import [BinaryOp, SimdOp, TypeName, WeakOp] from "model";
 import [WEAK] from "type_name";

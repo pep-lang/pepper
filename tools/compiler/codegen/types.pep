@@ -1,5 +1,4 @@
-## The LLVM type of each Pepper type name: `crates/pepper-codegen/src/types.rs`
-## in Pepper.
+## The LLVM type of each Pepper type name.
 
 import llvm;
 import [is_pointer_name, parse_type_string, PassState, stored_as] from compiler.sema;
@@ -42,7 +41,7 @@ export struct Types {
     ## Tuple types: a literal struct of the elements' slot types.
     var tuple_types: HashMap<String, llvm.Type> = HashMap<String, llvm.Type>();
     ## Each value struct's name with every omitted type argument filled in,
-    ## for the names that differ (`value_structs::canonical`).
+    ## for the names that differ.
     var canonical: HashMap<String, String> = HashMap<String, String>();
 
     construct(context: llvm.Context, state: PassState) {

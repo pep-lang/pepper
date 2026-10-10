@@ -1,7 +1,6 @@
 ## SIMD vectors (#517): the built-in type `__simd<T, N>`, LLVM's `<N x T>`,
 ## and the `__simd_<op><V>(args)` intrinsics (`Expression::Simd`) that the
-## runtime's `simd.Vector<T, N>` and `simd.Mask<N>` are written with:
-## `crates/pepper-codegen/src/simd.rs` in Pepper.
+## runtime's `simd.Vector<T, N>` and `simd.Mask<N>` are written with.
 ##
 ## Each operation is one or a few LLVM instructions or vector intrinsics,
 ## picked by the lane type: signed or unsigned integer, or float. Nothing
@@ -203,7 +202,7 @@ _scalar_bits(ty: llvm.Type): uint {
 }
 
 extend Generator {
-    ## The shape of vector type `ty` (`simd_shape` in Rust, renamed: the free
+    ## The shape of vector type `ty` (not `simd_shape`: the free
     ## `simd_shape` of types.pep parses the name).
     simd_vector_shape(ty: TypeName): Result<_Shape> {
         var name = ty.to_string();

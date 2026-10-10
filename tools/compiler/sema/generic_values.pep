@@ -1,6 +1,5 @@
-## Generic functions and methods named as values without type arguments:
-## `type_arguments::bind_generic_function_values` and
-## `generic_methods::bind_generic_method_values` in Pepper. Where a function
+## Generic functions and methods named as values without type arguments.
+## Where a function
 ## type is expected, the expected type picks the specialization the value
 ## names.
 
@@ -166,8 +165,7 @@ export generic_function_search(module: Module, state: PassState): GenericFunctio
 }
 
 ## Names each generic function written without type arguments where a
-## function type is expected by the specialization that type picks, as
-## `type_arguments::bind_generic_function_values` does.
+## function type is expected by the specialization that type picks.
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state
@@ -425,7 +423,7 @@ export generic_method_search(module: Module): GenericMethodSearch? {
 
 ## Names each generic method written as a value without type arguments
 ## where a function type is expected by the specialization that type picks
-## (`b.map<long>`), as `generic_methods::bind_generic_method_values` does.
+## (`b.map<long>`).
 ##
 ## @param module the model, changed in place
 ## @param state the passes' state

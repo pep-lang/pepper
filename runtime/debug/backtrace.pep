@@ -281,7 +281,7 @@ _debug_is_internal(function: String): bool {
 }
 
 # The readable name of a symbol: `_P` names undo the compiler's escaping
-# (see `symbol_name` in pepper-codegen's partition.rs), then a name's file
+# (see `symbol_name` in tools/compiler/link/names.pep), then a name's file
 # (`helper@io/file`) and overload suffix (`panic$1`) are dropped:
 # `_PArray_3cint_3e.count` is `Array<int>.count`.
 _debug_demangle(symbol: String): String {

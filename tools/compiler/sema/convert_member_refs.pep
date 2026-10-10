@@ -214,8 +214,7 @@ struct _MemberRefs {
 
 extend _MemberRefs with Rewriter;
 
-## Rewrites the bare names in every struct's constructors and methods, as
-## `convert_member_refs::convert_member_refs` does, reporting a bare name
+## Rewrites the bare names in every struct's constructors and methods, reporting a bare name
 ## that names nothing.
 ##
 ## @param module the model, changed in place
