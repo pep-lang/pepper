@@ -49,6 +49,19 @@ runs every example. It
 cannot tell whether prose still matches the compiler, so that part is on
 the author.
 
+## Tests
+
+- The suite is the Pepper `[Test]` functions of `runtime/` and `tools/`,
+  run by `scripts/pepper-tests.sh` (see the **test** skill and
+  `docs/src/contributing/tests.md`). New tests go there.
+- A test of a tool's behaviour as a user sees it runs the tool that
+  `scripts/pepper-tests.sh` built, found on the PATH (see "Tests that run
+  the tools" in `docs/src/contributing/tests.md`); data files go in the
+  tool's `testdata/` folder.
+- `runtime/` and `tools/` stay formatted with `pep-fmt`:
+  `tools/pep-fmt/repository_test.pep` fails on a file that is not
+  (`pep-fmt -w <file>` fixes it).
+
 ## Response style
 
 - Keep responses as concise as possible.

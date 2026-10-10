@@ -28,7 +28,7 @@
 # folder holding zlib.lib, and is skipped without it.
 #
 # The tools' tests take the longest, mostly building their test programs,
-# so they start as soon as `pepper` and `pep-test` are built and run beside
+# so they start as soon as the tools they run are built and run beside
 # the runtime's; their output follows the runtime's (#662).
 set -euo pipefail
 
@@ -82,17 +82,21 @@ fi
 export PEPPER_RUNTIME="$root/runtime"
 
 # The Pepper tools, side by side: `pepper` and `pep-test` run the tests,
-# and `pep-doc check` reads every tool's `--help`. The tests wait only for
-# the first two; the rest are waited for at the end.
+# the tools' tests run `pepper`, `pep-test`, `pep-fmt`, `pep-profile` and
+# `pep-package` end to end (finding them on the PATH, below), and
+# `pep-doc check` reads every tool's `--help`. The tests wait for the
+# first five; the rest are waited for at the end.
 pids=()
 for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install pep-doc; do
   "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done
-wait "${pids[0]}"
-wait "${pids[1]}"
+for pid in "${pids[@]:0:5}"; do
+  wait "$pid"
+done
 pepper="$bin/pepper$exe"
-# The compiler's parser test (tools/compiler) runs pep-build itself.
+# The tests that run pep-build or a tool find it here, before any
+# installed toolchain's.
 export PATH="$bin:$PATH"
 
 failed=0
@@ -158,7 +162,7 @@ fi
 
 wait "$tools" || failed=1
 cat "$tools_log"
-for pid in "${pids[@]:2}"; do
+for pid in "${pids[@]:5}"; do
   wait "$pid"
 done
 

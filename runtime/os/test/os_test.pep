@@ -1,6 +1,7 @@
 # os: Duration arithmetic and text, the monotonic and wall clocks, and what
-# the module reports about the machine and the user. os_tests.rs keeps the
-# checks that need a variable the parent sets or the host's own name.
+# the module reports about the machine and the user. The checks that need a
+# variable the parent sets or the host's own name are in
+# tools/compiler/programs_test.pep.
 
 import io;
 import os;

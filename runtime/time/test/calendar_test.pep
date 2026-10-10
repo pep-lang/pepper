@@ -1,7 +1,8 @@
 # The time module's calendar: days from the epoch, weekdays, leap years,
 # month and year arithmetic, dates and times as text, offsets and RFC 3339,
 # strftime-style formatting, and HTTP dates. Time zones, which depend on
-# the process's environment, stay in the Rust suite (time_tests.rs).
+# the process's environment, are tested in whole programs by
+# tools/compiler/programs_test.pep.
 
 import os;
 import time;

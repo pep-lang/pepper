@@ -1,0 +1,18 @@
+{
+  "libs": [{"name": "program", "path": "/missing/program", "debugName": "program"}],
+  "threads": [{
+    "stringArray": ["main", "work"],
+    "samples": {"length": 3, "stack": [1, 1, 0], "weight": [1, 1, 1], "threadCPUDelta": [5, 990, 0]},
+    "stackTable": {"length": 2, "prefix": [null, 0], "frame": [0, 1]},
+    "frameTable": {"length": 2, "address": [-1, -1], "func": [0, 1]},
+    "funcTable": {"length": 2, "name": [0, 1], "resource": [-1, -1]},
+    "resourceTable": {"length": 0, "lib": []}
+  }, {
+    "stringArray": ["RtlUserThreadStart", "NtWaitForWorkViaWorkerFactory"],
+    "samples": {"length": 1, "stack": [1], "weight": [767], "threadCPUDelta": [0]},
+    "stackTable": {"length": 2, "prefix": [null, 0], "frame": [0, 1]},
+    "frameTable": {"length": 2, "address": [-1, -1], "func": [0, 1]},
+    "funcTable": {"length": 2, "name": [0, 1], "resource": [-1, -1]},
+    "resourceTable": {"length": 0, "lib": []}
+  }]
+}

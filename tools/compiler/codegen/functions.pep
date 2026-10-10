@@ -197,7 +197,9 @@ extend Generator {
             # in each part that uses it.
             bool synthesized = method.name.starts_with("__") and method.owner.is_none() and method.loc == st.loc;
             if (!synthesized) {
-                own_function(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
+                own_function(
+                    mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner
+                );
             }
             functions[mangled] = fn_value;
             var param_names = Array<String>();

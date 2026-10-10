@@ -1,0 +1,7 @@
+{
+  "string_table": ["main", "Pwork_40main", "work"],
+  "data": [{"debug_name": "program", "symbol_table": [
+    {"rva": 4000, "size": 200, "symbol": 0},
+    {"rva": 8200, "size": 50, "symbol": 1, "frames": [{"function": 2}]}
+  ]}]
+}

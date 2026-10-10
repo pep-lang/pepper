@@ -292,9 +292,11 @@ main(args: String[]): int {
             for (var k in 1..args.count) {
                 worker_args.append(args[k]);
             }
-            var folder = build_dir.is_value()
-                ? Path(build_dir.value())
-                : (project.value().dir.is_value() ? project.value().dir.value() : _here()).join(Path(".pep")).join(Path("build"));
+            var folder = build_dir.is_value() ?
+                Path(build_dir.value()) :
+                (project.value().dir.is_value() ?
+                    project.value().dir.value() :
+                    _here()).join(Path(".pep")).join(Path("build"));
             early_worker = driver.start_layer_worker(worker_args, folder);
         }
         var program = link.load_program(entry, setup);

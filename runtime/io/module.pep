@@ -8,7 +8,7 @@
 ## [`IoError`](io-types.md#ioerror).
 ##
 ## - [Path](io-path.md): building, splitting, and inspecting paths
-## - [File](io-file.md): opening, reading, and writing files, and whole-file helpers
+## - [File](io-file.md): opening, reading, writing, and locking files, and whole-file helpers
 ## - [Directory](io-directory.md): listing, creating, and removing directories
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
@@ -36,6 +36,9 @@
 import "address";
 import "directory";
 import "file";
+import "lock_posix";
+import "lock_wasi";
+import "lock_windows";
 import "memory";
 import "path";
 import "print";

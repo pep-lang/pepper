@@ -86,6 +86,11 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
 ## not. With `pep-package` beside the compiler or on the PATH, it fetches
 ## (and locks); without it, git checks out each missing locked package.
 ##
+## Builds run side by side (`pepper test` builds every test program at
+## once), and each would fetch into the same `.partial` folders: one at a
+## time fetches, holding an exclusive lock on `.pep/fetch.lock`, and the
+## rest find the packages there afterwards.
+##
 ## @param entry the file being built
 ## @returns nothing, or why fetching failed
 export fetch_dependencies(entry: Path): Result<void, String> {
@@ -97,18 +102,57 @@ export fetch_dependencies(entry: Path): Result<void, String> {
     if (manifest.is_err()) {
         return Result<void, String>.ok();
     }
-    var locked = link.read_lock(project.value().join(Path(link.LOCK_FILE)));
-    if (locked.is_err()) {
-        return Result<void, String>.err(locked.error());
+    var needed = _needs_fetch(project.value(), manifest.value());
+    if (needed.is_err()) {
+        return Result<void, String>.err(needed.error());
     }
-    var missing = Array<link.LockedPackage>();
+    if (needed.value().is_empty()) {
+        return Result<void, String>.ok();
+    }
+    var lock_dir = project.value().join(Path(".pep"));
+    var created = Directory.create_all(lock_dir);
+    if (created.is_err()) {
+        return Result<void, String>.err($"cannot create {lock_dir}: {created.error().message}");
+    }
+    var lock_path = lock_dir.join(Path("fetch.lock"));
+    var opened = io.OpenOptions().write(true).create(true).open(lock_path);
+    if (opened.is_err()) {
+        return Result<void, String>.err($"cannot open {lock_path}: {opened.error().message}");
+    }
+    var lock = opened.value();
+    var locked = lock.lock();
+    if (locked.is_err()) {
+        return Result<void, String>.err($"cannot lock {lock_dir}: {locked.error().message}");
+    }
+    var fetched = _fetch_locked(project.value(), manifest.value());
+    lock.close();
+    return fetched;
+}
+
+## What a project lacks: the locked packages missing from `.pep/deps`, and
+## whether `pep.toml` names a dependency `pep.lock` does not list.
+struct _Missing {
+    var packages: link.LockedPackage[] = Array<link.LockedPackage>();
+    var unlocked: bool = false;
+
+    is_empty(): bool {
+        return packages.is_empty and !unlocked;
+    }
+}
+
+## What `project`, whose manifest is `manifest`, lacks, read afresh.
+_needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
+    var locked = link.read_lock(project.join(Path(link.LOCK_FILE)));
+    if (locked.is_err()) {
+        return Result<_Missing, String>.err(locked.error());
+    }
+    var missing = _Missing();
     for (var package in locked.value()) {
-        if (!link.package_directory(project.value(), package.host, package.repository).is_directory()) {
-            missing.append(package);
+        if (!link.package_directory(project, package.host, package.repository).is_directory()) {
+            missing.packages.append(package);
         }
     }
-    var unlocked = false;
-    for (var d in manifest.value().dependencies) {
+    for (var d in manifest.dependencies) {
         var source = d.locked_source();
         if (!source.is_value()) {
             continue;
@@ -119,19 +163,31 @@ export fetch_dependencies(entry: Path): Result<void, String> {
                 is_locked = true;
             }
         }
-        if (!is_locked and !d.directory(project.value(), project.value()).is_directory()) {
-            unlocked = true;
+        if (!is_locked and !d.directory(project, project).is_directory()) {
+            missing.unlocked = true;
         }
     }
-    if (missing.is_empty and !unlocked) {
+    return Result<_Missing, String>.ok(missing);
+}
+
+## Fetches what `project` lacks, holding the fetch lock: another build may
+## have fetched it while this one waited.
+_fetch_locked(project: Path, manifest: link.Manifest): Result<void, String> {
+    var needed = _needs_fetch(project, manifest);
+    if (needed.is_err()) {
+        return Result<void, String>.err(needed.error());
+    }
+    if (needed.value().is_empty()) {
         return Result<void, String>.ok();
     }
+    var missing = needed.value().packages;
+    var unlocked = needed.value().unlocked;
     var tool = process.find_companion("pep-package");
     if (tool.is_value()) {
         var ran = process
             .Command(tool.value().to_string())
             .argument("-C")
-            .argument(project.value().to_string())
+            .argument(project.to_string())
             .argument("fetch")
             .run();
         if (ran.is_err()) {
@@ -140,9 +196,9 @@ export fetch_dependencies(entry: Path): Result<void, String> {
         if (!ran.value().status.success()) {
             # What pep-package said names the dependency and git's error.
             var said = (ran.value().stderr + ran.value().stdout).trim();
-            var manifest_path = project.value().join(Path(link.MANIFEST_FILE));
+            var manifest_path = project.join(Path(link.MANIFEST_FILE));
             return Result<void, String>.err(
-                $"fetching the dependencies of {manifest_path} failed ({tool.value()} -C {project.value()} fetch exited with {ran.value().status.to_string()})"
+                $"fetching the dependencies of {manifest_path} failed ({tool.value()} -C {project} fetch exited with {ran.value().status.to_string()})"
                     + (said.is_empty ? "" : $":\n{said}")
             );
         }
@@ -150,11 +206,11 @@ export fetch_dependencies(entry: Path): Result<void, String> {
     }
     if (unlocked) {
         return Result<void, String>.err(
-            $"the dependencies in {project.value().join(Path(link.MANIFEST_FILE))} are not fetched; run 'pepper package fetch'"
+            $"the dependencies in {project.join(Path(link.MANIFEST_FILE))} are not fetched; run 'pepper package fetch'"
         );
     }
     for (var package in missing) {
-        var checked = _check_out(project.value(), package);
+        var checked = _check_out(project, package);
         if (checked.is_err()) {
             return checked;
         }

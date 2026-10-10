@@ -1,0 +1,11 @@
+{
+  "libs": [{"name": "program", "path": "/missing/program", "debugName": "program"}],
+  "threads": [{
+    "stringArray": ["0x1000", "0x2010", "0x9999"],
+    "samples": {"length": 3, "stack": [2, 1, 2], "weight": null},
+    "stackTable": {"length": 3, "prefix": [null, 0, 1], "frame": [0, 1, 2]},
+    "frameTable": {"length": 3, "address": [4096, 8208, 39321], "func": [0, 1, 2]},
+    "funcTable": {"length": 3, "name": [0, 1, 2], "resource": [0, 0, 0]},
+    "resourceTable": {"length": 1, "lib": [0]}
+  }]
+}

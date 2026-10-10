@@ -12,10 +12,11 @@ import archive;
 import compress;
 import digest;
 import http;
-import [Directory, File, Path] from io;
+import [File, Path] from io;
 import io;
 import os;
 import "git";
+import "tree";
 
 # The file in the unpacked package `directory` naming the commit it holds,
 # since an archive has no `.git` to say so.
@@ -222,11 +223,14 @@ export fetch_archive(
     # its place.
     var partial = Path(directory.to_string() + ".partial");
     if (partial.exists()) {
-        Directory.remove_all(partial);
+        var cleared = remove_tree(partial);
+        if (cleared.is_err()) {
+            return Result<String>.Err($"cannot remove {partial.to_string()}: {cleared.error().message}");
+        }
     }
     var extracted = archive.TarReader(io.ByteReader(tar.value())).extract(partial, strip_components = 1);
     if (extracted.is_err()) {
-        Directory.remove_all(partial);
+        remove_tree(partial);
         return Result<String>.Err($"cannot unpack {url}: {extracted.error().message}");
     }
     var marked = File.write_text(_commit_file(partial), commit + "\n");
@@ -234,7 +238,10 @@ export fetch_archive(
         return Result<String>.Err($"cannot write {_commit_file(partial).to_string()}: {marked.error().message}");
     }
     if (directory.exists()) {
-        Directory.remove_all(directory);
+        var removed = remove_tree(directory);
+        if (removed.is_err()) {
+            return Result<String>.Err($"cannot remove {directory.to_string()}: {removed.error().message}");
+        }
     }
     var moved = File.rename(partial, directory);
     if (moved.is_err()) {

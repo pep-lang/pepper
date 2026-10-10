@@ -259,8 +259,12 @@ tool_versions_are_held_to_the_version_file() {
     for (var tool in ["a", "b", "c"]) {
         Directory.create_all(folder.path.join("tools").join(tool));
     }
-    File.write_text(folder.path.join("tools").join("a").join("main.pep"), "\nversion(): String {\n    return \"1.2.3\";\n}\n");
-    File.write_text(folder.path.join("tools").join("b").join("main.pep"), "\nversion(): String {\n    return \"1.2.2\";\n}\n");
+    File.write_text(
+        folder.path.join("tools").join("a").join("main.pep"), "\nversion(): String {\n    return \"1.2.3\";\n}\n"
+    );
+    File.write_text(
+        folder.path.join("tools").join("b").join("main.pep"), "\nversion(): String {\n    return \"1.2.2\";\n}\n"
+    );
     # A tool without a version() is not checked.
     File.write_text(folder.path.join("tools").join("c").join("main.pep"), "main(): int { return 0; }\n");
     var stale = stale_versions(folder.path).value();

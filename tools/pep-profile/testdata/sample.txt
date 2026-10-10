@@ -1,0 +1,12 @@
+Analysis of sampling program (pid 4242) every 1 millisecond
+Process:         program [4242]
+
+Call graph:
+    10 Thread_1   DispatchQueue_1: com.apple.main-thread  (serial)
+      10 start  (in dyld) + 1942  [0x18bd8b154]
+        10 main  (in program) + 120  [0x100003f2f]  main.pep:26
+          6 _Pwork_40main  (in program) + 40  [0x100003e00]  main.pep:17
+          + 4 _PArray_3cint_3e.count  (in program) + 8  [0x100003d00]  array.pep:9
+          3 _pep_malloc  (in program) + 12  [0x100003c00]
+
+Total number in stack (recursive counted multiple times):

@@ -1,5 +1,5 @@
 # Files and directories: writing and reading bytes and text, OpenOptions,
-# seeking, set_length, metadata, directories, copy, rename and remove, the
+# seeking, set_length, metadata, whole-file locks, directories, copy, rename and remove, the
 # error kinds each reports, a File closing its handle on last release, the
 # io enums (ErrorKind, SeekFrom, FileType, StdStream), streaming a directory
 # and a file's lines.
@@ -123,6 +123,46 @@ open_options_append_create_new_and_truncate() {
     expect_equal(truncated.value().metadata().value().size, 0);
     truncated.value().close();
     expect_equal(text(t), "");
+}
+
+[Test]
+a_lock_excludes_other_files_until_released() {
+    var folder = TempFolder("a_lock_excludes_other_files_until_released");
+    var path = folder.path.join("fetch.lock");
+    var first = OpenOptions().write(true).create(true).open(path).value();
+    var second = OpenOptions().write(true).create(true).open(path).value();
+
+    # An exclusive lock keeps out every other lock, shared or exclusive.
+    expect_true(first.lock().is_ok());
+    expect_false(second.try_lock().value());
+    expect_false(second.try_lock_shared().value());
+
+    # Released, the other File takes it.
+    expect_true(first.unlock().is_ok());
+    expect_true(second.try_lock().value());
+    expect_false(first.try_lock_shared().value());
+    expect_true(second.unlock().is_ok());
+
+    # Shared locks admit each other but not an exclusive one.
+    expect_true(first.lock_shared().is_ok());
+    expect_true(second.try_lock_shared().value());
+    expect_false(OpenOptions().write(true).open(path).value().try_lock().value());
+    expect_true(first.unlock().is_ok());
+    expect_true(second.unlock().is_ok());
+
+    # Unlocking a File that holds no lock is fine.
+    expect_true(second.unlock().is_ok());
+
+    # Closing a File releases its lock.
+    expect_true(first.try_lock().value());
+    expect_true(first.close().is_ok());
+    expect_true(second.try_lock().value());
+    expect_true(second.close().is_ok());
+
+    # A closed File has nothing to lock.
+    expect_true(first.lock().is_err());
+    expect_true(first.try_lock().is_err());
+    expect_true(first.unlock().is_err());
 }
 
 [Test]

@@ -1256,6 +1256,116 @@ On Windows the File must have been opened with write access.
 **Returns**
 - an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error
 
+#### lock
+
+```pepper
+lock(): IoResult<void>
+```
+
+Takes an exclusive advisory lock on the whole file, waiting until no
+other holder has a lock on it, shared or exclusive. Modeled on Rust's
+`File::lock`.
+
+The lock belongs to this File: another File opened on the same path
+(in this process or another) contends with it, and it is released by
+`unlock`, by `close`, or when the File is destroyed. Taking a lock
+while this File already holds one is platform-defined, as in Rust:
+POSIX converts the lock, Windows may wait forever. The lock is
+advisory on POSIX (`flock(LOCK_EX)`): it binds only those who also
+lock. On Windows (`LockFileEx`) it also stops other handles from
+reading or writing the file while held. The wait blocks the calling
+thread, also inside a task. WASI has no file locks.
+
+**Returns**
+- an Ok result once the lock is held; an error when the File is closed, on WASI, or another platform error
+
+**See also**
+- `try_lock`
+- `unlock`
+
+**Example**
+```pepper
+var f = OpenOptions().write(true).create(true).open(Path(".pep/fetch.lock")).value();
+if (f.lock().is_ok()) {
+    # ... work no other locker does at the same time ...
+    f.unlock();
+}
+```
+
+#### lock_shared
+
+```pepper
+lock_shared(): IoResult<void>
+```
+
+Takes a shared advisory lock on the whole file, waiting until no
+other holder has an exclusive lock on it. Any number of Files can
+hold a shared lock at once. Modeled on Rust's `File::lock_shared`;
+otherwise as `lock` (`flock(LOCK_SH)` on POSIX, `LockFileEx` without
+`LOCKFILE_EXCLUSIVE_LOCK` on Windows).
+
+**Returns**
+- an Ok result once the lock is held; an error as for `lock`
+
+**See also**
+- `lock`
+
+#### try_lock
+
+```pepper
+try_lock(): IoResult<bool>
+```
+
+Takes an exclusive advisory lock on the whole file if no other
+holder has a lock on it, without waiting. Modeled on Rust's
+`File::try_lock`; otherwise as `lock`.
+
+**Returns**
+- true when the lock is now held, false when another holder has a lock on the file (Rust's `TryLockError::WouldBlock`); an error as for `lock`
+
+**See also**
+- `lock`
+
+**Example**
+```pepper
+var held = f.try_lock();
+if (held.is_ok() && !held.value()) {
+    print("another process holds the lock\n");
+}
+```
+
+#### try_lock_shared
+
+```pepper
+try_lock_shared(): IoResult<bool>
+```
+
+Takes a shared advisory lock on the whole file if no other holder
+has an exclusive lock on it, without waiting. Modeled on Rust's
+`File::try_lock_shared`; otherwise as `lock_shared`.
+
+**Returns**
+- true when the lock is now held, false when another holder has an exclusive lock on the file; an error as for `lock`
+
+**See also**
+- `lock_shared`
+
+#### unlock
+
+```pepper
+unlock(): IoResult<void>
+```
+
+Releases the lock this File holds, shared or exclusive. Releasing a
+File that holds none is not an error. Closing or destroying the File
+releases its lock too. Modeled on Rust's `File::unlock`.
+
+**Returns**
+- an Ok result once the lock is released; an error when the File is closed, on WASI, or another platform error
+
+**See also**
+- `lock`
+
 #### metadata
 
 ```pepper

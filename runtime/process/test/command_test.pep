@@ -1,7 +1,7 @@
 # process: a Command whose program cannot start reports why, both when it
-# runs as a child and when it would replace this process. process_tests.rs
-# keeps the checks that need a whole program: its arguments, its exit code,
-# and children that are copies of it.
+# runs as a child and when it would replace this process. The checks that
+# need a whole program (its arguments, its exit code, and children that are
+# copies of it) are in tools/compiler/programs_test.pep.
 
 import io;
 import os;
@@ -37,7 +37,8 @@ starts_a_child_in_a_folder_by_fork_and_exec() {
     }
     var forced = os.environment("PEPPER_PROCESS_FORK_SPAWN");
     if (!forced.is_value()) {
-        var copy = process.Command(process.executable_path().value().to_string())
+        var copy = process
+            .Command(process.executable_path().value().to_string())
             .argument("--run")
             .argument("process/test/command_test.pep::starts_a_child_in_a_folder_by_fork_and_exec")
             .environment("PEPPER_PROCESS_FORK_SPAWN", "1")

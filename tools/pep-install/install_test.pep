@@ -7,9 +7,9 @@ import archive;
 import async;
 import compress;
 import digest;
-import http;
 import [Directory, File, Path] from io;
 import io;
+import [serve_folder] from tool_testing.server;
 import tls;
 import toolchain;
 import "commands";
@@ -235,33 +235,6 @@ toolchain_archive(version: String): u8[] {
     tar.finish().value();
     gzip.finish().value();
     return packed.bytes;
-}
-
-# Serves the files of the folder `root`, as GitHub serves the releases and
-# their assets, and returns the URL of that folder. The URL's path is the
-# folder's own, since the handler, which runs on any worker, can capture
-# nothing to say where it is. It stops when `async.run` ends.
-serve_folder(root: Path): String {
-    var server = http.Server.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
-    var port = server.local_address().value().port();
-    async.spawn<void>(
-        () => {
-            server.serve(
-                (request) => {
-                    var path = request.path();
-                    # `/C:/Users/...` on Windows.
-                    var file = toolchain.is_windows() ? path.substr(1, path.length) : path;
-                    var data = File.read_bytes(Path(file));
-                    if (data.is_err()) {
-                        return http.Response(404);
-                    }
-                    return http.Response(200).set_body(data.value());
-                }
-            );
-        }
-    );
-    var folder = root.to_string().replace("\\", "/");
-    return "http://127.0.0.1:" + to_string(port) + (folder.starts_with("/") ? "" : "/") + folder + "/";
 }
 
 # Puts the release `version` in `root`, an archive and its `.sha256`

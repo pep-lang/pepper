@@ -1,0 +1,37 @@
+helper(x: int): int {
+    return x * 2;
+}
+
+[Test]
+doubles() {
+    expect_equal(helper(2), 4);
+    expect_true(helper(1) == 2);
+    expect_false(helper(0) == 1);
+    expect_not_equal("a", "b");
+}
+
+[Test]
+doubles_wrongly() {
+    expect_equal(helper(2), 5);
+}
+
+[Test]
+[ShouldPanic("out of bounds")]
+reads_past_the_end() {
+    var numbers = Array<int>();
+    var value = numbers[0];
+}
+
+[Test]
+[ShouldPanic]
+returns_instead() {}
+
+[Test]
+spins() {
+    while (true) {}
+}
+
+main(): int {
+    print("the program's own main");
+    return 0;
+}

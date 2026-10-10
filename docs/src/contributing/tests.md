@@ -16,7 +16,7 @@ tests.
 | A module, `runtime/<module>/` | `runtime/<module>/test/<topic>_test.pep`, which imports the module |
 | A prelude file, `runtime/<name>.pep` | `runtime/test/<topic>_test.pep` |
 | A file's private functions | `[Test]` functions in that file itself |
-| A Pepper tool, `tools/<tool>/` | `tools/<tool>/<topic>_test.pep`, which imports the tool's files (`import "format";`) |
+| A Pepper tool, `tools/<tool>/` | `tools/<tool>/<topic>_test.pep`, which imports the tool's files (`import "format";`), or runs the built tool (see [Tests that run the tools](#tests-that-run-the-tools)) |
 
 A `test/` folder holds no `module.pep`, so no program that imports the
 module loads it. Its files are still files of the module, though: a test file
@@ -65,8 +65,9 @@ and runs `pepper test`:
   holding `zlib.lib`, and is skipped without it);
 - in `tools/`, with `-I .`, the tools' tests.
 
-The tools' run, the longest, starts as soon as `pepper` and `pep-test`
-are built and runs beside the runtime's runs; its output is printed after
+The tools' run, the longest, starts as soon as the tools its tests run
+(`pepper`, `pep-test`, `pep-fmt`, `pep-profile` and `pep-package`) are
+built, and runs beside the runtime's runs; its output is printed after
 theirs.
 
 Once `pepper` is built, run any part of them by hand:
@@ -103,6 +104,44 @@ its own repository. It points git at the aliases through `GIT_CONFIG_*` and
 `GIT_SSH_COMMAND` variables of the test step only. Without a secret (in a
 fork, say) the step says so in a notice, and the tests of the tool that
 uses that package fail when they fetch it.
+
+## Tests that run the tools
+
+Some tests run programs rather than call functions: `pep-build` on
+programs, and the Pepper tools on files and folders, checking their
+output and exit status as a user would see them.
+
+| Test | What it runs |
+| --- | --- |
+| `tools/compiler/corpus_test.pep` | `pep-build -I tests` on each `tests/<Name>/test.pep`, then the program from the repository's root, which must exit with 0. With `WASI_SDK_PATH` set and wasmtime on the PATH (or `WASMTIME` naming it), each again for `wasm32-wasip1` under wasmtime; it says it skipped otherwise. A new `tests/<Name>/test.pep` joins the run. |
+| `tools/compiler/programs_test.pep` | `pep-build` on the programs of `tools/compiler/testdata/`, each run with the arguments and environment it needs: `cli`'s `parse` and an `add_options` error, `os`'s environment and host, `time`'s zones (TZif files under `TZDIR`, `TZ`, the system's database), and `process`'s arguments, `exit`, `main`'s arguments, children that are copies of the program, and `exec`. |
+| `tools/pep-doc/examples_test.pep` | `pep-build` on every example of the book, then the example (see [Building this documentation](docs.md)). |
+| `tools/pep-fmt/repository_test.pep` | `format_source` in the test itself on every `.pep` file under `runtime/`, `tools/`, `tests/` and `docs/examples/`: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of `runtime/` and `tools/` are already formatted (`pep-fmt -w` fixes one that is not). |
+| `tools/pep-fmt/cli_test.pep` | `pep-fmt` on standard input and on files and folders (`--check`, `-w`), its syntax errors and usage errors. |
+| `tools/pepper/pepper_test.pep` | `pepper`, copied beside stand-in tools built from `tools/pepper/testdata/`; and every tool's `--version` against the version in each `tools/*/main.pep`. |
+| `tools/pep-test/pep_test_test.pep` | `pep-test` on test files it writes, from `tools/pep-test/testdata/` (named `.pep.txt` so that the suite's own run skips them). |
+| `tools/pep-package/package_test.pep` | `pep-package` and `pep-build` on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under `.pep/fetch.lock`; skipped without git. |
+| `tools/pep-profile/profile_test.pep` | `pep-profile` on the recordings in `tools/pep-profile/testdata/`, and on a real program when samply or a working perf is installed (skipped otherwise). |
+
+They find `pep-build` and the tools beside the test program or on the
+PATH (`process.find_companion`), where `scripts/pepper-tests.sh` puts the
+ones it builds from the checkout, so they test this checkout's tools. To
+run one by hand, put that folder first on the PATH (after a run of the
+script, or with the tools built there as the script builds them):
+
+```bash
+export PATH="$PWD/target/pepper-tests/bin:$PATH"
+cd tools && pepper test -I . pep-fmt/cli_test.pep
+```
+
+The `tool_testing` module (`tools/tool_testing/`) holds what they share:
+`tool(name)` finds a tool, `run` and `run_with_input` run a
+`process.Command` and read its output with Windows' line ends made
+`\n`, `build_program` builds a program with `pep-build`, and
+`expect_exit`, `expect_contains`, `expect_starts_with` and
+`expect_ends_with` show the program's output when they fail.
+`tool_testing.server`'s `serve_folder` serves a folder over HTTP on
+loopback, for a test that downloads (`pep-install`, `pep-package`).
 
 ## Leaks fail a test
 

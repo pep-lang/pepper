@@ -1,6 +1,9 @@
 # OpenOptions, Metadata, File.
 
 import text;
+import "lock_posix";
+import "lock_wasi";
+import "lock_windows";
 import "path";
 import "sys_posix";
 import "sys_windows";
@@ -879,6 +882,109 @@ export struct File {
             return c;
         }
         return _io_sys_sync(_handle);
+    }
+
+    ## Takes an exclusive advisory lock on the whole file, waiting until no
+    ## other holder has a lock on it, shared or exclusive. Modeled on Rust's
+    ## `File::lock`.
+    ##
+    ## The lock belongs to this File: another File opened on the same path
+    ## (in this process or another) contends with it, and it is released by
+    ## `unlock`, by `close`, or when the File is destroyed. Taking a lock
+    ## while this File already holds one is platform-defined, as in Rust:
+    ## POSIX converts the lock, Windows may wait forever. The lock is
+    ## advisory on POSIX (`flock(LOCK_EX)`): it binds only those who also
+    ## lock. On Windows (`LockFileEx`) it also stops other handles from
+    ## reading or writing the file while held. The wait blocks the calling
+    ## thread, also inside a task. WASI has no file locks.
+    ##
+    ## @returns an Ok result once the lock is held; an error when the File
+    ##   is closed, on WASI, or another platform error
+    ## @see try_lock
+    ## @see unlock
+    ## @example
+    ##     var f = OpenOptions().write(true).create(true).open(Path(".pep/fetch.lock")).value();
+    ##     if (f.lock().is_ok()) {
+    ##         # ... work no other locker does at the same time ...
+    ##         f.unlock();
+    ##     }
+    lock(): IoResult<void> {
+        return _lock(true);
+    }
+
+    ## Takes a shared advisory lock on the whole file, waiting until no
+    ## other holder has an exclusive lock on it. Any number of Files can
+    ## hold a shared lock at once. Modeled on Rust's `File::lock_shared`;
+    ## otherwise as `lock` (`flock(LOCK_SH)` on POSIX, `LockFileEx` without
+    ## `LOCKFILE_EXCLUSIVE_LOCK` on Windows).
+    ##
+    ## @returns an Ok result once the lock is held; an error as for `lock`
+    ## @see lock
+    lock_shared(): IoResult<void> {
+        return _lock(false);
+    }
+
+    ## Takes an exclusive advisory lock on the whole file if no other
+    ## holder has a lock on it, without waiting. Modeled on Rust's
+    ## `File::try_lock`; otherwise as `lock`.
+    ##
+    ## @returns true when the lock is now held, false when another holder
+    ##   has a lock on the file (Rust's `TryLockError::WouldBlock`); an error
+    ##   as for `lock`
+    ## @see lock
+    ## @example
+    ##     var held = f.try_lock();
+    ##     if (held.is_ok() && !held.value()) {
+    ##         print("another process holds the lock\n");
+    ##     }
+    try_lock(): IoResult<bool> {
+        return _try_lock(true);
+    }
+
+    ## Takes a shared advisory lock on the whole file if no other holder
+    ## has an exclusive lock on it, without waiting. Modeled on Rust's
+    ## `File::try_lock_shared`; otherwise as `lock_shared`.
+    ##
+    ## @returns true when the lock is now held, false when another holder
+    ##   has an exclusive lock on the file; an error as for `lock`
+    ## @see lock_shared
+    try_lock_shared(): IoResult<bool> {
+        return _try_lock(false);
+    }
+
+    ## Releases the lock this File holds, shared or exclusive. Releasing a
+    ## File that holds none is not an error. Closing or destroying the File
+    ## releases its lock too. Modeled on Rust's `File::unlock`.
+    ##
+    ## @returns an Ok result once the lock is released; an error when the
+    ##   File is closed, on WASI, or another platform error
+    ## @see lock
+    unlock(): IoResult<void> {
+        var c = check_open();
+        if (c.is_err()) {
+            return c;
+        }
+        return _io_sys_unlock(_handle);
+    }
+
+    _lock(exclusive: bool): IoResult<void> {
+        var c = check_open();
+        if (c.is_err()) {
+            return c;
+        }
+        var r = _io_sys_lock(_handle, exclusive, true);
+        if (r.is_err()) {
+            return IoResult<void>.err(r.error());
+        }
+        return _io_ok_void();
+    }
+
+    _try_lock(exclusive: bool): IoResult<bool> {
+        var c = check_open();
+        if (c.is_err()) {
+            return IoResult<bool>.err(c.error());
+        }
+        return _io_sys_lock(_handle, exclusive, false);
     }
 
     ## Queries the metadata of the open file itself (the target, when it

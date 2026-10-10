@@ -1,0 +1,15 @@
+	    5598c6d7a1af _PArray_3cint_3e.count+0x3f (/missing/program)
+	    5598c6d7a59c _Pwork_40main+0x1fc (/missing/program)
+	    5598c6d7a59c main+0x10 (/missing/program)
+	    7f9ac822a28b __libc_start_main@@GLIBC_2.34+0x8b (/usr/lib/libc.so.6)
+
+	    5598c6d7a361 _P____closure__3_40geo_2fshapes.____call+0x11 (/missing/program)
+	    5598c6d7a59c main+0x10 (/missing/program)
+	    7f9ac822a28b __libc_start_main@@GLIBC_2.34+0x8b (/usr/lib/libc.so.6)
+
+	    5598c6d7a59c _Pwork_40main+0x1fc (/missing/program)
+	    5598c6d7a59c main+0x10 (/missing/program)
+	    7f9ac822a28b __libc_start_main@@GLIBC_2.34+0x8b (/usr/lib/libc.so.6)
+
+	    ffffffff8123 [unknown] ([unknown])
+	    5598c6d7a59c _Parea_40geo_2fshapes_242+0x4 (/missing/program)

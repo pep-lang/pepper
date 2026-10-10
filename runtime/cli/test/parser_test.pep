@@ -1,7 +1,7 @@
 # The cli module's Parser: options, flags and positional arguments, every
 # spelling of a value, clang-style errors with suggestions, the help and
 # version text, subcommands, and `closest`. `parse`, which prints and exits,
-# is tested by the Rust suite (cli_tests.rs).
+# is tested in a whole program by tools/compiler/programs_test.pep.
 
 import cli;
 

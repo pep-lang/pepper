@@ -748,7 +748,47 @@ _m_Module_read(input: RecordIn): Module {
     }
     var _f235 = _v230;
     var _f236 = input.flag();
-    return Module(_f104, _f107, _f110, _f113, _f116, _f119, _f122, _f125, _f128, _f131, _f134, _f137, _f140, _f143, _f146, _f149, _f155, _f158, _f161, _f164, _f170, _f178, _f187, _f188, _f191, _f194, _f199, _f204, _f207, _f210, _f214, _f217, _f218, _f219, _f223, _f224, _f229, _f235, _f236);
+    return Module(
+        _f104,
+        _f107,
+        _f110,
+        _f113,
+        _f116,
+        _f119,
+        _f122,
+        _f125,
+        _f128,
+        _f131,
+        _f134,
+        _f137,
+        _f140,
+        _f143,
+        _f146,
+        _f149,
+        _f155,
+        _f158,
+        _f161,
+        _f164,
+        _f170,
+        _f178,
+        _f187,
+        _f188,
+        _f191,
+        _f194,
+        _f199,
+        _f204,
+        _f207,
+        _f210,
+        _f214,
+        _f217,
+        _f218,
+        _f219,
+        _f223,
+        _f224,
+        _f229,
+        _f235,
+        _f236
+    );
 }
 
 _m_SpecRequest_write(out: RecordOut, value: SpecRequest) {
@@ -1024,7 +1064,9 @@ _m_FunctionDef_read_with(input: RecordIn, lazy: bool): FunctionDef {
     }
     var _f313 = _o310;
     var _f314 = input.loc();
-    var _function = FunctionDef(_f292, _f293, _f296, _f299, _f300, _f302, _f303, _f304, _f305, _f308, _f309, _f313, _f314);
+    var _function = FunctionDef(
+        _f292, _f293, _f296, _f299, _f300, _f302, _f303, _f304, _f305, _f308, _f309, _f313, _f314
+    );
     if (_pending.is_value()) {
         if (_function.is_generic_func or _function.generic_params.count > 0) {
             _function.body = Optional<Block>.Value(decode_body(_pending.value()));
@@ -6171,7 +6213,9 @@ _m_StructDef_read_with(input: RecordIn, lazy: bool): StructDef {
         _o1133 = Optional<Array<EnumCaseDef>>.Value(_v1134);
     }
     var _f1136 = _o1133;
-    return StructDef(_f1106, _f1107, _f1110, _f1113, _f1116, _f1119, _f1122, _f1123, _f1124, _f1125, _f1128, _f1131, _f1132, _f1136);
+    return StructDef(
+        _f1106, _f1107, _f1110, _f1113, _f1116, _f1119, _f1122, _f1123, _f1124, _f1125, _f1128, _f1131, _f1132, _f1136
+    );
 }
 
 _m_EnumCaseDef_write(out: RecordOut, value: EnumCaseDef) {
@@ -6689,14 +6733,18 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     var _news1505 = Array<ulong>();
     var _patches1506 = Array<(ulong, ulong)>();
     for (var _i1507 in 0..value.structs.count) {
-        if (_bj1503 < _seq1502.count and value.structs[_i1507] === _seq1502[_bj1503] and !value.extended_checked.contains(value.structs[_i1507].name)) {
+        if (_bj1503 < _seq1502.count
+            and value.structs[_i1507] === _seq1502[_bj1503]
+            and !value.extended_checked.contains(value.structs[_i1507].name)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_StructDef_write(scratch, value.structs[_i1507]);
                 base.verify_same("s", _bj1503, scratch, value.structs[_i1507].name);
             }
             _bj1503 += 1;
-        } else if (_bj1503 < _seq1502.count and !(value.structs[_i1507] === _seq1502[_bj1503]) and _same_m_StructDef(value.structs[_i1507], _seq1502[_bj1503], base)) {
+        } else if (_bj1503 < _seq1502.count
+            and !(value.structs[_i1507] === _seq1502[_bj1503])
+            and _same_m_StructDef(value.structs[_i1507], _seq1502[_bj1503], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_StructDef_write(scratch, value.structs[_i1507]);
@@ -6760,7 +6808,9 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             var _slot = _slots1504.try_get(_item1500.name);
             long named = _slot.is_value() ? _slot.value() : -1;
             long at = -1;
-            if (named >= 0 and _seq1502[named as ulong] === _item1500 and !value.extended_checked.contains(_item1500.name)) {
+            if (named >= 0
+                and _seq1502[named as ulong] === _item1500
+                and !value.extended_checked.contains(_item1500.name)) {
                 at = named;
             }
             ulong _before = out.values.count;
@@ -8521,14 +8571,18 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
     var _news2217 = Array<ulong>();
     var _patches2218 = Array<(ulong, ulong)>();
     for (var _i2219 in 0..value.templates.structs.count) {
-        if (_bj2215 < _seq2214.count and value.templates.structs[_i2219] === _seq2214[_bj2215] and !value.extended_checked.contains(value.templates.structs[_i2219].name)) {
+        if (_bj2215 < _seq2214.count
+            and value.templates.structs[_i2219] === _seq2214[_bj2215]
+            and !value.extended_checked.contains(value.templates.structs[_i2219].name)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_StructDef_write(scratch, value.templates.structs[_i2219]);
                 base.verify_same("t", _bj2215, scratch, value.templates.structs[_i2219].name);
             }
             _bj2215 += 1;
-        } else if (_bj2215 < _seq2214.count and !(value.templates.structs[_i2219] === _seq2214[_bj2215]) and _same_m_StructDef(value.templates.structs[_i2219], _seq2214[_bj2215], base)) {
+        } else if (_bj2215 < _seq2214.count
+            and !(value.templates.structs[_i2219] === _seq2214[_bj2215])
+            and _same_m_StructDef(value.templates.structs[_i2219], _seq2214[_bj2215], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_StructDef_write(scratch, value.templates.structs[_i2219]);
@@ -8592,7 +8646,9 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             var _slot = _slots2216.try_get(_item2212.name);
             long named = _slot.is_value() ? _slot.value() : -1;
             long at = -1;
-            if (named >= 0 and _seq2214[named as ulong] === _item2212 and !value.extended_checked.contains(_item2212.name)) {
+            if (named >= 0
+                and _seq2214[named as ulong] === _item2212
+                and !value.extended_checked.contains(_item2212.name)) {
                 at = named;
             }
             ulong _before = out.values.count;
@@ -8625,7 +8681,8 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 base.verify_same("tf", _bj2236, scratch);
             }
             _bj2236 += 1;
-        } else if (_bj2236 < _seq2235.count and _same_m_FunctionDef(value.templates.functions[_i2238], _seq2235[_bj2236], base)) {
+        } else if (_bj2236 < _seq2235.count
+            and _same_m_FunctionDef(value.templates.functions[_i2238], _seq2235[_bj2236], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.templates.functions[_i2238]);
@@ -10075,7 +10132,9 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
         for (var _ in 0.._n2223) {
             var _tag2224 = input.unsigned();
             if (_tag2224 & 1 == 1) {
-                _f2222.append(base.templates.structs[(_tag2224 >> 1) < base.templates.structs.count ? _tag2224 >> 1 : 0]);
+                _f2222.append(
+                    base.templates.structs[(_tag2224 >> 1) < base.templates.structs.count ? _tag2224 >> 1 : 0]
+                );
             } else if (_tag2224 == 2) {
                 var _was = base.templates.structs[input.unsigned()];
                 _f2222.append(_patch_t_read(input, _was));
@@ -10233,7 +10292,47 @@ _m_Module_read_delta(input: RecordIn, base: Module): Module {
         _f2331 = _v2339;
     }
     var _f2345 = input.flag();
-    return Module(_f1493, _f1510, _f1530, _f1549, _f1568, _f1587, _f1606, _f1625, _f1644, _f1663, _f1682, _f1694, _f1710, _f1729, _f1748, _f1767, _f1788, _f1817, _f1836, _f1849, _f1876, _f1923, _f2010, _f2036, _f2056, _f2082, _f2100, _f2126, _f2145, _f2158, _f2181, _f2205, _f2249, _f2250, _f2270, _f2279, _f2291, _f2331, _f2345);
+    return Module(
+        _f1493,
+        _f1510,
+        _f1530,
+        _f1549,
+        _f1568,
+        _f1587,
+        _f1606,
+        _f1625,
+        _f1644,
+        _f1663,
+        _f1682,
+        _f1694,
+        _f1710,
+        _f1729,
+        _f1748,
+        _f1767,
+        _f1788,
+        _f1817,
+        _f1836,
+        _f1849,
+        _f1876,
+        _f1923,
+        _f2010,
+        _f2036,
+        _f2056,
+        _f2082,
+        _f2100,
+        _f2126,
+        _f2145,
+        _f2158,
+        _f2181,
+        _f2205,
+        _f2249,
+        _f2250,
+        _f2270,
+        _f2279,
+        _f2291,
+        _f2331,
+        _f2345
+    );
 }
 
 _m_Module_index(value: Module, base: DeltaBase) {
@@ -10587,7 +10686,8 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"s.{slot}.generic_params", _bj2354, scratch);
             }
             _bj2354 += 1;
-        } else if (_bj2354 < _seq2353.count and _same_m_GenericParam(value.generic_params[_i2356], _seq2353[_bj2354], base)) {
+        } else if (_bj2354 < _seq2353.count
+            and _same_m_GenericParam(value.generic_params[_i2356], _seq2353[_bj2354], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_GenericParam_write(scratch, value.generic_params[_i2356]);
@@ -10627,7 +10727,8 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"s.{slot}.field_members", _bj2370, scratch);
             }
             _bj2370 += 1;
-        } else if (_bj2370 < _seq2369.count and _same_m_VariableDef(value.field_members[_i2372], _seq2369[_bj2370], base)) {
+        } else if (_bj2370 < _seq2369.count
+            and _same_m_VariableDef(value.field_members[_i2372], _seq2369[_bj2370], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_VariableDef_write(scratch, value.field_members[_i2372]);
@@ -10667,7 +10768,8 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"s.{slot}.method_members", _bj2386, scratch);
             }
             _bj2386 += 1;
-        } else if (_bj2386 < _seq2385.count and _same_m_FunctionDef(value.method_members[_i2388], _seq2385[_bj2386], base)) {
+        } else if (_bj2386 < _seq2385.count
+            and _same_m_FunctionDef(value.method_members[_i2388], _seq2385[_bj2386], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.method_members[_i2388]);
@@ -10707,7 +10809,8 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"s.{slot}.generic_methods", _bj2402, scratch);
             }
             _bj2402 += 1;
-        } else if (_bj2402 < _seq2401.count and _same_m_FunctionDef(value.generic_methods[_i2404], _seq2401[_bj2402], base)) {
+        } else if (_bj2402 < _seq2401.count
+            and _same_m_FunctionDef(value.generic_methods[_i2404], _seq2401[_bj2402], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.generic_methods[_i2404]);
@@ -10747,7 +10850,8 @@ _patch_s_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"s.{slot}.constructors", _bj2418, scratch);
             }
             _bj2418 += 1;
-        } else if (_bj2418 < _seq2417.count and _same_m_FunctionDef(value.constructors[_i2420], _seq2417[_bj2418], base)) {
+        } else if (_bj2418 < _seq2417.count
+            and _same_m_FunctionDef(value.constructors[_i2420], _seq2417[_bj2418], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.constructors[_i2420]);
@@ -11196,7 +11300,9 @@ _patch_s_read(input: RecordIn, was: StructDef): StructDef {
         _o2465 = Optional<Array<EnumCaseDef>>.Value(_v2466);
     }
     var _f2468 = _o2465;
-    return StructDef(_f2346, _f2347, _f2357, _f2373, _f2389, _f2405, _f2421, _f2428, _f2429, _f2430, _f2440, _f2456, _f2463, _f2468);
+    return StructDef(
+        _f2346, _f2347, _f2357, _f2373, _f2389, _f2405, _f2421, _f2428, _f2429, _f2430, _f2440, _f2456, _f2463, _f2468
+    );
 }
 
 _patch_s_index(value: StructDef, base: DeltaBase, slot: ulong) {
@@ -11279,7 +11385,8 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"t.{slot}.generic_params", _bj2477, scratch);
             }
             _bj2477 += 1;
-        } else if (_bj2477 < _seq2476.count and _same_m_GenericParam(value.generic_params[_i2479], _seq2476[_bj2477], base)) {
+        } else if (_bj2477 < _seq2476.count
+            and _same_m_GenericParam(value.generic_params[_i2479], _seq2476[_bj2477], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_GenericParam_write(scratch, value.generic_params[_i2479]);
@@ -11319,7 +11426,8 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"t.{slot}.field_members", _bj2493, scratch);
             }
             _bj2493 += 1;
-        } else if (_bj2493 < _seq2492.count and _same_m_VariableDef(value.field_members[_i2495], _seq2492[_bj2493], base)) {
+        } else if (_bj2493 < _seq2492.count
+            and _same_m_VariableDef(value.field_members[_i2495], _seq2492[_bj2493], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_VariableDef_write(scratch, value.field_members[_i2495]);
@@ -11359,7 +11467,8 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"t.{slot}.method_members", _bj2509, scratch);
             }
             _bj2509 += 1;
-        } else if (_bj2509 < _seq2508.count and _same_m_FunctionDef(value.method_members[_i2511], _seq2508[_bj2509], base)) {
+        } else if (_bj2509 < _seq2508.count
+            and _same_m_FunctionDef(value.method_members[_i2511], _seq2508[_bj2509], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.method_members[_i2511]);
@@ -11399,7 +11508,8 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"t.{slot}.generic_methods", _bj2525, scratch);
             }
             _bj2525 += 1;
-        } else if (_bj2525 < _seq2524.count and _same_m_FunctionDef(value.generic_methods[_i2527], _seq2524[_bj2525], base)) {
+        } else if (_bj2525 < _seq2524.count
+            and _same_m_FunctionDef(value.generic_methods[_i2527], _seq2524[_bj2525], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.generic_methods[_i2527]);
@@ -11439,7 +11549,8 @@ _patch_t_write(out: RecordOut, value: StructDef, base: DeltaBase, slot: ulong) {
                 base.verify_same($"t.{slot}.constructors", _bj2541, scratch);
             }
             _bj2541 += 1;
-        } else if (_bj2541 < _seq2540.count and _same_m_FunctionDef(value.constructors[_i2543], _seq2540[_bj2541], base)) {
+        } else if (_bj2541 < _seq2540.count
+            and _same_m_FunctionDef(value.constructors[_i2543], _seq2540[_bj2541], base)) {
             if (base.verifying) {
                 var scratch = base.scratch();
                 _m_FunctionDef_write(scratch, value.constructors[_i2543]);
@@ -11888,7 +11999,9 @@ _patch_t_read(input: RecordIn, was: StructDef): StructDef {
         _o2588 = Optional<Array<EnumCaseDef>>.Value(_v2589);
     }
     var _f2591 = _o2588;
-    return StructDef(_f2469, _f2470, _f2480, _f2496, _f2512, _f2528, _f2544, _f2551, _f2552, _f2553, _f2563, _f2579, _f2586, _f2591);
+    return StructDef(
+        _f2469, _f2470, _f2480, _f2496, _f2512, _f2528, _f2544, _f2551, _f2552, _f2553, _f2563, _f2579, _f2586, _f2591
+    );
 }
 
 _patch_t_index(value: StructDef, base: DeltaBase, slot: ulong) {
@@ -11958,7 +12071,22 @@ _patch_t_index(value: StructDef, base: DeltaBase, slot: ulong) {
 }
 
 _m_StructDef_shallow(value: StructDef): StructDef {
-    return StructDef(value.name, value.ty, value.generic_params.clone(), value.field_members.clone(), value.method_members.clone(), value.generic_methods.clone(), value.constructors.clone(), value.destructor, value.acquire, value.release, value.traits.clone(), value.attributes.clone(), value.loc, value.enum_cases);
+    return StructDef(
+        value.name,
+        value.ty,
+        value.generic_params.clone(),
+        value.field_members.clone(),
+        value.method_members.clone(),
+        value.generic_methods.clone(),
+        value.constructors.clone(),
+        value.destructor,
+        value.acquire,
+        value.release,
+        value.traits.clone(),
+        value.attributes.clone(),
+        value.loc,
+        value.enum_cases
+    );
 }
 
 # Whether `a`, not the base's element `b` itself, has the same record:
@@ -12020,7 +12148,6 @@ _same_m_VariableDef(a: VariableDef, b: VariableDef, base: DeltaBase): bool {
     _m_VariableDef_write(y, b);
     return base.hash_of(x) == base.hash_of(y);
 }
-
 
 _m_Module_interface_fields(value: Module, interface: bool): Array<(String, String)> {
     var found = Array<(String, String)>();

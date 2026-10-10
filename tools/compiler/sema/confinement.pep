@@ -19,9 +19,9 @@
 import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
-import os;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
+import os;
 import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
@@ -154,7 +154,9 @@ _verify_summaries(program: _Confinement) {
             same += 1;
         }
     }
-    io.File.stderr().write_all($"verify-summaries: {same} same, {missing} missing, {program.tentative.count} tentative\n");
+    io.File.stderr().write_all(
+        $"verify-summaries: {same} same, {missing} missing, {program.tentative.count} tentative\n"
+    );
 }
 
 # Summarizes what the checks need, then checks every function that may

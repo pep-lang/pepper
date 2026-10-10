@@ -163,7 +163,6 @@ _in_prelude(program: Program, i: ulong): bool {
     return file.prelude and !file.module_root.is_value();
 }
 
-
 ## Compares two strings by their bytes.
 _compare(a: String, b: String): int {
     return a < b ? -1 : (a > b ? 1 : 0);

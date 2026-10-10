@@ -1,8 +1,8 @@
 ## Building a program: the checked model to object files, linked into an
 ## executable.
 
-import async;
 import compiler.ast;
+import async;
 import compiler.codegen;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
 import io;
@@ -395,9 +395,9 @@ _check_layers(
         if (k + 1 < layered.count) {
             # What this build's workers found or made, else the cache's: the
             # cache may have changed since, as builds share it.
-            var found = prechecked.contains(k)
-                ? Optional<(u8[], String, String)>.Value(prechecked[k])
-                : find_checked(cache, program, layer);
+            var found = prechecked.contains(k) ?
+                Optional<(u8[], String, String)>.Value(prechecked[k]) :
+                find_checked(cache, program, layer);
             if (found.is_value()) {
                 var (bytes, own, warned) = found.value();
                 # Its warnings, as checking it gave them.
@@ -407,9 +407,7 @@ _check_layers(
                 if (verify_cutoff and checked_any) {
                     var wrong = _verify_reuse_merged(program, layered, records, k, bytes, reused, sources, warnings);
                     if (wrong.is_value()) {
-                        return Result<_Checked, String>.err(
-                            $"PEPC_VERIFY_CUTOFF: {wrong.value()}"
-                        );
+                        return Result<_Checked, String>.err($"PEPC_VERIFY_CUTOFF: {wrong.value()}");
                     }
                 }
                 owns[k] = own;
@@ -462,9 +460,7 @@ _check_layers(
         # The layers it reads, their records merged.
         var merged = merged_module(program, records, layer.reads);
         if (merged.is_err()) {
-            return Result<_Checked, String>.err(
-                $"the layers layer {layer.name} reads do not merge: {merged.error()}"
-            );
+            return Result<_Checked, String>.err($"the layers layer {layer.name} reads do not merge: {merged.error()}");
         }
         module = merged.value();
         clock.lap($"merge {layer.name}");
@@ -489,9 +485,9 @@ _check_layers(
         var unit = sema.finish_checked(module, state, aliases);
         # A layer with a warning is checked again on each build, which
         # reports it again; so a layer loaded had none.
-        var (bytes, own) = store_checked(
-            cache, program, layer, unit, base, _render_warnings(_warnings_in(warnings, layer), sources)
-        );
+        var (
+            bytes, own
+        ) = store_checked(cache, program, layer, unit, base, _render_warnings(_warnings_in(warnings, layer), sources));
         owns[k] = own;
         records[k] = bytes;
         clock.lap("store");
@@ -550,9 +546,9 @@ _copy_defines(cache: Cache, layer: Layer, dir: Path, k: ulong) {
 _defined_by(cache: Cache, layered: Layer[], ks: ulong[], dir: Path?): HashSet<String> {
     var out = HashSet<String>();
     for (var k in ks) {
-        var path = dir.is_value()
-            ? _layer_file(dir.value(), k, "defines")
-            : cache.objects($"layer {layered[k].name}", layered[k].key).join(Path("defines"));
+        var path = dir.is_value() ?
+            _layer_file(dir.value(), k, "defines") :
+            cache.objects($"layer {layered[k].name}", layered[k].key).join(Path("defines"));
         var text = File.read_to_string(path);
         if (text.is_err()) {
             continue;
@@ -631,7 +627,9 @@ _compile_layer(
         part_of_file.append(own.contains(i) ? 0 : 2);
     }
     var owners = HashMap<String, uint>();
-    var generated = codegen.generate(module, state, namespaces, layer.name, setup, owners, others, Optional<HashSet<String>>.Value(below));
+    var generated = codegen.generate(
+        module, state, namespaces, layer.name, setup, owners, others, Optional<HashSet<String>>.Value(below)
+    );
     if (generated.is_err()) {
         return Optional<String>.Value(render_all([generated.error()], program.sources()));
     }
@@ -1001,7 +999,9 @@ export layer_worker(program: link.Program, options: BuildOptions, dir: Path): in
     var triple = codegen.target_triple(program.target);
     var cpu = codegen.Cpu.default_for(triple);
     var units = link.units(program);
-    var keys = Keys(program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}{_codegen_options(options)}");
+    var keys = Keys(
+        program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}{_codegen_options(options)}"
+    );
     clock.lap("worker keys");
     var triple_extension = triple.contains("-windows") ? "obj" : "o";
     var reused = Optional<Reused>.Value(reuse(program, units, keys, cache, triple_extension));
@@ -1160,7 +1160,9 @@ _read_worker_record(dir: Path, k: ulong, layer: Layer): Result<(u8[], String, St
     }
     # Its warnings `_check_layers` prints, with the record.
     var warned = File.read_to_string(_layer_file(dir, k, "warn"));
-    return Result<(u8[], String, String), String>.ok((bytes.value(), own.value(), warned.is_ok() ? warned.value() : ""));
+    return Result<(u8[], String, String), String>.ok(
+        (bytes.value(), own.value(), warned.is_ok() ? warned.value() : "")
+    );
 }
 
 # Leaves the empty file `<k>.<what>` in `dir`, whole, by a rename.
@@ -1556,7 +1558,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 lower.append(k);
             }
             var below = _defined_by(options.cache.value(), layered, lower, Optional<Path>.Empty);
-            var generated = codegen.generate(module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below));
+            var generated = codegen.generate(
+                module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
+            );
             if (generated.is_err()) {
                 return Result<Built, String>.err(render_all([generated.error()], sources));
             }
@@ -1598,160 +1602,160 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         objects.append(last_folder.value().join(Path($"entry.{extension}")));
         clock.lap("objects");
     } else {
-    # The bodies of units whose objects the cache holds are only declared.
-    var cached_files = HashSet<uint>();
-    if (reused.is_value()) {
-        for (var u in 0..units.count) {
-            if (reused.value().objects[u].count > 0) {
-                for (var file in units[u].files) {
-                    cached_files.insert(file as uint);
+        # The bodies of units whose objects the cache holds are only declared.
+        var cached_files = HashSet<uint>();
+        if (reused.is_value()) {
+            for (var u in 0..units.count) {
+                if (reused.value().objects[u].count > 0) {
+                    for (var file in units[u].files) {
+                        cached_files.insert(file as uint);
+                    }
                 }
             }
         }
-    }
-    var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files);
-    if (generated.is_err()) {
-        return Result<Built, String>.err(render_all([generated.error()], sources));
-    }
-    var ir = generated.value();
-    clock.lap("codegen");
+        var generated = codegen.generate(module, state, namespaces, stem, setup, owners, cached_files);
+        if (generated.is_err()) {
+            return Result<Built, String>.err(render_all([generated.error()], sources));
+        }
+        var ir = generated.value();
+        clock.lap("codegen");
 
-    # Each unit is one part or more; the program's entry points are the
-    # last part.
-    var sizes = codegen.file_sizes(ir, owners, program.files.count);
-    var part_of_file = Array<uint>();
-    for (var _ in program.files) {
-        part_of_file.append(0);
-    }
-    var unit_parts = Array<uint[]>();
-    uint parts = 0;
-    for (var unit in units) {
-        var split = _split(program, unit, sizes, parts, options.part_size);
-        var own = Array<uint>();
-        for (var part in split) {
-            if (!own.contains(part)) {
-                own.append(part);
-            }
+        # Each unit is one part or more; the program's entry points are the
+        # last part.
+        var sizes = codegen.file_sizes(ir, owners, program.files.count);
+        var part_of_file = Array<uint>();
+        for (var _ in program.files) {
+            part_of_file.append(0);
         }
-        for (var i in 0..unit.files.count) {
-            part_of_file[unit.files[i]] = split[i];
-        }
-        unit_parts.append(_unit_size(unit, sizes) == 0 ? Array<uint>() : own);
-        parts += own.count as uint;
-    }
-    var entry_part = parts;
-    var partition = codegen.prepare(ir, owners, part_of_file, entry_part, entry_part + 1);
-    var jobs = Array<PartJob>();
-    # The units compiled, with their keys and their parts' objects, to
-    # store in the cache.
-    var stored = Array<(ulong, String, Path[])>();
-    # The parts compiled, with their places in their units and keys, to
-    # store in the cache.
-    var stored_parts = Array<(ulong, ulong, String)>();
-    for (var u in 0..units.count) {
-        if (reused.is_value() and reused.value().objects[u].count > 0) {
-            if (options.trace_cache) {
-                File.stderr().write_all($"cache: hit {units[u].name}\n");
-            }
-            objects.append_all(reused.value().objects[u]);
-            report.hits.append(units[u].name);
-            continue;
-        }
-        var own = unit_parts[u];
-        if (own.is_empty) {
-            continue;
-        }
-        var folder = work.join(Path($"{u}"));
-        Directory.create_all(folder);
-        if (!reused.is_value()) {
-            for (var i in 0..own.count) {
-                jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
-            }
-            continue;
-        }
-        var key = reused.value().keys[u].value();
-        report.misses.append(units[u].name);
-        # Each part's object from the cache when its key hits: its files and
-        # what they read are as when it was compiled.
-        var parts = Array<Path>();
-        ulong hits = 0;
-        for (var i in 0..own.count) {
-            var files = Array<ulong>();
-            for (var file in units[u].files) {
-                if (part_of_file[file] == own[i]) {
-                    files.append(file);
+        var unit_parts = Array<uint[]>();
+        uint parts = 0;
+        for (var unit in units) {
+            var split = _split(program, unit, sizes, parts, options.part_size);
+            var own = Array<uint>();
+            for (var part in split) {
+                if (!own.contains(part)) {
+                    own.append(part);
                 }
             }
-            var part_key = keys.value().part(program, units, u, files, reused.value().interfaces);
-            var cached = options.cache.value().part(units[u].name, i, part_key);
-            var object = cached.join(Path($"0.{extension}"));
-            parts.append(object);
-            if (object.is_file()) {
-                options.cache.value().used(cached);
-                report.part_hits.append($"{units[u].name}#{i}");
-                hits += 1;
+            for (var i in 0..unit.files.count) {
+                part_of_file[unit.files[i]] = split[i];
+            }
+            unit_parts.append(_unit_size(unit, sizes) == 0 ? Array<uint>() : own);
+            parts += own.count as uint;
+        }
+        var entry_part = parts;
+        var partition = codegen.prepare(ir, owners, part_of_file, entry_part, entry_part + 1);
+        var jobs = Array<PartJob>();
+        # The units compiled, with their keys and their parts' objects, to
+        # store in the cache.
+        var stored = Array<(ulong, String, Path[])>();
+        # The parts compiled, with their places in their units and keys, to
+        # store in the cache.
+        var stored_parts = Array<(ulong, ulong, String)>();
+        for (var u in 0..units.count) {
+            if (reused.is_value() and reused.value().objects[u].count > 0) {
+                if (options.trace_cache) {
+                    File.stderr().write_all($"cache: hit {units[u].name}\n");
+                }
+                objects.append_all(reused.value().objects[u]);
+                report.hits.append(units[u].name);
                 continue;
             }
-            var built = folder.join(Path($"{i}"));
-            Directory.create_all(built);
-            jobs.append(PartJob(own[i], built.join(Path($"0.{extension}"))));
-            stored_parts.append((u, i, part_key));
-        }
-        if (options.trace_cache) {
-            File.stderr().write_all($"cache: miss {units[u].name} ({own.count - hits} of {own.count} parts)\n");
-        }
-        stored.append((u, key, parts));
-    }
-    var entry_object = work.join(Path($"{stem}.{extension}"));
-    jobs.append(PartJob(entry_part, entry_object));
-    var compiled = compile_parts(
-        ir,
-        partition,
-        jobs,
-        machine.value(),
-        cpu,
-        options.opt_level,
-        work,
-        options.trace_time,
-        options.in_process,
-        !cached_files.is_empty or !stored_parts.is_empty
-    );
-    if (compiled.is_err()) {
-        # The bitcode and plan stay, so the failed part can be run again.
-        return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
-    }
-    if (keys.is_value()) {
-        for (var (u, i, part_key) in stored_parts) {
-            var kept = options.cache.value().store(
-                work.join(Path($"{u}")).join(Path($"{i}")), $"{units[u].name}#{i}", part_key
-            );
-            if (kept.is_err()) {
-                Directory.remove_all(work);
-                return Result<Built, String>.err(kept.error());
+            var own = unit_parts[u];
+            if (own.is_empty) {
+                continue;
             }
-        }
-        for (var (u, key, parts) in stored) {
             var folder = work.join(Path($"{u}"));
-            for (var i in 0..parts.count) {
-                Directory.remove_all(folder.join(Path($"{i}")));
+            Directory.create_all(folder);
+            if (!reused.is_value()) {
+                for (var i in 0..own.count) {
+                    jobs.append(PartJob(own[i], folder.join(Path($"{i}.{extension}"))));
+                }
+                continue;
             }
-            write_record(folder, reused.value(), module, program, units[u], warnings, parts, options.cache.value());
-            var kept = options.cache.value().store(folder, units[u].name, key);
-            if (kept.is_err()) {
-                Directory.remove_all(work);
-                return Result<Built, String>.err(kept.error());
+            var key = reused.value().keys[u].value();
+            report.misses.append(units[u].name);
+            # Each part's object from the cache when its key hits: its files and
+            # what they read are as when it was compiled.
+            var parts = Array<Path>();
+            ulong hits = 0;
+            for (var i in 0..own.count) {
+                var files = Array<ulong>();
+                for (var file in units[u].files) {
+                    if (part_of_file[file] == own[i]) {
+                        files.append(file);
+                    }
+                }
+                var part_key = keys.value().part(program, units, u, files, reused.value().interfaces);
+                var cached = options.cache.value().part(units[u].name, i, part_key);
+                var object = cached.join(Path($"0.{extension}"));
+                parts.append(object);
+                if (object.is_file()) {
+                    options.cache.value().used(cached);
+                    report.part_hits.append($"{units[u].name}#{i}");
+                    hits += 1;
+                    continue;
+                }
+                var built = folder.join(Path($"{i}"));
+                Directory.create_all(built);
+                jobs.append(PartJob(own[i], built.join(Path($"0.{extension}"))));
+                stored_parts.append((u, i, part_key));
             }
-            objects.append_all(parts);
+            if (options.trace_cache) {
+                File.stderr().write_all($"cache: miss {units[u].name} ({own.count - hits} of {own.count} parts)\n");
+            }
+            stored.append((u, key, parts));
         }
-    } else {
-        for (var job in jobs) {
-            if (job.part != entry_part) {
-                objects.append(job.object);
+        var entry_object = work.join(Path($"{stem}.{extension}"));
+        jobs.append(PartJob(entry_part, entry_object));
+        var compiled = compile_parts(
+            ir,
+            partition,
+            jobs,
+            machine.value(),
+            cpu,
+            options.opt_level,
+            work,
+            options.trace_time,
+            options.in_process,
+            !cached_files.is_empty or !stored_parts.is_empty
+        );
+        if (compiled.is_err()) {
+            # The bitcode and plan stay, so the failed part can be run again.
+            return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
+        }
+        if (keys.is_value()) {
+            for (var (u, i, part_key) in stored_parts) {
+                var kept = options.cache.value().store(
+                    work.join(Path($"{u}")).join(Path($"{i}")), $"{units[u].name}#{i}", part_key
+                );
+                if (kept.is_err()) {
+                    Directory.remove_all(work);
+                    return Result<Built, String>.err(kept.error());
+                }
+            }
+            for (var (u, key, parts) in stored) {
+                var folder = work.join(Path($"{u}"));
+                for (var i in 0..parts.count) {
+                    Directory.remove_all(folder.join(Path($"{i}")));
+                }
+                write_record(folder, reused.value(), module, program, units[u], warnings, parts, options.cache.value());
+                var kept = options.cache.value().store(folder, units[u].name, key);
+                if (kept.is_err()) {
+                    Directory.remove_all(work);
+                    return Result<Built, String>.err(kept.error());
+                }
+                objects.append_all(parts);
+            }
+        } else {
+            for (var job in jobs) {
+                if (job.part != entry_part) {
+                    objects.append(job.object);
+                }
             }
         }
-    }
-    objects.append(entry_object);
-    clock.lap("objects");
+        objects.append(entry_object);
+        clock.lap("objects");
     }
 
     # Search order: `-L`, then `[Link(path = ...)]`.

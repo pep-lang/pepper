@@ -65,3 +65,5 @@
 
 # The toml-test corpus checks exact bytes (CRLF, bare CR, invalid UTF-8).
 runtime/toml/test/toml-test/** -text
+# pep-profile's tests compare what it reads from these recordings exactly.
+tools/pep-profile/testdata/** -text

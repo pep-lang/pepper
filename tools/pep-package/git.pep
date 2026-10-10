@@ -5,6 +5,7 @@
 import [Directory, Path] from io;
 import os;
 import process;
+import "tree";
 
 # The web address of host `host` (`github`): `https://github.com`, or the
 # value of `PEPPER_PACKAGE_<HOST>_URL` when set (a mirror, or a folder of
@@ -131,7 +132,10 @@ export check_out(url: String, directory: Path, commit: String): Result<String> {
     }
     if (at.is_empty()) {
         if (directory.exists()) {
-            Directory.remove_all(directory);
+            var removed = remove_tree(directory);
+            if (removed.is_err()) {
+                return Result<String>.Err($"cannot remove {directory.to_string()}: {removed.error().message}");
+            }
         }
         var parent = directory.parent();
         if (parent.is_value()) {

@@ -12,7 +12,7 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 [`IoError`](io-types.md#ioerror).
 
 - [Path](io-path.md): building, splitting, and inspecting paths
-- [File](io-file.md): opening, reading, and writing files, and whole-file helpers
+- [File](io-file.md): opening, reading, writing, and locking files, and whole-file helpers
 - [Directory](io-directory.md): listing, creating, and removing directories
 - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
