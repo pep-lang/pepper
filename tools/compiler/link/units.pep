@@ -1,6 +1,6 @@
-## A program's compilation units, as `Program::units` and
-## `Program::unit_inputs` in `crates/pepper-sema/src/program.rs` make them:
-## the files compiled into one object, which the build cache keeps.
+## A program's compilation units, each source file compiled into an object
+## of its own, which the build cache keeps; and the units sema checks in
+## layers.
 
 import [Declaration, Module] from compiler.ast;
 import [Program] from "program";
@@ -21,17 +21,36 @@ export struct Unit {
     }
 }
 
-## Returns the program's units, sorted by name: the runtime's top-level
-## files (prelude files outside any module) form the unit `prelude`; every
-## other file is in the unit of its import cycle (a strongly connected
-## component of the import graph, where the files of one module, which see
-## each other's declarations without an import, all reach each other),
-## named after its first file's namespace. A unit's name depends only on
-## its files' paths, so it is the same in every program.
+## Returns the program's compilation units, sorted by name: each file is a
+## unit of its own, named after its namespace, compiled into an object of
+## its own as a C compiler compiles a translation unit (the instantiations
+## it uses go in it too, as `linkonce_odr`: `codegen.prepare`). A unit's
+## name depends only on its file's path, so it is the same in every
+## program.
 ##
 ## @param program the linked program
 ## @returns the units
 export units(program: Program): Unit[] {
+    var units = Array<Unit>();
+    for (var i in 0..program.files.count) {
+        units.append(Unit(program.files[i].namespace, [i]));
+    }
+    return _named(units);
+}
+
+## Returns the program's units as sema checks them in layers: as `units`
+## makes them, but a module's files are not joined into one unit, so each
+## file is in the unit of its own import cycle. A file sees another file of
+## its module only through an import, so its imports are all it reads.
+##
+## @param program the linked program
+## @returns the units
+export layer_units(program: Program): Unit[] {
+    return _units(program);
+}
+
+# The units of the files' import cycles, the runtime's top-level files one.
+_units(program: Program): Unit[] {
     var count = program.files.count;
     var prelude = Array<ulong>();
     for (var i in 0..count) {
@@ -47,8 +66,13 @@ export units(program: Program): Unit[] {
         files.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
         units.append(Unit(program.files[files[0]].namespace, files));
     }
+    return _named(units);
+}
+
+# `units` sorted by name, each name made unique: a user file named like the
+# prelude keeps its own unit.
+_named(units: Unit[]): Unit[] {
     units.sort((a, b) => _compare(a.name, b.name));
-    # A user file named like the prelude keeps its own unit.
     var taken = HashSet<String>();
     for (var unit in units) {
         var base = unit.name;
@@ -64,8 +88,9 @@ export units(program: Program): Unit[] {
 
 ## Returns the files whose text a unit's code can depend on, in namespace
 ## order: its own files and every prelude file (visible everywhere), the
-## files they import or take extensions from and the other files of their
-## modules, transitively; and every file that declares a concrete override
+## files they import or take extensions from, transitively (a file sees
+## another file of its module only through an import); and every file that
+## declares a concrete override
 ## (`hash<int>`), since sema honours an override wherever its generic is
 ## instantiated. An override file counts by its own text: what it imports
 ## matters only to code that names its types, which imports them itself.
@@ -74,7 +99,6 @@ export units(program: Program): Unit[] {
 ## @param unit one of its units
 ## @returns the files, as indices into `Program.files`
 export unit_inputs(program: Program, unit: Unit): ulong[] {
-    var modules = _modules(program);
     var seen = Array<bool>();
     var stack = Array<ulong>();
     for (var i in 0..program.files.count) {
@@ -95,10 +119,6 @@ export unit_inputs(program: Program, unit: Unit): ulong[] {
             if (target.is_value()) {
                 stack.append(target.value());
             }
-        }
-        var root = program.files[file].module_root;
-        if (root.is_value()) {
-            stack.append_all(modules[root.value().to_string()]);
         }
         if (file < program.scopes.count) {
             for (var extension in program.scopes[file].extensions) {
@@ -143,22 +163,6 @@ _in_prelude(program: Program, i: ulong): bool {
     return file.prelude and !file.module_root.is_value();
 }
 
-## The files of each module, by the module's folder.
-_modules(program: Program): HashMap<String, ulong[]> {
-    var modules = HashMap<String, ulong[]>();
-    for (var i in 0..program.files.count) {
-        var root = program.files[i].module_root;
-        if (!root.is_value()) {
-            continue;
-        }
-        var key = root.value().to_string();
-        if (!modules.contains(key)) {
-            modules[key] = Array<ulong>();
-        }
-        modules[key].append(i);
-    }
-    return modules;
-}
 
 ## Compares two strings by their bytes.
 _compare(a: String, b: String): int {
@@ -181,15 +185,6 @@ _components(program: Program): Array<ulong[]> {
             }
         }
         edges.append(targets);
-    }
-    # A module's files in a ring, so each reaches every other.
-    for (var (_, files) in _modules(program)) {
-        for (var k in 0..files.count) {
-            var file = files[k];
-            if (!_in_prelude(program, file)) {
-                edges[file].append(files[(k + 1) % files.count]);
-            }
-        }
     }
     var index = Array<long>();
     var low = Array<ulong>();

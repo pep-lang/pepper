@@ -3,6 +3,7 @@
 ## statement half of the codegen pass in `crates/pepper-codegen/src/lib.rs`.
 
 import compiler.ast;
+import compiler.link;
 import llvm;
 import compiler.sema;
 import [
@@ -197,7 +198,7 @@ extend Generator {
             # in each part that uses it.
             bool synthesized = method.name.starts_with("__") and method.owner.is_none() and method.loc == st.loc;
             if (!synthesized) {
-                own(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
+                own_function(mangled, method.owner.is_none() ? (method.loc.is_none() ? st.loc : method.loc) : method.owner);
             }
             functions[mangled] = fn_value;
             var param_names = Array<String>();
@@ -379,7 +380,7 @@ extend Generator {
         }
         var fn_value = ir.add_function(function.name, fn_type);
         set_private_linkage(fn_value, function.name);
-        own(function.name, function.loc);
+        own_function(function.name, function.loc);
         functions[function.name] = fn_value;
         fn_returns[function.name] = function.ty.to_string();
         var defaults = Array<Expression?>();
@@ -484,15 +485,28 @@ extend Generator {
     }
 
     ## Whether `function`, named `name`, is declared only: its unit's
-    ## object defines it.
+    ## object defines it, or the object of the layer that made it.
     declared_only(function: FunctionDef, name: String): bool {
-        return (!function.body.is_value() and stripped.contains(function.loc)) or is_cached(name);
+        if (!function.body.is_value() and stripped.contains(function.loc)) {
+            return true;
+        }
+        if (declared.is_value()) {
+            return declared.value().contains(link.symbol_name(name));
+        }
+        return is_cached(name);
     }
 
+    ## Declares `name`, a function another object defines. It keeps an
+    ## owner, the declaring file's or `DECLARED_ONLY` for an instantiation,
+    ## so `prepare` gives the declaration the linker spelling the definition
+    ## has (`link.symbol_name`).
     declare_external(name: String) {
         var declared = functions.try_get(name);
         if (declared.is_value()) {
             declared.value().set_linkage(llvm.Linkage.External);
+        }
+        if (!owners.contains(name)) {
+            owners[name] = DECLARED_ONLY;
         }
     }
 

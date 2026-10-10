@@ -44,6 +44,7 @@ import [
 import [ThreadSafeStructs, unsafe_part_in] from "shared_types";
 import [PassState] from "state";
 import [attribute_name, attribute_string] from "static_blocks";
+import [StructTable] from "static_type";
 import [trait_def] from "traits";
 import [FUNCTION, parse_type_string, SHARED_FUNCTION] from "type_name";
 import [Rewriter, rewrite_block] from "walk";
@@ -840,7 +841,7 @@ export synthesize_copies(module: Module, state: PassState): bool {
     var holders = _intrinsic_holders(module);
     var censuses_added = _lower_censuses(module, safe, holders);
     _lower_copy_objects(module, holders);
-    var traits_added = _add_trait_copies(module, safe);
+    var traits_added = _add_trait_copies(module, safe, state);
     var collector = _CopyIntrinsics();
     for (var function in holders) {
         _rewrite_function(function, collector);
@@ -917,6 +918,7 @@ export synthesize_copies(module: Module, state: PassState): bool {
         } else {
             st.method_members.append_all(_copy_methods(st, safe, copyable));
         }
+        _extended(module, state, st);
         added = true;
     }
     var lowerer = _CopyLowering(lowered);
@@ -1005,6 +1007,19 @@ struct _CopyLowering {
 extend _CopyLowering with Rewriter;
 
 ## `_pep_copy_failed<T>("message")`, which panics.
+# Marks `st`, which this pass just added methods to, as extended when it is
+# a checked struct: the layer's to walk and to record, as one an extension
+# or a specialized method changed.
+_extended(module: Module, state: PassState, st: StructDef) {
+    if (!module.checked.structs.contains(st.name)) {
+        return;
+    }
+    state.extended_checked.insert(st.name);
+    module.extended_checked.insert(st.name);
+    state.trait_memo.checked_table = Optional<StructTable>.Empty;
+    state.trait_memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Empty;
+}
+
 _copy_failed(ty: TypeName, message: String, loc: Loc): Expression {
     var literal = Expression.StringLiteral(StringLiteralExpression(message, true, Loc.none()));
     return Expression.FunctionCall(FunctionCallExpression($"_pep_copy_failed<{ty}>", [literal], loc));
@@ -1205,7 +1220,7 @@ _copy_tuple(ty: TypeName, parts: Array<_Part>, value: Expression, copies: Expres
 ## `_pep_copy_trait(copies): Tr` member, and each concrete struct that
 ## declares a trait the method that fills that vtable slot. Returns whether
 ## it added anything.
-_add_trait_copies(module: Module, safe: ThreadSafeStructs): bool {
+_add_trait_copies(module: Module, safe: ThreadSafeStructs, state: PassState): bool {
     var added = false;
     for (var def in module.traits) {
         bool has = false;
@@ -1266,6 +1281,7 @@ _add_trait_copies(module: Module, safe: ThreadSafeStructs): bool {
         var body = Array<Statement>();
         body.append(_return(copied));
         st.method_members.append(_context_method(st, _COPY_TRAIT_METHOD, this_ty, body));
+        _extended(module, state, st);
         added = true;
     }
     return added;

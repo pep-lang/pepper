@@ -407,10 +407,17 @@ _reaches(reads: Array<HashSet<ulong>>): Array<HashSet<ulong>> {
 }
 
 ## Identifies the running compiler: its executable's path, size and time
-## of modification, so a rebuilt compiler misses every key.
+## of modification, so a rebuilt compiler misses every key. For working on
+## the compiler, `PEPC_COMPILER_IDENTITY` names it instead, so compilers
+## built from changes that make the same output share the cache (as
+## ccache's `compiler_check = string:...`): one that does not is wrong.
 ##
 ## @returns the identity, as text
 export compiler_identity(): String {
+    var named = os.environment("PEPC_COMPILER_IDENTITY");
+    if (named.is_value() and !named.value().is_empty) {
+        return named.value();
+    }
     var executable = process.executable_path();
     if (executable.is_err()) {
         return "pepc";

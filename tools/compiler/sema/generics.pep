@@ -5,6 +5,7 @@
 ## or a struct spec when it constructs one; who asked first is kept for
 ## the depth limit.
 
+import [layer_decls] from "checked";
 import [is_closure_struct] from "closures";
 import [Loc] from "loc";
 import [
@@ -201,7 +202,11 @@ export gather_generics(module: Module) {
     }
     var functions = _Requests();
     var structs = _Requests();
-    for (var st in module.structs) {
+    # What a checked declaration asks for was made when it was checked:
+    # only the layer's own declarations, and the checked structs it
+    # extended, ask for anything new.
+    var layer = layer_decls(module);
+    for (var st in layer.structs) {
         var params = _param_names(st.generic_params);
         var gatherer = _CallGatherer(functions, params, st.name, true);
         for (var method in st.method_members) {
@@ -227,7 +232,7 @@ export gather_generics(module: Module) {
             }
         }
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         var params = _param_names(function.generic_params);
         _walk_body(function, _CallGatherer(functions, params, function.name, true));
         # A generic function's own parameters (`Array<U>` in `f<U>`) are
@@ -243,6 +248,9 @@ export gather_generics(module: Module) {
     }
     # Global initializers: `var x = Array<int>()` at file scope.
     for (var global in module.globals) {
+        if (module.checked.globals.contains(global.name)) {
+            continue;
+        }
         if (global.default.is_value()) {
             rewrite_expression(global.default.value(), _CallGatherer(functions, Array<String>(), global.name, false));
         }
@@ -257,7 +265,7 @@ export gather_generics(module: Module) {
         }
     }
     # Local declarations with no constructor call (`Array<int> a;`).
-    for (var st in module.structs) {
+    for (var st in layer.structs) {
         var params = _param_names(st.generic_params);
         for (var method in st.method_members) {
             if (method.body.is_value()) {
@@ -270,7 +278,7 @@ export gather_generics(module: Module) {
             }
         }
     }
-    for (var function in module.functions) {
+    for (var function in layer.functions) {
         if (function.body.is_value()) {
             _gather_locals(function.body.value(), structs, _param_names(function.generic_params), function.name);
         }

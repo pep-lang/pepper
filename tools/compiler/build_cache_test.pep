@@ -68,13 +68,13 @@ _unit_of(program: link.Program, file: String): String {
 }
 
 [Test]
-puts_a_modules_files_in_one_unit() {
+gives_each_file_a_unit_of_its_own() {
     var folder = TempFolder("units");
     _write_program(folder.path);
     var program = _load(folder.path);
     var geo = _unit_of(program, "module.pep");
     expect_false(geo.is_empty);
-    expect_equal(_unit_of(program, "math.pep"), geo);
+    expect_true(_unit_of(program, "math.pep") != geo);
     expect_true(_unit_of(program, "a.pep") != _unit_of(program, "b.pep"));
     expect_true(_unit_of(program, "a.pep") != geo);
 }
@@ -103,13 +103,15 @@ reuses_the_objects_of_unchanged_units() {
     expect_true(edited.misses.contains(b));
     expect_true(edited.hits.contains(a) and edited.hits.contains(geo));
 
-    # An edit to a file the module's other files see without an import.
+    # A body edit to a file of the module: `module.pep`, which imports it,
+    # keeps its object.
+    var math = _unit_of(program, "math.pep");
     File.write_text(
         root.join(Path("geo")).join(Path("math.pep")), "_times(a: int, b: int): int {\n    return b * a;\n}\n"
     );
     var module = _build(root);
-    expect_true(module.misses.contains(geo));
-    expect_true(module.hits.contains(a) and module.hits.contains(b));
+    expect_true(module.misses.contains(math));
+    expect_true(module.hits.contains(geo) and module.hits.contains(a) and module.hits.contains(b));
 }
 
 [Test]
@@ -188,60 +190,33 @@ keeps_the_layers_an_edit_does_not_reach() {
     expect_true(_records_of(root, b) == 2);
 }
 
-# Builds the program in `root` as `_build` does, each unit's files in
-# parts of their own (`BuildOptions.part_size`).
-_build_parts(root: Path, setup: link.Setup): driver.Built {
-    var output = root.join(Path("main"));
-    var options = driver.BuildOptions(output, root.join(Path("build")));
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
-    options.in_process = true;
-    options.part_size = 1;
-    var program = link.load_program(root.join(Path("main.pep")), setup);
-    expect_true(program.is_ok());
-    var built = driver.build(program.value(), options);
-    if (built.is_err()) {
-        print(built.error());
-    }
-    expect_true(built.is_ok());
-    var ran = process.Command(output.to_string()).spawn();
-    expect_true(ran.is_ok() and ran.value().wait().value().success());
-    return built.value();
-}
-
-# A unit's parts are cached each on its own, like a C file's object: a body
-# edit in one file of a module compiles its part again, and the part of the
-# module's other file, which reads the edited file by its interface, comes
-# from the cache.
+# An edit to one file of a module rebuilds that file's object alone while
+# its interface stays; an edit to its interface rebuilds the files that
+# import it too.
 [Test]
-reuses_the_parts_an_edit_does_not_reach() {
-    var folder = TempFolder("part_keys");
+rebuilds_only_the_objects_an_edit_reaches() {
+    var folder = TempFolder("file_objects");
     var root = folder.path;
     _write_program(root);
-    var setup = link.Setup();
-    setup.runtime = false;
-    setup.import_dirs.append(root);
     var program = _load(root);
     var geo = _unit_of(program, "module.pep");
-    var first = _build_parts(root, setup);
-    expect_true(first.misses.contains(geo));
-    expect_true(first.part_hits.is_empty);
+    var math = _unit_of(program, "math.pep");
+    var first = _build(root);
+    expect_true(first.misses.contains(geo) and first.misses.contains(math));
 
     File.write_text(
         root.join(Path("geo")).join(Path("math.pep")), "_times(a: int, b: int): int {\n    return b * a;\n}\n"
     );
-    var edited = _build_parts(root, setup);
-    expect_true(edited.misses.contains(geo));
-    expect_equal(edited.part_hits.count, 1 as ulong);
-    expect_true(edited.part_hits[0].starts_with(geo + "#"));
+    var edited = _build(root);
+    expect_true(edited.misses.contains(math));
+    expect_true(edited.hits.contains(geo));
 
-    # An edit to its interface reaches the other part too.
     File.write_text(
         root.join(Path("geo")).join(Path("math.pep")),
         "_times(a: int, b: int, c: int = 1): int {\n    return b * a * c;\n}\n"
     );
-    var changed = _build_parts(root, setup);
-    expect_true(changed.misses.contains(geo));
-    expect_true(changed.part_hits.is_empty);
+    var changed = _build(root);
+    expect_true(changed.misses.contains(math) and changed.misses.contains(geo));
 }
 
 # Writes a program whose `b.pep` calls `a.pep`'s `a_count`, which
@@ -463,9 +438,9 @@ _build_deferred(root: Path): bool {
 }
 
 # A build loaded with `defer_bodies` links and checks the bodies of the
-# files it checks, not those of the layers it loads from the cache, unless
-# a file of the layer warned: such a layer is never stored, so each build
-# checks it again and warns again.
+# files it checks, not those of the layers it loads from the cache, even
+# when a file of the layer warned: its record keeps the warnings, which a
+# build that loads it prints again.
 [Test]
 links_only_the_bodies_of_the_layers_it_checks() {
     var folder = TempFolder("deferred_bodies");
@@ -474,9 +449,10 @@ links_only_the_bodies_of_the_layers_it_checks() {
     expect_true(_build_deferred(root));
     _write_deferred(root, "b_new()", 2);
     expect_false(_build_deferred(root));
-    # `a.pep` warns: its layer is checked on every build.
+    # `a.pep` warns: its layer's record keeps the warning, which the next
+    # build prints again without checking the layer.
     _write_deferred(root, "b_old()", 3);
     expect_true(_build_deferred(root));
     _write_deferred(root, "b_old()", 4);
-    expect_true(_build_deferred(root));
+    expect_false(_build_deferred(root));
 }

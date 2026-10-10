@@ -584,7 +584,7 @@ def own_lines(label, expr, tree, blank_bodies='true'):
             + ['    ' + l for l in write_to(o, expr, tree)]
             + [f'    base.own("{label}", interface_text({o}));', '}'])
 
-def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge=False, named=False, own=None, own_bodies='true'):
+def _list_delta(expr, et, key, base_list, category=None, merge=False, named=False, own=None, own_bodies='true', ref=None):
     """Write, read and index lines for list `expr` of element type `et`,
     whose elements are referred to by `key` (a Pepper string expression)
     in the base's list `base_list`. `category` names the list in the
@@ -593,13 +593,45 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
     elements and their places (mode 2), which reading puts back among the
     base's: no reference into the base but its order. With `named`, a base
     element the layer changed is written with its name, which merging
-    finds it by."""
+    finds it by. With `ref`, the base's elements themselves (a Pepper
+    expression), a merged list finds the base's by identity, not hash, and
+    the index keeps no hashes of them unless `base.verifying`."""
     item = fresh('_item')
     ch = fresh('_changed'); sn = fresh('_seqn'); nc = fresh('_nc')
     hits = fresh('_hits')
-    nj = fresh('_nj')
     w = []
-    if merge:
+    if merge and ref:
+        seq = fresh('_seq'); bj = fresh('_bj'); news = fresh('_news'); i = fresh('_i')
+        w += [f'var {seq} = {ref};',
+              f'ulong {bj} = 0;',
+              f'var {news} = Array<ulong>();']
+        if named:
+            w += [f'var {ch} = Array<(ulong, ulong)>();']
+        w += [f'for (var {i} in 0..{expr}.count) {{',
+              f'    if ({bj} < {seq}.count and {expr}[{i}] === {seq}[{bj}]) {{',
+              '        if (base.verifying) {',
+              '            var scratch = base.scratch();',
+              f'            {fn(et)}_write(scratch, {expr}[{i}]);',
+              f'            base.verify_same({key}, {bj}, scratch);',
+              '        }',
+              f'        {bj} += 1;',
+              f'    }} else if ({bj} < {seq}.count and _same{fn(et)}({expr}[{i}], {seq}[{bj}], base)) {{',
+              '        if (base.verifying) {',
+              '            var scratch = base.scratch();',
+              f'            {fn(et)}_write(scratch, {expr}[{i}]);',
+              f'            base.verify_same({key}, {bj}, scratch);',
+              '        }',
+              f'        {bj} += 1;']
+        SAME_TYPES.add(et)
+        if named:
+            w += [f'    }} else if ({bj} < {seq}.count and {expr}[{i}].name == {seq}[{bj}].name) {{',
+                  f'        {ch}.append(({i}, {bj}));',
+                  f'        {bj} += 1;']
+        w += ['    } else {',
+              f'        {news}.append({i});',
+              '    }',
+              '}']
+    elif merge:
         hs = fresh('_hs'); seq = fresh('_seq'); bj = fresh('_bj'); news = fresh('_news'); i = fresh('_i')
         w += [f'var {hs} = Array<String>();',
               f'for (var {item} in {expr}) {{',
@@ -623,11 +655,7 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
               f'        {news}.append({i});',
               '    }',
               '}']
-        if index_next:
-            w += [f'for (var {i} in 0..{hs}.count) {{', f'    next.add_hashed({key}, {hs}[{i}], {i});']
-            if named:
-                w += [f'    next.name({key}, {expr}[{i}].name, {i});']
-            w += ['}']
+    if merge:
         w += [f'if ({bj} == {seq}.count) {{',
               '    out.unsigned(2);']
         if named:
@@ -663,15 +691,12 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
               '}']
     else:
         w += [f'var {hits} = HashSet<long>();',
-             f'ulong {nj} = 0;',
              f'out.unsigned({expr}.count);',
              f'for (var {item} in {expr}) {{',
              '    var scratch = base.scratch();',
              f'    {fn(et)}_write(scratch, {item});',
              '    var hash = base.hash_of(scratch);',
              f'    var at = base.find_hashed({key}, hash);']
-        if index_next:
-            w += [f'    next.add_hashed({key}, hash, {nj});', f'    {nj} += 1;']
         w += ['    if (at >= 0) {',
              f'        {hits}.insert(at);',
              '        out.unsigned((at as ulong) * 2 + 1);',
@@ -765,6 +790,8 @@ def _list_delta(expr, et, key, base_list, category=None, index_next=False, merge
         x += [f'    base.name({key}, {item}.name, {j});']
     x += [f'    {j} += 1;',
          '}']
+    if merge and ref:
+        x = ['if (base.verifying) {'] + ['    ' + l for l in x] + ['}']
     return w, r, x, local
 
 def _prefix_delta(fname, tree):
@@ -924,6 +951,44 @@ def _additions_delta(fname, tree):
 def _struct_fields():
     return [f for f in model.items['StructDef']['fields'] if not f['skip']]
 
+# The `DeltaBase` list each struct list's base structs are found in by
+# identity, and the one (`REF_PARTS`) of its member lists as indexed.
+REF_LISTS = {'s': 'ref_structs', 't': 'ref_templates'}
+# The element types a delta compares by record when identity misses
+# (`_same_<Type>`).
+SAME_TYPES = {('model', 'StructDef')}
+
+def same_functions():
+    out = []
+    for et in sorted(SAME_TYPES):
+        t = model_type_name(et)
+        out += [f'# Whether `a`, not the base\'s element `b` itself, has the same record:',
+                '# a copy a pass made of it.',
+                f'_same{fn(et)}(a: {t}, b: {t}, base: DeltaBase): bool {{',
+                '    var x = base.scratch();',
+                f'    {fn(et)}_write(x, a);',
+                '    var y = base.scratch();',
+                f'    {fn(et)}_write(y, b);',
+                '    return base.hash_of(x) == base.hash_of(y);',
+                '}', '']
+    return out
+REF_PARTS = {'s': 'ref_struct_parts', 't': 'ref_template_parts'}
+
+def struct_shallow():
+    """`_m_StructDef_shallow`: a struct with the same fields and copies of
+    its member lists, which an extension of the struct leaves as they are."""
+    fields = _struct_fields()
+    args = {}
+    for f in fields:
+        fname = model.fname(f['name'])
+        tree = rust_type(f['type'])
+        args[f['name']] = f'value.{fname}.clone()' if tree[0] == 'vec' else f'value.{fname}'
+    required = [f for f in fields if default_of(f['type']) is None]
+    optional = [f for f in fields if default_of(f['type']) is not None]
+    return ['_m_StructDef_shallow(value: StructDef): StructDef {',
+            f'    return StructDef({", ".join(args[f["name"]] for f in required + optional)});',
+            '}']
+
 def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
     """Lines for a list of StructDef, with the patch form. A list that
     holds the base's structs in order, some patched, is written as the
@@ -932,23 +997,32 @@ def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
     st = ('model', 'StructDef')
     item = fresh('_item')
     sh = fresh('_struct_hits')
-    hs = fresh('_hs'); seq = fresh('_seq'); seqn = fresh('_seqn'); bj = fresh('_bj')
+    seq = fresh('_seq'); bj = fresh('_bj'); slots = fresh('_slots')
     news = fresh('_news'); patches = fresh('_patches'); i = fresh('_i')
-    w = [f'var {hs} = Array<String>();',
-         f'for (var {item} in {expr}) {{',
-         '    var scratch = base.scratch();',
-         f'    {fn(st)}_write(scratch, {item});',
-         f'    {hs}.append(base.hash_of(scratch));',
-         '}',
-         f'var {seq} = base.sequence("{list_key}");',
-         f'var {seqn} = base.sequence("{list_key}#");',
+    ref = REF_LISTS[list_key]
+    # The base's structs by identity (`DeltaBase.ref_structs`): one still
+    # there is the base's as it was, unless the layer extended it, which
+    # patches it, its member lists found by identity in turn.
+    w = [f'var {seq} = base.{ref};',
          f'ulong {bj} = 0;',
          f'var {news} = Array<ulong>();',
          f'var {patches} = Array<(ulong, ulong)>();',
-         f'for (var {i} in 0..{hs}.count) {{',
-         f'    if ({bj} < {seq}.count and {hs}[{i}] == {seq}[{bj}]) {{',
+         f'for (var {i} in 0..{expr}.count) {{',
+         f'    if ({bj} < {seq}.count and {expr}[{i}] === {seq}[{bj}] and !value.extended_checked.contains({expr}[{i}].name)) {{',
+         '        if (base.verifying) {',
+         '            var scratch = base.scratch();',
+         f'            {fn(st)}_write(scratch, {expr}[{i}]);',
+         f'            base.verify_same("{list_key}", {bj}, scratch, {expr}[{i}].name);',
+         '        }',
          f'        {bj} += 1;',
-         f'    }} else if ({bj} < {seq}.count and {bj} < {seqn}.count and {expr}[{i}].name == {seqn}[{bj}]) {{',
+         f'    }} else if ({bj} < {seq}.count and !({expr}[{i}] === {seq}[{bj}]) and _same_m_StructDef({expr}[{i}], {seq}[{bj}], base)) {{',
+         '        if (base.verifying) {',
+         '            var scratch = base.scratch();',
+         f'            {fn(st)}_write(scratch, {expr}[{i}]);',
+         f'            base.verify_same("{list_key}", {bj}, scratch, {expr}[{i}].name);',
+         '        }',
+         f'        {bj} += 1;',
+         f'    }} else if ({bj} < {seq}.count and {expr}[{i}].name == {seq}[{bj}].name) {{',
          f'        {patches}.append(({i}, {bj}));',
          f'        {bj} += 1;',
          '    } else {',
@@ -981,11 +1055,21 @@ def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
          '    out.unsigned(1);',
          f'    base.count("{list_key} by place", 0);',
          f'    var {sh} = HashSet<long>();',
+         f'    var {slots} = HashMap<String, long>();',
+         f'    for (var {i} in 0..{seq}.count) {{',
+         f'        if (!{slots}.contains({seq}[{i}].name)) {{',
+         f'            {slots}[{seq}[{i}].name] = {i} as long;',
+         '        }',
+         '    }',
          f'    out.unsigned({expr}.count);',
          f'    for (var {i} in 0..{expr}.count) {{',
          f'        var {item} = {expr}[{i}];',
-         f'        var at = base.find_hashed("{list_key}", {hs}[{i}]);',
-         f'        var named = base.named("{list_key}", {item}.name);',
+         f'        var _slot = {slots}.try_get({item}.name);',
+         '        long named = _slot.is_value() ? _slot.value() : -1;',
+         '        long at = -1;',
+         f'        if (named >= 0 and {seq}[named as ulong] === {item} and !value.extended_checked.contains({item}.name)) {{',
+         '            at = named;',
+         '        }',
          '        ulong _before = out.values.count;',
          '        if (at >= 0) {',
          f'            {sh}.insert(at);',
@@ -1003,11 +1087,6 @@ def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
          '        }',
          '    }',
          f'    base.missed("{list_key}", "{list_key}", {sh}.count);',
-         '}',
-         f'for (var {i} in 0..{hs}.count) {{',
-         f'    next.add_hashed("{list_key}", {hs}[{i}], {i});',
-         f'    next.name("{list_key}", {expr}[{i}].name, {i});',
-         f'    _patch_{list_key}_index({expr}[{i}], next, {i});',
          '}']
     local = fresh('_f'); count = fresh('_n'); tag = fresh('_tag'); mode = fresh('_mode')
     bi = fresh('_bi'); at = fresh('_at'); patched = fresh('_patched')
@@ -1071,6 +1150,12 @@ def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
          f'    _patch_{list_key}_index({item}, base, {j});',
          f'    {j} += 1;',
          '}']
+    x = ['if (base.verifying) {'] + ['    ' + l for l in x] + ['}',
+         f'base.{ref} = {expr}.clone();',
+         f'base.{REF_PARTS[list_key]} = Array<StructDef>();',
+         f'for (var {item} in {expr}) {{',
+         f'    base.{REF_PARTS[list_key]}.append(_m_StructDef_shallow({item}));',
+         '}']
     return w, r, x, local
 
 def struct_patch(list_key):
@@ -1085,7 +1170,7 @@ def struct_patch(list_key):
         tree = rust_type(f['type'])
         if tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
             key = f'$"{list_key}.{{slot}}.{fname}"'
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], key, f'was.{fname}', f'"{list_key}.*.{fname}"', merge=True)
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], key, f'was.{fname}', f'"{list_key}.*.{fname}"', merge=True, ref=f'base.{REF_PARTS[list_key]}[slot].{fname}')
             w += ['    ' + l for l in lw]
             r += ['    ' + l for l in lr]
             x += ['    ' + l for l in lx]
@@ -1105,7 +1190,7 @@ def struct_patch(list_key):
 
 def module_delta():
     fields = [f for f in model.items['Module']['fields'] if not f['skip']]
-    w = ['_m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase, next: DeltaBase) {', '    ulong _mark = out.values.count;']
+    w = ['_m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {', '    ulong _mark = out.values.count;']
     # The fields `resume_checked` replaces after the write: indexed again
     # from the module it resumes.
     resumed = ('type_aliases', 'recorded_summaries', 'summaries_to_record')
@@ -1121,7 +1206,8 @@ def module_delta():
             lr = [_lazy(l) for l in lr]
         elif fname == 'templates':
             tw, tr, tx, tlocal = struct_list_delta('value.templates.structs', 't', 'base.templates.structs', own='templates structs', own_bodies='false')
-            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', index_next=True, merge=True, named=True, own='templates functions', own_bodies='false')
+            fw, fr, fx, flocal = _list_delta('value.templates.functions', ('model', 'FunctionDef'), '"tf"', 'base.templates.functions', merge=True, named=True, own='templates functions', own_bodies='false', ref='base.ref_template_functions')
+            fx += ['base.ref_template_functions = value.templates.functions.clone();']
             local = fresh('_f')
             lw = ['out.flag(value.templates.frozen);'] + tw + fw
             # The flag is written first, so it is read first.
@@ -1129,7 +1215,7 @@ def module_delta():
             lx = tx + fx
         elif fname == 'checked':
             local = fresh('_f')
-            lw = ['base.write_checked(out, value.checked);', 'next.keep_checked(value.checked);']
+            lw = ['base.write_checked(out, value.checked);']
             lr = [f'var {local} = DeltaBase.read_checked(input, base.checked);']
             lx = ['base.keep_checked(value.checked);']
         elif fname == 'conversions':
@@ -1147,9 +1233,10 @@ def module_delta():
             lx += ['    ' + l for l in write_to(co, ci, tree[1])]
             lx += [f'    base.add_hashed("conversions", interface_text({co}), {cj});', f'    {cj} += 1;', '}']
         elif tree[0] == 'vec' and tree[1][0] in ('model', 'ast'):
-            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', index_next=fname not in resumed, merge=fname not in resumed, named=fname == 'functions', own=None if fname in resumed else fname)
+            lw, lr, lx, local = _list_delta(f'value.{fname}', tree[1], f'"{fname}"', f'base.{fname}', merge=fname not in resumed, named=fname == 'functions', own=None if fname in resumed else fname, ref='base.ref_functions' if fname == 'functions' else None)
             if fname == 'functions':
                 lr = [_lazy(l) for l in lr]
+                lx += ['base.ref_functions = value.functions.clone();']
         elif fname == 'argument_names':
             lw, lr, lx, local = _sorted_delta(fname, tree)
         elif tree[0] == 'vec':
@@ -1165,9 +1252,6 @@ def module_delta():
         w += ['    ' + l for l in lw]
         if fname in resumed:
             xr += ['    ' + l for l in lx]
-        elif not (fname in ('structs', 'templates', 'checked') or (tree[0] == 'vec' and tree[1][0] in ('model', 'ast'))):
-            # Indexed into `next` as the index does: written again.
-            w += ['    ' + l.replace('base.', 'next.') for l in lx]
         w += [f'    base.stat("{fname}", out.values.count - _mark);', '    _mark = out.values.count;']
         r += ['    ' + l for l in lr]
         x += ['    ' + l for l in lx]
@@ -1179,7 +1263,7 @@ def module_delta():
     optional = [f for f in fields if default_of(f['type']) is not None]
     r.append(f'    return Module({", ".join(names[f["name"]] for f in required + optional)});')
     r.append('}')
-    return w + [''] + r + [''] + x + [''] + xr + [''] + struct_patch('s') + [''] + struct_patch('t')
+    return w + [''] + r + [''] + x + [''] + xr + [''] + struct_patch('s') + [''] + struct_patch('t') + [''] + struct_shallow() + [''] + same_functions()
 
 def model_type_name(t):
     return f'ast.{t[1]}' if t[0] == 'ast' else t[1]
@@ -1268,10 +1352,8 @@ export read_module(input: RecordIn): Module {
 ## @param out the record
 ## @param module the module
 ## @param base the index of the module it is written on
-## @param next filled with the index of `module`, as `index_module` would,
-##     but for the fields `index_resumed` indexes
-export write_module_delta(out: RecordOut, module: Module, base: DeltaBase, next: DeltaBase) {
-    _m_Module_write_delta(out, module, base, next);
+export write_module_delta(out: RecordOut, module: Module, base: DeltaBase) {
+    _m_Module_write_delta(out, module, base);
 }
 
 ## Reads a module from `input`, as `write_module_delta` wrote it on `base`.

@@ -2,7 +2,7 @@
 ## cache keeps each layer's result (a checked unit's record,
 ## `sema.CheckedUnit`), so an edit costs the layers it reaches.
 ##
-## The runtime is the first layer. Each other unit (`link.units`) is a
+## The runtime is the first layer. Each other unit (`link.layer_units`) is a
 ## layer of its own; units that read each other (through extensions) share
 ## one. A layer comes after every layer it reads, so the layers are the
 ## nodes of a DAG, in a topological order. Each layer is checked on its
@@ -85,8 +85,8 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         }
         runtime_unit.append(all);
     }
-    # What each unit reads: the units of the files its files import, of
-    # their modules' other files, and of the extensions they see.
+    # What each unit reads: the units of the files its files import, and of
+    # the extensions they see.
     var reads = Array<HashSet<ulong>>();
     for (var unit in units) {
         var read = HashSet<ulong>();
@@ -100,11 +100,70 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
                 for (var extension in program.scopes[file].extensions) {
                     read.insert(unit_of[extension]);
                 }
+                # A type's extensions go with it: a layer that reads the
+                # type's file reads them too, so a specialization means the
+                # same in every layer (`Array<T>.find` uses the `==` an
+                # extension gives `T`). The runtime's types are checked on
+                # their own, before any file outside it.
+                if (!in_runtime[file]) {
+                    for (var extender in program.scopes[file].extended_by) {
+                        read.insert(unit_of[extender]);
+                    }
+                }
             }
         }
         reads.append(read);
     }
-    var order = _layer_order(reads, runtime_unit);
+    # A unit whose files only import and re-export declares nothing to
+    # check: the linker resolved its names to the files they come from. It
+    # is no layer; a unit reading it reads what it reads instead. One that
+    # no unit reads stays, as the program's own (`pep-build sema/module.pep`).
+    var read_by = Array<bool>();
+    for (var _ in 0..units.count) {
+        read_by.append(false);
+    }
+    for (var u in 0..units.count) {
+        for (var read in reads[u]) {
+            if (read != u) {
+                read_by[read] = true;
+            }
+        }
+    }
+    var through = Array<bool>();
+    for (var u in 0..units.count) {
+        bool empty = !runtime_unit[u] and read_by[u];
+        for (var file in units[u].files) {
+            empty = empty and program.files[file].module.declarations.is_empty;
+        }
+        through.append(empty);
+    }
+    for (var u in 0..units.count) {
+        if (through[u]) {
+            continue;
+        }
+        var resolved = HashSet<ulong>();
+        var pending = Array<ulong>();
+        var seen = HashSet<ulong>();
+        for (var read in reads[u]) {
+            pending.append(read);
+        }
+        while (!pending.is_empty) {
+            var next = pending.remove_at(pending.count - 1);
+            if (!through[next]) {
+                resolved.insert(next);
+            } else if (seen.insert(next)) {
+                for (var further in reads[next]) {
+                    pending.append(further);
+                }
+            }
+        }
+        reads[u] = resolved;
+    }
+    var skip = Array<bool>();
+    for (var u in 0..units.count) {
+        skip.append(runtime_unit[u] or through[u]);
+    }
+    var order = _layer_order(reads, skip);
     var out = Array<Layer>();
     var layer_of = Array<ulong>();
     for (var _ in 0..units.count) {
@@ -134,7 +193,7 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         closures.append(HashSet<ulong>());
     }
     for (var u in 0..units.count) {
-        if (runtime_unit[u]) {
+        if (runtime_unit[u] or through[u]) {
             continue;
         }
         var k = layer_of[u];
@@ -356,25 +415,25 @@ _record_folder(name: String): String {
 ## Writes `unit`'s record, the record of `layer`: a delta on the module of
 ## the layers it reads, merged, which `base` indexes. Returns the record and
 ## the layer's own interface, what the delta changed in the interface
-## (`sema.DeltaBase.own_hash`). With `stored`, the build cache keeps both
-## under the layer's key: the record, and beside it its own interface, which
-## the keys of the layers that read it need without reading the record.
+## (`sema.DeltaBase.own_hash`). The build cache keeps both under the layer's
+## key: the record, and beside it its own interface, which the keys of the
+## layers that read it need without reading the record, and the warnings
+## checking it gave, rendered, which a build that loads the record prints
+## again (as rustc's incremental cache and ccache replay a unit's
+## diagnostics).
 ##
 ## @param cache the build cache
 ## @param program the program
 ## @param layer the layer
 ## @param unit the checked unit
 ## @param base the index of the module the layer was checked on
-## @param stored whether the cache keeps the record
+## @param warned the layer's warnings, rendered, or empty
 ## @returns the record and the own interface
 export store_checked(
-    cache: Cache, program: link.Program, layer: Layer, unit: sema.CheckedUnit, base: sema.DeltaBase, stored: bool
+    cache: Cache, program: link.Program, layer: Layer, unit: sema.CheckedUnit, base: sema.DeltaBase, warned: String
 ): (u8[], String) {
     var bytes = _record_bytes(program, unit, base);
     var own = base.own_hash();
-    if (!stored) {
-        return (bytes, own);
-    }
     var path = record_path(cache, layer);
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {
@@ -383,37 +442,51 @@ export store_checked(
     var partial = Path($"{path}.{process.id()}");
     var own_path = _own_path(path);
     var own_partial = Path($"{own_path}.{process.id()}");
+    var warn_path = _warn_path(path);
+    var warn_partial = Path($"{warn_path}.{process.id()}");
     if (File.write_bytes(partial, bytes).is_err()
         or File.write_text(own_partial, own).is_err()
+        or File.write_text(warn_partial, warned).is_err()
+        or File.rename(warn_partial, warn_path).is_err()
         or File.rename(own_partial, own_path).is_err()
         or File.rename(partial, path).is_err()) {
         File.remove(partial);
         File.remove(own_partial);
+        File.remove(warn_partial);
         return (bytes, own);
     }
     _prune_records(folder);
     return (bytes, own);
 }
 
-## Returns the record of `layer` under its key and its own interface, when
-## the cache has both.
+## Returns the record of `layer` under its key, its own interface and its
+## warnings, rendered, when the cache has them.
 ##
 ## @param cache the build cache
 ## @param program the program
 ## @param layer the layer, its key set
-## @returns the record's bytes and its own interface
-export find_checked(cache: Cache, program: link.Program, layer: Layer): (u8[], String)? {
+## @returns the record's bytes, its own interface and its warnings
+export find_checked(cache: Cache, program: link.Program, layer: Layer): (u8[], String, String)? {
     var path = record_path(cache, layer);
     var own = File.read_to_string(_own_path(path));
     if (own.is_err() or own.value().is_empty) {
-        return Optional<(u8[], String)>.Empty;
+        return Optional<(u8[], String, String)>.Empty;
+    }
+    var warned = File.read_to_string(_warn_path(path));
+    if (warned.is_err()) {
+        return Optional<(u8[], String, String)>.Empty;
     }
     var bytes = File.read_bytes(path);
     if (bytes.is_err()) {
-        return Optional<(u8[], String)>.Empty;
+        return Optional<(u8[], String, String)>.Empty;
     }
-    var found = (bytes.value(), own.value());
-    return Optional<(u8[], String)>.Value(found);
+    var found = (bytes.value(), own.value(), warned.value());
+    return Optional<(u8[], String, String)>.Value(found);
+}
+
+# Where the warnings of the record at `path` are kept.
+_warn_path(path: Path): Path {
+    return Path($"{path}.warn");
 }
 
 # Where the own interface of the record at `path` is kept.
@@ -460,7 +533,10 @@ _prune_records(folder: Path) {
     });
     for (var i in (_KEEP_RECORDS as ulong)..found.count) {
         var (name, _) = found[i];
-        File.remove(folder.join(Path(name)));
+        var path = folder.join(Path(name));
+        File.remove(path);
+        File.remove(_own_path(path));
+        File.remove(_warn_path(path));
     }
 }
 

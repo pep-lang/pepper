@@ -584,9 +584,11 @@ export windows_library_dirs(sysroot: Path, arch: String): Path[] {
     return dirs;
 }
 
-## The link driver's options that choose the platform: none for the host;
-## for another target, its triple, LLVM's linker (`lld`, the one at `lld`
-## when given), and its system root.
+## The link driver's options that choose the platform: for the host, none
+## but LLVM's linker on Linux when `lld` is found (much faster than the
+## system's BFD `ld`; rustc links with it on Linux too); for another target,
+## its triple, LLVM's linker (`lld`, the one at `lld` when given), and its
+## system root.
 ##
 ## @param target the compile target
 ## @param sysroot its system root, if any
@@ -597,7 +599,12 @@ export target_arguments(target: link.Target, sysroot: Path?, lld: Path?): String
     if (!target.triple.is_empty) {
         args.append($"--target={target.triple}");
     }
-    if (!target.is_host()) {
+    if (target.is_host()) {
+        if (lld.is_value() and target.os == "linux") {
+            args.append("-fuse-ld=lld");
+            args.append($"--ld-path={lld.value()}");
+        }
+    } else {
         if (lld.is_value() and target.os == "wasi") {
             # clang's WebAssembly toolchain reads only `-fuse-ld`, which
             # takes a path there.
@@ -714,7 +721,8 @@ export link_objects(
     # The NDK's clang runs the NDK's own lld, and clang's MSVC toolchain
     # finds lld-link itself.
     var lld = Optional<Path>.Empty;
-    if (!target.is_host() and target.os != "windows" and !ndk.is_value()) {
+    if ((!target.is_host() and target.os != "windows" and !ndk.is_value())
+        or (target.is_host() and target.os == "linux")) {
         lld = find_lld(target.os, driver.value());
     }
     for (var argument in target_arguments(target, root, lld)) {

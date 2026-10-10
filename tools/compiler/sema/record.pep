@@ -9,9 +9,11 @@
 
 import compiler.ast;
 import digest;
+import io;
+import os;
 import [Utf8] from text;
 import [Loc, NO_FILE] from "loc";
-import [Checked, StructDef] from "model";
+import [Checked, FunctionDef, StructDef] from "model";
 import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
@@ -334,6 +336,22 @@ export struct DeltaBase {
     var _checked: Array<HashSet<String>> = Array<HashSet<String>>();
     # The base's checked summaries, as indexed.
     var _summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
+    ## The base's structs, functions and templates as indexed: the elements
+    ## themselves, which a delta finds by identity. The passes change a
+    ## checked declaration only by extending a struct (`extended_checked`),
+    ## so one still there is the same as the base's; with
+    ## `PEPC_VERIFY_IDENTITY` set, the delta checks that against the hashes.
+    var ref_structs: Array<StructDef> = Array<StructDef>();
+    var ref_templates: Array<StructDef> = Array<StructDef>();
+    var ref_functions: Array<FunctionDef> = Array<FunctionDef>();
+    var ref_template_functions: Array<FunctionDef> = Array<FunctionDef>();
+    ## Each of `ref_structs` and `ref_templates` with its member lists as
+    ## indexed, which an extension may grow since.
+    var ref_struct_parts: Array<StructDef> = Array<StructDef>();
+    var ref_template_parts: Array<StructDef> = Array<StructDef>();
+    ## Whether the lists found by identity are also indexed by hash, and
+    ## each element found checked against its hash (`PEPC_VERIFY_IDENTITY`).
+    var verifying: bool = os.environment("PEPC_VERIFY_IDENTITY").is_value();
 
     construct() {}
 
@@ -633,6 +651,21 @@ export struct DeltaBase {
             _places[key] = index;
             var distinct = _distinct.try_get(list);
             _distinct[list] = (distinct.is_value() ? distinct.value() : 0) + 1;
+        }
+    }
+
+    ## With `verifying`, reports on standard error the element of the
+    ## base's list `list` at `at` found by identity whose record is not the
+    ## one written to `scratch`: an element changed in place.
+    ##
+    ## @param list the list
+    ## @param at the element's place in the base's list
+    ## @param scratch the element as it is, written alone
+    ## @param name the element's name, if it has one
+    verify_same(list: String, at: ulong, scratch: RecordOut, name: String = "") {
+        var sequence = sequence(list);
+        if (at >= sequence.count or sequence[at] != _hash(scratch)) {
+            io.File.stderr().write_all($"identity: {list} {at} {name} changed in place\n");
         }
     }
 

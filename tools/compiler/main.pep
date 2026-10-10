@@ -74,6 +74,9 @@ main(args: String[]): int {
     String? without_checks;
     String? triple;
     String? sysroot;
+    # `--layer-worker dir`, which `driver.build` adds when it checks layers
+    # in child processes: check the layers it is given (`driver.layer_worker`).
+    String? layer_worker;
     # Options are matched as `pep-build` matches them: a value after a
     # space or `=` (`--cache dir`, `--cache=dir`), or attached to a short
     # option (`-Idir`); after `--`, every argument is a file.
@@ -125,6 +128,8 @@ main(args: String[]): int {
             return 0;
         } else if (name == "-v" or name == "--verbose") {
             # Accepted for compatibility, as by pep-build.
+        } else if (name == "--layer-worker") {
+            layer_worker = Optional<String>.Value(value);
         } else if (name == "--emit-linked") {
             linked = true;
         } else if (name == "--emit-checked") {
@@ -279,6 +284,19 @@ main(args: String[]): int {
         # A build links the bodies of only the files it checks
         # (`driver.build`).
         setup.defer_bodies = !(ir or model or linked or checked);
+        # A rebuild's first layer worker loads the program while this
+        # process does (`driver.start_layer_worker`).
+        var early_worker = Optional<process.Child>.Empty;
+        if (setup.defer_bodies and !layer_worker.is_value() and !no_cache) {
+            var worker_args = Array<String>();
+            for (var k in 1..args.count) {
+                worker_args.append(args[k]);
+            }
+            var folder = build_dir.is_value()
+                ? Path(build_dir.value())
+                : (project.value().dir.is_value() ? project.value().dir.value() : _here()).join(Path(".pep")).join(Path("build"));
+            early_worker = driver.start_layer_worker(worker_args, folder);
+        }
         var program = link.load_program(entry, setup);
         if (program.is_err()) {
             _report(program.error());
@@ -375,6 +393,13 @@ main(args: String[]): int {
             }
             options.trace_time = traces.contains("time");
             options.trace_cache = traces.contains("cache");
+            if (layer_worker.is_value()) {
+                return driver.layer_worker(program.value(), options, Path(layer_worker.value()));
+            }
+            for (var k in 1..args.count) {
+                options.worker_args.append(args[k]);
+            }
+            options.early_worker = early_worker;
             var made = driver.build(program.value(), options);
             if (made.is_err()) {
                 # Empty: printed already (a syntax error read late).
@@ -399,6 +424,12 @@ main(args: String[]): int {
     }
     print(module.value().to_json().to_string());
     return 0;
+}
+
+## The current folder, or `.` when it cannot be read.
+_here(): Path {
+    var cwd = process.working_directory();
+    return cwd.is_ok() ? cwd.value() : Path(".");
 }
 
 ## The level `PEPPER_OPT_LEVEL` names (`0` to `3`), or 0 when it is unset
@@ -430,7 +461,7 @@ _value_name(name: String): String? {
         "-l" => {
             return Optional<String>.Value("LIB");
         }
-        "-L", "-I", "--build", "--cache", "--sysroot" => {
+        "-L", "-I", "--build", "--cache", "--sysroot", "--layer-worker" => {
             return Optional<String>.Value("DIR");
         }
         "--import" => {

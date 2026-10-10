@@ -10,7 +10,7 @@ import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
 import [Callees] from "named_arguments";
 import [Member] from "overload_select";
-import [PendingBody] from "pending";
+import [CheckedDecls, PendingBody] from "pending";
 import [ImplicitTables] from "resolve_implicit_types";
 import [StructInfo, StructTable] from "static_type";
 import [is_integral_name] from "type_name";
@@ -73,6 +73,9 @@ export struct PassState {
     var trait_memo: TraitTypeMemo = TraitTypeMemo();
     ## The callees of the checked declarations, built once (`Callees`).
     var checked_callees: Callees? = Optional<Callees>.Empty;
+    ## The checked declarations by name (`checked.checked_decls`), found
+    ## once per layer.
+    var checked_decls: CheckedDecls? = Optional<CheckedDecls>.Empty;
     ## The checked declarations' tables for `resolve_implicit_types`, built
     ## once per unit.
     var checked_implicit: ImplicitTables? = Optional<ImplicitTables>.Empty;

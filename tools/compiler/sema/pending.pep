@@ -1,7 +1,7 @@
 ## What the model holds in memory only (fields `model.pep` declares with a
 ## default): never fingerprinted, written as JSON or recorded.
 
-import [FunctionDef, StructDef] from "model";
+import [FunctionDef, StructDef, TypeName] from "model";
 
 ## A function body a checked unit's record holds that reading it skipped:
 ## where in the record it is, decoded only when a pass, codegen or a write
@@ -27,6 +27,27 @@ export struct PendingBody {
         this.start = start;
         this.end = end;
     }
+}
+
+## A layer's checked declarations by name (`checked.checked_decls`), for
+## the tables the passes build again each round: they look up the few the
+## layer's code names here rather than take in every checked one each
+## time. Built once per layer; a struct the layer extends since is the
+## layer's own (`LayerDecls`), which a table finds first.
+export struct CheckedDecls {
+    ## The checked free functions that are not generic, and the generic
+    ## ones, by name: the last of a name, as the tables kept them.
+    var functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    var generic_functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    ## The constructors of the checked structs that are not generic, by the
+    ## name a call gives them.
+    var constructors: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
+    ## The checked structs, by type (`Box<int>`; a generic base as `Box<T>`).
+    var structs: HashMap<String, StructDef> = HashMap<String, StructDef>();
+    ## The checked globals' types, by name.
+    var globals: HashMap<String, TypeName> = HashMap<String, TypeName>();
+
+    construct() {}
 }
 
 ## The declarations a layer adds: its structs and functions, the checked

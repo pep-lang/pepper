@@ -140,6 +140,10 @@ export struct FileScope {
     var named: HashMap<ulong, String> = HashMap<ulong, String>();
     ## The other files whose exported extensions this file may use.
     var extensions: HashSet<ulong> = HashSet<ulong>();
+    ## The other files that extend a type this file declares: code
+    ## anywhere that uses the type sees what they add to it (a
+    ## specialization of `Array<T>.find` the `==` an extension gives `T`).
+    var extended_by: HashSet<ulong> = HashSet<ulong>();
     ## The declarations the file's imports bind, by their linked names.
     var bound: HashSet<String> = HashSet<String>();
 
@@ -195,10 +199,14 @@ export struct PendingLink {
     ## @returns what `link` would return, without `imported` and errors
     bound(): Linked {
         var out = Linked();
+        var extended_by = _linker.extended_by();
+        ulong i = 0;
         for (var extensions in _linker.prepared_extensions) {
             var scope = FileScope();
             scope.extensions = extensions;
+            scope.extended_by = extended_by[i];
             out.scopes.append(scope);
+            i += 1;
         }
         out.overload_unions = _linker.unions.by_module();
         return out;
@@ -536,6 +544,10 @@ struct _Members {
     var adopters: HashMap<String, String[]> = HashMap<String, String[]>();
     # type alias -> the type it names.
     var aliases: HashMap<String, String> = HashMap<String, String>();
+    # struct, enum or trait -> the file that declares it.
+    var declared_in: HashMap<String, ulong> = HashMap<String, ulong>();
+    # Each extension's type and the file of the extension.
+    var extended_in: Array<(String, ulong)> = Array<(String, ulong)>();
 
     construct() {}
 
@@ -1743,6 +1755,21 @@ struct _Linker {
         return named;
     }
 
+    # Per file, the other files that extend a type it declares.
+    extended_by(): HashSet<ulong>[] {
+        var out = Array<HashSet<ulong>>();
+        for (var _ in 0..files.count) {
+            out.append(HashSet<ulong>());
+        }
+        for (var (extended, file) in members.extended_in) {
+            var declared = members.declared_in.try_get(extended);
+            if (declared.is_value() and declared.value() != file) {
+                out[declared.value()].insert(file);
+            }
+        }
+        return out;
+    }
+
     # Per file, the other files whose exported extensions it may use: the
     # prelude, the files it imports, and every file of a module it imports.
     visible_extensions(): HashSet<ulong>[] {
@@ -1822,8 +1849,12 @@ struct _Linker {
                     continue;
                 }
                 match (d) {
+                    Trait(t) => {
+                        members.declared_in[own[i].try_get(t.name).value_or(t.name)] = i;
+                    }
                     Struct(s) => {
                         var key = own[i].try_get(s.name).value_or(s.name);
+                        members.declared_in[key] = i;
                         if (!members.of_body.contains(key)) {
                             members.of_body[key] = HashSet<String>();
                         }
@@ -1842,6 +1873,7 @@ struct _Linker {
                     }
                     Extend(e) => {
                         var extended = members.resolve(_resolve_or_name(i, bindings[i], e.target.name));
+                        members.extended_in.append((extended, i));
                         for (var t in e.traits) {
                             var trait_name = members.resolve(_resolve_or_name(i, bindings[i], t.name));
                             if (!members.adopters.contains(trait_name)) {
@@ -2210,6 +2242,7 @@ struct _Linker {
         ulong n = files.count;
         var bindings = prepared_bindings;
         var extensions = prepared_extensions;
+        var extended_by = extended_by();
         var linked = Linked();
         ulong i = 0;
         while (i < n) {
@@ -2221,6 +2254,7 @@ struct _Linker {
             scope.imported = rewriter.imported;
             scope.named = named;
             scope.extensions = extensions[i];
+            scope.extended_by = extended_by[i];
             for (var (_, c) in bindings[i].unqualified) {
                 if (c.is_value()) {
                     scope.bound.insert(c.value());

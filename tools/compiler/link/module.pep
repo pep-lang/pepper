@@ -9,7 +9,7 @@ export [
 ] from "deprecation";
 export [is_build_option_name, supported_triples, Target, TEST_BUILD_OPTION] from "platform";
 export [path_key, Runtime] from "files";
-export [declares_override, unit_inputs, units, Unit, PRELUDE_UNIT] from "units";
+export [declares_override, layer_units, unit_inputs, units, Unit, PRELUDE_UNIT] from "units";
 export [
     demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR, symbol_name
 ] from "names";

@@ -122,6 +122,11 @@ export struct Temporary {
     }
 }
 
+## The owner `Generator.owners` records for a function declared only that
+## no file owns (an instantiation a lower layer's object defines): not a
+## file, so `prepare` only respells it.
+export const DECLARED_ONLY: uint = 0xffffffff;
+
 ## The generator of one LLVM module.
 export struct Generator {
     var context: llvm.Context;
@@ -194,6 +199,14 @@ export struct Generator {
     ## The files whose units' objects come from the build cache: the bodies
     ## they own are only declared.
     var cached_files: HashSet<uint> = HashSet<uint>();
+    ## Compiling one layer's object: the functions declared only, by linker
+    ## spelling (`link.symbol_name`), whoever owns them, which the objects
+    ## of the layers below define (instantiations among them). Every other
+    ## function with a body is defined here, and one whose file is another
+    ## layer's (a method a pass of this layer added to a struct below, such
+    ## as `_pep_copy_value`) has no owner, so it is `linkonce_odr`, as C++
+    ## emits an implicit special member in each object that uses it.
+    var declared: HashSet<String>? = Optional<HashSet<String>>.Empty;
     ## The unowned bodies held back (`hold`), with the names they are
     ## generated as and their declarations, and the places in those of the
     ## ones no generated code calls yet.
@@ -253,6 +266,17 @@ export struct Generator {
         # instructions.
         ir.set_data_layout(machine.data_layout());
         ir.set_target_triple(machine.triple());
+    }
+
+    ## Records `loc`'s file as the owner of function `name`, as `own` does,
+    ## except, compiling one layer's object, when the file is another
+    ## layer's (`Generator.declared`): the function is not in that layer's
+    ## object, so it is defined here unowned.
+    own_function(name: String, loc: Loc) {
+        if (declared.is_value() and cached_files.contains(loc.file)) {
+            return;
+        }
+        own(name, loc);
     }
 
     ## Remembers `loc` as where a failing `result` arose, unless a node nested
@@ -654,7 +678,10 @@ export struct Build {
 ## @param owners receives the file each owned symbol belongs to, by name
 ##               (see `partition.pep`)
 ## @param cached_files the files whose units' objects come from the build
-##   cache: the bodies they own are only declared
+##   cache, or another layer's object: the bodies they own are only declared
+## @param declared compiling one layer's object: the functions only
+##   declared, by linker spelling, whoever owns them, which the objects of
+##   the layers below define (`Generator.declared`)
 ## @returns the module, or the first error
 export generate(
     module: Module,
@@ -663,12 +690,14 @@ export generate(
     name: String,
     build: Build,
     owners: HashMap<String, uint> = HashMap<String, uint>(),
-    cached_files: HashSet<uint> = HashSet<uint>()
+    cached_files: HashSet<uint> = HashSet<uint>(),
+    declared: HashSet<String>? = Optional<HashSet<String>>.Empty
 ): Result<llvm.Module, Diagnostic> {
     var context = llvm.Context();
     var generator = Generator(context, name, build.machine, state);
     generator.owners = owners;
     generator.cached_files = cached_files;
+    generator.declared = declared;
     generator.file_namespaces = namespaces;
     generator.opt_level = build.opt_level;
     generator.runtime_checks = build.runtime_checks;

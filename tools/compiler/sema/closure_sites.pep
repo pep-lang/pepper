@@ -3,9 +3,10 @@
 ## `for_each_site`, `for_each_applied_site_in` and
 ## `for_each_expression_mut` in Pepper.
 
-import [layer_decls] from "checked";
+import [checked_decls, layer_decls] from "checked";
 import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
+import [CheckedDecls] from "pending";
 import [PassState] from "state";
 import [static_type_of, StructTable] from "static_type";
 import [zero_for] from "synthesize";
@@ -146,19 +147,29 @@ export trait SiteVisitor {
     visit(owner: String?, e: Expression, expected: TypeName?, current: TypeName?);
 }
 
-## Declared types the expected-type walk needs: `closures::Table`.
+## Declared types the expected-type walk needs: `closures::Table`. The
+## layer's own declarations are taken in when it is built; a checked one is
+## looked up when the walk first names it (`CheckedDecls`).
 export struct SiteTable {
-    ## Free function or struct constructor name to parameter types.
-    var callables: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+    ## Free function or struct constructor name to parameter types: the
+    ## layer's functions, then the externs, then its constructors, each
+    ## kind over the one before; and the checked ones found so far.
+    var _functions: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+    var _externs: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+    var _constructors: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
+    var _checked_callables: HashMap<String, TypeName[]?> = HashMap<String, TypeName[]?>();
     ## Struct type to (field name to type).
-    var fields: HashMap<String, HashMap<String, TypeName>> = HashMap<String, HashMap<String, TypeName>>();
+    var _fields: HashMap<String, HashMap<String, TypeName>> = HashMap<String, HashMap<String, TypeName>>();
     ## Struct type to (method name to parameter types).
-    var methods: HashMap<String, HashMap<String, TypeName[]>> = HashMap<String, HashMap<String, TypeName[]>>();
-    var globals: HashMap<String, TypeName> = HashMap<String, TypeName>();
+    var _methods: HashMap<String, HashMap<String, TypeName[]>> = HashMap<String, HashMap<String, TypeName[]>>();
+    var _globals: HashMap<String, TypeName> = HashMap<String, TypeName>();
     ## Generic free functions, for calls whose type arguments are inferred.
-    var generics: HashMap<String, GenericSignature> = HashMap<String, GenericSignature>();
+    var _generics: HashMap<String, GenericSignature> = HashMap<String, GenericSignature>();
     ## Struct type to generic methods, likewise.
-    var generic_methods: HashMap<String, HashMap<String, GenericSignature>> = HashMap<String, HashMap<String, GenericSignature>>();
+    var _generic_methods: HashMap<String, HashMap<String, GenericSignature>> = HashMap<String, HashMap<String, GenericSignature>>();
+    # The struct types whose checked entries `_checked_struct` took in.
+    var _checked_structs: HashSet<String> = HashSet<String>();
+    var _checked: CheckedDecls;
     var statics: StructTable;
     var state: PassState;
 
@@ -169,11 +180,13 @@ export struct SiteTable {
     construct(module: Module, state: PassState, statics: StructTable? = Optional<StructTable>.Empty) {
         this.state = state;
         this.statics = statics.is_value() ? statics.value() : StructTable(module, memo = state.trait_types_memo());
+        _checked = checked_decls(module, state);
+        var layer = layer_decls(module);
         # A generic base's parameter types name its own type parameters;
         # only its specializations give a closure argument its types.
-        for (var f in module.functions) {
+        for (var f in layer.functions) {
             if (!f.is_generic_func) {
-                callables[f.name] = _parameter_types(f);
+                _functions[f.name] = _parameter_types(f);
             }
         }
         for (var e in module.externs) {
@@ -181,51 +194,165 @@ export struct SiteTable {
             for (var p in e.parameters) {
                 types.append(p.ty);
             }
-            callables[e.name] = types;
+            _externs[e.name] = types;
         }
-        for (var st in module.structs) {
+        for (var st in layer.structs) {
             if (st.generic_params.count != 0) {
                 continue;
             }
             for (var c in st.constructors) {
-                callables[c.name] = _parameter_types(c);
+                _constructors[c.name] = _parameter_types(c);
             }
-            fields[st.ty.to_string()] = _field_types(st);
-            var by_name = HashMap<String, TypeName[]>();
-            for (var m in st.method_members) {
-                by_name[m.name] = _parameter_types(m);
-            }
-            methods[st.ty.to_string()] = by_name;
+            _add_struct(st);
         }
         # A generic base's fields, in its own terms: what a closure created
         # in one of its methods captures from `this`.
-        for (var st in module.structs) {
+        for (var st in layer.structs) {
             if (st.generic_params.count != 0) {
-                fields[st.ty.to_string()] = _field_types(st);
+                _fields[st.ty.to_string()] = _field_types(st);
             }
         }
         for (var g in module.globals) {
-            globals[g.name] = g.ty;
-        }
-        for (var f in module.functions) {
-            if (f.is_generic_func) {
-                generics[f.name] = GenericSignature(f, state);
+            if (!module.checked.globals.contains(g.name)) {
+                _globals[g.name] = g.ty;
             }
         }
-        for (var st in module.structs) {
-            if (st.generic_params.count == 0 and st.generic_methods.count != 0) {
-                var by_name = HashMap<String, GenericSignature>();
-                for (var m in st.generic_methods) {
-                    by_name[m.name] = GenericSignature(m, state);
-                }
-                generic_methods[st.ty.to_string()] = by_name;
+        for (var f in layer.functions) {
+            if (f.is_generic_func) {
+                _generics[f.name] = GenericSignature(f, state);
             }
         }
     }
 
+    # Takes in struct `st`, not a generic base: its fields, methods and
+    # generic methods.
+    _add_struct(st: StructDef) {
+        var key = st.ty.to_string();
+        _fields[key] = _field_types(st);
+        var by_name = HashMap<String, TypeName[]>();
+        for (var m in st.method_members) {
+            by_name[m.name] = _parameter_types(m);
+        }
+        _methods[key] = by_name;
+        if (st.generic_methods.count != 0) {
+            var generic = HashMap<String, GenericSignature>();
+            for (var m in st.generic_methods) {
+                generic[m.name] = GenericSignature(m, state);
+            }
+            _generic_methods[key] = generic;
+        }
+    }
+
+    # Takes in the checked struct of type `key`, once, unless the layer's
+    # own entry for it stands.
+    _checked_struct(key: String) {
+        if (_fields.contains(key) or !_checked_structs.insert(key)) {
+            return;
+        }
+        var st = _checked.structs.try_get(key);
+        if (!st.is_value()) {
+            return;
+        }
+        if (st.value().generic_params.count != 0) {
+            _fields[key] = _field_types(st.value());
+        } else {
+            _add_struct(st.value());
+        }
+    }
+
+    ## The parameter types of the free function or constructor a call
+    ## names, if any.
+    ##
+    ## @param name the name the call gives it
+    ## @returns the parameter types
+    callable(name: String): TypeName[]? {
+        var own = _constructors.try_get(name);
+        if (own.is_value()) {
+            return own;
+        }
+        var checked = _checked_callables.try_get(name);
+        if (!checked.is_value()) {
+            var found = Optional<TypeName[]>.Empty;
+            var c = _checked.constructors.try_get(name);
+            if (c.is_value()) {
+                found = Optional<TypeName[]>.Value(_parameter_types(c.value()));
+            }
+            _checked_callables[name] = found;
+            checked = Optional<TypeName[]?>.Value(found);
+        }
+        if (checked.value().is_value()) {
+            return checked.value();
+        }
+        var external = _externs.try_get(name);
+        if (external.is_value()) {
+            return external;
+        }
+        var function = _functions.try_get(name);
+        if (function.is_value()) {
+            return function;
+        }
+        var f = _checked.functions.try_get(name);
+        if (f.is_value()) {
+            var types = _parameter_types(f.value());
+            _functions[name] = types;
+            return Optional<TypeName[]>.Value(types);
+        }
+        return Optional<TypeName[]>.Empty;
+    }
+
+    ## The generic free function a call names, if any.
+    ##
+    ## @param name the function's name
+    ## @returns its signature
+    generic(name: String): GenericSignature? {
+        var found = _generics.try_get(name);
+        if (found.is_value()) {
+            return found;
+        }
+        var f = _checked.generic_functions.try_get(name);
+        if (!f.is_value()) {
+            return Optional<GenericSignature>.Empty;
+        }
+        var signature = GenericSignature(f.value(), state);
+        _generics[name] = signature;
+        return Optional<GenericSignature>.Value(signature);
+    }
+
+    ## The parameter types of method `name` of struct type `owner`, if any.
+    ##
+    ## @param owner the struct's type
+    ## @param name the method's name
+    ## @returns the parameter types
+    method(owner: String, name: String): TypeName[]? {
+        _checked_struct(owner);
+        var by_name = _methods.try_get(owner);
+        return by_name.is_value() ? by_name.value().try_get(name) : Optional<TypeName[]>.Empty;
+    }
+
+    ## Generic method `name` of struct type `owner`, if any.
+    ##
+    ## @param owner the struct's type
+    ## @param name the method's name
+    ## @returns its signature
+    generic_method(owner: String, name: String): GenericSignature? {
+        _checked_struct(owner);
+        var by_name = _generic_methods.try_get(owner);
+        return by_name.is_value() ? by_name.value().try_get(name) : Optional<GenericSignature>.Empty;
+    }
+
+    ## The type of global `name`, if any.
+    ##
+    ## @param name the global's name
+    ## @returns its type
+    global(name: String): TypeName? {
+        var own = _globals.try_get(name);
+        return own.is_value() ? own : _checked.globals.try_get(name);
+    }
+
     _field(owner: TypeName, name: String): TypeName? {
         var key = owner.without_pointers().to_string();
-        var found = fields.try_get(key);
+        _checked_struct(key);
+        var found = _fields.try_get(key);
         return found.is_value() ? found.value().try_get(name) : Optional<TypeName>.Empty;
     }
 
@@ -264,7 +391,7 @@ export struct SiteTable {
                         ty = _field(current.value(), node.id);
                     }
                     if (!ty.is_value()) {
-                        ty = globals.try_get(node.id);
+                        ty = global(node.id);
                     }
                 } else {
                     ty = static_type_of(e, statics, current, state);
@@ -844,9 +971,9 @@ _sites_in_expression(e: Expression, expected: TypeName?, table: SiteTable, curre
     var none = Optional<TypeName>.Empty;
     match (e) {
         FunctionCall(node) => {
-            var params = table.callables.try_get(node.function);
+            var params = table.callable(node.function);
             if (!params.is_value()) {
-                var signature = table.generics.try_get(node.function);
+                var signature = table.generic(node.function);
                 if (signature.is_value()) {
                     params = table.generic_parameters(signature.value(), node.args, current);
                 }
@@ -862,17 +989,11 @@ _sites_in_expression(e: Expression, expected: TypeName?, table: SiteTable, curre
             var receiver = table.type_of(node.this_value, current);
             if (receiver.is_value()) {
                 var owner = receiver.value().to_string();
-                var by_name = table.methods.try_get(owner);
-                if (by_name.is_value()) {
-                    params = by_name.value().try_get(node.method);
-                }
+                params = table.method(owner, node.method);
                 if (!params.is_value()) {
-                    var generic = table.generic_methods.try_get(owner);
-                    if (generic.is_value()) {
-                        var signature = generic.value().try_get(node.method);
-                        if (signature.is_value()) {
-                            params = table.generic_parameters(signature.value(), node.args, current);
-                        }
+                    var signature = table.generic_method(owner, node.method);
+                    if (signature.is_value()) {
+                        params = table.generic_parameters(signature.value(), node.args, current);
                     }
                 }
             }

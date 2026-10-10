@@ -9,7 +9,7 @@ import io;
 import os;
 import [Loc] from "loc";
 import [Block, Checked, FunctionDef, Module, StructDef, TraitType, TypeAliasDef] from "model";
-import [LayerDecls, PendingBody] from "pending";
+import [CheckedDecls, LayerDecls, PendingBody] from "pending";
 import [
     compare_bytes, DeltaBase, interface_text, RecordIn, RecordOut, summary_without_place, write_interface_summaries
 ] from "record";
@@ -171,6 +171,47 @@ export layer_decls(module: Module): LayerDecls {
     return out;
 }
 
+## The checked declarations of `module` by name (`CheckedDecls`), built on
+## first use and kept in `state` for the layer.
+##
+## @param module the module
+## @param state the passes' state
+## @returns the declarations
+export checked_decls(module: Module, state: PassState): CheckedDecls {
+    if (state.checked_decls.is_value()) {
+        return state.checked_decls.value();
+    }
+    var out = CheckedDecls();
+    for (var f in module.functions) {
+        if (!is_checked_function(module, f)) {
+            continue;
+        }
+        if (f.is_generic_func) {
+            out.generic_functions[f.name] = f;
+        } else {
+            out.functions[f.name] = f;
+        }
+    }
+    for (var st in module.structs) {
+        if (!module.checked.structs.contains(st.name)) {
+            continue;
+        }
+        out.structs[st.ty.to_string()] = st;
+        if (st.generic_params.count == 0) {
+            for (var c in st.constructors) {
+                out.constructors[c.name] = c;
+            }
+        }
+    }
+    for (var g in module.globals) {
+        if (module.checked.globals.contains(g.name)) {
+            out.globals[g.name] = g.ty;
+        }
+    }
+    state.checked_decls = Optional<CheckedDecls>.Value(out);
+    return out;
+}
+
 ## Whether `function` was checked with a unit below: its name is a checked
 ## function's, and it is not a concrete override still spelled as the
 ## generic it overrides (`compare<Point>` reads `compare` until
@@ -329,15 +370,13 @@ export struct CheckedUnit {
     ##
     ## @param out the record
     ## @param base the index of the module this unit was checked on
-    ## @param next with `base`, filled with the index of this unit's module
-    ##     (`write_module_delta`)
-    write(out: RecordOut, base: DeltaBase? = Optional<DeltaBase>.Empty, next: DeltaBase = DeltaBase()) {
+    write(out: RecordOut, base: DeltaBase? = Optional<DeltaBase>.Empty) {
         if (base.is_value()) {
             out.unsigned(1);
             # How many use contexts the base had: a merge moves the new
             # type uses' contexts by what it has instead.
             out.unsigned(base.value().size("use_contexts"));
-            write_module_delta(out, module, base.value(), next);
+            write_module_delta(out, module, base.value());
         } else {
             out.unsigned(0);
             write_module(out, module);
