@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
+            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -242,9 +242,8 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </tbody>
 </table>
 </div>
-<p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
-<code>pep-test</code> and <code>pepper</code> are Pepper programs, built with <code>pep-build</code>.</p>
+<p>Every one of them but <code>pep-build</code> is a Pepper program, built with
+<code>pep-build</code>; <code>pep-build</code> itself is too (<code>tools/compiler</code>).</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>

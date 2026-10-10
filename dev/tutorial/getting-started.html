@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
+            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -379,9 +379,9 @@ the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
 the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
-built yourself (<code>cargo build --release -p pepper-lsp</code> builds
-<code>target/release/pep-lsp</code>). The server restarts whenever that file
-changes.</li>
+built yourself (<code>pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
+<a href="../tools/pep-lsp.html">The language server: pep-lsp</a>). The server
+restarts whenever that file changes.</li>
 </ul>
 <p>To install the extension from the branch you have checked out instead of the
 release, see

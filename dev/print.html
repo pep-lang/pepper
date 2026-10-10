@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-71e7c868.js";
+            window.path_to_searchindex_js = "searchindex-1850ef6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-215b8fb0.js"></script>
@@ -527,9 +527,9 @@ the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
 the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
-built yourself (<code>cargo build --release -p pepper-lsp</code> builds
-<code>target/release/pep-lsp</code>). The server restarts whenever that file
-changes.</li>
+built yourself (<code>pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
+<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>). The server
+restarts whenever that file changes.</li>
 </ul>
 <p>To install the extension from the branch you have checked out instead of the
 release, see
@@ -20288,9 +20288,8 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </tbody>
 </table>
 </div>
-<p><code>cargo build --release --workspace</code> builds <code>pep-build</code>, <code>pep-lsp</code> and <code>pep-doc</code> into
-<code>target/release</code>; <code>pep-fmt</code>, <code>pep-profile</code>, <code>pep-package</code>, <code>pep-install</code>,
-<code>pep-test</code> and <code>pepper</code> are Pepper programs, built with <code>pep-build</code>.</p>
+<p>Every one of them but <code>pep-build</code> is a Pepper program, built with
+<code>pep-build</code>; <code>pep-build</code> itself is too (<code>tools/compiler</code>).</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
 <p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
 it next to it:</p>
@@ -21717,18 +21716,14 @@ folder uses, as <code>pepper install which</code> reports it there, so the edito
 checks code with the same compiler and standard library as <code>pepper build</code>.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run <strong>Pepper: Restart
-Language Server</strong> after switching toolchains. For another editor, build it with
-<code>cargo build --release -p pepper-lsp</code> (it is
-<code>target/release/pep-lsp</code>) and configure the editor to run it for <code>.pep</code>
-files.</p>
-<p>A rewrite of the server in Pepper is under way in <code>tools/pep-lsp</code> (#225).
-It’s built on the <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>,
-a framework for writing a language server for any language in Pepper.
-So far it reports diagnostics and the document outline, answers hover, go
-to definition and completion (generic code nothing instantiates and
-<code>match</code> bindings included), shows inlay hints, offers quick fixes, and
-dims code for other platforms. It reads the initialization options below. The server
-described here is still the Rust one until the rewrite does all it does.</p>
+Language Server</strong> after switching toolchains. For another editor, run the
+toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</code> files.</p>
+<p>The server is written in Pepper, in <code>tools/pep-lsp</code>, on the
+<a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
+for writing a language server for any language in Pepper. To build it from
+a checkout of the repository, with this checkout’s standard library:</p>
+<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+</code></pre>
 <h2 id="command-line-options-1"><a class="header" href="#command-line-options-1">Command-line options</a></h2>
 <pre><code class="language-text">pep-lsp [--stdio]
 </code></pre>
@@ -40872,8 +40867,8 @@ in the prelude, and the module passes them on as well.</p>
 returns a <code>Child</code>, and <code>exec()</code> runs it in place of the running program</li>
 <li><a href="#child">Child</a>: a running child process, its piped streams,
 and its <code>ExitStatus</code></li>
-<li><a href="#the-running-process-1">The running process</a>: <code>id()</code> and
-<code>executable_path()</code></li>
+<li><a href="#the-running-process-1">The running process</a>: <code>id()</code>,
+<code>executable_path()</code>, and <code>fork()</code>, which starts a copy of it</li>
 <li><a href="#finding-programs">Finding programs</a>: <code>find_executable()</code> looks a
 program up on the <code>PATH</code>, <code>find_companion()</code> looks beside the running
 program first, and <code>is_executable()</code> checks a file</li>
@@ -41368,6 +41363,36 @@ other C output streams. Nothing else runs: locals are not released and
 destructors do not run.</li>
 </ul>
 <p>Source: <code>runtime/process/current.pep</code></p>
+<h2 id="fork"><a class="header" href="#fork">fork</a></h2>
+<pre><code class="language-pepper">fork(): io.IoResult&lt;Child?&gt;
+</code></pre>
+<p>Starts a copy of the running process (POSIX <code>fork</code>): the copy has the
+same memory, open files and code, and both go on from here. In the
+parent, returns the copy as a <code>Child</code> to wait for; in the copy, returns
+none. The copy has only the calling thread, so fork before starting
+threads or tasks, and end the copy with <code>exit()</code>.</p>
+<p>The C standard streams are flushed first, so what <code>print</code> buffered is
+written once. Not on Windows or WASI, which start processes only from a
+program: there it returns an error.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the child in the parent, none in the copy, or an error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    var forked = process.fork();
+    if (forked.is_err()) {
+        return 0;
+    }
+    if (!forked.value().is_value()) {
+        process.exit(3);
+    }
+    var status = forked.value().value().wait().value();
+    return status.code().value() == 3 ? 0 : 1;
+}
+</code></pre>
 <h2 id="id-2"><a class="header" href="#id-2">id</a></h2>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>

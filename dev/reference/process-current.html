@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
+            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -199,6 +199,36 @@ other C output streams. Nothing else runs: locals are not released and
 destructors do not run.</li>
 </ul>
 <p>Source: <code>runtime/process/current.pep</code></p>
+<h2 id="fork"><a class="header" href="#fork">fork</a></h2>
+<pre><code class="language-pepper">fork(): io.IoResult&lt;Child?&gt;
+</code></pre>
+<p>Starts a copy of the running process (POSIX <code>fork</code>): the copy has the
+same memory, open files and code, and both go on from here. In the
+parent, returns the copy as a <code>Child</code> to wait for; in the copy, returns
+none. The copy has only the calling thread, so fork before starting
+threads or tasks, and end the copy with <code>exit()</code>.</p>
+<p>The C standard streams are flushed first, so what <code>print</code> buffered is
+written once. Not on Windows or WASI, which start processes only from a
+program: there it returns an error.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the child in the parent, none in the copy, or an error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import process;
+
+main(): int {
+    var forked = process.fork();
+    if (forked.is_err()) {
+        return 0;
+    }
+    if (!forked.value().is_value()) {
+        process.exit(3);
+    }
+    var status = forked.value().value().wait().value();
+    return status.code().value() == 3 ? 0 : 1;
+}
+</code></pre>
 <h2 id="id"><a class="header" href="#id">id</a></h2>
 <pre><code class="language-pepper">id(): ulong
 </code></pre>

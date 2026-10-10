@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-71e7c868.js";
+            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-215b8fb0.js"></script>
@@ -197,18 +197,14 @@ folder uses, as <code>pepper install which</code> reports it there, so the edito
 checks code with the same compiler and standard library as <code>pepper build</code>.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run <strong>Pepper: Restart
-Language Server</strong> after switching toolchains. For another editor, build it with
-<code>cargo build --release -p pepper-lsp</code> (it is
-<code>target/release/pep-lsp</code>) and configure the editor to run it for <code>.pep</code>
-files.</p>
-<p>A rewrite of the server in Pepper is under way in <code>tools/pep-lsp</code> (#225).
-It’s built on the <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>,
-a framework for writing a language server for any language in Pepper.
-So far it reports diagnostics and the document outline, answers hover, go
-to definition and completion (generic code nothing instantiates and
-<code>match</code> bindings included), shows inlay hints, offers quick fixes, and
-dims code for other platforms. It reads the initialization options below. The server
-described here is still the Rust one until the rewrite does all it does.</p>
+Language Server</strong> after switching toolchains. For another editor, run the
+toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</code> files.</p>
+<p>The server is written in Pepper, in <code>tools/pep-lsp</code>, on the
+<a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
+for writing a language server for any language in Pepper. To build it from
+a checkout of the repository, with this checkout’s standard library:</p>
+<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+</code></pre>
 <h2 id="command-line-options"><a class="header" href="#command-line-options">Command-line options</a></h2>
 <pre><code class="language-text">pep-lsp [--stdio]
 </code></pre>
