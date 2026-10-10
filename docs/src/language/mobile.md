@@ -44,7 +44,10 @@ pepper build --target aarch64-apple-ios --lib static greeter.pep -o ios/libgreet
 pepper build --target aarch64-linux-android --lib static greeter.pep -o android/libgreeter.a
 ```
 
-Each writes `greeter.h` beside the library. Build the library once for each
+The compiler writes each archive itself, in the format the platform's
+linkers read (BSD's for iOS, GNU's for Android), so nothing from Xcode or
+the NDK is needed to make it. Each writes `greeter.h` beside the library.
+Build the library once for each
 target the app ships: the device and the simulator on iOS, and each
 Android ABI.
 

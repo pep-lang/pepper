@@ -37,7 +37,7 @@ short, and `pepper help build` runs it.
 | `--emit-steps` | Print the names of the sema steps, one per line, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
 | `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
-| `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` | The CPU to generate code for | clang's default for the target |
+| `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` (`-m <option>`) | The CPU to generate code for | clang's default for the target |
 | `-g`, `--emit-debug` | Emit debug info | off |
 | `--debug-static=source`, `--debug-static=expanded` | With `-g`, step through `static` blocks as written or expanded | `source` |
 | `--frame-pointers` | Keep every function's frame pointer, for profilers | off |
@@ -153,11 +153,26 @@ Builds a library for C code to link instead of an executable, with a C
 header beside it that declares the program's `[Export]`ed functions. No
 `main` is needed.
 
-- `--lib static` writes an archive: `libname.a` (`name.lib` on Windows).
+- `--lib static` writes an archive: `libname.a` (`name.lib` on Windows),
+  holding the objects of the whole program, the runtime's included, with the
+  index of their symbols that linkers search. The compiler writes it itself
+  in the target's format (GNU's for Linux and Android, the BSD format
+  Apple's linkers read for macOS and iOS, the COFF archive for Windows), so
+  no archiver needs to be installed, and building one for another platform
+  needs no system root: nothing is linked. A program linking it also links
+  the libraries the program does, which the header names in a comment
+  (`/* Link the static library with: -lm */`).
 - `--lib shared` links a shared library: `libname.so`, `libname.dylib` on
-  macOS, `name.dll` on Windows.
+  macOS, `name.dll` (and its import library `name.lib`) on Windows. Its
+  `soname` is its file name; on macOS and iOS its install name is
+  `@rpath/<file name>`, so a program that links it finds it on its run
+  path. Linking one for another platform needs its system root, as an
+  executable does (`--sysroot`).
 
-See [Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
+The header goes beside the library, named for it without the `lib` prefix
+(`libname.a` has `name.h`). A library that exports nothing is built with a
+warning. See
+[Calling Pepper from C](../language/c-interop.md#calling-pepper-from-c).
 
 ### `--test`
 
@@ -347,10 +362,19 @@ whole program is optimized again as one module, so a call into another file
 alone, which links sooner. The default is `full` at `-O2` and `-O3` and
 `off` below; `--lto=full` at `-O0` is an error that asks for `-O`.
 
+With it, each file is optimized by LLVM's pre-link pipeline and kept as
+bitcode (in the build cache, as an object is), then the compiler links
+them into one module, makes every symbol internal but `main` and the C
+exports of `[Export]` functions, runs LLVM's link-time pipeline over the
+whole program and writes one object, which links as usual. No linker
+plugin is involved, so it works on every target. It applies to a library
+too (`--lib`).
+
 ### `-march=<cpu>`, `-mcpu=<cpu>`, `-mtune=<cpu>`, `-m<feature>`, `-mno-<feature>`
 
 The `-m` options choose the CPU the code is generated for, with clang's
-names and meanings:
+names and meanings (`-m <option>`, with a space, is the same as
+`-m<option>`):
 
 - On x86-64, `-march=<cpu>` names the CPU: `x86-64-v3`, `znver4`, or
   `native` for the machine compiling.
@@ -362,8 +386,14 @@ names and meanings:
 
 Without them the program runs on any machine of its kind: clang's default
 CPU for the target (`x86-64`; `apple-m1` on Apple arm64). An option the
-target's architecture does not know is an error. The chosen CPU is part of
-the build cache's key.
+target's architecture does not take is an error worded as clang words it:
+`-mcpu=` on x86-64 (`unsupported option '-mcpu=' for target ...; use
+'-march' or '-mtune'`), `-march=` on WebAssembly, an AArch64 `-march=`
+that is not `armv<version>-a` (`invalid arch name`), `native` for another
+platform's target, or an empty value. A CPU or feature name LLVM does not
+know is passed on, and LLVM warns about it. The last of each option wins;
+the features come after those the CPU implies. The chosen CPU, its
+features and its tuning are part of the build cache's key.
 
 ### `-g`, `--emit-debug`
 
@@ -542,6 +572,10 @@ differs from the cached object's, or if skipping the reused files' bodies
 changes another file's code. Setting `PEPPER_CACHE_VERIFY` to anything but
 empty or `0` does the same. `--no-verify-cache` turns it off even when
 `PEPPER_CACHE_VERIFY` is set. The two options cannot be combined.
+It builds the program a second time, with an empty cache of its own in the
+build folder, and compares each object that build makes with the one the
+cache holds under the same key, so a check costs about a build from
+scratch. A failure names the cached objects that differ.
 
 ## Tracing and diagnostics
 
@@ -553,7 +587,8 @@ more channels; `--Tall` turns on every one.
 - `-T time` prints how long each stage of the compile took
   (`time: check and build    470.763 ms`).
 - `-T passes` prints how long each pass of the checker took, summed over its
-  runs, slowest first.
+  runs, slowest first (`pass:  3116.171 ms   16x resolve_implicit_types`),
+  the passes run checking the runtime and each module included.
 - `-T cache` prints how the build cache supplied each object: `hit` (its
   sources, and its imports' declarations, are unchanged), `hit (same code)`
   (compiled again, to the same code), or `miss`; and whether linking was

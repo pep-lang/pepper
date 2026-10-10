@@ -1,5 +1,5 @@
 ## Building a program: the checked model to object files, linked into an
-## executable.
+## executable or a library (`--lib`).
 
 import compiler.ast;
 import async;
@@ -13,13 +13,16 @@ import os;
 import process;
 import compiler.sema;
 import "cache";
+import "emit_static";
 import "layers";
+import "library";
 import "linker";
+import "lto";
 import "parts";
 
 ## What `build` makes.
 export struct BuildOptions {
-    ## The executable to write.
+    ## The executable, or the library, to write.
     var output: Path;
     ## Where the object file goes.
     var build_dir: Path;
@@ -61,6 +64,26 @@ export struct BuildOptions {
     ## (`start_layer_worker`), which loads it at the same time: the first
     ## worker the build gives a layer, else stopped.
     var early_worker: process.Child? = Optional<process.Child>.Empty;
+    ## The CPU code is generated for (`-march`, `-mcpu`, `-mtune`,
+    ## `-m<feature>`); clang's default for the target without one.
+    var cpu: codegen.Cpu? = Optional<codegen.Cpu>.Empty;
+    ## Whether the program is optimized as one module before the link
+    ## (`--lto=full`); only above `-O0`.
+    var lto: bool = false;
+    ## The library to build for C instead of an executable (`--lib`).
+    var library: LibraryKind? = Optional<LibraryKind>.Empty;
+    ## With `-T passes`, where every sema pass's time adds up: the
+    ## program's, and each layer's, in a worker too.
+    var pass_times: sema.PassTimes? = Optional<sema.PassTimes>.Empty;
+    ## Whether to emit debug info (`-g`).
+    var debug: bool = false;
+    ## With `-g`, where the debugger shows the code a `static` block emits:
+    ## in the expanded copy of its file `--debug-static=expanded` writes
+    ## beside the output, rather than in the block as written.
+    var debug_static_expanded: bool = false;
+    ## The program's entry file, which `--debug-static=expanded` writes the
+    ## expanded copies of the files below its folder for.
+    var entry: Path? = Optional<Path>.Empty;
 
     construct(output: Path, build_dir: Path) {
         this.output = output;
@@ -372,7 +395,8 @@ _check_layers(
     trace: bool,
     verify: bool,
     prechecked: HashMap<ulong, (u8[], String, String)> = HashMap<ulong, (u8[], String, String)>(),
-    last_extension: String = ""
+    last_extension: String = "",
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<_Checked, String> {
     var module = sema.Module();
     var state = sema.PassState(program.target);
@@ -470,7 +494,7 @@ _check_layers(
             sema.index_module(module, base);
             clock.lap("index");
         }
-        var checked = _check_layer(program, module, layer, reused, sources, warnings);
+        var checked = _check_layer(program, module, layer, reused, sources, warnings, times);
         if (checked.is_err()) {
             return Result<_Checked, String>.err(checked.error());
         }
@@ -562,6 +586,25 @@ _defined_by(cache: Cache, layered: Layer[], ks: ulong[], dir: Path?): HashSet<St
     return out;
 }
 
+# How the units are compiled, as text for their keys: the target, the CPU
+# (`-m`), the `-O` level, link-time optimization and the code generation
+# options. A layer worker keys them as the build does.
+_build_text(options: BuildOptions, triple: String): String {
+    var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
+    bool lto = options.lto and options.opt_level > 0;
+    return $"{triple} {cpu.key()} -O{options.opt_level}{lto ? " -lto" : ""}{_codegen_options(options)}";
+}
+
+# The extension of a unit's object for `triple`: with link-time
+# optimization (`--lto=full` above `-O0`) its bitcode, which the cache
+# keeps as it keeps an object.
+_object_extension(options: BuildOptions, triple: String): String {
+    if (options.lto and options.opt_level > 0) {
+        return "bc";
+    }
+    return triple.contains("-windows") ? "obj" : "o";
+}
+
 # The object of `layer` in the build cache, under its key: its files' code
 # and what it instantiated, as a layer worker compiles it.
 _layer_object(cache: Cache, layer: Layer, extension: String): Path {
@@ -598,8 +641,8 @@ _compile_layer(
     dir: Path
 ): String? {
     var triple = codegen.target_triple(program.target);
-    var cpu = codegen.Cpu.default_for(triple);
-    var extension = triple.contains("-windows") ? "obj" : "o";
+    var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
+    var extension = _object_extension(options, triple);
     var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][options.opt_level];
     codegen.initialize_backends();
     var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
@@ -648,7 +691,9 @@ _compile_layer(
         options.opt_level,
         folder,
         options.trace_time,
-        true
+        true,
+        false,
+        options.lto and options.opt_level > 0
     );
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
@@ -762,6 +807,15 @@ _check_in_workers(
         return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
     }
     var checked = _check_in_workers_at(program, layered, options, jobs, prechecked, dir);
+    # With `-T passes`, the time each worker's passes took (`<k>.passes`).
+    if (options.pass_times.is_value()) {
+        for (var k in 0..layered.count) {
+            var passes = File.read_to_string(_layer_file(dir, k, "passes"));
+            if (passes.is_ok()) {
+                options.pass_times.value().add_all(sema.PassTimes.parse(passes.value()));
+            }
+        }
+    }
     if (!options.trace_time) {
         Directory.remove_all(dir);
     }
@@ -778,7 +832,7 @@ _check_in_workers_at(
     dir: Path
 ): Result<void, String> {
     var cache = options.cache.value();
-    var extension = codegen.target_triple(program.target).contains("-windows") ? "obj" : "o";
+    var extension = _object_extension(options, codegen.target_triple(program.target));
     var executable = process.executable_path();
     if (executable.is_err()) {
         return Result<void, String>.err($"cannot find this compiler: {executable.error().message}");
@@ -997,13 +1051,10 @@ export layer_worker(program: link.Program, options: BuildOptions, dir: Path): in
     var clock = _Clock(options.trace_time);
     var cache = options.cache.value();
     var triple = codegen.target_triple(program.target);
-    var cpu = codegen.Cpu.default_for(triple);
     var units = link.units(program);
-    var keys = Keys(
-        program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}{_codegen_options(options)}"
-    );
+    var keys = Keys(program, units, _build_text(options, triple));
     clock.lap("worker keys");
-    var triple_extension = triple.contains("-windows") ? "obj" : "o";
+    var triple_extension = _object_extension(options, triple);
     var reused = Optional<Reused>.Value(reuse(program, units, keys, cache, triple_extension));
     clock.lap("worker reuse");
     var layered = layers(program, link.layer_units(program), keys.base());
@@ -1102,9 +1153,15 @@ _work_on(
     var t2 = os.Instant.now();
     stages = stages + $"index {(t2 - t1).milliseconds()}\n";
     var warnings = Array<Diagnostic>();
-    var checked = _check_layer(program, module, layer, reused, sources, warnings);
+    var times = options.pass_times.is_value() ?
+        Optional<sema.PassTimes>.Value(sema.PassTimes()) :
+        Optional<sema.PassTimes>.Empty;
+    var checked = _check_layer(program, module, layer, reused, sources, warnings, times);
     if (checked.is_err()) {
         return Optional<String>.Value(checked.error());
+    }
+    if (times.is_value()) {
+        File.write_text(_layer_file(dir, k, "passes"), times.value().to_text());
     }
     var t3 = os.Instant.now();
     stages = stages + $"check {(t3 - t2).milliseconds()}\n";
@@ -1180,7 +1237,8 @@ _check_layer(
     layer: Layer,
     reused: Reused?,
     sources: SourceText[],
-    warnings: Diagnostic[]
+    warnings: Diagnostic[],
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
 ): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String> {
     # The specializations the checked layers asked for met their
     # constraints when they were checked.
@@ -1208,6 +1266,7 @@ _check_layer(
     var state = sema.PassState(program.target);
     state.sources = sources;
     state.checked_specs = checked_specs;
+    state.pass_times = times;
     # No lazy methods: a later layer may use a method this one would drop
     # from a specialization it made.
     var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
@@ -1363,11 +1422,14 @@ _print_record_stats(name: String, base: sema.DeltaBase) {
 }
 
 ## Builds `program` into an executable: merge, the sema passes, code
-## generation for the target (`program.target`), LLVM's standard pipeline at the `-O` level, one
-## object per compilation unit (from the build cache when its key hits),
-## then the link. When the cache records that the output is this very
-## program, unchanged since, nothing is built. Warnings print on standard
-## error whether or not the build succeeds.
+## generation for the target (`program.target`), LLVM's standard pipeline
+## at the `-O` level, one object per compilation unit (from the build cache
+## when its key hits), with link-time optimization one object for the
+## whole program (`lto.pep`), then the link. With `options.library`, a
+## library for C instead, with its header beside it (`library.pep`). When
+## the cache records that the output is this very program, unchanged
+## since, nothing is built. Warnings print on standard error whether or
+## not the build succeeds.
 ##
 ## @param program the loaded and linked program
 ## @param options where the output goes, and how it is built
@@ -1376,16 +1438,24 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var report = Built();
     var clock = _Clock(options.trace_time);
     var triple = codegen.target_triple(program.target);
-    var cpu = codegen.Cpu.default_for(triple);
+    var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
+    # Link-time optimization needs an optimized build.
+    bool lto = options.lto and options.opt_level > 0;
     var units = link.units(program);
     var keys = Optional<Keys>.Empty;
     String program_key = "";
+    # A library's header is written beside it, and must still be there.
+    var header = options.library.is_value() ?
+        Optional<Path>.Value(header_path(options.output, program.target)) :
+        Optional<Path>.Empty;
     if (options.cache.is_value()) {
-        keys = Optional<Keys>.Value(
-            Keys(program, units, $"{triple} {cpu.name} {cpu.features} -O{options.opt_level}{_codegen_options(options)}")
-        );
+        keys = Optional<Keys>.Value(Keys(program, units, _build_text(options, triple)));
+        # A unit's code holds the line numbers of the generics it
+        # instantiates from other files, which interface hashes leave out.
+        keys.value().exact_positions = options.debug;
         program_key = keys.value().program(program, _link_text(options));
-        if (options.cache.value().is_built(options.output, program_key)) {
+        if (options.cache.value().is_built(options.output, program_key)
+            and (!header.is_value() or header.value().is_file())) {
             if (options.trace_cache) {
                 File.stderr().write_all($"cache: {options.output} is up to date\n");
             }
@@ -1396,7 +1466,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         clock.lap("keys");
     }
 
-    var triple_extension = triple.contains("-windows") ? "obj" : "o";
+    # With LTO each part is bitcode, which the cache keeps as it keeps an
+    # object.
+    var triple_extension = _object_extension(options, triple);
     # The units whose objects the cache has: sema skips their bodies.
     var reused = Optional<Reused>.Empty;
     if (keys.is_value()) {
@@ -1406,7 +1478,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
 
     var sources = program.sources();
     var layered = Array<Layer>();
-    if (options.cache.is_value() and !_layers_off()) {
+    # Debug info holds the positions a layer's key leaves out, so a build
+    # with `-g` keys each unit by its text (`Keys.exact_positions`) instead.
+    if (options.cache.is_value() and !_layers_off() and !options.debug) {
         layered = layers(program, link.layer_units(program), keys.value().base());
     }
     # Checking layers links the bodies it needs when it gets to them.
@@ -1450,7 +1524,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             options.trace_cache,
             options.verify_cutoff,
             prechecked,
-            layer_objects ? triple_extension : ""
+            layer_objects ? triple_extension : "",
+            options.pass_times
         );
         if (checked.is_err()) {
             report_warnings(warnings, sources);
@@ -1475,6 +1550,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         }
         state.sources = sources;
         state.lazy_methods = true;
+        state.pass_times = options.pass_times;
+        if (options.debug_static_expanded) {
+            state.static_recording = Optional<sema.StaticRecording>.Value(sema.StaticRecording());
+        }
         var ran = sema.run_steps_with(module, state, 0xffffffffffffffff);
         for (var note in state.notes) {
             warnings.append(note);
@@ -1484,7 +1563,27 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             return Result<Built, String>.err(render_all([ran.error()], sources));
         }
     }
+    # `--debug-static=expanded`: the expanded copies of the files, which
+    # the debug info places the `static` blocks' code in.
+    var static_locations = HashMap<uint, sema.Loc>();
+    if (options.debug and state.static_recording.is_value()) {
+        var entry = options.entry.is_value() ? options.entry.value() : Path(program.files[0].name);
+        var written = write_debug_sources(program, state.static_recording.value().expansions, entry, options.output);
+        if (written.is_err()) {
+            return Result<Built, String>.err(written.error());
+        }
+        for (var file in written.value()) {
+            var index = state.sources.count as uint;
+            state.sources.append(file.source);
+            for (var (id, offset) in file.placed) {
+                static_locations[id] = sema.Loc.at(index, ast.Span(offset, offset));
+            }
+        }
+    }
     clock.lap("sema");
+    if (options.pass_times.is_value()) {
+        File.stderr().write_all(options.pass_times.value().report());
+    }
     if (reused.is_value() and !layer_objects) {
         reuse_after_sema(
             reused.value(),
@@ -1508,6 +1607,12 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     setup.opt_level = options.opt_level;
     setup.frame_pointers = options.frame_pointers;
     setup.runtime_checks = options.runtime_checks;
+    setup.debug_info = options.debug;
+    setup.static_locations = static_locations;
+    var runtime = _runtime_dir(program);
+    if (options.debug) {
+        setup.gdb_printers = gdb_printers(program);
+    }
     var namespaces = Array<String>();
     for (var f in program.files) {
         namespaces.append(f.namespace);
@@ -1578,7 +1683,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 work,
                 options.trace_time,
                 options.in_process,
-                true
+                true,
+                lto
             );
             if (compiled.is_err()) {
                 return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
@@ -1718,7 +1824,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             work,
             options.trace_time,
             options.in_process,
-            !cached_files.is_empty or !stored_parts.is_empty
+            !cached_files.is_empty or !stored_parts.is_empty,
+            lto
         );
         if (compiled.is_err()) {
             # The bitcode and plan stay, so the failed part can be run again.
@@ -1757,6 +1864,16 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         objects.append(entry_object);
         clock.lap("objects");
     }
+    if (lto) {
+        var whole = work.join(Path($"{stem}.lto.{triple.contains("-windows") ? "obj" : "o"}"));
+        var optimized = optimize_whole(objects, whole, machine.value(), options.opt_level);
+        if (optimized.is_err()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(optimized.error());
+        }
+        objects = [whole];
+        clock.lap("link-time optimization");
+    }
 
     # Search order: `-L`, then `[Link(path = ...)]`.
     if (!layer_objects) {
@@ -1787,21 +1904,92 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
         }
     }
-    var made = link_objects(objects, options.output, libraries, dirs, program.target, options.sysroot);
+    # A library gets its C header; a static one is an archive, not linked.
+    if (options.library.is_value()) {
+        var written = write_header(
+            header.value(),
+            state.exports,
+            state.enum_representations,
+            options.library.value(),
+            libraries,
+            program.target
+        );
+        if (written.is_err()) {
+            Directory.remove_all(work);
+            return Result<Built, String>.err(written.error());
+        }
+    }
+    # Windows debuggers read the runtime's visualizers from the `.pdb`.
+    var natvis = Optional<Path>.Empty;
+    if (options.debug and program.target.os == "windows" and runtime.is_value()) {
+        var found = runtime.value().join(Path("debuggers")).join(Path("pepper.natvis"));
+        if (found.is_file()) {
+            natvis = Optional<Path>.Value(found);
+        }
+    }
+    var made = Result<void, String>.ok();
+    if (options.library.is_value() and options.library.value() == LibraryKind.Static) {
+        made = write_archive(objects, options.output, program.target);
+    } else {
+        made = link_objects(
+            objects,
+            options.output,
+            libraries,
+            dirs,
+            program.target,
+            options.sysroot,
+            options.library.is_value(),
+            options.debug,
+            natvis
+        );
+    }
     Directory.remove_all(work);
     if (made.is_err()) {
         return Result<Built, String>.err(made.error());
     }
-    clock.lap("link");
+    clock.lap(options.library.is_value() and options.library.value() == LibraryKind.Static ? "archive" : "link");
     if (options.cache.is_value()) {
         options.cache.value().record(options.output, program_key, !warnings.is_empty);
     }
     return Result<Built, String>.ok(report);
 }
 
+## The runtime's folder: the one beside the program's runtime files that
+## holds `debuggers/`, if any.
+## The text of the runtime's gdb pretty-printers
+## (`runtime/debuggers/gdb_printers.py`), which a Linux program built with
+## `-g` carries; empty without the runtime.
+##
+## @param program the program
+## @returns the printers' Python source, or empty
+export gdb_printers(program: link.Program): String {
+    var runtime = _runtime_dir(program);
+    if (!runtime.is_value()) {
+        return "";
+    }
+    var printers = File.read_to_string(runtime.value().join(Path("debuggers")).join(Path("gdb_printers.py")));
+    return printers.ok_or("");
+}
+
+_runtime_dir(program: link.Program): Path? {
+    for (var file in program.files) {
+        if (!file.prelude) {
+            continue;
+        }
+        var folder = Path(file.name).parent();
+        if (folder.is_value() and folder.value().join(Path("debuggers")).is_directory()) {
+            return folder;
+        }
+    }
+    return Optional<Path>.Empty;
+}
+
 # What else changes the code generated, for the cache's keys.
 _codegen_options(options: BuildOptions): String {
     var out = options.frame_pointers ? " --frame-pointers" : "";
+    if (options.debug) {
+        out = $"{out} -g";
+    }
     var checks = options.runtime_checks;
     if (!(checks.overflow and checks.divide and checks.shift and checks.bounds and checks.null)) {
         out = $"{out} --no-runtime-checks {checks.overflow} {checks.divide} {checks.shift} {checks.bounds} {checks.null}";
@@ -1879,13 +2067,17 @@ _unit_size(unit: link.Unit, sizes: ulong[]): ulong {
 }
 
 ## What linking a program takes beyond its files, as text for its key: the
-## output, the `-l` libraries, the `-L` folders, the system root, and the
-## current folder (`[Link(path = ...)]` folders are relative to it).
+## output and the library kind, the `-l` libraries, the `-L` folders, the
+## system root, and the current folder (`[Link(path = ...)]` folders are
+## relative to it).
 _link_text(options: BuildOptions): String {
     var cwd = process.working_directory();
     var here = cwd.is_ok() ? cwd.value().to_string() : "";
     var text = StringBuilder();
     text.append($"output {options.output}\ncwd {here}\n");
+    if (options.library.is_value()) {
+        text.append(options.library.value() == LibraryKind.Static ? "--lib static\n" : "--lib shared\n");
+    }
     for (var library in options.libraries) {
         text.append($"-l {library}\n");
     }

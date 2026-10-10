@@ -1013,9 +1013,40 @@ language side.
   entry back to the non-generic code that asked for it
   (`gather_generics.with_requests`), so an error inside `json`'s converters ends
   at the user's `json.encode(job)`.
-- **`--emit-static`** and **`--debug-static`**, which wrote the source
-  with each `static` block expanded and pointed debug info at it, are not
-  in pepc yet; it says so when asked for either.
+- **`--emit-static`** (`sema/static_source.pep`, `driver/emit_static.pep`).
+  `static_source.record` runs the passes with `PassState.static_recording`
+  set, and while it is set the expander renders each block it expands as
+  source beside the statements it builds: an emitted statement is its
+  source as written (its span, widened over parentheses), with each
+  placeholder `fill` replaces given an edit: a literal for a static value
+  (`StaticValue.source`, inlined into an interpolated string's text), and
+  for a static member the source of what it became (`value.x`, `f(args)`,
+  `value is Shape.Rect`, a `match` reading a case's value), with its
+  arguments rendered the same way; each `x.Type` and type parameter outside
+  strings and comments becomes the type. A pass, a kept branch and a nested
+  block are `{ ... }`; a runtime `if` is written around its branches. Each
+  finished block is an expansion (its span, its specialization's type
+  arguments, the lines); module-scope blocks are not recorded. The driver
+  copies the program's files under the entry's folder into `-o`, replacing
+  a concrete block with its expansion between `# static (...) expanded
+  from` and `# end static`; a generic free function stays and is followed
+  by one concrete override per specialization (`describe<Point>(value:
+  Point)`, its text with the type arguments substituted and its blocks
+  expanded); a block in other generic code stays, with its expansions
+  above it as comments. `pep-fmt`, beside the compiler or on `PATH`,
+  formats the copies.
+- **`-g --debug-static=expanded`** points the debug info at that copy. The
+  build records the passes too (`check_recording`), and
+  `write_debug_sources` writes each user file with an expansion,
+  unformatted, as `<name>.static.pep` beside the output, appends its text
+  to `PassState.sources`, and fills `Build.static_locations`: while
+  recording, each emitted statement, runtime `if` and pass header gets an
+  id; the rendered parts carry it, and the driver tracks where each lands
+  in the copy, so each pass lists its statements by source `Loc` and id.
+  Codegen resolves them when it enters the pass's block, and
+  `DebugInfo.place` moves any location inside such a statement to the same
+  relative line in the copy (§4.4). The option builds without the cache: a
+  cached unit's sema, and so its expansions, would be skipped.
 - **Cases.** A case of a reference or `[Value]` enum lists its `values` as
   members whose `field` is the payload field (`Circle.radius`), so `get`
   reads it; `case.matches(v)` emits a `__tag` comparison (a comparison with
@@ -1603,16 +1634,41 @@ a machine whose codegen level matches. The level is in every cache key.
 `[Export]`ed free function (its C symbol, from `[Export(name = ...)]` or the
 declared name) and the struct handles it passes, rejecting a type C cannot
 hold (`c_type`), and codegen defines its C entry point in the entry part.
-Building a library for C (`--lib`) and link-time optimization (`--lto`) are
-not in pepc yet.
+
+**Libraries for C** (`--lib static|shared`, `driver/library.pep`). The
+header of `state.exports` (`sema.header_declarations`, `sema.header`) goes
+beside the output, naming for a static library the system libraries a
+program linking it needs. `--lib shared` links with `-shared` and
+`-soname` (`-install_name @rpath/...` on Apple); `--lib static` is an
+archive `write_archive` writes itself: GNU (`/` index of big-endian
+offsets), Darwin (`#1/` names, `__.SYMDEF`, 8-byte aligned members) or
+COFF (both linker members), indexing the global definitions
+`defined_symbols` reads from each ELF, Mach-O 64 or COFF (`/bigobj` too)
+object, its members named `p<n>.o` since cached objects are all `0.o`.
+
+**Link-time optimization** (`--lto=full|off`, full by default at
+`-O2`/`-O3`; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`
+and is written, and cached, as bitcode (`0.bc`; the key gains `-lto`);
+then the parts are linked into one module (`LLVMLinkModules2`), every
+definition but `main` and the default-visible C exports is made internal
+and leaves its comdat, `lto<On>` runs over the whole program, the
+constructors move to `.init_array`, and one object links.
 
 **Target CPU** (`Cpu` in `codegen/generator.pep`). Code is generated for
 clang's default CPU of the target triple (`Cpu.default_for`: `x86-64` tuned
 for `generic`, `penryn` on Intel macOS, `apple-m1` on Apple arm64, `generic`
 on other AArch64), never the build machine's CPU; codegen stamps
 `target-cpu` and `target-features` on every defined function as clang does.
-The CPU is part of every cache key. pepc has no `-march`/`-mcpu`/`-m<feature>`
-options yet.
+`-march`/`-mcpu`/`-mtune`/`-m<feature>` choose another, by clang's rules
+(`Cpu.from_options`). The CPU is part of every cache key (`Cpu.key()`:
+name, features, tune).
+
+**`--verify-cache`** (or `PEPPER_CACHE_VERIFY`; `driver/verify.pep`) also
+sets `BuildOptions.verify_cutoff`, then loads the program again and builds
+it with an empty cache of its own in `<build>/verify.<pid>`, and compares
+every object that build stores with the one the real cache holds under the
+same unit (or layer) and key: a stale hit, or a unit whose code changed
+because sema skipped the cached units' bodies, differs.
 
 **IR facts** (`codegen/globals.pep`). Generation ends by annotating the
 module with what the language guarantees: `nounwind`
@@ -1725,12 +1781,97 @@ changed.
   miss. `compiler/build_cache_test.pep` holds the cache to early cutoff,
   reuse and invalidation.
 
-### 4.4 Debug info
+### 4.4 Debug info (`codegen/debug.pep`, `codegen/debug_types.pep`, `codegen/static_debug.pep`)
 
-`-g` is accepted with a warning: pepc does not emit debug info yet, and
-`--frame-pointers` is what `pep-profile` needs to unwind. The runtime's
-debugger formatters (`runtime/debuggers/`) and `docs/src/tools/debugging.md`
-describe what a `-g` build gives a debugger.
+`-g` (`BuildOptions.debug`, `codegen.Build.debug_info`) is
+`codegen/debug.pep`, `debug_types.pep` and `static_debug.pep`. The
+generator creates a `DebugInfo` for the program's module: one compile unit
+named for it, which every part split from it carries, with the module flags
+`Debug Info Version` and `Dwarf Version` 4 (`CodeView` on Windows; DWARF
+5's per-object `.debug_names`, which the C API cannot turn off, is
+concatenated by GNU ld into one gdb rejects). The externs the `llvm`
+package lacks are declared in `debug.pep`.
+
+- **Subprograms.** Each function gets a `DISubprogram` named as written
+  (file namespaces dropped: `Point@geo.length` is `Point.length`; a
+  closure's `__call` is `closure at main.pep:14`, `closure_name`), with no
+  linkage name (a debugger would show the linker spelling instead). A
+  method with no location (the synthesized `__acquire`, a constructor) is
+  artificial and placed at its struct.
+- **Locations.** `enter_location`/`leave_location` stamp what
+  `codegen_statement` and `codegen_var_def` emit with their node's `Loc`
+  and restore the outer one afterwards, so compiler-inserted code
+  (acquires, the releases after a statement) is attributed to the
+  statement that caused it. Positioning the builder before an instruction
+  takes that instruction's location, so the helpers that put a slot in the
+  entry block restore the current one (`keep_location`).
+- **Scopes and variables.** `codegen_scoped_block` (a nested block, an
+  `if` or `else` arm, a loop body) pushes a `DILexicalBlock` at its first
+  statement. `debug_declare` declares each parameter (numbered from 1,
+  `this` artificial) and each local that is not hidden or `__`-named, with
+  a debug record. Module-scope variables get a
+  `DIGlobalVariableExpression` (`declare_global`, from `emit_globals`);
+  `keep_parts` drops the `!dbg` of a global a part only declares, and the
+  part that defines it describes it.
+- **Types** (`debug_types.pep`, `Generator.debug_type`): numbers under
+  their written names, raw pointers (`__ptr<T>` for `T*`), a plain enum as
+  an enumeration, a tuple as a structure of `0`, `1`, ..., a trait value as
+  `object` and `vtable`, a struct reference as a pointer to a structure
+  with every field, the count head included, and a value struct (such as
+  `Optional<T>`) as the structure itself. An enum's payload field
+  `Case.value` is the member `Case__value`, which debugger expressions and
+  natvis can name. A reference back to a struct or tuple still being built
+  is a forward declaration, which debuggers resolve by name.
+- **`finish`**, before the module is verified, gives every other defined
+  function (thunks, initializers) an artificial subprogram, moves to line 0
+  every call without a location in its own function's scope and clears
+  other instructions' (codegen emits a thunk in the middle of a caller, and
+  LLVM requires a location on every call in a function with a subprogram),
+  adds `uwtable` to every definition so debuggers can unwind through it,
+  and finalizes the builder.
+- **`static` blocks** (`static_debug.pep`). Each pass of an unrolled
+  compile-time loop, and the branch a compile-time `if` kept, starts with
+  a static pass statement (§2.8), which emits nothing without `-g`. Under
+  `-g -O0` it is a `nop` (sideeffect inline asm) at the loop's header: the
+  passes' bodies share their lines, and a debugger steps until the line
+  changes, so without it every pass ran in one step. Its compile-time
+  variables get slots stored in the entry block (so they hold their values
+  from the header on) and are declared in the pass's `DILexicalBlock`:
+  numbers and `bool` as `long`, `double`, `bool`, a string as a `char*` to
+  a constant, and a member, case, function or attribute as a structure of
+  what `reflect` reads from it.
+- **Locations in another file.** A `DILocation` takes its file from its
+  scope, so `location` gives a location in another file than its scope's a
+  lexical block of that scope in its file. `--debug-static=expanded`
+  relies on it: `place` moves a `static` block's emitted code into the
+  expanded copy (§2.8).
+- **Optimization** keeps all of it: LLVM's inliner writes the inlined-at
+  chains itself, and `tools/pep-doc/examples_test.pep` builds a sample of
+  the examples at `-O2 -g`, so the verifier checks them.
+- **Cache.** ` -g` joins every key, and `Keys.exact_positions` hashes every
+  input by its text: a unit's code holds the line numbers of the generics
+  it instantiates from other files, which interface hashes leave out. The
+  build checks no layers (§8.1): a layer's key leaves positions out too.
+- **Linking.** `link_objects` passes `-g` to clang: a `.pdb` with the
+  runtime's `pepper.natvis` on Windows, `dsymutil` on macOS.
+- **Formatters** for `String`, `Array` and `Optional` live in
+  `runtime/debuggers/`. `embed_gdb_printers` puts `gdb_printers.py`
+  (`driver.gdb_printers`, from the runtime) in the program module's
+  `.debug_gdb_scripts` section on Linux, as an inline script (kind 4),
+  kept by `llvm.used`; `--emit-llvm -g` carries it too. Each matches the
+  struct and a reference to it, by name, and shows the head counts first
+  as `[ref count]` and `[weak count]`; `Optional`, a value enum, has no
+  head and shows its case from `__tag` and its value from `Value__value`.
+- **Frame pointers.** `--frame-pointers` puts `"frame-pointer"="all"` on
+  every definition, so profilers walk optimized stacks; `pep-profile`
+  builds with it.
+
+`compiler/debug_info_test.pep` checks the IR, a `-g` program's DWARF, gdb
+breaking, printing and stepping (skipped without gdb), `-O2 -g`, the cache
+keeping `-g` objects apart and `--debug-static` both ways.
+
+Not done yet (issue #218): enums with payloads as variant parts, which the
+LLVM C API cannot create.
 
 ### 4.5 Value structs (`sema/value_structs.pep`, codegen `values`)
 
@@ -2388,8 +2529,10 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   (`static_blocks.pep`): checking attributes against their `[Attribute]`
   structs, running the module-scope blocks into their constants, and
   expanding the blocks of concrete code (those of generic code expand
-  once specialized). Writing expansions back as source (`--emit-static`)
-  is not ported. Then enum cases and value types' methods (`enums.pep`,
+  once specialized); while `PassState.static_recording` is set
+  (`--emit-static`, `--debug-static=expanded`), each expansion is also
+  written back as source (`static_source.pep`, `StaticExpansion`), and
+  each pass's `StaticPass` gets the ids that place it (§2.8). Then enum cases and value types' methods (`enums.pep`,
   `value_types.pep`), `main(args)` (`entry_point.pep`), names declared
   twice and const bindings assigned (`bindings.pep`), and the `[Alias]`,
   `[Rename]` and `[Link]` checks and the binding of named arguments to
@@ -2888,6 +3031,7 @@ the runtime's tests in `runtime/` and the tools' in `tools/` (`-I .`, at
 | Docs examples | `tools/pep-doc/examples_test.pep` | Builds and runs every `docs/examples/*.pep` (or `name/main.pep`). Filter with `PEPPER_DOCS_EXAMPLE=prefix`. |
 | Runtime docs, tool docs | `pep-doc check` (`tools/pep-doc/checks.pep`), run by CI after the tests | `check_documented` over the runtime and `tools/syntax`; every option of every tool (their `--help`, `HELP` in `tools/pep-lsp/main.pep`, `setup-llvm.sh`'s usage) on its page, `pep-build`'s values, trace channels and environment variables, `pep-lsp`'s initialization options and VS Code settings; the reference current. |
 | Tools | `tools/<tool>/*_test.pep` | pep-doc's parts (`pep_doc_test.pep`), pep-fmt's style (`format_test.pep`), its command line (`cli_test.pep`) and the repository formatted (`repository_test.pep`), pep-lsp (`pep_lsp_test.pep`), pep-install against a loopback server (`install_test.pep`), and `pepper`, `pep-test`, `pep-package` and `pep-profile` run end to end with the `tool_testing` helpers (`tools/tool_testing/`). |
+| pepc's options | `compiler/options_test.pep`, `library_test.pep`, `debug_info_test.pep`, `emit_static_test.pep` | The command line run on the compiler under test (`pep-build` beside the test or on the PATH: CI builds a changed compiler first, `scripts/ci-build-compiler.sh`); libraries for C called from C, archives' symbol indexes, the CPU in the cache key; `-g` (§4.4); `--emit-static` copies that build into the same program. |
 
 To run a subset, build the tools once with the script, put them on the
 `PATH`, and run `pepper test` where the script runs it:

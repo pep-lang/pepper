@@ -17,6 +17,9 @@ export struct ProjectSetup {
     var dir: Path? = Optional<Path>.Empty;
     ## `[build]`'s `link` libraries.
     var libraries: String[] = Array<String>();
+    ## The package's name, when building the project itself (no file
+    ## given): it names a library the build makes (`--lib`).
+    var name: String = "";
 
     construct(entry: Path) {
         this.entry = entry;
@@ -72,6 +75,7 @@ export apply_project(file: Path?, target: link.Target): Result<ProjectSetup, Str
         }
         setup.output = Optional<Path>.Value(output);
         setup.dir = Optional<Path>.Value(manifest.dir());
+        setup.name = manifest.name;
     }
     for (var library in manifest.link) {
         if (!setup.libraries.contains(library)) {

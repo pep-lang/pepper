@@ -8,8 +8,132 @@ import [Exports] from "export_table";
 import [Loc] from "loc";
 import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
 import [CheckedDecls, PendingBody] from "pending";
+import [StaticRecording] from "static_source";
 import [StructInfo] from "struct_info";
 import [is_integral_name] from "type_name";
+
+## How long each pass took, summed over its runs, for `-T passes`: the
+## Rust compiler's `pass_timer`. One is shared by every run of the passes
+## that a build makes (the layers', the program's).
+export struct PassTimes {
+    ## Each pass's nanoseconds and runs, by name (`pass_name`).
+    var times: HashMap<String, (ulong, uint)> = HashMap<String, (ulong, uint)>();
+
+    construct() {}
+
+    ## Adds `nanoseconds` and one run to the pass that step `call` runs.
+    add(call: String, nanoseconds: ulong) {
+        var name = pass_name(call);
+        var before = times.try_get(name);
+        if (before.is_value()) {
+            var (spent, runs) = before.value();
+            times[name] = (spent + nanoseconds, runs + 1);
+        } else {
+            times[name] = (nanoseconds, 1);
+        }
+    }
+
+    ## Adds what `other` recorded (a layer worker's) to these.
+    add_all(other: PassTimes) {
+        for (var (name, (spent, runs)) in other.times) {
+            var before = times.try_get(name);
+            if (before.is_value()) {
+                var (mine, my_runs) = before.value();
+                times[name] = (mine + spent, my_runs + runs);
+            } else {
+                times[name] = (spent, runs);
+            }
+        }
+    }
+
+    ## The lines `-T passes` prints, the slowest pass first (by name when
+    ## two took as long): `pass:   470.763 ms   12x resolve_implicit_types`.
+    report(): String {
+        var all = Array<(String, ulong, uint)>();
+        for (var (name, (spent, runs)) in times) {
+            all.append((name, spent, runs));
+        }
+        all.sort((a, b) => {
+            var (x_name, x, _) = a;
+            var (y_name, y, _) = b;
+            if (x != y) {
+                return x > y ? -1 : 1;
+            }
+            return x_name < y_name ? -1 : (x_name > y_name ? 1 : 0);
+        });
+        var out = StringBuilder();
+        for (var (name, spent, runs) in all) {
+            var micros = (spent + 500) / 1000;
+            var fraction = $"{micros % 1000}";
+            while (fraction.size < 3) {
+                fraction = "0" + fraction;
+            }
+            out.append($"pass: {_pad($"{micros / 1000}.{fraction}", 9)} ms {_pad($"{runs}", 4)}x {name}\n");
+        }
+        return out.to_string();
+    }
+
+    ## The lines a layer worker passes back (`<name>\t<ns>\t<runs>`), which
+    ## `parse` reads.
+    to_text(): String {
+        var out = StringBuilder();
+        for (var (name, (spent, runs)) in times) {
+            out.append($"{name}\t{spent}\t{runs}\n");
+        }
+        return out.to_string();
+    }
+
+    ## The times `to_text` wrote.
+    static parse(text: String): PassTimes {
+        var out = PassTimes();
+        for (var line in text.split("\n")) {
+            var fields = line.split("\t");
+            if (fields.count != 3) {
+                continue;
+            }
+            var spent = ulong.parse(fields[1]);
+            var runs = uint.parse(fields[2]);
+            if (spent.is_value() and runs.is_value()) {
+                out.times[fields[0]] = (spent.value(), runs.value());
+            }
+        }
+        return out;
+    }
+}
+
+## The name of the pass step `call` runs, as the Rust compiler's
+## `pass_timer::pass_name` gives it: its function, and the file it is in
+## when the two differ (`check_casts` for `check_casts::check_casts(module)`,
+## `value_structs::check` for `crate::value_structs::check(module)`).
+##
+## @param call the step, as `--emit-steps` names it
+## @returns the pass's name
+export pass_name(call: String): String {
+    var open = call.find("(");
+    var function = open < 0 ? call : call.substr_bytes(0, open as ulong);
+    var path = Array<String>();
+    for (var part in function.split("::")) {
+        if (part != "crate" and part != "passes") {
+            path.append(part);
+        }
+    }
+    if (path.is_empty) {
+        return function;
+    }
+    if (path.count >= 2 and path[path.count - 2] != path[path.count - 1]) {
+        return $"{path[path.count - 2]}::{path[path.count - 1]}";
+    }
+    return path[path.count - 1];
+}
+
+# `text` with spaces before it, to `width` bytes.
+_pad(text: String, width: ulong): String {
+    var out = text;
+    while (out.size < width) {
+        out = " " + out;
+    }
+    return out;
+}
 
 ## The passes' state for one program.
 export struct PassState {
@@ -27,6 +151,13 @@ export struct PassState {
     ## The value structs' names (`[Value]`), as `value_structs::install`
     ## records them.
     var value_structs: HashSet<String> = HashSet<String>();
+    ## While `--emit-static` or `--debug-static=expanded` records them, the
+    ## `static` blocks' expansions as source (`static_source.pep`).
+    var static_recording: StaticRecording? = Optional<StaticRecording>.Empty;
+    ## The name of each step run, in order (`--emit-steps`).
+    var step_names: String[] = Array<String>();
+    ## With `-T passes`, where each pass's time adds up (`PassTimes`).
+    var pass_times: PassTimes? = Optional<PassTimes>.Empty;
     ## The notes the passes report besides errors (`reflect.print`), in
     ## order.
     var notes: Diagnostic[] = Array<Diagnostic>();

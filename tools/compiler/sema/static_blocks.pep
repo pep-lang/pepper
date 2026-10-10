@@ -5,8 +5,9 @@
 ## filling in each emitted statement's placeholders; `expand_module_blocks`
 ## runs the module-scope blocks and gives their constants the values they
 ## computed; `check_attributes` checks every attribute against the
-## `[Attribute]` struct it names. Writing expansions back out as source
-## (`--emit-static`) is not ported.
+## `[Attribute]` struct it names. While the passes' state records them
+## (`--emit-static`), each expansion is written back out as source too
+## (`static_source.pep`).
 
 import compiler.ast;
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
@@ -54,6 +55,18 @@ import "overload_select";
 import [display_float] from "program";
 import [replace_statement_types] from "replace_types";
 import [PassState] from "state";
+import [
+    escape_text,
+    expression_source,
+    Rendered,
+    RenderedBranch,
+    SourceEdit,
+    SourcePiece,
+    statement_source,
+    StaticExpansion,
+    string_literal,
+    write_lines
+] from "static_source";
 import [is_integral_name, parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_statement] from "walk";
 
@@ -589,6 +602,57 @@ enum _CtValue {
         }
     }
 
+    # The value as a literal in source, for `--emit-static`; none for what
+    # emitted code cannot hold.
+    source(): String? {
+        match (this) {
+            Int(value) => {
+                return Optional<String>.Value($"{value}");
+            }
+            Float(value) => {
+                var shown = display_float(value);
+                if (!shown.contains(".") and !shown.contains("e") and !shown.contains("N") and !shown.contains("inf")) {
+                    shown = shown + ".0";
+                }
+                return Optional<String>.Value(shown);
+            }
+            Bool(value) => {
+                return Optional<String>.Value(value ? "true" : "false");
+            }
+            Text(value) => {
+                return Optional<String>.Value(string_literal(value));
+            }
+            Case(c) => {
+                if (c.is_value) {
+                    return Optional<String>.Value($"{display_name(c.enumeration.display())}.{c.name}");
+                }
+                return Optional<String>.Empty;
+            }
+            else => {
+                return Optional<String>.Empty;
+            }
+        }
+    }
+
+    # The value as the text of an interpolated string, where it prints the
+    # same as its hole would.
+    interpolated(): String? {
+        match (this) {
+            Int(value) => {
+                return Optional<String>.Value($"{value}");
+            }
+            Bool(value) => {
+                return Optional<String>.Value(value ? "true" : "false");
+            }
+            Text(value) => {
+                return Optional<String>.Value(escape_text(value, true));
+            }
+            else => {
+                return Optional<String>.Empty;
+            }
+        }
+    }
+
     # `display`, with a string in quotes (`quote_debug`).
     quoted(): String {
         if (this is Text(value)) {
@@ -794,8 +858,90 @@ _with_stop(marker: StaticPass, items: Statement[]): Statement[] {
     return out;
 }
 
-_marker(loc: Loc, values: Array<(String, StaticConstant)>): StaticPass {
-    return StaticPass(loc, true, values, Optional<uint>.Empty, Array<(Loc, uint)>());
+_marker(loc: Loc, values: Array<(String, StaticConstant)>, header: uint?, lines: Array<(Loc, uint)>): StaticPass {
+    return StaticPass(loc, true, values, header, lines);
+}
+
+## The source a `get`, `set`, `call` or `matches` placeholder becomes, its
+## arguments as written (see `_Expander.fill_member` for the code it
+## becomes).
+_member_source(receiver: _CtValue, method: String, arguments: ast.Span[]): SourcePiece[]? {
+    var out = Array<SourcePiece>();
+    match (receiver) {
+        Member(m) => {
+            if (method == "get" and m.field.is_value()) {
+                # A case's value: only a `match` can read it in source.
+                if (!m.enumeration.is_value() or arguments.count < 1) {
+                    return Optional<SourcePiece[]>.Empty;
+                }
+                var enumeration = display_name(m.enumeration.value().display());
+                var case = m.field.value().split(".")[0];
+                var bindings = Array<String>();
+                for (var i in 0..m.count) {
+                    bindings.append(i == m.index ? "_pep_value" : "_");
+                }
+                out.append(SourcePiece.Text("match ("));
+                out.append(SourcePiece.Argument(arguments[0]));
+                out.append(
+                    SourcePiece.Text(
+                        $") {{ {enumeration}.{case}({", ".join(bindings)}) => _pep_value, else => __default<{display_name(m.ty.display())}>() }}"
+                    )
+                );
+                return Optional<SourcePiece[]>.Value(out);
+            }
+            if (method == "get" and arguments.count >= 1) {
+                out.append(SourcePiece.Argument(arguments[0]));
+                out.append(SourcePiece.Text($".{m.name}"));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+            if (method == "set" and arguments.count >= 2) {
+                out.append(SourcePiece.Argument(arguments[0]));
+                out.append(SourcePiece.Text($".{m.name} = "));
+                out.append(SourcePiece.Argument(arguments[1]));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+        }
+        Function(f) => {
+            if (method == "call") {
+                out.append(SourcePiece.Text($"{demangle_name(f.symbol)}("));
+                _append_arguments(out, arguments);
+                out.append(SourcePiece.Text(")"));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+        }
+        Case(c) => {
+            var enumeration = display_name(c.enumeration.display());
+            if (method == "get" and c.is_value) {
+                out.append(SourcePiece.Text($"{enumeration}.{c.name}"));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+            if (method == "get") {
+                out.append(SourcePiece.Text($"{enumeration}.{c.name}("));
+                _append_arguments(out, arguments);
+                out.append(SourcePiece.Text(")"));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+            if (method == "matches" and arguments.count >= 1) {
+                var test = c.is_value ? "==" : "is";
+                out.append(SourcePiece.Text("("));
+                out.append(SourcePiece.Argument(arguments[0]));
+                out.append(SourcePiece.Text($" {test} {enumeration}.{c.name})"));
+                return Optional<SourcePiece[]>.Value(out);
+            }
+        }
+        else => {}
+    }
+    return Optional<SourcePiece[]>.Empty;
+}
+
+## Appends `arguments`, separated by commas, to `out`.
+_append_arguments(out: SourcePiece[], arguments: ast.Span[]) {
+    for (var i in 0..arguments.count) {
+        if (i > 0) {
+            out.append(SourcePiece.Text(", "));
+        }
+        out.append(SourcePiece.Argument(arguments[i]));
+    }
 }
 
 ## The candidate declared in `file`, else the only one.
@@ -848,11 +994,19 @@ struct _Expander {
     var jump: LoopBreakKind? = Optional<LoopBreakKind>.Empty;
     # Whether a string the block emits is lowered, as the bodies' are.
     var lowered: bool = false;
+    # Writing each expansion back out as source too (`--emit-static`).
+    var recording: bool = false;
+    # The placeholders the statement being filled replaced, as source.
+    var edits: SourceEdit[] = Array<SourceEdit>();
+    # When recording, the statements emitted so far into each pass being
+    # expanded, innermost last: what its `StaticPass.lines` holds.
+    var lines: Array<Array<(Loc, uint)>> = Array<Array<(Loc, uint)>>();
 
     construct(module: Module, state: PassState, context: _ExpansionContext) {
         this.module = module;
         this.state = state;
         this.context = context;
+        this.recording = state.static_recording.is_value();
     }
 
     # Replaces each `static` block in `block` with what it emits. An error
@@ -894,7 +1048,11 @@ struct _Expander {
         scopes = [HashMap<String, _CtValue>()];
         passes = Array<_Pass>();
         jump = Optional<LoopBreakKind>.Empty;
-        var items = run_items(block.items);
+        lines = Array<Array<(Loc, uint)>>();
+        var text = Array<Rendered>();
+        lines.append(Array<(Loc, uint)>());
+        var items = run_items(block.items, text);
+        var emitted = lines.pop();
         if (items.is_err()) {
             var error = items.error();
             if (!context.name.is_empty) {
@@ -905,7 +1063,73 @@ struct _Expander {
             }
             return Result<Block, Diagnostic>.Err(error);
         }
-        return Result<Block, Diagnostic>.Ok(_block_of(items.value()));
+        # A module-scope block emits nothing: its constants hold what it
+        # computed.
+        if (recording and !context.symbol.is_empty and block.span.end > block.span.start) {
+            var written = Array<String>();
+            var positions = Array<(uint, ulong, ulong)>();
+            write_lines([Rendered.Braced(text, Optional<uint>.Empty)], 0, written, positions);
+            if (written.count == 0) {
+                written.append("{}");
+            }
+            var type_arguments = Array<(String, String)>();
+            for (var (param, ty) in block.type_map) {
+                type_arguments.append((param, display_name(ty.display())));
+            }
+            state.static_recording.value().expansions.append(
+                StaticExpansion(block.loc, block.span, type_arguments, written, positions)
+            );
+        }
+        # The statements emitted outside any pass, for the debugger.
+        if (emitted.count == 0) {
+            return Result<Block, Diagnostic>.Ok(_block_of(items.value()));
+        }
+        var marker = StaticPass(block.loc, false, Array<(String, StaticConstant)>(), Optional<uint>.Empty, emitted);
+        return Result<Block, Diagnostic>.Ok(_block_of(_with_stop(marker, items.value())));
+    }
+
+    # A new id for a statement or header of the expansion, when recording.
+    new_id(): uint? {
+        if (!recording) {
+            return Optional<uint>.Empty;
+        }
+        return Optional<uint>.Value(state.static_recording.value().next_id());
+    }
+
+    # Records that the statement written at `span` was emitted as `id`.
+    emitted_as(span: ast.Span, id: uint?) {
+        if (id.is_value() and lines.count > 0) {
+            lines.last().append((at(span), id.value()));
+        }
+    }
+
+    # When recording, the source at `span` (an emitted statement, or a
+    # runtime `if`'s condition) with the placeholders just filled in
+    # replaced and the types named; lines indented relative to the first.
+    source_of(span: ast.Span, statement: bool): String[]? {
+        if (!recording) {
+            return Optional<String[]>.Empty;
+        }
+        var taken = edits;
+        edits = Array<SourceEdit>();
+        if (file as ulong >= state.sources.count) {
+            return Optional<String[]>.Empty;
+        }
+        var source = state.sources[file as ulong].text;
+        if (span.end > source.size) {
+            return Optional<String[]>.Empty;
+        }
+        var names = Array<(String, String)>();
+        for (var (spelled, ty) in member_types()) {
+            names.append((spelled, display_name(ty.display())));
+        }
+        for (var (param, ty) in type_map) {
+            names.append((param, display_name(ty.display())));
+        }
+        if (statement) {
+            return Optional<String[]>.Value(statement_source(source, span, taken, names));
+        }
+        return Optional<String[]>.Value([expression_source(source, span, taken, names)]);
     }
 
     # `error` with a note for each specialization that led to the one being
@@ -964,15 +1188,15 @@ struct _Expander {
         scopes.pop();
     }
 
-    scoped_items(items: StaticItem[]): Result<Statement[], Diagnostic> {
+    scoped_items(items: StaticItem[], text: Rendered[]): Result<Statement[], Diagnostic> {
         push_scope();
-        var out = run_items(items);
+        var out = run_items(items, text);
         pop_scope();
         return out;
     }
 
-    # Expands `items`.
-    run_items(items: StaticItem[]): Result<Statement[], Diagnostic> {
+    # Expands `items`, and when recording adds their source to `text`.
+    run_items(items: StaticItem[], text: Rendered[]): Result<Statement[], Diagnostic> {
         var out = Array<Statement>();
         for (var item in items) {
             match (item) {
@@ -999,16 +1223,25 @@ struct _Expander {
                     while (index < list.count) {
                         var element = list[index];
                         passes.append(_Pass(node.loc, index, list.count, $"{element.kind()} '{element.display()}'"));
+                        var pass_text = Array<Rendered>();
+                        var header = new_id();
+                        lines.append(Array<(Loc, uint)>());
                         push_scope();
                         scopes.last()[node.name] = element;
                         var values = debug_values();
-                        var pass = run_items(node.body);
+                        var pass = run_items(node.body, pass_text);
                         pop_scope();
+                        var pass_lines = lines.pop();
                         passes.pop();
                         if (pass.is_err()) {
                             return pass;
                         }
-                        out.append(Statement.Block(_block_of(_with_stop(_marker(node.loc, values), pass.value()))));
+                        out.append(
+                            Statement.Block(
+                                _block_of(_with_stop(_marker(node.loc, values, header, pass_lines), pass.value()))
+                            )
+                        );
+                        text.append(Rendered.Braced(pass_text, header));
                         var jumped = jump;
                         jump = Optional<LoopBreakKind>.Empty;
                         if (jumped.is_value() and jumped.value() is Break) {
@@ -1053,13 +1286,22 @@ struct _Expander {
                         }
                         passes.append(_Pass(node.loc, iteration as ulong, 0, ""));
                         var values = debug_values();
-                        var pass = scoped_items(node.body);
+                        var pass_text = Array<Rendered>();
+                        var header = new_id();
+                        lines.append(Array<(Loc, uint)>());
+                        var pass = scoped_items(node.body, pass_text);
+                        var pass_lines = lines.pop();
                         passes.pop();
                         if (pass.is_err()) {
                             return pass;
                         }
                         if (pass.value().count > 0) {
-                            out.append(Statement.Block(_block_of(_with_stop(_marker(node.loc, values), pass.value()))));
+                            out.append(
+                                Statement.Block(
+                                    _block_of(_with_stop(_marker(node.loc, values, header, pass_lines), pass.value()))
+                                )
+                            );
+                            text.append(Rendered.Braced(pass_text, header));
                         }
                         iteration += 1;
                         var jumped = jump;
@@ -1093,11 +1335,20 @@ struct _Expander {
                         }
                     }
                     var values = debug_values();
-                    var expanded = scoped_items(taken ? node.then_items : node.else_items);
+                    var branch_text = Array<Rendered>();
+                    var header = new_id();
+                    lines.append(Array<(Loc, uint)>());
+                    var expanded = scoped_items(taken ? node.then_items : node.else_items, branch_text);
+                    var branch_lines = lines.pop();
                     if (expanded.is_err()) {
                         return expanded;
                     }
-                    out.append(Statement.Block(_block_of(_with_stop(_marker(node.loc, values), expanded.value()))));
+                    out.append(
+                        Statement.Block(
+                            _block_of(_with_stop(_marker(node.loc, values, header, branch_lines), expanded.value()))
+                        )
+                    );
+                    text.append(Rendered.Braced(branch_text, header));
                 }
                 EmitIf(node) => {
                     var condition = node.condition.copy();
@@ -1105,26 +1356,43 @@ struct _Expander {
                     if (filled.is_err()) {
                         return Result<Statement[], Diagnostic>.Err(filled.error());
                     }
-                    var then_items = scoped_items(node.then_items);
+                    var condition_text = source_of(node.span, false);
+                    var id = new_id();
+                    emitted_as(node.span, id);
+                    var then_text = Array<Rendered>();
+                    var else_text = Array<Rendered>();
+                    var then_items = scoped_items(node.then_items, then_text);
                     if (then_items.is_err()) {
                         return then_items;
                     }
                     var else_block = Optional<Block>.Empty;
                     if (node.else_items.count > 0) {
-                        var else_items = scoped_items(node.else_items);
+                        var else_items = scoped_items(node.else_items, else_text);
                         if (else_items.is_err()) {
                             return else_items;
                         }
                         else_block = Optional<Block>.Value(_block_of(else_items.value()));
                     }
                     out.append(Statement.Branch(Branch(filled.value(), _block_of(then_items.value()), else_block)));
+                    if (condition_text.is_value()) {
+                        var else_rendered = node.else_items.count > 0 ?
+                            Optional<Rendered[]>.Value(else_text) :
+                            Optional<Rendered[]>.Empty;
+                        text.append(
+                            Rendered.Conditional(
+                                RenderedBranch("\n".join(condition_text.value()), then_text, else_rendered, id)
+                            )
+                        );
+                    }
                 }
                 Block(inner) => {
-                    var expanded = scoped_items(inner);
+                    var inner_text = Array<Rendered>();
+                    var expanded = scoped_items(inner, inner_text);
                     if (expanded.is_err()) {
                         return expanded;
                     }
                     out.append(Statement.Block(_block_of(expanded.value())));
+                    text.append(Rendered.Braced(inner_text, Optional<uint>.Empty));
                 }
                 Var(node) => {
                     var value = evaluate(node.value);
@@ -1139,12 +1407,18 @@ struct _Expander {
                         return Result<Statement[], Diagnostic>.Err(value.error());
                     }
                 }
-                Emit(statement, _) => {
+                Emit(statement, span) => {
                     var filled = fill_statement(statement.copy());
                     if (filled.is_err()) {
                         return Result<Statement[], Diagnostic>.Err(filled.error());
                     }
                     out.append(filled.value());
+                    var id = new_id();
+                    emitted_as(span, id);
+                    var written = source_of(span, true);
+                    if (written.is_value()) {
+                        text.append(Rendered.Code(written.value(), id));
+                    }
                 }
             }
             if (jump.is_value()) {
@@ -1206,6 +1480,7 @@ struct _Expander {
     # Fills in an emitted statement: the members' types, then the
     # placeholders.
     fill_statement(statement: Statement): Result<Statement, Diagnostic> {
+        edits = Array<SourceEdit>();
         var types = member_types();
         if (types.count > 0) {
             replace_statement_types(statement, types);
@@ -1237,12 +1512,30 @@ struct _Expander {
                 if (value.is_err()) {
                     return Result<Expression, Diagnostic>.Err(value.error());
                 }
+                if (recording) {
+                    var written = value.value().source();
+                    if (written.is_value()) {
+                        edits.append(
+                            SourceEdit(
+                                placeholder.expr.extent(),
+                                [SourcePiece.Text(written.value())],
+                                value.value().interpolated()
+                            )
+                        );
+                    }
+                }
                 return emitted(value.value(), placeholder.expr, placeholder.loc);
             }
             StaticMember(placeholder) => {
                 var evaluated = evaluate(placeholder.member);
                 if (evaluated.is_err()) {
                     return Result<Expression, Diagnostic>.Err(evaluated.error());
+                }
+                if (recording) {
+                    var pieces = _member_source(evaluated.value(), placeholder.method, placeholder.argument_spans);
+                    if (pieces.is_value()) {
+                        edits.append(SourceEdit(placeholder.span, pieces.value()));
+                    }
                 }
                 return fill_member(evaluated.value(), placeholder.method, placeholder.args, placeholder.loc);
             }

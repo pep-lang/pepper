@@ -1,30 +1,41 @@
 # pepc: the Pepper compiler written in Pepper (#225), built and shipped as
 # `pep-build`: the same command line, `pep-build --help` for the options.
-# The options of the Rust compiler it does not have yet (`--lib`, `--lto`,
-# `-m...` and the rest `_not_ported` names) are errors that say so; `-g`
-# builds without debug info, with a warning. `--target` compiles for another
-# platform, and `--sysroot` names its system libraries for the link.
+# Every option of the Rust compiler's `pep-build` is here, with its
+# meaning. `--target` compiles for another platform, `--sysroot` names its
+# system libraries for the link, and `-march`, `-mcpu`, `-mtune`,
+# `-m<feature>` choose the CPU (`codegen.Cpu.from_options`). `-g` emits
+# debug info (`codegen/debug.pep`), and `--debug-static` picks where the
+# debugger shows a `static` block's code.
 #
 # With no `--emit-*` option it builds the program into an executable: `-o
 # out`, else the file's stem in the current directory, or the project of
-# the current directory with no file. `--test` builds the test program of
-# the file (or of several files of one folder) instead
-# (`driver/test_main.pep`). A build keeps each unit's object in the build
-# cache (`driver/cache.pep`): `--cache dir`, else `$PEPPER_CACHE_DIR`, else
-# `.pep/cache`; `--no-cache` compiles everything. `-T time` prints how long
-# each stage took, `-T cache` whether each unit's object came from the
-# cache, `--Tall` both.
+# the current directory with no file. `--lib static|shared` builds a
+# library for C instead, with the header of its `[Export]`ed functions
+# beside it (`driver/library.pep`), and `--lto=full` (the default at `-O2`
+# and `-O3`) optimizes the program as one module before the link
+# (`driver/lto.pep`). `--test` builds the test program of the file (or of
+# several files of one folder) instead (`driver/test_main.pep`). A build
+# keeps each unit's object in the build cache (`driver/cache.pep`): `--cache
+# dir`, else `$PEPPER_CACHE_DIR`, else `.pep/cache`; `--no-cache` compiles
+# everything, and `--verify-cache` builds again with an empty cache and
+# compares the objects (`driver/verify.pep`). `-T time` prints how long
+# each stage took, `-T passes` each sema pass, `-T cache` whether each
+# unit's object came from the cache, `--Tall` all three.
 #
-# `--emit-ast=json`, `--emit-linked`, `--emit-checked`, `--emit-model
-# [--emit-model-step N]` and `--emit-llvm` print the file's syntax tree,
-# the program after linking, what the checks after linking report, the
-# sema model, or the program's LLVM IR, unoptimized, instead.
+# `--emit-ast[=text|json]`, `--emit-linked`, `--emit-checked`,
+# `--emit-model [--emit-model-step N]` and `--emit-steps` print the file's
+# syntax tree (`ast/text.pep`), the program after linking, what the checks
+# after linking report, the sema model, or the names of the sema steps,
+# instead; `--emit-llvm` writes the program's LLVM IR, optimized at the
+# `-O` level, to `<build>/<name>.ll`, and `--emit-static` the program's
+# source with its `static` blocks expanded (`driver/emit_static.pep`).
 
+import compiler.ast;
 import compiler.codegen;
 import [render_all] from compiler.diagnostic;
 import compiler.driver;
 import io;
-import [File, Path] from io;
+import [Directory, File, Path] from io;
 import compiler.link;
 import os;
 import compiler.parse;
@@ -56,8 +67,13 @@ main(args: String[]): int {
     bool linked = false;
     bool checked = false;
     bool model = false;
+    bool steps = false;
+    bool ast_json = false;
+    bool verify_cache = false;
+    bool no_verify_cache = false;
+    bool msvc = false;
     bool ir = false;
-    bool ast = false;
+    bool emit_ast = false;
     bool test = false;
     var paths = Array<String>();
     uint? opt_level;
@@ -77,6 +93,13 @@ main(args: String[]): int {
     # `--layer-worker dir`, which `driver.build` adds when it checks layers
     # in child processes: check the layers it is given (`driver.layer_worker`).
     String? layer_worker;
+    String? library;
+    String? lto;
+    # What follows each `-m` (`arch=x86-64-v3`, `avx2`), in order.
+    var machine = Array<String>();
+    bool debug = false;
+    String? debug_static;
+    String? emit_static;
     # Options are matched as `pep-build` matches them: a value after a
     # space or `=` (`--cache dir`, `--cache=dir`), or attached to a short
     # option (`-Idir`); after `--`, every argument is a file.
@@ -110,6 +133,11 @@ main(args: String[]): int {
             name = arg.substr_bytes(0, 2);
             attached = Optional<String>.Value(arg.substr_bytes(2, arg.size - 2));
         }
+        # `-march=x86-64-v3`, `-mavx2`, or `-m avx2`.
+        if (arg.starts_with("-m") and arg.size > 2) {
+            name = "-m";
+            attached = Optional<String>.Value(arg.substr_bytes(2, arg.size - 2));
+        }
         if (_value_name(name).is_value() and !attached.is_value()) {
             if (i >= args.count) {
                 return _usage_error(
@@ -136,15 +164,28 @@ main(args: String[]): int {
             checked = true;
         } else if (name == "--emit-model") {
             model = true;
+        } else if (name == "--emit-steps") {
+            steps = true;
+        } else if (name == "--verify-cache") {
+            verify_cache = true;
+        } else if (name == "--no-verify-cache") {
+            no_verify_cache = true;
+        } else if (name == "--MSVC") {
+            msvc = true;
         } else if (name == "--emit-llvm") {
             ir = true;
         } else if (name == "--test") {
             test = true;
         } else if (name == "--emit-ast") {
-            if (value != "json") {
-                return _unsupported($"{arg} (only --emit-ast=json)");
+            # `--emit-ast` alone is `--emit-ast=text`.
+            var format = attached.is_value() ? value : "text";
+            if (format != "text" and format != "json") {
+                return _usage_error(
+                    $"invalid value '{format}' for '--emit-ast[=<FORMAT>]'\n  [possible values: text, json]"
+                );
             }
-            ast = true;
+            emit_ast = true;
+            ast_json = format == "json";
         } else if (name.starts_with("-O")) {
             # `-O` alone is `-O2`; `-O2`, or `-O 2`.
             var level = name.substr_bytes(2, name.size - 2);
@@ -201,16 +242,50 @@ main(args: String[]): int {
             triple = Optional<String>.Value(value);
         } else if (name == "--sysroot") {
             sysroot = Optional<String>.Value(value);
+        } else if (name == "--lib") {
+            if (value != "static" and value != "shared") {
+                return _usage_error($"invalid value '{value}' for '--lib <KIND>': expected static or shared");
+            }
+            library = Optional<String>.Value(value);
+        } else if (name == "--lto") {
+            if (value != "full" and value != "off") {
+                return _usage_error($"invalid value '{value}' for '--lto <MODE>': expected full or off");
+            }
+            lto = Optional<String>.Value(value);
+        } else if (name == "-m") {
+            machine.append(value);
         } else if (name == "-g" or name == "--emit-debug") {
-            File.stderr().write_all("warning: this compiler does not emit debug info yet; building without it\n");
-        } else if (_not_ported(name)) {
-            return _unsupported(arg);
+            debug = true;
+        } else if (name == "--emit-static") {
+            var mode = attached.is_value() ? value : "expand";
+            if (mode != "expand" and mode != "keep") {
+                return _usage_error(
+                    $"invalid value '{mode}' for '--emit-static[=<MODE>]'\n  [possible values: expand, keep]"
+                );
+            }
+            emit_static = Optional<String>.Value(mode);
+        } else if (name == "--debug-static") {
+            if (value != "source" and value != "expanded") {
+                return _usage_error(
+                    $"invalid value '{value}' for '--debug-static <VIEW>'\n  [possible values: source, expanded]"
+                );
+            }
+            debug_static = Optional<String>.Value(value);
         } else {
             return _usage_error($"unexpected argument '{arg}' found");
         }
     }
-    if (!path.is_value() and (ast or linked or checked or model or ir)) {
+    if (debug_static.is_value() and !debug) {
+        return _usage_error("the following required arguments were not provided:\n  --emit-debug");
+    }
+    if (!path.is_value() and (emit_ast or linked or checked or model or steps or ir or emit_static.is_value())) {
         return _usage_error("the --emit options need the program's entry file");
+    }
+    if (test and library.is_value()) {
+        return _usage_error("the argument '--test' cannot be used with '--lib <KIND>'");
+    }
+    if (verify_cache and no_verify_cache) {
+        return _usage_error("the argument '--verify-cache' cannot be used with '--no-verify-cache'");
     }
     # The platform to compile for, with the build options `-D` defined.
     if (triple.is_value()) {
@@ -232,6 +307,35 @@ main(args: String[]): int {
             return 2;
         }
         opt_level = Optional<uint>.Value(level.value());
+    }
+    # The runtime checks the code keeps: every one at `-O0`, else all but
+    # those `--no-runtime-checks` removes.
+    var runtime_checks = codegen.RuntimeChecks.all();
+    if (without_checks.is_value()) {
+        var kept = codegen.RuntimeChecks.without(without_checks.value());
+        if (!kept.is_value()) {
+            return _usage_error(
+                $"invalid value '{without_checks.value()}' for '--no-runtime-checks <CHECKS>': expected overflow, divide, shift, bounds, null or all"
+            );
+        }
+        if (opt_level.value() > 0) {
+            runtime_checks = kept.value();
+        }
+    }
+    # The CPU the `-m` options choose for the target, else clang's default.
+    var cpu = codegen.Cpu.from_options(codegen.target_triple(setup.target), machine);
+    if (cpu.is_err()) {
+        _report(cpu.error());
+        return 1;
+    }
+    # Link-time optimization: `full` by default at `-O2` and `-O3`.
+    bool whole = opt_level.value() >= 2;
+    if (lto.is_value()) {
+        if (lto.value() == "full" and opt_level.value() == 0) {
+            _report("'--lto=full' needs optimization: add '-O'");
+            return 1;
+        }
+        whole = lto.value() == "full";
     }
     # In a project, the build takes what its `pep.toml` gives: with no file,
     # the entry and output; and `[build]`'s libraries.
@@ -272,8 +376,45 @@ main(args: String[]): int {
             setup.sources[link.path_key(entry)] = driver.add_test_main(entry, read.value());
         }
     }
-    if (!ast) {
-        if (!(linked or checked or model or ir)) {
+    # Where a build writes: `-o`, else named for the entry file or the
+    # project, and its intermediate files (`--build`).
+    var cwd = process.working_directory();
+    var here = cwd.is_ok() ? cwd.value() : Path(".");
+    var stem = entry.file_stem();
+    var work = project.value().dir.is_value() ? project.value().dir.value() : here;
+    var kind = Optional<driver.LibraryKind>.Empty;
+    if (library.is_value()) {
+        kind = Optional<driver.LibraryKind>.Value(
+            library.value() == "static" ? driver.LibraryKind.Static : driver.LibraryKind.Shared
+        );
+    }
+    var out = here.join(Path(stem.is_value() ? stem.value() : "main"));
+    if (output.is_value()) {
+        out = Path(output.value());
+    } else if (kind.is_value()) {
+        # A library is named for the package, else the entry file,
+        # as the target names libraries (`libmain.a`).
+        var named = project.value().name.is_empty ? (stem.is_value() ? stem.value() : "main") : project.value().name;
+        out = work.join(Path(driver.library_file_name(kind.value(), named, setup.target)));
+    } else if (project.value().output.is_value()) {
+        out = project.value().output.value();
+    }
+    var build_folder = build_dir.is_value() ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
+    if (!emit_ast) {
+        if (!(linked or checked or model or steps)) {
+            # Debug builds keep every check.
+            if (without_checks.is_value() and opt_level.value() == 0) {
+                var kept = codegen.RuntimeChecks.without(without_checks.value()).value();
+                if (!(kept.overflow and kept.divide and kept.shift and kept.bounds and kept.null)) {
+                    File.stderr().write_all("warning: '--no-runtime-checks' has no effect at -O0\n");
+                }
+            }
+            if (msvc) {
+                _report("the MSVC linker path is not ported");
+                return 1;
+            }
+        }
+        if (!(linked or checked or model or steps or ir)) {
             # A project builds with what pep.lock lists: fetch what is missing.
             var fetched = driver.fetch_dependencies(entry);
             if (fetched.is_err()) {
@@ -283,63 +424,103 @@ main(args: String[]): int {
         }
         # A build links the bodies of only the files it checks
         # (`driver.build`).
-        setup.defer_bodies = !(ir or model or linked or checked);
+        setup.defer_bodies = !(ir or model or steps or linked or checked or emit_static.is_value());
         # A rebuild's first layer worker loads the program while this
         # process does (`driver.start_layer_worker`).
         var early_worker = Optional<process.Child>.Empty;
-        if (setup.defer_bodies and !layer_worker.is_value() and !no_cache) {
+        if (setup.defer_bodies and !layer_worker.is_value() and !no_cache and !debug) {
             var worker_args = Array<String>();
             for (var k in 1..args.count) {
                 worker_args.append(args[k]);
             }
-            var folder = build_dir.is_value() ?
-                Path(build_dir.value()) :
-                (project.value().dir.is_value() ?
-                    project.value().dir.value() :
-                    _here()).join(Path(".pep")).join(Path("build"));
-            early_worker = driver.start_layer_worker(worker_args, folder);
+            early_worker = driver.start_layer_worker(worker_args, build_folder);
         }
         var program = link.load_program(entry, setup);
         if (program.is_err()) {
             _report(program.error());
             return 1;
         }
-        if (ir) {
+        if (emit_static.is_value()) {
+            # The copies go into `-o`, else `<stem>.static`.
+            var stem = entry.file_stem();
+            var out_dir = Path(
+                output.is_value() ? output.value() : $"{stem.is_value() ? stem.value() : "main"}.static"
+            );
+            var written = driver.emit_static(program.value(), entry, out_dir, emit_static.value() == "keep");
+            if (written.is_err()) {
+                _report(written.error());
+                return 1;
+            }
+        } else if (ir) {
+            # The whole program's IR, optimized at the `-O` level, in
+            # `<build>/<name>.ll`.
             var built = sema.merge(program.value());
             if (built.is_err()) {
                 File.stderr().write_all($"{built.error()}\n");
                 return 1;
             }
-            var ran = sema.run_passes(built.value(), program.value().target, program.value().sources());
+            var state = sema.PassState(program.value().target);
+            state.sources = program.value().sources();
+            state.lazy_methods = true;
+            if (traces.contains("passes")) {
+                state.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
+            }
+            var ran = sema.run_steps_with(built.value(), state, 0xffffffffffffffff);
             if (ran.is_err()) {
                 File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
                 return 1;
+            }
+            if (state.pass_times.is_value()) {
+                File.stderr().write_all(state.pass_times.value().report());
             }
             var namespaces = Array<String>();
             for (var f in program.value().files) {
                 namespaces.append(f.namespace);
             }
-            var generated = codegen.generate_ir(built.value(), ran.value(), namespaces, entry.file_stem().value());
+            var module_name = out.file_stem();
+            var name = module_name.is_value() ? module_name.value() : "main";
+            var generated = codegen.generate_ir(
+                built.value(),
+                state,
+                namespaces,
+                name,
+                Optional<codegen.Cpu>.Value(cpu.value()),
+                debug,
+                opt_level.value(),
+                frame_pointers,
+                runtime_checks,
+                debug ? driver.gdb_printers(program.value()) : ""
+            );
             if (generated.is_err()) {
                 File.stderr().write_all(render_all([generated.error()], program.value().sources()) + "\n");
                 return 1;
             }
-            # The IR ends with a newline, which `print` adds.
-            var text = generated.value();
-            print(text.ends_with("\n") ? text.substr_bytes(0, text.size - 1) : text);
-        } else if (model) {
+            Directory.create_all(build_folder);
+            var ll = build_folder.join(Path($"{name}.ll"));
+            var written = File.write_text(ll, generated.value());
+            if (written.is_err()) {
+                _report($"cannot write {ll}: {written.error().message}");
+                return 1;
+            }
+        } else if (model or steps) {
             var built = sema.merge(program.value());
             if (built.is_err()) {
                 File.stderr().write_all($"{built.error()}\n");
                 return 1;
             }
-            if (step.is_value()) {
-                var ran = sema.run_steps(
-                    built.value(), program.value().target, step.value(), program.value().sources()
-                );
+            # `--emit-steps` runs every step, or the first `--emit-model-step`.
+            if (steps or step.is_value()) {
+                var state = sema.PassState(program.value().target);
+                state.sources = program.value().sources();
+                var limit = step.is_value() ? step.value() : 0xffffffffffffffff;
+                var ran = sema.run_steps_with(built.value(), state, limit);
                 if (ran.is_err()) {
                     File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
                     return 1;
+                }
+                if (steps) {
+                    print("\n".join(state.step_names));
+                    return 0;
                 }
             }
             print(sema.model_json(built.value()));
@@ -348,35 +529,18 @@ main(args: String[]): int {
         } else if (checked) {
             print(program.value().check_report());
         } else {
-            var cwd = process.working_directory();
-            var here = cwd.is_ok() ? cwd.value() : Path(".");
-            var stem = entry.file_stem();
-            var out = here.join(Path(stem.is_value() ? stem.value() : "main"));
-            if (output.is_value()) {
-                out = Path(output.value());
-            } else if (project.value().output.is_value()) {
-                out = project.value().output.value();
-            }
-            var work = project.value().dir.is_value() ? project.value().dir.value() : here;
-            var options = driver.BuildOptions(
-                out, build_dir.is_value() ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"))
-            );
+            var options = driver.BuildOptions(out, build_folder);
             options.opt_level = opt_level.value();
             options.frame_pointers = frame_pointers;
-            if (without_checks.is_value()) {
-                var kept = codegen.RuntimeChecks.without(without_checks.value());
-                if (!kept.is_value()) {
-                    return _usage_error(
-                        $"invalid value '{without_checks.value()}' for '--no-runtime-checks <CHECKS>': expected overflow, divide, shift, bounds, null or all"
-                    );
-                }
-                if (options.opt_level == 0) {
-                    File.stderr().write_all(
-                        "warning: --no-runtime-checks is ignored without optimization (-O1 or above)\n"
-                    );
-                } else {
-                    options.runtime_checks = kept.value();
-                }
+            options.cpu = Optional<codegen.Cpu>.Value(cpu.value());
+            options.lto = whole;
+            options.library = kind;
+            options.debug = debug;
+            options.entry = Optional<Path>.Value(entry);
+            options.debug_static_expanded = debug_static.is_value() and debug_static.value() == "expanded";
+            options.runtime_checks = runtime_checks;
+            if (traces.contains("passes")) {
+                options.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
             }
             for (var library in project.value().libraries) {
                 if (!libraries.contains(library)) {
@@ -388,11 +552,22 @@ main(args: String[]): int {
             options.sysroot = driver.effective_sysroot(
                 setup.target, sysroot.is_value() ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
             );
-            if (!no_cache) {
+            # A cached unit's sema is skipped, so its expansions would not be
+            # written for `--debug-static=expanded`.
+            if (!no_cache and !options.debug_static_expanded) {
                 options.cache = Optional<driver.Cache>.Value(
                     cache_dir.is_value() ? driver.Cache(Path(cache_dir.value())) : driver.default_cache(work)
                 );
             }
+            # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but
+            # empty or `0`, unless `--no-verify-cache`.
+            var named_verify = os.environment("PEPPER_CACHE_VERIFY");
+            bool verifying = verify_cache
+                or (!no_verify_cache
+                    and named_verify.is_value()
+                    and !named_verify.value().is_empty
+                    and named_verify.value() != "0");
+            options.verify_cutoff = verifying;
             options.trace_time = traces.contains("time");
             options.trace_cache = traces.contains("cache");
             if (layer_worker.is_value()) {
@@ -410,6 +585,19 @@ main(args: String[]): int {
                 }
                 return 1;
             }
+            if (verifying and options.cache.is_value()) {
+                # The program again, as the build loaded it.
+                var reloaded = link.load_program(entry, setup);
+                if (reloaded.is_err()) {
+                    _report(reloaded.error());
+                    return 1;
+                }
+                var verified = driver.verify_cache(reloaded.value(), options);
+                if (verified.is_err()) {
+                    _report(verified.error());
+                    return 1;
+                }
+            }
         }
         return 0;
     }
@@ -424,14 +612,14 @@ main(args: String[]): int {
         File.stderr().write_all($"{path.value()}:{error.span.start}: error: {error.message}\n");
         return 1;
     }
-    print(module.value().to_json().to_string());
+    if (ast_json) {
+        print(module.value().to_json().to_string());
+    } else {
+        # The text ends with a newline, which `print` adds.
+        var text = ast.module_text(module.value());
+        print(text.ends_with("\n") ? text.substr_bytes(0, text.size - 1) : text);
+    }
     return 0;
-}
-
-## The current folder, or `.` when it cannot be read.
-_here(): Path {
-    var cwd = process.working_directory();
-    return cwd.is_ok() ? cwd.value() : Path(".");
 }
 
 ## The level `PEPPER_OPT_LEVEL` names (`0` to `3`), or 0 when it is unset
@@ -484,21 +672,20 @@ _value_name(name: String): String? {
         "--target" => {
             return Optional<String>.Value("TRIPLE");
         }
+        "--lib" => {
+            return Optional<String>.Value("KIND");
+        }
+        "--lto" => {
+            return Optional<String>.Value("MODE");
+        }
+        "-m" => {
+            return Optional<String>.Value("OPTION");
+        }
+        "--debug-static" => {
+            return Optional<String>.Value("VIEW");
+        }
         else => {
             return Optional<String>.Empty;
-        }
-    }
-}
-
-# Whether `name` is an option of the Rust pep-build that this compiler does
-# not have yet.
-_not_ported(name: String): bool {
-    match (name) {
-        "--lib", "--lto", "--emit-static", "--debug-static", "--emit-steps", "--verify-cache", "--no-verify-cache", "--MSVC" => {
-            return true;
-        }
-        else => {
-            return name.starts_with("-m");
         }
     }
 }
@@ -511,18 +698,12 @@ _usage_error(message: String): int {
     return 2;
 }
 
-# Reports an option this compiler does not have yet; exits 2.
-_unsupported(option: String): int {
-    File.stderr().write_all($"error: {option} is not supported by this compiler yet\n");
-    return 2;
-}
-
 # `--help`: the options this compiler has, as `pep-build --help` lists them.
 ## The channels `-T` names, which `--Tall` enables (`pep-doc check` reads
 ## them, for `docs/src/tools/pep-build.md`).
-const TRACE_CHANNELS = "time cache";
+const TRACE_CHANNELS = "time passes cache";
 
-const _HELP = "Pepper compiler\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nArguments:\n  [SOURCE_FILES]...  The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it\n\nOptions:\n  -I <DIR>                          Add a directory to the import search path\n      --import <NAME>               Force an import by name\n  -l <LIB>                          Link against a library\n  -L <DIR>                          Add a directory to the linker's library search path\n  -D <NAME[=VALUE]>                 Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins\n  -o <OUT>                          Output path: the executable\n      --build <DIR>                 Build directory\n  -O <LEVEL>                        Optimization level: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set\n      --no-runtime-checks <CHECKS>  Remove kinds of runtime check from an optimized build, as a comma-separated list: `overflow` (integer overflow; arithmetic then wraps), `divide` (division by zero and `MIN / -1`; then undefined), `shift` (a count of at least the width; then masked), `bounds` (array and string indexing) and `null` (calls and matches through a null reference), or `all`. Removing `bounds` or `null` gives up memory safety. Ignored, with a warning, at `-O0`\n      --test                        Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it\n      --emit-llvm                   Print the program's LLVM IR, unoptimized, instead of compiling it\n  -g, --emit-debug                  Accepted, with a warning: this compiler does not emit debug info yet\n      --target <TRIPLE>             The platform to compile for, as an LLVM target triple (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`). The default is the machine the compiler runs on. `[Target(...)]` selects code for it, and linking another platform's executable needs its system libraries (`--sysroot`)\n      --sysroot <DIR>               The directory holding the target's system headers and libraries, passed to the link driver. Without it, `$PEPPER_SYSROOT_<TRIPLE>` (the triple upper-cased, with `_` for `-`) when set\n      --frame-pointers              Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it\n  -v, --verbose                     Accepted for compatibility; prints nothing more yet\n      --no-runtime                  Skip runtime discovery\n      --emit-ast=<FORMAT>           Dump the parsed AST of the entry file instead of compiling [possible values: json]\n      --emit-linked                 Load and link the program instead of compiling it, and print every file's syntax tree after linking, with the linking errors, as JSON\n      --emit-checked                Load, link and check the program instead of compiling it, and print what the checks before sema report: the errors (linking, then `[__BuiltIn]` misuse, then visibility), then the warnings, rendered\n      --emit-model                  Load, link, check and build the program's sema model instead of compiling it, and print the model before any sema pass, as JSON\n      --emit-model-step <N>         With `--emit-model`: run the first N sema steps (one pass each, in the order the compiler runs them) and print the model after them\n  -T <CHAN>                         Enable a trace channel. `time` prints how long each compile stage took; `cache` prints whether each unit's object came from the build cache; any other name is accepted and ignored\n      --Tall                        Enable all trace channels\n      --no-cache                    Compile every unit without reading or writing the build cache\n      --cache <DIR>                 Build cache directory (default: `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`)\n  -h, --help                        Print help\n  -V, --version                     Print version\n";
+const _HELP = "Pepper compiler\n\nUsage: pep-build [OPTIONS] [SOURCE_FILES]...\n\nArguments:\n  [SOURCE_FILES]...  The program's entry file. The files it imports are found on their own; only the first file named is compiled. With none, builds the project whose `pep.toml` is in the current directory or above it\n\nOptions:\n  -I <DIR>                          Add a directory to the import search path\n      --import <NAME>               Force an import by name\n  -l <LIB>                          Link against a library\n  -L <DIR>                          Add a directory to the linker's library search path. The folders in `$PEPPER_LIBRARY_PATH` (separated like `PATH`) are searched after these and `[Link(path = ...)]` folders\n  -D <NAME[=VALUE]>                 Define a build option: `-D NAME`, or `-D NAME=VALUE` with a value (a bare `NAME` is `NAME=1`, as in C). `[BuildOption(\"NAME\")]` and `BuildOption(NAME)` in `[Target(...)]` select code by it, and `static` blocks read it with `reflect.build_option`. Repeat for more options; of two that name one option, the later wins\n  -o <OUT>                          Output path: the executable, with `--lib` the library, or with `--emit-static` the folder for the expanded source\n      --lib <KIND>                  Build a library for C code to link instead of an executable: `static` (`libname.a`, `name.lib` on Windows) or `shared` (`libname.so`, `libname.dylib`, `name.dll`), with a C header beside it declaring the `[Export]`ed functions. No `main` is needed [possible values: static, shared]\n      --build <DIR>                 Build directory\n  -O <LEVEL>                        Optimization level: `-O0` (the default) through `-O3`; `-O` alone is `-O2`. Without it, `$PEPPER_OPT_LEVEL` when set\n      --lto <MODE>                  Link-time optimization: `full` optimizes the whole program as one module after linking every file's code, so calls between files (into the runtime, for one) inline; `off` optimizes each file alone. The default is `full` at `-O2` and `-O3`, and `off` below [possible values: full, off]\n      --target <TRIPLE>             The platform to compile for, as an LLVM target triple (`aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, `x86_64-unknown-linux-gnu`). The default is the machine the compiler runs on. `[Target(...)]` selects code for it, and linking another platform's executable needs its system libraries (`--sysroot`)\n      --sysroot <DIR>               The directory holding the target's system headers and libraries, passed to the link driver. Without it, `$PEPPER_SYSROOT_<TRIPLE>` (the triple upper-cased, with `_` for `-`) when set\n  -m <OPTION>                       The CPU to generate code for, with clang's names and meanings: `-march=<cpu>` (x86: `x86-64-v3`, `native`), `-mcpu=<cpu>` (AArch64: `apple-m2`, `native`), `-march=<arch>` (AArch64: `armv8.2-a+crypto`), `-mtune=<cpu>`, and `-m<feature>` / `-mno-<feature>`. The default is clang's for the target (`x86-64`; `apple-m1` on Apple arm64)\n      --no-runtime-checks <CHECKS>  Remove kinds of runtime check from an optimized build, as a comma-separated list: `overflow` (integer overflow; arithmetic then wraps), `divide` (division by zero and `MIN / -1`; then undefined), `shift` (a count of at least the width; then masked), `bounds` (array and string indexing) and `null` (calls and matches through a null reference), or `all`. Removing `bounds` or `null` gives up memory safety. Ignored, with a warning, at `-O0`\n      --test                        Build the entry file's tests: keep its `[Test]` functions, define the build option `TEST`, and replace its `main` with one that lists or runs them (`--list`, `--run NAME`). Given several files of one folder, builds the tests of them all into one program, each file keeping the scope it has in any program. `pep-test` builds with it\n      --emit-llvm                   Emit LLVM IR (optimized at the `-O` level)\n      --emit-static[=<MODE>]        Write the program's source with each `static` block replaced by the code it emits, like C's `cc -E`, into the folder `-o` names (default `<name>.static`) instead of compiling it. `--emit-static=keep` also keeps each block, as `#` comments above its expansion [possible values: expand, keep]\n  -g, --emit-debug                  Emit debug info: DWARF on Linux and macOS, CodeView and a `.pdb` on Windows\n      --debug-static <VIEW>         With `-g`, where the debugger shows the code a `static` block emits: `source` (the default), the block as written, stopping on a loop's header once per pass; or `expanded`, a copy of each file with its blocks expanded as `--emit-static` writes them, saved beside the output as `<name>.static.pep`, stepping through the expanded statements. `expanded` builds without the build cache [possible values: source, expanded]\n      --frame-pointers              Keep the frame pointer in every function, even when optimizing, so profilers and stack walkers unwind the stack cheaply (clang's `-fno-omit-frame-pointer`). `pep-profile` builds with it\n  -v, --verbose                     Accepted for compatibility; prints nothing more yet\n      --no-runtime                  Skip runtime discovery\n      --emit-ast[=<FORMAT>]         Dump the parsed AST instead of compiling: as source-like text (`--emit-ast`, `--emit-ast=text`) or as JSON (`--emit-ast=json`) [possible values: text, json]\n      --emit-linked                 Load and link the program instead of compiling it, and print every file's syntax tree after linking, with the linking errors, as JSON\n      --emit-checked                Load, link and check the program instead of compiling it, and print what the checks before sema report: the errors (linking, then `[__BuiltIn]` misuse, then visibility), then the warnings, rendered\n      --emit-model                  Load, link, check and build the program's sema model instead of compiling it, and print the model before any sema pass, as JSON\n      --emit-model-step <N>         With `--emit-model`: run the first N sema steps (one pass each, in the order the compiler runs them) and print the model after them\n      --emit-steps                  Load, link, check and build the program, run the sema passes, and print the name of each step run, one per line, instead of compiling\n  -T <CHAN>                         Enable a trace channel. `time` prints how long each compile stage took; `passes` prints how long each sema pass took, summed over its runs; `cache` prints whether each unit's object came from the build cache; any other name is accepted and ignored\n      --Tall                        Enable all trace channels\n      --no-cache                    Compile every unit without reading or writing the build cache\n      --cache <DIR>                 Build cache directory (default: `$PEPPER_CACHE_DIR`, else `$CWD/.pep/cache`)\n      --verify-cache                Check the build cache: generate the code of every unit that hits anyway, and fail if it differs from the cached object's, or if skipping the hit units' bodies in sema changes another unit's code (also `PEPPER_CACHE_VERIFY=1`). For testing the compiler\n      --no-verify-cache             Do not check the build cache, even with `PEPPER_CACHE_VERIFY` set\n      --MSVC                        Use the MSVC linker. Not ported: always an error\n  -h, --help                        Print help\n  -V, --version                     Print version\n";
 
 # Prints `message` on standard error as an error: with `error:` unless it is
 # a rendered diagnostic that says so already.

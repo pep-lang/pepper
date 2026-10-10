@@ -915,6 +915,7 @@ extend Generator {
             }
             false_val = coerce(false_val, value_type_name(false_val), promoted_ty);
             builder.position_at_end(merge_block);
+            keep_location();
         }
         var phi = builder.phi(true_val.value_type(), "ternary");
         phi.add_incoming([true_val, false_val], [true_end, false_end]);

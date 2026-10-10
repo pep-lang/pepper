@@ -26,6 +26,9 @@ import "address";
 import "calls";
 import [RuntimeChecks] from "checks";
 import "checks";
+import [DebugInfo] from "debug";
+import "debug";
+import "debug_types";
 import "expressions";
 import "functions";
 import [annotate_facts, stamp_cpu] from "globals";
@@ -35,6 +38,7 @@ import "operators";
 import "ops";
 import "refs";
 import "simd";
+import "static_debug";
 import [initialize_backends, target_triple] from "target";
 import "traits";
 import [Types, is_object] from "types";
@@ -253,9 +257,30 @@ export struct Generator {
     var call_loc: Loc = Loc.none();
     ## Whether a call's default arguments are being generated.
     var in_default_argument: bool = false;
+    ## Whether to emit debug info (`-g`; see `debug.pep`).
+    var debug_info: bool = false;
+    ## The module's debug info, while it is generated with `-g`.
+    var debug: DebugInfo? = Optional<DebugInfo>.Empty;
+    ## The location instructions are stamped with now, when debug info is
+    ## on: null for none (see `enter_location`).
+    var debug_location: llvm.Metadata = llvm.Metadata();
+    ## Where the struct whose members are being generated is declared: a
+    ## synthesized member without a location of its own is placed there for
+    ## the debugger.
+    var debug_struct_loc: Loc = Loc.none();
+    ## `--debug-static=expanded`: where each emitted statement and pass
+    ## header of a `static` block is in the expanded source, by its id.
+    var static_locations: HashMap<uint, Loc> = HashMap<uint, Loc>();
+    ## The text of gdb's pretty-printers for the runtime's types, which a
+    ## Linux program carries with `-g` (`DebugInfo.embed_gdb_printers`).
+    var gdb_printers: String = "";
+
+    ## The module's name.
+    var ir_name: String;
 
     construct(context: llvm.Context, name: String, machine: llvm.TargetMachine, state: PassState) {
         this.context = context;
+        this.ir_name = name;
         this.ir = llvm.Module(context, name);
         this.builder = llvm.Builder(context);
         this.machine = machine;
@@ -355,6 +380,43 @@ export struct Generator {
         return Result<void, Diagnostic>.ok();
     }
 
+    ## Stamps the instructions emitted from here on with `loc`'s location,
+    ## when debug info is on and `loc` is known; returns the location to
+    ## restore with `leave_location`.
+    enter_location(loc: Loc): llvm.Metadata {
+        var saved = debug_location;
+        if (debug.is_value()) {
+            var location = debug.value().location(loc);
+            if (!location.is_null()) {
+                builder.set_location(location);
+                debug_location = location;
+            }
+        }
+        return saved;
+    }
+
+    ## Stamps what is emitted next with the current location again, after
+    ## positioning the builder before an instruction, which takes that
+    ## instruction's location (none, for an entry block's slots).
+    keep_location() {
+        if (debug.is_value() and !debug_location.is_null()) {
+            builder.set_location(debug_location);
+        }
+    }
+
+    ## Restores the location `enter_location` replaced.
+    leave_location(saved: llvm.Metadata) {
+        if (!debug.is_value() or debug_location.ref == saved.ref) {
+            return;
+        }
+        if (saved.is_null()) {
+            builder.clear_location();
+        } else {
+            builder.set_location(saved);
+        }
+        debug_location = saved;
+    }
+
     generate_module(module: Module): Result<void> {
         index_check_files();
         caller_copies = module.caller_copies;
@@ -379,6 +441,24 @@ export struct Generator {
             if (own.is_value()) {
                 equality_methods[st.name] = $"{st.name}.{own.value().name}";
             }
+        }
+        if (debug_info) {
+            # One compile unit for the program's module, named for it: each
+            # part split from it carries the unit.
+            var info = DebugInfo(ir, state.sources, ir_name, opt_level > 0);
+            info.static_locations = static_locations;
+            for (var e in module.enums) {
+                var plain = true;
+                var cases = Array<(String, long)>();
+                for (var c in e.cases) {
+                    plain = plain and c.payload.is_empty;
+                    cases.append((c.name, c.value));
+                }
+                if (plain) {
+                    info.enums[e.name] = (e.loc, e.representation.to_string(), cases);
+                }
+            }
+            debug = Optional<DebugInfo>.Value(info);
         }
         return generate_items(module);
     }
@@ -505,6 +585,10 @@ export struct Generator {
             codegen_function(function)?;
         }
         codegen_called()?;
+        if (debug.is_value()) {
+            debug.value().embed_gdb_printers(ir, gdb_printers);
+            debug.value().finish(ir);
+        }
         var verified = ir.verify();
         if (verified.is_err()) {
             return fail<void>(verification_error(module, verified.error().message));
@@ -645,6 +729,160 @@ export struct Cpu {
         var device = apple and triple.contains("-ios") and !triple.ends_with("-simulator");
         return Cpu(device ? "apple-a7" : (apple ? "apple-m1" : "generic"), "", "");
     }
+
+    ## The CPU clang's `-m` options choose for `triple`, as
+    ## `Cpu::from_options` in `crates/pepper-codegen/src/target.rs`: each of
+    ## `machine` is what follows `-m`, in order (`arch=x86-64-v3`,
+    ## `cpu=native`, `tune=znver4`, `avx2`, `no-avx2`). On x86, `-march`
+    ## names the CPU (`native` the host's) and `-mcpu` is an error; without
+    ## `-march` the code is tuned for `generic`. On AArch64, `-mcpu` names
+    ## the CPU and `-march` the architecture (`armv8.2-a`), each with
+    ## `+<extension>` or `+no<extension>` after it. On WebAssembly, `-mcpu`
+    ## names the CPU and `-march` is an error. `-mtune` names the CPU to
+    ## schedule for, `-m<feature>` adds an LLVM feature and
+    ## `-mno-<feature>` removes one, after those the CPU implies. The last
+    ## of each option wins.
+    ##
+    ## @param triple the target triple
+    ## @param machine the options, without their `-m`
+    ## @returns the CPU, or the error, worded as clang words it
+    static from_options(triple: String, machine: String[]): Result<Cpu, String> {
+        var cpu = Cpu.default_for(triple);
+        var x86 = _is_x86(triple);
+        var wasm = triple.starts_with("wasm32");
+        var cross = wasm or x86 != _is_x86(llvm.default_triple());
+        String? arch;
+        String? mcpu;
+        String? tune;
+        var extra = Array<String>();
+        for (var option in machine) {
+            if (option.ends_with("=native") and cross) {
+                return Result<Cpu, String>.err(
+                    $"'-m{option}' names this machine's CPU, which target '{triple}' cannot run on"
+                );
+            }
+            if (option.starts_with("arch=")) {
+                if (wasm) {
+                    return Result<Cpu, String>.err($"unsupported option '-march=' for target '{triple}'; use '-mcpu'");
+                }
+                arch = Optional<String>.Value(_after(option, 5));
+            } else if (option.starts_with("cpu=")) {
+                if (x86) {
+                    return Result<Cpu, String>.err(
+                        $"unsupported option '-mcpu=' for target '{triple}'; use '-march' or '-mtune'"
+                    );
+                }
+                mcpu = Optional<String>.Value(_after(option, 4));
+            } else if (option.starts_with("tune=")) {
+                tune = Optional<String>.Value(_after(option, 5));
+            } else if (option.starts_with("no-")) {
+                extra.append("-" + _after(option, 3));
+            } else if (!option.is_empty and !option.contains("=")) {
+                extra.append("+" + option);
+            } else {
+                return Result<Cpu, String>.err($"unknown argument '-m{option}'");
+            }
+        }
+        var features = [cpu.features];
+        if (x86) {
+            if (arch.is_value()) {
+                if (arch.value().is_empty) {
+                    return Result<Cpu, String>.err("missing value for '-march='");
+                }
+                if (arch.value() == "native") {
+                    cpu.name = llvm.host_cpu();
+                    features.append(llvm.host_features());
+                    cpu.tune = llvm.host_cpu();
+                } else {
+                    cpu.name = arch.value();
+                    cpu.tune = "";
+                }
+            }
+        } else {
+            # `-mcpu` sets the CPU and `-march` the architecture; with both,
+            # clang takes the CPU from `-mcpu` and the features from both.
+            if (arch.is_value()) {
+                var named = arch.value();
+                if (named.is_empty) {
+                    return Result<Cpu, String>.err("missing value for '-march='");
+                }
+                if (named == "native") {
+                    cpu.name = llvm.host_cpu();
+                    features.append(llvm.host_features());
+                } else {
+                    var (base, extensions) = _split_extensions(named);
+                    # `armv<version>-a`, with a version.
+                    if (base.size <= 6 or !base.starts_with("armv") or !base.ends_with("-a")) {
+                        return Result<Cpu, String>.err($"invalid arch name '-march={named}'");
+                    }
+                    cpu.name = "generic";
+                    features.append($"+v{base.substr_bytes(4, base.size - 6)}a");
+                    features.append_all(extensions);
+                }
+            }
+            if (mcpu.is_value()) {
+                var named = mcpu.value();
+                if (named.is_empty) {
+                    return Result<Cpu, String>.err("missing value for '-mcpu='");
+                }
+                if (named == "native") {
+                    cpu.name = llvm.host_cpu();
+                    features.append(llvm.host_features());
+                } else {
+                    var (base, extensions) = _split_extensions(named);
+                    cpu.name = base;
+                    features.append_all(extensions);
+                }
+            }
+        }
+        if (tune.is_value()) {
+            if (tune.value().is_empty) {
+                return Result<Cpu, String>.err("missing value for '-mtune='");
+            }
+            cpu.tune = tune.value() == "native" ? llvm.host_cpu() : tune.value();
+        }
+        features.append_all(extra);
+        var kept = Array<String>();
+        for (var feature in features) {
+            if (!feature.is_empty) {
+                kept.append(feature);
+            }
+        }
+        cpu.features = ",".join(kept);
+        return Result<Cpu, String>.ok(cpu);
+    }
+
+    ## The CPU, features and tuning as one line, for the build cache's key
+    ## (`x86-64-v3+avx512f@generic`), as `Cpu::key` writes it.
+    ##
+    ## @returns the line
+    key(): String {
+        var out = name + features.replace(",", "");
+        return tune.is_empty ? out : $"{out}@{tune}";
+    }
+}
+
+# Whether `triple` names an x86-64 machine.
+_is_x86(triple: String): bool {
+    return triple.starts_with("x86_64") or triple.starts_with("amd64");
+}
+
+# `text` from byte `start` on.
+_after(text: String, start: ulong): String {
+    return text.substr_bytes(start, text.size - start);
+}
+
+# `name+ext+noext` as `name` and the LLVM features `+ext`, `-ext`.
+_split_extensions(value: String): (String, String[]) {
+    var parts = value.split("+");
+    var extensions = Array<String>();
+    for (var i in 1..parts.count) {
+        var extension = parts[i];
+        if (!extension.is_empty) {
+            extensions.append(extension.starts_with("no") ? "-" + _after(extension, 2) : "+" + extension);
+        }
+    }
+    return (parts[0], extensions);
 }
 
 ## What `generate` builds the module for.
@@ -659,6 +897,14 @@ export struct Build {
     var runtime_checks: RuntimeChecks = RuntimeChecks.all();
     ## Whether every function keeps its frame pointer (`--frame-pointers`).
     var frame_pointers: bool = false;
+    ## Whether to emit debug info (`-g`).
+    var debug_info: bool = false;
+    ## With `--debug-static=expanded`, where each `static` block's emitted
+    ## statements and pass headers are in the expanded sources, by id.
+    var static_locations: HashMap<uint, Loc> = HashMap<uint, Loc>();
+    ## The text of `runtime/debuggers/gdb_printers.py`, which a Linux
+    ## program carries with `-g`; empty for none.
+    var gdb_printers: String = "";
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -700,6 +946,9 @@ export generate(
     generator.file_namespaces = namespaces;
     generator.opt_level = build.opt_level;
     generator.runtime_checks = build.runtime_checks;
+    generator.debug_info = build.debug_info;
+    generator.static_locations = build.static_locations;
+    generator.gdb_printers = build.gdb_printers;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());
@@ -724,18 +973,50 @@ export generate(
 ## @param state the passes' state for it
 ## @param namespaces each file's namespace, by file index
 ## @param name the module's name: the main file's stem
+## @param chosen the CPU the `-m` options chose; clang's default for the
+##   target without one
+## @param debug_info whether to emit debug info (`-g`)
+## @param opt_level the `-O` level the IR is optimized at, as LLVM's
+##   standard pipeline does (`pep-build --emit-llvm`); 0 leaves it as
+##   generated
+## @param frame_pointers whether every function keeps its frame pointer
+## @param runtime_checks the runtime checks the code keeps
 ## @returns the IR, or the first error
-export generate_ir(module: Module, state: PassState, namespaces: String[], name: String): Result<String, Diagnostic> {
+export generate_ir(
+    module: Module,
+    state: PassState,
+    namespaces: String[],
+    name: String,
+    chosen: Cpu? = Optional<Cpu>.Empty,
+    debug_info: bool = false,
+    opt_level: uint = 0,
+    frame_pointers: bool = false,
+    runtime_checks: RuntimeChecks = RuntimeChecks.all(),
+    gdb_printers: String = ""
+): Result<String, Diagnostic> {
     var triple = target_triple(state.target);
-    var cpu = Cpu.default_for(triple);
+    var cpu = chosen.is_value() ? chosen.value() : Cpu.default_for(triple);
     initialize_backends();
-    var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, llvm.OptLevel.O0);
+    var level = [llvm.OptLevel.O0, llvm.OptLevel.O1, llvm.OptLevel.O2, llvm.OptLevel.O3][opt_level];
+    var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, level);
     if (machine.is_err()) {
         return Result<String, Diagnostic>.err(Diagnostic.error(machine.error().message));
     }
-    var generated = generate(module, state, namespaces, name, Build(machine.value(), cpu));
+    var setup = Build(machine.value(), cpu);
+    setup.debug_info = debug_info;
+    setup.opt_level = opt_level;
+    setup.frame_pointers = frame_pointers;
+    setup.runtime_checks = runtime_checks;
+    setup.gdb_printers = gdb_printers;
+    var generated = generate(module, state, namespaces, name, setup);
     if (generated.is_err()) {
         return Result<String, Diagnostic>.err(generated.error());
+    }
+    if (opt_level > 0) {
+        var optimized = generated.value().run_passes($"default<O{opt_level}>", machine.value());
+        if (optimized.is_err()) {
+            return Result<String, Diagnostic>.err(Diagnostic.error($"cannot optimize: {optimized.error().message}"));
+        }
     }
     return Result<String, Diagnostic>.ok(generated.value().to_string());
 }

@@ -27,6 +27,8 @@ import "address";
 import "calls";
 import [function_checks] from "checks";
 import "checks";
+import "debug";
+import "debug_types";
 import "expressions";
 import [Generator, ScopeSlot, StructDesc] from "generator";
 import "generator";
@@ -36,6 +38,7 @@ import "operators";
 import "ops";
 import "refs";
 import "simd";
+import "static_debug";
 import "traits";
 import [is_object] from "types";
 import "types";
@@ -463,6 +466,13 @@ extend Generator {
         if (is_abstract(st)) {
             return Result<void>.ok();
         }
+        debug_struct_loc = st.loc;
+        var result = codegen_struct_members(st);
+        debug_struct_loc = Loc.none();
+        return result;
+    }
+
+    codegen_struct_members(st: StructDef): Result<void> {
         for (var ctor in patched_ctors(st)) {
             codegen_function(ctor)?;
         }
@@ -530,12 +540,44 @@ extend Generator {
         # A body a checked unit's record held undecoded is decoded only now,
         # when it is generated.
         sema.full_body(function);
+        begin_debug_function(function);
+        # The prologue (parameter slots, the parameters' acquires) is left
+        # unstamped, as clang leaves it (`DebugInfo.finish` puts its calls on
+        # line 0): a debugger ends the prologue at the first instruction with
+        # a line, the first statement's, after the parameters are stored.
         var result = codegen_function_unlocated(function);
+        if (debug.is_value()) {
+            debug.value().end_function();
+        }
         final_reads = outer_finals;
         this_may_be_null = outer_reads;
         runtime_checks = build_checks;
         locate(result, function.loc);
         return result;
+    }
+
+    ## Gives `function` its subprogram, when debug info is on: named as
+    ## written, a closure's body for where it is written (`closure at
+    ## main.pep:12`), as debuggers and profilers show it; a member with no
+    ## location of its own (a synthesized one) artificial, at its struct.
+    begin_debug_function(function: FunctionDef) {
+        var fn_value = functions.try_get(function.name);
+        if (!debug.is_value() or !fn_value.is_value()) {
+            return;
+        }
+        var info = debug.value();
+        var declared = function.loc.is_none() ? debug_struct_loc : function.loc;
+        bool closure = function.parent.is_value()
+            and sema.is_closure_struct(function.parent.value())
+            and function.name.ends_with(sema.CALL_METHOD);
+        var name = sema.display_name(function.name);
+        if (closure) {
+            var named = info.closure_name(declared);
+            if (named.is_value()) {
+                name = named.value();
+            }
+        }
+        info.begin_function(fn_value.value(), name, declared, function.loc.is_none());
     }
 
     ## Holds `function` back until something calls it, to be generated as
@@ -683,9 +725,16 @@ extend Generator {
             var slot = builder.alloca(ty, name);
             param_slots.append((name, slot, arg, ty_string, ty));
         }
-        for (var entry_slot in param_slots) {
-            var (name, slot, arg, ty_name, ty) = entry_slot;
+        for (var number in 0..param_slots.count) {
+            var (name, slot, arg, ty_name, ty) = param_slots[number];
             builder.store(arg, slot);
+            var declared = function.loc;
+            for (var p in function.parameters) {
+                if (p.name == name) {
+                    declared = p.loc;
+                }
+            }
+            debug_declare(slot, name, ty_name, declared, number as uint + 1);
             frame.push_local(name, Address.typed(name, ty_name, ty, slot));
             # A struct parameter's copy arrives acquired and the function's
             # scope owns it, unless it is `[Move]`d in or the caller made the
@@ -750,7 +799,48 @@ extend Generator {
 
     ## A block nested in a function: its own lexical scope for the debugger.
     codegen_scoped_block(block: Block): Result<void> {
-        return codegen_block(block);
+        bool in_pass = false;
+        if (debug.is_value()) {
+            var info = debug.value();
+            # A pass of a `static` block: its places in the expanded source
+            # apply from its scope on.
+            if (block.items.count > 0) {
+                if (block.items[0] is StaticPass(pass)) {
+                    in_pass = info.push_static(pass.loc, pass.header, pass.lines);
+                }
+            }
+            var first = Loc.none();
+            for (var statement in block.items) {
+                var at = statement_loc(statement);
+                if (!at.is_none()) {
+                    first = at;
+                    break;
+                }
+            }
+            info.push_block(first);
+        }
+        var result = codegen_block(block);
+        if (debug.is_value()) {
+            debug.value().pop_block();
+            if (in_pass) {
+                debug.value().pop_static();
+            }
+        }
+        return result;
+    }
+
+    ## Declares a variable for the debugger (see `DebugInfo.declare`), when
+    ## debug info is on and describes its type: parameter number `argument`
+    ## (from 1), or 0 for a local. Compiler-made locals (`__iterator`) are
+    ## left out.
+    debug_declare(storage: llvm.Value, name: String, ty: String, loc: Loc, argument: uint) {
+        if (!debug.is_value() or (name.starts_with("__") and argument == 0)) {
+            return;
+        }
+        var debug_ty = debug_type(ty);
+        if (debug_ty.is_value()) {
+            debug.value().declare(storage, name, debug_ty.value(), loc, argument, builder.insert_block());
+        }
     }
 
     ## A nested `{ ... }` gets its own basic block, so a `return` inside it
@@ -798,7 +888,16 @@ extend Generator {
         return context.insert_block(next, name);
     }
 
+    ## Generates a statement, stamping what it emits, including the
+    ## releases after it, with its location (see `enter_location`).
     codegen_statement(statement: Statement): Result<void> {
+        var saved = enter_location(statement_loc(statement));
+        var result = codegen_statement_unlocated(statement);
+        leave_location(saved);
+        return result;
+    }
+
+    codegen_statement_unlocated(statement: Statement): Result<void> {
         # Dead code after a `return`, `break` or `continue` in this region.
         if (frame.exited) {
             return Result<void>.ok();
@@ -834,7 +933,9 @@ extend Generator {
             Static(_) => {
                 return fail<void>("internal error: unexpanded 'static' block");
             }
-            StaticPass(_) => {}
+            StaticPass(pass) => {
+                codegen_static_pass(pass)?;
+            }
             Return(ret) => {
                 codegen_return(ret)?;
             }
@@ -902,11 +1003,14 @@ extend Generator {
         }
         var slot = builder.alloca(ty, name);
         builder.position_at_end(saved);
+        keep_location();
         return slot;
     }
 
     codegen_var_def(var_def: VariableDef): Result<void> {
+        var saved = enter_location(var_def.loc);
         var result = codegen_var_def_unlocated(var_def);
+        leave_location(saved);
         locate(result, var_def.loc);
         return result;
     }
@@ -966,6 +1070,9 @@ extend Generator {
             ty = found.value();
         }
         var slot = entry_alloca(ty, var_def.name);
+        if (!var_def.hidden) {
+            debug_declare(slot, var_def.name, ty_name, var_def.loc, 0);
+        }
         if (var_def.default.is_value()) {
             var default = var_def.default.value();
             keep_lazy = is_final_read(default);
@@ -1242,6 +1349,40 @@ extend Generator {
         frame.exited = true;
         builder.branch(target);
         return Result<void>.ok();
+    }
+}
+
+## Where a statement is, for debug locations: its expression, returned
+## value, condition or declared name; none for a block or a `break`.
+statement_loc(statement: Statement): Loc {
+    match (statement) {
+        Expression(expr) => {
+            return sema.expression_loc(expr);
+        }
+        Return(ret) => {
+            return ret.loc;
+        }
+        Branch(branch) => {
+            return sema.expression_loc(branch.condition);
+        }
+        While(wh) => {
+            return sema.expression_loc(wh.condition);
+        }
+        Declaration(declaration) => {
+            if (declaration is Variable(var_def)) {
+                return var_def.loc;
+            }
+            return Loc.none();
+        }
+        Static(block) => {
+            return block.loc;
+        }
+        StaticPass(pass) => {
+            return pass.loc;
+        }
+        else => {
+            return Loc.none();
+        }
     }
 }
 

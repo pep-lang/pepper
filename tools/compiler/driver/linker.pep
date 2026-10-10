@@ -1,5 +1,5 @@
-## Linking: the objects and libraries into an executable, with clang as
-## the link driver.
+## Linking: the objects and libraries into an executable or a shared
+## library (`--lib shared`), with clang as the link driver.
 ##
 ## For another platform (`--target`), clang links with `--target=<triple>`,
 ## LLVM's own linker (`lld`, since the host's system linker knows only the
@@ -699,7 +699,11 @@ export cross_link_note(target: link.Target, sysroot: Path?): String {
     return $"\nnote: linking for '{triple}' with the system root '{sysroot.value()}' needs LLVM's linker (lld) beside clang";
 }
 
-## Links `objects` into the executable `output` with clang, for `target`.
+## Links `objects` into the executable `output` with clang, for `target`,
+## or with `shared` into a shared library (`-shared`), named for the
+## programs that link it: its `-soname`, or on Apple its install name on
+## their run path (`@rpath/<name>`). A Windows DLL's import library
+## (`name.lib`) goes beside it.
 ##
 ## @param objects the object files
 ## @param output the executable to write
@@ -707,9 +711,22 @@ export cross_link_note(target: link.Target, sysroot: Path?): String {
 ## @param library_dirs the folders to search for them
 ## @param target the compile target
 ## @param sysroot its system root (`effective_sysroot`), if any
+## @param shared whether to link a shared library
+## @param debug whether to keep the objects' debug info (`-g`): on Windows
+##   clang then has the linker write `<output>.pdb`, with the visualizers
+##   in `natvis`; on macOS `dsymutil` gathers it into `<output>.dSYM`
+## @param natvis the runtime's `pepper.natvis`, if it has one
 ## @returns nothing, or why the link failed
 export link_objects(
-    objects: Path[], output: Path, libraries: String[], library_dirs: Path[], target: link.Target, sysroot: Path?
+    objects: Path[],
+    output: Path,
+    libraries: String[],
+    library_dirs: Path[],
+    target: link.Target,
+    sysroot: Path?,
+    shared: bool = false,
+    debug: bool = false,
+    natvis: Path? = Optional<Path>.Empty
 ): Result<void, String> {
     var ndk = target.os == "android" ? AndroidNdk.locate(sysroot) : Optional<AndroidNdk>.Empty;
     var driver = ndk.is_value() ? Optional<Path>.Value(ndk.value().clang) : find_link_driver();
@@ -719,6 +736,17 @@ export link_objects(
     var root = sysroot.is_value() ? sysroot : apple_sdk(target);
     var command = process.Command(driver.value().to_string());
     command.argument("-o").argument(output.to_string());
+    if (shared) {
+        command.argument("-shared");
+        var name = output.file_name();
+        var named = name.is_value() ? name.value() : "";
+        if (target.is_apple()) {
+            # Programs that link it find it on their run path.
+            command.argument($"-Wl,-install_name,@rpath/{named}");
+        } else if (target.os != "windows") {
+            command.argument($"-Wl,-soname,{named}");
+        }
+    }
     # The NDK's clang runs the NDK's own lld, and clang's MSVC toolchain
     # finds lld-link itself.
     var lld = Optional<Path>.Empty;
@@ -729,9 +757,27 @@ export link_objects(
     for (var argument in target_arguments(target, root, lld)) {
         command.argument(argument);
     }
-    if (target.os == "windows") {
+    if (debug) {
+        command.argument("-g");
+        if (target.os == "windows") {
+            # `-g` makes link.exe link incrementally, which announces a full
+            # link on every fresh build and leaves a `.ilk` beside the output.
+            command.argument("-Xlinker").argument("/INCREMENTAL:NO");
+            if (natvis.is_value()) {
+                # link.exe records the path as given; a canonical path's
+                # `\\?\` prefix would show in the PDB.
+                var path = natvis.value().to_string();
+                if (path.starts_with("\\\\?\\")) {
+                    path = path.substr_bytes(4, path.size - 4);
+                }
+                command.argument("-Xlinker").argument($"/NATVIS:{path}");
+            }
+        }
+    } else if (target.os == "windows") {
         # A PE image has no symbol table of its own: backtraces name
-        # functions through a `.pdb` of the public symbols.
+        # functions through a `.pdb` of the public symbols. Without `-g` the
+        # objects carry no CodeView, so it holds only those; `/DEBUG` turns
+        # off `/OPT:REF`, which a release link wants, so ask for it again.
         for (var flag in ["/DEBUG", "/INCREMENTAL:NO", "/OPT:REF"]) {
             command.argument("-Xlinker").argument(flag);
         }
@@ -773,6 +819,9 @@ export link_objects(
         if (!out.stderr.trim().is_empty) {
             File.stderr().write_all(out.stderr);
         }
+        if (debug and target.os == "macos" and target.is_host()) {
+            _write_dsym(output);
+        }
         return Result<void, String>.ok();
     }
     var detail = out.stdout.trim();
@@ -782,4 +831,17 @@ export link_objects(
     return Result<void, String>.err(
         $"Link failed: {driver.value()} exited with {out.status}\n{detail}{cross_link_note(target, root)}"
     );
+}
+
+## Gathers a macOS executable's DWARF into `<output>.dSYM` beside it, as
+## clang does when it compiles and links in one step. The linker leaves the
+## DWARF in the object files, which the build cache may replace; the bundle
+## is what lldb and the `debug` module's backtraces read source lines from.
+## Without `dsymutil` (Xcode's command line tools) the program still runs
+## and its backtraces name functions, so a failure is ignored.
+_write_dsym(output: Path) {
+    var command = process.Command("dsymutil");
+    command.argument(output.to_string());
+    command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    command.run();
 }

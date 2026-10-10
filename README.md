@@ -197,8 +197,8 @@ second toolchain.
 It is worth having. A compiler that generates and links native code fails in
 native ways: an access violation or SIGSEGV from inside LLVM or inside the
 code it generated. `lldb` turns that into a symbolized stack with source
-lines and frame arguments (source lines once the compiler emits debug
-info; `-g` is accepted but emits none yet):
+lines and frame arguments. Build the compiler with `-g` for its own frames
+(see [Build and test](#build-and-test)), then:
 
 ```powershell
 & "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `
@@ -287,23 +287,35 @@ From the repository root:
 ```bash
 pep-build --emit-ast tests/hello.pep     # parse only, dump the AST to stdout (--emit-ast=json for JSON)
 pep-build tests/hello.pep --emit-llvm    # print the IR instead of linking
+pep-build tests/hello.pep --emit-static  # write the source with static blocks expanded to hello.static/
 pep-build tests/hello.pep                # compile + link -> ./hello
 pep-build tests/hello.pep -o hello.exe   # choose the output name
 pep-build tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
+pep-build tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
+pep-build tests/hello.pep -g --debug-static=expanded  # ...stepping through static blocks expanded (hello.static.pep)
+pep-build tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
+pep-build tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 pep-build tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries
 pep-build tests/hello.pep --target wasm32-wasip1 --sysroot /opt/wasi-sdk -o hello.wasm  # WebAssembly; run with wasmtime
+pep-build greeter.pep --target aarch64-apple-ios --lib static  # iOS (or aarch64-linux-android); see the "iOS and Android" chapter
 pep-build tests/hello.pep -D USE_ZLIB -D LOG_LEVEL=2  # define build options for [BuildOption] and [Target(BuildOption(...))]
 pep-build tests/hello.pep -O --no-runtime-checks=overflow  # drop kinds of runtime check (overflow,divide,shift,bounds,null,all)
 pep-build tests/hello.pep -T time       # print each compile stage's time
 pep-build tests/hello.pep -T cache      # print which objects came from the build cache
+pep-build tests/hello.pep --verify-cache  # regenerate cache hits and check they match
 pep-build tests/hello.pep --no-cache    # compile everything, skip the build cache
 pep-build main.pep -L libs -l foo        # link libfoo from the folder libs
 PEPPER_LIBRARY_PATH=libs pep-build main.pep -l foo  # the same, from the environment
+pep-build lib.pep --lib static           # a C library: liblib.a and lib.h ([Export]ed functions)
+pep-build lib.pep --lib shared           # liblib.so / liblib.dylib / lib.dll, and lib.h
 ```
 
 (`pep-build` is `target/bin/pep-build`, or `pepper build` for the installed
-one.) The compiler produces an executable; it does not run it for you. With no `-o`
-the output goes to `<cwd>/<source stem>`, so the third command leaves a
+one.) The compiler produces an executable (or with `--lib`, a library and
+its C header; see the book's
+[Calling Pepper from C](docs/src/language/c-interop.md#calling-pepper-from-c));
+it does not run it for you. With no `-o`
+the output goes to `<cwd>/<source stem>`, so the fourth command leaves a
 `hello` in whatever directory you invoked it from. At the repository root that
 path is gitignored; anywhere else it is not.
 
@@ -330,7 +342,7 @@ body recompiles only that file: the files importing it are reused. A file
 whose text did not change is not even parsed again, and when nothing changed
 the compiler checks nothing and does not link again. Delete
 `.pep/cache/` to clear it, or move it with `--cache <dir>` or
-`PEPPER_CACHE_DIR`. The optimization level, target and removed runtime checks are part of every object's key, so
+`PEPPER_CACHE_DIR`. The optimization level, target CPU and removed runtime checks are part of every object's key, so
 switching between `-O0` and `-O2` never reuses the other level's objects.
 
 Integer overflow, division by zero, an oversized shift, an index out of
@@ -342,9 +354,14 @@ up memory safety (see the book's
 [Integer overflow](docs/src/language/types-and-variables.md#integer-overflow)).
 
 `-O` runs LLVM's standard `default<O2>` pipeline (what clang runs at `-O2`)
-over each file's object; `-O1` and `-O3` run theirs. The code runs on any
-machine of its target: clang's default CPU for it (`x86-64`; `apple-m1` on
-Apple arm64).
+over each file's object; `-O1` and `-O3` run theirs. At `-O2` and `-O3` the
+compiler also optimizes the program as a whole once every file is compiled
+(link-time optimization), so a call into another file, the runtime
+included, can inline; `--lto=off` optimizes each file alone, which links
+sooner. The code runs on any machine of its target: clang's default CPU
+for it (`x86-64`; `apple-m1` on Apple arm64), unless `-march`, `-mcpu`,
+`-mtune` or `-m<feature>` (`-mavx2`, `-mno-avx2`) say otherwise, with
+clang's meanings; `-march=native` targets the machine compiling.
 `PEPPER_OPT_LEVEL=2` makes `-O2` the default, so every build the tests
 make can run optimized:
 
@@ -362,10 +379,16 @@ Without them those tests say they skipped and pass:
 WASI_SDK_PATH=/opt/wasi-sdk WASMTIME=/opt/wasmtime/wasmtime scripts/pepper-tests.sh
 ```
 
-`-g` is accepted, with a warning: the compiler does not emit debug info
-yet. The formatters in `runtime/debuggers/` and the book's
-[Debugging](docs/src/tools/debugging.md) chapter describe what a debug build
-gives a debugger.
+`-g` emits debug info: DWARF 4 on Linux and macOS, CodeView on Windows,
+where the linker writes `<output>.pdb` beside the executable. Break on a
+`file:line`, step, print a backtrace and inspect variables in gdb
+(`gdb ./hello`), lldb (`lldb ./hello`, or `lldb-dap` in VS Code), or Visual
+Studio and WinDbg (open the `.exe`). Formatters in `runtime/debuggers/` show
+`String`, `Array` and `Optional` naturally: gdb loads them from the program
+(`gdb -iex "add-auto-load-safe-path ." ./hello`), Visual Studio from the
+`.pdb`, and lldb with `command script import runtime/debuggers/lldb_formatters.py`.
+The book's [Debugging](docs/src/tools/debugging.md) chapter walks through a
+session.
 
 The compiler needs the standard library in `runtime/`. It uses the directory
 named by `PEPPER_RUNTIME` when that is set, and otherwise searches near the

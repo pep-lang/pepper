@@ -577,6 +577,15 @@ import library `name.lib`. `-o` chooses another name. Either way the header
 is written beside the library, named for it without the `lib` prefix
 (`counter.h`).
 
+The compiler writes the archive itself, in the format of the platform it
+builds for (with `--target`, another one's: GNU's for Linux and Android,
+the BSD format Apple's linkers read for macOS and iOS, the COFF archive for
+Windows), with the index of the symbols its objects define, so no archiver
+needs to be installed and a static library for another platform needs no
+system root. A shared library links like an executable, with clang. At
+`-O2` and `-O3` the library is optimized as one module first, as an
+executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
+
 - A library needs no `main`. One that has a `main` keeps it, and C code that
   links the library cannot have its own.
 - Only the exported functions and their handle functions are visible

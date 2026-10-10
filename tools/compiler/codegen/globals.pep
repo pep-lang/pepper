@@ -3,6 +3,7 @@
 ## externs, the language's facts for LLVM's optimizer, and the CPU stamp.
 
 import compiler.ast;
+import compiler.link;
 import [NAMESPACE_SEPARATOR] from compiler.link;
 import llvm;
 import compiler.sema;
@@ -11,6 +12,8 @@ import [Address] from "address";
 import "address";
 import "calls";
 import "checks";
+import "debug";
+import "debug_types";
 import "expressions";
 import "functions";
 import [Generator] from "generator";
@@ -205,6 +208,16 @@ extend Generator {
                 }
             }
             global_addrs[variable.name] = Address.typed(variable.name, ty_string, llvm_ty, global);
+            # A debugger would read a thread-local's image, not the thread's
+            # copy (DWARF needs a TLS location expression).
+            if (debug.is_value() and !is_thread_local(variable)) {
+                var debug_ty = debug_type(ty_string);
+                if (debug_ty.is_value()) {
+                    debug.value().declare_global(
+                        global, link.demangle_name(variable.name), debug_ty.value(), variable.loc
+                    );
+                }
+            }
         }
 
         emit_thread_locals_release(module)?;

@@ -224,6 +224,9 @@ export struct Keys {
     var _inputs: Array<Array<(ulong, bool)>> = Array<Array<(ulong, bool)>>();
     ## Each file's unit, by index.
     var _unit_of: ulong[] = Array<ulong>();
+    ## Whether every input is read by its text, never by its interface
+    ## (`-g`): debug info holds the positions interfaces leave out.
+    var exact_positions: bool = false;
 
     ## @param program the loaded program
     ## @param units its units
@@ -303,7 +306,7 @@ export struct Keys {
             hasher.update($"own {program.files[file].namespace}\n");
         }
         for (var (file, by_text) in _inputs[u]) {
-            if (by_text) {
+            if (by_text or exact_positions) {
                 hasher.update($"{_files[file]}\n");
                 continue;
             }
@@ -344,7 +347,7 @@ export struct Keys {
             if (own.contains(file)) {
                 continue;
             }
-            if (by_text and _unit_of[file] != u) {
+            if ((by_text and _unit_of[file] != u) or exact_positions) {
                 hasher.update($"{_files[file]}\n");
                 continue;
             }

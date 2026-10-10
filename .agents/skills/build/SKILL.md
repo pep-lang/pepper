@@ -54,7 +54,7 @@ Errors are pepc's clang-style diagnostics (`file.pep:line:col: error: ...`). Fix
 pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows: installs lldb into the prefix
 ```
 
-`PEPPER_SETUP_DEVTOOLS=1` does the same once per machine. On Windows `lldb` is absent from the `clang+llvm` tarball and ships only in the llvm.org installer, so the script extracts it with 7-Zip (`winget install 7zip.7zip`); `liblldb.dll` needs one exact CPython minor, so the script drops Python's embeddable runtime beside `lldb.exe` (without it: `unable to find python311.dll`). The script leaves PATH alone, so invoke lldb by full path there. pepc accepts `-g` but emits no debug info yet, so expect symbols without source lines:
+`PEPPER_SETUP_DEVTOOLS=1` does the same once per machine. On Windows `lldb` is absent from the `clang+llvm` tarball and ships only in the llvm.org installer, so the script extracts it with 7-Zip (`winget install 7zip.7zip`); `liblldb.dll` needs one exact CPython minor, so the script drops Python's embeddable runtime beside `lldb.exe` (without it: `unable to find python311.dll`). The script leaves PATH alone, so invoke lldb by full path there. Build pepc with `-g` for source lines in its own frames:
 
 ```powershell
 & "$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe" --batch -o run `

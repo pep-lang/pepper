@@ -20,7 +20,8 @@
 ## - the program's own entry points (`main`, `__pep_global_init`, the C
 ##   exports, the thread-locals' release, and LLVM's `llvm.*` globals such
 ##   as `llvm.global_ctors`) are in a part of their own, which depends on
-##   the whole program and is never cached.
+##   the whole program and is never cached. Each export's entry point,
+##   named `EXPORT_PREFIX` and its C symbol until then, takes its C symbol.
 ##
 ## Every symbol a definition names gets its linker spelling
 ## (`link.symbol_name`), so names with `@`, `<` or spaces survive every linker.
@@ -31,6 +32,7 @@
 import [File] from io;
 import compiler.link;
 import llvm;
+import [forget_global_debug_info] from "debug";
 import "globals";
 
 ## A program's symbols assigned to parts.
@@ -113,6 +115,10 @@ export prepare(
     var functions = ir.functions();
     var part_of = HashMap<String, uint>();
     var names = HashMap<String, String>();
+    # The C entry points of `[Export]`ed functions, named by their C
+    # symbols once every Pepper symbol has its spelling (a Pepper `add` is
+    # `_Padd`), as `partition::finish` names them.
+    var exports = Array<llvm.Value>();
     var values = Array<llvm.Value>();
     values.append_all(functions);
     for (var global in ir.globals()) {
@@ -131,7 +137,11 @@ export prepare(
             continue;
         }
         if (_is_entry(name)) {
-            part_of[name] = entry_part;
+            if (name.starts_with(EXPORT_PREFIX)) {
+                exports.append(value);
+            } else {
+                part_of[name] = entry_part;
+            }
             sizes[entry_part] += _size(value);
             continue;
         }
@@ -164,6 +174,12 @@ export prepare(
         if (comdats) {
             value.set_comdat(spelled);
         }
+    }
+    for (var entry in exports) {
+        var name = entry.name();
+        var symbol = name.substr_bytes(EXPORT_PREFIX.size, name.size - EXPORT_PREFIX.size);
+        entry.set_name(symbol);
+        part_of[entry.name()] = entry_part;
     }
     var out = Partition(part_of, sizes);
     out.names = names;
@@ -236,6 +252,8 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, t
             } else {
                 global.set_initializer(llvm.Value());
                 global.set_linkage(llvm.Linkage.External);
+                # The part that defines it describes it.
+                forget_global_debug_info(global);
             }
         }
     }

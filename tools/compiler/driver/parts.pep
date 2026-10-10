@@ -3,7 +3,8 @@
 ## compilation unit, and one for the program's entry points), written once
 ## as bitcode, and a few `pepc --compile-part` children, one per logical
 ## CPU, each keep their share of the parts, optimize them and write their
-## objects.
+## objects: with link-time optimization, their bitcode after LLVM's
+## pre-link pipeline instead (`lto.pep`).
 
 import async;
 import compiler.codegen;
@@ -14,8 +15,9 @@ import process;
 import "build";
 
 ## The plan file beside the bitcode: the machine, the level, whether to
-## print how long each part took, then one `<part> <symbol>` line per
-## symbol defined in exactly one part.
+## print how long each part took, whether the parts are kept as bitcode
+## for link-time optimization, then one `<part> <symbol>` line per symbol
+## defined in exactly one part.
 const _PLAN_FILE = "plan";
 const _BITCODE_FILE = "program.bc";
 
@@ -48,6 +50,8 @@ export struct PartJob {
 ##   after another (for a program that is not this compiler, such as a
 ##   test, which cannot run `--compile-part`)
 ## @param partial whether other units' objects come from the build cache
+## @param lto whether each part is written as bitcode after the pre-link
+##   pipeline, for link-time optimization, rather than as an object
 ## @returns nothing, or why a part failed
 export compile_parts(
     ir: llvm.Module,
@@ -59,12 +63,13 @@ export compile_parts(
     dir: Path,
     trace_time: bool = false,
     in_process: bool = false,
-    partial: bool = false
+    partial: bool = false,
+    lto: bool = false
 ): Result<void, String> {
     if (jobs.count == 1 or in_process) {
         for (var i in 0..jobs.count) {
             var module = i + 1 < jobs.count ? ir.clone() : ir;
-            var compiled = _compile(module, partition, jobs[i], machine, opt_level, trace_time);
+            var compiled = _compile(module, partition, jobs[i], machine, opt_level, trace_time, lto);
             if (compiled.is_err()) {
                 return compiled;
             }
@@ -84,7 +89,7 @@ export compile_parts(
         return Result<void, String>.err(written.error().message);
     }
     var plan = StringBuilder();
-    plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n");
+    plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n{lto}\n");
     for (var (symbol, part) in partition.part_of) {
         plan.append($"{part} {symbol}\n");
     }
@@ -173,14 +178,17 @@ _size_of(sizes: ulong[], part: uint): ulong {
     return (part as ulong) < sizes.count ? sizes[part as ulong] : 0;
 }
 
-## Keeps `job`'s part of `ir`, optimizes it and writes its object.
+## Keeps `job`'s part of `ir`, optimizes it and writes its object, or with
+## `lto` its bitcode after the pre-link pipeline: the static constructors
+## then stay in `llvm.global_ctors` until the whole program is optimized.
 _compile(
     ir: llvm.Module,
     partition: codegen.Partition,
     job: PartJob,
     machine: llvm.TargetMachine,
     opt_level: uint,
-    trace_time: bool
+    trace_time: bool,
+    lto: bool
 ): Result<void, String> {
     var start = os.Instant.now();
     # `PEPC_TRACE_PARTS` names each stage before it runs and verifies the
@@ -193,10 +201,22 @@ _compile(
     }
     if (opt_level > 0) {
         _stage(tracing, ir, job, "optimize");
-        var optimized = ir.run_passes($"default<O{opt_level}>", machine);
+        var pipeline = lto ? "lto-pre-link" : "default";
+        var optimized = ir.run_passes($"{pipeline}<O{opt_level}>", machine);
         if (optimized.is_err()) {
             return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
         }
+    }
+    if (lto) {
+        _stage(tracing, ir, job, "bitcode");
+        var written = ir.write_bitcode(job.object.to_string());
+        if (written.is_err()) {
+            return Result<void, String>.err($"cannot write {job.object}: {written.error().message}");
+        }
+        if (trace_time) {
+            File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
+        }
+        return Result<void, String>.ok();
     }
     _stage(tracing, ir, job, "constructors");
     place_constructors(ir, machine.triple());
@@ -246,7 +266,8 @@ _keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[], parti
 
 ## Compiles `jobs`, parts of the program `compile_parts` split into `dir`:
 ## reads the bitcode once, and for each part keeps it (in a copy, but for
-## the last), optimizes it at the plan's level and writes its object.
+## the last), optimizes it at the plan's level and writes its object (or
+## its bitcode, for link-time optimization).
 ## `pepc --compile-part` runs it.
 ##
 ## @param dir the folder holding the bitcode and the plan
@@ -258,7 +279,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
         return Result<void, String>.err($"cannot read the plan in {dir}: {read.error().message}");
     }
     var lines = read.value().split("\n");
-    if (lines.count < 5) {
+    if (lines.count < 6) {
         return Result<void, String>.err($"the plan in {dir} is incomplete");
     }
     var level = uint.parse(lines[3]);
@@ -267,7 +288,8 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     }
     var part_of = HashMap<String, uint>();
     var trace_time = lines[4] == "true";
-    for (var index in 5..lines.count) {
+    var lto = lines[5] == "true";
+    for (var index in 6..lines.count) {
         var line = lines[index];
         var space = line.find(" ");
         if (space < 0) {
@@ -307,7 +329,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     }
     for (var i in 0..jobs.count) {
         var module = i + 1 < jobs.count ? ir.value().clone() : ir.value();
-        var compiled = _compile(module, partition, jobs[i], machine.value(), level.value(), trace_time);
+        var compiled = _compile(module, partition, jobs[i], machine.value(), level.value(), trace_time, lto);
         if (compiled.is_err()) {
             return compiled;
         }
