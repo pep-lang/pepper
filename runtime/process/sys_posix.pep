@@ -49,6 +49,10 @@ extern int close(int descriptor);
 [Target(OS(Linux) || OS(Mac))]
 extern int waitpid(int pid, int* status, int options);
 [Target(OS(Linux) || OS(Mac))]
+extern int fork();
+[Target(OS(Linux) || OS(Mac))]
+extern int fflush(void* stream);
+[Target(OS(Linux) || OS(Mac))]
 extern int kill(int pid, int signal);
 [Target(OS(Linux) || OS(Mac))]
 extern int getpid();
@@ -445,4 +449,22 @@ _process_add_chdir(actions: __ptr<void>, path: __ptr<char>): int {
 [Target(OS(Mac))]
 _process_add_chdir(actions: __ptr<void>, path: __ptr<char>): int {
     return posix_spawn_file_actions_addchdir_np(actions, path);
+}
+
+# Starts a copy of this process with fork(2), after flushing C stdio (where
+# `print` buffers), so neither copy writes the other's buffered output.
+[Target(OS(Linux) || OS(Mac))]
+_process_sys_fork(): io.IoResult<Child?> {
+    fflush(__null);
+    var process_id = fork();
+    if (process_id < 0) {
+        return io.IoResult<Child?>.err(io.IoError(11, "cannot start a copy of this process"));
+    }
+    if (process_id == 0) {
+        return io.IoResult<Child?>.ok(Optional<Child>.Empty);
+    }
+    var child = Child();
+    child._handle = process_id;
+    child._id = process_id as ulong;
+    return io.IoResult<Child?>.ok(Optional<Child>.Value(child));
 }

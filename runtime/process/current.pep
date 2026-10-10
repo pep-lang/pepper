@@ -15,6 +15,7 @@
 ##   destructors do not run.
 
 import io;
+import [Child] from "child";
 import "sys_posix";
 import "sys_wasi";
 import "sys_windows";
@@ -69,6 +70,35 @@ _process_arguments(): Array<String> {
 ##     }
 _process_exit(code: int) {
     _pep_exit(code);
+}
+
+## Starts a copy of the running process (POSIX `fork`): the copy has the
+## same memory, open files and code, and both go on from here. In the
+## parent, returns the copy as a `Child` to wait for; in the copy, returns
+## none. The copy has only the calling thread, so fork before starting
+## threads or tasks, and end the copy with `exit()`.
+##
+## The C standard streams are flushed first, so what `print` buffered is
+## written once. Not on Windows or WASI, which start processes only from a
+## program: there it returns an error.
+##
+## @returns the child in the parent, none in the copy, or an error
+## @example
+##     import process;
+##
+##     main(): int {
+##         var forked = process.fork();
+##         if (forked.is_err()) {
+##             return 0;
+##         }
+##         if (!forked.value().is_value()) {
+##             process.exit(3);
+##         }
+##         var status = forked.value().value().wait().value();
+##         return status.code().value() == 3 ? 0 : 1;
+##     }
+export fork(): io.IoResult<Child?> {
+    return _process_sys_fork();
 }
 
 ## Returns the running process's id, as the operating system knows it.

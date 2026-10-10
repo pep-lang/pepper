@@ -15,8 +15,8 @@ in the prelude, and the module passes them on as well.
   returns a `Child`, and `exec()` runs it in place of the running program
 - [Child](process-child.md): a running child process, its piped streams,
   and its `ExitStatus`
-- [The running process](process-current.md): `id()` and
-  `executable_path()`
+- [The running process](process-current.md): `id()`,
+  `executable_path()`, and `fork()`, which starts a copy of it
 - [Finding programs](process-find.md): `find_executable()` looks a
   program up on the `PATH`, `find_companion()` looks beside the running
   program first, and `is_executable()` checks a file

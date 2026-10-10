@@ -432,3 +432,10 @@ _process_sys_release(handle: _ProcessHandle) {
         CloseHandle(handle);
     }
 }
+
+# Windows has no fork: a process starts from a program, never as a copy.
+# ERROR_NOT_SUPPORTED.
+[Target(OS(Windows))]
+_process_sys_fork(): io.IoResult<Child?> {
+    return io.IoResult<Child?>.err(io.IoError(50, "copying a process is not supported on Windows"));
+}

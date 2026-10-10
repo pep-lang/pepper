@@ -69,3 +69,8 @@ _process_sys_release(handle: _ProcessHandle) {}
 _process_wasi_unsupported(what: String): io.IoError {
     return io.IoError(58, what + " is not supported on WASI");
 }
+
+[Target(OS(Wasi))]
+_process_sys_fork(): io.IoResult<Child?> {
+    return io.IoResult<Child?>.err(_process_wasi_unsupported("copying a process"));
+}
