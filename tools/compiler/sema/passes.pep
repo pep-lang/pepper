@@ -19,7 +19,7 @@ import [check_tries] from "check_tries";
 import [restore_bodies, stash_bodies] from "checked";
 import [check_closures, lift_closures] from "closures";
 import [check_conditions] from "conditions";
-import [check_confinement, drop_stale_summaries] from "confinement";
+import [check_confinement] from "confinement";
 import [check_constraints, check_specializations] from "constraints";
 import [convert_intrinsics] from "convert_intrinsics";
 import [convert_member_refs] from "convert_member_refs";
@@ -443,10 +443,9 @@ _after_specializing(module: Module, state: PassState, steps: _Steps) {
     }
     # What `with` blocks over `[Isolated]` guards may do, `[Move]`
     # arguments, and the guards' own rules, once every type is final.
-    # Link summaries recorded with a checked unit hold while the structs
-    # their trait calls reach stay the same; the checked bodies the others
-    # need come back from the stash on demand.
-    drop_stale_summaries(module, state);
+    # Link summaries recorded with a checked unit hold while the joins of
+    # their trait calls stay the same; the checked bodies the others need
+    # come back from the stash on demand.
     check_confinement(module, state);
     if (steps.stepped("check_confinement")) {
         return;

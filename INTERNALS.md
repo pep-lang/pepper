@@ -3265,9 +3265,10 @@ on the `pepper-llvm` package, then the driver and `pep-doc`.
   when a body edit misses a unit, only the edited file's part is optimized
   and emitted again; the others are linked from the cache. A function whose
   link summary calls through a trait (a dependent summary) has no facts:
-  a later layer that implements the trait summarizes it again, so whether
-  a build has the summary depends on which layers it checked, and its body
-  stands in the interface instead. Each folder is written to the build
+  it records the joins of the implementations its layer saw, and a later
+  layer whose implementations change a join summarizes it again (§8.1), so
+  its text depends on which layers a build checked, and its body stands in
+  the interface instead. Each folder is written to the build
   folder and moved into place as one. The same key gives the same objects,
   so they never change once there, and builds share the cache without
   locks or copies: a hit is linked where it is. Each unit, and each part,
@@ -3428,7 +3429,7 @@ the cache has one. Otherwise it checks the layer:
 The modules of the closures are rebuilt from bytes for each layer checked.
 Loading a record costs a read and a merge, not a check.
 
-**Records.** A record lives at `<cache>/v1/checked15/<layer>/<key>.rec`. The
+**Records.** A record lives at `<cache>/v1/checked16/<layer>/<key>.rec`. The
 folder's number is the format's version: a format change takes a new
 number, so old records are never misread. Each layer keeps its newest four
 keys. A record starts with the program's files' namespaces, which its file
@@ -3480,6 +3481,29 @@ marked applied. When two layers both made the same specialization, only the
 first is kept: they are the same, made from the same declarations.
 `sort_globals` orders globals by their files' initialization order.
 
+**Link summaries.** `check_confinement` keeps with each layer the link
+summary of every function it summarized (`Checked.summaries`, by summary
+key), so a layer above summarizes only its own functions and the checked
+ones no summary covers yet, whose bodies come back from the stash
+(`_Confinement.restore`). A call through a trait value joins the summaries
+of the methods implementing it, and a layer above may add implementations.
+So a summary that reaches such a call (a **dependent** one: its own trait
+calls, and those of the functions it calls by name) records it
+symbolically: after its first line, a line per call,
+`trait\tmethod\toperands\tresults`, then a tab and the `classes;taints`
+of the joined summary it was made with, never the structs it reached. A layer uses a dependent summary only
+while each of those joins is the same over the implementations its module
+holds now (`_stale`, which summarizes first the implementations that have
+no summary). One that no longer holds is dropped from the module's checked
+summaries, and the pass summarizes and checks again without it, from its
+restored body. A new implementation whose summary the join already covers,
+such as most new specializations of a generic one (another
+`ArrayIterator<T>`), leaves every recorded summary, the record and the own
+interface alone. A layer checks only the dependent summaries it uses: one
+it leaves may be stale there, and each layer that reads it checks it again,
+so a summary merged from a layer that never saw a sibling layer's
+implementation is found stale too.
+
 **Own interfaces.** The own interface is computed while the delta is
 written (`own_lines` in the generator, `DeltaBase.own`): an entry for each
 element, entry or name the delta adds, changes or drops, each hashed with
@@ -3530,6 +3554,11 @@ that should be cut off.
   standard error each element the delta found by identity whose record
   changed since (`identity: <list> <place> <name> changed in place`): a pass
   that changed a checked declaration without marking it extended. A
+  self-build with it set reports none.
+- `PEPC_VERIFY_SUMMARIES`: after `check_confinement`, makes every link
+  summary it used again from the bodies, without the dependent summaries
+  recorded below, and reports each that differs
+  (`verify-summaries: <key> <used> fresh <made>`), then the counts. A
   self-build with it set reports none.
 - `PEPC_LAYER_JOBS`: how many layers to check at once; 1 checks them in the
   build's process.

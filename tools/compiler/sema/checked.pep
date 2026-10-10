@@ -685,10 +685,11 @@ export resume_checked(unit: CheckedUnit): Module {
 ## puts this in place of the body (`driver/interface.pep`), so a body edit
 ## that changes neither leaves the file's interface alone. A function with
 ## no summary has no entry; its body stays part of the interface. Nor has
-## one whose summary calls through a trait (a dependent summary): a layer
-## that implements the trait makes it again from the body, and which layers
-## a build checked decides whether one is at hand, so the interface would
-## depend on the cache.
+## one whose summary calls through a trait (a dependent summary): it keeps
+## the joins of the implementations its layer saw, a layer whose
+## implementations change one makes it again from the body, and which
+## layers a build checked decides which one is at hand, so the interface
+## would depend on the cache.
 ##
 ## @param module the checked module
 ## @param state the passes' state that checked its last layer

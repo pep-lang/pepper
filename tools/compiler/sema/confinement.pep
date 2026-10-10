@@ -9,12 +9,17 @@
 ## says; linking the lock's region with the outer one (or another lock's)
 ## is an error at the value that would cross, as is returning part of the
 ## locked value from the block. Summaries are a least fixed point over the
-## call graph. The pass also checks guard use, `[Move]` arguments,
+## call graph; a call through a trait value joins the summaries of the
+## methods implementing it. A summary a checked layer recorded keeps, for
+## each trait call it reaches, the join it was made with rather than the
+## structs it reached, and holds in a later layer wherever those joins are
+## the same (`_stale`). The pass also checks guard use, `[Move]` arguments,
 ## `ThreadLocal<T>.get()` and `Mutex<T>` of a number, and use after `move`.
 
 import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
+import os;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
 import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
@@ -87,6 +92,77 @@ export check_confinement(module: Module, state: PassState) {
     if (_check_parameter_attributes(program) or _check_mutex_arguments(program) or _check_guard_fields(program)) {
         return;
     }
+    var triggers = _triggers(program);
+    # The settled summaries used hold while the joins of their trait calls
+    # do: when one no longer does, it is dropped and everything is
+    # summarized and checked again without it.
+    while (true) {
+        var error = _confine(program, triggers);
+        var stale = _stale(program);
+        if (stale.count == 0) {
+            _settle(program);
+            var verify = os.environment("PEPC_VERIFY_SUMMARIES");
+            if (verify.is_value() and !verify.value().is_empty) {
+                _verify_summaries(program);
+            }
+            if (error.is_value()) {
+                state.report(error.value());
+                return;
+            }
+            break;
+        }
+        for (var key in stale) {
+            program.dropped.insert(key);
+            module.checked.summaries.remove(key);
+        }
+        program.reset();
+    }
+    module.summaries_to_record = program.recorded_out;
+}
+
+# With `PEPC_VERIFY_SUMMARIES` set: makes every summary the pass used again
+# from scratch, without the dependent summaries recorded before, and
+# reports on standard error each one that differs, then the counts.
+_verify_summaries(program: _Confinement) {
+    var fresh = _Confinement(program.module, program.state);
+    for (var (key, value) in program.module.checked.summaries) {
+        var (_, text) = value;
+        if (text.contains("\n")) {
+            fresh.dropped.insert(key);
+        }
+    }
+    for (var (key, body) in program._restored) {
+        fresh._restored[key] = body;
+        fresh._by_key()[key] = body;
+        fresh.bodies.insert(key);
+    }
+    var keys = Array<String>();
+    for (var (key, _) in program.summaries) {
+        keys.append(key);
+    }
+    _summaries(fresh, keys);
+    ulong same = 0;
+    ulong missing = 0;
+    for (var key in keys) {
+        var a = program.summaries[key];
+        var b = fresh.summary(key);
+        if (!b.is_value()) {
+            missing += 1;
+        } else if (a.links() != b.value().links()) {
+            var shown = key.replace("\n", ".");
+            io.File.stderr().write_all($"verify-summaries: {shown} {a.links()} fresh {b.value().links()}\n");
+        } else {
+            same += 1;
+        }
+    }
+    io.File.stderr().write_all($"verify-summaries: {same} same, {missing} missing, {program.tentative.count} tentative\n");
+}
+
+# Summarizes what the checks need, then checks every function that may
+# break a rule: the first error.
+_confine(program: _Confinement, triggers: HashSet<String>): Diagnostic? {
+    var none = Optional<Diagnostic>.Empty;
+    var module = program.module;
     var roots = _roots(program);
     # Only a function with a `with` block needs the region walk.
     var with_blocks = HashSet<String>();
@@ -97,9 +173,7 @@ export check_confinement(module: Module, state: PassState) {
         _record_summaries(program);
     } else if (roots.count > 0) {
         _summaries(program, roots);
-        _settle(program);
     }
-    var triggers = _triggers(program);
     for (var body in program.all) {
         var regions = with_blocks.contains(body.key);
         if (program.is_settled(body.key) or (!regions and !_mentions(body.function, triggers))) {
@@ -112,11 +186,10 @@ export check_confinement(module: Module, state: PassState) {
         }
         var error = _check_function(program, body.owner, body.function, regions);
         if (error.is_value()) {
-            state.report(error.value());
-            return;
+            return error;
         }
     }
-    module.summaries_to_record = program.recorded_out;
+    return none;
 }
 
 # ── Summaries ────────────────────────────────────────────────────────────
@@ -132,12 +205,12 @@ struct _Summary {
     ## The first `return` whose value shares an operand's class or is
     ## tainted, for notes. Not compared.
     var blame: Loc? = Optional<Loc>.Empty;
-    ## It reaches a call through a trait value: recorded only with the
-    ## structs each such call may reach (`dispatches`), and kept only while
-    ## those stay the same.
-    var dependent: bool = false;
-    ## The trait methods it reaches calls through, each `trait\tmethod`.
-    var dispatches: HashSet<String> = HashSet<String>();
+    ## The calls through a trait value it reaches, its own and those of the
+    ## functions it calls by name (not the implementations'): for each,
+    ## `trait\tmethod\toperands\tresults`, the joined summary of the
+    ## implementations it was made with (`links`). It holds wherever those
+    ## joins are the same, whichever structs implement the traits there.
+    var dispatched: HashMap<String, String> = HashMap<String, String>();
 
     construct(classes: ulong[], tainted: bool[]) {
         this.classes = classes;
@@ -200,18 +273,26 @@ struct _Summary {
         }
         var out = _Summary(joined, taints);
         out.blame = blame.is_value() ? blame : other.blame;
-        out.dependent = dependent or other.dependent;
-        out.dispatches = _union(dispatches, other.dispatches);
         return out;
     }
 
-    ## Whether `other` links and taints the same.
+    ## It reaches a call through a trait value.
+    dependent(): bool {
+        return dispatched.count > 0;
+    }
+
+    ## Whether `other` links and taints the same, with the same joins.
     same_links(other: _Summary): bool {
-        if (dependent != other.dependent
-            or dispatches.count != other.dispatches.count
+        if (dispatched.count != other.dispatched.count
             or classes.count != other.classes.count
             or tainted.count != other.tainted.count) {
             return false;
+        }
+        for (var (call, links) in dispatched) {
+            var theirs = other.dispatched.try_get(call);
+            if (!theirs.is_value() or theirs.value() != links) {
+                return false;
+            }
         }
         ulong i = 0;
         while (i < classes.count) {
@@ -230,9 +311,8 @@ struct _Summary {
         return true;
     }
 
-    ## The summary as recorded for the build cache: `classes;taints;blame`
-    ## (`0,1,0;0;12-30`).
-    encode(): String {
+    ## What it links and taints: `classes;taints` (`0,1,0;0`).
+    links(): String {
         var class_text = Array<String>();
         for (var c in classes) {
             class_text.append($"{c}");
@@ -241,23 +321,35 @@ struct _Summary {
         for (var t in tainted) {
             taint_text.append(t ? "1" : "0");
         }
+        return $"{_joined(class_text)};{_joined(taint_text)}";
+    }
+
+    ## The summary as recorded for the build cache: `classes;taints;blame`
+    ## (`0,1,0;0;12-30`).
+    encode(): String {
         var blamed = "-";
         if (blame.is_value()) {
             blamed = $"{blame.value().span.start}-{blame.value().span.end}";
         }
-        return $"{_joined(class_text)};{_joined(taint_text)};{blamed}";
+        return $"{links()};{blamed}";
     }
-}
 
-_union(a: HashSet<String>, b: HashSet<String>): HashSet<String> {
-    var out = HashSet<String>();
-    for (var x in a) {
-        out.insert(x);
+    ## The summary as a checked unit records it: `encode`, then a line for
+    ## each call through a trait value it reaches, in order,
+    ## `trait\tmethod\toperands\tresults\tlinks`.
+    settled_text(): String {
+        var calls = Array<String>();
+        for (var (call, _) in dispatched) {
+            calls.append(call);
+        }
+        calls.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
+        var out = StringBuilder();
+        out.append(encode());
+        for (var call in calls) {
+            out.append($"\n{call}\t{dispatched[call]}");
+        }
+        return out.to_string();
     }
-    for (var x in b) {
-        out.insert(x);
-    }
-    return out;
 }
 
 _joined(parts: String[]): String {
@@ -331,8 +423,8 @@ _decode(text: String, file: uint): _Summary? {
     # What follows `|` is other passes'.
     var bar = text.find("|");
     var own = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
-    # What follows a newline is a dependent summary's dispatches, one a
-    # line, each `trait\tmethod` and the structs it reached.
+    # What follows a newline is a dependent summary's trait calls, one a
+    # line, each with the joined summary it was made with.
     var lines = own.split("\n");
     own = lines[0];
     var fields = own.split(";");
@@ -363,12 +455,12 @@ _decode(text: String, file: uint): _Summary? {
         summary.blame = Optional<Loc>.Value(Loc.at(file, ast.Span(start.value(), end.value())));
     }
     for (var i in 1..lines.count) {
-        var parts = lines[i].split("\t");
-        if (parts.count < 2) {
+        var tab = lines[i].rfind("\t");
+        if (tab < 0) {
             return none;
         }
-        summary.dependent = true;
-        summary.dispatches.insert($"{parts[0]}\t{parts[1]}");
+        var call = lines[i].substr_bytes(0, tab as ulong);
+        summary.dispatched[call] = lines[i].substr_bytes(tab as ulong + 1, lines[i].size - tab as ulong - 1);
     }
     return Optional<_Summary>.Value(summary);
 }
@@ -572,8 +664,9 @@ enum _Callee {
     ## A free function, method or constructor with a body: its summary key
     ## and definition.
     Known(key: String, function: FunctionDef),
-    ## A method called through a trait value: every implementation's key.
-    Trait(keys: String[]),
+    ## A method called through a trait value: `trait\tmethod`, and every
+    ## implementation's key.
+    Trait(call: String, keys: String[]),
     ## `copy(x)`: fresh, linking nothing.
     Copy,
     ## An `extern`: links nothing; a pointer result is marked.
@@ -607,6 +700,11 @@ struct _Confinement {
     var settled: HashSet<String> = HashSet<String>();
     # The checked summaries `_decode_checked` looked for.
     var _tried: HashSet<String> = HashSet<String>();
+    ## The settled summaries decoded that call through a trait value, in
+    ## the order decoded: they hold only while their joins do (`stale`).
+    var tentative: Array<String> = Array<String>();
+    ## The checked summaries found stale, never decoded again.
+    var dropped: HashSet<String> = HashSet<String>();
     ## Every compiled function body.
     var all: Array<_Body>;
     var bodies: HashSet<String> = HashSet<String>();
@@ -704,7 +802,7 @@ struct _Confinement {
             }
         }
         var recorded = module.checked.summaries.try_get(key);
-        if (!recorded.is_value()) {
+        if (!recorded.is_value() or dropped.contains(key)) {
             return;
         }
         var (loc, text) = recorded.value();
@@ -712,7 +810,47 @@ struct _Confinement {
         if (decoded.is_value()) {
             summaries[key] = decoded.value();
             settled.insert(key);
+            if (decoded.value().dependent()) {
+                tentative.append(key);
+            }
         }
+    }
+
+    ## Forgets every summary, to summarize again without the `dropped`
+    ## ones. The bodies `restore` put back stay.
+    reset() {
+        summaries = HashMap<String, _Summary>();
+        settled = HashSet<String>();
+        _tried = HashSet<String>();
+        tentative = Array<String>();
+        recorded_out = Array<(Loc, String)>();
+    }
+
+    ## The summary a call of `key` uses, sized for its operands and results
+    ## when there is none yet: the bottom for a body (a caller is walked
+    ## again once it has its own), the top for a function without one.
+    callee_summary(key: String, operands: ulong, results: ulong): _Summary {
+        var found = summary(key);
+        if (found.is_value()) {
+            return found.value();
+        }
+        # A checked function no summary settled starts at the bottom like
+        # any other body.
+        if (bodies.contains(key) or restore(key).is_value()) {
+            return _bottom(operands, results);
+        }
+        return _top(operands, results);
+    }
+
+    ## The summary of a call through a trait value: every implementation's
+    ## joined, or the top when there is none.
+    dispatch_summary(keys: String[], operands: ulong, results: ulong): _Summary {
+        _Summary? joined = Optional<_Summary>.Empty;
+        for (var key in keys) {
+            var s = callee_summary(key, operands, results);
+            joined = Optional<_Summary>.Value(joined.is_value() ? joined.value().join(s) : s);
+        }
+        return joined.is_value() ? joined.value() : _top(operands, results);
     }
 
     ## The keys of method `method` of every struct that implements trait
@@ -730,6 +868,13 @@ struct _Confinement {
         }
         _dispatch[memo] = keys;
         return keys;
+    }
+
+    ## The keys of the implementations a trait call of a summary's
+    ## `dispatched` may reach.
+    dispatched_call(call: String): String[] {
+        var parts = call.split("\t");
+        return parts.count < 2 ? Array<String>() : dispatched(parts[0], parts[1]);
     }
 
     ## The function a summary key names: a compiled body, or a checked one
@@ -916,89 +1061,60 @@ _dispatch_owners(implementors: HashMap<String, StructDef[]>, trait_name: String,
     return out;
 }
 
-# A dependent summary's dispatches as recorded after its text: a line for
-# each, `trait\tmethod` then a tab before each struct it reaches.
-_dispatch_lines(implementors: HashMap<String, StructDef[]>, dispatches: HashSet<String>): String {
-    var sorted = Array<String>();
-    for (var d in dispatches) {
-        sorted.append(d);
-    }
-    sorted.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
-    var out = StringBuilder();
-    for (var d in sorted) {
-        out.append("\n");
-        out.append(d);
-        var (trait_name, method) = d.split_once("\t").value();
-        for (var owner in _dispatch_owners(implementors, trait_name, method)) {
-            out.append("\t");
-            out.append(owner);
-        }
-    }
-    return out.to_string();
-}
-
-## Drops from `module`'s checked summaries each dependent one whose trait
-## calls now reach other structs than when it was recorded (a later unit
-## implements the trait), so that its function is summarized again.
+## The settled summaries `program` decoded that no longer hold: a call
+## through a trait value they reach now joins other summaries than they
+## were made with (a struct implementing the trait since, or an
+## implementation summarized again). Summarizes first every
+## implementation those calls reach that has no summary yet.
 ##
-## @param module the module
-## @param state the passes' state
-export drop_stale_summaries(module: Module, state: PassState) {
-    var implementors = Optional<HashMap<String, StructDef[]>>.Empty;
-    var stale = Array<String>();
-    var changed = _changed_traits(module, state);
-    for (var (key, value) in module.checked.summaries) {
-        var (_, text) = value;
-        var bar = text.find("|");
-        var own = bar < 0 ? text : text.substr_bytes(0, bar as ulong);
-        var lines = own.split("\n");
-        if (lines.count < 2) {
-            continue;
-        }
-        # Only a struct this unit adds or changes can reach a trait call
-        # differently than when the summary was recorded.
-        bool touched = false;
-        for (var i in 1..lines.count) {
-            var tab = lines[i].find("\t");
-            touched = touched or changed.contains(tab < 0 ? lines[i] : lines[i].substr_bytes(0, tab as ulong));
-        }
-        if (!touched) {
-            continue;
-        }
-        if (!implementors.is_value()) {
-            implementors = Optional<HashMap<String, StructDef[]>>.Value(_implementors_of(module));
-        }
-        for (var i in 1..lines.count) {
-            var parts = lines[i].split("\t");
-            var owners = parts.count < 2 ? Array<String>() : _dispatch_owners(implementors.value(), parts[0], parts[1]);
-            bool same = parts.count == owners.count + 2;
-            for (var j in 0..owners.count) {
-                same = same and parts[j + 2] == owners[j];
+## @param program the pass's view of the program, its summaries made
+## @returns their keys, in the order decoded
+_stale(program: _Confinement): String[] {
+    # Every implementation the decoded ones' calls reach, with a summary
+    # (decoding more of them on the way, which are checked in turn).
+    ulong done = 0;
+    var seen = HashSet<String>();
+    while (done < program.tentative.count) {
+        var missing = Array<String>();
+        while (done < program.tentative.count) {
+            var summary = program.summaries[program.tentative[done]];
+            done += 1;
+            for (var (call, _) in summary.dispatched) {
+                if (!seen.insert(call)) {
+                    continue;
+                }
+                for (var key in program.dispatched_call(call)) {
+                    if (!program.summary(key).is_value()) {
+                        missing.append(key);
+                    }
+                }
             }
-            if (!same) {
-                stale.append(key);
+        }
+        if (missing.count > 0) {
+            _summaries(program, missing);
+        }
+    }
+    var out = Array<String>();
+    var joins = HashMap<String, String>();
+    for (var key in program.tentative) {
+        for (var (call, links) in program.summaries[key].dispatched) {
+            var now = joins.try_get(call);
+            if (!now.is_value()) {
+                var parts = call.split("\t");
+                var operands = parts.count == 4 ? ulong.parse(parts[2]) : Optional<ulong>.Empty;
+                var results = parts.count == 4 ? ulong.parse(parts[3]) : Optional<ulong>.Empty;
+                var joined = "";
+                if (operands.is_value() and results.is_value()) {
+                    joined = program.dispatch_summary(
+                        program.dispatched_call(call), operands.value(), results.value()
+                    ).links();
+                }
+                joins[call] = joined;
+                now = Optional<String>.Value(joined);
+            }
+            if (now.value() != links) {
+                out.append(key);
                 break;
-            }
-        }
-    }
-    for (var key in stale) {
-        module.checked.summaries.remove(key);
-    }
-}
-
-# The traits implemented by a struct the unit being checked adds, or by a
-# checked one it changes: an extension applied to it, or gave it members
-# with bodies, which the checked ones' stashed bodies are not.
-_changed_traits(module: Module, state: PassState): HashSet<String> {
-    var out = HashSet<String>();
-    for (var st in module.structs) {
-        bool changed = !module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name);
-        for (var m in st.method_members) {
-            changed = changed or m.body.is_value();
-        }
-        if (changed) {
-            for (var t in st.traits) {
-                out.insert(t.name);
             }
         }
     }
@@ -1060,6 +1176,15 @@ export returns_fresh(module: Module, target: Target, key: String): bool? {
         return none;
     }
     _summaries(program, [key]);
+    var stale = _stale(program);
+    while (stale.count > 0) {
+        for (var dropped in stale) {
+            program.dropped.insert(dropped);
+        }
+        program.reset();
+        _summaries(program, [key]);
+        stale = _stale(program);
+    }
     var summary = program.summary(key);
     if (summary.is_empty()) {
         return none;
@@ -1162,7 +1287,7 @@ _record_summaries(program: _Confinement) {
         }
         String? text = Optional<String>.Empty;
         var summary = program.summary(body.key);
-        if (summary.is_value() and !summary.value().dependent) {
+        if (summary.is_value() and !summary.value().dependent()) {
             text = Optional<String>.Value(summary.value().encode());
         }
         if (at.contains(function.loc)) {
@@ -1181,13 +1306,13 @@ _record_summaries(program: _Confinement) {
     }
     out.sort(_compare_recorded);
     program.recorded_out = out;
-    _settle(program);
 }
 
 ## Keeps every summary the passes made of a function not settled before,
 ## by key: what a checked unit records for the units checked on top of it.
-## A summary that calls through a trait keeps the structs those calls
-## reach, and holds while they stay the same.
+## A summary that calls through a trait keeps the joined summary each such
+## call was made with (`_Summary.settled_text`), and holds where those
+## joins are the same.
 _settle(program: _Confinement) {
     for (var (key, summary) in program.summaries) {
         if (program.is_settled(key)) {
@@ -1198,11 +1323,7 @@ _settle(program: _Confinement) {
             continue;
         }
         var blame = summary.blame.is_value() ? summary.blame.value() : function.value().loc;
-        var text = summary.encode();
-        if (summary.dependent) {
-            text = text + _dispatch_lines(program.implementors(), summary.dispatches);
-        }
-        program.state.settled_summaries[key] = (blame, text);
+        program.state.settled_summaries[key] = (blame, summary.settled_text());
     }
 }
 
@@ -1330,20 +1451,19 @@ _summarize(program: _Confinement, body: _Body): (_Summary, String[]) {
         k += 1;
     }
     summary.blame = blame;
-    bool dependent = walk.dependent;
-    var dispatches = walk.dispatches;
-    for (var key in walk.called) {
+    # The joins of its own trait calls, and those its callees by name were
+    # made with: an implementation's reach the caller only through its
+    # call's join.
+    summary.dispatched = walk.dispatched;
+    for (var key in walk.named) {
         var known = program.summary(key);
-        if (!known.is_value() or !known.value().dependent) {
+        if (!known.is_value()) {
             continue;
         }
-        dependent = true;
-        for (var d in known.value().dispatches) {
-            dispatches.insert(d);
+        for (var (call, links) in known.value().dispatched) {
+            summary.dispatched[call] = links;
         }
     }
-    summary.dependent = dependent;
-    summary.dispatches = dispatches;
     return (summary, walk.called);
 }
 
@@ -1362,6 +1482,13 @@ _summaries(program: _Confinement, roots: String[]) {
     var queued = HashSet<String>();
     for (var key in roots) {
         var body = all.try_get(key);
+        if (!body.is_value() and !program.is_settled(key)) {
+            # A checked implementation `_stale` needs the summary of.
+            body = program.restore(key);
+            if (body.is_value()) {
+                all[key] = body.value();
+            }
+        }
         if (!body.is_value() or program.is_settled(key) or queued.contains(key)) {
             continue;
         }
@@ -1959,10 +2086,11 @@ struct _RegionWalk {
     var operands: Array<long> = Array<long>();
     ## The summary keys of the functions the walk called.
     var called: Array<String> = Array<String>();
-    var dependent: bool = false;
-    ## The trait methods the walk called through a trait value, each
-    ## `trait\tmethod`.
-    var dispatches: HashSet<String> = HashSet<String>();
+    ## Those it called by name, not through a trait value.
+    var named: Array<String> = Array<String>();
+    ## The joined summary of each call through a trait value it made, as
+    ## `_Summary.dispatched`.
+    var dispatched: HashMap<String, String> = HashMap<String, String>();
     ## The operand slots of `[Move]` parameters (summaries).
     var sending: Array<ulong> = Array<ulong>();
     ## Walking a `[Locked]` closure's body: its parameters are the locked
@@ -2914,24 +3042,10 @@ struct _RegionWalk {
             return _ResolvedMethod(_Callee.Unknown, false);
         }
         if (program.is_trait(receiver)) {
-            dispatches.insert($"{receiver.name}\t{method}");
             var keys = program.dispatched(receiver.name, method);
-            return _ResolvedMethod(_Callee.Trait(keys), false);
+            return _ResolvedMethod(_Callee.Trait($"{receiver.name}\t{method}", keys), false);
         }
         return _ResolvedMethod(_Callee.Unknown, false);
-    }
-
-    known_summary(key: String, operands: ulong, results: ulong): _Summary {
-        var found = program.summary(key);
-        if (found.is_value()) {
-            return found.value();
-        }
-        # A checked function no summary settled starts at the bottom like
-        # any other body: the caller is walked again once it has its own.
-        if (program.bodies.contains(key) or program.restore(key).is_value()) {
-            return _bottom(operands, results);
-        }
-        return _top(operands, results);
     }
 
     ## The summary of a call, sized for its operands and results; none for
@@ -2939,15 +3053,12 @@ struct _RegionWalk {
     summary_of(callee: _Callee, operands: ulong, results: ulong): _Summary? {
         match (callee) {
             Known(key, function) => {
-                return Optional<_Summary>.Value(known_summary(key, operands, results));
+                return Optional<_Summary>.Value(program.callee_summary(key, operands, results));
             }
-            Trait(keys) => {
-                _Summary? joined = Optional<_Summary>.Empty;
-                for (var key in keys) {
-                    var s = known_summary(key, operands, results);
-                    joined = Optional<_Summary>.Value(joined.is_value() ? joined.value().join(s) : s);
-                }
-                return joined.is_value() ? joined : Optional<_Summary>.Value(_top(operands, results));
+            Trait(call, keys) => {
+                var joined = program.dispatch_summary(keys, operands, results);
+                dispatched[$"{call}\t{operands}\t{results}"] = joined.links();
+                return Optional<_Summary>.Value(joined);
             }
             Unknown => {
                 return Optional<_Summary>.Value(_top(operands, results));
@@ -2966,12 +3077,12 @@ struct _RegionWalk {
         match (callee) {
             Known(key, function) => {
                 called.append(key);
+                named.append(key);
             }
-            Trait(keys) => {
+            Trait(call, keys) => {
                 for (var key in keys) {
                     called.append(key);
                 }
-                dependent = true;
             }
             Copy => {
                 copies = true;
