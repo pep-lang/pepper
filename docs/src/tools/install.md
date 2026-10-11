@@ -177,8 +177,10 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
      Code extension's `package.json` and `package-lock.json` to match.
   2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the
      commit holds that version, builds it and publishes the release; the
-     `VSIX` and `Docs` workflows publish the extension and the docs from
-     the same tag.
+     `Docs` workflow publishes the docs from the same tag, and once the
+     release's archives are up the workflow dispatches `VSIX` on the tag,
+     which builds the extension with them and publishes it as
+     `vsix-v<extension version>`.
   3. Once it is published, the workflow opens a pull request that starts
      the next minor version on main (`0.10.0-dev`) and merges itself once
      its checks pass, unless main has already moved on; a major version is

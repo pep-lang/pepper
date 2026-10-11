@@ -15,10 +15,11 @@
 # replace the asset on the existing release, and a version bump opens a new
 # one. `pepper.lspPath` remains as a dev override for using your own build.
 #
-# It runs only for a release (pushing a vX.Y.Z tag, the same tags that
-# publish the docs) or when dispatched by hand (`gh workflow run vsix.yml`).
-# A release tag's toolchain is the one release.yml publishes for the same
-# tag, which each leg waits for.
+# It runs only when dispatched: by release.yml on a vX.Y.Z tag once that
+# release's archives are published, or by hand (`gh workflow run vsix.yml`).
+# A tag push does not start it: its legs would wait for the release's
+# toolchain on the same self-hosted runners the release builds on, and hold
+# them, so neither could finish.
 # A release tag or a dispatch on main publishes; a dispatch on any other
 # branch uploads the vsix as a run artifact instead, so a branch can be
 # tested without replacing the released extension.
@@ -31,8 +32,6 @@
 name: VSIX
 
 on:
-  push:
-    tags: ['v*.*.*']
   workflow_dispatch:
 
 concurrency:
@@ -82,19 +81,11 @@ jobs:
           TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           set -euo pipefail
-          tries=1
           version=""
           if [ "$TAG" = true ]; then
-            tries=36
             version="$(tr -d '\r' < VERSION)"
           fi
-          for i in $(seq "$tries"); do
-            if bash -euxo pipefail scripts/ci-install-toolchain.sh ${version:+--version "$version"}; then
-              exit 0
-            fi
-            [ "$i" = "$tries" ] || { echo "toolchain not published yet; retrying in 5 minutes"; sleep 300; }
-          done
-          exit 1
+          bash -euxo pipefail scripts/ci-install-toolchain.sh ${version:+--version "$version"}
 
       # Release build, as required for the bundled server, of this
       # checkout's tools/pep-lsp against this checkout's runtime. pep-lsp
