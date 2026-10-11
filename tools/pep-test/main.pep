@@ -259,7 +259,7 @@ build_and_run(options: Options, list_only: bool, files: Array<String>, compiler:
     }
     in_parallel(selected.count, options.jobs, (i: ulong) => {
         var start = os.Instant.now();
-        var outcome = run_test(selected[i], options.timeout);
+        var outcome = run_test(selected[i], options.timeout, scratch.join($"{i}"));
         var took = format_duration(start.elapsed());
         outcomes[i] = outcome;
         print($"test {display_name(selected[i], qualify)} ... {outcome.passed ? "ok" : "FAILED"} ({took})");
@@ -438,9 +438,30 @@ list_tests(program: String, tests: Array<Test>): String? {
     return Optional<String>.Empty;
 }
 
-# Runs `test` in a child process and judges how it ended.
-run_test(test: Test, timeout: ulong): Outcome {
+# Runs `test` in a child process and judges how it ended. The child's
+# temporary folder is `temp`, removed when the test ends, so what a test
+# that panics or times out (or a child of its that outlives it) leaves
+# there is removed too, rather than leaked into the system's (#818). Its
+# name is short: macOS caps a Unix socket's path at 103 bytes.
+run_test(test: Test, timeout: ulong, temp: Path): Outcome {
+    var outcome = Outcome();
+    var made = Directory.create_all(temp);
+    if (made.is_err()) {
+        outcome.reason = $"cannot create '{temp.to_string()}': {made.error().message}";
+        return outcome;
+    }
+    outcome = run_test_in(test, timeout, temp);
+    Directory.remove_all(temp);
+    return outcome;
+}
+
+# `run_test`, once `temp` is made.
+run_test_in(test: Test, timeout: ulong, temp: Path): Outcome {
     var command = process.Command(test.program).argument("--run").argument($"{test.file}::{test.name}");
+    # `TMPDIR` on POSIX; Windows' GetTempPathW reads `TMP`, then `TEMP`.
+    for (var name in ["TMPDIR", "TMP", "TEMP"]) {
+        command.environment(name, temp.to_string());
+    }
     if (timeout > 0) {
         command.argument("--timeout").argument($"{timeout}");
     }

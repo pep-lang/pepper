@@ -84,7 +84,11 @@ error.
 The test programs are built in a temporary folder that is removed at the
 end. A test runs in the current folder, with `PEPPER_BACKTRACE=0` unless
 `PEPPER_BACKTRACE` is set, so a panic prints its message without a
-backtrace.
+backtrace. Each test gets a temporary folder of its own (`TMPDIR`, and
+`TMP` and `TEMP` for Windows, name it), removed when the test ends, so
+what a test that panics or times out leaves there, such as a
+[`TempFolder`](../reference/testing-temp_folder.md) whose destructor
+never ran, is removed too.
 
 ## The test program
 

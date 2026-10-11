@@ -6,7 +6,7 @@
 # fail, panic as they should and as they should not, and time out; its
 # name keeps the repository's own run from finding it. Run with `-I tools`.
 
-import [Path] from io;
+import [Directory, Path] from io;
 import process;
 import [TempFolder] from testing;
 import [
@@ -106,6 +106,36 @@ reports_test_files_of_a_module_that_clash() {
     var passed = pep_test(folder.path, Array<String>());
     expect_exit(passed, 0);
     expect_ends_with(passed.stdout, "2 passed, 0 failed\n");
+}
+
+[Test]
+removes_what_tests_leave_in_the_temporary_folder() {
+    # Neither test's TempFolder is removed by its destructor: one panics,
+    # the other times out (#818).
+    var folder = TempFolder("pep_test_temp");
+    write_file(
+        folder.path.join("leak_test.pep"),
+        "import io;\nimport [TempFolder] from testing;\n\n"
+            + "[Test]\npanics() {\n    var folder = TempFolder(\"panics\");\n"
+            + "    io.File.write_text(io.Directory.temp().join(\"left.txt\"), \"left\");\n    panic(\"stop\");\n}\n\n"
+            + "[Test]\nspins() {\n    var folder = TempFolder(\"spins\");\n    while (true) {}\n}\n"
+    );
+    var temp = folder.path.join("temp");
+    write_file(temp.join("kept.txt"), "kept");
+    var command = process
+        .Command(tool("pep-test").to_string())
+        .arguments(["--timeout", "1"])
+        .working_directory(folder.path)
+        .remove_environment("PEPPER_BACKTRACE");
+    for (var name in ["TMPDIR", "TMP", "TEMP"]) {
+        command.environment(name, temp.to_string());
+    }
+    var ran = run(command);
+    expect_exit(ran, 1);
+    expect_ends_with(ran.stdout, "0 passed, 2 failed\n");
+    var entries = Directory.open(temp).value().entries().value();
+    expect_equal(entries.count, 1 as ulong);
+    expect_equal(entries[0].name, "kept.txt");
 }
 
 # Writes the test files `a_test.pep` and `b_test.pep` of the module `shop`
