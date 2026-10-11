@@ -1,0 +1,853 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Memory and reference counting - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-a821ef30.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e4845a93.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/memory.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="memory-and-reference-counting"><a class="header" href="#memory-and-reference-counting">Memory and reference counting</a></h1>
+<p>Pepper frees memory for you, without a garbage collector and without
+ownership annotations. Every struct object keeps a count of the references to
+it, and the object is destroyed the moment that count drops to zero. Because
+the rules are simple and the same everywhere, you can always tell when an
+object will be destroyed and its <a href="structs.html#destructors">destructor</a> will run.</p>
+<p>If you know C++, the whole model fits in one sentence: every struct value
+behaves exactly like a <code>std::shared_ptr&lt;T&gt;</code> passed by value.</p>
+<h2 id="values-and-references"><a class="header" href="#values-and-references">Values and references</a></h2>
+<p>Numbers, <code>bool</code>, and the other primitive types are plain values: assigning
+one copies it, as in C. So is a <a href="tuples.html">tuple</a>, whose elements are
+copied the way each element would be on its own, and so is a struct or enum
+marked <a href="value-structs.html"><code>[Value]</code></a>, such as <code>Optional&lt;T&gt;</code> and <code>Result&lt;T&gt;</code>
+(see <a href="enums.html#value-enums">value enums</a>).</p>
+<p>Everything else, including your own structs, <code>String</code>, <code>Array</code>, <code>HashMap</code>, and
+<a href="function-types.html">function values</a>, is a <em>reference</em> to an object on the
+heap. Assigning a reference, passing it to a function, or storing it in a
+field or an array shares the object. Nothing is copied.</p>
+<pre><code class="language-pepper">struct Account {
+    var balance: int = 0;
+}
+
+# The parameter is another reference to the caller's object, so changes to
+# its fields are visible to the caller.
+deposit(account: Account, amount: int) {
+    account.balance += amount;
+}
+
+# Rebinding the parameter itself only changes this function's reference.
+replace(account: Account) {
+    account = Account();
+    account.balance = 999;
+}
+
+main(): int {
+    var mine = Account();
+    var yours = mine;               # shares the object; nothing is copied
+    yours.balance = 50;
+    assert(mine.balance == 50, "assignment shares the object");
+
+    deposit(mine, 25);
+    assert(mine.balance == 75, "a function can change the shared object");
+
+    replace(mine);
+    assert(mine.balance == 75, "rebinding a parameter does not affect the caller");
+
+    # To get an independent object, make a new one and copy the fields.
+    var copy = Account();
+    copy.balance = mine.balance;
+    copy.balance = 0;
+    assert(mine.balance == 75, "the copy is a separate object");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>var yours = mine;</code> makes a second reference to the same <code>Account</code>.
+Changes through either name are visible through both.</li>
+<li>A parameter is one more reference to the caller’s object. The function can
+change the object’s fields, but assigning a new object to the parameter
+only changes the function’s own reference.</li>
+<li>To get an independent object, create a new one. Pepper does not copy
+structs for you; some library types offer a method for it, such as
+<a href="../reference/array.html"><code>Array</code></a>’s <code>clone()</code>.</li>
+</ul>
+<p>A struct-typed variable or field that has not been given a value, such as
+<code>var next: Account;</code>, is <em>null</em>: it refers to no object. Reading a field or
+calling a method through a null reference crashes the program. Use <code>===</code> or
+<code>!==</code> to check whether two references name the same object, or whether one is
+null (<code>next === __null</code>). A struct is not a condition by itself, so
+<code>if (next)</code> is an error unless the struct declares the truth test <code>!!</code> (see
+<a href="structs.html#truth-tests-and-conditions">Truth tests and conditions</a>). For a
+value that may be absent, prefer <a href="optionals.html"><code>Optional&lt;T&gt;</code></a>, whose type
+says so.</p>
+<h2 id="when-objects-are-destroyed"><a class="header" href="#when-objects-are-destroyed">When objects are destroyed</a></h2>
+<p>A reference is held by whatever stores it: a local variable, a parameter, a
+field, an element of a container, or a temporary value in the middle of an
+expression. Each of those releases its reference exactly once, when it goes
+away. When the last reference is released, the object is destroyed: its
+destructor runs, and then its fields release their own references, which may
+destroy further objects in turn.</p>
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
+
+struct Tracked {
+    var name: String;
+    construct(this.name = "") {}
+    destruct {
+        destroyed.fetch_add(1);
+    }
+}
+
+struct Holder {
+    var item: Tracked;
+}
+
+make(name: String): Tracked {
+    var t = Tracked(name);
+    return t;                   # the caller receives the object
+}
+
+main(): int {
+    # 1. A local is released when its scope ends.
+    {
+        var a = Tracked("a");
+    }
+    assert(destroyed.load() == 1, "a was destroyed at the end of its block");
+
+    # 2. While another reference exists, the object stays alive.
+    var b = Tracked("b");
+    var also_b = b;
+    b = Tracked("b2");          # b lets go of the first object...
+    assert(destroyed.load() == 1, "...but also_b still holds it");
+    also_b = b;                 # the last reference moves away
+    assert(destroyed.load() == 2, "the first object is destroyed now");
+
+    # 3. Fields and containers hold references too.
+    var holder = Holder();
+    {
+        var c = Tracked("c");
+        holder.item = c;
+    }
+    assert(destroyed.load() == 2, "holder.item keeps c alive after its scope");
+    holder = Holder();          # the old Holder dies and releases c
+    assert(destroyed.load() == 3, "releasing the holder released its field");
+
+    var list = Array&lt;Tracked&gt;();
+    list.append(Tracked("d"));
+    assert(destroyed.load() == 3, "the array holds d");
+    list.clear();
+    assert(destroyed.load() == 4, "clearing the array released d");
+
+    # 4. Returned objects belong to the caller; unused results are
+    #    destroyed right away.
+    var e = make("e");
+    assert(destroyed.load() == 4, "e is alive in main");
+    make("temporary");
+    assert(destroyed.load() == 5, "a result nobody keeps is destroyed immediately");
+    return 0;
+}
+</code></pre>
+<p>Concretely, a reference is released when:</p>
+<ul>
+<li><strong>A local variable goes out of scope</strong>, at the closing brace of the block
+that declared it, or when the function returns.</li>
+<li><strong>A variable or field is overwritten.</strong> <code>b = Tracked("b2");</code> releases the
+object <code>b</code> held before, after taking the new one. Assigning a variable to
+itself (<code>a = a</code>) changes nothing.</li>
+<li><strong>A parameter’s function returns.</strong> The function held its parameters for
+as long as it ran.</li>
+<li><strong>The object that holds a field is destroyed</strong>, or a container removes an
+element (<code>clear()</code>, overwriting <code>list[i]</code>, and so on). <code>remove_at()</code> and
+<code>pop()</code> are the exception: they hand the container’s reference to the
+caller, so <code>var x = list.remove_at(0);</code> leaves the count unchanged.</li>
+<li><strong>A temporary is no longer needed.</strong> A result that is not stored anywhere,
+like the one from <code>make("temporary");</code>, is released at the end of the
+statement. The same goes for a call result passed straight to another
+function, and for the object in <code>make().name</code>.</li>
+</ul>
+<p>Returning a local hands its reference to the caller, so the object survives
+the function. Calling a method on an object does not add a reference to it:
+inside the method, <code>this</code> refers to the caller’s object.</p>
+<h2 id="cycles-leak"><a class="header" href="#cycles-leak">Cycles leak</a></h2>
+<p>Reference counting cannot free a <em>cycle</em>: objects that refer to each other,
+directly or through a chain, keep each other’s counts above zero even after
+nothing else refers to them. Their destructors never run and their memory is
+never freed.</p>
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
+
+struct Person {
+    var name: String;
+    var friends: Array&lt;Person&gt;;
+
+    construct(this.name = "") {
+        friends = Array&lt;Person&gt;();
+    }
+
+    destruct {
+        destroyed.fetch_add(1);
+    }
+}
+
+main(): int {
+    # Two people who list each other as friends form a cycle: each keeps
+    # the other alive, so neither is ever destroyed.
+    {
+        var ann = Person("Ann");
+        var bob = Person("Bob");
+        ann.friends.append(bob);
+        bob.friends.append(ann);
+    }
+    assert(destroyed.load() == 0, "the cycle leaked both objects");
+
+    # Break the cycle before letting go, and both are destroyed.
+    {
+        var cat = Person("Cat");
+        var dan = Person("Dan");
+        cat.friends.append(dan);
+        dan.friends.append(cat);
+        dan.friends.clear();    # Dan no longer holds Cat
+    }
+    assert(destroyed.load() == 2, "without the cycle, both were destroyed");
+    return 0;
+}
+</code></pre>
+<p>To avoid a cycle, make one direction of it a weak reference (next section),
+or break the cycle yourself before the last outside reference goes away:
+clear the container, or overwrite the field, that closes the loop.</p>
+<p>A <a href="function-types.html#closures">closure</a> holds a reference to every struct it
+captures, including <code>this</code>, so a closure stored inside an object it captures
+closes a cycle too. The compiler reports the direct case, a method storing a
+closure that captures <code>this</code> in a field of <code>this</code>.</p>
+<h2 id="weak-references"><a class="header" href="#weak-references">Weak references</a></h2>
+<p>A <a href="../reference/weak.html"><code>Weak&lt;T&gt;</code></a> points at an object without keeping it
+alive. Use it for back pointers: a child’s parent, a document’s folder, an
+observer’s subject. The owner holds strong references down the tree, and
+everything that points back up holds a <code>Weak&lt;T&gt;</code>, so there is no cycle.</p>
+<pre><code class="language-pepper">import async;
+
+# A module-scope counter: const, and changed through an Atomic.
+const destroyed = async.Atomic&lt;int&gt;(0);
+
+struct Folder {
+    var name: String;
+    var files: Array&lt;Document&gt;;
+
+    construct(this.name = "") {
+        files = Array&lt;Document&gt;();
+    }
+
+    destruct {
+        destroyed.fetch_add(1);
+    }
+}
+
+struct Document {
+    var title: String;
+    # A weak back pointer: the folder owns its documents, not the other way
+    # round, so there is no cycle.
+    var folder: Weak&lt;Folder&gt;;
+
+    construct(String title, Folder folder) {
+        this.title = title;
+        this.folder = Weak&lt;Folder&gt;(folder);
+    }
+
+    destruct {
+        destroyed.fetch_add(1);
+    }
+
+    String path() {
+        with (var f = folder) {
+            return f.name + "/" + title;
+        } else {
+            return "(deleted)/" + title;
+        }
+        return "";
+    }
+}
+
+main(): int {
+    var kept = Document("draft", Folder("none"));
+    {
+        var home = Folder("home");
+        var notes = Document("notes", home);
+        home.files.append(notes);
+        assert(notes.path() == "home/notes", "the folder is alive");
+        kept = notes;
+    }
+    # The folder went away with `home`; the weak pointer did not keep it.
+    assert(kept.path() == "(deleted)/notes", "the folder is gone");
+    assert(kept.folder.expired(), "and the weak reference knows it");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong><code>Weak&lt;T&gt;(object)</code></strong> makes the weak reference. It does not change the
+object’s reference count.</li>
+<li><strong>A <code>with</code> block reaches the object</strong>: <code>with (var f = folder) { ... }</code>
+binds <code>f</code> to an ordinary strong reference for the length of the block. When
+the object has already been destroyed, the body is skipped and the <code>else</code>
+block runs. See <a href="scopes.html">Scoped blocks with <code>with</code></a>.</li>
+<li><strong><code>expired()</code></strong> reports whether the object has been destroyed.</li>
+<li><strong><code>T</code> may be a trait</strong>: <code>Weak&lt;Shape&gt;</code> upgrades to a <code>Shape</code> (see
+<a href="traits-and-extensions.html#weak-references-and-atomics">Weak references and atomics</a>).</li>
+<li><strong>The object is destroyed on time.</strong> When its last strong reference goes,
+its destructor runs and its fields are released, even if weak references
+remain. Only the object’s small header stays allocated until the last weak
+reference is gone.</li>
+</ul>
+<p>In C++ terms, a struct value is a <code>std::shared_ptr&lt;T&gt;</code> and <code>Weak&lt;T&gt;</code> wraps
+the built-in <code>__weak&lt;T&gt;</code>, a <code>std::weak_ptr&lt;T&gt;</code>: <code>Weak&lt;T&gt;(object)</code> is
+<code>weak_ptr(object)</code>, and entering it with <code>with</code> is <code>lock()</code>. Inside a
+constructor, <code>this</code> already holds the object’s first reference, like the
+<code>shared_ptr</code> that <code>make_shared</code> fills in: a constructor may pass <code>this</code> to a
+function or store it, and a weak reference made from it upgrades, without
+the object being destroyed when those copies are dropped.</p>
+<h2 id="references-and-threads"><a class="header" href="#references-and-threads">References and threads</a></h2>
+<p>Reference counts are plain, fast increments, so a struct’s objects must stay
+on one thread. A struct declared <code>[Shared]</code> has atomic counts instead, and
+its references can be copied and dropped on any thread. The compiler requires
+such a struct’s fields to be <code>const</code> and thread-safe. See
+<a href="threads.html#what-threads-can-share">What threads can share</a>.</p>
+<p>Function values follow the same split: a plain function type such as
+<code>() =&gt; void</code> has plain counts and stays on one thread, and a
+<a href="function-types.html#sharing-function-values-between-threads"><code>shared</code> function type</a>
+such as <code>shared () =&gt; void</code> has atomic counts.</p>
+<h2 id="copying-a-value-with-copy"><a class="header" href="#copying-a-value-with-copy">Copying a value with copy</a></h2>
+<p><code>copy(value)</code> makes a copy of a value that shares no object that is not
+thread-safe with the original, so the copy can go to another thread: pass
+<code>copy(x)</code> to a <a href="threads.html#channels">channel</a> to send a value you keep
+using.</p>
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("ada");
+var copied = copy(names);
+copied[0].append(" lovelace");   # names[0] is still "ada"
+</code></pre>
+<ul>
+<li>Every struct object the value reaches is copied once. An object referenced
+twice is copied once and stays shared inside the copy, and a cycle becomes
+the same cycle among the copies.</li>
+<li>Thread-safe objects are not copied: a <code>[Shared]</code> struct or a <code>shared</code>
+function value in the original is the same object in the copy. For a
+thread-safe value, <code>copy</code> returns the value itself.</li>
+<li>A weak reference to an object that was copied points at its copy. A weak
+reference to an object outside the copied value becomes null.</li>
+<li>A struct is copied field by field, without running its constructor.</li>
+</ul>
+<p>A struct with a destructor or a raw pointer (<code>__ptr&lt;T&gt;</code>) field is not
+<strong>trivially copyable</strong>: copying its fields would share what it owns, such as
+a buffer it frees. Such a struct says how to copy itself by implementing
+<code>Copyable&lt;T&gt;</code>, with a <code>copy(): T</code> method that builds the copy and copies each
+value it holds with <code>copy(value)</code>. <code>String</code>, <code>Array</code>, <code>HashMap</code> and
+<code>HashSet</code> implement it. <code>String.copy()</code> also copies a single
+String; it replaces the deprecated <code>clone()</code>. <code>Array.clone()</code> is unchanged: it
+copies the Array but shares its elements.</p>
+<pre><code class="language-pepper"># A struct with a destructor is not trivially copyable, so it implements
+# `Copyable&lt;T&gt;` to say how `copy` copies it.
+struct Buffer {
+    __ptr&lt;u8&gt; data;
+    ulong size;
+    String label;
+
+    construct(size: ulong) {
+        data = _pep_malloc(size);
+        this.size = size;
+        label = "buffer";
+    }
+
+    destruct {
+        _pep_free(data);
+    }
+
+    copy(): Buffer {
+        var made = Buffer(size);
+        var i: ulong = 0;
+        while (i &lt; size) {
+            made.data[i] = data[i];
+            i = i + 1;
+        }
+        # The free function `copy`: it continues the running copy.
+        made.label = copy(label);
+        return made;
+    }
+}
+
+extend Buffer with Copyable&lt;Buffer&gt;;
+
+struct Message {
+    Buffer body;
+    Buffer again;
+}
+
+main(): int {
+    var message = Message();
+    message.body = Buffer(4);
+    message.body.data[0] = 9;
+    message.again = message.body;
+
+    var copied = copy(message);
+    copied.body.data[0] = 1;
+    copied.body.label.append(" (copy)");
+    assert(message.body.data[0] == 9, "the original buffer is unchanged");
+    assert(message.body.label == "buffer", "the original label is unchanged");
+    # The buffer appears twice, so its copy is one object.
+    assert(copied.again === copied.body, "one copy of the shared buffer");
+    return 0;
+}
+</code></pre>
+<p>Inside <code>copy()</code>, the call <code>copy(label)</code> is the free function, not the
+method: a bare call in a method names the struct’s own method only when one
+by that name takes those arguments. While a copy runs, <code>copy(value)</code>
+continues it rather than starting another, so an object the outer copy
+already made is reused and sharing is kept. That is why a <code>Copyable</code> value
+is copied with <code>copy(x)</code>: calling <code>x.copy()</code> directly still works, but each
+<code>copy(value)</code> inside it is then a copy of its own. A value whose contents can
+lead back to it calls <code>register_copy(this, made)</code> before copying them, so
+the cycle finds the copy being built.</p>
+<p>The <code>copy(copies: Copies): T</code> form of <code>Copyable&lt;T&gt;</code>, which took the copy’s
+context as an argument and copied with <code>copies.copy(value)</code>, still works in
+this release, with a warning at <code>Copies</code>.</p>
+<p>Copying a value that reaches a struct that is not trivially copyable and does
+not implement <code>Copyable&lt;T&gt;</code> is an error at the <code>copy</code> call. It names the
+struct, shows each field on the way to it, says why it cannot be copied, and
+shows a <code>Copyable&lt;T&gt;</code> to fill in (the editor offers to insert it):</p>
+<pre><code class="language-text">main.pep:14:13: error: cannot copy 'Log' because it contains 'Handle', which is not trivially copyable
+   14 |     var c = copy(log);
+      |             ^~~~
+main.pep:9:5: note: 'Log' reaches it through field 'out'
+    9 |     Handle out;
+      |     ^~~~~~
+main.pep:1:8: note: 'Handle' has a destructor, so copying its fields would release what it owns twice
+    1 | struct Handle {
+      |        ^~~~~~
+note: implement 'Copyable&lt;Handle&gt;' to say how to copy it:
+    extend Handle with Copyable&lt;Handle&gt; {
+        copy(): Handle {
+            # Build the copy; copy each struct field with copy(field).
+            panic("copying 'Handle' is not implemented");
+            return this;
+        }
+    }
+</code></pre>
+<p>Some types cannot be copied at all: an <code>io.File</code> owns an operating-system
+handle, so the error says to send its path instead. A plain function value
+cannot be copied, because it may capture anything; declare it <code>shared</code>.</p>
+<h3 id="copying-trait-values"><a class="header" href="#copying-trait-values">Copying trait values</a></h3>
+<p><code>copy</code> of a <a href="traits-and-extensions.html#traits-as-types">trait value</a> copies
+the struct behind it, as <code>copy</code> of that struct would, and returns the copy
+as the same trait type. Sharing works across the boundary: a struct reached
+twice, through a trait value or directly, is copied once.</p>
+<pre><code class="language-pepper"># `copy` of a trait value copies the struct behind it, whichever it is.
+trait Shape {
+    area(): int;
+    grow();
+}
+
+struct Square {
+    var side: int = 1;
+    construct(this.side = 1) {}
+}
+
+extend Square with Shape {
+    area(): int { return side * side; }
+    grow() { side = side + 1; }
+}
+
+struct Rect {
+    var width: int = 1;
+    var height: int = 1;
+    construct(this.width = 1, this.height = 1) {}
+}
+
+extend Rect with Shape {
+    area(): int { return width * height; }
+    grow() { width = width + 1; }
+}
+
+main(): int {
+    var shapes = Array&lt;Shape&gt;();
+    var square = Square(2);
+    shapes.append(square);
+    shapes.append(Rect(2, 3));
+    shapes.append(square);
+
+    var copied = copy(shapes);
+    for (var shape in copied) {
+        shape.grow();
+    }
+    assert(shapes[0].area() == 4, "the original Square is unchanged");
+    assert(shapes[1].area() == 6, "the original Rect is unchanged");
+
+    # The Square appears twice, so its copy is one object, grown twice.
+    assert(copied[0] == copied[2], "one copy of the shared Square");
+    assert(copied[0].area() == 16, "the copied Square grew twice");
+    assert(copied[1].area() == 9, "the copied Rect grew once");
+    return 0;
+}
+</code></pre>
+<p>Which struct a trait value holds is known only when the program runs, so
+the compiler cannot check that it can be copied. Copying a trait value that
+holds a struct that cannot be copied (one with a destructor and no
+<code>Copyable&lt;T&gt;</code>, an <code>io.File</code>, a <code>MutexGuard</code>) panics:</p>
+<pre><code class="language-text">cannot copy the 'Owner' behind a trait value, which is not trivially copyable
+</code></pre>
+<h2 id="handing-a-reference-over-with-move"><a class="header" href="#handing-a-reference-over-with-move">Handing a reference over with move</a></h2>
+<p><code>move(x)</code> gives up <code>x</code>’s reference: the call returns the same object, and
+<code>x</code> is left null. Nothing is copied and no count changes. It is how a value
+built in a local variable goes to a <a href="threads.html#channels">channel</a>, a
+<a href="threads.html#mutexes-and-conditions">Mutex</a> or another <code>[Move]</code> parameter,
+which takes a new value, without the cost of <code>copy(x)</code>:</p>
+<pre><code class="language-pepper">var lines = Array&lt;String&gt;();
+lines.append("first");
+var log = async.Mutex&lt;Array&lt;String&gt;&gt;(move(lines));   # lines is now null
+</code></pre>
+<p><code>move</code> is an ordinary function from the prelude (<code>runtime/copy.pep</code>), but
+the compiler checks every call:</p>
+<ul>
+<li>
+<p>Only a local variable can be moved (<code>move(h.s)</code> is an error), and only
+when it holds the one reference to a new value: nothing else refers to it
+or to anything it reaches. A parameter can be moved only when it is
+<code>[Move]</code>, since the caller handed its value over.</p>
+<pre><code class="language-text">main.pep:8:24: error: 'a' cannot be moved: 'b' also references its value
+    8 |     names.replace(move(a));
+      |                        ^
+note: only a variable that holds the one reference to a new value can hand it over; pass 'copy(...)' instead
+</code></pre>
+</li>
+<li>
+<p>A moved variable cannot be read again until it is assigned a new value,
+including on the next pass through a loop:</p>
+<pre><code class="language-text">main.pep:8:12: error: 'a' is used after its value was moved
+    8 |     return a.count;
+      |            ^
+main.pep:7:19: note: 'a' was moved here; assign it a new value before using it again
+    7 |     names.replace(move(a));
+      |                   ^~~~
+</code></pre>
+</li>
+</ul>
+<p>The runtime also moves values out of raw memory (<code>move(buffer[head])</code>), which
+is a promise the compiler cannot check: only runtime files may do it. The
+parameter of <code>move</code> is marked <code>[MoveSource]</code>, which is also only allowed in
+the runtime, so a hand-off always shows at the call as <code>move(x)</code>; a function
+of your own that takes over its argument uses <code>[Move]</code>.</p>
+<h2 id="where-objects-live"><a class="header" href="#where-objects-live">Where objects live</a></h2>
+<p>Every object, <code>String</code> buffer and <code>Array</code> buffer comes from the runtime’s
+allocator. A block of up to 128 bytes (most objects and short strings)
+comes from a small block allocator: blocks are grouped by size into
+classes (multiples of 16 bytes up to 128, then four classes per power of
+two). Each class’s blocks are cut from 64 KiB spans, and a thread hands
+out a class’s blocks from one span at a time, so objects made one after
+another sit close together in memory. Allocating, and freeing on the
+thread that allocated, take no lock; a block freed on another thread goes
+back to its span with one atomic step. Larger blocks come from the C
+library’s <code>calloc</code> and go back with <code>free</code>. A small block’s size is
+rounded up to its class, so a 40-byte object takes 48 bytes.</p>
+<p>An empty <code>Array</code> allocates nothing. <code>Array&lt;T&gt;()</code> makes no object until the
+Array is written (<code>append</code>, <code>insert</code>, <code>reserve</code>, …) or shared (assigned to
+a second variable, stored in a field or element, passed or returned):
+reading it (<code>count</code>, <code>is_empty</code>, <code>contains</code>, a <code>for</code> loop over it)
+allocates nothing. The first write or share allocates the object, so every
+name for the Array still sees the same appends:</p>
+<pre><code class="language-pepper">struct Node {
+    String name;
+    # Most nodes never get children, and an empty Array costs nothing.
+    Array&lt;Node&gt; children = Array&lt;Node&gt;();
+    construct(name: String) {
+        this.name = name;
+    }
+}
+
+main(): int {
+    var a = Array&lt;int&gt;();           # no allocation
+    assert(a.count == 0 &amp;&amp; a.is_empty, "reading allocates nothing");
+    for (var x in a) {
+        assert(false, "an empty Array has no elements");
+    }
+    var b = a;                      # allocates the Array: a and b share it
+    b.append(1);                    # allocates its buffer
+    assert(a.count == 1, "both names see the append");
+
+    var leaf = Node("leaf");
+    var root = Node("root");
+    root.children.append(leaf);
+    assert(leaf.children.is_empty &amp;&amp; root.children.count == 1, "only root's children were allocated");
+    return 0;
+}
+</code></pre>
+<p>Structs that hold an Array which usually stays empty (a tree node’s
+children, a list of comments) cost nothing extra for it.</p>
+<p>The environment variable <code>PEPPER_SMALL_BLOCK_LIMIT</code>, read when the program
+starts, sets the largest size the small block allocator serves, in bytes,
+up to 4096 (a larger value counts as 4096). <code>0</code> turns it off, and then
+every block comes from the C library:</p>
+<pre><code class="language-bash">PEPPER_SMALL_BLOCK_LIMIT=0 ./main      # every block from calloc
+PEPPER_SMALL_BLOCK_LIMIT=512 ./main    # blocks up to 512 bytes from the classes
+</code></pre>
+<p>With it off, a program can use another C allocator, such as mimalloc, by
+loading it in front of the C library (<code>LD_PRELOAD=libmimalloc.so</code> on
+Linux).</p>
+<p>Small blocks live in address space the program reserves at start (4 GiB,
+committed 64 KiB at a time as it is used, and never returned to the
+operating system); a program that fills it falls back to <code>calloc</code>. On
+WebAssembly, which cannot reserve address space, every block comes from
+<code>calloc</code>.</p>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>What happens to references</th></tr>
+</thead>
+<tbody>
+<tr><td><code>var b = a;</code></td><td><code>b</code> takes a new reference to <code>a</code>’s object.</td></tr>
+<tr><td><code>b = c;</code></td><td><code>b</code> takes a reference to <code>c</code>’s object and holds it, then releases its old one. A destructor that runs then and reads <code>b</code> finds <code>c</code>’s object.</td></tr>
+<tr><td><code>f(a)</code></td><td>The parameter takes a reference for the duration of the call.</td></tr>
+<tr><td><code>return a;</code></td><td>The caller receives a reference to <code>a</code>’s object.</td></tr>
+<tr><td><code>a.method()</code></td><td>No change: <code>this</code> refers to <code>a</code>’s object.</td></tr>
+<tr><td><code>f(move(a))</code></td><td>No change: <code>a</code>’s reference goes to the call, and <code>a</code> is left null.</td></tr>
+<tr><td><code>make();</code> (result unused)</td><td>The result is released at the end of the statement.</td></tr>
+<tr><td><code>var w = Weak&lt;T&gt;(a);</code></td><td>No change to <code>a</code>’s count; <code>w</code> does not keep the object alive.</td></tr>
+<tr><td><code>var c = copy(a);</code></td><td><code>c</code> refers to new objects; <code>a</code>’s count does not change.</td></tr>
+<tr><td>end of a block</td><td>Every local declared in the block releases its reference.</td></tr>
+</tbody>
+</table>
+</div>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/enums.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/generics.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/enums.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/generics.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

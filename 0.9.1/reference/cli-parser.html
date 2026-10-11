@@ -1,0 +1,801 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Parser - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-a821ef30.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e4845a93.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/reference/cli-parser.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <!-- Generated from runtime/cli/parser.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="parser"><a class="header" href="#parser">Parser</a></h1>
+<p>Parser and the handles its declarations return: Flag, Argument and
+ArgumentList.</p>
+<p>Source: <code>runtime/cli/parser.pep</code></p>
+<h2 id="parser-1"><a class="header" href="#parser-1">Parser</a></h2>
+<pre><code class="language-pepper">struct Parser
+</code></pre>
+<p>Declares a program’s command-line interface and parses its arguments.</p>
+<p>Declare each option and positional argument with <code>flag</code>, <code>option</code>,
+<code>multiple</code>, <code>positional</code> and <code>positionals</code>; each returns a handle that
+reads its value once <code>parse</code> has run. <code>parse</code> also writes the help
+(<code>--help</code>), the version (<code>--version</code>) and clang-style errors, all from
+the declarations.</p>
+<p>Options have a long name (<code>--output</code>) and an optional one-letter short
+name (<code>-o</code>). A value follows as <code>--output a.out</code>, <code>--output=a.out</code>,
+<code>-o a.out</code> or <code>-oa.out</code>; short flags combine (<code>-vq</code> is <code>-v -q</code>), and
+<code>--</code> ends the options, so every argument after it is positional. A value
+is taken as it is, even when it starts with <code>-</code>. When an option that
+takes one value is given twice, the last value wins.</p>
+<p>Subcommands (<code>git add</code>, <code>pep-package update</code>) are parsers of their own,
+made with <code>command</code>. Options before the command’s name belong to this
+parser, and everything after it to the command’s.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import cli;
+
+main(args: String[]): int {
+    var parser = cli.Parser("pepper", "Compiles a Pepper program", version = "0.2.1");
+    var output = parser.option("output", "o", "the executable to write", default_value = "a.out");
+    var imports = parser.multiple("import-path", "I", "a directory to search for modules");
+    var verbose = parser.flag("verbose", "v", "say what is happening");
+    var source = parser.positional("source", "the program's entry file");
+    if (!parser.parse(args)) {
+        return 2;
+    }
+    print($"{source.value()} -&gt; {output.value()}");
+    return 0;
+}
+</code></pre>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<h4 id="is_selected"><a class="header" href="#is_selected">is_selected</a></h4>
+<pre><code class="language-pepper">var is_selected: bool { get; }
+</code></pre>
+<p>Whether the last <code>parse</code> reached this parser: whether this command
+was given. The top-level parser is selected whenever its arguments
+were parsed.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
+<pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
+</code></pre>
+<p>Makes a parser for the program <code>name</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the program’s name, as the help and errors show it</li>
+<li><code>about</code> — a sentence on what the program does, the help’s first line</li>
+<li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="flag"><a class="header" href="#flag">flag</a></h4>
+<pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
+</code></pre>
+<p>Declares an option that takes no value, such as <code>--verbose</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option does, for the help</li>
+<li><code>global</code> — whether the flag may also be given after the name of a command, at any depth (<code>pkg add -v x</code> as well as <code>pkg -v add x</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that tells whether the flag was given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, here, as a global option of a parser this one is a command of, or (for a global flag) in one of its commands</li>
+</ul>
+<h4 id="option"><a class="header" href="#option">option</a></h4>
+<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;String&gt;
+</code></pre>
+<p>Declares an option that takes one String value, such as
+<code>--output a.out</code>. <code>option&lt;T&gt;</code> declares one whose value is a number,
+a path or an enum case.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option sets, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>OUTPUT</code>)</li>
+<li><code>default_value</code> — the value when the option is not given; empty for none</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="option-1"><a class="header" href="#option-1">option</a></h4>
+<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;T&gt;
+</code></pre>
+<p>Declares an option that takes one value of type <code>T</code>, such as
+<code>--jobs 4</code> for <code>option&lt;int&gt;</code>. A value that does not read as a <code>T</code>
+fails the parse: <code>invalid value 'x' for '--jobs': expected an integer</code>.</p>
+<p><code>T</code> may be <code>String</code>, an integer type, <code>float</code>, <code>double</code>, <code>io.Path</code>,
+or an enum whose cases carry no values; a case is written in kebab
+case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists them.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option sets, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>JOBS</code>)</li>
+<li><code>default_value</code> — the value when the option is not given, written as on the command line (<code>"4"</code>); empty for none</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, or if <code>default_value</code> does not read as a <code>T</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var jobs = parser.option&lt;int&gt;("jobs", "j", "how many at once", default_value = "4");
+</code></pre>
+<h4 id="multiple"><a class="header" href="#multiple">multiple</a></h4>
+<pre><code class="language-pepper">multiple( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList&lt;String&gt;
+</code></pre>
+<p>Declares an option that may be given any number of times, each with a
+String value, such as <code>-I src -I lib</code>. <code>multiple&lt;T&gt;</code> declares one
+whose values are numbers, paths or enum cases.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option adds, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="multiple-1"><a class="header" href="#multiple-1">multiple</a></h4>
+<pre><code class="language-pepper">multiple&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", required: bool = false, global: bool = false ): ArgumentList&lt;T&gt;
+</code></pre>
+<p>Declares an option that may be given any number of times, each with a
+value of type <code>T</code>, such as <code>-I src -I lib</code> for <code>multiple&lt;io.Path&gt;</code>.
+<code>T</code> is one of the types <code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
+<li><code>help</code> — what the option adds, for the help</li>
+<li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
+<li><code>required</code> — whether leaving the option out is an error</li>
+<li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
+</ul>
+<h4 id="positional"><a class="header" href="#positional">positional</a></h4>
+<pre><code class="language-pepper">positional(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument&lt;String&gt;
+</code></pre>
+<p>Declares the next positional argument, with a String value.
+Positional arguments are filled in the order they are declared.
+<code>positional&lt;T&gt;</code> declares one whose value is a number, a path or an
+enum case.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what it is, for the help</li>
+<li><code>required</code> — whether leaving it out is an error</li>
+<li><code>default_value</code> — the value when it is left out; empty for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if a required argument follows an optional one, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="positional-1"><a class="header" href="#positional-1">positional</a></h4>
+<pre><code class="language-pepper">positional&lt;T&gt;(name: String, help: String = "", required: bool = true, default_value: String = ""): Argument&lt;T&gt;
+</code></pre>
+<p>Declares the next positional argument, with a value of type <code>T</code>.
+<code>T</code> is one of the types <code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what it is, for the help</li>
+<li><code>required</code> — whether leaving it out is an error</li>
+<li><code>default_value</code> — the value when it is left out, written as on the command line; empty for none</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if a required argument follows an optional one, if it follows <code>positionals</code>, if the parser has commands, or if <code>default_value</code> does not read as a <code>T</code></li>
+</ul>
+<h4 id="positionals"><a class="header" href="#positionals">positionals</a></h4>
+<pre><code class="language-pepper">positionals(name: String, help: String = "", required: bool = false): ArgumentList&lt;String&gt;
+</code></pre>
+<p>Declares a positional argument that takes every remaining value, such
+as a list of files. It must be the last positional argument.
+<code>positionals&lt;T&gt;</code> declares one whose values are numbers, paths or enum
+cases.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what the values are, for the help</li>
+<li><code>required</code> — whether at least one value must be given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="positionals-1"><a class="header" href="#positionals-1">positionals</a></h4>
+<pre><code class="language-pepper">positionals&lt;T&gt;(name: String, help: String = "", required: bool = false): ArgumentList&lt;T&gt;
+</code></pre>
+<p>Declares a positional argument that takes every remaining value, each
+of type <code>T</code>, such as a list of files for <code>positionals&lt;io.Path&gt;</code>. It
+must be the last positional argument. <code>T</code> is one of the types
+<code>option&lt;T&gt;</code> takes.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — what the help and errors call it</li>
+<li><code>help</code> — what the values are, for the help</li>
+<li><code>required</code> — whether at least one value must be given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the handle that reads the values, in the order given</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or already declared, if it follows <code>positionals</code>, or if the parser has commands</li>
+</ul>
+<h4 id="command"><a class="header" href="#command">command</a></h4>
+<pre><code class="language-pepper">command(name: String, about: String = ""): Parser
+</code></pre>
+<p>Declares a subcommand, such as <code>add</code> in <code>pep-package add NAME</code>, and
+returns its parser, on which to declare its own options and
+arguments.</p>
+<p>A parser with commands requires one: the first argument that is not
+an option names it, and the arguments after it go to its parser.
+After <code>parse</code>, <code>is_selected</code> on the command’s parser tells whether
+it was the one given.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the command’s name</li>
+<li><code>about</code> — what the command does, for the help</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the command’s parser</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty, starts with <code>-</code> or is already declared, or if this parser has positional arguments</li>
+</ul>
+<h4 id="add_options"><a class="header" href="#add_options">add_options</a></h4>
+<pre><code class="language-pepper">add_options&lt;T&gt;(options: T)
+</code></pre>
+<p>Declares an option or positional argument for each public field of
+<code>options</code>, and has every successful parse store the values in those
+fields.</p>
+<p>A field’s type picks what it declares: <code>bool</code> is a flag, <code>String</code> an
+option with one value, <code>String?</code> one that may be left out, and
+<code>String[]</code> one that may be given many times. An option is named after
+its field, with each <code>_</code> written <code>-</code> (<code>import_path</code> is
+<code>--import-path</code>); <code>[cli.Option]</code> on a field gives it a short name,
+help, another name, or makes it required. <code>[cli.Positional]</code> makes a
+field the next positional argument instead.</p>
+<p>A <code>String</code> field that holds a value when this is called keeps it as
+the default; an empty one has no default, so leaving the option out
+leaves it empty, or is an error for a positional argument. Every
+parse sets every field: a flag to whether it was given, a list to the
+values given.</p>
+<p>The declarations are the same as the builder methods make, so the
+help and errors read the same, and the two styles mix on one parser.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the options struct</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>options</code> — the struct whose fields to declare and fill in</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import cli;
+
+struct Options {
+    [cli.Option("o", "the executable to write")]
+    var output: String = "a.out";
+    [cli.Option("v", "say what is happening")]
+    var verbose: bool;
+    [cli.Positional("the program's entry file")]
+    var source: String;
+}
+
+main(args: String[]): int {
+    var options = Options();
+    var parser = cli.Parser("pepper", "Compiles a Pepper program");
+    parser.add_options(options);
+    if (!parser.parse(args)) {
+        return 2;
+    }
+    print($"{options.source} -&gt; {options.output}");
+    return 0;
+}
+</code></pre>
+<h4 id="usage"><a class="header" href="#usage">usage</a></h4>
+<pre><code class="language-pepper">usage(): String
+</code></pre>
+<p>Returns the one-line usage, such as
+<code>usage: pepper [OPTIONS] &lt;source&gt;</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the usage line, without a line break</li>
+</ul>
+<h4 id="help"><a class="header" href="#help">help</a></h4>
+<pre><code class="language-pepper">help(): String
+</code></pre>
+<p>Returns the help that <code>--help</code> prints: what the program does, the
+usage, and a line for each argument, option and command.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the help text, ending in a line break</li>
+</ul>
+<h4 id="completions"><a class="header" href="#completions">completions</a></h4>
+<pre><code class="language-pepper">completions(shell: Shell): String
+</code></pre>
+<p>Returns a script that completes this program’s command line in
+<code>shell</code>: its options, commands and enum choices, and file names
+where a value is a <code>String</code> or an <code>io.Path</code>. A program usually
+prints it from a command of its own (<code>pkg completions bash</code>), for
+the user to install where <code>Shell</code>’s cases say.</p>
+<p>Call it on the program’s parser, after the declarations.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>shell</code> — the shell the script is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the script, ending in a line break</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var parser = cli.Parser("pkg");
+var shell = parser.option&lt;cli.Shell&gt;("completions", help = "print a completion script");
+if (!parser.parse(args)) {
+    return 2;
+}
+if (shell.is_set) {
+    print(parser.completions(shell.value()));
+}
+</code></pre>
+<h4 id="try_parse"><a class="header" href="#try_parse">try_parse</a></h4>
+<pre><code class="language-pepper">try_parse(args: String[]): Result&lt;String?&gt;
+</code></pre>
+<p>Parses <code>args</code> and fills in every handle, or reports the problem.</p>
+<p>Writes nothing. Use it to handle errors, help and the version
+yourself; <code>parse</code> does it the usual way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>args</code> — the arguments as <code>main</code> receives them: the program’s name, then its arguments</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>some text when <code>--help</code> or <code>--version</code> was given (the program should print it and exit with 0), none when the arguments were parsed, or an error when they are wrong, with a clang-style message such as <code>missing value for '-o'</code></li>
+</ul>
+<h4 id="parse"><a class="header" href="#parse">parse</a></h4>
+<pre><code class="language-pepper">parse(args: String[]): bool
+</code></pre>
+<p>Parses <code>args</code> and fills in every handle.</p>
+<p>For <code>--help</code> or <code>--version</code> it prints the text to standard output and
+ends the program with status 0. When the arguments are wrong it
+writes the error, the usage and a hint to standard error, such as</p>
+<pre><code>pepper: error: missing value for '-o'
+usage: pepper [OPTIONS] &lt;source&gt;
+Run 'pepper --help' for more information.
+</code></pre>
+<p>and returns false; exit with status 2, as the example does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>args</code> — the arguments as <code>main</code> receives them: the program’s name, then its arguments</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the arguments were parsed, false after an error</li>
+</ul>
+<h2 id="closest"><a class="header" href="#closest">closest</a></h2>
+<pre><code class="language-pepper">closest(name: String, candidates: Array&lt;String&gt;): String?
+</code></pre>
+<p>Returns the candidate closest to a misspelled <code>name</code>, for a “did you
+mean” suggestion: the one the fewest single-byte insertions, deletions
+and substitutions turn <code>name</code> into, when that is at most 2. Of equally
+close candidates the first wins.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the name that matched nothing</li>
+<li><code>candidates</code> — the names it could have meant</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the closest candidate, or none when none is within 2 edits</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+names.append("build");
+names.append("fmt");
+var best = cli.closest("buidl", names);   # some("build")
+</code></pre>
+<h2 id="flag-1"><a class="header" href="#flag-1">Flag</a></h2>
+<pre><code class="language-pepper">struct Flag
+</code></pre>
+<p>An option that takes no value, from <code>Parser.flag</code>.</p>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="is_set"><a class="header" href="#is_set">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether the flag was given at least once.</p>
+<h4 id="occurrences"><a class="header" href="#occurrences">occurrences</a></h4>
+<pre><code class="language-pepper">var occurrences: int { get; }
+</code></pre>
+<p>How many times the flag was given, so <code>-vvv</code> can mean more than <code>-v</code>.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="flag-2"><a class="header" href="#flag-2">Flag()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.flag</code> makes flags; this constructor is
+for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h2 id="argument"><a class="header" href="#argument">Argument</a></h2>
+<pre><code class="language-pepper">struct Argument&lt;T&gt;
+</code></pre>
+<p>An option or positional argument that takes one value, from
+<code>Parser.option</code> or <code>Parser.positional</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the value: <code>String</code>, or what <code>option&lt;T&gt;</code> or <code>positional&lt;T&gt;</code> declared</li>
+</ul>
+<h3 id="properties-2"><a class="header" href="#properties-2">Properties</a></h3>
+<h4 id="is_set-1"><a class="header" href="#is_set-1">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether a value was given on the command line; false when the
+argument was left out, even when it has a default.</p>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="argument-1"><a class="header" href="#argument-1">Argument()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.option</code> and <code>Parser.positional</code> make
+arguments; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="value"><a class="header" href="#value">value</a></h4>
+<pre><code class="language-pepper">value(): T
+</code></pre>
+<p>Returns the value given, or the default when it was left out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the argument was left out and has no default; check <code>is_set</code> or use <code>value_or</code> for an optional argument</li>
+</ul>
+<h4 id="value_or"><a class="header" href="#value_or">value_or</a></h4>
+<pre><code class="language-pepper">value_or(fallback: T): T
+</code></pre>
+<p>Returns the value given, or <code>fallback</code> when it was left out.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>fallback</code> — the value to use when the argument was left out</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value given, else the declared default, else <code>fallback</code></li>
+</ul>
+<h2 id="argumentlist"><a class="header" href="#argumentlist">ArgumentList</a></h2>
+<pre><code class="language-pepper">struct ArgumentList&lt;T&gt;
+</code></pre>
+<p>An option that may be given many times, or a positional argument that
+takes every remaining value, from <code>Parser.multiple</code> or
+<code>Parser.positionals</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of each value: <code>String</code>, or what <code>multiple&lt;T&gt;</code> or <code>positionals&lt;T&gt;</code> declared</li>
+</ul>
+<h3 id="properties-3"><a class="header" href="#properties-3">Properties</a></h3>
+<h4 id="is_set-2"><a class="header" href="#is_set-2">is_set</a></h4>
+<pre><code class="language-pepper">var is_set: bool { get; }
+</code></pre>
+<p>Whether at least one value was given.</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="argumentlist-1"><a class="header" href="#argumentlist-1">ArgumentList()</a></h4>
+<pre><code class="language-pepper">construct(argument: _CliArgument)
+</code></pre>
+<p>Wraps a declaration. <code>Parser.multiple</code> and <code>Parser.positionals</code> make
+argument lists; this constructor is for the runtime.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>argument</code> — the declaration</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="values"><a class="header" href="#values">values</a></h4>
+<pre><code class="language-pepper">values(): Array&lt;T&gt;
+</code></pre>
+<p>Returns the values given, in command-line order.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new array of the values, empty when none was given</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/cli-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/cli-options.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/cli-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/cli-options.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

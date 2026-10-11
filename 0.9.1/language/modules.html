@@ -1,0 +1,637 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Modules and imports - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-a821ef30.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e4845a93.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/modules.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="modules-and-imports"><a class="header" href="#modules-and-imports">Modules and imports</a></h1>
+<p>As a program grows, you split it into files, and group related files into
+modules. An <strong>import</strong> makes another file’s or module’s exported declarations
+available in the importing file. What a file exports is covered in
+<a href="visibility.html">Visibility</a>.</p>
+<h2 id="importing-a-file"><a class="header" href="#importing-a-file">Importing a file</a></h2>
+<p>The simplest import names another file, as a string, relative to the importing
+file. The <code>.pep</code> extension is optional:</p>
+<pre><code class="language-pepper"># Every import comes before the file's declarations.
+import "util";                       # util.pep's exports, unqualified
+import "util" as u;                  # the same exports, as u.name
+import [thrice as triple] from "util";
+import "helpers/text";               # a file in a subfolder
+
+main(): int {
+    assert(twice(BASE) == 20, "unqualified names from util.pep");
+    assert(u.thrice(2) == 6, "qualified by the alias");
+    assert(triple(3) == 9, "renamed by the import list");
+    assert(shout("hi") == "hi!", "from helpers/text.pep");
+
+    # An imported function is a value like any other.
+    var f = u.twice;
+    assert(f(4) == 8, "function reference through a qualifier");
+    return 0;
+}
+</code></pre>
+<p><code>util.pep</code> sits next to <code>main.pep</code>, and <code>text.pep</code> is in a <code>helpers</code> folder:</p>
+<pre><code class="language-pepper">export const BASE = 10;
+
+export twice(n: int): int {
+    return n * 2;
+}
+
+export thrice(n: int): int {
+    return n * 3;
+}
+</code></pre>
+<pre><code class="language-pepper">export shout(s: String): String {
+    return s + "!";
+}
+</code></pre>
+<p>An import comes in one of these forms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>What it makes available</th></tr>
+</thead>
+<tbody>
+<tr><td><code>import "util";</code></td><td>Every export of <code>util.pep</code>, unqualified: <code>twice(BASE)</code>.</td></tr>
+<tr><td><code>import "util" as u;</code></td><td>Every export, qualified by the name you choose: <code>u.twice(1)</code>.</td></tr>
+<tr><td><code>import [thrice as triple, twice] from "util";</code></td><td>Only the listed exports, unqualified, each under its own name or the one after <code>as</code>.</td></tr>
+<tr><td><code>import geometry;</code></td><td>A module’s exports, qualified by the module’s name: <code>geometry.Point</code>.</td></tr>
+<tr><td><code>import geometry as g;</code></td><td>A module’s exports, qualified by <code>g</code>.</td></tr>
+<tr><td><code>import [area, Point as Pt] from geometry;</code></td><td>The listed exports of a module, unqualified.</td></tr>
+</tbody>
+</table>
+</div>
+<p>An import ends with a semicolon.</p>
+<p>An import binds names only in the file that contains it. The exports of a file
+that this file did not import are not visible to it, even when another file of
+the program imports them. Here <code>geometry/module.pep</code> imports <code>shapes.pep</code>, but
+<code>main.pep</code> imports only the module:</p>
+<pre><code class="language-pepper">import geometry;
+main(): int { return area(1, 2); }
+</code></pre>
+<pre><code class="language-text">main.pep:2:22: error: 'area' is exported by deps/geometry/shapes.pep, which this file does not import; add an import for it
+    2 | main(): int { return area(1, 2); }
+      |                      ^~~~
+deps/geometry/shapes.pep:3:8: note: declared here
+    3 | export area(w: int, h: int): int {
+      |        ^~~~
+</code></pre>
+<h2 id="imports-come-first"><a class="header" href="#imports-come-first">Imports come first</a></h2>
+<p>Every import, and every <code>export ... from</code>, comes before all of a file’s declarations
+and <code>export name</code> re-exports:</p>
+<pre><code class="language-pepper">main(): int { return 0; }
+import geometry;
+</code></pre>
+<pre><code class="language-text">main.pep:2:1: error: imports must come before all declarations
+    2 | import geometry;
+      | ^~~~~~
+</code></pre>
+<h2 id="modules"><a class="header" href="#modules">Modules</a></h2>
+<p>A <strong>module</strong> is a folder that contains a <code>module.pep</code> file. The module is named
+after its folder, and its exports are exactly what its <code>module.pep</code> exports.
+The other files in the folder are the module’s own files: <code>module.pep</code> imports
+them and chooses what to pass on to the module’s users. A file of a module
+sees the declarations of the module’s files it imports, exported or not,
+except those marked <code>private</code>
+(see <a href="visibility.html#files-of-a-module-see-each-other-through-imports">Files of a module see each other through imports</a>).
+Loading any file of a module loads its <code>module.pep</code>, and with it every file
+the module imports.</p>
+<p>This example has a <code>geometry</code> module next to <code>main.pep</code>:</p>
+<pre><code class="language-text">modules-folders/
+    main.pep
+    geometry/
+        module.pep      # the module's interface
+        shapes.pep      # a file of the module
+        solids/
+            module.pep  # a module nested inside geometry
+</code></pre>
+<pre><code class="language-pepper"># A file of the geometry module. Its exports are visible to the files of
+# the module that import it, not to the module's importers.
+export area(w: int, h: int): int {
+    return w * h;
+}
+
+export struct Box&lt;T&gt; {
+    var value: T;
+}
+</code></pre>
+<pre><code class="language-pepper"># A module nested in the geometry folder.
+export volume(w: int, h: int, d: int): int {
+    return w * h * d;
+}
+</code></pre>
+<pre><code class="language-pepper"># The geometry module: what this file exports is the module's interface.
+import "shapes";
+import "solids" as solids;
+
+export struct Point {
+    var x: int;
+    var y: int;
+}
+
+export make(x: int, y: int): Point {
+    var p = Point();
+    p.x = x;
+    p.y = y;
+    return p;
+}
+
+reset_count(): int {
+    return 0;
+}
+
+export area as rect_area;           # shapes.pep's area, renamed
+export Box;                         # shapes.pep's Box, under its own name
+export reset_count as reset;        # a private function, exported as reset
+export solids.volume as box_volume; # from the nested module
+</code></pre>
+<pre><code class="language-pepper">import "geometry" as g;
+import [rect_area, Point as Pt] from "geometry";
+
+# Qualified names work in types, too.
+corner(): g.Point {
+    return g.make(1, 1);
+}
+
+main(): int {
+    var p: g.Point = g.make(3, 4);
+    assert(p.x == 3, "qualified function and type");
+
+    Pt q = corner();
+    assert(q.y == 1, "the struct under its import-list name");
+
+    assert(g.rect_area(2, 3) == 6, "re-exported under a new name");
+    assert(rect_area(2, 5) == 10, "imported unqualified");
+    assert(g.reset() == 0, "a private function, re-exported");
+    assert(g.box_volume(2, 3, 4) == 24, "re-exported from a nested module");
+
+    var b = g.Box&lt;int&gt;();
+    b.value = 7;
+    var boxes: g.Box&lt;int&gt;[] = g.Box&lt;int&gt;[]();
+    boxes.append(b);
+    assert(boxes[0].value == 7, "a generic struct through a qualifier");
+    return 0;
+}
+</code></pre>
+<p><code>main.pep</code> imports the folder with a string, <code>import "geometry"</code>, because the
+module lives next to it. A string import names either a file (<code>geometry.pep</code>)
+or a module folder (<code>geometry/</code>) relative to the importing file. A module
+imports a module nested in its own folder the same way: <code>geometry/module.pep</code>
+imports <code>"solids"</code>.</p>
+<h3 id="re-exports"><a class="header" href="#re-exports">Re-exports</a></h3>
+<p><code>export name as new_name;</code> exports <code>name</code> to importers under <code>new_name</code>, and
+<code>export name;</code> exports it under its own name. The name may be declared in the
+file (even privately) or imported from another file or module, qualified or
+not. This is how a <code>module.pep</code> publishes what its other files define.</p>
+<p>The semicolon is required. Without it, <code>export Box</code> followed by a declaration
+would read as an exported C-style declaration whose type is <code>Box</code>.</p>
+<p>The exports of the module’s other files are not the module’s exports. In the
+example, users of <code>geometry</code> can call <code>g.rect_area</code>, but not <code>g.area</code>:</p>
+<pre><code class="language-text">main.pep:2:22: error: 'area' is not exported by 'geometry' (deps/geometry/module.pep)
+    2 | main(): int { return geometry.area(1, 2); }
+      |                      ^~~~~~~~~~~~~
+</code></pre>
+<h3 id="re-exporting-a-whole-file-or-module"><a class="header" href="#re-exporting-a-whole-file-or-module">Re-exporting a whole file or module</a></h3>
+<p>A <code>module.pep</code> that only passes on its files’ exports would repeat every name.
+<code>export ... from</code> passes them on in one line, in the same shapes as the
+<code>import ... from</code> forms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Form</th><th>What importers get</th></tr>
+</thead>
+<tbody>
+<tr><td><code>export * from "rect";</code></td><td>Every export of <code>rect.pep</code>, each under its own name.</td></tr>
+<tr><td><code>export * from geometry;</code></td><td>Every export of the module <code>geometry</code>.</td></tr>
+<tr><td><code>export [perimeter as outline, Side] from "measure";</code></td><td>Only the listed exports, each under its own name or the one after <code>as</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper"># The shapes module: its interface is its files' exports, passed on whole or
+# by name.
+export * from "rect";                               # every export of rect.pep
+export [perimeter as outline, Side] from "measure"; # two, one renamed
+</code></pre>
+<pre><code class="language-pepper">import "shapes";
+
+main(): int {
+    var r = make_rect(3, 4);
+    assert(area(r) == 12, "from export * of rect.pep");
+    assert(outline(r) == 14, "from the export list, renamed");
+
+    var s = Side();
+    s.length = 5;
+    assert(s.length == 5, "a struct from the export list");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>It re-exports; it doesn’t import.</strong> <code>export * from "rect";</code> makes no name
+visible in the file that contains it. Inside a module that does not
+matter, since the module’s files see each other’s declarations anyway; a
+file outside it imports the names as usual (<code>import "rect";</code>).</p>
+</li>
+<li>
+<p><strong>Only exports travel.</strong> Private declarations stay behind, and extensions
+stay visible only as they always are.</p>
+</li>
+<li>
+<p><strong>Collisions are errors.</strong> If two re-exports, or a re-export and one of the
+file’s own exports, publish one name for different declarations, the
+compiler reports it at the <code>export ... from</code> that adds the second one. List the names you want instead, or
+rename one with <code>as</code>. The exception is functions declared under one
+name: they join one
+<a href="overloading.html#files-of-one-module-share-a-set">overload set</a>.
+Anything else collides:</p>
+<pre><code class="language-text">shapes/module.pep:2:1: error: 'area' is exported twice by module 'shapes'
+    2 | export * from "measure";
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+shapes/module.pep:1:1: note: also exported here
+    1 | export * from "rect";
+      | ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
+</li>
+<li>
+<p>Like imports, <code>export ... from</code> lines come before every declaration and
+take attributes such as <code>[Target(...)]</code>. A deprecated declaration stays
+deprecated through every re-export.</p>
+</li>
+</ul>
+<h3 id="a-modules-files-stay-inside-it"><a class="header" href="#a-modules-files-stay-inside-it">A module’s files stay inside it</a></h3>
+<p>A string import from a file of a module must name a file of the same module,
+or a module folder. Reaching into another module’s files, or out of your own
+module, is an error:</p>
+<pre><code class="language-text">main.pep:1:8: error: "geometry/shapes.pep" belongs to another module; import that module's folder instead
+    1 | import "geometry/shapes";
+      |        ^~~~~~~~~~~~~~~~~
+</code></pre>
+<pre><code class="language-text">geometry/bad.pep:1:8: error: "../main.pep" is outside this file's module; a module imports only its own files
+    1 | import "../main";
+      |        ^~~~~~~~~
+</code></pre>
+<p>A file outside any module, such as your program’s <code>main.pep</code>, may import files
+in its own folder or below, except files inside a module folder there.</p>
+<p>Files of one module may import each other, even in a cycle.</p>
+<h2 id="dependencies-and-search-paths"><a class="header" href="#dependencies-and-search-paths">Dependencies and search paths</a></h2>
+<p>A module that is not part of your program’s own folders, such as a library you
+depend on, is imported by <strong>name</strong> rather than by string:</p>
+<pre><code class="language-pepper">import geometry;
+
+main(): int {
+    var p: geometry.Point = geometry.make(3, 4);
+    return p.x - 3;
+}
+</code></pre>
+<p>An identifier import looks for a folder <code>geometry/module.pep</code> on the <strong>search
+paths</strong>: first each directory you pass with <code>-I</code>, in order, then the runtime
+directory. If <code>geometry</code> lives in a <code>deps</code> folder, compile with:</p>
+<pre><code class="language-sh">pepper build main.pep -I deps -o main
+</code></pre>
+<p>An identifier import never looks next to the importing file. A module that is
+not found is reported with the places the compiler looked:</p>
+<pre><code class="language-text">main.pep:1:8: error: cannot find module 'nowhere': no nowhere/module.pep in deps, /home/you/pepper/runtime
+    1 | import nowhere;
+      |        ^~~~~~~
+</code></pre>
+<p>The standard library’s <a href="../reference/io-module.html">io module</a> is found this
+way, in the runtime directory: <code>import io;</code> then <code>io.File</code>, or
+<code>import [File, Path] from io;</code>.</p>
+<p>A module nested in another module’s folder is imported with a dotted name:
+<code>import geometry.solids;</code> finds <code>geometry/solids/module.pep</code> and binds its
+last name, so its declarations are <code>solids.volume</code> (or, with
+<code>import geometry.solids as s;</code>, <code>s.volume</code>).</p>
+<h3 id="projects-and-packages"><a class="header" href="#projects-and-packages">Projects and packages</a></h3>
+<p>A project’s <code>pep.toml</code> lists the packages it depends on, and each key is the
+name source code imports:</p>
+<pre><code class="language-toml">[dependencies]
+geometry = { github = "someone/geometry", version = "1.2" }
+</code></pre>
+<p><code>import geometry;</code> then finds the package’s root <code>module.pep</code> in the
+project’s <code>.pep/deps</code>, with no <code>-I</code>, and <code>import geometry.solids;</code> the module
+in its <code>solids</code> folder. <code>pepper build</code> with no file builds the project. See
+<a href="../tools/projects.html">Projects: pep.toml</a>.</p>
+<h3 id="the-runtime-prelude-and---import"><a class="header" href="#the-runtime-prelude-and---import">The runtime prelude and <code>--import</code></a></h3>
+<p>The runtime itself is not a module: its files are loaded into every program,
+and their exports, such as <code>String</code>, <code>Array</code>, and <code>Result</code>, are visible
+everywhere without an import.</p>
+<p><code>--import NAME</code> adds a module, or a file <code>NAME.pep</code>, found on the search paths
+to that prelude, so every file sees its exports without importing it. A name
+that resolves to neither is an error:</p>
+<pre><code class="language-text">error: --import no_such_module: cannot find module 'no_such_module' (no no_such_module/module.pep) or file no_such_module.pep in /home/you/pepper/runtime
+</code></pre>
+<p>A prelude module may redefine an export of the runtime, such as <code>panic</code>: it is
+loaded ahead of the runtime and its definition wins. It must declare the name
+itself (<code>export panic(...)</code>); re-exporting another function under a runtime
+export’s name is an error, since the runtime’s own files would keep calling
+their version. When the runtime’s function is <a href="overloading.html">overloaded</a>,
+the prelude module replaces only the overloads it declares, matched by
+parameter types, defaulted ones included: an <code>export assert(condition: bool, message: String, location: __ptr&lt;char&gt; = __caller_location())</code> replaces the
+<code>String</code> form, and a string literal message still calls the runtime’s
+<code>__ptr&lt;char&gt;</code> form.</p>
+<p>Only functions may be redefined this way. A struct, trait, type alias or
+variable that a prelude module exports under a name the runtime (or another
+prelude module) already exports is an error in the module loaded first, with
+a note at the other:</p>
+<pre><code class="language-text">alt/module.pep:1:15: error: redefinition of 'MapIterator'
+    1 | export struct MapIterator&lt;K, V&gt; { var key: K; var value: V; }
+      |               ^~~~~~~~~~~
+runtime/iterator.pep:182:15: note: also exported here
+</code></pre>
+<h2 id="how-imported-names-behave"><a class="header" href="#how-imported-names-behave">How imported names behave</a></h2>
+<ul>
+<li><strong>Qualified names work wherever a name does</strong>: in expressions
+(<code>g.rect_area(1, 2)</code>, or a module variable such as <code>u.BASE</code>), in types (<code>var p: g.Point</code>,
+<code>g.Box&lt;int&gt;[]</code>, a return type <code>g.Point</code>), and in generic constructions
+(<code>g.Box&lt;int&gt;()</code>). A generic construction is recognized only for a qualifier
+imported earlier in the file; elsewhere <code>a.b &lt; c, d &gt; (e)</code> is two
+comparisons.</li>
+<li><strong>Local names shadow imports.</strong> A local variable, parameter, generic
+parameter, or struct member hides a qualifier or an imported name of the
+same name.</li>
+<li><strong>A file may not import a name it also declares</strong> at top level:
+<code>'make' is imported but also declared in this file</code>. Functions are the
+exception: a file’s own functions of a name join the imported ones in
+one <a href="overloading.html#imported-sets-merge">overload set</a>.</li>
+<li><strong>An import list wins.</strong> A name listed in <code>import [...]</code> takes priority over
+the same name from a whole-file import. When two whole-file imports provide
+the same name differently, using that name is an error because it is
+ambiguous, unless both are functions declared under that name, which
+join one <a href="overloading.html#imported-sets-merge">overload set</a>.</li>
+<li><strong>A local may share an imported declaration’s name.</strong> If <code>g.rect_area</code> is
+<code>shapes.pep</code>’s <code>area</code>, calling <code>g.rect_area(1, 2)</code> inside a function with a
+parameter named <code>area</code> calls <code>shapes.pep</code>’s function. The one exception is a
+re-exported runtime name: if a module exports the runtime’s <code>print</code> as
+<code>say</code>, a local named <code>print</code> where you call <code>say</code> is an error that asks you
+to rename one of them.</li>
+</ul>
+<p>Each module (and each file outside a module) has its own namespace, for its
+exported declarations as well as its private ones, so modules may reuse names
+freely: two modules may both export <code>parse</code>, and <code>a.parse</code> and <code>b.parse</code> stay
+apart. See
+<a href="visibility.html#each-module-has-its-own-namespace">Each module has its own namespace</a>.
+Here <code>metric</code> and <code>imperial</code> each export a <code>Length</code>, a <code>parse</code> and a <code>unit</code>:</p>
+<pre><code class="language-pepper"># Both modules export `Length`, `parse` and `unit`; each keeps its own.
+import "metric" as metric;
+import "imperial" as imp;
+import [unit as imperial_unit] from "imperial";
+
+main(): int {
+    var a: metric.Length = metric.parse("abc");
+    var b: imp.Length = imp.parse("abc");
+    assert(a.metres == 3.0, "metric.parse");
+    assert(b.feet == 9.0, "imperial.parse");
+    assert(metric.unit() == "m", "qualified by the alias");
+    assert(imperial_unit() == "ft", "renamed by the import list");
+    return 0;
+}
+</code></pre>
+<h2 id="platform-specific-imports"><a class="header" href="#platform-specific-imports">Platform-specific imports</a></h2>
+<p>An import or a re-export may carry attributes like any declaration. With a
+<code>[Target(...)]</code> attribute it applies only on matching platforms and is ignored
+elsewhere (see <a href="platform-selection.html">Platform selection</a>):</p>
+<pre><code class="language-pepper">[Target(OS(Linux))]
+import linux;
+
+[Target(OS(Linux))]
+export linux_open as open;
+
+[Target(OS(Windows))]
+export * from "windows";
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/visibility.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/atomics.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/visibility.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/atomics.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
