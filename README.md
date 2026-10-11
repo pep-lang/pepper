@@ -173,8 +173,9 @@ The script:
   else the platform's package manager, else the release archive (cached, so
   re-runs are free);
 - records the prefix it settled on, one line, in `.pep/llvm-prefix`
-  (gitignored), which the test, release and CI scripts read. Re-run the
-  script on a new machine rather than copying it;
+  (gitignored), which the test, release and CI scripts read (a git worktree
+  reads its main checkout's). Re-run the script on a new machine rather than
+  copying it;
 - is idempotent: with a valid install present it only rewrites that file.
   `./scripts/setup-llvm.sh --check` reports what it would use, changing
   nothing.

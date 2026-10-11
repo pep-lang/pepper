@@ -62,6 +62,38 @@ if [ ! -x "$compiler/pep-build$exe" ]; then
 fi
 "$compiler/pep-build$exe" --version
 
+# The compiler's tests (tools/compiler) import pepper-llvm, which links the
+# LLVM library. The toolchain does not ship it (pep-build has LLVM linked
+# in), so they need an LLVM install. Linux finds it on the default search
+# path; macOS and Windows need its folder (see pepper-llvm's
+# llvm_c/link.pep): PEPPER_LLVM_PREFIX or LLVM_SYS_201_PREFIX, else the
+# prefix scripts/setup-llvm.sh or .ps1 wrote to .pep/llvm-prefix (this
+# checkout's, else, in a git worktree, the main checkout's). Windows also
+# needs its DLL's folder on PATH to run the tests.
+llvm=()
+llvm_path=""
+if [ "$(uname -s)" != Linux ]; then
+  llvm_prefix="${PEPPER_LLVM_PREFIX:-${LLVM_SYS_201_PREFIX:-}}"
+  prefix_file="$root/.pep/llvm-prefix"
+  if [ ! -f "$prefix_file" ]; then
+    common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+    [ -z "$common" ] || prefix_file="$(dirname "$common")/.pep/llvm-prefix"
+  fi
+  if [ -z "$llvm_prefix" ] && [ -f "$prefix_file" ]; then
+    llvm_prefix="$(tr -d '\r' < "$prefix_file" | head -1)"
+  fi
+  # The library pepper-llvm names: LLVM-C on Windows, LLVM on macOS.
+  library="LLVM-C.lib"
+  [ -n "$exe" ] || library="libLLVM.dylib"
+  if [ -z "$llvm_prefix" ] || [ ! -f "$llvm_prefix/lib/$library" ]; then
+    echo "error: the compiler's tests link LLVM 20's $library, not found in ${llvm_prefix:-(no LLVM prefix set)}/lib" >&2
+    echo "run scripts/setup-llvm.sh (scripts/setup-llvm.ps1 on Windows) in this checkout, or set PEPPER_LLVM_PREFIX" >&2
+    exit 2
+  fi
+  llvm=(-L "$llvm_prefix/lib")
+  [ -z "$exe" ] || llvm_path="$(cygpath -u "$llvm_prefix")/bin"
+fi
+
 # The tools get a folder of their own, with a link to the compiler (a copy
 # on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
 # never written to.
@@ -110,23 +142,7 @@ run() {
 tools_log="$bin/pepper-tests-tools.log"
 (
   cd "$root/tools"
-  # The compiler's tests (tools/compiler) import pepper-llvm, which links the
-  # LLVM library. Linux finds it on the default search path; macOS and
-  # Windows need its folder (see pepper-llvm's llvm_c/link.pep):
-  # PEPPER_LLVM_PREFIX or LLVM_SYS_201_PREFIX, else the prefix
-  # scripts/setup-llvm.sh or .ps1 wrote to .pep/llvm-prefix. Windows also
-  # needs its DLL's folder on PATH to run the tests.
-  llvm=()
-  llvm_prefix="${PEPPER_LLVM_PREFIX:-${LLVM_SYS_201_PREFIX:-}}"
-  if [ -z "$llvm_prefix" ] && [ -f "$root/.pep/llvm-prefix" ]; then
-    llvm_prefix="$(tr -d '\r' < "$root/.pep/llvm-prefix" | head -1)"
-  fi
-  if [ -n "$llvm_prefix" ] && [ "$(uname -s)" != Linux ]; then
-    llvm=(-L "$llvm_prefix/lib")
-    if [ -n "$exe" ]; then
-      PATH="$(cygpath -u "$llvm_prefix")/bin:$PATH"
-    fi
-  fi
+  [ -z "$llvm_path" ] || PATH="$llvm_path:$PATH"
   if grep -rlq --include='*.pep' '^\[Test\]' .; then
     # At -O1: the compiler's passes tests run the Pepper passes in-process
     # over the test programs, which is slow unoptimized (near the 60 s
