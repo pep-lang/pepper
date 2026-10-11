@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7e4d56f8.js";
+            window.path_to_searchindex_js = "../searchindex-81241d26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -260,7 +260,11 @@ test programs that did not build when there are any.</li>
 <p>The test programs are built in a temporary folder that is removed at the
 end. A test runs in the current folder, with <code>PEPPER_BACKTRACE=0</code> unless
 <code>PEPPER_BACKTRACE</code> is set, so a panic prints its message without a
-backtrace.</p>
+backtrace. Each test gets a temporary folder of its own (<code>TMPDIR</code>, and
+<code>TMP</code> and <code>TEMP</code> for Windows, name it), removed when the test ends, so
+what a test that panics or times out leaves there, such as a
+<a href="../reference/testing-temp_folder.html"><code>TempFolder</code></a> whose destructor
+never ran, is removed too.</p>
 <h2 id="the-test-program"><a class="header" href="#the-test-program">The test program</a></h2>
 <p><code>pep-build --test</code> builds a folder’s test program (see <a href="pep-build.html#--test">pep-build</a>),
 which <code>pep-test</code> runs with one of two requests:</p>
