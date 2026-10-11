@@ -3,9 +3,9 @@
 ##
 ## The whole program is generated as one module, as before. `prepare` then
 ## gives every definition the linkage of a multi-object program, and
-## assigns each file's symbols to one part, the part of its compilation
-## unit (`link.units`), so each unit's object can be kept in the build
-## cache:
+## assigns each file's symbols to one part, the part of its translation
+## unit (`link.translation_units`), so each unit's object can be kept in the
+## build cache:
 ##
 ## - a symbol with an owner (`Generator.owners`, the file declaring it) is
 ##   defined only in its file's part, and is external with hidden
