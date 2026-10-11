@@ -1,11 +1,10 @@
 # Required check for merging into main: `test`, a gate that passes only when
 # `test-windows` -- the Pepper test suite (scripts/pepper-tests.sh) on
-# Windows, the platform the compiler is developed against -- and
-# `test-linux`, the same suite on Linux, both ran and passed on this commit (or
-# the PR changes only prose; see `changes`). `test-macos` runs the suite on
-# macOS too but does not gate merging for now: it takes twice as long as the
-# others and held up the merge queue. Every job uses LLVM 20, the one the
-# compiler binds (scripts/setup-llvm.sh).
+# Windows, the platform the compiler is developed against -- `test-linux`
+# and `test-macos`, the same suite on Linux and macOS, all ran and passed on
+# this commit (or the PR changes only prose; see `changes`). A cancelled or
+# timed-out job fails the gate like a failed one. Every job uses LLVM 20, the
+# one the compiler binds (scripts/setup-llvm.sh).
 #
 # Every job tests with the published build of main (#713): the toolchain
 # release.yml builds on each merge, installed with the install scripts as a
@@ -258,8 +257,8 @@ jobs:
         shell: bash
         run: '"${PEPPER_TARGET_DIR:-target}/pepper-tests/bin/pep-doc" check'
 
-  # The suite on macOS against the default LLVM, from Homebrew. Not required
-  # for now: `test` does not wait for it (see the top of this file).
+  # The suite on macOS against the default LLVM, from Homebrew. Required,
+  # through `test` (see the top of this file).
   test-macos:
     runs-on: pepper-macos
     needs: changes
@@ -432,7 +431,7 @@ jobs:
   # Cross-linking for the other operating systems (#485): each host builds a
   # few examples for the other two, with `--target` and their system roots,
   # and each host runs what the others built for it and compares the output
-  # with its own native build's. Like test-macos, these do not gate merging.
+  # with its own native build's. These do not gate merging.
   #
   # The system roots: Linux's glibc and macOS's SDK stubs come from the
   # runners themselves (ci-export-sysroot.sh, a few megabytes, handed over as
@@ -596,7 +595,7 @@ jobs:
   # one, whose Actions quota the account spends in days.
   test:
     if: always()
-    needs: [changes, test-windows, test-linux]
+    needs: [changes, test-windows, test-linux, test-macos]
     runs-on: pepper-linux
     timeout-minutes: 5
     permissions:
@@ -615,10 +614,11 @@ jobs:
           HOLD: ${{ needs.changes.outputs.hold }}
           WINDOWS: ${{ needs.test-windows.result }}
           LINUX: ${{ needs.test-linux.result }}
+          MACOS: ${{ needs.test-macos.result }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "changes=$CHANGES draft=$DRAFT code=$CODE hold=$HOLD test-windows=$WINDOWS test-linux=$LINUX"
+          echo "changes=$CHANGES draft=$DRAFT code=$CODE hold=$HOLD test-windows=$WINDOWS test-linux=$LINUX test-macos=$MACOS"
 
           verdict() {
             if [ "$CHANGES" != "success" ]; then
@@ -648,7 +648,11 @@ jobs:
               echo "test-linux did not pass ($LINUX)"
               return 1
             fi
-            echo "test-windows and test-linux passed"
+            if [ "$MACOS" != "success" ]; then
+              echo "test-macos did not pass ($MACOS)"
+              return 1
+            fi
+            echo "test-windows, test-linux and test-macos passed"
             return 0
           }
 

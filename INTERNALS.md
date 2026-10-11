@@ -3266,9 +3266,8 @@ compiler and pep-lsp depend on are cloned with deploy keys
     check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
     do the same; `test-linux` also cross-compiles a few examples for Linux
-    arm64 and runs them under qemu. `test-linux` is required, through
-    `test`; `test-macos` is not for now (it takes about twice as long and
-    held up the merge queue).
+    arm64 and runs them under qemu. Both are required, through `test`,
+    which fails on a cancelled or timed-out job as on a failed one.
   - `cross-sysroots`, `cross-link` and `cross-run` (#485, not required)
     cross-link from each runner for the other two operating systems and
     run the result on its own runner. `cross-sysroots` packs the Linux
