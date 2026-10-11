@@ -280,6 +280,17 @@ jobs:
         shell: bash
         run: echo "PEPPER_TARGET_DIR=$RUNNER_WORKSPACE/target-test" >> "$GITHUB_ENV"
 
+      # The runners share one $TMPDIR, which test folders left by crashed or
+      # cancelled runs fill up. macOS's getcwd can scan every entry of a
+      # folder's parent, so a build in a test folder there took minutes per
+      # path once it held ~300k (tests timing out at 300 s). Older than a
+      # day, none belongs to a running job.
+      - name: Prune stale test folders
+        shell: bash
+        run: |
+          set -euxo pipefail
+          find "$TMPDIR" -maxdepth 1 \( -name 'pepper_*' -o -name 'pep-test-*' \) -mmin +1440 -exec rm -rf {} +
+
       # The digest tests link Homebrew's libcrypto under `-D USE_LIBCRYPTO`
       # (#370, scripts/pepper-tests.sh); zlib comes with macOS.
       - name: Provision libcrypto
