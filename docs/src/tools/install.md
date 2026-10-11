@@ -166,19 +166,26 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   the runtime or the tools: main holds the version being developed as a
   prerelease (`0.4.0-dev` in `VERSION` and each tool's `version()`), and
   the workflow publishes it on the prerelease `v0.4.0-dev`, moving its tag
-  to the merge and replacing its archives. CI and the workers install it
-  (`--version 0.4.0-dev`) instead of building the compiler. The newest
-  release, the default, never picks a prerelease.
-- **a release**, on a `vX.Y.Z` tag, made by hand: `scripts/set-version.sh
-  0.4.0` sets the version everywhere a tool reads it, the commit is tagged
-  `v0.4.0` (the workflow checks that it holds that version). Once it is
-  published, the workflow opens a pull request that starts the next minor
-  version on main (`0.5.0-dev`) and merges itself once its checks pass,
-  unless main has already moved on; a major
-  version is started by hand. A pull request the workflow opens with its
-  own token starts no workflows, so it is opened with the
-  `RELEASE_BUMP_TOKEN` secret when that is set, and otherwise the workflow
-  dispatches CI on its branch.
+  to the merge and replacing its archives. CI and the workers install the
+  newest such prerelease, whatever `VERSION` holds, instead of building the
+  compiler. The newest release, the default, never picks a prerelease.
+- **a release**, on a `vX.Y.Z` tag, made by hand. Its stage 0, the
+  compiler that builds it, is the newest build of main too, so the release
+  may take any version, not only the one main was developing:
+  1. A pull request runs `scripts/set-version.sh 0.9.0`, which sets the
+     version everywhere a tool reads it; the same pull request sets the VS
+     Code extension's `package.json` and `package-lock.json` to match.
+  2. Tag that merge `v0.9.0` and push the tag. The workflow checks that the
+     commit holds that version, builds it and publishes the release; the
+     `VSIX` and `Docs` workflows publish the extension and the docs from
+     the same tag.
+  3. Once it is published, the workflow opens a pull request that starts
+     the next minor version on main (`0.10.0-dev`) and merges itself once
+     its checks pass, unless main has already moved on; a major version is
+     started by hand. A pull request the workflow opens with its own token
+     starts no workflows, so it is opened with the `RELEASE_BUMP_TOKEN`
+     secret when that is set, and otherwise the workflow dispatches CI on
+     its branch.
 
 For each platform, `scripts/release-build.sh` builds the
 tools, lays them out as above, archives them as

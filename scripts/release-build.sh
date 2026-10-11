@@ -5,8 +5,8 @@
 #   scripts/release-build.sh <target> <version> <output-dir> [<stage0-dir>]
 #
 # <stage0-dir> holds the stage 0 pep-build (default: $PEPPER_COMPILER_DIR,
-# else the release PEPPER_STAGE0_VERSION names, installed, else the
-# installed toolchain's, the one `pepper install which` names).
+# else, with PEPPER_STAGE0_INSTALL=1, the newest build of main, installed,
+# else the installed toolchain's, the one `pepper install which` names).
 #
 # <target> is one of:
 #
@@ -167,13 +167,14 @@ fi
 
 # Stage 0, the compiler that builds pepc: the previously published
 # toolchain's pep-build, from <stage0-dir>, else $PEPPER_COMPILER_DIR; else,
-# with PEPPER_STAGE0_VERSION set (release.yml), that release installed here
+# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest build of main
+# (the newest vX.Y.Z-dev prerelease, whatever VERSION holds) installed here
 # by scripts/ci-install-toolchain.sh, now that the provisioning above has
 # put clang on the PATH (the install builds a program to check itself);
 # else the installed toolchain's.
 stage0="${4:-${PEPPER_COMPILER_DIR:-}}"
-if [ -z "$stage0" ] && [ -n "${PEPPER_STAGE0_VERSION:-}" ]; then
-  stage0="$(GITHUB_ENV= bash scripts/ci-install-toolchain.sh --version "$PEPPER_STAGE0_VERSION" | sed -n 's/^PEPPER_COMPILER_DIR=//p' | tail -1)"
+if [ -z "$stage0" ] && [ "${PEPPER_STAGE0_INSTALL:-}" = 1 ]; then
+  stage0="$(GITHUB_ENV= bash scripts/ci-install-toolchain.sh | sed -n 's/^PEPPER_COMPILER_DIR=//p' | tail -1)"
 fi
 if [ -z "$stage0" ] && command -v pepper >/dev/null 2>&1; then
   installed="$(pepper install which 2>/dev/null | sed -n 2p | tr -d '\r' || true)"
@@ -181,7 +182,7 @@ if [ -z "$stage0" ] && command -v pepper >/dev/null 2>&1; then
 fi
 if [ -z "$stage0" ] || [ ! -x "$stage0/pep-build$exe" ]; then
   echo "no stage 0 pep-build: pass the folder of a published toolchain's pep-build," >&2
-  echo "set PEPPER_COMPILER_DIR, or install one (scripts/ci-install-toolchain.sh --version <x.y.z-dev>)" >&2
+  echo "set PEPPER_COMPILER_DIR, or install one (scripts/ci-install-toolchain.sh)" >&2
   exit 1
 fi
 [ "$target" != windows-x64 ] || stage0="$(cygpath -u "$stage0")"

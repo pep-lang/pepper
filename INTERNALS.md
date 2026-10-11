@@ -3275,8 +3275,8 @@ compiler and pep-lsp depend on are cloned with deploy keys
     run is still testing it.
   - `test-windows` (**`pepper-windows`**): provision LLVM 20
     (`ci-provision-llvm.sh`, cached; the compiler's tests link it through
-    pepper-llvm), install the build of main (the `x.y.z-dev` prerelease
-    `release.yml` publishes on each merge, through `install.sh` /
+    pepper-llvm), install the build of main (the newest `x.y.z-dev`
+    prerelease `release.yml` publishes on each merge, through `install.sh` /
     `install.ps1`), build `tools/compiler` with it when the PR changes it
     (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
     check`.
@@ -3322,8 +3322,8 @@ compiler and pep-lsp depend on are cloned with deploy keys
   `pepper-linux`, for glibc 2.28, with LLVM 20 built from source and
   cached), macos-arm64 (`pepper-macos`) and windows-x64 (`pepper-windows`)
   with `scripts/release-build.sh`: it provisions LLVM and clang, installs
-  stage 0 (the previously published toolchain: the checkout's `X.Y.Z-dev`,
-  or for a release `X.Y.Z` the `X.Y.Z-dev` before it), builds pepc with
+  stage 0 (the newest published build of main, whatever `VERSION` holds,
+  as CI installs it), builds pepc with
   stage 0, then with itself, builds every tool with that, archives an
   install layout (`bin/`, `runtime/`) and smoke-tests it
   (`scripts/release-smoke-test.sh`). The job then installs each archive

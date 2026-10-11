@@ -11,7 +11,8 @@
 # Main holds the version being developed, as a prerelease (`0.4.0-dev`),
 # which every build of main reports and the release workflow publishes on
 # each merge (#713). Making release 0.4.0 by hand: set 0.4.0 and tag
-# v0.4.0; release.yml then opens the pull request that sets 0.5.0-dev.
+# v0.4.0 (any version: release.yml builds it with the newest build of main);
+# release.yml then opens the pull request that sets 0.5.0-dev.
 # It fails when a file does not hold the current version where expected,
 # so a tool that moves its version cannot be released under the old one
 # unnoticed.

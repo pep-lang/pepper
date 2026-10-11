@@ -390,7 +390,9 @@ unix_datagrams_by_path_pair_and_connect() {
         expect_equal(text_of(paired), "hi");
         expect_true(a.path().is_empty);
 
-        expect_true(anonymous.send_to("x".bytes(), folder.path.join("missing.sock")).error().is_not_found());
+        # A short name: macOS holds a socket path to 103 bytes, and pep-test's
+        # per-test temporary folder brings this one close.
+        expect_true(anonymous.send_to("x".bytes(), folder.path.join("m.sock")).error().is_not_found());
         expect_true(anonymous.send_to("x".bytes(), io.Path("")).error().is_invalid_input());
         expect_true(server.close().is_ok());
         expect_true(server.close().is_ok());

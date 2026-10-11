@@ -3,7 +3,7 @@
 # to download.
 #
 # Each leg runs scripts/release-build.sh, which provisions LLVM and clang,
-# installs stage 0, the previously published toolchain
+# installs stage 0, the newest published build of main
 # (scripts/ci-install-toolchain.sh), builds `pep-build` (pepc,
 # tools/compiler) with it, then with itself, builds
 # the other tools with the result, lays them out as an install (bin/,
@@ -73,12 +73,22 @@ concurrency:
 permissions:
   contents: read
 
+# A container job leaves root-owned files in the self-hosted runner's
+# checkout, and git then refuses that checkout as of "dubious ownership" in
+# later jobs (gh release view, git commit). The runners are the
+# maintainer's own, with one checkout each.
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: safe.directory
+  GIT_CONFIG_VALUE_0: "*"
+
 jobs:
   # The version to build and whether to publish it, as a release or as the
-  # prerelease build of main, and the published toolchain that builds it
-  # (stage 0): the build of main when the checkout holds a prerelease
-  # (0.4.0-dev builds with the v0.4.0-dev of the merge before), and for a
-  # release X.Y.Z the X.Y.Z-dev build of main that preceded it.
+  # prerelease build of main. Stage 0, the published toolchain that builds
+  # it, is always the newest build of main (release-build.sh with
+  # PEPPER_STAGE0_INSTALL), whatever VERSION holds: v0.9.0 was tagged on a
+  # commit that moved VERSION from 0.4.0-dev, and stage 0 named from VERSION
+  # (0.9.0-dev) had never been published.
   version:
     runs-on: pepper-linux
     timeout-minutes: 5
@@ -86,7 +96,6 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       publish: ${{ steps.version.outputs.publish }}
       prerelease: ${{ steps.version.outputs.prerelease }}
-      stage0: ${{ steps.version.outputs.stage0 }}
     steps:
       - uses: actions/checkout@v7
 
@@ -127,16 +136,11 @@ jobs:
                 ;;
             esac
           fi
-          case "$held" in
-            *-*) stage0="$held" ;;
-            *) stage0="$held-dev" ;;
-          esac
-          echo "version=$version publish=$publish prerelease=$prerelease stage0=$stage0"
+          echo "version=$version publish=$publish prerelease=$prerelease"
           {
             echo "version=$version"
             echo "publish=$publish"
             echo "prerelease=$prerelease"
-            echo "stage0=$stage0"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -175,10 +179,10 @@ jobs:
           # releases on Windows.
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ matrix.target }}
-          # Stage 0: the published toolchain that builds pepc, which
-          # release-build.sh installs with the install scripts (as CI
-          # installs the build of main) once it has provisioned clang.
-          PEPPER_STAGE0_VERSION: ${{ needs.version.outputs.stage0 }}
+          # Stage 0: the newest build of main, which release-build.sh
+          # installs with the install scripts (as CI does) once it has
+          # provisioned clang.
+          PEPPER_STAGE0_INSTALL: "1"
           # pep-build is pepc, which depends on the private pepper-llvm
           # package, and pep-lsp on the private pepper-lsp package
           # (scripts/ci-package-auth.sh).

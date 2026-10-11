@@ -7,12 +7,13 @@
 #
 # It installs a published toolchain with the install scripts, as a user
 # would: install.sh, or install.ps1 on Windows, into a fresh home under
-# $RUNNER_TEMP. By default that is the build of main, the prerelease named
-# by the version this checkout's VERSION file holds (`0.4.0-dev`, which
-# release.yml publishes on every merge that changes the compiler, the
-# runtime or the tools); --version names another release (release.yml's
-# stage 0). No job builds the compiler except the release build, which
-# builds it with the toolchain this installs.
+# $RUNNER_TEMP. By default that is the build of main: the newest published
+# `vX.Y.Z-dev` prerelease (release.yml publishes it on every merge that
+# changes the compiler, the runtime or the tools), whatever version this
+# checkout's VERSION file holds, so a change of VERSION (a release, or the
+# next -dev) never asks for a build that is not published yet; --version
+# names a release instead. No job builds the compiler except the release
+# build, which builds it with the toolchain this installs.
 #
 # Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
 # while the repository is private; RUNNER_TEMP, where the home goes
@@ -39,8 +40,16 @@ case "$(uname -s)" in
 esac
 
 if [ -z "$version" ]; then
-  version="$(tr -d '\r' < VERSION)"
-  [ -n "$version" ] || { echo "error: no version in VERSION" >&2; exit 1; }
+  # The API lists releases newest first (by the commit each tag is on).
+  url="https://api.github.com/repos/justinboswell/pepper/releases?per_page=100"
+  token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+  if [ -n "$token" ]; then
+    releases="$(curl -fsSL -H "Authorization: Bearer $token" "$url")"
+  else
+    releases="$(curl -fsSL "$url")"
+  fi
+  version="$(sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*-dev\)".*/\1/p' <<< "$releases" | sed -n 1p)"
+  [ -n "$version" ] || { echo "error: no build of main (vX.Y.Z-dev prerelease) is published" >&2; exit 1; }
 fi
 home="${RUNNER_TEMP:-$target}/pepper-home"
 rm -rf "$home"

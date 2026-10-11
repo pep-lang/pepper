@@ -27,6 +27,13 @@ concurrency:
 permissions:
   contents: write
 
+# A container job of release.yml leaves root-owned files in the self-hosted
+# runner's checkout, and git then refuses it ("dubious ownership").
+env:
+  GIT_CONFIG_COUNT: 1
+  GIT_CONFIG_KEY_0: safe.directory
+  GIT_CONFIG_VALUE_0: "*"
+
 jobs:
   publish:
     runs-on: pepper-linux
@@ -85,19 +92,12 @@ jobs:
           fi
 
       # pep-doc is a Pepper program, built against this checkout's runtime
-      # with the published build of main (#713). A release tag X.Y.Z, whose
-      # own release may not be published yet, uses the X.Y.Z-dev build of
-      # main that preceded it, as release.yml's stage 0 does.
+      # with the newest published build of main (#713), also for a release
+      # tag, whose own release may not be published yet.
       - name: Install the toolchain
         env:
           GH_TOKEN: ${{ github.token }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          if [ "$REF_TYPE" = tag ]; then
-            bash scripts/ci-install-toolchain.sh --version "$DOCS_VERSION-dev"
-          else
-            bash scripts/ci-install-toolchain.sh
-          fi
+        run: bash scripts/ci-install-toolchain.sh
 
       - name: Build pep-doc
         env:

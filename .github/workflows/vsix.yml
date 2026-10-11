@@ -71,9 +71,10 @@ jobs:
         with:
           node-version: 22
 
-      # The toolchain of this checkout's VERSION (scripts/ci-install-toolchain.sh
-      # names its folder in PEPPER_COMPILER_DIR). For a tag, release.yml
-      # publishes it from the same push: retry until it has.
+      # For a tag, the toolchain of that release, which release.yml publishes
+      # from the same push: retry until it has. Otherwise the newest build of
+      # main. scripts/ci-install-toolchain.sh names its folder in
+      # PEPPER_COMPILER_DIR.
       - name: Install the toolchain
         shell: bash
         env:
@@ -82,9 +83,13 @@ jobs:
         run: |
           set -euo pipefail
           tries=1
-          [ "$TAG" = true ] && tries=36
+          version=""
+          if [ "$TAG" = true ]; then
+            tries=36
+            version="$(tr -d '\r' < VERSION)"
+          fi
           for i in $(seq "$tries"); do
-            if bash -euxo pipefail scripts/ci-install-toolchain.sh; then
+            if bash -euxo pipefail scripts/ci-install-toolchain.sh ${version:+--version "$version"}; then
               exit 0
             fi
             [ "$i" = "$tries" ] || { echo "toolchain not published yet; retrying in 5 minutes"; sleep 300; }
