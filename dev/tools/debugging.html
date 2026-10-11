@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-70976905.js";
+            window.path_to_searchindex_js = "../searchindex-7e4d56f8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -251,33 +251,56 @@ Project/Solution), set a breakpoint in the source file and start debugging.
 The <code>.pdb</code> beside the executable is found automatically.</p>
 <h2 id="what-the-debugger-sees"><a class="header" href="#what-the-debugger-sees">What the debugger sees</a></h2>
 <ul>
-<li><strong>Functions</strong> under the names you wrote: <code>total</code>, <code>Point.length</code>,
+<li>
+<p><strong>Functions</strong> under the names you wrote: <code>total</code>, <code>Point.length</code>,
 <code>Array&lt;int&gt;.append</code>. Methods the compiler writes for a struct, such as
 <code>__acquire</code> and <code>__release</code>, are marked artificial and placed on the
-struct’s line. A closure is named for where it is written: <code>closure at main.pep:14</code>.</li>
-<li><strong>Structs.</strong> A variable of a struct type holds a reference, so the
+struct’s line. A closure is named for where it is written: <code>closure at main.pep:14</code>.</p>
+</li>
+<li>
+<p><strong>Structs.</strong> A variable of a struct type holds a reference, so the
 debugger shows an address. Dereference it (<code>print *first</code>) to see the
 fields. The fields include the <code>__refcount</code> and <code>__weakcount</code> head, which
-helps when chasing an ownership bug.</li>
-<li><strong>Numbers</strong> under their Pepper names (<code>int</code>, <code>ulong</code>, <code>u8</code>).</li>
-<li><strong>Enums.</strong> A plain enum shows its case by name. An enum with payloads
-shows as a struct holding its tag, <code>__tag</code> (the case’s position), and its
-payload fields, each named <code>Case__value</code> (<code>Value__value</code>), which a
-debugger expression can name: <code>print found.Value__value</code>. A value enum
+helps when chasing an ownership bug.</p>
+</li>
+<li>
+<p><strong>Numbers</strong> under their Pepper names (<code>int</code>, <code>ulong</code>, <code>u8</code>).</p>
+</li>
+<li>
+<p><strong>Enums.</strong> A plain enum shows its case by name. An enum with payloads
+shows as a struct holding its tag, <code>__tag</code>, whose value names the case
+(<code>Rect</code>), and the payload fields of every case, each named <code>Case__field</code>
+(<code>Rect__width</code>), which a debugger expression can name:
+<code>print shape.Rect__width</code>. With Pepper’s formatters loaded (see below) it
+shows only its case and that case’s values instead. A value enum
 (<code>[Value]</code>, such as <code>Optional</code> and <code>Result</code>) is that struct itself,
-held inline, with no reference counts.</li>
-<li><strong>Tuples</strong> as a struct with members <code>0</code>, <code>1</code>, and so on.</li>
-<li><strong>Trait values</strong> as the object they refer to and its vtable.</li>
-<li><strong>Generics.</strong> Each instantiation is its own type, such as <code>Array&lt;long&gt;</code>.</li>
-<li><strong>Module-scope variables</strong> under their names.</li>
-<li><strong><code>String</code>, <code>Array</code> and <code>Optional</code></strong> read naturally once the
+held inline, with no reference counts.</p>
+</li>
+<li>
+<p><strong>Tuples</strong> as a struct with members <code>0</code>, <code>1</code>, and so on.</p>
+</li>
+<li>
+<p><strong>Trait values</strong> as the object they refer to and its vtable.</p>
+</li>
+<li>
+<p><strong>Generics.</strong> Each instantiation is its own type, such as <code>Array&lt;long&gt;</code>.</p>
+</li>
+<li>
+<p><strong>Module-scope variables</strong> under their names.</p>
+</li>
+<li>
+<p><strong><code>String</code>, <code>Array</code> and <code>Optional</code></strong> read naturally once the
 debugger loads Pepper’s formatters (see below): a <code>String</code> as its text,
 an <code>Array</code> as its count and elements, an <code>Optional</code> as its case, <code>Empty</code>
 or <code>Value</code>, and its value. A <code>String</code> and an <code>Array</code> also show their
-reference counts as <code>[ref count]</code> (strong references) and <code>[weak count]</code>.</li>
+reference counts as <code>[ref count]</code> (strong references) and <code>[weak count]</code>.</p>
+</li>
+<li>
+<p><strong>Other enums with payloads</strong> read the same way with the formatters: as
+their case and that case’s values, such as <code>Rect</code> with <code>width</code> and
+<code>height</code>.</p>
+</li>
 </ul>
-<p>Not yet supported: an enum with payloads shows its tag and every payload
-field, rather than the active case and its payload alone.</p>
 <h2 id="stepping-through-a-static-block"><a class="header" href="#stepping-through-a-static-block">Stepping through a <code>static</code> block</a></h2>
 <p>A <a href="../language/reflection.html"><code>static</code> block</a> unrolls its compile-time
 loops into one pass per element, and the debugger steps through those
@@ -387,7 +410,8 @@ $3 = Value = {value = 7}
 </li>
 <li>
 <p><strong>Visual Studio and WinDbg.</strong> A <code>-g</code> program’s <code>.pdb</code> carries
-<code>pepper.natvis</code>, so nothing needs loading.</p>
+<code>pepper.natvis</code>, and an entry for each of the program’s enums with
+payloads, so nothing needs loading.</p>
 </li>
 </ul>
 <h2 id="building-with--g"><a class="header" href="#building-with--g">Building with <code>-g</code></a></h2>
