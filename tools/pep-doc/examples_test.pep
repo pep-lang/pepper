@@ -272,13 +272,15 @@ check(example: Example, options: Array<String>, failures: Array<String>) {
 
 # The temporary folder of the run labeled `label`: short, since examples
 # bind Unix sockets in it and macOS caps a socket's path at 104 bytes (its
-# own temporary folder already takes about half), so under `/tmp` but on
-# Windows.
+# own temporary folder already takes about half), Windows at 108. So it is
+# under `/tmp`, or on Windows the user's own temporary folder: pep-test's
+# per-test one, which `Directory.temp()` is here, nests too deep.
 run_temp(label: String): Path {
-    var root = Directory.temp();
-    [Target(!OS(Windows))]
+    var root = Path("/tmp");
+    [Target(OS(Windows))]
     {
-        root = Path("/tmp");
+        var local = os.environment("LOCALAPPDATA");
+        root = local.is_empty() ? Directory.temp() : Path(local.value()).join("Temp");
     }
     # FNV-1a of the label: the plain and optimized runs differ.
     ulong hash = 2166136261;
