@@ -6,6 +6,7 @@ export * from "build";
 export * from "library";
 export * from "linker";
 export * from "lto";
+export * from "natvis";
 export * from "parts";
 export * from "project";
 export * from "test_main";

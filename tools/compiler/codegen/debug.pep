@@ -136,6 +136,9 @@ export struct DebugInfo {
     var building: HashSet<String> = HashSet<String>();
     ## The plain enums, by name: `(location, representation, cases)`.
     var enums: HashMap<String, (Loc, String, Array<(String, long)>)> = HashMap<String, (Loc, String, Array<(String, long)>)>();
+    ## The enums with payloads, each a struct, by struct name: their cases
+    ## and tag values, which name the values of its `__tag`.
+    var payload_enums: HashMap<String, Array<(String, long)>> = HashMap<String, Array<(String, long)>>();
     ## `--debug-static=expanded`: where each emitted statement and pass
     ## header is in the expanded source, by its id.
     var static_locations: HashMap<uint, Loc> = HashMap<uint, Loc>();

@@ -43,6 +43,7 @@ import "emit_static";
 import "library";
 import "linker";
 import "lto";
+import "natvis";
 import "parts";
 
 ## What `build` makes.
@@ -1244,12 +1245,19 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             return Result<Built, String>.err(written.error());
         }
     }
-    # Windows debuggers read the runtime's visualizers from the `.pdb`.
-    var natvis = Optional<Path>.Empty;
-    if (options.debug and program.target.os == "windows" and runtime.is_value()) {
-        var found = runtime.value().join(Path("debuggers")).join(Path("pepper.natvis"));
-        if (found.is_file()) {
-            natvis = Optional<Path>.Value(found);
+    # Windows debuggers read the visualizers from the `.pdb`: the runtime's,
+    # and the program's enums with payloads' (`enum_natvis`).
+    var natvis = Array<Path>();
+    if (options.debug and program.target.os == "windows") {
+        if (runtime.is_value()) {
+            var found = runtime.value().join(Path("debuggers")).join(Path("pepper.natvis"));
+            if (found.is_file()) {
+                natvis.append(found);
+            }
+        }
+        var enums = work.join(Path("enums.natvis"));
+        if (File.write_text(enums, enum_natvis(module)).is_ok()) {
+            natvis.append(enums);
         }
     }
     var made = Result<void, String>.ok();

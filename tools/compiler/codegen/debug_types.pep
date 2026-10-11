@@ -314,6 +314,9 @@ extend Generator {
             if (!member_type.is_value()) {
                 continue;
             }
+            if (field == sema.TAG_FIELD and info.payload_enums.contains(name)) {
+                member_type = Optional<llvm.Metadata>.Value(_debug_tag(name, ty, member_type.value(), desc.loc));
+            }
             var offset = machine.offset_of(desc.llvm_type, index as uint) * 8;
             var bits = info.size_in_bits(member_type.value());
             # An enum's payload field `Case.value` is `Case__value`: a
@@ -323,6 +326,30 @@ extend Generator {
             members.append(info.member(field.replace(".", "__"), loc, bits, offset, member_type.value()));
         }
         return info.structure(_shown(name), desc.loc, desc.size * 8, members, name);
+    }
+
+    # The type of the `__tag` of the enum with payloads `name`: an
+    # enumeration of its cases, `<enum>.Case`, over the tag's own type
+    # `base`, so a debugger shows the case by name and the runtime's
+    # formatters (`runtime/debuggers/`) find which case's fields to show.
+    _debug_tag(name: String, ty: String, base: llvm.Metadata, loc: sema.Loc): llvm.Metadata {
+        var info = debug.value();
+        var tag_name = $"{name}.Case";
+        var known = info.types.try_get(tag_name);
+        if (known.is_value()) {
+            return known.value();
+        }
+        var scalar = _scalar(ty);
+        var is_unsigned = scalar.is_value()
+            and (scalar.value().1 == llvm.DwarfEncoding.Unsigned
+                or scalar.value().1 == llvm.DwarfEncoding.UnsignedChar);
+        var enumerators = Array<llvm.Metadata>();
+        for (var (case, value) in info.payload_enums[name]) {
+            enumerators.append(info.enumerator(case, value, is_unsigned));
+        }
+        var made = info.enumeration($"{_shown(name)}.Case", loc, info.size_in_bits(base), enumerators, base);
+        info.types[tag_name] = made;
+        return made;
     }
 
     # A struct or tuple whose type is still being built: a declaration of

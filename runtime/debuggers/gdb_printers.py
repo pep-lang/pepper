@@ -10,6 +10,7 @@
 # so each printer accepts the reference as well as the object. Each shows
 # the object's reference counts first, as `[ref count]` (strong references)
 # and `[weak count]`. An Optional is a value, held inline, with no counts.
+# Any other enum with payloads shows its case and that case's values.
 
 import re
 
@@ -92,6 +93,46 @@ class OptionalPrinter:
             yield "value", self.value["Value__value"]
 
 
+class EnumPrinter:
+    """An enum with payloads as its case and that case's values. Its
+    `__tag` is an enumeration of its cases, and the payload field `value`
+    of the case `Rect` is the member `Rect__value`. A reference enum shows
+    its counts first; a value enum is held inline and has none."""
+
+    def __init__(self, value, name):
+        self.object = _object(value)
+
+    def _case(self):
+        return str(self.object["__tag"])
+
+    def to_string(self):
+        if self.object is None:
+            return "null"
+        return self._case()
+
+    def children(self):
+        if self.object is None:
+            return
+        fields = [field.name for field in self.object.type.strip_typedefs().fields()]
+        if "__refcount" in fields:
+            yield from _counts(self.object)
+        prefix = self._case() + "__"
+        for field in fields:
+            if field.startswith(prefix):
+                yield field[len(prefix):], self.object[field]
+
+
+def _is_enum(type_):
+    """Whether `type_` is an enum with payloads: a struct whose `__tag` is
+    an enumeration of its cases."""
+    if type_.code != gdb.TYPE_CODE_STRUCT:
+        return False
+    for field in type_.fields():
+        if field.name == "__tag":
+            return field.type.strip_typedefs().code == gdb.TYPE_CODE_ENUM
+    return False
+
+
 _PRINTERS = [
     (re.compile(r"^String$"), StringPrinter),
     (re.compile(r"^Array<.*>$"), ArrayPrinter),
@@ -110,6 +151,8 @@ def _lookup(value):
     for pattern, printer in _PRINTERS:
         if pattern.match(name):
             return printer(value, name)
+    if _is_enum(type_):
+        return EnumPrinter(value, name)
     return None
 
 

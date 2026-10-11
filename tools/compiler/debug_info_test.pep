@@ -20,6 +20,10 @@ const _PROGRAM = "struct Point {\n    var x: int = 0;\n    var y: int = 0;\n}\n\
 
 const _TYPES = "enum Suit: u8 {\n    Clubs,\n    Hearts = 5,\n}\n\ntrait Shape {\n    area(): int;\n}\n\nstruct Square {\n    var side: int = 2;\n}\n\nextend Square with Shape {\n    area(): int { return side * side; }\n}\n\nstruct Node {\n    Node next;\n    (int, Node) pair;\n}\n\nstruct Leaf {\n    var up: Leaf?;\n}\n\nmain(): int {\n    var leaf = Optional<Leaf>.Empty;\n    var found = Optional<int>.Value(7);\n    var suit = Suit.Hearts;\n    var pair = (3, Square());\n    Shape shape = Square();\n    var node = Node();\n    var counts = Array<long>();\n    return shape.area() - 4 + (suit as int) - 5 + pair.0 - 3 + (counts.count as int);\n}\n";
 
+# An enum with payloads, a variable of each case kind, and a line to stop on
+# with them alive (line 10).
+const _ENUMS = "enum Shape {\n    Circle(radius: int),\n    Rect(width: int, height: int),\n    Empty,\n}\n\nmain(): int {\n    var shape = Shape.Rect(3, 4);\n    var round = shape is Shape.Rect ? 0 : 1;\n    return round;\n}\n";
+
 # A `static` block whose compile-time `for`, `while` and `if` each unroll
 # into passes. 1 + 2 + 3, plus 0 + 1, times 2: `total` returns 14.
 const _STATIC = "struct Point {\n    var x: int = 1;\n    var y: int = 2;\n    var z: int = 3;\n}\n\ntotal(p: Point): int {\n    var sum = 0;\n    static (sum, p) {\n        for (var field in reflect.properties<Point>()) {\n            sum = sum + field.get(p);\n        }\n        var n = 0;\n        while (n < 2) {\n            sum = sum + n;\n            n += 1;\n        }\n        if (reflect.is_struct<Point>()) {\n            sum = sum * 2;\n        }\n    }\n    return sum;\n}\n\nmain(): int {\n    return total(Point()) - 14;\n}\n";
@@ -156,19 +160,20 @@ _run(program: Path) {
 # gdb's output for `script` on `program`; none where gdb is missing, or
 # cannot run the program (a host that forbids tracing never reaches the
 # breakpoint, whose report starts with `stop`).
-_gdb(program: Path, script: String, stop: String): String? {
+# With `printers`, gdb loads the runtime's pretty-printers the program
+# carries (`.debug_gdb_scripts`).
+_gdb(program: Path, script: String, stop: String, printers: bool = false): String? {
     if (link.Target().os != "linux" or !process.find_executable("gdb").is_value()) {
         return Optional<String>.Empty;
     }
     var commands = program.parent().value().join(Path("gdb.cmd"));
     File.write_text(commands, script);
     var command = process.Command("gdb");
-    command
-        .argument("-nx")
-        .argument("-batch")
-        .argument("-x")
-        .argument(commands.to_string())
-        .argument(program.to_string());
+    command.argument("-nx");
+    if (printers) {
+        command.argument("-iex").argument($"add-auto-load-safe-path {program.parent().value()}");
+    }
+    command.argument("-batch").argument("-x").argument(commands.to_string()).argument(program.to_string());
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
     var ran = command.run();
     if (ran.is_err() or !ran.value().stdout.contains(stop)) {
@@ -427,4 +432,55 @@ debug_static_takes_source_or_expanded_with_g() {
         expect_true(ran.is_ok());
         expect_equal(ran.value().status.code().value(), 2);
     }
+}
+
+[Test]
+g_names_an_enums_tag_by_its_cases() {
+    var ir = _ir(_ENUMS, true);
+    # `__tag` is an enumeration of the cases, so a debugger names the case.
+    var tag = _line(ir, ["!DICompositeType(tag: DW_TAG_enumeration_type, name: \"Shape.Case\""]);
+    expect_false(tag.is_empty);
+    expect_false(_line(ir, ["!DIEnumerator(name: \"Rect\", value: 1"]).is_empty);
+    expect_false(_line(ir, ["!DIDerivedType(tag: DW_TAG_member, name: \"__tag\"", $"baseType: {_id(tag)}"]).is_empty);
+    expect_false(_line(ir, ["!DIDerivedType(tag: DW_TAG_member, name: \"Rect__width\""]).is_empty);
+}
+
+[Test]
+gdb_shows_an_enums_case_and_its_values() {
+    var folder = TempFolder("debug_enums");
+    var program = _build(folder.path, _ENUMS, 0, false);
+    _run(program);
+    var text = _gdb(program, "break main.pep:10\nrun\nprint shape\n", "Breakpoint 1, main", true);
+    if (text.is_value()) {
+        var printed = _line(text.value(), ["$1 = "]);
+        if (!printed.contains("Rect") or !printed.contains("width = 3") or !printed.contains("height = 4")) {
+            print(text.value());
+        }
+        expect_true(printed.contains("Rect"));
+        expect_true(printed.contains("width = 3") and printed.contains("height = 4"));
+        expect_false(printed.contains("radius"));
+    }
+}
+
+[Test]
+natvis_shows_an_enums_case_and_its_values() {
+    var folder = TempFolder("debug_natvis");
+    var program = _load(folder.path, _ENUMS);
+    var module = sema.merge(program);
+    expect_true(module.is_ok());
+    expect_true(sema.run_passes(module.value(), program.target, program.sources()).is_ok());
+    var natvis = driver.enum_natvis(module.value());
+    if (!natvis.contains("<Type Name=\"Shape\">")) {
+        print(natvis);
+    }
+    expect_true(natvis.contains("<Type Name=\"Shape\">"));
+    expect_true(
+        natvis.contains(
+            "<DisplayString Condition=\"(int)__tag == 1\">Rect {{ width={Rect__width}, height={Rect__height} }}</DisplayString>"
+        )
+    );
+    expect_true(natvis.contains("<DisplayString Condition=\"(int)__tag == 2\">Empty</DisplayString>"));
+    expect_true(natvis.contains("<Item Name=\"radius\" Condition=\"(int)__tag == 0\">Circle__radius</Item>"));
+    # The runtime's `pepper.natvis` shows Optional.
+    expect_false(natvis.contains("Optional&lt;"));
 }

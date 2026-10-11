@@ -1854,9 +1854,17 @@ package lacks are declared in `debug.pep`.
 - **Cache.** ` -g` joins every key, and `Keys.exact_positions` hashes every
   input by its text: a unit's code holds the line numbers of the generics
   it instantiates from other files, which interface hashes leave out. The
-  build checks no compilation units (§8.1): a compilation unit's key leaves positions out too.
-- **Linking.** `link_objects` passes `-g` to clang: a `.pdb` with the
-  runtime's `pepper.natvis` on Windows, `dsymutil` on macOS.
+  build checks no compilation units (§8.1): a compilation unit's key
+  leaves positions out too.
+- **Linking.** `link_objects` passes `-g` to clang: on Windows a `.pdb`
+  with the runtime's `pepper.natvis` and the program's enums' visualizers
+  (`driver/natvis.pep`, `enum_natvis`, written to the build folder), and
+  `dsymutil` on macOS.
+- **Enums with payloads.** Their `__tag` is an enumeration of the cases,
+  `<enum>.Case` (`_debug_tag`, from `DebugInfo.payload_enums`), so a
+  debugger names the case. DWARF's variant parts would show only the
+  active case's fields, but the LLVM C API cannot create them; the
+  formatters below do it instead.
 - **Formatters** for `String`, `Array` and `Optional` live in
   `runtime/debuggers/`. `embed_gdb_printers` puts `gdb_printers.py`
   (`driver.gdb_printers`, from the runtime) in the program module's
@@ -1865,16 +1873,18 @@ package lacks are declared in `debug.pep`.
   struct and a reference to it, by name, and shows the head counts first
   as `[ref count]` and `[weak count]`; `Optional`, a value enum, has no
   head and shows its case from `__tag` and its value from `Value__value`.
+  Any other enum with payloads, recognized by a `__tag` of enumeration type
+  (an lldb recognizer function, lldb 16 and later), shows its case and the
+  members of that case, `<Case>__<field>`, under their field names. natvis
+  has no pattern for every enum, hence `enum_natvis`'s entry per enum.
 - **Frame pointers.** `--frame-pointers` puts `"frame-pointer"="all"` on
   every definition, so profilers walk optimized stacks; `pep-profile`
   builds with it.
 
 `compiler/debug_info_test.pep` checks the IR, a `-g` program's DWARF, gdb
-breaking, printing and stepping (skipped without gdb), `-O2 -g`, the cache
+breaking, printing and stepping (skipped without gdb), gdb printing an
+enum through the printers, the enums' natvis entries, `-O2 -g`, the cache
 keeping `-g` objects apart and `--debug-static` both ways.
-
-Not done yet (issue #218): enums with payloads as variant parts, which the
-LLVM C API cannot create.
 
 ### 4.5 Value structs (`sema/value_structs.pep`, codegen `values`)
 

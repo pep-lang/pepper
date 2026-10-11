@@ -715,7 +715,8 @@ export cross_link_note(target: link.Target, sysroot: Path?): String {
 ## @param debug whether to keep the objects' debug info (`-g`): on Windows
 ##   clang then has the linker write `<output>.pdb`, with the visualizers
 ##   in `natvis`; on macOS `dsymutil` gathers it into `<output>.dSYM`
-## @param natvis the runtime's `pepper.natvis`, if it has one
+## @param natvis the visualizer files to link into the `.pdb`: the runtime's
+##   `pepper.natvis` and the program's enums' (`enum_natvis`)
 ## @returns nothing, or why the link failed
 export link_objects(
     objects: Path[],
@@ -726,7 +727,7 @@ export link_objects(
     sysroot: Path?,
     shared: bool = false,
     debug: bool = false,
-    natvis: Path? = Optional<Path>.Empty
+    natvis: Path[] = Array<Path>()
 ): Result<void, String> {
     var ndk = target.os == "android" ? AndroidNdk.locate(sysroot) : Optional<AndroidNdk>.Empty;
     var driver = ndk.is_value() ? Optional<Path>.Value(ndk.value().clang) : find_link_driver();
@@ -763,10 +764,10 @@ export link_objects(
             # `-g` makes link.exe link incrementally, which announces a full
             # link on every fresh build and leaves a `.ilk` beside the output.
             command.argument("-Xlinker").argument("/INCREMENTAL:NO");
-            if (natvis.is_value()) {
+            for (var file in natvis) {
                 # link.exe records the path as given; a canonical path's
                 # `\\?\` prefix would show in the PDB.
-                var path = natvis.value().to_string();
+                var path = file.to_string();
                 if (path.starts_with("\\\\?\\")) {
                     path = path.substr_bytes(4, path.size - 4);
                 }

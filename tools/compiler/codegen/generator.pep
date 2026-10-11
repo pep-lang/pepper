@@ -458,6 +458,15 @@ export struct Generator {
                     info.enums[e.name] = (e.loc, e.representation.to_string(), cases);
                 }
             }
+            for (var st in module.structs) {
+                if (st.enum_cases.is_value()) {
+                    var cases = Array<(String, long)>();
+                    for (var c in st.enum_cases.value()) {
+                        cases.append((c.name, c.value));
+                    }
+                    info.payload_enums[st.name] = cases;
+                }
+            }
             debug = Optional<DebugInfo>.Value(info);
         }
         return generate_items(module);

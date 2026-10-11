@@ -74,9 +74,11 @@ The `.pdb` beside the executable is found automatically.
   helps when chasing an ownership bug.
 - **Numbers** under their Pepper names (`int`, `ulong`, `u8`).
 - **Enums.** A plain enum shows its case by name. An enum with payloads
-  shows as a struct holding its tag, `__tag` (the case's position), and its
-  payload fields, each named `Case__value` (`Value__value`), which a
-  debugger expression can name: `print found.Value__value`. A value enum
+  shows as a struct holding its tag, `__tag`, whose value names the case
+  (`Rect`), and the payload fields of every case, each named `Case__field`
+  (`Rect__width`), which a debugger expression can name:
+  `print shape.Rect__width`. With Pepper's formatters loaded (see below) it
+  shows only its case and that case's values instead. A value enum
   (`[Value]`, such as `Optional` and `Result`) is that struct itself,
   held inline, with no reference counts.
 - **Tuples** as a struct with members `0`, `1`, and so on.
@@ -89,8 +91,9 @@ The `.pdb` beside the executable is found automatically.
   or `Value`, and its value. A `String` and an `Array` also show their
   reference counts as `[ref count]` (strong references) and `[weak count]`.
 
-Not yet supported: an enum with payloads shows its tag and every payload
-field, rather than the active case and its payload alone.
+- **Other enums with payloads** read the same way with the formatters: as
+  their case and that case's values, such as `Rect` with `width` and
+  `height`.
 
 ## Stepping through a `static` block
 
@@ -195,7 +198,8 @@ The sessions below stop in a program holding `var name = "pepper";`, an
   ```
 
 - **Visual Studio and WinDbg.** A `-g` program's `.pdb` carries
-  `pepper.natvis`, so nothing needs loading.
+  `pepper.natvis`, and an entry for each of the program's enums with
+  payloads, so nothing needs loading.
 
 ## Building with `-g`
 
