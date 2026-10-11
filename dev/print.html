@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-81241d26.js";
+            window.path_to_searchindex_js = "searchindex-a821ef30.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e4845a93.js"></script>
@@ -20246,18 +20246,29 @@ stay.</p>
 the runtime or the tools: main holds the version being developed as a
 prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool’s <code>version()</code>), and
 the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
-to the merge and replacing its archives. CI and the workers install it
-(<code>--version 0.4.0-dev</code>) instead of building the compiler. The newest
-release, the default, never picks a prerelease.</li>
-<li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand: <code>scripts/set-version.sh 0.4.0</code> sets the version everywhere a tool reads it, the commit is tagged
-<code>v0.4.0</code> (the workflow checks that it holds that version). Once it is
-published, the workflow opens a pull request that starts the next minor
-version on main (<code>0.5.0-dev</code>) and merges itself once its checks pass,
-unless main has already moved on; a major
-version is started by hand. A pull request the workflow opens with its
-own token starts no workflows, so it is opened with the
-<code>RELEASE_BUMP_TOKEN</code> secret when that is set, and otherwise the workflow
-dispatches CI on its branch.</li>
+to the merge and replacing its archives. CI and the workers install the
+newest such prerelease, whatever <code>VERSION</code> holds, instead of building the
+compiler. The newest release, the default, never picks a prerelease.</li>
+<li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
+compiler that builds it, is the newest build of main too, so the release
+may take any version, not only the one main was developing:
+<ol>
+<li>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
+version everywhere a tool reads it; the same pull request sets the VS
+Code extension’s <code>package.json</code> and <code>package-lock.json</code> to match.</li>
+<li>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
+commit holds that version, builds it and publishes the release; the
+<code>VSIX</code> and <code>Docs</code> workflows publish the extension and the docs from
+the same tag.</li>
+<li>Once it is published, the workflow opens a pull request that starts
+the next minor version on main (<code>0.10.0-dev</code>) and merges itself once
+its checks pass, unless main has already moved on; a major version is
+started by hand. A pull request the workflow opens with its own token
+starts no workflows, so it is opened with the <code>RELEASE_BUMP_TOKEN</code>
+secret when that is set, and otherwise the workflow dispatches CI on
+its branch.</li>
+</ol>
+</li>
 </ul>
 <p>For each platform, <code>scripts/release-build.sh</code> builds the
 tools, lays them out as above, archives them as
