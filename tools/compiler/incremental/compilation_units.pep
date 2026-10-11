@@ -59,7 +59,7 @@ export struct CompilationUnit {
 ## @param base what every key starts from (`Keys`' base)
 ## @returns the compilation units, each with its key
 export compilation_units(program: link.Program, base: String): CompilationUnit[] {
-    var in_runtime = _runtime_files(program);
+    var in_runtime = program.in_runtime();
     var count = program.files.count;
     for (var i in 0..count) {
         if (!in_runtime[i]) {
@@ -372,30 +372,6 @@ _components(reads: Array<HashSet<ulong>>, skip: bool[]): Array<ulong[]> {
             group.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
             out.append(group);
         }
-    }
-    return out;
-}
-
-## For each file of `program`, whether it is the runtime's: the prelude, a
-## forced import, or a file under a runtime folder.
-_runtime_files(program: link.Program): bool[] {
-    var dirs = Array<String>();
-    for (var dir in link.Runtime.discover().dirs) {
-        dirs.append(link.path_key(dir));
-    }
-    var out = Array<bool>();
-    for (var file in program.files) {
-        bool runtime = file.prelude or file.prelude_part;
-        if (!runtime) {
-            var key = link.path_key(Path(file.name));
-            for (var dir in dirs) {
-                if (key.starts_with(dir)) {
-                    runtime = true;
-                    break;
-                }
-            }
-        }
-        out.append(runtime);
     }
     return out;
 }

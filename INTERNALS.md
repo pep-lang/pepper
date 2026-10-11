@@ -188,6 +188,13 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   imports reach, then the prelude. Each file goes through
   `parse.parse`. For each import, `platform.keep` evaluates its
   `[Target]` attributes first; an import that is dropped is never resolved.
+  A file's identity is its `ProgramFile.key`, its canonical path
+  (`files.path_key`); `ModuleRoots.key` canonicalizes each path once per
+  load, and `files.canonical_path` joins a relative path onto the working
+  directory first, since `realpath` of a relative path on macOS lists every
+  folder above the working directory (#819). `load_program` records the
+  runtime's folders as keys (`Program.runtime_dirs`) for
+  `Program.in_runtime`, which the build's compilation units also read.
   - `import "x"` (`Import.is_local`) goes through `files.resolve_local`,
     which tries `x.pep` beside the file and then `x/module.pep`. A file
     target must be in the same module (`ModuleRoots.placement`); otherwise
@@ -814,7 +821,7 @@ top-level declaration (`build_module`), so it declares, links and generates
 nothing, while pep-doc, `doc.check_documented` and the language server
 read it under the built-in's name (`ast.built_in_name`, `reflect.name`).
 `Program.built_in_errors` rejects the attribute outside the runtime
-(`_in_runtime`). Its functions and methods end in `;` after their
+(`Program.in_runtime`). Its functions and methods end in `;` after their
 parameter list (`Parser._function_body`); the builder's `function_def` rejects a bodyless function
 anywhere else, since only a trait method may lack one.
 The target is a `link.Target` (`os`, `arch`, the build options, and the

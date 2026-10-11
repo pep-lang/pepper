@@ -225,17 +225,9 @@ _root(entry: Path): Path {
 
 # `path`, absolute and with its links resolved when it exists.
 _absolute(path: Path): Path {
-    var resolved = path.canonicalize();
-    if (resolved.is_ok()) {
-        return resolved.value();
-    }
-    if (path.is_relative()) {
-        var cwd = process.working_directory();
-        if (cwd.is_ok()) {
-            return cwd.value().join(path).normalize();
-        }
-    }
-    return path;
+    var absolute = link.absolute(path);
+    var resolved = absolute.canonicalize();
+    return resolved.is_ok() ? resolved.value() : absolute.normalize();
 }
 
 # `path` relative to `root`, with `/` between folders; none when it is not

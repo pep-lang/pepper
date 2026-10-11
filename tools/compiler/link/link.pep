@@ -37,6 +37,8 @@ const _PRELUDE_HOME = "<prelude>";
 export struct ProgramFile {
     ## The name diagnostics use: the path as the program reached it.
     var name: String = "";
+    ## Its identity, `files.path_key` of its path.
+    var key: String = "";
     ## The namespace its private names are mangled with, unique in the
     ## program.
     var namespace: String = "";

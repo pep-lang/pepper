@@ -7,7 +7,7 @@ export [
     declared_deprecation, deprecation_of, deprecation_warning, is_deprecation, Deprecation, DeprecationError
 ] from "deprecation";
 export [is_build_option_name, supported_triples, Target, TEST_BUILD_OPTION] from "platform";
-export [path_key, Runtime] from "files";
+export [absolute, path_key, Runtime] from "files";
 export [declares_override, translation_units, TranslationUnit, unit_inputs] from "translation_units";
 export [
     demangle_name, is_concrete_override, is_override, mangle, NAMESPACE_SEPARATOR, OVERLOAD_SEPARATOR, symbol_name

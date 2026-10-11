@@ -20,7 +20,7 @@ import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import io;
 import [Path] from io;
-import [demangle_name, Runtime, Target] from compiler.link;
+import [absolute, demangle_name, Runtime, Target] from compiler.link;
 import os;
 import [has_stashed, is_checked_function, unit_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
@@ -1141,7 +1141,7 @@ _runtime_files(state: PassState): bool[] {
             out.append(true);
             continue;
         }
-        var real = Path(source.name).canonicalize();
+        var real = absolute(Path(source.name)).canonicalize();
         if (!real.is_ok()) {
             out.append(false);
             continue;

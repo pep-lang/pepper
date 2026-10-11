@@ -59,6 +59,9 @@ export struct Program {
     ## Per file, whether its bodies were linked and are checked; empty:
     ## every file's (`link_bodies`).
     var bodies: bool[] = Array<bool>();
+    ## The runtime's folders, as `files.path_key`s: found once per load,
+    ## whether or not the program uses the runtime.
+    var runtime_dirs: String[] = Array<String>();
     # Linking left to `link_bodies`, when loaded with `defer_bodies`.
     var _pending: link.PendingLink? = Optional<link.PendingLink>.Empty;
 
@@ -163,12 +166,31 @@ export struct Program {
         return errors;
     }
 
+    ## Returns, for each file, whether it is part of the runtime: the
+    ## prelude, a file a prelude file reaches, or a file under one of
+    ## `runtime_dirs`.
+    ##
+    ## @returns one flag per file, by index
+    in_runtime(): bool[] {
+        var out = Array<bool>();
+        for (var f in files) {
+            bool inside = f.prelude or f.prelude_part;
+            for (var dir in runtime_dirs) {
+                if (f.key.starts_with(dir)) {
+                    inside = true;
+                }
+            }
+            out.append(inside);
+        }
+        return out;
+    }
+
     ## Returns every `[__BuiltIn]` declaration outside the runtime: only the
     ## runtime declares the compiler's built-ins.
     ##
     ## @returns an error at each
     built_in_errors(): Diagnostic[] {
-        var in_runtime = _in_runtime(files);
+        var in_runtime = in_runtime();
         var out = Array<Diagnostic>();
         ulong i = 0;
         while (i < files.count) {
@@ -330,7 +352,8 @@ export struct Program {
 ## @param setup where the other files come from
 ## @returns the program, or why it cannot be loaded
 export load_program(root: Path, setup: Setup): Result<Program, String> {
-    var runtime = setup.runtime ? Runtime.discover() : Runtime();
+    var found = Runtime.discover();
+    var runtime = setup.runtime ? found : Runtime();
     if (setup.runtime and runtime.sources.count == 0) {
         var named = os.environment(files.RUNTIME_ENV);
         if (named.is_value() and !named.value().is_empty) {
@@ -370,7 +393,15 @@ export load_program(root: Path, setup: Setup): Result<Program, String> {
         prelude.append(path.value());
     }
     prelude.append_all(runtime.sources);
-    return load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies);
+    var loaded = load(root, prelude, search_paths, setup.target, setup.sources, setup.defer_bodies);
+    if (loaded.is_err()) {
+        return loaded;
+    }
+    var program = loaded.value();
+    for (var dir in found.dirs) {
+        program.runtime_dirs.append(files.path_key(dir));
+    }
+    return Result<Program, String>.ok(program);
 }
 
 # One file waiting to be loaded.
@@ -419,14 +450,14 @@ export load(
     var roots = ModuleRoots(project);
     # A stack: the root is taken first, and each file's imports are loaded
     # before the prelude.
-    var root_key = files.path_key(root);
+    var root_key = roots.key(root);
     var prelude_keys = HashSet<String>();
     var stack = Array<_Queued>();
     var queued = HashSet<String>();
     queued.insert(root_key);
     var keys = Array<String>();
     for (var p in prelude) {
-        keys.append(files.path_key(p));
+        keys.append(roots.key(p));
         prelude_keys.insert(keys[keys.count - 1]);
     }
     long p_index = prelude.count as long - 1;
@@ -530,7 +561,7 @@ export load(
                 }
             }
             if (found.is_value()) {
-                var k = files.path_key(found.value());
+                var k = roots.key(found.value());
                 if (queued.insert(k)) {
                     stack.append(_Queued(found.value(), k, false));
                 }
@@ -551,6 +582,7 @@ export load(
         index[next.key] = file;
         resolved.append(targets);
         var loaded = ProgramFile(path.to_string(), source.value(), module);
+        loaded.key = next.key;
         loaded.namespace = roots.namespace_of(path);
         loaded.module_root = roots.module_of(path);
         # A file of a module sees the declarations of the module's other
@@ -558,12 +590,12 @@ export load(
         # files the module reaches. Spelled from the file's own path, as an
         # import of it would be.
         if (loaded.module_root.is_value()) {
-            var module_key = files.path_key(loaded.module_root.value());
+            var module_key = roots.key(loaded.module_root.value());
             var dir = path.parent();
             while (dir.is_value()) {
-                if (files.path_key(dir.value()) == module_key) {
+                if (roots.key(dir.value()) == module_key) {
                     var module_file = dir.value().join(Path(files.MODULE_FILE));
-                    var k = files.path_key(module_file);
+                    var k = roots.key(module_file);
                     if (queued.insert(k)) {
                         stack.append(_Queued(module_file, k, false));
                     }
@@ -634,27 +666,6 @@ export load(
     }
     program._take_linked(link.link(program.files, target));
     return Result<Program, String>.ok(program);
-}
-
-# Whether each file is part of the runtime: the prelude, or a file in one
-# of the runtime's folders.
-_in_runtime(program_files: ProgramFile[]): bool[] {
-    var dirs = Array<String>();
-    for (var dir in Runtime.discover().dirs) {
-        dirs.append(files.path_key(dir));
-    }
-    var out = Array<bool>();
-    for (var f in program_files) {
-        bool inside = f.prelude or f.prelude_part;
-        var key = files.path_key(Path(f.name));
-        for (var dir in dirs) {
-            if (key.starts_with(dir)) {
-                inside = true;
-            }
-        }
-        out.append(inside);
-    }
-    return out;
 }
 
 _describe_paths(paths: Path[]): String {

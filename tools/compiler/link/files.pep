@@ -41,7 +41,7 @@ export dir_of(path: Path): Path {
 ## @param path the path
 ## @returns the canonical path, or why it cannot be resolved
 export canonical_path(path: Path): io.IoResult<Path> {
-    var resolved = path.canonicalize();
+    var resolved = absolute(path).canonicalize();
     if (resolved.is_err() or os.system_os() != os.OperatingSystem.Windows) {
         return resolved;
     }
@@ -50,6 +50,20 @@ export canonical_path(path: Path): io.IoResult<Path> {
         return io.IoResult<Path>.ok(Path("\\\\?\\UNC\\" + text.substr_bytes(2, text.size - 2)));
     }
     return io.IoResult<Path>.ok(Path("\\\\?\\" + text));
+}
+
+## Returns `path` joined onto the working directory when it is relative.
+## Canonicalize only absolute paths: on macOS `realpath` of a relative path
+## lists every folder above the working directory to find its name (#819).
+##
+## @param path the path
+## @returns the absolute path, or `path` when the working directory is unknown
+export absolute(path: Path): Path {
+    if (path.is_absolute()) {
+        return path;
+    }
+    var cwd = process.working_directory();
+    return cwd.is_ok() ? cwd.value().join(path) : path;
 }
 
 ## Returns `path` made canonical. A file not on disk is normalized through
@@ -68,11 +82,7 @@ export normalized(path: Path): Path {
     if (dir.is_ok() and name.is_value()) {
         return dir.value().join(name.value());
     }
-    if (path.is_absolute()) {
-        return path;
-    }
-    var cwd = process.working_directory();
-    return cwd.is_ok() ? cwd.value().join(path) : path;
+    return absolute(path);
 }
 
 ## Returns a path's identity for "already loaded" checks: canonical when
@@ -314,7 +324,7 @@ export enum Placement {
 
 ## Module folders: which module a file belongs to, the namespace that
 ## names it, and whether a file import stays inside its module. Each
-## directory is looked up once.
+## directory is looked up once, and each path canonicalized once.
 export struct ModuleRoots {
     # directory (normalized) -> its module folder, or "" for none.
     var _by_dir: HashMap<String, String> = HashMap<String, String>();
@@ -332,6 +342,14 @@ export struct ModuleRoots {
             var resolved = canonical_path(project.value());
             _project = Optional<Path>.Value(resolved.is_ok() ? resolved.value() : project.value());
         }
+    }
+
+    ## Returns `path_key(path)`, canonicalizing each path only once.
+    ##
+    ## @param path the path
+    ## @returns the key
+    key(path: Path): String {
+        return _normal(path).to_string();
     }
 
     _normal(path: Path): Path {
