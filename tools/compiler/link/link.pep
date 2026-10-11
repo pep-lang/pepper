@@ -178,7 +178,7 @@ export link(files: ProgramFile[], target: Target): Linked {
 
 ## A program whose names are bound and whose bodies are not yet rewritten:
 ## `link` in two steps, so a build can leave alone the bodies of the files
-## whose layers its cache holds checked.
+## whose compilation units its cache holds checked.
 export struct PendingLink {
     # The linker, prepared.
     var _linker: _Linker;

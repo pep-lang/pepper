@@ -2,19 +2,19 @@
 ## `[Isolated]` guard (a `Mutex<T>`'s lock, a `ThreadLocal<T>`'s value) may
 ## do, and the checks that make it sound.
 ##
-## Inside such a block every value of a type that is not thread-safe is part
-## of the locked value (the lock's region), of the rest of the program (the
-## outer region), or new (a fresh region, which may join either). A call
-## links the regions of the operands its callee links, as its link summary
-## says; linking the lock's region with the outer one (or another lock's)
-## is an error at the value that would cross, as is returning part of the
-## locked value from the block. Summaries are a least fixed point over the
-## call graph; a call through a trait value joins the summaries of the
-## methods implementing it. A summary a checked layer recorded keeps, for
-## each trait call it reaches, the join it was made with rather than the
-## structs it reached, and holds in a later layer wherever those joins are
-## the same (`_stale`). The pass also checks guard use, `[Move]` arguments,
-## `ThreadLocal<T>.get()` and `Mutex<T>` of a number, and use after `move`.
+## Inside such a block every value of a type that is not thread-safe is part of
+## the locked value (the lock's region), of the rest of the program (the outer
+## region), or new (a fresh region, which may join either). A call links the
+## regions of the operands its callee links, as its link summary says; linking
+## the lock's region with the outer one (or another lock's) is an error at the
+## value that would cross, as is returning part of the locked value from the
+## block. Summaries are a least fixed point over the call graph; a call through
+## a trait value joins the summaries of the methods implementing it. A summary a
+## checked compilation unit recorded keeps, for each trait call it reaches, the
+## join it was made with rather than the structs it reached, and holds in a
+## later compilation unit wherever those joins are the same (`_stale`). The pass
+## also checks guard use, `[Move]` arguments, `ThreadLocal<T>.get()` and
+## `Mutex<T>` of a number, and use after `move`.
 
 import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
@@ -22,7 +22,7 @@ import io;
 import [Path] from io;
 import [demangle_name, Runtime, Target] from compiler.link;
 import os;
-import [has_stashed, is_checked_function, layer_decls, take_stashed] from "checked";
+import [has_stashed, is_checked_function, unit_decls, take_stashed] from "checked";
 import [expression_children] from "closure_sites";
 import [CALL_METHOD] from "closures";
 import "common";
@@ -786,8 +786,8 @@ struct _Confinement {
         return settled.contains(key);
     }
 
-    # A checked unit's summary is decoded on first use: a layer reads few
-    # of those below it.
+    # A checked unit's summary is decoded on first use: a compilation unit reads
+    # few of those below it.
     _decode_checked(key: String) {
         if (summaries.contains(key) or !_tried.insert(key)) {
             return;
@@ -1867,12 +1867,12 @@ _error_at_known(message: String, loc: Loc): Diagnostic {
 ## attribute is an error.
 _check_parameter_attributes(program: _Confinement): bool {
     # The declarations checked with a unit below were checked with it.
-    var layer = layer_decls(program.module);
+    var decls = unit_decls(program.module);
     var functions = Array<(FunctionDef, bool)>();
-    for (var f in layer.functions) {
+    for (var f in decls.functions) {
         functions.append((f, true));
     }
-    for (var st in layer.structs) {
+    for (var st in decls.structs) {
         for (var m in st.method_members) {
             functions.append((m, false));
         }

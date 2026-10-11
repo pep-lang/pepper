@@ -23,15 +23,15 @@ Options:
                  for editors that pass it)
   --serve        run the server in this process, without a supervisor
                  (internal: the supervisor starts it so)
-  --layer-worker <dir>
-                 check layers for the server that started it (internal: the
+  --compilation-unit-worker <dir>
+                 check compilation units for the server that started it (internal: the
                  server starts these itself)
   -h, --help     show this help
   -V, --version  show pep-lsp's version
 ";
 
-## Handles the command line: prints the help or the version, runs a layer
-## worker, or rejects an unknown argument.
+## Handles the command line: prints the help or the version, runs a compilation
+## unit worker, or rejects an unknown argument.
 ##
 ## @param args the arguments, the program's name first
 ## @returns Empty when the server should start, else the exit code of what
@@ -42,8 +42,9 @@ export handle_arguments(args: String[]): int? {
         if (arg == "--stdio" or arg == "--serve") {
             continue;
         }
-        if (arg == "--layer-worker" and i + 1 < args.count) {
-            return Optional<int>.Value(layer_worker(Path(args[i + 1])));
+        # `--layer-worker` is the deprecated spelling.
+        if ((arg == "--compilation-unit-worker" or arg == "--layer-worker") and i + 1 < args.count) {
+            return Optional<int>.Value(compilation_unit_worker(Path(args[i + 1])));
         }
         if (arg == "-h" or arg == "--help") {
             File.stdout().write_all(HELP);

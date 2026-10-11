@@ -3,7 +3,7 @@
 ## `for_each_site`, `for_each_applied_site_in` and
 ## `for_each_expression_mut` in Pepper.
 
-import [checked_decls, layer_decls] from "checked";
+import [checked_decls, unit_decls] from "checked";
 import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
 import [CheckedDecls] from "pending";
@@ -44,8 +44,8 @@ extend _Collector with Rewriter;
 ## @param module the model
 ## @param rewriter what to do at each expression
 export rewrite_module(module: Module, rewriter: Rewriter) {
-    var layer = layer_decls(module);
-    for (var st in layer.structs) {
+    var decls = unit_decls(module);
+    for (var st in decls.structs) {
         for (var field in st.field_members) {
             if (field.default.is_value()) {
                 field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
@@ -59,7 +59,7 @@ export rewrite_module(module: Module, rewriter: Rewriter) {
         }
         _rewrite_function(st.destructor, rewriter, true);
     }
-    for (var function in layer.functions) {
+    for (var function in decls.functions) {
         _rewrite_function(function, rewriter, true);
     }
     for (var ext in module.extensions) {
@@ -78,9 +78,9 @@ export rewrite_module(module: Module, rewriter: Rewriter) {
 ## `_select_each`'s order over all of `module`, as `rewrite_module` does to
 ## all of it.
 _rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
-    var layer = layer_decls(module);
+    var decls = unit_decls(module);
     ulong at = 0;
-    for (var st in layer.structs) {
+    for (var st in decls.structs) {
         for (var field in st.field_members) {
             if (walk[at]) {
                 field.default = Optional<Expression>.Value(rewrite_expression(field.default.value(), rewriter));
@@ -104,7 +104,7 @@ _rewrite_selected(module: Module, walk: Array<bool>, rewriter: Rewriter) {
         }
         at += 1;
     }
-    for (var function in layer.functions) {
+    for (var function in decls.functions) {
         if (walk[at]) {
             _rewrite_function(function, rewriter, true);
         }
@@ -146,13 +146,13 @@ export trait SiteVisitor {
     visit(owner: String?, e: Expression, expected: TypeName?, current: TypeName?);
 }
 
-## Declared types the expected-type walk needs. The
-## layer's own declarations are taken in when it is built; a checked one is
-## looked up when the walk first names it (`CheckedDecls`).
+## Declared types the expected-type walk needs. The compilation unit's own
+## declarations are taken in when it is built; a checked one is looked up when
+## the walk first names it (`CheckedDecls`).
 export struct SiteTable {
     ## Free function or struct constructor name to parameter types: the
-    ## layer's functions, then the externs, then its constructors, each
-    ## kind over the one before; and the checked ones found so far.
+    ## compilation unit's functions, then the externs, then its constructors,
+    ## each kind over the one before; and the checked ones found so far.
     var _functions: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
     var _externs: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
     var _constructors: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
@@ -180,10 +180,10 @@ export struct SiteTable {
         this.state = state;
         this.statics = statics.is_value() ? statics.value() : StructTable(module, memo = state.trait_types_memo());
         _checked = checked_decls(module, state);
-        var layer = layer_decls(module);
+        var decls = unit_decls(module);
         # A generic base's parameter types name its own type parameters;
         # only its specializations give a closure argument its types.
-        for (var f in layer.functions) {
+        for (var f in decls.functions) {
             if (!f.is_generic_func) {
                 _functions[f.name] = _parameter_types(f);
             }
@@ -195,7 +195,7 @@ export struct SiteTable {
             }
             _externs[e.name] = types;
         }
-        for (var st in layer.structs) {
+        for (var st in decls.structs) {
             if (st.generic_params.count != 0) {
                 continue;
             }
@@ -206,7 +206,7 @@ export struct SiteTable {
         }
         # A generic base's fields, in its own terms: what a closure created
         # in one of its methods captures from `this`.
-        for (var st in layer.structs) {
+        for (var st in decls.structs) {
             if (st.generic_params.count != 0) {
                 _fields[st.ty.to_string()] = _field_types(st);
             }
@@ -216,7 +216,7 @@ export struct SiteTable {
                 _globals[g.name] = g.ty;
             }
         }
-        for (var f in layer.functions) {
+        for (var f in decls.functions) {
             if (f.is_generic_func) {
                 _generics[f.name] = GenericSignature(f, state);
             }
@@ -242,8 +242,8 @@ export struct SiteTable {
         }
     }
 
-    # Takes in the checked struct of type `key`, once, unless the layer's
-    # own entry for it stands.
+    # Takes in the checked struct of type `key`, once, unless the compilation
+    # unit's own entry for it stands.
     _checked_struct(key: String) {
         if (_fields.contains(key) or !_checked_structs.insert(key)) {
             return;
@@ -752,9 +752,9 @@ struct _Owned {
 ## extensions' own copies of their methods left out when `applied`): all
 ## of it.
 _select_all(module: Module, applied: bool): Array<bool> {
-    var layer = layer_decls(module);
+    var decls = unit_decls(module);
     var walk = Array<bool>();
-    for (var st in layer.structs) {
+    for (var st in decls.structs) {
         for (var field in st.field_members) {
             walk.append(field.default.is_value());
         }
@@ -766,7 +766,7 @@ _select_all(module: Module, applied: bool): Array<bool> {
         }
         walk.append(true);
     }
-    for (var function in layer.functions) {
+    for (var function in decls.functions) {
         walk.append(true);
     }
     if (!applied) {
@@ -797,13 +797,13 @@ _note_found(holder: _Holder, applied: Array<bool>, extension: bool, walks: Array
 ## extensions' own copies of their methods left out where `applied`): the
 ## code holding an expression the filter wants. One walk serves them all.
 _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): Array<Array<bool>> {
-    var layer = layer_decls(module);
+    var decls = unit_decls(module);
     var walks = Array<Array<bool>>();
     for (var filter in filters) {
         walks.append(Array<bool>());
     }
     var holder = _Holder(filters);
-    for (var st in layer.structs) {
+    for (var st in decls.structs) {
         for (var field in st.field_members) {
             _look_through_default(field.default, holder);
             _note_found(holder, applied, false, walks);
@@ -819,7 +819,7 @@ _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): 
         _look_through_function(st.destructor, holder);
         _note_found(holder, applied, false, walks);
     }
-    for (var function in layer.functions) {
+    for (var function in decls.functions) {
         _look_through_function(function, holder);
         _note_found(holder, applied, false, walks);
     }
@@ -839,9 +839,9 @@ _select_each(module: Module, filters: Array<SiteFilter>, applied: Array<bool>): 
 ## Walks the sites of the code of `module` that `walk` picks, as `_select`
 ## ordered it.
 _sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bool>, visitor: SiteVisitor) {
-    var layer = layer_decls(module);
+    var decls = unit_decls(module);
     ulong at = 0;
-    for (var st in layer.structs) {
+    for (var st in decls.structs) {
         var current = Optional<TypeName>.Value(st.ty);
         var owned = _Owned(Optional<String>.Value(st.name), visitor);
         for (var field in st.field_members) {
@@ -861,7 +861,7 @@ _sites_in_module(module: Module, table: SiteTable, applied: bool, walk: Array<bo
             at += 1;
         }
     }
-    for (var function in layer.functions) {
+    for (var function in decls.functions) {
         if (walk[at]) {
             _sites_in_function(
                 function, table, Optional<TypeName>.Empty, _Owned(Optional<String>.Value(function.name), visitor)

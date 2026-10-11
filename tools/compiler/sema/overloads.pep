@@ -659,7 +659,7 @@ export concrete_overrides(module: Module) {
     if (rewrites.is_empty) {
         return;
     }
-    # A new list, so what was found from the old one (`layer_decls`) is
+    # A new list, so what was found from the old one (`unit_decls`) is
     # found again.
     var functions = module.functions.clone();
     for (var (i, name) in rewrites) {

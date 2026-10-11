@@ -91,9 +91,10 @@ main(args: String[]): int {
     String? without_checks;
     String? triple;
     String? sysroot;
-    # `--layer-worker dir`, which `driver.build` adds when it checks layers
-    # in child processes: check the layers it is given (`driver.layer_worker`).
-    String? layer_worker;
+    # `--compilation-unit-worker dir`, which `driver.build` adds when it checks
+    # compilation units in child processes: check the compilation units it is
+    # given (`driver.compilation_unit_worker`).
+    String? compilation_unit_worker;
     String? library;
     String? lto;
     # What follows each `-m` (`arch=x86-64-v3`, `avx2`), in order.
@@ -157,8 +158,9 @@ main(args: String[]): int {
             return 0;
         } else if (name == "-v" or name == "--verbose") {
             # Accepted for compatibility, as by pep-build.
-        } else if (name == "--layer-worker") {
-            layer_worker = Optional<String>.Value(value);
+        } else if (name == "--compilation-unit-worker" or name == "--layer-worker") {
+            # `--layer-worker` is the deprecated spelling.
+            compilation_unit_worker = Optional<String>.Value(value);
         } else if (name == "--emit-linked") {
             linked = true;
         } else if (name == "--emit-checked") {
@@ -426,15 +428,15 @@ main(args: String[]): int {
         # A build links the bodies of only the files it checks
         # (`driver.build`).
         setup.defer_bodies = !(ir or model or steps or linked or checked or emit_static.is_value());
-        # A rebuild's first layer worker loads the program while this
-        # process does (`driver.start_layer_worker`).
+        # A rebuild's first compilation unit worker loads the program while this
+        # process does (`driver.start_compilation_unit_worker`).
         var early_worker = Optional<process.Child>.Empty;
-        if (setup.defer_bodies and !layer_worker.is_value() and !no_cache and !debug) {
+        if (setup.defer_bodies and !compilation_unit_worker.is_value() and !no_cache and !debug) {
             var worker_args = Array<String>();
             for (var k in 1..args.count) {
                 worker_args.append(args[k]);
             }
-            early_worker = driver.start_layer_worker(worker_args, build_folder);
+            early_worker = driver.start_compilation_unit_worker(worker_args, build_folder);
         }
         var program = link.load_program(entry, setup);
         if (program.is_err()) {
@@ -571,8 +573,8 @@ main(args: String[]): int {
             options.verify_cutoff = verifying;
             options.trace_time = traces.contains("time");
             options.trace_cache = traces.contains("cache");
-            if (layer_worker.is_value()) {
-                return driver.layer_worker(program.value(), options, Path(layer_worker.value()));
+            if (compilation_unit_worker.is_value()) {
+                return driver.compilation_unit_worker(program.value(), options, Path(compilation_unit_worker.value()));
             }
             for (var k in 1..args.count) {
                 options.worker_args.append(args[k]);
@@ -652,7 +654,7 @@ _value_name(name: String): String? {
         "-l" => {
             return Optional<String>.Value("LIB");
         }
-        "-L", "-I", "--build", "--cache", "--sysroot", "--layer-worker" => {
+        "-L", "-I", "--build", "--cache", "--sysroot", "--compilation-unit-worker", "--layer-worker" => {
             return Optional<String>.Value("DIR");
         }
         "--import" => {

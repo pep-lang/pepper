@@ -713,7 +713,7 @@ export struct DeltaBase {
 
     ## Returns the hash of what the delta written on this base changed in
     ## the interface (`own`): unlike an interface hash of the whole module,
-    ## it does not depend on the layers before.
+    ## it does not depend on the compilation units before.
     ##
     ## @returns the hash, as hex
     own_hash(): String {
@@ -774,9 +774,9 @@ export struct RecordIn {
     ## Whether the bodies of functions that are not generic are skipped
     ## (`skip`), decoded when needed.
     var lazy_bodies: bool = false;
-    ## Whether a delta is read onto a base other than the one it was
-    ## written on: the module of the layers its layer reads, merged. New
-    ## elements go after the base's, a patched struct is found by name, and
+    ## Whether a delta is read onto a base other than the one it was written on:
+    ## the module of the compilation units its compilation unit reads, merged.
+    ## New elements go after the base's, a patched struct is found by name, and
     ## a list written by place cannot be read so (`error`).
     var merging: bool = false;
 

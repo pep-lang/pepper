@@ -2,7 +2,7 @@
 ## the Rust compiler's `--verify-cache` does. A build that reused objects
 ## from the cache skipped the bodies of the files they came from, and
 ## linked objects an earlier build made; checking builds the same program
-## again with an empty cache of its own, so every unit and layer is
+## again with an empty cache of its own, so every unit and compilation unit is
 ## generated from its sources with every body read, and fails if any
 ## object it stores differs from the one the build's cache holds under the
 ## same key: a cache hit whose code is stale, or a unit whose code changed
@@ -100,8 +100,8 @@ _compare(fresh: Path, cached: Path, relative: String, differ: String[]) {
     }
 }
 
-# Whether `name` is an object a unit or layer was compiled into: native, or
-# bitcode with link-time optimization.
+# Whether `name` is an object a unit or compilation unit was compiled into:
+# native, or bitcode with link-time optimization.
 _is_object(name: String): bool {
     return name.ends_with(".o") or name.ends_with(".obj") or name.ends_with(".bc");
 }

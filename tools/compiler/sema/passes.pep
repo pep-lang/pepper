@@ -47,7 +47,7 @@ import [bind_calls, check_link_attributes, check_named_attributes] from "named_a
 import [check_overloads] from "overload_checks";
 import [has_overloads] from "overload_select";
 import [name_overloads] from "overloads";
-import [LayerDecls] from "pending";
+import [UnitDecls] from "pending";
 import [apply_platform_filters] from "platform";
 import [check_ranges] from "ranges";
 import [release_field_refs] from "release_field_refs";
@@ -572,12 +572,12 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             return derive_equatable(module);
         }
         2 => {
-            # Enum names are integer types from here on; closure literals
-            # become structs, so they get bodies below.
-            # Checked declarations' bodies stay out of the passes. A new
-            # layer: no checked struct extended yet, nothing found for it.
+            # Enum names are integer types from here on; closure literals become
+            # structs, so they get bodies below. Checked declarations' bodies
+            # stay out of the passes. A new compilation unit: no checked struct
+            # extended yet, nothing found for it.
             module.extended_checked = HashSet<String>();
-            module.layer = Optional<LayerDecls>.Empty;
+            module.own_decls = Optional<UnitDecls>.Empty;
             stash_bodies(module, state);
             state.install_enums(module.enums);
             lift_closures(module, state);

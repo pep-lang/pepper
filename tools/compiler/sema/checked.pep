@@ -8,7 +8,7 @@ import io;
 import os;
 import [Loc] from "loc";
 import [Block, Checked, FunctionDef, Module, StructDef, TraitType, TypeAliasDef] from "model";
-import [CheckedDecls, LayerDecls, PendingBody] from "pending";
+import [CheckedDecls, UnitDecls, PendingBody] from "pending";
 import [
     compare_bytes, DeltaBase, interface_text, RecordIn, RecordOut, summary_without_place, write_interface_summaries
 ] from "record";
@@ -107,7 +107,7 @@ export has_stashed(state: PassState): bool {
 
 ## Whether `function`, a free function, has a body: its own, one a
 ## library's interface stripped, or one `stash_bodies` holds while the
-## passes run (a checked layer's function referenced as a value).
+## passes run (a checked compilation unit's function referenced as a value).
 ##
 ## @param module the module
 ## @param state the passes' state
@@ -141,19 +141,19 @@ export full_body(function: FunctionDef) {
     }
 }
 
-## The declarations the layer at hand adds (`LayerDecls`): every one
+## The declarations the compilation unit at hand adds (`UnitDecls`): every one
 ## without checked declarations, as when no unit below was checked. Kept
 ## on `module` while its lists stay as they are: a pass that replaces a
 ## declaration makes a new list.
 ##
 ## @param module the module
-## @returns the layer's structs and functions, in the module's order
-export layer_decls(module: Module): LayerDecls {
+## @returns the compilation unit's structs and functions, in the module's order
+export unit_decls(module: Module): UnitDecls {
     var extended = module.extended_checked.count as ulong;
-    if (module.layer.is_value() and module.layer.value().fits(module.structs, module.functions, extended)) {
-        return module.layer.value();
+    if (module.own_decls.is_value() and module.own_decls.value().fits(module.structs, module.functions, extended)) {
+        return module.own_decls.value();
     }
-    var out = LayerDecls(
+    var out = UnitDecls(
         module.structs, module.functions, (module.structs.count as ulong, module.functions.count as ulong, extended)
     );
     for (var st in module.structs) {
@@ -166,12 +166,12 @@ export layer_decls(module: Module): LayerDecls {
             out.functions.append(f);
         }
     }
-    module.layer = Optional<LayerDecls>.Value(out);
+    module.own_decls = Optional<UnitDecls>.Value(out);
     return out;
 }
 
 ## The checked declarations of `module` by name (`CheckedDecls`), built on
-## first use and kept in `state` for the layer.
+## first use and kept in `state` for the compilation unit.
 ##
 ## @param module the module
 ## @param state the passes' state
@@ -533,7 +533,8 @@ export finish_checked(module: Module, state: PassState, aliases: TypeAliasDef[])
         file.file = blame.file;
         summaries[key] = (file, text);
     }
-    # So the next layers walk no checked value struct's bodies for these.
+    # So the next compilation units walk no checked value struct's bodies for
+    # these.
     for (var (key, loc, text) in state.value_facts) {
         summaries[key] = (loc, text);
     }
@@ -578,12 +579,13 @@ export interface_hash(unit: CheckedUnit): String {
     return hash;
 }
 
-## Settles `module`, the records of layers merged (`RecordIn.merging`):
-## what each layer's passes kept in order across the whole module, merging
-## puts in order again. Externs are in file order; trait types sorted by
-## name, once each; a struct, function or method two layers both
-## specialized is kept once, the first; and every extension merged has been applied.
-## Globals are left to the driver, which knows their files' order.
+## Settles `module`, the records of compilation units merged
+## (`RecordIn.merging`): what each compilation unit's passes kept in order
+## across the whole module, merging puts in order again. Externs are in file
+## order; trait types sorted by name, once each; a struct, function or method
+## two compilation units both specialized is kept once, the first; and every
+## extension merged has been applied. Globals are left to the driver, which
+## knows their files' order.
 ##
 ## @param module the merged module
 ## @returns how many repeated specializations it dropped
@@ -635,12 +637,12 @@ export settle_merged(module: Module): ulong {
     return dropped;
 }
 
-# Keeps once each method of `st` that two layers both added, the first:
-# a specialization of a generic method (`_address<Array<Path>>` of the
-# runtime's `Copies`, from two files that copy an `Array<Path>`) or a
-# method the passes synthesize for a use (`__copy`). Two methods of one
-# name and the same parameter types are one method; overloads differ in
-# their parameters. Returns how many it dropped.
+# Keeps once each method of `st` that two compilation units both added, the
+# first: a specialization of a generic method (`_address<Array<Path>>` of the
+# runtime's `Copies`, from two files that copy an `Array<Path>`) or a method the
+# passes synthesize for a use (`__copy`). Two methods of one name and the same
+# parameter types are one method; overloads differ in their parameters. Returns
+# how many it dropped.
 _settle_methods(st: StructDef): ulong {
     ulong dropped = 0;
     var seen = HashSet<String>();
@@ -678,20 +680,20 @@ export resume_checked(unit: CheckedUnit): Module {
     return module;
 }
 
-## What other units can observe of each non-generic function and method
-## sema checked: its return type, as sema resolved it, and its settled link
-## summary, by the function's location. The build cache's interface hash
-## puts this in place of the body (`driver/interface.pep`), so a body edit
-## that changes neither leaves the file's interface alone. A function with
-## no summary has no entry; its body stays part of the interface. Nor has
-## one whose summary calls through a trait (a dependent summary): it keeps
-## the joins of the implementations its layer saw, a layer whose
+## What other units can observe of each non-generic function and method sema
+## checked: its return type, as sema resolved it, and its settled link summary,
+## by the function's location. The build cache's interface hash puts this in
+## place of the body (`driver/interface.pep`), so a body edit that changes
+## neither leaves the file's interface alone. A function with no summary has no
+## entry; its body stays part of the interface. Nor has one whose summary calls
+## through a trait (a dependent summary): it keeps the joins of the
+## implementations its compilation unit saw, a compilation unit whose
 ## implementations change one makes it again from the body, and which
-## layers a build checked decides which one is at hand, so the interface
-## would depend on the cache.
+## compilation units a build checked decides which one is at hand, so the
+## interface would depend on the cache.
 ##
 ## @param module the checked module
-## @param state the passes' state that checked its last layer
+## @param state the passes' state that checked its last compilation unit
 ## @returns each function's facts, by location
 export function_facts(module: Module, state: PassState): HashMap<Loc, String> {
     var settled = HashMap<String, String>();

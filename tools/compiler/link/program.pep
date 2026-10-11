@@ -65,12 +65,12 @@ export struct Program {
     ## Creates an empty program.
     construct() {}
 
-    ## Finishes linking a program loaded with `Setup.defer_bodies`: the
-    ## bodies of the files `bodies` marks are linked, and only theirs are
-    ## checked (`check`, `warnings`). A build leaves out the files whose
-    ## layers its cache holds checked: they and what they import are as
-    ## they were, and checked without an error or a warning then. Without
-    ## pending linking, nothing.
+    ## Finishes linking a program loaded with `Setup.defer_bodies`: the bodies
+    ## of the files `bodies` marks are linked, and only theirs are checked
+    ## (`check`, `warnings`). A build leaves out the files whose compilation
+    ## units its cache holds checked: they and what they import are as they
+    ## were, and checked without an error or a warning then. Without pending
+    ## linking, nothing.
     ##
     ## @param bodies per file, whether to link and check its bodies
     ## @returns a syntax error in a body read now, rendered as `load`

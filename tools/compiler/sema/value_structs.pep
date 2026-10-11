@@ -388,11 +388,11 @@ _report_found(found: _ValueUse, mutating: _Mutating, state: PassState) {
 ## on `this` or a value field. A fixpoint, since one method can make
 ## another mutating.
 ##
-## A checked struct's come from its unit's record (`VALUE_FACTS`), unless
-## this layer extended it: its stashed bodies are walked no more. Which
-## methods are mutating comes out the same; only the order they are found
-## in can differ, which picks the change a note shows for a call still
-## named by an overload set of two mutating methods.
+## A checked struct's come from its unit's record (`VALUE_FACTS`), unless this
+## compilation unit extended it: its stashed bodies are walked no more. Which
+## methods are mutating comes out the same; only the order they are found in can
+## differ, which picks the change a note shows for a call still named by an
+## overload set of two mutating methods.
 _mutating_methods(module: Module, table: StructTable, state: PassState): _Mutating {
     var mutating = _Mutating();
     var globals = Array<_ValueBinding>();
@@ -798,7 +798,7 @@ _facts_of(mutating: _Mutating): Array<(String, Loc, String)> {
 
 # Puts the checked structs' recorded mutating methods in `mutating`, in the
 # order found, and returns the structs they are of: all the checked value
-# structs but those an extension of this layer changed.
+# structs but those an extension of this compilation unit changed.
 _seed_mutating(module: Module, state: PassState, mutating: _Mutating): HashSet<String> {
     var seeded = HashSet<String>();
     var facts = Array<(ulong, String, String, String, Loc)>();

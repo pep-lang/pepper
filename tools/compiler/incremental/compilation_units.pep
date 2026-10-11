@@ -1,17 +1,19 @@
-## Checked layers: sema checks a program one layer at a time, and the build
-## cache keeps each layer's result (a checked unit's record,
-## `sema.CheckedUnit`), so an edit costs the layers it reaches.
+## Compilation units: sema checks a program one compilation unit at a
+## time, and the build cache keeps each one's result (its checked unit's
+## record, `sema.CheckedUnit`), so an edit costs the compilation units it
+## reaches.
 ##
-## The runtime is the first layer. Each other unit (`link.layer_units`) is a
-## layer of its own; units that read each other (through extensions) share
-## one. A layer comes after every layer it reads, so the layers are the
-## nodes of a DAG, in a topological order. Each layer is checked on its
-## closure only (`Layer.reads`): the records of the layers it reads, merged
-## (`merged_module`). Its key (`layer_key`) hashes its files and the own
-## interface of each layer it reads (`sema.DeltaBase.own_hash`), so an edit
-## outside its closure, or one that keeps every own interface in it, loads
-## its record rather than checking it again (early cutoff). INTERNALS.md
-## §8.1 describes the whole design.
+## A compilation unit is a group of files checked together: one file, or
+## the files that import each other in a cycle (and cycles that read each
+## other through extensions). The runtime is the first one. A compilation
+## unit comes after every compilation unit it reads, so they are the nodes
+## of a DAG, in a topological order. Each is checked on its closure only
+## (`CompilationUnit.reads`): the records of the compilation units it reads,
+## merged (`merged_module`). Its key (`compilation_unit_key`) hashes its
+## files and the own interface of each compilation unit it reads
+## (`sema.DeltaBase.own_hash`), so an edit outside its closure, or one that
+## keeps every own interface in it, loads its record rather than checking it
+## again (early cutoff). INTERNALS.md §8.1 describes the whole design.
 
 import [Diagnostic] from compiler.diagnostic;
 import digest;
@@ -23,23 +25,25 @@ import "cache";
 
 ## The record format's version: a new format gets a new folder.
 const _RECORDS_FOLDER = "checked16";
-## How many keys' records each layer keeps.
+## How many keys' records each compilation unit keeps.
 const _KEEP_RECORDS = 4;
 
-## One layer: files checked together, on top of the layers they read.
-export struct Layer {
-    ## Its name: `runtime`, or its first unit's.
+## One compilation unit: files checked together, on top of the
+## compilation units they read.
+export struct CompilationUnit {
+    ## Its name: `runtime`, or its first file's namespace.
     var name: String;
     ## Its files, as indices into `Program.files`.
     var files: ulong[] = Array<ulong>();
     ## Its files' hash: their names, namespaces and texts.
     var files_key: String = "";
-    ## The layers it reads, directly or through others, as indices into
-    ## the layers, in order: the runtime, its units' imports, their modules'
-    ## other files and the extensions they see.
+    ## The compilation units it reads, directly or through others, as
+    ## indices into the compilation units, in order: the runtime, its files'
+    ## imports and the extensions they see.
     var reads: ulong[] = Array<ulong>();
     ## Its record's key: its files' hash and the own interfaces of the
-    ## layers it reads (`layer_key`), set as the build reaches it.
+    ## compilation units it reads (`compilation_unit_key`), set as the build
+    ## reaches it.
     var key: String = "";
 
     construct(name: String) {
@@ -47,14 +51,14 @@ export struct Layer {
     }
 }
 
-## Returns `program`'s layers, in the order they are checked; none when the
-## runtime cannot be checked alone (a runtime file imports one outside it).
+## Returns `program`'s compilation units, in the order they are checked; none
+## when the runtime cannot be checked alone (a runtime file imports one outside
+## it).
 ##
 ## @param program the linked program
-## @param units its units
 ## @param base what every key starts from (`Keys`' base)
-## @returns the layers, each with its key
-export layers(program: link.Program, units: link.Unit[], base: String): Layer[] {
+## @returns the compilation units, each with its key
+export compilation_units(program: link.Program, base: String): CompilationUnit[] {
     var in_runtime = _runtime_files(program);
     var count = program.files.count;
     for (var i in 0..count) {
@@ -63,66 +67,68 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         }
         for (var target in program.files[i].imports) {
             if (target.is_value() and !in_runtime[target.value()]) {
-                return Array<Layer>();
+                return Array<CompilationUnit>();
             }
         }
     }
-    var unit_of = Array<ulong>();
+    var cycles = _import_cycles(program);
+    var cycle_of = Array<ulong>();
     for (var _ in 0..count) {
-        unit_of.append(0);
+        cycle_of.append(0);
     }
-    for (var u in 0..units.count) {
-        for (var file in units[u].files) {
-            unit_of[file] = u;
+    for (var u in 0..cycles.count) {
+        for (var file in cycles[u]) {
+            cycle_of[file] = u;
         }
     }
-    # A unit is in the runtime when all its files are.
-    var runtime_unit = Array<bool>();
-    for (var unit in units) {
+    # A cycle is in the runtime when all its files are.
+    var runtime_cycle = Array<bool>();
+    for (var cycle in cycles) {
         bool all = true;
-        for (var file in unit.files) {
+        for (var file in cycle) {
             all = all and in_runtime[file];
         }
-        runtime_unit.append(all);
+        runtime_cycle.append(all);
     }
-    # What each unit reads: the units of the files its files import, and of
-    # the extensions they see.
+    # What each cycle reads: the cycles of the files its files import, and
+    # of the extensions they see.
     var reads = Array<HashSet<ulong>>();
-    for (var unit in units) {
+    for (var cycle in cycles) {
         var read = HashSet<ulong>();
-        for (var file in unit.files) {
+        for (var file in cycle) {
             for (var target in program.files[file].imports) {
                 if (target.is_value()) {
-                    read.insert(unit_of[target.value()]);
+                    read.insert(cycle_of[target.value()]);
                 }
             }
             if (file < program.scopes.count) {
                 for (var extension in program.scopes[file].extensions) {
-                    read.insert(unit_of[extension]);
+                    read.insert(cycle_of[extension]);
                 }
-                # A type's extensions go with it: a layer that reads the
-                # type's file reads them too, so a specialization means the
-                # same in every layer (`Array<T>.find` uses the `==` an
+                # A type's extensions go with it: a compilation unit that
+                # reads the type's file reads them too, so a specialization
+                # means the same in every one (`Array<T>.find` uses the `==` an
                 # extension gives `T`). The runtime's types are checked on
                 # their own, before any file outside it.
                 if (!in_runtime[file]) {
                     for (var extender in program.scopes[file].extended_by) {
-                        read.insert(unit_of[extender]);
+                        read.insert(cycle_of[extender]);
                     }
                 }
             }
         }
         reads.append(read);
     }
-    # A unit whose files only import and re-export declares nothing to
+    # A cycle whose files only import and re-export declares nothing to
     # check: the linker resolved its names to the files they come from. It
-    # is no layer; a unit reading it reads what it reads instead. One that
-    # no unit reads stays, as the program's own (`pep-build sema/module.pep`).
+    # is no compilation unit; a cycle reading it reads what it reads
+    # instead. One that no cycle reads stays, as the program's own
+    # (`pep-build sema/module.pep`).
     var read_by = Array<bool>();
-    for (var _ in 0..units.count) {
+    for (var _ in 0..cycles.count) {
         read_by.append(false);
     }
-    for (var u in 0..units.count) {
+    for (var u in 0..cycles.count) {
         for (var read in reads[u]) {
             if (read != u) {
                 read_by[read] = true;
@@ -130,14 +136,14 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         }
     }
     var through = Array<bool>();
-    for (var u in 0..units.count) {
-        bool empty = !runtime_unit[u] and read_by[u];
-        for (var file in units[u].files) {
+    for (var u in 0..cycles.count) {
+        bool empty = !runtime_cycle[u] and read_by[u];
+        for (var file in cycles[u]) {
             empty = empty and program.files[file].module.declarations.is_empty;
         }
         through.append(empty);
     }
-    for (var u in 0..units.count) {
+    for (var u in 0..cycles.count) {
         if (through[u]) {
             continue;
         }
@@ -160,48 +166,48 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         reads[u] = resolved;
     }
     var skip = Array<bool>();
-    for (var u in 0..units.count) {
-        skip.append(runtime_unit[u] or through[u]);
+    for (var u in 0..cycles.count) {
+        skip.append(runtime_cycle[u] or through[u]);
     }
-    var order = _layer_order(reads, skip);
-    var out = Array<Layer>();
-    var layer_of = Array<ulong>();
-    for (var _ in 0..units.count) {
-        layer_of.append(0);
+    var order = _components(reads, skip);
+    var out = Array<CompilationUnit>();
+    var unit_of = Array<ulong>();
+    for (var _ in 0..cycles.count) {
+        unit_of.append(0);
     }
-    var runtime = Layer("runtime");
-    for (var u in 0..units.count) {
-        if (runtime_unit[u]) {
-            runtime.files.append_all(units[u].files);
+    var runtime = CompilationUnit("runtime");
+    for (var u in 0..cycles.count) {
+        if (runtime_cycle[u]) {
+            runtime.files.append_all(cycles[u]);
         }
     }
     if (!runtime.files.is_empty) {
         out.append(runtime);
     }
     for (var group in order) {
-        var layer = Layer(units[group[0]].name);
+        var unit = CompilationUnit(program.files[cycles[group[0]][0]].namespace);
         for (var u in group) {
-            layer.files.append_all(units[u].files);
-            layer_of[u] = out.count;
+            unit.files.append_all(cycles[u]);
+            unit_of[u] = out.count;
         }
-        out.append(layer);
+        out.append(unit);
     }
-    # A layer comes after every layer it reads, so each one's closure is
-    # complete when a later one takes it in.
+    # A compilation unit comes after every one it reads, so each one's
+    # closure is complete when a later one takes it in.
     var closures = Array<HashSet<ulong>>();
     for (var _ in 0..out.count) {
         closures.append(HashSet<ulong>());
     }
-    for (var u in 0..units.count) {
-        if (runtime_unit[u] or through[u]) {
+    for (var u in 0..cycles.count) {
+        if (runtime_cycle[u] or through[u]) {
             continue;
         }
-        var k = layer_of[u];
+        var k = unit_of[u];
         if (!runtime.files.is_empty) {
             closures[k].insert(0);
         }
         for (var read in reads[u]) {
-            var d = runtime_unit[read] ? 0 : layer_of[read];
+            var d = runtime_cycle[read] ? 0 : unit_of[read];
             if (d != k) {
                 closures[k].insert(d);
             }
@@ -222,49 +228,50 @@ export layers(program: link.Program, units: link.Unit[], base: String): Layer[] 
         }
         out[k].reads.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
     }
-    for (var layer in out) {
-        layer.files.sort((a, b) => _layer_compare(program.files[a].namespace, program.files[b].namespace));
+    for (var unit in out) {
+        unit.files.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
         var hasher = digest.Blake3();
         hasher.update(base);
-        hasher.update($"\nlayer {layer.name}\n");
-        for (var file in layer.files) {
+        hasher.update($"\ncompilation unit {unit.name}\n");
+        for (var file in unit.files) {
             var f = program.files[file];
             hasher.update($"{f.name}\n{f.namespace}\n{f.prelude} {f.prelude_part}\n{f.source.size}\n");
             hasher.update(f.source);
         }
-        layer.files_key = hasher.finish_hex();
+        unit.files_key = hasher.finish_hex();
     }
     return out;
 }
 
-## Returns the key of `layer`'s record: its files and what it is checked
-## on, the own interface (`sema.DeltaBase.own_hash`) of each layer it reads. A
-## change to a layer it does not read, or one that keeps the own interface
-## of every layer it reads, keeps the key: the record is still good (early
-## cutoff).
+## Returns the key of `unit`'s record: its files and what it is checked on, the
+## own interface (`sema.DeltaBase.own_hash`) of each compilation unit it reads.
+## A change to a compilation unit it does not read, or one that keeps the own
+## interface of every compilation unit it reads, keeps the key: the record is
+## still good (early cutoff).
 ##
-## @param layer the layer
-## @param owns each layer's own interface, by index: those `layer` reads set
+## @param unit the compilation unit
+## @param owns each compilation unit's own interface, by index: those `unit`
+##   reads set
 ## @returns the key, as hex
-export layer_key(layer: Layer, owns: String[]): String {
+export compilation_unit_key(unit: CompilationUnit, owns: String[]): String {
     var hasher = digest.Blake3();
-    hasher.update("pepper checked layer 3\n");
-    hasher.update(layer.files_key);
+    hasher.update("pepper checked compilation unit 4\n");
+    hasher.update(unit.files_key);
     hasher.update("\n");
-    for (var d in layer.reads) {
+    for (var d in unit.reads) {
         hasher.update(owns[d]);
         hasher.update("\n");
     }
     return hasher.finish_hex();
 }
 
-## Returns the module the layers `reads` leave, their records merged in
-## order (`sema.RecordIn.merging`), each layer's new declarations after
-## those of the layers before; or why a record does not merge.
+## Returns the module the compilation units `reads` leave, their records merged
+## in order (`sema.RecordIn.merging`), each compilation unit's new declarations
+## after those of the compilation units before; or why a record does not merge.
 ##
 ## @param program the program
-## @param records each layer's record, by index: those of `reads` set
-## @param reads the layers, in order
+## @param records each compilation unit's record, by index: those of `reads` set
+## @param reads the compilation units, in order
 ## @returns the module
 export merged_module(
     program: link.Program, records: HashMap<ulong, u8[]>, reads: ulong[]
@@ -274,7 +281,7 @@ export merged_module(
     for (var d in reads) {
         var bytes = records.try_get(d);
         if (!bytes.is_value()) {
-            return Result<sema.Module, String>.err($"no record of layer {d}");
+            return Result<sema.Module, String>.err($"no record of compilation unit {d}");
         }
         var read = _read_record(slots, bytes.value(), Optional<sema.Module>.Value(module), true);
         if (read.is_err()) {
@@ -287,11 +294,11 @@ export merged_module(
     return Result<sema.Module, String>.ok(module);
 }
 
-## The units outside the runtime in groups, each group after every group it
-## reads: the strongly connected components of `reads`, in reverse
-## topological order of the condensation (Tarjan's order), which is the
-## order dependencies come first in.
-_layer_order(reads: Array<HashSet<ulong>>, skip: bool[]): Array<ulong[]> {
+## The nodes of `reads` but those `skip` names, in groups: the strongly
+## connected components of the graph, each group after every group it
+## reads (Tarjan's order, the reverse topological order of the
+## condensation).
+_components(reads: Array<HashSet<ulong>>, skip: bool[]): Array<ulong[]> {
     var count = reads.count;
     var index = Array<long>();
     var low = Array<ulong>();
@@ -393,48 +400,77 @@ _runtime_files(program: link.Program): bool[] {
     return out;
 }
 
-_layer_compare(a: String, b: String): int {
+# The files' import cycles, the strongly connected components of the
+# import graph, each in namespace order and in the order of its first
+# file: what compilation units are made of, one or more each.
+_import_cycles(program: link.Program): Array<ulong[]> {
+    var imports = Array<HashSet<ulong>>();
+    var skip = Array<bool>();
+    for (var file in program.files) {
+        var targets = HashSet<ulong>();
+        for (var target in file.imports) {
+            if (target.is_value()) {
+                targets.insert(target.value());
+            }
+        }
+        imports.append(targets);
+        skip.append(false);
+    }
+    var cycles = _components(imports, skip);
+    for (var cycle in cycles) {
+        cycle.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
+    }
+    cycles.sort((a, b) => _compare(program.files[a[0]].namespace, program.files[b[0]].namespace));
+    return cycles;
+}
+
+_compare(a: String, b: String): int {
     return a < b ? -1 : (a > b ? 1 : 0);
 }
 
-## Where layer `layer`'s record under its key is.
+## Where compilation unit `unit`'s record under its key is.
 ##
 ## @param cache the build cache
-## @param layer the layer
+## @param unit the compilation unit
 ## @returns the record's path, which need not exist
-export record_path(cache: Cache, layer: Layer): Path {
-    return cache.dir.join(Path(_RECORDS_FOLDER)).join(Path(_record_folder(layer.name))).join(Path($"{layer.key}.rec"));
+export record_path(cache: Cache, unit: CompilationUnit): Path {
+    return cache.dir.join(Path(_RECORDS_FOLDER)).join(Path(_record_folder(unit.name))).join(Path($"{unit.key}.rec"));
 }
 
-# A layer's name as a folder name: its namespace's separators kept as
+# A compilation unit's name as a folder name: its namespace's separators kept as
 # folders, anything else plain.
 _record_folder(name: String): String {
     return name.replace(":", "_").replace("#", "_");
 }
 
-## Writes `unit`'s record, the record of `layer`: a delta on the module of
-## the layers it reads, merged, which `base` indexes. Returns the record and
-## the layer's own interface, what the delta changed in the interface
-## (`sema.DeltaBase.own_hash`). The build cache keeps both under the layer's
-## key: the record, and beside it its own interface, which the keys of the
-## layers that read it need without reading the record, and the warnings
-## checking it gave, rendered, which a build that loads the record prints
-## again (as incremental compilers and ccache replay a unit's
+## Writes `checked_unit`'s record, the record of `unit`: a delta on the module
+## of the compilation units it reads, merged, which `base` indexes. Returns the
+## record and the compilation unit's own interface, what the delta changed in
+## the interface (`sema.DeltaBase.own_hash`). The build cache keeps both under
+## the compilation unit's key: the record, and beside it its own interface,
+## which the keys of the compilation units that read it need without reading the
+## record, and the warnings checking it gave, rendered, which a build that loads
+## the record prints again (as incremental compilers and ccache replay a unit's
 ## diagnostics).
 ##
 ## @param cache the build cache
 ## @param program the program
-## @param layer the layer
-## @param unit the checked unit
-## @param base the index of the module the layer was checked on
-## @param warned the layer's warnings, rendered, or empty
+## @param unit the compilation unit
+## @param checked_unit the checked unit
+## @param base the index of the module the compilation unit was checked on
+## @param warned the compilation unit's warnings, rendered, or empty
 ## @returns the record and the own interface
 export store_checked(
-    cache: Cache, program: link.Program, layer: Layer, unit: sema.CheckedUnit, base: sema.DeltaBase, warned: String
+    cache: Cache,
+    program: link.Program,
+    unit: CompilationUnit,
+    checked_unit: sema.CheckedUnit,
+    base: sema.DeltaBase,
+    warned: String
 ): (u8[], String) {
-    var bytes = _record_bytes(program, unit, base);
+    var bytes = _record_bytes(program, checked_unit, base);
     var own = base.own_hash();
-    var path = record_path(cache, layer);
+    var path = record_path(cache, unit);
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {
         return (bytes, own);
@@ -459,15 +495,15 @@ export store_checked(
     return (bytes, own);
 }
 
-## Returns the record of `layer` under its key, its own interface and its
+## Returns the record of `unit` under its key, its own interface and its
 ## warnings, rendered, when the cache has them.
 ##
 ## @param cache the build cache
 ## @param program the program
-## @param layer the layer, its key set
+## @param unit the compilation unit, its key set
 ## @returns the record's bytes, its own interface and its warnings
-export find_checked(cache: Cache, program: link.Program, layer: Layer): (u8[], String, String)? {
-    var path = record_path(cache, layer);
+export find_checked(cache: Cache, program: link.Program, unit: CompilationUnit): (u8[], String, String)? {
+    var path = record_path(cache, unit);
     var own = File.read_to_string(_own_path(path));
     if (own.is_err() or own.value().is_empty) {
         return Optional<(u8[], String, String)>.Empty;
@@ -540,9 +576,9 @@ _prune_records(folder: Path) {
     }
 }
 
-# The record of `unit`: the program's files' namespaces, then the unit, as
+# The record of `checked_unit`: the program's files' namespaces, then the unit, as
 # a delta on `base`.
-_record_bytes(program: link.Program, unit: sema.CheckedUnit, base: sema.DeltaBase): u8[] {
+_record_bytes(program: link.Program, checked_unit: sema.CheckedUnit, base: sema.DeltaBase): u8[] {
     var out = sema.RecordOut();
     # Slot i is program file i; the record keeps their names, so it loads
     # into a program whose files sit elsewhere.
@@ -553,12 +589,13 @@ _record_bytes(program: link.Program, unit: sema.CheckedUnit, base: sema.DeltaBas
     for (var file in program.files) {
         out.text(file.namespace);
     }
-    unit.write(out, Optional<sema.DeltaBase>.Value(base));
+    checked_unit.write(out, Optional<sema.DeltaBase>.Value(base));
     return out.finish();
 }
 
-# Reads the unit in record `bytes`, its slots mapped to the program's files
-# by `slots`: a delta merged onto `base`, the module of the layers before.
+# Reads the unit in record `bytes`, its slots mapped to the program's files by
+# `slots`: a delta merged onto `base`, the module of the compilation units
+# before.
 _read_record(
     slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?, merging: bool
 ): Result<sema.CheckedUnit, String> {
@@ -572,12 +609,12 @@ _read_record(
         var file = slots.try_get(input.text());
         input.files.append(file.is_value() ? file.value() : sema.NO_FILE);
     }
-    var unit = sema.CheckedUnit.read(input, base);
+    var checked_unit = sema.CheckedUnit.read(input, base);
     if (!input.error.is_empty) {
         return Result<sema.CheckedUnit, String>.err(input.error);
     }
     if (!input.done()) {
         return Result<sema.CheckedUnit, String>.err("the record does not read whole");
     }
-    return Result<sema.CheckedUnit, String>.ok(unit);
+    return Result<sema.CheckedUnit, String>.ok(checked_unit);
 }

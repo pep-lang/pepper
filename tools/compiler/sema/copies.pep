@@ -1007,9 +1007,9 @@ struct _CopyLowering {
 extend _CopyLowering with Rewriter;
 
 ## `_pep_copy_failed<T>("message")`, which panics.
-# Marks `st`, which this pass just added methods to, as extended when it is
-# a checked struct: the layer's to walk and to record, as one an extension
-# or a specialized method changed.
+# Marks `st`, which this pass just added methods to, as extended when it is a
+# checked struct: the compilation unit's to walk and to record, as one an
+# extension or a specialized method changed.
 _extended(module: Module, state: PassState, st: StructDef) {
     if (!module.checked.structs.contains(st.name)) {
         return;

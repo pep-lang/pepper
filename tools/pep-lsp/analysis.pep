@@ -217,17 +217,19 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ## imports, linking and visibility errors, then the first error type
 ## checking finds) and its warnings, all as they apply to the document.
 ##
-## The program is checked layer by layer, as `pepc` builds it
-## (`incremental.check_layers`): the build cache in the project's `.pep`
-## folder keeps each layer's checked record, so only the document's own
-## layer, and any layer whose files or interfaces below changed, is
-## checked again; the rest load, and their bodies are not even read.
+## The program is checked one compilation unit at a time, as `pepc` builds it
+## (`incremental.check_compilation_units`): the build cache in the project's
+## `.pep` folder keeps each compilation unit's checked record, so only the
+## document's own compilation unit, and any compilation unit whose files or
+## interfaces below changed, is checked again; the rest load, and their bodies
+## are not even read.
 ##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
 ## @param build_options the build options (`-D`) to analyze with, by name
-## @param workers whether layers the cache lacks may be checked in
-##   `--layer-worker` children of this executable: only when it is pep-lsp
+## @param workers whether compilation units the cache lacks may be checked in
+##   `--compilation-unit-worker` children of this executable: only when it is
+##   pep-lsp
 ## @returns the diagnostics and how the analysis went
 export analyze(
     uri: String, text: String, build_options: HashMap<String, String> = HashMap<String, String>(), workers: bool = false
@@ -272,25 +274,25 @@ export analyze(
         out.outcome = "found an error";
         return out;
     }
-    var layered = _layers(program);
-    # The document's own layer is checked last: the layers after it
-    # (its importers, in a cycle with a module file) do not change what it
-    # shows.
+    var units = _compilation_units(program);
+    # The document's own compilation unit is checked last: the compilation units
+    # after it (its importers, in a cycle with a module file) do not change what
+    # it shows.
     var own = Optional<ulong>.Empty;
-    for (var k in 0..layered.count) {
-        if (layered[k].files.contains(0)) {
+    for (var k in 0..units.count) {
+        if (units[k].files.contains(0)) {
             own = Optional<ulong>.Value(k);
         }
     }
     var folder = _project_folder(Path(path.value()));
     var cache = incremental.default_cache(folder);
-    # The layers below the document's that the cache does not have are
-    # checked in parallel, in worker children, as `pepc` checks them.
-    var below = own.is_value() ? own.value() : layered.count - 1;
+    # The compilation units below the document's that the cache does not have
+    # are checked in parallel, in worker children, as `pepc` checks them.
+    var below = own.is_value() ? own.value() : units.count - 1;
     var prechecked = HashMap<ulong, (u8[], String, String)>();
     if (workers and below > 1) {
         var parallel = _check_in_workers(
-            program, layered, below, cache, prechecked, folder, path.value(), text, out.os, build_options
+            program, units, below, cache, prechecked, folder, path.value(), text, out.os, build_options
         );
         if (parallel.is_err()) {
             reporter.out.append(lsp.Diagnostic(lsp.Range(), parallel.error()));
@@ -301,9 +303,9 @@ export analyze(
     }
     var warnings = Array<Diagnostic>();
     var replayed = Array<String>();
-    var checked = incremental.check_layers(
+    var checked = incremental.check_compilation_units(
         program,
-        layered,
+        units,
         cache,
         Optional<incremental.Reused>.Empty,
         program.sources(),
@@ -315,7 +317,8 @@ export analyze(
         prechecked,
         stop = own
     );
-    # Warnings of the program's files, and of its own layer's checking.
+    # Warnings of the program's files, and of its own compilation unit's
+    # checking.
     for (var warning in warnings) {
         reporter.add_if_in_document(warning);
     }
@@ -369,9 +372,9 @@ _add_program_errors(reporter: _Reporter, program: link.Program) {
     }
 }
 
-# Loads the program rooted at `root`, whose text is `text`, for `target`,
-# its bodies deferred: `incremental.check_layers` links those of the layers
-# it checks.
+# Loads the program rooted at `root`, whose text is `text`, for `target`, its
+# bodies deferred: `incremental.check_compilation_units` links those of the
+# compilation units it checks.
 _load(root: Path, text: String, target: link.Target): Result<link.Program, String> {
     var setup = link.Setup();
     setup.target = target;
@@ -380,20 +383,21 @@ _load(root: Path, text: String, target: link.Target): Result<link.Program, Strin
     return link.load_program(root, setup);
 }
 
-# `program`'s layers, keyed for the language server: its own compiler
+# `program`'s compilation units, keyed for the language server: its own compiler
 # identity, no code generation.
-_layers(program: link.Program): incremental.Layer[] {
-    var keys = incremental.Keys(program, link.units(program), "pep-lsp");
-    return incremental.layers(program, link.layer_units(program), keys.base());
+_compilation_units(program: link.Program): incremental.CompilationUnit[] {
+    var keys = incremental.Keys(program, link.translation_units(program), "pep-lsp");
+    return incremental.compilation_units(program, keys.base());
 }
 
-# Checks layers `0..count` of `program` in `pep-lsp --layer-worker`
-# children (`incremental.check_in_workers`), each loading the program as
-# `analyze` did: `root`, with the document's `text`, for `os_name`, with
-# `build_options`, as `<dir>/program` and `<dir>/root.text` give them.
+# Checks compilation units `0..count` of `program` in `pep-lsp
+# --compilation-unit-worker` children (`incremental.check_in_workers`), each
+# loading the program as `analyze` did: `root`, with the document's `text`, for
+# `os_name`, with `build_options`, as `<dir>/program` and `<dir>/root.text` give
+# them.
 _check_in_workers(
     program: link.Program,
-    layered: incremental.Layer[],
+    units: incremental.CompilationUnit[],
     count: ulong,
     cache: incremental.Cache,
     prechecked: HashMap<ulong, (u8[], String, String)>,
@@ -403,7 +407,7 @@ _check_in_workers(
     os_name: String,
     build_options: HashMap<String, String>
 ): Result<void, String> {
-    var dir = folder.join(Path(".pep")).join(Path("build")).join(Path($"lsp-layers.{process.id()}"));
+    var dir = folder.join(Path(".pep")).join(Path("build")).join(Path($"lsp-compilation-units.{process.id()}"));
     Directory.remove_all(dir);
     var created = Directory.create_all(dir);
     if (created.is_err()) {
@@ -421,7 +425,7 @@ _check_in_workers(
     }
     var checked = incremental.check_in_workers(
         program,
-        layered,
+        units,
         count,
         cache,
         async.logical_cpus(),
@@ -436,15 +440,15 @@ _check_in_workers(
     return checked;
 }
 
-## A `pep-lsp --layer-worker <dir>` child of an analysis
-## (`incremental.serve_layers`): loads the program `<dir>/program` names
-## (its root, the OS it is analyzed for and the build options, a line
-## each, the root's text in `<dir>/root.text`), and checks each layer it is
-## given, storing its record in the build cache.
+## A `pep-lsp --compilation-unit-worker <dir>` child of an analysis
+## (`incremental.serve_compilation_units`): loads the program `<dir>/program`
+## names (its root, the OS it is analyzed for and the build options, a line
+## each, the root's text in `<dir>/root.text`), and checks each compilation unit
+## it is given, storing its record in the build cache.
 ##
 ## @param dir the folder the analysis and its workers share
 ## @returns the exit code: 0 once standard input ends
-export layer_worker(dir: Path): int {
+export compilation_unit_worker(dir: Path): int {
     var job = File.read_to_string(dir.join(Path("program")));
     var text = File.read_to_string(dir.join(Path("root.text")));
     if (job.is_err() or text.is_err()) {
@@ -471,25 +475,17 @@ export layer_worker(dir: Path): int {
         return 1;
     }
     var program = loaded.value();
-    var layered = _layers(program);
+    var units = _compilation_units(program);
     var cache = incremental.default_cache(_project_folder(root));
     var sources = program.sources();
-    return incremental.serve_layers(
+    return incremental.serve_compilation_units(
         program,
-        layered,
+        units,
         dir,
         incremental.Clock(false),
         (k, records) => {
             var checked = incremental.check_for_worker(
-                program,
-                layered[k],
-                records,
-                cache,
-                Optional<incremental.Reused>.Empty,
-                sources,
-                dir,
-                k,
-                StringBuilder()
+                program, units[k], records, cache, Optional<incremental.Reused>.Empty, sources, dir, k, StringBuilder()
             );
             return checked.is_err() ? Optional<String>.Value(checked.error()) : Optional<String>.Empty;
         }

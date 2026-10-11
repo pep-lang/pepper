@@ -64,8 +64,8 @@ export share_string_literals(module: Module, state: PassState) {
         facts[loc] = text;
     }
     var caller_copies = HashMap<String, Array<bool>>();
-    # A checked callee no body of this layer reaches keeps the copies its
-    # layer recorded: its facts stand.
+    # A checked callee no body of this compilation unit reaches keeps the copies
+    # its compilation unit recorded: its facts stand.
     for (var (key, copies) in module.caller_copies) {
         if (!program.callees.contains(key) and program.lazy_key(key)) {
             caller_copies[key] = copies;
@@ -89,7 +89,7 @@ export share_string_literals(module: Module, state: PassState) {
             caller_copies[key] = copies;
         }
     }
-    # A checked body shared its literals when its layer was checked.
+    # A checked body shared its literals when its compilation unit was checked.
     # A walk may make the callees of checked functions it reaches.
     var own = Array<_LiteralCallee>();
     for (var (_, callee) in program.callees) {
@@ -200,9 +200,9 @@ struct _Literals {
     var kept: HashMap<String, Array<bool>> = HashMap<String, Array<bool>>();
     ## Keys whose recorded facts stand: no body to refine, or a checked one.
     var settled: HashSet<String> = HashSet<String>();
-    ## The callees of checked functions and of the structs no extension of
-    ## this layer changed are made when a lookup reaches them: checked free
-    ## functions by name, checked structs' constructors by call name.
+    ## The callees of checked functions and of the structs no extension of this
+    ## compilation unit changed are made when a lookup reaches them: checked
+    ## free functions by name, checked structs' constructors by call name.
     var checked_functions: HashMap<String, FunctionDef> = HashMap<String, FunctionDef>();
     var checked_constructors: HashMap<String, StructDef> = HashMap<String, StructDef>();
     ## Checked structs whose callees are made one by one, as lookups reach
@@ -257,9 +257,9 @@ struct _Literals {
     ## free; one whose body the cache skipped takes its recorded fact.
     seed() {
         indirect = _indirectly_called(module, state, false);
-        # A checked body's facts were settled with its layer, and its calls
-        # reach only checked functions: it keeps its recorded facts unless
-        # this layer made a checked function newly called indirectly.
+        # A checked body's facts were settled with its compilation unit, and its
+        # calls reach only checked functions: it keeps its recorded facts unless
+        # this compilation unit made a checked function newly called indirectly.
         for (var key in indirect) {
             var callee = _callee(key);
             if (callee.is_value() and _is_checked(module, callee.value())) {
@@ -618,8 +618,8 @@ struct _Literals {
 ## them: those used as function values, and the methods that implement a
 ## trait's, which a trait value's vtable calls.
 ##
-## With `checked_too` false, the bodies checked with a unit below are
-## skipped: what they call indirectly was found with their layer, and is
+## With `checked_too` false, the bodies checked with a unit below are skipped:
+## what they call indirectly was found with their compilation unit, and is
 ## recorded kept.
 _indirectly_called(module: Module, state: PassState, checked_too: bool): HashSet<String> {
     var note = _IndirectCalls();
@@ -635,8 +635,8 @@ _indirectly_called(module: Module, state: PassState, checked_too: bool): HashSet
         }
     }
     for (var st in module.structs) {
-        # A checked struct no extension of this layer changed has only
-        # bodies `restore_bodies` put back.
+        # A checked struct no extension of this compilation unit changed has
+        # only bodies `restore_bodies` put back.
         if (!checked_too and module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
             continue;
         }

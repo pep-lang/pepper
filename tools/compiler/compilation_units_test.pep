@@ -1,7 +1,7 @@
-# Programs that once built one way and not the other: in layers (a layer
-# for each module or file the program imports, as a build with the cache
-# checks it) or whole (with no cache). Each is built both ways and must
-# run.
+# Programs that once built one way and not the other: in compilation units
+# (each file, or each import cycle of files, checked on its own, as a build
+# with the cache checks it) or whole (with no cache). Each is built both ways
+# and must run.
 
 import compiler.driver;
 import compiler.incremental;
@@ -25,7 +25,7 @@ _builds_and_runs(name: String, files: Array<(String, String)>) {
         setup.import_dirs.append(root);
         var program = link.load_program(root.join(Path("main.pep")), setup);
         expect_true(program.is_ok());
-        var output = root.join(Path(cached ? "layered" : "whole"));
+        var output = root.join(Path(cached ? "units" : "whole"));
         var options = driver.BuildOptions(output, root.join(Path("build")));
         if (cached) {
             options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
@@ -33,7 +33,7 @@ _builds_and_runs(name: String, files: Array<(String, String)>) {
         options.in_process = true;
         var built = driver.build(program.value(), options);
         if (built.is_err()) {
-            print($"{name} ({cached ? "layered" : "whole"}): {built.error()}");
+            print($"{name} ({cached ? "units" : "whole"}): {built.error()}");
         }
         expect_true(built.is_ok());
         var ran = process.Command(output.to_string()).spawn();
@@ -41,13 +41,13 @@ _builds_and_runs(name: String, files: Array<(String, String)>) {
     }
 }
 
-# A function of a layer below held in a local and called through it: the
-# layer's bodies are set aside while the passes run, and the function was
-# taken for a declaration with no body, not a value.
+# A function of a compilation unit below held in a local and called through it:
+# the compilation unit's bodies are set aside while the passes run, and the
+# function was taken for a declaration with no body, not a value.
 [Test]
-calls_a_function_of_a_layer_below_through_a_local() {
+calls_a_function_of_a_unit_below_through_a_local() {
     _builds_and_runs(
-        "layered_function_value",
+        "units_function_value",
         [
             ("util.pep", "export twice(x: int): int {\n    return x * 2;\n}\n"),
             ("main.pep", "import \"util\" as u;\nmain(): int {\n    var f = u.twice;\n    return f(4) - 8;\n}\n")
@@ -72,14 +72,14 @@ binds_a_generic_overload_beside_a_plain_one() {
     );
 }
 
-# A closure in a generic method of a layer below, specialized in this
-# layer, capturing a local whose type is inferred: the layer walked only
-# the structs it declared or extended, not the checked struct it added the
-# specialization to, so the capture's type was never inferred.
+# A closure in a generic method of a compilation unit below, specialized in this
+# compilation unit, capturing a local whose type is inferred: the compilation
+# unit walked only the structs it declared or extended, not the checked struct
+# it added the specialization to, so the capture's type was never inferred.
 [Test]
 captures_an_inferred_local_in_a_method_specialized_above() {
     _builds_and_runs(
-        "layered_closure_capture",
+        "units_closure_capture",
         [
             (
                 "lib/holder.pep",
@@ -94,14 +94,14 @@ captures_an_inferred_local_in_a_method_specialized_above() {
     );
 }
 
-# Two layers that read a third and not each other, each specializing a
-# generic method of its struct the same way (here and in the runtime's
-# `Copies`, which copying the array argument uses): merged, the program
-# had both, "redefinition of '_address<Array<i32>>'".
+# Two compilation units that read a third and not each other, each specializing
+# a generic method of its struct the same way (here and in the runtime's
+# `Copies`, which copying the array argument uses): merged, the program had
+# both, "redefinition of '_address<Array<i32>>'".
 [Test]
-keeps_once_a_method_two_layers_specialized() {
+keeps_once_a_method_two_units_specialized() {
     _builds_and_runs(
-        "layered_twice_specialized",
+        "units_twice_specialized",
         [
             ("lib/holder.pep", "export struct Holder {\n    get<T>(value: T): int {\n        return 1;\n    }\n}\n"),
             ("lib/module.pep", "export [Holder] from \"holder\";\n"),
@@ -118,12 +118,12 @@ keeps_once_a_method_two_layers_specialized() {
     );
 }
 
-# The same with a method the passes synthesize for a use: two layers that
-# copy a struct of a third each gave it a `__copy`.
+# The same with a method the passes synthesize for a use: two compilation units
+# that copy a struct of a third each gave it a `__copy`.
 [Test]
-keeps_once_a_copy_method_two_layers_made() {
+keeps_once_a_copy_method_two_units_made() {
     _builds_and_runs(
-        "layered_twice_copied",
+        "units_twice_copied",
         [
             (
                 "lib/item.pep",
@@ -164,10 +164,10 @@ _build_with(root: Path, imports: Path, cache: Path) {
 }
 
 # A member the passes synthesize for a use (`__copy`) of a struct of a
-# layer below is defined wherever it is used, not in the struct's file's
-# object: that object, cached by a program that never copied the struct,
-# does not have it, and the program that copies it then did not link
-# ("undefined reference to Item@lib/item.____copy").
+# compilation unit below is defined wherever it is used, not in the struct's
+# file's object: that object, cached by a program that never copied the struct,
+# does not have it, and the program that copies it then did not link ("undefined
+# reference to Item@lib/item.____copy").
 [Test]
 links_a_copy_method_the_cached_object_of_its_struct_lacks() {
     var folder = TempFolder("synthesized_member");

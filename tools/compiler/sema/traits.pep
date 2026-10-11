@@ -149,8 +149,8 @@ export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTyp
 }
 
 # `used_trait_types` while the checked bodies are stashed: what the settled
-# checked declarations hold is found once per layer (`TraitTypeMemo`), and
-# only the rest is looked through each time.
+# checked declarations hold is found once per compilation unit
+# (`TraitTypeMemo`), and only the rest is looked through each time.
 _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName[] {
     # A checked struct gains methods (a generic method specialized for it)
     # with bodies: what it holds is then looked through again.

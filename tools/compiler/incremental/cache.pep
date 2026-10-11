@@ -1,15 +1,14 @@
-## The build cache: each compilation unit's object, kept under a key that
-## hashes everything its code can depend on, and a record of each program
-## built, so an unchanged program is not built again.
+## The build cache: each translation unit's object (`link.TranslationUnit`,
+## one source file; here "unit" means a translation unit), kept under a key
+## that hashes everything its code can depend on, and a record of each
+## program built, so an unchanged program is not built again.
 ##
-## A unit is compiled as one part or more (a large unit's files are split
-## by size), and each part's object is kept on its own,
-## `<cache>/v1/units/<unit>#<n>/<key>/0.o`, under a key of its files' text
-## and the interfaces of everything else they read, the other files of
-## their module included (`Keys.part`): like a C file's object, which
-## depends on its text and its headers, so a body edit in one file of a
-## module compiles that file's part again, not the module's. A unit's own
-## key (`<cache>/v1/units/<unit>/<key>/`) keeps what a later build needs to
+## A unit is compiled as one part or more, and each part's object is kept on
+## its own, `<cache>/v1/units/<unit>#<n>/<key>/0.o`, under a key of its
+## file's text and the interfaces of everything else it reads
+## (`Keys.part`): like a C file's object, which depends on its text and its
+## headers, so a body edit in one file compiles that file's parts again,
+## and no other file's. A unit's own key (`<cache>/v1/units/<unit>/<key>/`) keeps what a later build needs to
 ## skip its bodies, and the list of its parts' objects (`parts`). Each is
 ## written to a folder of the build and moved into place as one, and never
 ## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
@@ -229,10 +228,10 @@ export struct Keys {
     var exact_positions: bool = false;
 
     ## @param program the loaded program
-    ## @param units its units
+    ## @param units its translation units
     ## @param build how code is generated: the target, CPU, `-O` level and
     ##   anything else that changes it
-    construct(program: link.Program, units: link.Unit[], build: String) {
+    construct(program: link.Program, units: link.TranslationUnit[], build: String) {
         var options = Array<String>();
         for (var (name, value) in program.target.build_options) {
             options.append($"{name}={value}");
@@ -298,7 +297,7 @@ export struct Keys {
     ## @param u the unit's index
     ## @param interfaces each file's interface hash, when known
     ## @returns the key, in hexadecimal, or none
-    unit(program: link.Program, units: link.Unit[], u: ulong, interfaces: Array<String?>): String? {
+    unit(program: link.Program, units: link.TranslationUnit[], u: ulong, interfaces: Array<String?>): String? {
         var hasher = digest.Blake3();
         hasher.update(_base);
         hasher.update($"unit {units[u].name}\n");
@@ -334,7 +333,9 @@ export struct Keys {
     ## @param files the part's files
     ## @param interfaces each file's interface hash: those the unit reads set
     ## @returns the key, in hexadecimal
-    part(program: link.Program, units: link.Unit[], u: ulong, files: ulong[], interfaces: Array<String?>): String {
+    part(
+        program: link.Program, units: link.TranslationUnit[], u: ulong, files: ulong[], interfaces: Array<String?>
+    ): String {
         var own = HashSet<ulong>();
         var hasher = digest.Blake3();
         hasher.update(_base);
@@ -472,7 +473,9 @@ const _PARTS = "parts";
 ## @param cache the build cache
 ## @param extension the objects' file extension
 ## @returns what the cache has
-export reuse(program: link.Program, units: link.Unit[], keys: Keys, cache: Cache, extension: String): Reused {
+export reuse(
+    program: link.Program, units: link.TranslationUnit[], keys: Keys, cache: Cache, extension: String
+): Reused {
     var reused = Reused();
     for (var _ in program.files) {
         reused.files.append(false);
@@ -550,7 +553,7 @@ export reuse(program: link.Program, units: link.Unit[], keys: Keys, cache: Cache
 export reuse_after_sema(
     reused: Reused,
     program: link.Program,
-    units: link.Unit[],
+    units: link.TranslationUnit[],
     keys: Keys,
     cache: Cache,
     extension: String,
@@ -661,7 +664,7 @@ export write_record(
     reused: Reused,
     module: sema.Module,
     program: link.Program,
-    unit: link.Unit,
+    unit: link.TranslationUnit,
     warnings: Diagnostic[],
     parts: Path[],
     cache: Cache

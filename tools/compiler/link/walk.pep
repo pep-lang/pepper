@@ -268,9 +268,9 @@ export trait ScopeWalk {
         walk_type_name(type_name);
     }
 
-    ## Whether the walk goes into function, constructor, destructor and
-    ## accessor bodies. The default does; a walk over a file whose layer
-    ## the build cache holds checked skips them (`Program.link_bodies`).
+    ## Whether the walk goes into function, constructor, destructor and accessor
+    ## bodies. The default does; a walk over a file whose compilation unit the
+    ## build cache holds checked skips them (`Program.link_bodies`).
     ##
     ## @returns true to walk bodies
     walks_bodies(): bool {

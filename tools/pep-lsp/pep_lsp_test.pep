@@ -1501,8 +1501,9 @@ definition_line(uri: String, text: String, offset: ulong): int {
 
 [Test]
 a_changed_import_refreshes_the_analysis() {
-    # The build cache keeps each checked layer; a file an import reaches
-    # that changes on disk is read again, though the document is the same.
+    # The build cache keeps each checked compilation unit; a file an import
+    # reaches that changes on disk is read again, though the document is the
+    # same.
     var test = "changed_import";
     var text = "import \"util\";\nmain(): int { return twice(2); }\n";
     var uri = fresh_file(test, "main.pep", text);

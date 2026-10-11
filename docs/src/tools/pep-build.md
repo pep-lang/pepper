@@ -546,10 +546,14 @@ pepper build -O main.pep --no-runtime-checks=overflow,shift
 
 ## The build cache
 
-Each file of the program (each import cycle, and the runtime as one) is
-compiled to its own object, and the build cache keeps them: a file whose
-sources, and whose imports' declarations, did not change is not compiled or
-checked again. The optimization level, link-time optimization, debug info,
+The compiler checks a program one **compilation unit** at a time: a file,
+or the files that import each other in a cycle, with the runtime as one.
+The build cache keeps each compilation unit's checked result and object,
+and each file's own object: a file whose sources, and whose imports'
+declarations, did not change is not compiled or checked again.
+`PEPC_COMPILATION_UNIT_JOBS` sets how many compilation units are checked at
+once (one per processor by default; `PEPC_LAYER_JOBS`, its old name, still
+works). The optimization level, link-time optimization, debug info,
 CPU, removed runtime checks and build options are part of each object's
 key. Deleting the cache folder is always safe.
 

@@ -379,7 +379,7 @@ def model_struct(name, fields):
     made = f'{name}({", ".join(names[f["name"]] for f in required + optional)})'
     if name == 'FunctionDef':
         # A generic function's body is decoded now: specializing it reads
-        # it on any layer.
+        # it on any compilation unit.
         r += [f'    var _function = {made};',
               '    if (_pending.is_value()) {',
               '        if (_function.is_generic_func or _function.generic_params.count > 0) {',
@@ -565,10 +565,10 @@ for b in blocks:
 # patch on it (tag 2): its member lists element by element the same way.
 
 # The fields an interface leaves out (`module_interface_fields`): what the
-# passes record for codegen and the build, not declarations. A layer that
-# reads another is checked against its declarations alone, so these stay
-# out of its own interface too, and an edit that changes only them keeps
-# the keys of the layers that read it (early cutoff). A field that can
+# passes record for codegen and the build, not declarations. A compilation unit
+# that reads another is checked against its declarations alone, so these stay
+# out of its own interface too, and an edit that changes only them keeps the
+# keys of the compilation units that read it (early cutoff). A field that can
 # change what a reader checks or generates must not be listed here.
 NOT_INTERFACE = ('literal_args', 'call_targets', 'argument_names', 'stripped', 'summaries_to_record', 'cached_files')
 # The fields an own interface leaves out besides: the link summaries of the
@@ -576,7 +576,7 @@ NOT_INTERFACE = ('literal_args', 'call_targets', 'argument_names', 'stripped', '
 NOT_OWN = NOT_INTERFACE + ('recorded_summaries',)
 
 def own_lines(label, expr, tree, blank_bodies='true'):
-    """Lines that add `expr`, of type `tree`, to the layer's own interface
+    """Lines that add `expr`, of type `tree`, to the compilation unit's own interface
     (`DeltaBase.own`): its interface hash, under `label`."""
     o = fresh('_own')
     return (['{', f'    var {o} = RecordOut();', f'    {o}.blank_bodies = {blank_bodies};', f'    {o}.blank_locs = true;',
@@ -592,7 +592,7 @@ def _list_delta(expr, et, key, base_list, category=None, merge=False, named=Fals
     list that holds the base's elements in order is written as its other
     elements and their places (mode 2), which reading puts back among the
     base's: no reference into the base but its order. With `named`, a base
-    element the layer changed is written with its name, which merging
+    element the compilation unit changed is written with its name, which merging
     finds it by. With `ref`, the base's elements themselves (a Pepper
     expression), a merged list finds the base's by identity, not hash, and
     the index keeps no hashes of them unless `base.verifying`."""
@@ -1000,8 +1000,8 @@ def struct_list_delta(expr, list_key, base_list, own=None, own_bodies='true'):
     seq = fresh('_seq'); bj = fresh('_bj'); slots = fresh('_slots')
     news = fresh('_news'); patches = fresh('_patches'); i = fresh('_i')
     ref = REF_LISTS[list_key]
-    # The base's structs by identity (`DeltaBase.ref_structs`): one still
-    # there is the base's as it was, unless the layer extended it, which
+    # The base's structs by identity (`DeltaBase.ref_structs`): one still there
+    # is the base's as it was, unless the compilation unit extended it, which
     # patches it, its member lists found by identity in turn.
     w = [f'var {seq} = base.{ref};',
          f'ulong {bj} = 0;',
@@ -1219,8 +1219,8 @@ def module_delta():
             lr = [f'var {local} = DeltaBase.read_checked(input, base.checked);']
             lx = ['base.keep_checked(value.checked);']
         elif fname == 'conversions':
-            # Rebuilt by each layer's `convert_to_traits`: written whole;
-            # its own interface is the conversions the base lacks.
+            # Rebuilt by each compilation unit's `convert_to_traits`: written
+            # whole; its own interface is the conversions the base lacks.
             lw = write(f'value.{fname}', tree)
             ci = fresh('_conv'); co = fresh('_own'); cj = fresh('_cj')
             lw += [f'for (var {ci} in value.conversions) {{', f'    var {co} = RecordOut();', f'    {co}.blank_locs = true;']

@@ -29,11 +29,11 @@ export struct PendingBody {
     }
 }
 
-## A layer's checked declarations by name (`checked.checked_decls`), for
-## the tables the passes build again each round: they look up the few the
-## layer's code names here rather than take in every checked one each
-## time. Built once per layer; a struct the layer extends since is the
-## layer's own (`LayerDecls`), which a table finds first.
+## A compilation unit's checked declarations by name (`checked.checked_decls`),
+## for the tables the passes build again each round: they look up the few the
+## compilation unit's code names here rather than take in every checked one each
+## time. Built once per compilation unit; a struct the compilation unit extends
+## since is the compilation unit's own (`UnitDecls`), which a table finds first.
 export struct CheckedDecls {
     ## The checked free functions that are not generic, and the generic
     ## ones, by name: the last of a name, as the tables kept them.
@@ -50,15 +50,15 @@ export struct CheckedDecls {
     construct() {}
 }
 
-## The declarations a layer adds: its structs and functions, the checked
-## ones left out but for the structs an extension of the layer changed.
-## A pass that only checks or rewrites declarations walks these; one that
-## looks a name up still searches the whole module.
-export struct LayerDecls {
+## The declarations a compilation unit adds: its structs and functions, the
+## checked ones left out but for the structs an extension of the compilation
+## unit changed. A pass that only checks or rewrites declarations walks these;
+## one that looks a name up still searches the whole module.
+export struct UnitDecls {
     var structs: Array<StructDef> = Array<StructDef>();
     var functions: Array<FunctionDef> = Array<FunctionDef>();
     # What they were found from: the module's lists, their sizes, and how
-    # many checked structs the layer had extended.
+    # many checked structs the compilation unit had extended.
     var _structs_of: Array<StructDef>;
     var _functions_of: Array<FunctionDef>;
     var _counts: (ulong, ulong, ulong);

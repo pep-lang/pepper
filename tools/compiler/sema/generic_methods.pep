@@ -128,9 +128,9 @@ export specialize_methods(module: Module, state: PassState): bool {
         st.method_members.append(_specialize_method(base.value(), spec, state));
         added = true;
         if (module.checked.structs.contains(st.name)) {
-            # A checked struct this layer adds a method to is the layer's
-            # to walk, as one an extension changed: the closures in the
-            # method's body get their captured types.
+            # A checked struct this compilation unit adds a method to is the
+            # compilation unit's to walk, as one an extension changed: the
+            # closures in the method's body get their captured types.
             state.extended_checked.insert(st.name);
             module.extended_checked.insert(st.name);
             state.trait_memo.checked_table = Optional<PassMemo>.Empty;

@@ -14,7 +14,7 @@ import [is_integral_name] from "type_name";
 
 ## How long each pass took, summed over its runs, for `-T passes`: the
 ## Rust compiler's `pass_timer`. One is shared by every run of the passes
-## that a build makes (the layers', the program's).
+## that a build makes (the compilation units', the program's).
 export struct PassTimes {
     ## Each pass's nanoseconds and runs, by name (`pass_name`).
     var times: HashMap<String, (ulong, uint)> = HashMap<String, (ulong, uint)>();
@@ -33,7 +33,7 @@ export struct PassTimes {
         }
     }
 
-    ## Adds what `other` recorded (a layer worker's) to these.
+    ## Adds what `other` recorded (a compilation unit worker's) to these.
     add_all(other: PassTimes) {
         for (var (name, (spent, runs)) in other.times) {
             var before = times.try_get(name);
@@ -73,8 +73,8 @@ export struct PassTimes {
         return out.to_string();
     }
 
-    ## The lines a layer worker passes back (`<name>\t<ns>\t<runs>`), which
-    ## `parse` reads.
+    ## The lines a compilation unit worker passes back (`<name>\t<ns>\t<runs>`),
+    ## which `parse` reads.
     to_text(): String {
         var out = StringBuilder();
         for (var (name, (spent, runs)) in times) {
@@ -202,7 +202,7 @@ export struct PassState {
     ## as `named_arguments` keeps it.
     var checked_callees: PassMemo? = Optional<PassMemo>.Empty;
     ## The checked declarations by name (`checked.checked_decls`), found
-    ## once per layer.
+    ## once per compilation unit.
     var checked_decls: CheckedDecls? = Optional<CheckedDecls>.Empty;
     ## The checked declarations' tables for `resolve_implicit_types`, built
     ## once per unit: an `ImplicitTables`, as `resolve_implicit_types`

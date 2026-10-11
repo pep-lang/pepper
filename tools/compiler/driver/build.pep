@@ -7,17 +7,17 @@ import compiler.codegen;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
 import [
     Cache,
-    check_layer,
-    check_layers,
+    check_compilation_unit,
+    check_compilation_units,
     Clock,
     compare_locations,
     every_file,
     find_checked,
     Keys,
-    Layer,
-    layer_key,
-    LayerError,
-    layers,
+    CompilationUnit,
+    compilation_unit_key,
+    CheckError,
+    compilation_units,
     merged_module,
     render_warnings,
     reuse,
@@ -25,9 +25,9 @@ import [
     Reused,
     check_for_worker,
     check_in_workers,
-    layer_file,
+    worker_file,
     mark,
-    serve_layers,
+    serve_compilation_units,
     store_checked,
     warnings_in,
     write_record
@@ -72,22 +72,22 @@ export struct BuildOptions {
     var frame_pointers: bool = false;
     ## Which runtime checks the code performs (`--no-runtime-checks`).
     var runtime_checks: codegen.RuntimeChecks = codegen.RuntimeChecks.all();
-    ## Whether to check every layer loaded by early cutoff again and fail
-    ## when its record differs, as `PEPC_VERIFY_CUTOFF` does.
+    ## Whether to check every compilation unit loaded by early cutoff again and
+    ## fail when its record differs, as `PEPC_VERIFY_CUTOFF` does.
     var verify_cutoff: bool = false;
     ## The target's system root, which the link reads its libraries from
     ## (`--sysroot`, else `$PEPPER_SYSROOT_<TRIPLE>`).
     var sysroot: Path? = Optional<Path>.Empty;
-    ## This compiler's arguments, which a `--layer-worker` child is given
-    ## again (with `--layer-worker dir` after them) to load the same
-    ## program; none checks every layer in this process.
+    ## This compiler's arguments, which a `--compilation-unit-worker` child is
+    ## given again (with `--compilation-unit-worker dir` after them) to load the
+    ## same program; none checks every compilation unit in this process.
     var worker_args: String[] = Array<String>();
-    ## How many layers are checked at once in worker children: 0 for one
-    ## per logical CPU (`PEPC_LAYER_JOBS` overrides it).
-    var layer_jobs: ulong = 0;
-    ## A layer worker started before the program was loaded
-    ## (`start_layer_worker`), which loads it at the same time: the first
-    ## worker the build gives a layer, else stopped.
+    ## How many compilation units are checked at once in worker children: 0 for
+    ## one per logical CPU (`PEPC_COMPILATION_UNIT_JOBS` overrides it).
+    var compilation_unit_jobs: ulong = 0;
+    ## A compilation unit worker started before the program was loaded
+    ## (`start_compilation_unit_worker`), which loads it at the same time: the
+    ## first worker the build gives a compilation unit, else stopped.
     var early_worker: process.Child? = Optional<process.Child>.Empty;
     ## The CPU code is generated for (`-march`, `-mcpu`, `-mtune`,
     ## `-m<feature>`); clang's default for the target without one.
@@ -98,7 +98,7 @@ export struct BuildOptions {
     ## The library to build for C instead of an executable (`--lib`).
     var library: LibraryKind? = Optional<LibraryKind>.Empty;
     ## With `-T passes`, where every sema pass's time adds up: the
-    ## program's, and each layer's, in a worker too.
+    ## program's, and each compilation unit's, in a worker too.
     var pass_times: sema.PassTimes? = Optional<sema.PassTimes>.Empty;
     ## Whether to emit debug info (`-g`).
     var debug: bool = false;
@@ -141,9 +141,9 @@ export link_inputs(module: sema.Module, program: link.Program): (String[], Path[
     return _resolve_links(_link_attributes(module), program);
 }
 
-# The `[Link]` arguments on `module`'s externs, in declaration order, a
-# line each: `lib\t<name>`, or `path\t<file>\t<folder>` with the index of
-# the file declaring the extern. The cache keeps them with the last layer's
+# The `[Link]` arguments on `module`'s externs, in declaration order, a line
+# each: `lib\t<name>`, or `path\t<file>\t<folder>` with the index of the file
+# declaring the extern. The cache keeps them with the last compilation unit's
 # objects (`_store_last`), which a build that loads those links with.
 _link_attributes(module: sema.Module): String {
     var out = StringBuilder();
@@ -303,7 +303,7 @@ _link_bodies(program: link.Program, bodies: bool[]): String? {
 
 # `error` as the build reports it, rendered; a file whose bodies did not
 # read prints as `_link_bodies` prints it, and the error is empty.
-_layer_error(error: LayerError, sources: SourceText[]): String {
+_check_error(error: CheckError, sources: SourceText[]): String {
     match (error) {
         Unread(message) => {
             print($"pepc: {message}");
@@ -321,20 +321,20 @@ _layer_error(error: LayerError, sources: SourceText[]): String {
     }
 }
 
-## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
-## builds with and without them.
-_layers_off(): bool {
-    var named = os.environment("PEPC_NO_LAYERS");
+## Whether `PEPC_NO_COMPILATION_UNITS` turns checked compilation units off, for
+## comparing builds with and without them.
+_compilation_units_off(): bool {
+    var named = os.environment("PEPC_NO_COMPILATION_UNITS");
     return named.is_value() and !named.value().is_empty;
 }
 
-# The symbols `ir`, a layer's module just compiled with `partition`,
+# The symbols `ir`, a compilation unit's module just compiled with `partition`,
 # defines for other objects, a line each, by Pepper name: what survived
-# optimization, not local. The cache
-# keeps them beside the layer's object (`defines`), and a layer above only
-# declares these (`codegen.generate`'s `declared`); an instantiation the
-# layer's object dropped (`linkonce_odr`, inlined everywhere) it defines
-# itself, as a compiler shares the generics a library exports.
+# optimization, not local. The cache keeps them beside the compilation unit's
+# object (`defines`), and a compilation unit above only declares these
+# (`codegen.generate`'s `declared`); an instantiation the compilation unit's
+# object dropped (`linkonce_odr`, inlined everywhere) it defines itself, as a
+# compiler shares the generics a library exports.
 _defines(ir: llvm.Module, partition: codegen.Partition): String {
     var out = StringBuilder();
     var values = ir.functions();
@@ -354,24 +354,24 @@ _defines(ir: llvm.Module, partition: codegen.Partition): String {
     return out.to_string();
 }
 
-# Leaves the symbols layer `layer` (number `k`)'s object defines, which the
-# cache keeps, in `dir` as `<k>.defines`, for the workers of the layers that
-# read it.
-_copy_defines(cache: Cache, layer: Layer, dir: Path, k: ulong) {
-    var text = File.read_to_string(cache.objects($"layer {layer.name}", layer.key).join(Path("defines")));
-    var partial = layer_file(dir, k, $"defines.{process.id()}");
+# Leaves the symbols compilation unit `unit` (number `k`)'s object defines,
+# which the cache keeps, in `dir` as `<k>.defines`, for the workers of the
+# compilation units that read it.
+_copy_defines(cache: Cache, unit: CompilationUnit, dir: Path, k: ulong) {
+    var text = File.read_to_string(cache.objects($"compilation unit {unit.name}", unit.key).join(Path("defines")));
+    var partial = worker_file(dir, k, $"defines.{process.id()}");
     File.write_text(partial, text.is_ok() ? text.value() : "");
-    File.rename(partial, layer_file(dir, k, "defines"));
+    File.rename(partial, worker_file(dir, k, "defines"));
 }
 
-# The symbols the objects of the layers numbered `ks` define (`_defines`),
-# from `<k>.defines` in `dir` or, with no `dir`, from the cache.
-_defined_by(cache: Cache, layered: Layer[], ks: ulong[], dir: Path?): HashSet<String> {
+# The symbols the objects of the compilation units numbered `ks` define
+# (`_defines`), from `<k>.defines` in `dir` or, with no `dir`, from the cache.
+_defined_by(cache: Cache, units: CompilationUnit[], ks: ulong[], dir: Path?): HashSet<String> {
     var out = HashSet<String>();
     for (var k in ks) {
         var path = dir.is_value() ?
-            layer_file(dir.value(), k, "defines") :
-            cache.objects($"layer {layered[k].name}", layered[k].key).join(Path("defines"));
+            worker_file(dir.value(), k, "defines") :
+            cache.objects($"compilation unit {units[k].name}", units[k].key).join(Path("defines"));
         var text = File.read_to_string(path);
         if (text.is_err()) {
             continue;
@@ -387,7 +387,7 @@ _defined_by(cache: Cache, layered: Layer[], ks: ulong[], dir: Path?): HashSet<St
 
 # How the units are compiled, as text for their keys: the target, the CPU
 # (`-m`), the `-O` level, link-time optimization and the code generation
-# options. A layer worker keys them as the build does.
+# options. A compilation unit worker keys them as the build does.
 _build_text(options: BuildOptions, triple: String): String {
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     bool lto = options.lto and options.opt_level > 0;
@@ -404,34 +404,36 @@ _object_extension(options: BuildOptions, triple: String): String {
     return triple.contains("-windows") ? "obj" : "o";
 }
 
-# The object of `layer` in the build cache, under its key: its files' code
-# and what it instantiated, as a layer worker compiles it.
-_layer_object(cache: Cache, layer: Layer, extension: String): Path {
-    return cache.objects($"layer {layer.name}", layer.key).join(Path($"0.{extension}"));
+# The object of `unit` in the build cache, under its key: its files' code
+# and what it instantiated, as a compilation unit worker compiles it.
+_compilation_unit_object(cache: Cache, unit: CompilationUnit, extension: String): Path {
+    return cache.objects($"compilation unit {unit.name}", unit.key).join(Path($"0.{extension}"));
 }
 
-# Keeps the last layer's objects, `folder`'s `0.<ext>` and `entry.<ext>`,
-# in the build cache under its key, with the program's `[Link]` arguments
-# (`link`) and the warnings checking it gave (`warn`), rendered: a later
-# build whose last layer has the same key links them, as Go links a `main`
-# package from its cache, and prints the warnings again. Returns where the
-# cache keeps them.
-_store_last(cache: Cache, last: Layer, folder: Path, link_text: String, warned: String): Result<Path, String> {
+# Keeps the last compilation unit's objects, `folder`'s `0.<ext>` and
+# `entry.<ext>`, in the build cache under its key, with the program's `[Link]`
+# arguments (`link`) and the warnings checking it gave (`warn`), rendered: a
+# later build whose last compilation unit has the same key links them, as Go
+# links a `main` package from its cache, and prints the warnings again. Returns
+# where the cache keeps them.
+_store_last(
+    cache: Cache, last: CompilationUnit, folder: Path, link_text: String, warned: String
+): Result<Path, String> {
     if (File.write_text(folder.join(Path("link")), link_text).is_err()
         or File.write_text(folder.join(Path("warn")), warned).is_err()) {
         return Result<Path, String>.err($"cannot write to {folder}");
     }
-    return cache.store(folder, $"layer {last.name}", last.key);
+    return cache.store(folder, $"compilation unit {last.name}", last.key);
 }
 
-# Compiles `module`, the layer `layer` just checked, into its object and
-# keeps that in the build cache (`_layer_object`): the layer's files' own
-# code and what it instantiated; everything else, what the layers below
-# made (`below`) and the other files' code, is only declared, since their
-# objects define it. `dir` holds the work.
-_compile_layer(
+# Compiles `module`, the compilation unit `unit` just checked, into its object
+# and keeps that in the build cache (`_compilation_unit_object`): the
+# compilation unit's files' own code and what it instantiated; everything else,
+# what the compilation units below made (`below`) and the other files' code, is
+# only declared, since their objects define it. `dir` holds the work.
+_compile_unit(
     program: link.Program,
-    layer: Layer,
+    unit: CompilationUnit,
     module: sema.Module,
     state: sema.PassState,
     below: HashSet<String>,
@@ -457,7 +459,7 @@ _compile_layer(
         namespaces.append(f.namespace);
     }
     var own = HashSet<ulong>();
-    for (var file in layer.files) {
+    for (var file in unit.files) {
         own.insert(file);
     }
     var others = HashSet<uint>();
@@ -470,15 +472,15 @@ _compile_layer(
     }
     var owners = HashMap<String, uint>();
     var generated = codegen.generate(
-        module, state, namespaces, layer.name, setup, owners, others, Optional<HashSet<String>>.Value(below)
+        module, state, namespaces, unit.name, setup, owners, others, Optional<HashSet<String>>.Value(below)
     );
     if (generated.is_err()) {
         return Optional<String>.Value(render_all([generated.error()], program.sources()));
     }
-    # Part 0 is the layer's; the program's entry points (part 1) are the
-    # last layer's to compile.
+    # Part 0 is the compilation unit's; the program's entry points (part 1) are
+    # the last compilation unit's to compile.
     var partition = codegen.prepare(generated.value(), owners, part_of_file, 1, 3);
-    var folder = dir.join(Path($"{layer.name.replace("/", "_")}.object"));
+    var folder = dir.join(Path($"{unit.name.replace("/", "_")}.object"));
     Directory.remove_all(folder);
     Directory.create_all(folder);
     var compiled = compile_parts(
@@ -500,25 +502,25 @@ _compile_layer(
     if (File.write_text(folder.join(Path("defines")), _defines(generated.value(), partition)).is_err()) {
         return Optional<String>.Value($"cannot write to {folder}");
     }
-    var kept = cache.store(folder, $"layer {layer.name}", layer.key);
+    var kept = cache.store(folder, $"compilation unit {unit.name}", unit.key);
     if (kept.is_err()) {
         return Optional<String>.Value(kept.error());
     }
     return Optional<String>.Empty;
 }
 
-## Starts a layer worker for a build with `args` (this compiler's, as
+## Starts a compilation unit worker for a build with `args` (this compiler's, as
 ## `BuildOptions.worker_args`) whose build folder is `build_dir`, before the
-## program is loaded, so it loads the program while the build does: a
-## rebuild's first layer to check then waits for no worker to load it, as
+## program is loaded, so it loads the program while the build does: a rebuild's
+## first compilation unit to check then waits for no worker to load it, as
 ## Gradle and Bazel keep workers ready. Only when `build_dir` exists, from a
-## build before; a build that checks no layer in workers stops it.
+## build before; a build that checks no compilation unit in workers stops it.
 ##
 ## @param args this compiler's arguments
 ## @param build_dir the build's folder
 ## @returns the worker, if started
-export start_layer_worker(args: String[], build_dir: Path): process.Child? {
-    if (!build_dir.is_directory() or _layer_jobs_named() == 1) {
+export start_compilation_unit_worker(args: String[], build_dir: Path): process.Child? {
+    if (!build_dir.is_directory() or _compilation_unit_jobs_named() == 1) {
         return Optional<process.Child>.Empty;
     }
     var executable = process.executable_path();
@@ -529,14 +531,16 @@ export start_layer_worker(args: String[], build_dir: Path): process.Child? {
     for (var arg in args) {
         command.argument(arg);
     }
-    command.argument("--layer-worker").argument(build_dir.join(Path($"layers.{process.id()}")).to_string());
+    command.argument(
+        "--compilation-unit-worker"
+    ).argument(build_dir.join(Path($"compilation-units.{process.id()}")).to_string());
     command.stdin(process.Stream.Pipe);
     var spawned = command.spawn();
     return spawned.is_ok() ? Optional<process.Child>.Value(spawned.value()) : Optional<process.Child>.Empty;
 }
 
-# Stops `options`' early worker, which no layer needs: at the end of its
-# input, it ends.
+# Stops `options`' early worker, which no compilation unit needs: at the end of
+# its input, it ends.
 _stop_early_worker(options: BuildOptions) {
     if (options.early_worker.is_value()) {
         options.early_worker.value().stdin().close();
@@ -544,9 +548,13 @@ _stop_early_worker(options: BuildOptions) {
     }
 }
 
-# `PEPC_LAYER_JOBS` as a number, or 0.
-_layer_jobs_named(): ulong {
-    var named = os.environment("PEPC_LAYER_JOBS");
+# `PEPC_COMPILATION_UNIT_JOBS` (or its deprecated spelling,
+# `PEPC_LAYER_JOBS`) as a number, or 0.
+_compilation_unit_jobs_named(): ulong {
+    var named = os.environment("PEPC_COMPILATION_UNIT_JOBS");
+    if (!named.is_value()) {
+        named = os.environment("PEPC_LAYER_JOBS");
+    }
     if (named.is_value() and !named.value().is_empty) {
         var n = ulong.parse(named.value());
         if (n.is_value()) {
@@ -556,23 +564,24 @@ _layer_jobs_named(): ulong {
     return 0;
 }
 
-# How many layers to check at once (`BuildOptions.layer_jobs`).
-_layer_jobs(options: BuildOptions): ulong {
-    var named = _layer_jobs_named();
+# How many compilation units to check at once
+# (`BuildOptions.compilation_unit_jobs`).
+_compilation_unit_jobs(options: BuildOptions): ulong {
+    var named = _compilation_unit_jobs_named();
     if (named != 0) {
         return named;
     }
-    return options.layer_jobs != 0 ? options.layer_jobs : async.logical_cpus();
+    return options.compilation_unit_jobs != 0 ? options.compilation_unit_jobs : async.logical_cpus();
 }
 
-# Checks every layer but the last, the program's own, in up to `jobs`
-# `--layer-worker` children (`incremental.check_in_workers`), each of which
-# also compiles the layer into its object, and puts in `prechecked` the
-# record, own interface and warnings of every layer, found in the cache or
-# checked.
+# Checks every compilation unit but the last, the program's own, in up to `jobs`
+# `--compilation-unit-worker` children (`incremental.check_in_workers`), each of
+# which also compiles the compilation unit into its object, and puts in
+# `prechecked` the record, own interface and warnings of every compilation unit,
+# found in the cache or checked.
 _check_in_workers(
     program: link.Program,
-    layered: Layer[],
+    units: CompilationUnit[],
     options: BuildOptions,
     jobs: ulong,
     prechecked: HashMap<ulong, (u8[], String, String)>
@@ -580,7 +589,7 @@ _check_in_workers(
     # A folder of this build's own: builds in one folder at once (`pepper
     # test` builds its test programs side by side) share `build_dir`. Kept
     # with `-T time`, for the time each worker's stages took (`<k>.stages`).
-    var dir = options.build_dir.join(Path($"layers.{process.id()}"));
+    var dir = options.build_dir.join(Path($"compilation-units.{process.id()}"));
     Directory.remove_all(dir);
     var created = Directory.create_all(dir);
     if (created.is_err()) {
@@ -590,8 +599,8 @@ _check_in_workers(
     var extension = _object_extension(options, codegen.target_triple(program.target));
     var checked = check_in_workers(
         program,
-        layered,
-        layered.count - 1,
+        units,
+        units.count - 1,
         cache,
         jobs,
         prechecked,
@@ -600,22 +609,22 @@ _check_in_workers(
         options.early_worker,
         options.trace_time,
         (k) => {
-            # A layer's object goes with its record: one without it (pruned,
-            # say) is checked again, which compiles it.
-            if (!_layer_object(cache, layered[k], extension).is_file()) {
+            # A compilation unit's object goes with its record: one without it
+            # (pruned, say) is checked again, which compiles it.
+            if (!_compilation_unit_object(cache, units[k], extension).is_file()) {
                 return false;
             }
             # Reused now: no build pruning the cache removes it before this
             # one links it.
-            cache.used(cache.objects($"layer {layered[k].name}", layered[k].key));
-            _copy_defines(cache, layered[k], dir, k);
+            cache.used(cache.objects($"compilation unit {units[k].name}", units[k].key));
+            _copy_defines(cache, units[k], dir, k);
             return true;
         }
     );
     # With `-T passes`, the time each worker's passes took (`<k>.passes`).
     if (options.pass_times.is_value()) {
-        for (var k in 0..layered.count) {
-            var passes = File.read_to_string(layer_file(dir, k, "passes"));
+        for (var k in 0..units.count) {
+            var passes = File.read_to_string(worker_file(dir, k, "passes"));
             if (passes.is_ok()) {
                 options.pass_times.value().add_all(sema.PassTimes.parse(passes.value()));
             }
@@ -627,49 +636,50 @@ _check_in_workers(
     return checked;
 }
 
-## A `--layer-worker` child of a build with `options`: loads the layers as
-## the build does, then checks each layer whose number and key a line of
-## standard input gives, on the records of the layers it reads (in `dir`,
-## as `<k>.rec`), stores its record and object in the cache as the build
-## would, and leaves in `dir` its record (`<k>.rec`), its own interface
-## (`<k>.own`), what its object defines (`<k>.defines`), its warnings,
-## rendered (`<k>.warn`), or its error (`<k>.err`), then `<k>.done`. Its
-## first line (`done k...`) names the layers done when it started, whose
-## files' bodies it does not read.
+## A `--compilation-unit-worker` child of a build with `options`: loads the
+## compilation units as the build does, then checks each compilation unit whose
+## number and key a line of standard input gives, on the records of the
+## compilation units it reads (in `dir`, as `<k>.rec`), stores its record and
+## object in the cache as the build would, and leaves in `dir` its record
+## (`<k>.rec`), its own interface (`<k>.own`), what its object defines
+## (`<k>.defines`), its warnings, rendered (`<k>.warn`), or its error
+## (`<k>.err`), then `<k>.done`. Its first line (`done k...`) names the
+## compilation units done when it started, whose files' bodies it does not read.
 ##
 ## @param program the program, loaded and linked as the build loads it
 ## @param options the build's options
-## @param dir the folder the build and its workers pass layers through
+## @param dir the folder the build and its workers pass compilation units
+##   through
 ## @returns the exit code: 0 once standard input ends
-export layer_worker(program: link.Program, options: BuildOptions, dir: Path): int {
+export compilation_unit_worker(program: link.Program, options: BuildOptions, dir: Path): int {
     if (!options.cache.is_value()) {
-        File.stderr().write_all("pepc: a layer worker needs the build cache\n");
+        File.stderr().write_all("pepc: a compilation unit worker needs the build cache\n");
         return 1;
     }
     var clock = Clock(options.trace_time);
     var cache = options.cache.value();
     var triple = codegen.target_triple(program.target);
-    var units = link.units(program);
-    var keys = Keys(program, units, _build_text(options, triple));
+    var translation_units = link.translation_units(program);
+    var keys = Keys(program, translation_units, _build_text(options, triple));
     clock.lap("worker keys");
     var triple_extension = _object_extension(options, triple);
-    var reused = Optional<Reused>.Value(reuse(program, units, keys, cache, triple_extension));
+    var reused = Optional<Reused>.Value(reuse(program, translation_units, keys, cache, triple_extension));
     clock.lap("worker reuse");
-    var layered = layers(program, link.layer_units(program), keys.base());
-    clock.lap("worker layers");
+    var units = compilation_units(program, keys.base());
+    clock.lap("worker compilation units");
     var sources = program.sources();
-    return serve_layers(program, layered, dir, clock, (k, records) => {
-        return _work_on(program, layered[k], records, cache, reused, sources, dir, k, options);
+    return serve_compilation_units(program, units, dir, clock, (k, records) => {
+        return _work_on(program, units[k], records, cache, reused, sources, dir, k, options);
     });
 }
 
-# Checks `layer` (number `k`) for a layer worker on the merged `records`
-# of the layers it reads, stores its record and leaves it in `dir`
-# (`incremental.check_for_worker`), then compiles its object: the error, if
-# any.
+# Checks `unit` (number `k`) for a compilation unit worker on the merged
+# `records` of the compilation units it reads, stores its record and leaves it
+# in `dir` (`incremental.check_for_worker`), then compiles its object: the
+# error, if any.
 _work_on(
     program: link.Program,
-    layer: Layer,
+    unit: CompilationUnit,
     records: HashMap<ulong, u8[]>,
     cache: Cache,
     reused: Reused?,
@@ -682,33 +692,33 @@ _work_on(
     var times = options.pass_times.is_value() ?
         Optional<sema.PassTimes>.Value(sema.PassTimes()) :
         Optional<sema.PassTimes>.Empty;
-    var checked = check_for_worker(program, layer, records, cache, reused, sources, dir, k, stages, times);
+    var checked = check_for_worker(program, unit, records, cache, reused, sources, dir, k, stages, times);
     if (checked.is_err()) {
         return Optional<String>.Value(checked.error());
     }
     var (after, state) = checked.value();
     var t5 = os.Instant.now();
-    # Its object declares what the objects of the layers it reads define:
-    # it waits for them.
-    for (var d in layer.reads) {
-        while (!layer_file(dir, d, "defines").is_file()) {
+    # Its object declares what the objects of the compilation units it reads
+    # define: it waits for them.
+    for (var d in unit.reads) {
+        while (!worker_file(dir, d, "defines").is_file()) {
             async.Thread.sleep(2);
         }
     }
-    var below = _defined_by(cache, Array<Layer>(), layer.reads, Optional<Path>.Value(dir));
+    var below = _defined_by(cache, Array<CompilationUnit>(), unit.reads, Optional<Path>.Value(dir));
     var t6 = os.Instant.now();
     stages.append($"wait {(t6 - t5).milliseconds()}\n");
     mark(dir, k, "compiling");
     # Its object, which code generation of the program does not make again.
-    var compiled = _compile_layer(program, layer, after, state, below, options, cache, dir);
+    var compiled = _compile_unit(program, unit, after, state, below, options, cache, dir);
     if (compiled.is_value()) {
         return compiled;
     }
-    _copy_defines(cache, layer, dir, k);
+    _copy_defines(cache, unit, dir, k);
     var t7 = os.Instant.now();
-    stages.append($"object {(t7 - t6).milliseconds()}\nreads {layer.reads.count}\n");
+    stages.append($"object {(t7 - t6).milliseconds()}\nreads {unit.reads.count}\n");
     if (options.trace_time) {
-        File.write_text(layer_file(dir, k, "stages"), stages.to_string());
+        File.write_text(worker_file(dir, k, "stages"), stages.to_string());
     }
     return Optional<String>.Empty;
 }
@@ -733,7 +743,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     # Link-time optimization needs an optimized build.
     bool lto = options.lto and options.opt_level > 0;
-    var units = link.units(program);
+    var translation_units = link.translation_units(program);
     var keys = Optional<Keys>.Empty;
     String program_key = "";
     # A library's header is written beside it, and must still be there.
@@ -741,7 +751,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         Optional<Path>.Value(header_path(options.output, program.target)) :
         Optional<Path>.Empty;
     if (options.cache.is_value()) {
-        keys = Optional<Keys>.Value(Keys(program, units, _build_text(options, triple)));
+        keys = Optional<Keys>.Value(Keys(program, translation_units, _build_text(options, triple)));
         # A unit's code holds the line numbers of the generics it
         # instantiates from other files, which interface hashes leave out.
         keys.value().exact_positions = options.debug;
@@ -764,20 +774,23 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # The units whose objects the cache has: sema skips their bodies.
     var reused = Optional<Reused>.Empty;
     if (keys.is_value()) {
-        reused = Optional<Reused>.Value(reuse(program, units, keys.value(), options.cache.value(), triple_extension));
+        reused = Optional<Reused>.Value(
+            reuse(program, translation_units, keys.value(), options.cache.value(), triple_extension)
+        );
         clock.lap("reuse");
     }
 
     var sources = program.sources();
-    var layered = Array<Layer>();
-    # Debug info holds the positions a layer's key leaves out, so a build
-    # with `-g` keys each unit by its text (`Keys.exact_positions`) instead.
-    if (options.cache.is_value() and !_layers_off() and !options.debug) {
-        layered = layers(program, link.layer_units(program), keys.value().base());
+    var units = Array<CompilationUnit>();
+    # Debug info holds the positions a compilation unit's key leaves out, so a
+    # build with `-g` keys each unit by its text (`Keys.exact_positions`)
+    # instead.
+    if (options.cache.is_value() and !_compilation_units_off() and !options.debug) {
+        units = compilation_units(program, keys.value().base());
     }
-    # Checking layers links the bodies it needs when it gets to them.
+    # Checking compilation units links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
-    if (layered.count <= 1) {
+    if (units.count <= 1) {
         var unread = _link_bodies(program, every_file(program));
         if (unread.is_value()) {
             return Result<Built, String>.err(unread.value());
@@ -786,29 +799,30 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
     var module = sema.Module();
     var state = sema.PassState(program.target);
-    # Whether layer workers compiled every layer but the last into its
-    # object (`_layer_object`), and what those layers made.
-    bool layer_objects = false;
-    # The cache's folder of the last layer's objects, when it has them
-    # (`_store_last`).
+    # Whether compilation unit workers compiled every compilation unit but the
+    # last into its object (`_compilation_unit_object`), and what those
+    # compilation units made.
+    bool unit_objects = false;
+    # The cache's folder of the last compilation unit's objects, when it has
+    # them (`_store_last`).
     var last_folder = Optional<Path>.Empty;
-    if (layered.count > 1) {
+    if (units.count > 1) {
         var prechecked = HashMap<ulong, (u8[], String, String)>();
-        var jobs = _layer_jobs(options);
-        if (jobs > 1 and layered.count > 2 and !options.in_process and !options.worker_args.is_empty) {
-            var parallel = _check_in_workers(program, layered, options, jobs, prechecked);
+        var jobs = _compilation_unit_jobs(options);
+        if (jobs > 1 and units.count > 2 and !options.in_process and !options.worker_args.is_empty) {
+            var parallel = _check_in_workers(program, units, options, jobs, prechecked);
             if (parallel.is_err()) {
                 return Result<Built, String>.err(parallel.error());
             }
-            clock.lap("layers in workers");
-            layer_objects = true;
+            clock.lap("compilation units in workers");
+            unit_objects = true;
         } else {
             _stop_early_worker(options);
         }
         var replayed = Array<String>();
-        var checked = check_layers(
+        var checked = check_compilation_units(
             program,
-            layered,
+            units,
             options.cache.value(),
             reused,
             sources,
@@ -818,16 +832,17 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             options.trace_cache,
             options.verify_cutoff,
             prechecked,
-            layer_objects ? triple_extension : "",
+            unit_objects ? triple_extension : "",
             times = options.pass_times
         );
-        # The warnings of the layers loaded, as checking them gave them.
+        # The warnings of the compilation units loaded, as checking them gave
+        # them.
         for (var warned in replayed) {
             File.stderr().write_all(warned);
         }
         if (checked.is_err()) {
             report_warnings(warnings, sources);
-            return Result<Built, String>.err(_layer_error(checked.error(), sources));
+            return Result<Built, String>.err(_check_error(checked.error(), sources));
         }
         module = checked.value().module;
         state = checked.value().state;
@@ -882,11 +897,11 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     if (options.pass_times.is_value()) {
         File.stderr().write_all(options.pass_times.value().report());
     }
-    if (reused.is_value() and !layer_objects) {
+    if (reused.is_value() and !unit_objects) {
         reuse_after_sema(
             reused.value(),
             program,
-            units,
+            translation_units,
             keys.value(),
             options.cache.value(),
             triple_extension,
@@ -928,11 +943,11 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     var objects = Array<Path>();
     # The `[Link]` arguments the link takes (`_link_attributes`).
     var link_text = "";
-    if (layer_objects) {
-        var last = layered[layered.count - 1];
+    if (unit_objects) {
+        var last = units[units.count - 1];
         if (last_folder.is_value()) {
-            # The cache has the last layer's objects: its warnings and
-            # `[Link]` arguments are kept beside them.
+            # The cache has the last compilation unit's objects: its warnings
+            # and `[Link]` arguments are kept beside them.
             var warned = File.read_to_string(last_folder.value().join(Path("warn")));
             if (warned.is_ok() and !warned.value().is_empty) {
                 File.stderr().write_all(warned.value());
@@ -941,9 +956,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             link_text = links.is_ok() ? links.value() : "";
             options.cache.value().used(last_folder.value());
         } else {
-            # The layer workers compiled every layer but the last: only the
-            # last layer's files and the entry points are generated here,
-            # and what the layers below defined is only declared.
+            # The compilation unit workers compiled every compilation unit but
+            # the last: only the last compilation unit's files and the entry
+            # points are generated here, and what the compilation units below
+            # defined is only declared.
             var own = HashSet<ulong>();
             for (var file in last.files) {
                 own.insert(file);
@@ -957,10 +973,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 part_of_file.append(own.contains(i) ? 0 : 2);
             }
             var lower = Array<ulong>();
-            for (var k in 0..layered.count - 1) {
+            for (var k in 0..units.count - 1) {
                 lower.append(k);
             }
-            var below = _defined_by(options.cache.value(), layered, lower, Optional<Path>.Empty);
+            var below = _defined_by(options.cache.value(), units, lower, Optional<Path>.Empty);
             var generated = codegen.generate(
                 module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
             );
@@ -997,8 +1013,8 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
             last_folder = Optional<Path>.Value(stored.value());
         }
-        for (var k in 0..layered.count - 1) {
-            var folder = options.cache.value().objects($"layer {layered[k].name}", layered[k].key);
+        for (var k in 0..units.count - 1) {
+            var folder = options.cache.value().objects($"compilation unit {units[k].name}", units[k].key);
             options.cache.value().used(folder);
             objects.append(folder.join(Path($"0.{extension}")));
         }
@@ -1009,9 +1025,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # The bodies of units whose objects the cache holds are only declared.
         var cached_files = HashSet<uint>();
         if (reused.is_value()) {
-            for (var u in 0..units.count) {
+            for (var u in 0..translation_units.count) {
                 if (reused.value().objects[u].count > 0) {
-                    for (var file in units[u].files) {
+                    for (var file in translation_units[u].files) {
                         cached_files.insert(file as uint);
                     }
                 }
@@ -1033,18 +1049,18 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         }
         var unit_parts = Array<uint[]>();
         uint parts = 0;
-        for (var unit in units) {
-            var split = _split(program, unit, sizes, parts, options.part_size);
+        for (var translation_unit in translation_units) {
+            var split = _split(program, translation_unit, sizes, parts, options.part_size);
             var own = Array<uint>();
             for (var part in split) {
                 if (!own.contains(part)) {
                     own.append(part);
                 }
             }
-            for (var i in 0..unit.files.count) {
-                part_of_file[unit.files[i]] = split[i];
+            for (var i in 0..translation_unit.files.count) {
+                part_of_file[translation_unit.files[i]] = split[i];
             }
-            unit_parts.append(_unit_size(unit, sizes) == 0 ? Array<uint>() : own);
+            unit_parts.append(_translation_unit_size(translation_unit, sizes) == 0 ? Array<uint>() : own);
             parts += own.count as uint;
         }
         var entry_part = parts;
@@ -1056,13 +1072,13 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # The parts compiled, with their places in their units and keys, to
         # store in the cache.
         var stored_parts = Array<(ulong, ulong, String)>();
-        for (var u in 0..units.count) {
+        for (var u in 0..translation_units.count) {
             if (reused.is_value() and reused.value().objects[u].count > 0) {
                 if (options.trace_cache) {
-                    File.stderr().write_all($"cache: hit {units[u].name}\n");
+                    File.stderr().write_all($"cache: hit {translation_units[u].name}\n");
                 }
                 objects.append_all(reused.value().objects[u]);
-                report.hits.append(units[u].name);
+                report.hits.append(translation_units[u].name);
                 continue;
             }
             var own = unit_parts[u];
@@ -1078,25 +1094,25 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 continue;
             }
             var key = reused.value().keys[u].value();
-            report.misses.append(units[u].name);
+            report.misses.append(translation_units[u].name);
             # Each part's object from the cache when its key hits: its files and
             # what they read are as when it was compiled.
             var parts = Array<Path>();
             ulong hits = 0;
             for (var i in 0..own.count) {
                 var files = Array<ulong>();
-                for (var file in units[u].files) {
+                for (var file in translation_units[u].files) {
                     if (part_of_file[file] == own[i]) {
                         files.append(file);
                     }
                 }
-                var part_key = keys.value().part(program, units, u, files, reused.value().interfaces);
-                var cached = options.cache.value().part(units[u].name, i, part_key);
+                var part_key = keys.value().part(program, translation_units, u, files, reused.value().interfaces);
+                var cached = options.cache.value().part(translation_units[u].name, i, part_key);
                 var object = cached.join(Path($"0.{extension}"));
                 parts.append(object);
                 if (object.is_file()) {
                     options.cache.value().used(cached);
-                    report.part_hits.append($"{units[u].name}#{i}");
+                    report.part_hits.append($"{translation_units[u].name}#{i}");
                     hits += 1;
                     continue;
                 }
@@ -1106,7 +1122,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 stored_parts.append((u, i, part_key));
             }
             if (options.trace_cache) {
-                File.stderr().write_all($"cache: miss {units[u].name} ({own.count - hits} of {own.count} parts)\n");
+                File.stderr().write_all(
+                    $"cache: miss {translation_units[u].name} ({own.count - hits} of {own.count} parts)\n"
+                );
             }
             stored.append((u, key, parts));
         }
@@ -1132,7 +1150,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         if (keys.is_value()) {
             for (var (u, i, part_key) in stored_parts) {
                 var kept = options.cache.value().store(
-                    work.join(Path($"{u}")).join(Path($"{i}")), $"{units[u].name}#{i}", part_key
+                    work.join(Path($"{u}")).join(Path($"{i}")), $"{translation_units[u].name}#{i}", part_key
                 );
                 if (kept.is_err()) {
                     Directory.remove_all(work);
@@ -1144,8 +1162,17 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 for (var i in 0..parts.count) {
                     Directory.remove_all(folder.join(Path($"{i}")));
                 }
-                write_record(folder, reused.value(), module, program, units[u], warnings, parts, options.cache.value());
-                var kept = options.cache.value().store(folder, units[u].name, key);
+                write_record(
+                    folder,
+                    reused.value(),
+                    module,
+                    program,
+                    translation_units[u],
+                    warnings,
+                    parts,
+                    options.cache.value()
+                );
+                var kept = options.cache.value().store(folder, translation_units[u].name, key);
                 if (kept.is_err()) {
                     Directory.remove_all(work);
                     return Result<Built, String>.err(kept.error());
@@ -1174,7 +1201,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     }
 
     # Search order: `-L`, then `[Link(path = ...)]`.
-    if (!layer_objects) {
+    if (!unit_objects) {
         link_text = _link_attributes(module);
     }
     var (linked, linked_dirs) = _resolve_links(link_text, program);
@@ -1302,7 +1329,7 @@ _codegen_options(options: BuildOptions): String {
 ## objects stay the same from one program to the next.
 const _PART_SIZE = 20000;
 
-## The part of each of `unit`'s files: as many parts as the unit's size
+## The part of each of `translation_unit`'s files: as many parts as the unit's size
 ## needs (`part_size`), no more than its files, each a run of the unit's
 ## files in namespace order, a file in the part its middle falls in. Each
 ## part's object is cached under its files (`Keys.part`), so the split
@@ -1310,31 +1337,33 @@ const _PART_SIZE = 20000;
 ## only the files at its ends, and only when the edit is large, where
 ## filling the least loaded part first moved files all over the unit. The
 ## parts are numbered from `first`, with no gaps.
-_split(program: link.Program, unit: link.Unit, sizes: ulong[], first: uint, part_size: ulong): uint[] {
-    var total = _unit_size(unit, sizes);
+_split(
+    program: link.Program, translation_unit: link.TranslationUnit, sizes: ulong[], first: uint, part_size: ulong
+): uint[] {
+    var total = _translation_unit_size(translation_unit, sizes);
     var count = (total + part_size - 1) / part_size;
-    if (count > unit.files.count) {
-        count = unit.files.count;
+    if (count > translation_unit.files.count) {
+        count = translation_unit.files.count;
     }
     if (count < 1) {
         count = 1;
     }
     var order = Array<ulong>();
-    for (var i in 0..unit.files.count) {
+    for (var i in 0..translation_unit.files.count) {
         order.append(i);
     }
     order.sort((a, b) => {
-        var x = program.files[unit.files[a]].namespace;
-        var y = program.files[unit.files[b]].namespace;
+        var x = program.files[translation_unit.files[a]].namespace;
+        var y = program.files[translation_unit.files[b]].namespace;
         return x < y ? -1 : (x > y ? 1 : 0);
     });
     var split = Array<uint>();
-    for (var _ in unit.files) {
+    for (var _ in translation_unit.files) {
         split.append(0);
     }
     ulong before = 0;
     for (var i in order) {
-        var size = sizes[unit.files[i]];
+        var size = sizes[translation_unit.files[i]];
         # Twice the file's middle, against twice each part's share, in
         # whole numbers.
         var part = total == 0 ? 0 : ((before * 2 + size) * count) / (total * 2);
@@ -1355,10 +1384,10 @@ _split(program: link.Program, unit: link.Unit, sizes: ulong[], first: uint, part
     return split;
 }
 
-## How much code `unit`'s files own.
-_unit_size(unit: link.Unit, sizes: ulong[]): ulong {
+## How much code `translation_unit`'s files own.
+_translation_unit_size(translation_unit: link.TranslationUnit, sizes: ulong[]): ulong {
     ulong total = 0;
-    for (var file in unit.files) {
+    for (var file in translation_unit.files) {
         total += sizes[file];
     }
     return total;

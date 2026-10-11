@@ -58,7 +58,7 @@ _build(root: Path): driver.Built {
 
 # The name of the unit holding the file whose name ends with `file`.
 _unit_of(program: link.Program, file: String): String {
-    for (var unit in link.units(program)) {
+    for (var unit in link.translation_units(program)) {
         for (var i in unit.files) {
             if (program.files[i].name.ends_with(file)) {
                 return unit.name;
@@ -144,8 +144,8 @@ rebuilds_only_the_unit_whose_body_changed() {
     expect_true(signature.misses.contains(b) and signature.misses.contains(main));
 }
 
-# How many records the cache holds of the layer whose first unit is
-# `unit`: one for each key it was stored under.
+# How many records the cache holds of the compilation unit named `unit`
+# (after its first file): one for each key it was stored under.
 _records_of(root: Path, unit: String): ulong {
     return _count_records(root.join(Path("cache")), "", unit.replace(":", "_").replace("#", "_"));
 }
@@ -166,12 +166,12 @@ _count_records(dir: Path, name: String, folder: String): ulong {
     return count;
 }
 
-# A layer is keyed on the layers it reads: an interface edit to `a.pep`
-# keeps the record of `b.pep`'s layer, which does not read it, and an edit
-# to `b.pep` that of `a.pep`'s.
+# A compilation unit is keyed on the compilation units it reads: an interface
+# edit to `a.pep` keeps the record of `b.pep`'s compilation unit, which does not
+# read it, and an edit to `b.pep` that of `a.pep`'s.
 [Test]
-keeps_the_layers_an_edit_does_not_reach() {
-    var folder = TempFolder("layer_keys");
+keeps_the_compilation_units_an_edit_does_not_reach() {
+    var folder = TempFolder("unit_keys");
     var root = folder.path;
     _write_program(root);
     var program = _load(root);
@@ -230,8 +230,8 @@ _write_callee(root: Path, a_body: String) {
             + ";\n}\n"
     );
     # `b.pep` implements `Measure`, so the confinement summary `a.pep`'s
-    # layer recorded for `a_count`, whose trait calls now reach `_Three`
-    # too, is made again from its body: a call under a lock needs it.
+    # compilation unit recorded for `a_count`, whose trait calls now reach
+    # `_Three` too, is made again from its body: a call under a lock needs it.
     File.write_text(
         root.join(Path("b.pep")),
         "import async;\nimport \"a\";\n[Shared]\nstruct _Count {\n    const value: async.Atomic<long>;\n    construct() {\n        this.value = async.Atomic<long>(0);\n    }\n}\nstruct _Three {\n    var n: int;\n    construct() {\n        this.n = 3;\n    }\n}\nextend _Three with Measure {\n    measure(): int {\n        return n;\n    }\n}\nexport b_value(): int {\n    var counter = async.Mutex<_Count>(_Count());\n    var items = Array<Measure>();\n    items.append(_Three());\n    var n = 0;\n    with (var c = counter.lock()) {\n        n = a_count(items);\n    }\n    return n;\n}\n"
@@ -242,9 +242,9 @@ _write_callee(root: Path, a_body: String) {
     );
 }
 
-# A body a layer decodes from a record below it is not a change of that
-# layer's: its record keeps no copy of the body, which an edit to the body
-# below would leave stale (`PEPC_VERIFY_CUTOFF` finds the copy).
+# A body a compilation unit decodes from a record below it is not a change of
+# that compilation unit's: its record keeps no copy of the body, which an edit
+# to the body below would leave stale (`PEPC_VERIFY_CUTOFF` finds the copy).
 [Test]
 keeps_no_copy_of_the_bodies_it_decodes() {
     var folder = TempFolder("decoded_bodies");
@@ -438,20 +438,20 @@ _build_deferred(root: Path): bool {
     return true;
 }
 
-# A build loaded with `defer_bodies` links and checks the bodies of the
-# files it checks, not those of the layers it loads from the cache, even
-# when a file of the layer warned: its record keeps the warnings, which a
+# A build loaded with `defer_bodies` links and checks the bodies of the files it
+# checks, not those of the compilation units it loads from the cache, even when
+# a file of the compilation unit warned: its record keeps the warnings, which a
 # build that loads it prints again.
 [Test]
-links_only_the_bodies_of_the_layers_it_checks() {
+links_only_the_bodies_of_the_compilation_units_it_checks() {
     var folder = TempFolder("deferred_bodies");
     var root = folder.path;
     _write_deferred(root, "b_new()", 1);
     expect_true(_build_deferred(root));
     _write_deferred(root, "b_new()", 2);
     expect_false(_build_deferred(root));
-    # `a.pep` warns: its layer's record keeps the warning, which the next
-    # build prints again without checking the layer.
+    # `a.pep` warns: its compilation unit's record keeps the warning, which the
+    # next build prints again without checking the compilation unit.
     _write_deferred(root, "b_old()", 3);
     expect_true(_build_deferred(root));
     _write_deferred(root, "b_old()", 4);
