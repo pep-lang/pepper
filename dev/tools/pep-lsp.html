@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
+            window.path_to_searchindex_js = "../searchindex-70976905.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -216,21 +216,22 @@ change it again, so one text that crashes the server cannot keep it down;
 after five crashes in a row <code>pep-lsp</code> gives up and exits.</p>
 <h2 id="checking-as-you-type"><a class="header" href="#checking-as-you-type">Checking as you type</a></h2>
 <p>The server checks a file as the root of its own program, the way
-<code>pepper build</code> checks one: one group of files at a time, starting with the
-standard library and working up through each file’s imports. Files that
-import each other in a cycle form one group. It saves what it learned
-about each group in the build cache, in the <code>.pep/cache</code> folder of the
+<code>pepper build</code> checks one: one compilation unit at a time, starting with
+the standard library and working up through each file’s imports. A
+compilation unit is one file, or the files that import each other in a
+cycle. It saves what it learned about each compilation unit in the build
+cache, in the <code>.pep/cache</code> folder of the
 file’s project (the folder holding its <code>pep.toml</code>, else the file’s own
 folder), or in <code>$PEPPER_CACHE_DIR</code> when that is set. When you edit a file,
-only the file you are editing is checked again. Every other group loads
+only the file you are editing is checked again. Every other compilation unit loads
 from the cache, unless its files changed on disk or a declaration it
 depends on changed. The cache outlives the server, so a restarted editor
 answers quickly once the files have been checked once. Delete the folder
 to start over.</p>
 <p>The first time, when the cache has nothing yet, the server checks the
-groups the file depends on in parallel: it starts copies of itself
-(<code>pep-lsp --layer-worker</code>), one per processor at most, as <code>pepper build</code>
-does.</p>
+compilation units the file depends on in parallel: it starts copies of itself
+(<code>pep-lsp --compilation-unit-worker</code>), one per processor at most, as
+<code>pepper build</code> does.</p>
 <h2 id="command-line-options"><a class="header" href="#command-line-options">Command-line options</a></h2>
 <pre><code class="language-text">pep-lsp [--stdio]
 </code></pre>
@@ -242,7 +243,7 @@ does.</p>
 <tbody>
 <tr><td><code>--stdio</code></td><td>Talk over standard input and output: the default, accepted for editors that pass it</td></tr>
 <tr><td><code>--serve</code></td><td>Internal: run the server in this process, without the supervisor that restarts it. The supervisor starts it so</td></tr>
-<tr><td><code>--layer-worker &lt;dir&gt;</code></td><td>Internal: check layers for the server that started it, which passes them through <code>&lt;dir&gt;</code>. The server starts these itself</td></tr>
+<tr><td><code>--compilation-unit-worker &lt;dir&gt;</code></td><td>Internal: check compilation units for the server that started it, which passes them through <code>&lt;dir&gt;</code>. The server starts these itself. <code>--layer-worker</code> is its deprecated spelling</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options and exit</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print <code>pep-lsp</code> and its version, and exit</td></tr>
 </tbody>

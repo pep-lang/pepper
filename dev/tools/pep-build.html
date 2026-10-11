@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
+            window.path_to_searchindex_js = "../searchindex-70976905.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -634,10 +634,14 @@ See <a href="../language/types-and-variables.html#integer-overflow">Integer over
 <pre><code class="language-bash">pepper build -O main.pep --no-runtime-checks=overflow,shift
 </code></pre>
 <h2 id="the-build-cache"><a class="header" href="#the-build-cache">The build cache</a></h2>
-<p>Each file of the program (each import cycle, and the runtime as one) is
-compiled to its own object, and the build cache keeps them: a file whose
-sources, and whose imports’ declarations, did not change is not compiled or
-checked again. The optimization level, link-time optimization, debug info,
+<p>The compiler checks a program one <strong>compilation unit</strong> at a time: a file,
+or the files that import each other in a cycle, with the runtime as one.
+The build cache keeps each compilation unit’s checked result and object,
+and each file’s own object: a file whose sources, and whose imports’
+declarations, did not change is not compiled or checked again.
+<code>PEPC_COMPILATION_UNIT_JOBS</code> sets how many compilation units are checked at
+once (one per processor by default; <code>PEPC_LAYER_JOBS</code>, its old name, still
+works). The optimization level, link-time optimization, debug info,
 CPU, removed runtime checks and build options are part of each object’s
 key. Deleting the cache folder is always safe.</p>
 <h3 id="--no-cache"><a class="header" href="#--no-cache"><code>--no-cache</code></a></h3>
