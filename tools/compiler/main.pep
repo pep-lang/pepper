@@ -641,7 +641,7 @@ _env_opt_level(): Result<uint, String> {
 
 ## The release this compiler belongs to: `scripts/set-version.sh` sets it.
 version(): String {
-    return "0.4.0-dev";
+    return "0.9.0";
 }
 
 # The name of the value an option takes, as its help shows it: none for an
