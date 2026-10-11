@@ -1,6 +1,5 @@
 ## Conversions where a value flows into a typed slot (a variable's
-## initializer, an assignment, an argument, a return):
-## `convert_to_traits` in Pepper.
+## initializer, an assignment, an argument, a return): `convert_to_traits`.
 ##
 ## A value reaching a struct slot whose constructor is `[Implicit]` from its
 ## type (or a type it promotes to) becomes that constructor's call; a

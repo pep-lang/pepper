@@ -1,5 +1,4 @@
-## What a cast may convert: `pepper_sema::casts` and the `check_casts` pass
-## in Pepper.
+## What a cast may convert, and the `check_casts` pass.
 ##
 ## `x as T` is a `static_cast`: a value conversion between numbers, `bool`
 ## and enums, a pointer to `__ptr<void>` and back, and the identity.

@@ -1,5 +1,4 @@
-## Tuple destructures and element references: `tuples::lower_destructures`
-## in Pepper.
+## Tuple destructures and element references: `lower_destructures`.
 
 import "closures";
 import [error_at] from "common";

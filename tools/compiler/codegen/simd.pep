@@ -1,5 +1,5 @@
 ## SIMD vectors (#517): the built-in type `__simd<T, N>`, LLVM's `<N x T>`,
-## and the `__simd_<op><V>(args)` intrinsics (`Expression::Simd`) that the
+## and the `__simd_<op><V>(args)` intrinsics (`Expression.Simd`) that the
 ## runtime's `simd.Vector<T, N>` and `simd.Mask<N>` are written with.
 ##
 ## Each operation is one or a few LLVM instructions or vector intrinsics,
@@ -29,8 +29,7 @@ import "traits";
 import [simd_shape] from "types";
 import "types";
 
-## Every SIMD operation, with the name after `__simd_` that calls it
-## (`SimdOp::ALL`).
+## Every SIMD operation, with the name after `__simd_` that calls it.
 _simd_operations(): Array<(SimdOp, String)> {
     return [
         (SimdOp.Splat, "splat"),
@@ -85,7 +84,7 @@ _simd_operations(): Array<(SimdOp, String)> {
     ];
 }
 
-## The name after `__simd_` that calls `op` (`SimdOp::name`).
+## The name after `__simd_` that calls `op`.
 export simd_op_name(op: SimdOp): String {
     for (var entry in _simd_operations()) {
         var (candidate, name) = entry;
@@ -96,7 +95,7 @@ export simd_op_name(op: SimdOp): String {
     return "";
 }
 
-## How many arguments `op` takes (`SimdOp::arity`).
+## How many arguments `op` takes.
 export simd_op_arity(op: SimdOp): ulong {
     match (op) {
         Lanes, LaneBits, IsSigned => {
@@ -114,8 +113,7 @@ export simd_op_arity(op: SimdOp): ulong {
     }
 }
 
-## The type of the node, given the vector type `ty` `op` works on
-## (`SimdOp::result`).
+## The type of the node, given the vector type `ty` `op` works on.
 export simd_op_result(op: SimdOp, ty: TypeName): TypeName {
     match (op) {
         Equal, NotEqual, Less, LessEqual, Greater, GreaterEqual => {
@@ -156,7 +154,7 @@ enum _Lane {
     Float,
 }
 
-## The lane kind of lane type `name` (`Lane::of`).
+## The lane kind of lane type `name`.
 _lane_of(state: PassState, name: String): _Lane {
     if (sema.is_float_type(name)) {
         return _Lane.Float;
@@ -236,7 +234,7 @@ extend Generator {
         if (value.value_type().same(ty)) {
             return Result<llvm.Value>.ok(value);
         }
-        # `build_int_cast` is `LLVMBuildIntCast`: signed.
+        # Signed, as `LLVMBuildIntCast` casts.
         return Result<llvm.Value>.ok(simd_int_cast(value, ty, true, "simd.cast"));
     }
 
@@ -310,7 +308,7 @@ extend Generator {
         return llvm.const_vector(lanes);
     }
 
-    ## `Expression::Simd`: operation `op` on vector type `ty` (see `SimdOp`).
+    ## `Expression.Simd`: operation `op` on vector type `ty` (see `SimdOp`).
     codegen_simd(op: SimdOp, ty: TypeName, args: Array<Expression>): Result<llvm.Value> {
         var i32 = context.int32_type();
         var i64 = context.int64_type();

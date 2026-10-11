@@ -1,6 +1,6 @@
 ## Debug info (`-g`): line tables, subprograms, scopes and variables, as
-## DWARF 4 on Linux and macOS and CodeView on Windows:
-## `crates/pepper-codegen/src/debug.rs` in Pepper (see INTERNALS.md §4.4).
+## DWARF 4 on Linux and macOS and CodeView on Windows (see INTERNALS.md
+## §4.4).
 ##
 ## A `DebugInfo` belongs to the program's module, which is one compile
 ## unit, copied into each part `partition.pep` splits it into. Each Pepper
@@ -127,7 +127,7 @@ export struct DebugInfo {
     ## Each lexical block's subprogram, by handle.
     var block_owners: HashMap<ulong, ulong> = HashMap<ulong, ulong>();
     ## A block of a scope in another file than the scope's, by scope handle
-    ## and file: where a location in that file goes (`scope_for`).
+    ## and file: where a location in that file goes (`_scope_for`).
     var file_blocks: HashMap<String, llvm.Metadata> = HashMap<String, llvm.Metadata>();
     ## Types by Pepper type name (see `debug_types.pep`).
     var types: HashMap<String, llvm.Metadata> = HashMap<String, llvm.Metadata>();
@@ -180,9 +180,9 @@ export struct DebugInfo {
         if (ir.target_triple().contains("-windows")) {
             builder.use_codeview();
         } else {
-            # DWARF 4, as Rust emits: LLVM's DWARF 5 adds a `.debug_names`
-            # index per object (the C API cannot turn it off), and GNU ld
-            # concatenates those into one gdb rejects.
+            # DWARF 4: LLVM's DWARF 5 adds a `.debug_names` index per object
+            # (the C API cannot turn it off), and GNU ld concatenates those
+            # into one gdb rejects.
             builder.set_dwarf_version(4);
         }
     }

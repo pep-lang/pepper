@@ -1,8 +1,8 @@
-## Which types are thread-safe: `check_shared_types`' `ThreadSafeStructs`
-## and `unsafe_part_in` in Pepper. A `[Shared]` struct, a `shared` function
-## type, and a value struct (`[Value]`) whose fields all are thread-safe are
-## thread-safe structs; numbers, raw pointers and weak references to
-## thread-safe types, and tuples of them, are thread-safe types.
+## Which types are thread-safe: `ThreadSafeStructs` and `unsafe_part_in`. A
+## `[Shared]` struct, a `shared` function type, and a value struct
+## (`[Value]`) whose fields all are thread-safe are thread-safe structs;
+## numbers, raw pointers and weak references to thread-safe types, and
+## tuples of them, are thread-safe types.
 
 import compiler.ast;
 import [SHARED_ATTRIBUTE] from "builder";

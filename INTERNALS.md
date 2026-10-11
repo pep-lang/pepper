@@ -188,26 +188,26 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   imports reach, then the prelude. Each file goes through
   `parse.parse`. For each import, `platform.keep` evaluates its
   `[Target]` attributes first; an import that is dropped is never resolved.
-  - `import "x"` (`imp.is_local`) goes through `imports.resolve_local`,
+  - `import "x"` (`Import.is_local`) goes through `files.resolve_local`,
     which tries `x.pep` beside the file and then `x/module.pep`. A file
     target must be in the same module (`ModuleRoots.placement`); otherwise
     the import is reported as belonging to another module, or as outside
     this module or folder.
-  - `import m` goes through `imports.resolve_module`, which returns the
+  - `import m` goes through `files.resolve_module`, which returns the
     first `<search path>/m/module.pep`.
   - Files reached from prelude files through local imports are marked
     `prelude_part`, which exempts their functions from duplicate-export
     checks (types and variables never are: two prelude files exporting one
     is a `redefinition`).
-- **`modules.link`** binds every file's imports and `export x as y`
+- **`link.link`** binds every file's imports and `export x as y`
   re-exports, then **rewrites each imported spelling in the AST**
   (`m.sqrt`, an alias `power`, a qualified type `m.Point`) to the name of the
   declaration it denotes. The type arguments of a generic method call
   (`b.run<S>(...)`), which the parser keeps in the member name, are
-  rewritten the same way (`member_type`). It also gives each file's
+  rewritten the same way (`_member_type`). It also gives each file's
   **private** top-level declarations, and every reference to them, a
   mangled name
-  (`namespace.mangle`: `helper@io/file`), keyed on the
+  (`names.mangle`: `helper@io/file`), keyed on the
   file's `ProgramFile.namespace`, which `load` computes with
   `ModuleRoots.namespace_of` (module name plus path inside the module;
   outside any module, the path from the project directory, the one the
@@ -222,10 +222,11 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   unrenamed, and the visibility check reports it as not imported. Externs
   and concrete overrides keep their names; so do
   the root file's private names, unless another file keeps the same name
-  (so `main` stays findable). `own_names` decides
+  (so `main` stays findable). `_Linker.keeps_name` and
+  `_Linker.compute_own_names` decide
   this. Which generic functions are concrete overrides (`hash<int>`, and
-  `hash<Point>` of a visible `hash<T>`) is decided by `modules.Overrides`,
-  the same rule sema's `gather_generics.concrete_overrides` applies: every
+  `hash<Point>` of a visible `hash<T>`) is decided by `_Linker.compute_overrides`,
+  the same rule sema's `overloads.concrete_overrides` applies: every
   type parameter names a primitive, `String`, or a struct, and either all
   are primitives or `String`, or a generic of that name and arity exists.
   A constrained parameter (`describe<Point: Shape>`) is always a parameter,
@@ -233,64 +234,63 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   "A type" and "a base" mean ones the declaring file can name: its own,
   the exports of the files it imports (a module's are its `module.pep`'s,
   re-exports included), the prelude's, under import-list aliases too
-  (`visible_names`, iterated until re-exports settle). Linking marks an
+  (`_Linker.visible_names`, iterated until re-exports settle). Linking marks an
   override's parameters (`GenericParam.is_argument`) and resolves them
   like type references to the structs they denote, mangled or imported,
-  binding no names (`visit_function_generics`); a type alias there is an
-  error. Linking then applies the orphan rule (`_check_orphan`): the override's file must share a home (`_Linker.home`:
+  binding no names (`_Rewriter.visit_function_generics`); a type alias there is an
+  error. Linking then applies the orphan rule (`_Rewriter._check_orphan`): the override's file must share a home (`_Linker.home`:
   its module, the prelude for the runtime's top-level files and built-in
   types, else itself) with the generic or one of its type arguments
-  (`declared_in`), so a unit's inputs never need another unit's
+  (`_Linker.declared_at`), so a unit's inputs never need another unit's
   overrides. Sema (`concrete_overrides`) and the visibility check follow the
   mark; sema's own program-wide rule applies only to an unlinked module
   (`Module.linked`). A file's own function of a name hides the imported
   generics of that name. Several functions of one name in one file are an
   overload set, which sema resolves (`overloads`); linking reports
   only a generic beside another function of its name with the same
-  parameters (`parameter_shape`), or a generic whose type parameters all
+  parameters (`_parameter_shape`), or a generic whose type parameters all
   name structs the file sees (an override of a generic the file's own
   functions hide). The
-  visibility check applies the same override rule (`Decl.is_override`).
+  visibility check applies the same override rule (`_Decl.is_override`).
   A file's overloads of a name take one name whatever their visibility, so
   an import binds the whole set.
-  **Files of one module see each other's declarations** (#559): `module_mates`
-  groups the files of the program by `module_root`, and `module_bindings`
-  gives each file `Bindings.module`, every name its module's other files
+  **Files of one module see each other's declarations** (#559): `_Linker.compute_mates`
+  groups the files of the program by `module_root`, and `_Linker.compute_module_names`
+  gives each file `_Bindings.module`, every name its module's other files
   declare (exported or not) -> the name it takes in the merged program.
   Functions of one name declared by several files of a module form one
-  union (`Unions.merge`), which the declaring files see too (it seeds the
+  union (`_Unions.merge`), which the declaring files see too (it seeds the
   union an import of that name joins); externs keep their names; any other
   name two files declare is the first's here, and the visibility check
   reports the second (`redefinition of 'x'`, a note at the first). Lookup
-  of an unqualified name (`resolve_imported`) is the file's own, then its
-  imports, then `Bindings.module` (`Source.Module`, captured by a hidden
-  extension method like an import), then the prelude; `denote` records the
+  of an unqualified name (`_resolve_imported`) is the file's own, then its
+  imports, then `_Bindings.module` (which a hidden extension method
+  captures like an import), then the prelude; `_Rewriter._denote` records the
   reference in `FileScope.imported`, so the visibility check, the LSP
   (go to definition, hover) and the deprecation check follow it like an
-  import. `Overrides.of` counts the module's other files' types and
-  generic bases as the file's own; `FileScope.extensions` includes the
+  import. `_Linker.compute_overrides` counts the module's other files' types and
+  generic bases as the file's own (`_Linker._with_mates`); `FileScope.extensions` includes the
   module's other files (so `Program.unit_inputs` hashes them into the
   file's build-cache key), and their extensions are visible whether or not
-  exported (`Rewriter.mates`, `Checker.same_module`,
-  `ExtensionScopes.same_module`, also used by `Overloads.set` for a
+  exported (`_Linker.mates`, `_Checker._same_module`,
+  `Overloads._same_module`, also used by `Overloads._set` for a
   set's private members). `load` queues a module file's `module.pep`,
   so a file of a module never loads without the files its module imports.
   A **`private` declaration** (#592, `Declaration.is_private`) stays out
-  of all of that: `module_bindings` binds it for no other file (and a file
+  of all of that: `_Linker.compute_module_names` binds it for no other file (and a file
   whose only declarations of a name are private joins no union of it),
-  `Overrides.of` leaves it out of what the module's other files see, the
-  extension checks (`Rewriter.is_member`, `Checker.sees_extension`,
-  `ExtensionScopes.sees`) see a private extension only in its file,
-  `Overloads.set` offers a private function only to its own file
+  `_Linker._bases_of` leaves it out of what the module's other files see, the
+  extension checks (`_Rewriter.is_member`, `_Checker._sees_extension`,
+  `Overloads._sees`) see a private extension only in its file,
+  `Overloads._set` offers a private function only to its own file
   (`Module.file_private_functions`), and the visibility check skips it
   when comparing a module's names and reports a reference to one from
-  another file of its module as `FilePrivate`. The Pepper linker in
-  `tools/compiler/link` mirrors each of these.
+  another file of its module as `FilePrivate`.
   Files outside any module, and the runtime's top-level prelude files, keep
   per-file visibility. Where an import or re-export would bind
   one name to functions of two files (of one module or of several), or a
   file's own functions of a name meet an import of it, it binds a union
-  instead (`Unions.merge`, a name like `f@geo/a#set1`; the prelude never
+  instead (`_Unions.merge`, a name like `f@geo/a#set1`; the prelude never
   joins); `link` returns them grouped by module
   (`Linked.overload_unions`, carried to `Module.overload_unions`), and
   `name_overloads` records each as a set of every member, reporting two
@@ -298,7 +298,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   modules' such members only make a call ambiguous). Sema hides a mixed
   set's private members (`Module.private_functions`) from calls in other
   files, and an imported member with the same parameters as one of the
-  calling file's own (`Overloads.set`, by the call's location).
+  calling file's own (`Overloads._set`, by the call's location).
   Codegen gives every mangled declaration internal linkage
   (`set_private_linkage`): no other object can name it, and ELF linkers
   read the `@` of a global symbol as a version. After this step every reference is spelled the way the merged
@@ -335,7 +335,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   call in a method, or in a trait's default method, that such an invisible
   extension would capture (sema binds it to any extension's method;
   `visit_callee`). A member access is accepted when a trait the file
-  can see declares the method (`Members.in_traits`: a call may go through
+  can see declares the method (`_VisibilityMembers.in_traits`: a call may go through
   a trait value), or when its receiver's type is unknown here (`this` in a
   trait default, or a chain starting from a parameter, local, or closure
   parameter whose type is a generic parameter in scope, or that is
@@ -509,7 +509,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   Each use points into `Module.use_contexts` (`UseContext`: the generic
   parameters in scope, the extended type inside `extend`, and the
   attributes of the enclosing declarations and blocks), which the uses of
-  one declaration share; `Module.merge` offsets the indices. The builder
+  one declaration share; `program._join` offsets the indices. The builder
   keeps the current context in `CONTEXT` (`in_generic_scope` adds a
   declaration's parameters, `with_attributes` its attributes) and records
   it once per change. `check_constraints` skips a use whose context a
@@ -519,8 +519,8 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
 - **Literal arguments.** A model literal (`IntLiteral`, ...) carries no
   `Loc`, so the builder records where each literal argument of a call is
   written in `Module.literal_args` (call location, position, literal
-  location), and `Module.argument_loc` gives an error about an argument
-  its own location or that one (constraint errors at an inferred call,
+  location), where the passes that report an error about an argument
+  look up a literal's own location (constraint errors at an inferred call,
   `check_bounds`). Each generic parameter keeps the `Loc`
   of its name, of each constraint (`Bound`), and of its default.
 - `type_name_from` lowers `T[]` to `Array<T>`.
@@ -534,7 +534,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   - A `with (var x = scope) { body } else { other }` block becomes a block
     holding a hidden `__with_scope_N` local (the scope), `var x =
     __with_scope_N.enter()` (`__with_value_N` when unnamed), and `if
-    (Expression::WithEntered(x)) { body } else { other }`. The model has no
+    (Expression.WithEntered(x)) { body } else { other }`. The model has no
     `with` statement; `lower_with_blocks` resolves the condition.
   - A tuple literal `(a, b)` becomes `FunctionCall { function: "__tuple" }`;
     `resolve_implicit_types` renames it to its type (`__tuple<int, String>`)
@@ -546,9 +546,9 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     (`display()` shows them); `check_labels` rejects a partly labeled or
     duplicate set, and `lower_destructures` renames `p.line` to `p.0`
     (`tuple_index`). A labeled literal `(line: 3, column: 7)` is built as
-    a call to `__tuple(line,column)` (`tuples.constructor_name`), so
-    `type_of_expr` gives an inferred `var` the labeled type
-    (`labeled_literal_type`) before the rename drops the labels; the builder's
+    a call to `__tuple(line,column)` (`tuple_literals.tuple_constructor_labels`
+    reads them back), so `resolve_implicit_types` gives an inferred `var` the labeled type
+    (`labeled_tuple_literal_type`) before the rename drops the labels; the builder's
     `check_literal_labels` rejects labels that differ from a declared type's.
   - An array literal `[a, b, c]` becomes the chain
     `_array_literal(a)._literal_append(b)._literal_append(c)`, and a map
@@ -557,10 +557,10 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `runtime/array.pep` and `runtime/hash.pep`). With no other type, the
     generic start function infers the element types from the first entry.
     Every pass and codegen recurse down a chain, so a literal of more than
-    `literals.CHUNK` (16) steps is a balanced tree of short chains over
+    `_LITERAL_CHUNK` (16) steps is a balanced tree of short chains over
     one collection instead: a `WithSubject` whose subject is the start
     call and whose body joins chains on the `Subject` with
-    `_literal_then` (`sema/literals.pep`), keeping the
+    `_literal_then` (`sema/builder.pep`), keeping the
     depth logarithmic whatever the length.
     A variable declared as `Array<T>`, `HashSet<T>` or `HashMap<K, V>`
     types its literal in the builder (`typed_expression`), which also lets
@@ -581,7 +581,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `var a = __tuple_N.0; var b: T = __tuple_N.1;` in the enclosing block
     (`destructure`). `(a, p.x) = e;` becomes a block holding the hidden
     local and one assignment per place (`destructuring_assignment`), so the
-    right side is evaluated first. `tuples.lower_destructures` checks the
+    right side is evaluated first. `destructures.lower_destructures` checks the
     count and removes the `Destructure` node. A nested pattern
     (`DestructureBinding.nested`) gets its own hidden local bound from the
     outer one's element (`bind_elements`, `assign_elements`), and
@@ -593,7 +593,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `module.enums` instead (cases with their values folded, checked for
     range and duplicates); such an enum is not a struct in the model. Each
     method becomes a free function named `E::m` (`enum_method`,
-    `enums.method_name`); an instance method gets a first parameter
+    `enum_method_name`); an instance method gets a first parameter
     `this: E`, passed by value like any integer. A property's getter
     becomes `E::__get_p` the same way (`PropertyOwner.Enum`), and
     `properties` reads a bare `p` in those functions as `this.p`.
@@ -601,15 +601,15 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     (`enum_property_error`).
     An operator or indexer method is the function `E::<` (with `<` and `>`
     spelled `{` and `}` in the name, as for value types), and
-    `resolve_operators` and `unary_operators.dispatch` turn `a < b`, `-a`
+    `resolve_operators` and `unary_operators.dispatch_unary` turn `a < b`, `-a`
     and `a[i]` on such an enum into calls of it
-    (`enums.declares_operator`, `operator_call`).
+    (`_declares_enum_operator`, `_enum_operator_call`).
   - An enum with a case that carries values (a reference enum) *is* a
     struct in the model (`reference_enum_def`): `StructDef.enum_cases`
     lists its cases (`EnumCaseDef.payload` names each case's values, and
     its `value` is the case's tag, its position). Its fields are `__tag`
-    (`model.TAG_FIELD`) and every case's values as `const` fields named
-    `Case.value` (`model.payload_field`; the dot keeps source code from
+    (`builder.TAG_FIELD`) and every case's values as `const` fields named
+    `Case.value` (`builder.payload_field`; the dot keeps source code from
     naming them). One constructor takes every field (`this.field`
     parameters); each case is a static method named after it that calls it
     with the case's tag, its values, and `Default` for the other cases'
@@ -630,12 +630,12 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `resolve_implicit_types` types from the payload field and checks
     (`enums.case_value_type`), and `lower_matches` replaces with the field.
     A literal pattern (`1`, `"import"`) carries the test `subject ==
-    literal` in `CasePattern::literal`, so the passes type and resolve it
+    literal` in `CasePattern.literal`, so the passes type and resolve it
     like any `==` (a `String`'s `==` included); its `case` is the literal as
     written, for duplicate checks.
   - A tuple pattern `(Circle, 0, r)` is a `CasePattern` with `elements`,
     each over its path from the subject (`__match_N.0`, built by
-    `element_path`), so a literal element carries `__match_N.1 == 0`. A bare
+    `_element_path`), so a literal element carries `__match_N.1 == 0`. A bare
     name in a tuple pattern (`r`) is kept as a case pattern with no
     bindings; only its element's type says whether it is a case or binds
     the element. `match_bindings` declares it as a local reading its path
@@ -647,7 +647,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
     `Value(Text(t))`): each is built over its value's path, a `CaseValue`
     with one choice (`case_path`), so a nested literal carries
     `CaseValue(...) == ""` and a nested case's bindings read `CaseValue`s
-    of that path. A bare name there is a binding (`Leaf.Payload`) that is
+    of that path. A bare name there is a binding (a `_Leaf` with `payload` set) that is
     also listed in `element_names`, since the value's enum may have a case
     of that name (`Value(Empty)`); one repeated in a pattern must be a case.
   - `if (x is P(a))` and `while (x is P(a))` become the same `match`
@@ -695,17 +695,17 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   - A range pattern (`1..9`, `ast.Pattern.range`) carries the test
     `subject >= start && subject < end` (`<=` for `..>`) in
     `CasePattern.literal`, with `range` set. A bare pattern name that module
-    linking resolved to a module-scope variable (`Rewriter::
-    visit_pattern_name`, the scope walk's `visit_pattern_values` hook, sets
+    linking resolved to a module-scope variable (`_Rewriter.visit_pattern_name`,
+    the scope walk's `visit_pattern_values` hook, sets
     `ast.Pattern.constant` to its linked name) carries `subject == NAME`.
     `CasePattern.values` holds the integers a literal or range covers when
     its bounds are literals; `lower_matches` collects them per `match`
-    (`Coverage.intervals`, `covers`) to report a covered pattern and to
+    (`_Coverage.intervals`, `_covers`) to report a covered pattern and to
     accept an integer `match` whose patterns cover its type without `else`.
   - An arm's guard (`Circle(r) if r > 10`) makes its test
     `MatchArm(...) && guard` (`arm_test`), the `MatchArmTest` marked
     `guarded`; the guard reads the arm's names as `CaseValue`s, as a `match`
-    expression's value does (`bind_in_expression`). `enums.arm_test` finds
+    expression's value does (`bind_in_expression`). `matches._arm_test` finds
     the test in either form, and `lower_matches` lowers the guard's
     `CaseValue`s and leaves a guarded arm's patterns out of the coverage.
   - A character literal (`ast.Literal.Char`) becomes
@@ -715,7 +715,7 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   - `x as T` becomes `Cast` with `CastKind.Static`, located at the `as`
     keyword (`ast.Expression.Cast.keyword_span`), and the intrinsic
     `unsafe_cast<T>(x)` becomes `Cast` with `CastKind.Unsafe`, located at
-    the name (`builder.unsafe_cast`, which reports a missing or extra type
+    the name (`build_unsafe_cast`, which reports a missing or extra type
     argument or value). Every cast sema inserts is `Synthesized`. What each
     kind may convert is `casts.check` (`sema/casts.pep`): `as` is a
     `static_cast` (numbers, `bool`, enum to integer, pointer to and from
@@ -756,8 +756,8 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   fields a struct of its own, §8); passes change the `Module` in place. The main node types are `StructDef`
   (a method with type parameters of its own, `map<U>`, sits in
   `generic_methods` rather than `method_members` until specialized),
-  `FunctionDef` (methods have `parent: Some(struct)`), `ExternDef` (with
-  `link()` and `link_name()`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
+  `FunctionDef` (methods have `parent: Some(struct)`), `ExternDef` (its
+  C symbol is codegen's `extern_symbol`), `VariableDef { kind: Variable|Field|Param, loc, type_loc
   }`, `Expression` (includes intrinsic nodes: `SizeOf`, `Default`, `IsPod`,
   `RefCount`, `Address`, `Atomic*`, `FunctionRef`, `Invoke`,
   `ForIterator`, `WithEntered`, `Destructure`, `Move`, `ToTrait`, `ClosureLiteral`, `MakeClosure`,
@@ -765,17 +765,16 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `MethodAddress`, `CallPointer`), and `Statement`. Each node that names something has a
   `Loc`; `Expression.loc()` returns it (`Loc.none()` for literals and
   synthesized nodes).
-- **Types**: `type_name.TypeName { name, sub_types, flags }`, with
-  constants `AUTO` (`__auto`), `VOID`, and `FUNCTION` (`__function`),
-  primitive alias sets, `widest`, and `replace_map` (generic substitution).
-  `symbols.SymbolTable` maps names to indices. When a name is declared
-  twice, the later entry overwrites the earlier one. `static_type.of`
-  gives a best-effort static type for operator resolution and print
-  conversion.
-- `Module.merge` concatenates vectors into one namespace. Modules exist
-  only up to `modules.link`, which has already made every private name
-  unique by mangling it. The driver's `compiler.merge`
-  then orders `module.globals` by `Program.initialization_order`: the
+- **Types**: `TypeName { name, sub_types, flags, labels }` (`model.pep`,
+  its methods in `type_name.pep`), with constants `AUTO` (`__auto`),
+  `VOID`, and `FUNCTION` (`__function`), and `replace_map` (generic
+  substitution); `arithmetic.result_type` gives the type two numbers
+  promote to. `static_type_of` gives a best-effort static type for
+  operator resolution and print conversion.
+- `merge` (`sema/program.pep`, through `_join`) concatenates vectors into
+  one namespace. Modules exist only up to `link.link`, which has already
+  made every private name unique by mangling it. `sort_globals`
+  then orders `module.globals` by `initialization_order`: the
   prelude first (in reverse load order, so the runtime precedes the forced
   imports built on it), then every file after the files it imports. Globals
   are initialized in that order, so an initializer may use an imported
@@ -793,19 +792,19 @@ the literal's type says how the value is read), `!`, `&&`/`and`, and
 are `Invalid { message, span }`, located at the token (older ones at the
 attribute). A comparison with an undefined option is false; the parser
 lists every attribute that tests an option in `ast.Module.build_option_tests`,
-and `Program.build_option_warnings` warns at each such comparison
+and `Program.warnings` warns at each such comparison
 (`undefined_build_option_comparisons`), once per site. The options are in
 the cache key (`cache.Build.name`'s `-D<hash>`, and the checked
 runtime's key), `static` blocks read them (`reflect.build_option`,
 `has_build_option`), and the language server takes them from its
-`buildOptions` initialization option (`set_default_build_options`, which
-every `Target.host()` then carries). The pass drops top-level declarations,
+`buildOptions` initialization option (`build_options` in
+`tools/pep-lsp/server.pep`; the analysis worker analyzes with them). The pass drops top-level declarations,
 struct/trait/extension members, and attributed blocks whose predicate is
 false. Every predicate is validated before anything is dropped, so a typo in
 code that another platform would compile is still reported. Attributes other
 than `Target` are ignored here, except two: `[Test]` drops a function
 unless the build option `TEST` is defined (`pep-build --test` defines it),
-and `check_tests`, run first, reports a `[Test]` that is not a free function
+and `_check_tests`, run first, reports a `[Test]` that is not a free function
 taking nothing and returning nothing, and a `[ShouldPanic]` without `[Test]`.
 `keep(&attrs)` is the reusable evaluator;
 the loader, linking, and visibility all call it. It is also false for
@@ -815,9 +814,8 @@ top-level declaration (`build_module`), so it declares, links and generates
 nothing, while pep-doc, `doc.check_documented` and the language server
 read it under the built-in's name (`ast.built_in_name`, `reflect.name`).
 `Program.built_in_errors` rejects the attribute outside the runtime
-(`checked.in_runtime`). Its functions and methods end in `;` after their
-parameter list (`body_or_semicolon` in the parser; `_function_body` in
-`tools/compiler/parse`); the builder's `function_def` rejects a bodyless function
+(`_in_runtime`). Its functions and methods end in `;` after their
+parameter list (`Parser._function_body`); the builder's `function_def` rejects a bodyless function
 anywhere else, since only a trait method may lack one.
 The target is a `link.Target` (`os`, `arch`, the build options, and the
 LLVM triple, or none for the host's own): `Target.parse` reads a
@@ -833,7 +831,8 @@ handing the loader a `Target` of that OS (§8).
 
 ### 2.6 Struct bodies (`sema/synthesize.pep`)
 
-`struct_body.apply` first runs `equatable.derive`, which gives each
+The steps after the platform filters prepare struct bodies
+(`sema/passes.pep`). First `equatable.derive_equatable` gives each
 `[Equatable]` struct (or reference enum) a synthesized `==(other: T): bool`
 comparing the tuples of its fields (`(this.a, this.b) == (other.a,
 other.b)`, a lone field paired with `true`) and `__hash(): u64` returning
@@ -847,7 +846,7 @@ the generic's specialization). It reports `[Equatable]` on a value type or
 a payload-free enum, an `[Equatable]` struct's own `==`, arguments on the
 struct's `[Equatable]`, a field's `[Equatable]` outside an `[Equatable]`
 struct, and a contradicting `include`/`exclude`.
-Then it runs `closures.lift_closures`, which
+Then `closures.lift_closures`
 turns every closure literal into a synthesized struct
 `__closure_N@<namespace>`, numbered within its file (see §4.3) and generic
 over the enclosing code's type parameters, and a `MakeClosure` creation
@@ -859,7 +858,7 @@ parameters and `closures.TRAIT_SELF` (`__This`), the type of its `__this`;
 method, so each conformer specializes its own closure.
 Closures that passes make later (`function_references`, `shared_functions`'
 adapters) are named after the declaration whose code makes them instead
-(`closures.owned_closure_name`: `__closure_<escaped owner>_<k>@<namespace>`,
+(`function_references._owned_closure_name`: `__closure_<escaped owner>_<k>@<namespace>`,
 the owner's name escaped so no two owners share a name), so a
 specialization makes the same closures whenever it is created.
 `strip_bodies` runs next, dropping the bodies of units the build
@@ -876,7 +875,7 @@ use of the value, with the captured local's declaration as its `type_loc`
 lift reports an assignment to a captured local
 anywhere in the enclosing function, and a method storing a closure that
 captures `this` in a field of `this`. Types the literal left out are filled
-by `closures.sync_closures`, which `resolve_implicit_types` runs in its
+by `closure_sites.sync_closures`, which `resolve_implicit_types` runs in its
 fixpoint loop: parameter and return types from the function type of the slot
 the closure flows into, capture field types from the constructor arguments,
 and each `MakeClosure`'s type from its `__call`. `closures.check_closures`
@@ -884,8 +883,9 @@ reports what is still `auto` before `check_function_types`. Methods, constructor
 generic function specializations used as values become closure structs too,
 late, in `function_references` (see the pass table).
 
-Then `struct_body.apply` runs `resolve_type_aliases`, so no alias
-survives into later stages. Then, for each struct:
+Then `type_aliases.resolve_type_aliases` runs, so no alias
+survives into later stages. Then `synthesize` (`sema/synthesize.pep`),
+for each struct:
 
 - `apply_synthesized` inserts the two head fields: `u32 __refcount`
   (default 0) and `u32 __weakcount` (default 1: weak references plus one
@@ -894,11 +894,11 @@ survives into later stages. Then, for each struct:
   and the `__release` body (null check, `--`, and at 0 a call to `__dtor`,
   then `--__weakcount` and `_pep_free(this)` if that reached 0). Each step
   is an `Expression.CountStep` node, which evaluates to the new count and
-  is atomic when `StructDef.atomic_counts()` holds: the struct is
-  `[Shared]` or a `shared` function type. Everything else, plain function
+  is atomic when the struct is `[Shared]` or a `shared` function type (as
+  codegen's `atomic_counts` decides too). Everything else, plain function
   types included, uses a plain load/add/store.
 - `finish` builds each constructor. A hidden `size` local is patched with the
-  real ABI size in codegen by `patched_ctors`. The constructor calls `this =
+  real ABI size in codegen by `Generator.patched_ctors`. The constructor calls `this =
   _pep_malloc(size)`, initializes each field (explicit default or zero),
   assigns `this.field` constructor parameters (renamed `__init_<field>`),
   runs the user body, and ends with `return this`. The destructor does not
@@ -912,8 +912,8 @@ survives into later stages. Then, for each struct:
 A property (`var name: T { get; set; } = init;`, `ast.PropertyDecl`) is
 lowered to ordinary members; nothing after sema knows about it.
 
-- **Parser.** `member_property` (traits, extensions) and
-  `property_declaration` (a struct field followed by `{`) build the
+- **Parser.** `Parser._member` reads a member variable followed by `{`
+  (in a struct, trait or extension) as a property, and `_property` builds the
   `PropertyDecl`. Each `ast.Accessor` carries the method it compiles to as
   a `FunctionDecl` (`__get_P(): T`, `__set_P(value: T)`; `body` is `None`
   for `get;` / `set;`), so tools that walk methods, such as the language
@@ -922,13 +922,13 @@ lowered to ordinary members; nothing after sema knows about it.
   method `__get_P`, the setter `__set_P` when there is a `set`, and, when
   the storage is implied (a default accessor, or `field` in a body), the
   storage field: named `P` when `get` is default, else `__field_P`. `field`
-  in a body becomes `this.<storage>` (`replace_field`); default bodies read
+  in a body becomes `this.<storage>` (`_FieldReplacer`); default bodies read
   and write the storage. A trait property becomes trait methods; an
   extension property must be computed. Each property is recorded in
   `Module.properties` (`PropertyDef`: owner, accessor kinds, storage,
-  `[Shared]`), which the rest of sema reads. `scope_walk.walk_property`
+  `[Shared]`), which the rest of sema reads. `ScopeWalk.walk_property`
   binds `field` and `value` for the visibility checks.
-- **Reads and writes** are rewritten by `properties.lower`, which
+- **Reads and writes** are rewritten by `properties.lower_property`, which
   `resolve_implicit_types` calls first on every expression it walks
   (pre-order), once the receiver's type is known: `x.P` becomes
   `x.__get_P()`, `x.P = v` becomes `x.__set_P(v)`, and `x.P op= v` / `x.P++`
@@ -936,33 +936,33 @@ lowered to ordinary members; nothing after sema knows about it.
   is evaluated once through a `WithSubject` (its id comes from the access's
   `Loc`, so builds are deterministic). A default accessor becomes direct
   storage access; inside its own accessors `this.P` is the storage
-  (`Site.is_own_storage`). Assigning a get-only property is allowed only in
+  (`_is_own_storage`). Assigning a get-only property is allowed only in
   the owning struct's constructors and methods (not its extensions:
   `Properties.extension_methods`), and assigning a `[Shared]` struct's
   property only in its constructors. `P()` on a property that is not a
   function type is an error. Assignments sema synthesizes (`Loc.none()`:
   field initializers, `__copy`) are left alone, except a constructor's
   `this.P` parameter.
-- **Typing.** `type_of_expr` gives `x.P` (and a bare `P` in a method) the
+- **Typing.** `resolve_implicit_types` (`_TypeScopes.type_of`) gives `x.P` (and a bare `P` in a method) the
   getter's return type; `convert_member_refs` treats a property without a
   same-named field as a member, so a bare name becomes `this.P`.
 - **Traits.** `apply_extensions` meets a trait property with the struct's
   property, or with a plain field through a synthesized accessor
-  (`field_accessor`), and reports `'S' does not implement property 'P'`.
+  (`_field_accessor`), and reports `'S' does not implement property 'P'`.
 
 ### 2.8 Static blocks and reflection (`sema/builder.pep`, `sema/static_blocks.pep`)
 
-`static (captures) { ... }` (`ast.StaticBlock`, parsed by `static_block`)
+`static (captures) { ... }` (`ast.StaticBlock`, parsed by `Parser._static_block`)
 is compile-time work; docs/src/language/reflection.md describes the
 language side.
 
 - **Parser.** Inside a static block, each `for` loop's variable is added to
-  `QUALIFIERS` until the block ends, so `field.Type` and
+  `Parser._qualifiers` until the block ends, so `field.Type` and
   `parse<field.Type>(s)` parse as types the way `module.Type` does
-  (`STATIC_DEPTH`). The scope walk binds `reflect` like a local
-  (`Scope.Static`), and linking leaves a type qualified by a value in
+  (`_static_depth`). The scope walk binds `reflect` like a local
+  (`ScopeKind.Static`), and linking leaves a type qualified by a value in
   scope alone (`Scopes.in_static_block`).
-- **Builder.** `static_items.static_block` sorts the statements by name:
+- **Builder.** `build_static_block` sorts the statements by name:
   one that uses a capture or a runtime local of the block (or calls `get`,
   `set` or `call`) is emitted, the rest is compile-time. The result is a
   `model.StaticBlock` of `StaticItem`s: `For`, `While`, `If`, `Var` and `Evaluate`
@@ -970,18 +970,18 @@ language side.
   statement, built normally except that a sub-expression of only
   compile-time names becomes `Expression.StaticValue` and `x.get(v)` /
   `x.set(v, y)` / `x.call(...)` become `Expression.StaticMember`
-  (`placeholder`, through the builder's compile-time names, which
+  (`static_placeholder`, through the builder's compile-time names, which
   `expression` checks first); `EmitIf` is a runtime `if` whose branches
   hold items. `break`/`continue` in a compile-time loop is a `Jump`; one
   under a runtime `if`, or outside any compile-time loop, is an error
-  (`Names.loops`, `Names.in_runtime_if`).
+  (`_StaticNames.loops`, `_StaticNames.in_runtime_if`).
 - **Module scope.** A module-scope `static { ... }` is
   `ast.Declaration.Static`. The parser also declares each `const` at the
   top of the block as a module-scope variable (`static_constants`, with
   the block's attributes and `export`) whose initializer is its own name,
   so linking, visibility and mangling see an ordinary constant.
-  `static_items.module_static_block` builds the block with
-  `Names.module_scope` (nothing may be emitted; `case.get()` is
+  `module_static_block` builds the block with
+  `_StaticNames.module_scope` (nothing may be emitted; `case.get()` is
   evaluated) into `Module.static_blocks`, and
   `static_blocks.expand_module_blocks`, first among the passes after
   `check_attributes`, runs each and gives each constant the value it
@@ -990,22 +990,22 @@ language side.
   statements, so the early passes lower them with the rest of a generic
   base; passes with their own statement walks skip `Statement.Static`.
   Specialization records its type arguments in the block
-  (`StaticBlock.substitute`, from `replace_stmt_types` and
-  `substitute_statement`) and substitutes them in the emitted statements.
+  (`replace_types._substitute`, from `replace_statement_types`) and
+  substitutes them in the emitted statements.
 - **Expansion.** `static_blocks.expand` replaces each block in concrete
   code (non-generic functions, methods of structs that are not generic
   bases) with a block of what it emits: it evaluates the compile-time items
-  (`Expander.evaluate`, a small interpreter over `Value`s: numbers, `bool`,
+  (`_Expander.evaluate`, a small interpreter over `_CtValue`s: numbers, `bool`,
   strings, enum cases, members, functions, lists and attribute values),
   unrolls each `For` into one block per element and each `While` into one
   per iteration (at most `MAX_ITERATIONS`; a `Jump` sets
-  `Expander.jump`, which skips the rest of the pass), starts each pass
+  `_Expander.jump`, which skips the rest of the pass), starts each pass
   that emits anything, and the branch a compile-time `If` kept, with a
   `Statement.StaticPass` at the header holding the compile-time variables
-  in scope (`Expander.debug_values`, as `StaticConstant`s; see §4.4),
+  in scope (`_Expander.debug_values`, as `StaticConstant`s; see §4.4),
   and fills in the emitted
   statements: `x.Type` types first (`replace_body_types`), then each
-  placeholder (`fill`). The passes call it at the start (concrete
+  placeholder (`_Expander.fill`). The passes call it at the start (concrete
   code, `lowered = false`), after the first specialization, inside the
   specialization loop after `specialize_functions` and after
   `specialize_methods` (an expansion forces `resolve_implicit_types` and
@@ -1014,15 +1014,15 @@ language side.
   empties the blocks left in generic bases. Errors carry a note per `for`
   pass, one naming the specialization, and one per `Module.spec_requests`
   entry back to the non-generic code that asked for it
-  (`gather_generics.with_requests`), so an error inside `json`'s converters ends
+  (`instantiation.with_requests`), so an error inside `json`'s converters ends
   at the user's `json.encode(job)`.
 - **`--emit-static`** (`sema/static_source.pep`, `driver/emit_static.pep`).
-  `static_source.record` runs the passes with `PassState.static_recording`
+  `emit_static.check_recording` runs the passes with `PassState.static_recording`
   set, and while it is set the expander renders each block it expands as
   source beside the statements it builds: an emitted statement is its
   source as written (its span, widened over parentheses), with each
   placeholder `fill` replaces given an edit: a literal for a static value
-  (`StaticValue.source`, inlined into an interpolated string's text), and
+  (`_CtValue.source`, inlined into an interpolated string's text), and
   for a static member the source of what it became (`value.x`, `f(args)`,
   `value is Shape.Rect`, a `match` reading a case's value), with its
   arguments rendered the same way; each `x.Type` and type parameter outside
@@ -1039,10 +1039,10 @@ language side.
   above it as comments. `pep-fmt`, beside the compiler or on `PATH`,
   formats the copies.
 - **`-g --debug-static=expanded`** points the debug info at that copy. The
-  build records the passes too (`check_recording`), and
+  build records the passes too (`PassState.static_recording`), and
   `write_debug_sources` writes each user file with an expansion,
   unformatted, as `<name>.static.pep` beside the output, appends its text
-  to `PassState.sources`, and fills `Build.static_locations`: while
+  to `PassState.sources`, and fills `Generator.static_locations`: while
   recording, each emitted statement, runtime `if` and pass header gets an
   id; the rendered parts carry it, and the driver tracks where each lands
   in the copy, so each pass lists its statements by source `Loc` and id.
@@ -1056,7 +1056,7 @@ language side.
   the value for an integer enum), and `case.get(args)` the case's static
   method `Shape.Circle(args)`. A compile-time `var` in a static block is a
   parser qualifier like a `for` variable, so `first.Type` parses, and
-  `gather_generics.contains_param` leaves any `x.Type` to the
+  `generics._contains_param` leaves any `x.Type` to the
   specialization that expands the block.
 - **Reflection.** `reflect.properties<T>()` lists the public fields and the
   properties of a struct, in source order; `fields<T>()` every field but
@@ -1064,15 +1064,15 @@ language side.
   field's, or its getter's for a property.
 - **Attributes.** A struct marked `[Attribute]` is an attribute.
   `check_attributes` (first among the passes) reports an attribute that
-  is neither one of `BUILT_IN_ATTRIBUTES` nor an `[Attribute]` struct
+  is neither one the compiler knows (`_is_built_in_name`) nor an `[Attribute]` struct
   (`unknown attribute 'X'`, at the name), an argument that is not a
   constant of its field's type, and an attribute field of another type.
-  `attribute_value` binds the arguments to the struct's `slots`: the
+  `_attribute_value` binds the arguments to the struct's `_slots`: the
   constructor's parameters (`this.f`, or assigned to a field in its body)
   or, without one, the fields in order. The built-in attributes are also
   declared as `[Attribute]` structs in `runtime/attributes.pep`
-  (`is_built_in`: a struct named like one); `check_attributes` leaves their
-  arguments to the compiler's own checks, and `built_in_value` reads a
+  (`_is_built_in_name`: a struct named like one); `check_attributes` leaves their
+  arguments to the compiler's own checks, and `_built_in_value` reads a
   value through the same binding, except `Target`, which holds its
   condition as written, and `BuildOption`, which holds its option's name.
 
@@ -1096,66 +1096,66 @@ is a field of the `PassState`.
 | # | Step | What it does |
 | --- | --- | --- |
 | 0′ | `static_blocks.check_attributes`, `static_blocks.expand_module_blocks`, `static_blocks.expand` (`sema/static_blocks.pep`) | Reports unknown attributes and bad attribute arguments, runs the module-scope `static` blocks to set their constants, then expands the `static` blocks of concrete code (§2.8). |
-| 0 | `enums.resolve_enum_cases` (`sema/enums.pep`) | First, `value_types.lower_extensions` (`sema/value_types.pep`) turns each extension of a value type (a number type, `char`, `bool`, or an enum whose cases carry no values; `value_types.key` files them under the enum's name or the number's canonical spelling, `i32` for `int`) into free functions `X::m` like an enum's own methods, copies the trait defaults its conformances need, reports a missing member, an enum extension without a trait, and an operator in a number extension that does not take exactly one non-number operand (`number_operator_error`), and leaves the extension in `module.extensions` with no methods (and `resolved` set) as the declaration of its conformances, which `Conformance` reads for `T: Tr`; `value_types.resolve_static_calls` turns `int.zero()` into `i32::zero()`, and `rewrite_static_calls` does the same for `T.zero()` in a specialization. `convert_to_traits` reports a value type flowing into a trait slot (`'int' cannot be converted to trait 'Tr'`). Installs the reference enums (structs with `enum_cases`) in their own registry (`enums.reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the enum registry (a `PassState` field) (`enums.install`; `struct_body.apply` and codegen install it too), which `TypeName.is_integral`, `arithmetic` and codegen's `scalar_type` consult (`enums.stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E.from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums.method_is_static`, installed by codegen too), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums.call_on_value`), and a binary operator with a number on the left and a struct (or other non-number) on the right whose extension declares it, `2.0 * v`, to `f64::*(2.0, v)` (`number_operator`, which `type_of_expr` also uses to type it); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
-| 0a | `entry_point.lower_main_arguments` (`sema/entry_point.pep`) | The C `main` the compiler emits takes no `argc`/`argv`, so a root file's `main(args: String[])` is renamed `main@#args` (`MAIN_WITH_ARGUMENTS`; `#` cannot start a namespace, and messages demangle it to `main`) and a `main()` is synthesized at its location that returns `main@#args(_pep_arguments())` (a `void` one is called, then 0 returned). `_pep_arguments` is `arguments()` under a name a program's own `arguments` cannot shadow. Reports any other parameter list on `main` and `main` declared twice. First, in a test build, the `[TestMain]` `main` (`TEST_MAIN_ATTRIBUTE`, declared by `runtime/testing/`) that `pep-build --test` appended drops every other top-level `main`. `is_entry_point` gives both forms the inferred `int` return. |
+| 0 | `enums.resolve_enum_cases` (`sema/enums.pep`) | First, `value_types.lower_extensions` (`sema/value_types.pep`) turns each extension of a value type (a number type, `char`, `bool`, or an enum whose cases carry no values; `value_types.value_type_key` files them under the enum's name or the number's canonical spelling, `i32` for `int`) into free functions `X::m` like an enum's own methods, copies the trait defaults its conformances need, reports a missing member, an enum extension without a trait, and an operator in a number extension that does not take exactly one non-number operand (`_number_operator_error`), and leaves the extension in `module.extensions` with no methods (and `resolved` set) as the declaration of its conformances, which `Conformance` reads for `T: Tr`; `value_types.resolve_static_calls` turns `int.zero()` into `i32::zero()`, and `specialize_structs.rewrite_static_calls` does the same for `T.zero()` in a specialization. `convert_to_traits` reports a value type flowing into a trait slot (`'int' cannot be converted to trait 'Tr'`). Installs the reference enums (structs with `enum_cases`) in their own registry (`enums.reference_cases`), rewrites `Doc.Line` to the call `Doc.Line()`, and reports a case that carries values used without them (`case 'Text' of 'Doc' takes 1 value`) and a direct `Doc(...)`. Installs `module.enums` in the enum registry (`PassState.install_enums`, which step 2 already ran), which `PassState.is_integral`, `arithmetic` and codegen's `scalar_type` consult (`arithmetic.stored_as`), so an enum type keeps its name through sema but is stored as its representation. Rewrites `Enum.Case` to `Cast { IntLiteral(value), Enum }`, reports `no case named 'X' in 'E'` and a user-written `n as Enum`, and gives enum locals and globals without an initializer the default case (value 0, else the first). Adds each enum's built-in `E::name` and `static E.from_value` (after platform selection, so they see only the surviving cases), records every `E::m` in the method registry (`enums.install_methods`; `value_types.method_is_static` reads it), rewrites `this` and bare sibling calls inside enum methods, turns a static call `E.m(...)` into `E::m(...)`, and reports `extend E`. A call on an enum value, `c.m(...)`, needs `c`'s type, so `resolve_implicit_types` rewrites it to `E::m(c, ...)` (`enums.call_on_value`), and a binary operator with a number on the left and a struct (or other non-number) on the right whose extension declares it, `2.0 * v`, to `f64::*(2.0, v)` (`_TypeScopes.number_operator`, which `_TypeScopes.type_of` also uses to type it); `check_deprecated_members` finds deprecated enum methods by the function name, and codegen's argument-count errors leave out the `this` argument. |
+| 0a | `entry_point.lower_main_arguments` (`sema/entry_point.pep`) | The C `main` the compiler emits takes no `argc`/`argv`, so a root file's `main(args: String[])` is renamed `main@#args` (`MAIN_WITH_ARGUMENTS`; `#` cannot start a namespace, and messages demangle it to `main`) and a `main()` is synthesized at its location that returns `main@#args(_pep_arguments())` (a `void` one is called, then 0 returned). `_pep_arguments` is `arguments()` under a name a program's own `arguments` cannot shadow. Reports any other parameter list on `main` and `main` declared twice. First, in a test build, the `[TestMain]` `main` (`TEST_MAIN_ATTRIBUTE`, declared by `runtime/testing/`) that `pep-build --test` appended drops every other top-level `main`. `resolve_implicit_types` gives both forms the inferred `int` return. |
 | 1 | `check_bindings` | Reports a local declared twice in one scope (`redefinition of 'x'`, with a note at the previous one) and an assignment, compound assignment, or `++`/`--` to a `const` local, global, or (outside the constructor) field (`cannot assign to const variable 'x'`). |
-| 1a | `named_arguments.check_attributes`, `check_link_attributes`, `named_arguments.bind_calls` (`sema/named_arguments.pep`) | Reports a wrong `[Alias]`, `[Rename]`, or `[Link(...)]` (including the removed `[LinkName]`). Then binds named arguments: the builder keeps each `name = value` argument as an `Expression.NamedArgument` after the positional ones (reporting a positional one after a named one), and binding rewrites a call's arguments into parameter order, a skipped parameter becoming `Expression.DefaultArgument` (codegen passes the parameter's default there, as `missing_args` does for trailing ones; overload ranking treats it as `ArgKind.Default`). This step binds the calls a name decides (free functions, constructors, an own method called bare); `resolve_implicit_types` binds `value.method(...)` once the receiver is typed (`bind_method_call`, enum methods included), and reports a call through a function value; `check_unbound` (after the last `resolve_implicit_types`) reports what is left. An overloaded callee binds when every member the names fit binds the same positions. When binding reorders the named arguments, a receiver that is a call and each argument that is not a literal or a closure is evaluated first into a `WithSubject` around the call, in the order written. Former names (`[Rename]`) warn with a fix. |
-| 2 | `synthesize_function_types` (`sema/function_types.pep`) | Each tuple type `__tuple<A, B>` becomes a synthesized struct (`tuples.tuple_struct`) with const fields `"0"`, `"1"`, … and a constructor taking the elements, so every pass that types fields, constructor arguments and member reads handles tuples unchanged; codegen emits no object for it (§4.6). Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`sema/function_types.pep`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
+| 1a | `named_arguments.check_named_attributes`, `check_link_attributes`, `named_arguments.bind_calls` (`sema/named_arguments.pep`) | Reports a wrong `[Alias]`, `[Rename]`, or `[Link(...)]` (including the removed `[LinkName]`). Then binds named arguments: the builder keeps each `name = value` argument as an `Expression.NamedArgument` after the positional ones (reporting a positional one after a named one), and binding rewrites a call's arguments into parameter order, a skipped parameter becoming `Expression.DefaultArgument` (codegen passes the parameter's default there, as `Generator.missing_args` does for trailing ones; overload ranking treats it as `ArgKind.Default`). This step binds the calls a name decides (free functions, constructors, an own method called bare); `resolve_implicit_types` binds `value.method(...)` once the receiver is typed (`bind_method_call`, enum methods included), and reports a call through a function value; `argument_names.check_unbound` (after the last `resolve_implicit_types`) reports what is left. An overloaded callee binds when every member the names fit binds the same positions. When binding reorders the named arguments, a receiver that is a call and each argument that is not a literal or a closure is evaluated first into a `WithSubject` around the call, in the order written. Former names (`[Rename]`) warn with a fix. |
+| 2 | `synthesize_function_types` (`sema/function_types.pep`) | Each tuple type `__tuple<A, B>` becomes a synthesized struct (`function_types.tuple_struct`) with const fields `"0"`, `"1"`, … and a constructor taking the elements, so every pass that types fields, constructor arguments and member reads handles tuples unchanged; codegen emits no object for it (§4.6). Each distinct `__function<R, P…>` and `__shared_function<R, P…>` becomes a synthesized refcounted struct (`__refcount`, `__weakcount`, `__invoke`, `__destroy`; its destructor calls `__destroy` through `CallPointer` when set, which releases a closure's captures), and each `__weak<T>` with a concrete struct `T` a weak view struct (`sema/function_types.pep`). A `shared` one counts atomically; a plain one counts plainly and leaves a count at or above `STATIC_REFCOUNT` alone, so the static object of a named function, which several threads may hold as plain values, is only ever read. |
 | 3 | `resolve_literals` | Folds unary minus into numeric literals. |
-| 4 | `overloads.name_overloads` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`) (`gather_generics.concrete_overrides`). Then groups each file's free functions by name: a name with several is an overload set, whose members become `name$1`, `name$2`, ... (after any namespace: `f@ns$1`; `namespace.demangle` strips both), recorded in `module.overload_sets`. First, where prelude files (a forced import, then the runtime) export the same name, a later file's member with an earlier member's parameters is dropped and the rest form one set (`replace_prelude_members`), so a forced import replaces exactly the overloads it declares. Reports a redefinition, a difference only in return type, and an overloaded `extern`, and attaches an override of an overloaded generic to the member with its arity (`f$2<Point>`). Each struct's same-name methods (operators included) are renamed the same way (`add$1`, `+$2`), recorded in `module.method_overload_sets`; specializations copy the renamed members, and a static and an instance method may not share a name. A trait's same-name methods are renamed the same way, each its own vtable slot (`overloads.group_methods` serves structs, traits, and `apply_extensions`). `StructTable` and `convert_member_refs` also answer to a member's set name, so `a + b` and a bare `add(x)` in a method still find the set. Constructors arrive named by the builder (`Point$1`, `Point$2`; a specialization keeps the ordinal, `Box<int>$2`); this pass reports two with the same parameters (`constructor of 'P' cannot be redeclared`), and `Overloads.build` makes each concrete struct's constructors the set named by its type (`Point`, `Box<int>`), so `Point(args)` resolves like a function call. `Module.constructor_of` maps a call's name to its struct and constructor. |
+| 4 | `overloads.name_overloads` | Renames concrete overrides of generic functions to their spelled type (`hash<int>`) (`overloads.concrete_overrides`). Then groups each file's free functions by name: a name with several is an overload set, whose members become `name$1`, `name$2`, ... (after any namespace: `f@ns$1`; `diagnostic.demangle` strips both), recorded in `module.overload_sets`. First, where prelude files (a forced import, then the runtime) export the same name, a later file's member with an earlier member's parameters is dropped and the rest form one set (`_replace_prelude_members`), so a forced import replaces exactly the overloads it declares. Reports a redefinition, a difference only in return type, and an overloaded `extern`, and attaches an override of an overloaded generic to the member with its arity (`f$2<Point>`). Each struct's same-name methods (operators included) are renamed the same way (`add$1`, `+$2`), recorded in `module.method_overload_sets`; specializations copy the renamed members, and a static and an instance method may not share a name. A trait's same-name methods are renamed the same way, each its own vtable slot (`overloads.group_methods` serves structs, traits, and `apply_extensions`). `StructTable` and `convert_member_refs` also answer to a member's set name, so `a + b` and a bare `add(x)` in a method still find the set. Constructors arrive named by the builder (`Point$1`, `Point$2`; a specialization keeps the ordinal, `Box<int>$2`); this pass reports two with the same parameters (`constructor of 'P' cannot be redeclared`), and `Overloads._build` makes each concrete struct's constructors the set named by its type (`Point`, `Box<int>`), so `Point(args)` resolves like a function call. |
 | 5 | `convert_string_literals` | `"abc"` → `String(raw, size, length)` constructor call, in every body: functions, globals, struct and extension methods, and trait default bodies (copied into structs later, by `apply_extensions`). The raw literal stays a `char*` global. |
 | 6 | `gather_generics` | Records generic uses as `struct_specs` and `func_specs`. |
-| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures.sync_closures` in the same fixpoint loop (§2.6). A call to a generic function or method without type arguments (`larger(3, 9)`, `b.map(f)`) gets them from its arguments' types through `type_arguments.GenericSignature` (bind each parameter type against an argument type, `unify`; a trait parameter `Iterator<U>` binds through the trait the argument's struct declares, from the `record_conformances` table each inferring pass sets; a bound naming another parameter, `I: Iterator<T>`, binds `T` from `I`'s binding the same way, `bind_through_bounds`), and is renamed to the specialization (`larger<int>`, `map<long>`); a call writing only the leading type arguments (`count_all<int>(it)`) gets the rest the same way (`GenericSignature.complete`), and `specialize_functions` / `specialize_methods` skip such a name until it is complete; a closure argument receives the partly bound parameter type as its expected type, so inference runs across fixpoint rounds. A call naming an overload set is resolved first, once its arguments' types are known (`overloads.Overloads.select`): each viable member ranks each argument (exact, promotion, conversion, `[Implicit]` constructor; a string literal is exact for `__ptr<char>` and `StringConstant` and a promotion for `String`, and a `StringConstant` value is a conversion for `__ptr<char>` and ranks like an `[Implicit]` constructor for `String`), the best member must be better in one argument and worse in none than every other (a non-generic wins a tie with a generic; a generic member whose inferred or written type arguments do not meet its constraints is not viable: `candidate function not viable: 'Circle' does not conform to 'Shape'`), and the call is renamed to it (a specialization for a generic member); a call whose argument types mention a type parameter waits for the specialization. An argument still untyped decides by arity only when the one member of that arity is non-generic; a generic member that also fits keeps the call waiting (`print(a.count)` is `print<ulong>`, #503). The last `resolve_implicit_types` (`Module.settle_overloads_by_arity`) settles a call still waiting, or settling on a generic member only then, on its only non-generic member of that arity, so an argument that never types (`print($"{nope}")`) or types last (a bound method) is reported against that member's parameter. A method call (`m.add(x)`, `Money.of(x)`) on a struct with a method set of that name resolves the same way against `Overloads.select_method`, by the receiver's type; `resolve_operators` resolves the method calls it creates for operators with `overloads.resolve_method_call`, typed by `static_type`. Each resolution goes to `module.call_targets` for the LSP (a method as `Struct.member`). The same loop runs `overloads.bind_function_values`, which rewrites a set (or an overloaded method, `p.add`) used as a value to the member whose function type matches its slot (closures' `for_each_site`), and `type_arguments.bind_generic_function_values`, which rewrites a generic function named as a value without type arguments (`larger` in an `(int, int) => int` slot) to a `FunctionRef` of the specialization the slot's type binds (`GenericSignature.infer_from_function_type`: parameters against the slot's parameters, the return type against its return type); `gather_generics` requests a `FunctionRef`'s specialization like a call's. Generic code is left to its specializations. |
+| 7 | `resolve_implicit_types` | Infers `auto` locals and symbol types by scoped lookup (`p[i]` through a `__ptr<T>` or `T*` is a `T`; a `void` pointer is left to codegen), and a function's return type from its `return` statements when it declares none (`void` when it returns no value, `int` for `main`). Runs `closures.sync_closures` in the same fixpoint loop (§2.6). A call to a generic function or method without type arguments (`larger(3, 9)`, `b.map(f)`) gets them from its arguments' types through `type_arguments.GenericSignature` (bind each parameter type against an argument type, `GenericSignature._unify`; a trait parameter `Iterator<U>` binds through the trait the argument's struct declares, from the `record_conformances` table each inferring pass sets; a bound naming another parameter, `I: Iterator<T>`, binds `T` from `I`'s binding the same way, `GenericSignature._bind_through_bounds`), and is renamed to the specialization (`larger<int>`, `map<long>`); a call writing only the leading type arguments (`count_all<int>(it)`) gets the rest the same way (`GenericSignature.complete`), and `specialize_functions` / `specialize_methods` skip such a name until it is complete; a closure argument receives the partly bound parameter type as its expected type, so inference runs across fixpoint rounds. A call naming an overload set is resolved first, once its arguments' types are known (`Overloads.select`, `sema/overload_select.pep`): each viable member ranks each argument (exact, promotion, conversion, `[Implicit]` constructor; a string literal is exact for `__ptr<char>` and `StringConstant` and a promotion for `String`, and a `StringConstant` value is a conversion for `__ptr<char>` and ranks like an `[Implicit]` constructor for `String`), the best member must be better in one argument and worse in none than every other (a non-generic wins a tie with a generic; a generic member whose inferred or written type arguments do not meet its constraints is not viable: `candidate function not viable: 'Circle' does not conform to 'Shape'`), and the call is renamed to it (a specialization for a generic member); a call whose argument types mention a type parameter waits for the specialization. An argument still untyped decides by arity only when the one member of that arity is non-generic; a generic member that also fits keeps the call waiting (`print(a.count)` is `print<ulong>`, #503). The last `resolve_implicit_types` (`PassState.settle_overloads_by_arity`) settles a call still waiting, or settling on a generic member only then, on its only non-generic member of that arity, so an argument that never types (`print($"{nope}")`) or types last (a bound method) is reported against that member's parameter. A method call (`m.add(x)`, `Money.of(x)`) on a struct with a method set of that name resolves the same way against `Overloads.select_method`, by the receiver's type; `resolve_operators` resolves the method calls it creates for operators with `Overloads.select_method` too, typed by `static_type`. Each resolution goes to `module.call_targets` for the LSP (a method as `Struct.member`). The same loop runs `overload_select.bind_function_values`, which rewrites a set (or an overloaded method, `p.add`) used as a value to the member whose function type matches its slot (closures' `for_each_site`), and `generic_values.bind_generic_function_values`, which rewrites a generic function named as a value without type arguments (`larger` in an `(int, int) => int` slot) to a `FunctionRef` of the specialization the slot's type binds (`GenericSignature.infer_from_function_type`: parameters against the slot's parameters, the return type against its return type); `gather_generics` requests a `FunctionRef`'s specialization like a call's. Generic code is left to its specializations. |
 | 7a | `check_tries.check_tries` (`sema/check_tries.pep`) | For each `?` the builder lowered (its hidden `__try_N` local, now typed): reports an operand that is neither a `Result` nor an `Optional` (`'?' requires a Result or an Optional, not 'int'`), a function that does not return the same kind (`'?' requires the enclosing function to return a Result`, with a note at the function), and a `Result` error type that does not convert (`cannot convert error type 'X' to 'Y'`: neither the same type nor an `[Implicit]` constructor of struct `Y` from `X`), before the lowered calls fail with errors that name them. Concrete code only; it runs again after the specialization loop for generic code. |
 | 8 | `resolve_resolvables(false)` | Resolves struct, function, and method references against the symbol table. |
 | 9 | `apply_extensions(false)` | Clones `extend` methods onto their target and records traits. For `extend S with T`, checks that `S` has every method `T` declares and copies in `T`'s default methods (those with a body) that `S` lacks, reporting `'S' does not implement 'm', required by trait 'T'` otherwise (`'m(int)'` for an overloaded member). A trait member is implemented by the method of its set name with its parameter types, and a copied default takes the set name. Each implementation must have the declared signature, except that a struct result may stand for a declared trait result. Then `overloads.group_methods` regroups the struct's methods, so extension methods and defaults join its overload sets: named members keep their names, new ones take the next ordinal, and a repeated parameter list is `redefinition of 'm'`. Then `check_parameter_names` warns where an implementing method names a parameter differently from its trait (a fix renames it and its uses in the body), since a named argument through the trait uses the trait's names. |
 | 9b | `interpolation.check_interpolations` (`sema/interpolation.pep`) | Checks each interpolated value (a call `_pep_interpolate<X>`, see §2.3) converts: `X` is an integer type or `bool` (the runtime's `to_string` overloads), a struct or trait with a `to_string()` method, an enum declaring one (`E::to_string`), or has a concrete override `to_string<X>` (one not at the generic's location). Otherwise reports `cannot interpolate a value of type 'X'` at the `{name}`, with a note at a struct, before the runtime's `to_string<T>` body would fail on it. Runs again after the specialization loop for the calls in specializations of generic code. |
-| 9c | `constraints.check_constraints` (`sema/constraints.pep`) | Generic constraints (`T: Shape`), before anything is specialized. Reports a constraint that names no trait (`'Point' is not a trait; a constraint must name a trait`, with a note at the struct, or `unknown type name`), a constraint written on something other than an extension's own parameter (`only the parameters of 'Box' can restate its constraints`), a default that does not meet its parameter's constraints, and each `TypeUse` (and concrete override) whose argument does not conform: `'Circle' does not conform to trait 'Shape', required by 'T' in 'Gallery'` at the argument, a note at the constraint, and either `declare it with 'extend Circle with Shape'` at the struct (with a `Fix` inserting it after the struct, `copies.struct_end`) or, for a type parameter in scope, `add a constraint to 'T'` (with a `Fix` inserting `: Shape`). Conformance (`Conformance`, owned so `Overloads` can keep it) is nominal and computed from `module.extensions`: `extend Box<T> with Tr` (the struct's own parameters) covers every `Box<X>`, with `T` substituted into `Tr`; `extend Box<int>` only itself; a trait type conforms to itself when every member is dispatchable; a type parameter in scope (the enclosing declarations', and inside `extend Box<T>` those of `Box`) by its own constraints; nothing else conforms. Then runs `check_specializations`. |
-| 9c′ | constrained extensions | `extend Box<T: Named>` restates or adds constraints (`ExtensionDef.restated`); `constraints.added_constraints` gives those the struct lacks. They are conditions: `Conformance` counts an extension's `with` traits only where its arguments meet them (`declaring`, and `condition_note` for the note naming the unmet one, used by this pass and `convert_to_traits`), `specialize_structs` calls `constraints.withhold` to drop the extension's methods, the trait defaults its conformances copied in (`FunctionDef.owner`), and its traits from a specialization whose arguments miss one (recorded in `Module.withheld`), `check_bounds` gives the extension's methods the combined constraints, and the builder puts them in the type-use scope. After the specialization loop, `constraints.check_withheld` reports a call of a withheld member (`no member named 'label' in 'Box<Circle>'`, with notes naming the condition and the constraint) before codegen would report it without them. |
-| 9c″ | built-in `Shared` constraint | `T: Shared` (`constraints.SHARED`, `is_shared_bound`) is not a trait: `Conformance.unshared_part` decides it by `check_shared_types`' rule (numbers, `void`, enums, `[Shared]` structs and generic bases, `shared` and C function types, pointers, weak references and tuples of such types, a parameter constrained `Shared`), and the error says `does not conform to 'Shared'` with `check_shared_types.not_shared_note`. `scope_walk` does not link a `Shared` constraint, and a trait named `Shared` is an error, so the name is never a program's own declaration. It gives no members (`check_bounds`). The runtime's `Atomic`, `spawn`, `run_blocking`, `Lazy` and `_TaskResult` declare it; `check_shared_structs`' per-specialization error remains for `[Shared]` generics without it (a program's own). |
+| 9c | `constraints.check_constraints` (`sema/constraints.pep`) | Generic constraints (`T: Shape`), before anything is specialized. Reports a constraint that names no trait (`'Point' is not a trait; a constraint must name a trait`, with a note at the struct, or `unknown type name`), a constraint written on something other than an extension's own parameter (`only the parameters of 'Box' can restate its constraints`), a default that does not meet its parameter's constraints, and each `TypeUse` (and concrete override) whose argument does not conform: `'Circle' does not conform to trait 'Shape', required by 'T' in 'Gallery'` at the argument, a note at the constraint, and either `declare it with 'extend Circle with Shape'` at the struct (with a `Fix` inserting it after the struct, `constraints._struct_end`) or, for a type parameter in scope, `add a constraint to 'T'` (with a `Fix` inserting `: Shape`). Conformance (`Conformance`, owned so `Overloads` can keep it) is nominal and computed from `module.extensions`: `extend Box<T> with Tr` (the struct's own parameters) covers every `Box<X>`, with `T` substituted into `Tr`; `extend Box<int>` only itself; a trait type conforms to itself when every member is dispatchable; a type parameter in scope (the enclosing declarations', and inside `extend Box<T>` those of `Box`) by its own constraints; nothing else conforms. Then runs `check_specializations`. |
+| 9c′ | constrained extensions | `extend Box<T: Named>` restates or adds constraints (`ExtensionDef.restated`); `constraints._added_constraints` gives those the struct lacks. They are conditions: `Conformance` counts an extension's `with` traits only where its arguments meet them (`Conformance._declaring`, and `Conformance.condition_note` for the note naming the unmet one, used by this pass and `convert_to_traits`), `specialize_structs` calls `constraints.withhold` to drop the extension's methods, the trait defaults its conformances copied in (`FunctionDef.owner`), and its traits from a specialization whose arguments miss one (recorded in `Module.withheld`), `check_bounds` gives the extension's methods the combined constraints, and the builder puts them in the type-use scope. After the specialization loop, `withheld.check_withheld` reports a call of a withheld member (`no member named 'label' in 'Box<Circle>'`, with notes naming the condition and the constraint) before codegen would report it without them. |
+| 9c″ | built-in `Shared` constraint | `T: Shared` (`constraints.SHARED`, `is_shared_bound`) is not a trait: `Conformance._unshared_part` decides it by `check_shared_types`' rule (numbers, `void`, enums, `[Shared]` structs and generic bases, `shared` and C function types, pointers, weak references and tuples of such types, a parameter constrained `Shared`), and the error says `does not conform to 'Shared'` with `constraints._not_shared_note`. Linking does not link a `Shared` constraint, and a trait named `Shared` is an error, so the name is never a program's own declaration. It gives no members (`check_bounds`). The runtime's `Atomic`, `spawn`, `run_blocking`, `Lazy` and `_TaskResult` declare it; `shared_type_checks._check_shared_structs`' per-specialization error remains for `[Shared]` generics without it (a program's own). |
 | 9d | `check_bounds.check_bounds` (`sema/check_bounds.pep`) | Definition checking of constrained generic code: walks every generic base (free functions, struct methods and constructors, generic methods, trait default methods, lifted closures) that has a constrained parameter in scope, typing expressions with its own scopes of parameters and locals, the enclosing struct's fields, bare sibling calls, and `static_type`. A value of a constrained parameter's type may call instance methods and operators its constraints' traits declare (their signatures with the trait's parameters and `this` substituted), static members through the parameter (`T.unit()`), flow into a slot of a constraint's trait type, and be compared with `==`, `!=`, `===`, `!==`; anything else is reported: `no member named 'm' in 'T'` with a note at the constraint (`'T' is constrained by 'Shape', which has no member 'm'`), a field, `T()`, `'m' is declared by both 'A' and 'B'`, argument counts and clearly wrong argument types, `invalid operands to binary expression`, and a conversion to another type (`'T' converts only to its constraint 'Shape'`). An unconstrained parameter is left to the specializations. Produces no code. |
-| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. They clone `Module.templates`, the bases frozen once the constraints are checked (`Templates.freeze`), never a base later passes have changed, so an instance is the same whichever round of the fixpoint loop creates it; it gets the passes the bases got after that point from the passes that run after the loop. `gather_generics` records who first asked for each specialization and where (`Module.spec_requests`), and both passes refuse to make one whose chain of requests is longer than `MAX_SPECIALIZATION_DEPTH` (64), reporting it at the request with the chain's places as notes (`specialization_too_deep`), so a generic that asks for a larger instance of itself is an error rather than a loop that stops after so many rounds. `apply_extensions` applies each extension once per struct (not once overall), so `extend Box<int>` reaches a `Box<int>` the loop creates, and runs again after the loop; `convert_intrinsics` converts the type of the node a call such as `__default<__ptr<void>>()` lowers to. A `void` argument erases what it types (`erase_void`): fields and parameters of that type, stores of them, a `return` of one, and an argument that is one (a removed field of `this` included), and a call stored into a removed field stays as a statement (`this._value = body()` becomes `body();` in `Task<void>`); for an enum, a case's `void` value goes with its field: the case, the patterns and bindings of it in the enum's own methods, and `enums.reference_cases` (which erases the same values for any `Result<void>`) no longer count it, so `Result<void>.Ok` carries nothing and `ok()` takes no argument. A generic struct's `generic_methods` are cloned with the struct's parameters substituted and keep their own. A static call through a type parameter (`T.unit()`, a `MethodCall` on `SymbolRef T`) is rewritten to the type argument (`Square.unit()`, or a type literal for `Box<int>`), and so is a constructor call `T(...)` (a `FunctionCall` named `T`), which `resolve_resolvables` lets stand in the generic base. |
+| 10–11 | `specialize_structs`, `specialize_functions` | Clones generic bases into `Name<args>` instances with substituted types. They clone `Module.templates`, the bases frozen once the constraints are checked (`freeze_templates`), never a base later passes have changed, so an instance is the same whichever round of the fixpoint loop creates it; it gets the passes the bases got after that point from the passes that run after the loop. `gather_generics` records who first asked for each specialization and where (`Module.spec_requests`), and both passes refuse to make one whose chain of requests is longer than `_MAX_SPECIALIZATION_DEPTH` (64), reporting it at the request with the chain's places as notes (`specialization_too_deep`), so a generic that asks for a larger instance of itself is an error rather than a loop that stops after so many rounds. `apply_extensions` applies each extension once per struct (not once overall), so `extend Box<int>` reaches a `Box<int>` the loop creates, and runs again after the loop; `convert_intrinsics` converts the type of the node a call such as `__default<__ptr<void>>()` lowers to. A `void` argument erases what it types (`_erase_void`): fields and parameters of that type, stores of them, a `return` of one, and an argument that is one (a removed field of `this` included), and a call stored into a removed field stays as a statement (`this._value = body()` becomes `body();` in `Task<void>`); for an enum, a case's `void` value goes with its field: the case, the patterns and bindings of it in the enum's own methods, and `enums.reference_cases` (which erases the same values for any `Result<void>`) no longer count it, so `Result<void>.Ok` carries nothing and `ok()` takes no argument. A generic struct's `generic_methods` are cloned with the struct's parameters substituted and keep their own. A static call through a type parameter (`T.unit()`, a `MethodCall` on `SymbolRef T`) is rewritten to the type argument (`Square.unit()`, or a type literal for `Box<int>`), and so is a constructor call `T(...)` (a `FunctionCall` named `T`), which `resolve_resolvables` lets stand in the generic base. |
 | 11a | `ranges.check_ranges` (`sema/ranges.pep`) | The builder lowers `a..b` / `a..>b` to `_range(a, b, inclusive)` (runtime/range.pep), its `T` inferred from the bounds. Once calls are specialized (`_range<String>`), reports a non-integer `T` at the range operator (`range bounds must be integers, not 'String'`), before the runtime's `Range<T>` body fails inside. Runs again in the specialization loop. |
-| 11b | `specialize_methods` (`sema/generic_methods.pep`) | For each method call named `m<args>` on a struct with a generic method `m` (or the method as a value, a `MemberRef` `b.map<long>`: the parser keeps `<args>` in the member name when `(` or the end of the expression follows the `>`; `bind_generic_method_values`, in `resolve_implicit_types`' loop, names one written without them from its slot's function type), first checks `m`'s constraints (`Conformance.check_call`, at the argument that fixed the type), then clones `m` into `method_members` as `m<args>` with its own parameters substituted. `apply_extensions` routes generic extension methods and generic trait default methods (`Iterator<T>.map<U>`) to `generic_methods`; `traits.is_dispatchable` excludes them, since a vtable has one slot per method. |
+| 11b | `specialize_methods` (`sema/generic_methods.pep`) | For each method call named `m<args>` on a struct with a generic method `m` (or the method as a value, a `MemberRef` `b.map<long>`: the parser keeps `<args>` in the member name when `(` or the end of the expression follows the `>`; `bind_generic_method_values`, in `resolve_implicit_types`' loop, names one written without them from its slot's function type), first checks `m`'s constraints (`constraints.check_method_call`, at the argument that fixed the type), then clones `m` into `method_members` as `m<args>` with its own parameters substituted. `apply_extensions` routes generic extension methods and generic trait default methods (`Iterator<T>.map<U>`) to `generic_methods`; `traits.is_dispatchable` excludes them, since a vtable has one slot per method. |
 | 12 | `synthesize_function_types` | For function types that specialization exposed. |
-| 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`, including the `T` of intrinsic nodes that specialization substituted. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes, `__simd_<op><V>(…)` into `Expression.Simd` (`SimdOp.from_name`, with an argument-count check; see §4.7), and `__function_pointer(f)` into `Expression.FunctionPointer` (a free function, or a static method of the enclosing struct, whose owner type specialization substitutes). |
+| 13 | `convert_intrinsics` | Rewrites `__ptr<T>` to `T*`, including the `T` of intrinsic nodes that specialization substituted. Turns `__is_pod`, `__default`, `__refcount`, `__address`, `__atomic_load/store/cmpxchg/fetch_*` calls into intrinsic nodes, `__simd_<op><V>(…)` into `Expression.Simd` (`convert_intrinsics._simd_operations`, with an argument-count check; see §4.7), and `__function_pointer(f)` into `Expression.FunctionPointer` (a free function, or a static method of the enclosing struct, whose owner type specialization substitutes). |
 | 14–15 | `resolve_resolvables`, `apply_extensions(true)` | Resolves what remains and applies specialized extensions. |
-| 16 | `convert_member_refs` | In methods, a bare field becomes `this.field`, a bare call becomes a method call (unless no method of that name takes its argument count and a free function of that name exists, as `resolve_implicit_types.Scopes.calls_method` decides too: a `copy()` method's `copy(x)` is the free function), and a bare method name becomes `this.m` (`S.m` for a static method), which `reference_functions` makes a function value (parameters and locals are exempt). In a trait's default method copied into a struct (`FunctionDef.trait_default`, set by `apply_extensions`), only the trait's methods count and no fields. |
-| 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. A chained assignment `x[a][b] = v` calls the setter on `x[a]`'s result; when `x[a]` is typed only after its overload is picked, `resolve_body`'s lowering loop rewrites the assignment to the setter (`lower_index_assign`) before the outer index can become a getter call. A struct receiver typed only later (in the specialization loop) leaves `x[i]` an index until the final `resolve_operators`; `resolve_implicit_types` types it meanwhile as the `x.__index_get(i)` call it becomes, so an overloaded indexer picks its member. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`BinaryOp.identity_as_equality`), addresses for references. `unary_operators.dispatch` turns `-x`, `~x` and `!x` on a struct declaring the operator into a zero-argument method call named after it, and a struct value in a boolean context (`if`/`while` condition, ternary condition, operand of `&&`/`\|\|` that the struct does not overload, operand of `!`) into `x.!!()`; `!x` without its own `!` is `!(x.!!())`, and `!!x` is `x.!!()`. `StructInfo.unary_operators` records which of `-`, `~`, `!`, `!!` a struct or trait declares as parameterless instance methods. |
-| loop ≤16× | `gather_generics`, `constraints.check_specializations`, `specialize_structs`, `specialize_functions`, `check_ranges`, `static_blocks.expand`, `specialize_methods`, `static_blocks.expand`, `copies.synthesize_copies` | `check_specializations` checks the gathered `struct_specs` and `func_specs` of constrained generics before they are cloned; one that fails came from an inferred call (a written use was checked at 9c) and is reported at the call argument whose parameter type mentions the failing type parameter (`spec_site`). Repeats until the counts of structs, functions and methods stop growing and no copy was synthesized (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. `synthesize_copies` (`sema/copies.pep`) serves `copy(value)`: it checks every copy the program asks for (a `copy<T>` call outside a `Copyable` method) through everything it reaches and reports `cannot copy 'X' because it contains 'Y', ...` at the request (a `Channel<T>` is found through `check_shared_types.use_site`), with a note per field hop and, for a struct with a destructor or a raw pointer field, a `Copyable<T>` skeleton note and `Fix` that inserts it after the struct. It then lowers each concrete `__copy<T>(value, copies)` (the body of `_Copies.copy<T>`) to `value` for a thread-safe `T`, to `copies._copy_object<T>(value)` for a struct, whose `__copy_object<T>(value)` it lowers to the struct's synthesized `value.__copy()` (a `__` method source cannot call), or to a panicking `_pep_copy_failed<T>` for a type nothing asks to copy. A trait type `T` lowers to `copies._copy_trait<T>(value)`, which calls `value._pep_copy_trait(copies)` through the vtable: each round, `add_trait_copies` gives every trait that member (`_pep_copy_trait(copies: _Copies): Tr<T>`) and every concrete struct that declares a trait the method `return copies.copy<S>(this);`, or a `_pep_copy_failed<S>` panic naming the blocker when `S` cannot be copied (or is `[Isolated]`). Every trait gets the slot whether or not the program copies it, so a vtable depends only on declarations and a cached unit's vtable stays valid when another unit starts copying (`a_cached_vtable_serves_a_new_copy_of_its_trait`). It gives each such struct `__copy()`: `this.copy()` when the struct implements `Copyable<T>` (declares it and has `copy()`), `this.copy(_pep_copies())` for the deprecated `copy(copies: Copies)`, else a field-by-field copy that reads the running copy's context once (`var copies = _pep_copies();`, a thread-local read), allocates with `Expression.Allocate` (no constructor), registers the copy before copying fields (cycles), copies thread-safe fields as they are and others with `copies.copy<F>`, and defers weak fields to a `_pep_fix_weak` method run by `_Copies._finish`. The context is implicit (#463): the outermost `copy<T>` on a thread installs its `_Copies` behind a thread-local key and a nested `copy(x)` in a `Copyable` method continues it; the runtime's own `copy<T>` body is not a request (its caller's call is). `apply_extensions.conform` accepts the deprecated `copy(Copies)` as `Copyable<T>`'s `copy()`; the warning comes from the `[Deprecated]` alias `Copies`. `[NotCopyable("why")]` on a struct forbids copying it; its reason is read like `reflect.attribute<NotCopyable>()` (`static_blocks.attribute_string`). Reflection cannot replace this synthesis (no access to another file's private fields, no constructor-free allocation, no run-time types for trait values). |
+| 16 | `convert_member_refs` | In methods, a bare field becomes `this.field`, a bare call becomes a method call (unless no method of that name takes its argument count and a free function of that name exists, as `convert_member_refs`' `calls_method` decides too: a `copy()` method's `copy(x)` is the free function), and a bare method name becomes `this.m` (`S.m` for a static method), which `reference_functions` makes a function value (parameters and locals are exempt). In a trait's default method copied into a struct (`FunctionDef.trait_default`, set by `apply_extensions`), only the trait's methods count and no fields. |
+| 17–18 | `resolve_implicit_types`, `resolve_operators` | `x[i]` → `__index_get`/`__index_set` or POD `ArrayIndex`. A chained assignment `x[a][b] = v` calls the setter on `x[a]`'s result; when `x[a]` is typed only after its overload is picked, the assignment is rewritten to the setter before the outer index can become a getter call. A struct receiver typed only later (in the specialization loop) leaves `x[i]` an index until the final `resolve_operators`; `resolve_implicit_types` types it meanwhile as the `x.__index_get(i)` call it becomes, so an overloaded indexer picks its member. An overloaded binary operator becomes a method call. Without its own `!=`, `a != b` on a type with `==` becomes `!(a == b)`. `===` and `!==` are never overloaded; codegen compares their raw values (`operators._identity_as_equality`), addresses for references. `unary_operators.dispatch_unary` turns `-x`, `~x` and `!x` on a struct declaring the operator into a zero-argument method call named after it, and a struct value in a boolean context (`if`/`while` condition, ternary condition, operand of `&&`/`\|\|` that the struct does not overload, operand of `!`) into `x.!!()`; `!x` without its own `!` is `!(x.!!())`, and `!!x` is `x.!!()`. `StructInfo.unary_operators` records which of `-`, `~`, `!`, `!!` a struct or trait declares as parameterless instance methods. |
+| loop ≤16× | `gather_generics`, `constraints.check_specializations`, `specialize_structs`, `specialize_functions`, `check_ranges`, `static_blocks.expand`, `specialize_methods`, `static_blocks.expand`, `copies.synthesize_copies` | `check_specializations` checks the gathered `struct_specs` and `func_specs` of constrained generics before they are cloned; one that fails came from an inferred call (a written use was checked at 9c) and is reported at the call argument whose parameter type mentions the failing type parameter (`constraints._spec_site`). Repeats until the counts of structs, functions and methods stop growing and no copy was synthesized (specializing exposes new uses). When the module has generic methods or overload sets, each round first runs `resolve_implicit_types` so calls on newly specialized structs get their type arguments. Bounded because a self-nesting generic never converges. `synthesize_copies` (`sema/copies.pep`) serves `copy(value)`: it checks every copy the program asks for (a `copy<T>` call outside a `Copyable` method) through everything it reaches and reports `cannot copy 'X' because it contains 'Y', ...` at the request (a `Channel<T>` is found through `shared_type_checks.use_site`), with a note per field hop and, for a struct with a destructor or a raw pointer field, a `Copyable<T>` skeleton note and `Fix` that inserts it after the struct. It then lowers each concrete `__copy<T>(value, copies)` (the body of `_Copies.copy<T>`) to `value` for a thread-safe `T`, to `copies._copy_object<T>(value)` for a struct, whose `__copy_object<T>(value)` it lowers to the struct's synthesized `value.__copy()` (a `__` method source cannot call), or to a panicking `_pep_copy_failed<T>` for a type nothing asks to copy. A trait type `T` lowers to `copies._copy_trait<T>(value)`, which calls `value._pep_copy_trait(copies)` through the vtable: each round, `copies._add_trait_copies` gives every trait that member (`_pep_copy_trait(copies: _Copies): Tr<T>`) and every concrete struct that declares a trait the method `return copies.copy<S>(this);`, or a `_pep_copy_failed<S>` panic naming the blocker when `S` cannot be copied (or is `[Isolated]`). Every trait gets the slot whether or not the program copies it, so a vtable depends only on declarations and a cached unit's vtable stays valid when another unit starts copying. It gives each such struct `__copy()`: `this.copy()` when the struct implements `Copyable<T>` (declares it and has `copy()`), `this.copy(_pep_copies())` for the deprecated `copy(copies: Copies)`, else a field-by-field copy that reads the running copy's context once (`var copies = _pep_copies();`, a thread-local read), allocates with `Expression.Allocate` (no constructor), registers the copy before copying fields (cycles), copies thread-safe fields as they are and others with `copies.copy<F>`, and defers weak fields to a `_pep_fix_weak` method run by `_Copies._finish`. The context is implicit (#463): the outermost `copy<T>` on a thread installs its `_Copies` behind a thread-local key and a nested `copy(x)` in a `Copyable` method continues it; the runtime's own `copy<T>` body is not a request (its caller's call is). `apply_extensions._conform` accepts the deprecated `copy(Copies)` as `Copyable<T>`'s `copy()`; the warning comes from the `[Deprecated]` alias `Copies`. `[NotCopyable("why")]` on a struct forbids copying it; its reason is read like `reflect.attribute<NotCopyable>()` (`static_blocks.attribute_string`). Reflection cannot replace this synthesis (no access to another file's private fields, no constructor-free allocation, no run-time types for trait values). |
 | then | `static_blocks.remove_from_generic_code`, `check_interpolations`, `convert_intrinsics`, `resolve_resolvables`, `apply_extensions(true)`, `static_blocks.expand`, `convert_member_refs`, `synthesize_function_types` | Covers what the loop created. |
-| then | `check_simd_shapes` (`sema/simd_shapes.pep`) | After `constraints.check_withheld`: each specialization of a generic struct with a `__simd<_, P>` field (`simd.Vector`, `simd.Mask`) must give `P` a power of two from 1 to `MAX_LANES` (64); otherwise `lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'`, located at the argument through `module.type_uses` (§4.7). |
+| then | `check_simd_shapes` (`sema/simd_shapes.pep`) | After `withheld.check_withheld`: each specialization of a generic struct with a `__simd<_, P>` field (`simd.Vector`, `simd.Mask`) must give `P` a power of two from 1 to `_MAX_LANES` (64); otherwise `lane count of 'Vector<int, 3>' must be a power of two from 1 to 64, not '3'`, located at the argument through `module.type_uses` (§4.7). |
 | final | `reference_functions` (`sema/function_references.pep`) | A method, constructor or generic function specialization used as a value (`p.norm`, `Point.norm`, `Point`, `Box<int>`, `identity<int>`) becomes a `MakeClosure` of a new complete closure struct whose `__call` forwards to it; a bound method's receiver is its one capture (`__receiver`). Needs final types to tell a method from a field, so it runs here, before `release_field_refs` releases the receiver. A local inferred from the expression (`var f = Point;`) is retyped to the function type. Reports storing `this.m` in a field of `this`. |
 | final | `release_field_refs` | Inserts `__release` calls for struct-typed fields, in reverse declaration order, at the end of the destructor. The object itself is freed by `__release` once `__weakcount` reaches 0, not by the destructor. |
-| final | `resolve_implicit_types`, `resolve_operators`, `resolve_operators.check_assignment_targets`, `unary_operators.check_conditions`, `resolve_resolvables(true)`, `synthesize_function_types` | `check_assignment_targets` reports an assignment whose target is still a call: `get() = v` (`expression is not assignable`), or `x[i] = v` where `x`'s type has a `[]` getter but no setter (`cannot assign through '[]'`), which codegen would otherwise reject as an unlocated `unsupported lvalue`. `check_conditions` reports a struct or trait value still in a boolean context, one whose type declares no `!!` (`'S' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'`, with a note at the declaration): a struct is never null-tested implicitly. Pointers, numbers, `bool` and function values (synthesized `__…` structs) keep codegen's `as_bool`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
+| final | `resolve_implicit_types`, `resolve_operators`, `assignment_targets.check_assignment_targets`, `conditions.check_conditions`, `resolve_resolvables(true)`, `synthesize_function_types` | `check_assignment_targets` reports an assignment whose target is still a call: `get() = v` (`expression is not assignable`), or `x[i] = v` where `x`'s type has a `[]` getter but no setter (`cannot assign through '[]'`), which codegen would otherwise reject as an unlocated `unsupported lvalue`. `check_conditions` reports a struct or trait value still in a boolean context, one whose type declares no `!!` (`'S' cannot be used as a condition: declare '!!(): bool' on it, or compare with '__null'`, with a note at the declaration): a struct is never null-tested implicitly. Pointers, numbers, `bool` and function values (synthesized `__…` structs) keep codegen's `as_bool`. `resolve_resolvables(true)` is the step that reports `use of undeclared identifier`, `call to undeclared function`, and similar. |
 | final | `check_type_arguments` (`sema/type_arguments.pep`) | Reports a generic call (a function, or a struct's generic method by the receiver's `static_type`) whose type arguments the arguments did not determine (`cannot infer the type arguments of 'make' from its arguments; write them: make<T>(...)`, with a note at the declaration), or whose written type arguments stop short of one with no default (`cannot infer the type argument 'U' of 'make' ...`), a generic function named as a value that no function type specialized (`cannot infer the type arguments of 'larger' used as a value; ...`), and likewise a generic method (`cannot infer the type arguments of method 'map' of 'Box<int>' used as a value; ...`). |
-| final | `overloads.check_overloads` | Reports an overload call no member fits (`no matching function for call to 'f'`, a note per candidate saying why; for constructors `no matching constructor for initialization of 'P'`), one two members fit equally well (`call to 'f' is ambiguous`, `call to constructor of 'P' is ambiguous`), one whose argument type stayed unknown, and a set used as a value where no expected type picks a member (`cannot infer the type of 'g' from overloaded function 'f'`, `address of overloaded function 'f' does not match required type`). Method calls and method values (`overloaded method 'S.get'`) are checked the same way, by the receiver's `static_type` (a trait type's sets are its members). A method set's candidates at a call are the body methods plus the methods of extensions visible in the call's file (`Module.extension_scopes`, from each file's `FileScope.extensions`). Skips extensions' own copies of their methods (only the struct's copies are resolved) and generic bases, whose calls resolve in their specializations. |
+| final | `overload_checks.check_overloads` | Reports an overload call no member fits (`no matching function for call to 'f'`, a note per candidate saying why; for constructors `no matching constructor for initialization of 'P'`), one two members fit equally well (`call to 'f' is ambiguous`, `call to constructor of 'P' is ambiguous`), one whose argument type stayed unknown, and a set used as a value where no expected type picks a member (`cannot infer the type of 'g' from overloaded function 'f'`, `address of overloaded function 'f' does not match required type`). Method calls and method values (`overloaded method 'S.get'`) are checked the same way, by the receiver's `static_type` (a trait type's sets are its members). A method set's candidates at a call are the body methods plus the methods of extensions visible in the call's file (`Module.extension_scopes`, from each file's `FileScope.extensions`). Skips extensions' own copies of their methods (only the struct's copies are resolved) and generic bases, whose calls resolve in their specializations. |
 | final | `check_closures` | Reports a closure parameter, return or capture type that nothing inferred (`cannot infer the type of parameter 'x'`). |
-| final | `shared_functions`, `synthesize_function_types` | Reports a C function pointer type (`__extern_function<R, P…>`, `TypeName.is_extern_function_type`; not a refcounted type, it lowers to `ptr`) declared with a type C cannot pass (a struct). Where a value flows into a C function pointer slot, replaces a `FunctionRef`, or a `MakeClosure` whose closure captures nothing (its `__call` copied into a free function `<closure>_c_function`), with `Cast(FunctionPointer, slot type)`; reports a closure or bound method that captures (`sync_closures` inferred its parameter types from the slot's plain signature, `extern_as_function`). Where a function value flows into a `shared` function-typed slot, retypes a `FunctionRef` or `MakeClosure` to the `shared` type, reporting a capture that `check_shared_types.unsafe_part_in` finds not thread-safe (at its first use in the closure, with a note at the captured local). Where a `shared` value flows into a plain slot of the same signature, wraps it in a new plain adapter closure (`__inner`, `__call` forwarding to it; its destructor releases `__inner`), so plain counts never touch a shared object. Any other plain value in a `shared` slot is left for `check_function_types`. |
-| final | `value_structs.check` (`sema/value_structs.pep`) | Installs the program's `[Value]` structs (`value_structs.install`, which `struct_body.apply` and codegen also call; `is_value` answers by base name) and reports what a value cannot do: `===`/`!==` and `__null` on one, `__weak<V>`, `__refcount`, a value struct in an `extern` signature, and one that contains itself (`check_recursion`, an explicit-stack walk over value-typed fields, a note per step). Infers each value struct's mutating methods (`mutating_methods`, a fixpoint: a method that assigns a field of `this`, or of a value field of it, or calls a mutating method on either) and, walking each body with its scopes (`Uses`, an explicit statement stack), reports a change that would land in a copy or a `const`: a field of a call's result assigned or a mutating method called on one (`Root.Temporary`, with a note at the call that made the copy), the same on a `const` variable, and a change to a closure's `__this`. `__address` stays allowed: on a value it hashes the fields (§4.5). The builder rejects `destruct` and `[Shared]` on a value struct (`check_value_attributes`). A `for` over a `const` value iterator (no `iterate()`) is reported as a mutating `next` call. |
-| final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`StructDef.implicit_from`) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. A string literal (the `String(raw, size, length)` call `convert_string_literals` made, matched by the literal's loc) flowing into a `char`, `u8`, or `void` pointer slot is unwrapped back to its raw literal, in each arm of a ternary too; flowing into a `StringConstant` slot it becomes `StringConstant(raw, size, length)` (`constant_string_literal`), a `[Value]` over the literal's constant bytes. A `StringConstant` value flowing into a `String` slot becomes `value.to_string()`, and into a C string slot `value.c_str()` (`convert_constant`): the conversion `String` would make with an `[Implicit]` constructor, built in so that `String` keeps its one constructor (a second one would make every `String(...)` call, the literals' included, an overload set), and `String(text)` of a `StringConstant` is `text.to_string()` too. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
+| final | `shared_functions`, `synthesize_function_types` | Reports a C function pointer type (`__extern_function<R, P…>`, `TypeName.is_extern_function_type`; not a refcounted type, it lowers to `ptr`) declared with a type C cannot pass (a struct). Where a value flows into a C function pointer slot, replaces a `FunctionRef`, or a `MakeClosure` whose closure captures nothing (its `__call` copied into a free function `<closure>_c_function`), with `Cast(FunctionPointer, slot type)`; reports a closure or bound method that captures (`sync_closures` inferred its parameter types from the slot's plain signature, `_extern_as_function`). Where a function value flows into a `shared` function-typed slot, retypes a `FunctionRef` or `MakeClosure` to the `shared` type, reporting a capture that `shared_types.unsafe_part_in` finds not thread-safe (at its first use in the closure, with a note at the captured local). Where a `shared` value flows into a plain slot of the same signature, wraps it in a new plain adapter closure (`__inner`, `__call` forwarding to it; its destructor releases `__inner`), so plain counts never touch a shared object. Any other plain value in a `shared` slot is left for `check_function_types`. |
+| final | `value_structs.check_value_structs` (`sema/value_structs.pep`) | Records the program's `[Value]` structs in `PassState.value_structs` (as `synthesize` does too; `PassState.is_value_struct` answers by base name) and reports what a value cannot do: `===`/`!==` and `__null` on one, `__weak<V>`, `__refcount`, a value struct in an `extern` signature, and one that contains itself (`_check_recursion`, an explicit-stack walk over value-typed fields, a note per step). Infers each value struct's mutating methods (`_mutating_methods`, a fixpoint: a method that assigns a field of `this`, or of a value field of it, or calls a mutating method on either) and, walking each body with its scopes (`_Uses`, an explicit statement stack), reports a change that would land in a copy or a `const`: a field of a call's result assigned or a mutating method called on one (`Root.Temporary`, with a note at the call that made the copy), the same on a `const` variable, and a change to a closure's `__this`. `__address` stays allowed: on a value it hashes the fields (§4.5). The builder rejects `destruct` and `[Shared]` on a value struct (`check_value_attributes`). A `for` over a `const` value iterator (no `iterate()`) is reported as a mutating `next` call. |
+| final | `convert_to_traits` | Implicit constructor conversions and trait conversions, at every place a value flows into a typed slot (initializer, assignment, argument, return). A value flowing into a struct whose constructor is `[Implicit]` (`convert_to_traits`' `_Implicit` table) becomes a `FunctionCall` of that constructor when its type matches the parameter exactly or by promotion (integer widening, a fitting integer literal, `f32` → `f64`, struct → declared trait); the call's own argument never converts through another constructor. A string literal (the `String(raw, size, length)` call `convert_string_literals` made, matched by the literal's loc) flowing into a `char`, `u8`, or `void` pointer slot is unwrapped back to its raw literal, in each arm of a ternary too; flowing into a `StringConstant` slot it becomes `StringConstant(raw, size, length)` (`_constant_string_literal`), a `[Value]` over the literal's constant bytes. A `StringConstant` value flowing into a `String` slot becomes `value.to_string()`, and into a C string slot `value.c_str()` (`convert_constant`): the conversion `String` would make with an `[Implicit]` constructor, built in so that `String` keeps its one constructor (a second one would make every `String(...)` call, the literals' included, an overload set), and `String(text)` of a `StringConstant` is `text.to_string()` too. It wraps every struct value that flows into a trait-typed slot in `ToTrait`, checking that the struct declares the trait; rejects calls through a trait value to members it cannot dispatch, and struct results of trait methods that do not conform to the declared trait type. Records the trait types in use in `module.trait_types`. See §4.2. |
 | final | `check_function_types` | Rejects a value whose type does not match the typed slot it flows into (variable initializer, assignment, argument, return): a function value of a different signature, a plain function value where a `shared` one is expected (`cannot initialize variable 'f' of type 'shared () => void' with a value of type '() => void'`), a number or a raw pointer where a struct is expected or the reverse (a struct may pass as `void*`, but `void*` is never a struct; a string literal in a pointer slot is its `char*` global), or a different struct (`cannot initialize variable 'x' of type 'int' with a value of type 'String'`). A C function pointer slot takes only the same C function pointer type (`extern_flows_into`, with a hint saying what converts), and a C function pointer converts only to `void*`. An extern call's arguments are checked here only for its function-typed parameters; codegen checks the rest. It also rejects a call returning `void` used as a value (stored, passed, returned, an operand, or a condition). Errors are located `Diagnostic`s. |
-| final | `check_casts` (`sema/casts.pep`) | Reports each `as` or `unsafe_cast` whose conversion `casts.check` rejects, at the `as` or the `unsafe_cast` name (`cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret`). Runs after `convert_to_traits`, which turns an `s as Trait` into the `ToTrait` a trait-typed slot gets. A cast whose operand `static_type.of` cannot type, or whose type still names a parameter of the generic base (`check_function_types.base_params`), is left to codegen: `codegen_cast` asks `casts.check` again with the operand's exact type, and lowers an `unsafe_cast` between a float and an integer as a `bitcast` and an integer to a pointer as `inttoptr`. |
+| final | `check_casts` (`sema/casts.pep`) | Reports each `as` or `unsafe_cast` whose conversion `casts.check` rejects, at the `as` or the `unsafe_cast` name (`cannot cast '__ptr<int>' to 'ulong' with 'as'; use 'unsafe_cast<ulong>(...)' to reinterpret`). Runs after `convert_to_traits`, which turns an `s as Trait` into the `ToTrait` a trait-typed slot gets. A cast whose operand `static_type_of` cannot type, or whose type still names a parameter of the generic base (`function_types_check._Bases`), is left to codegen: `codegen_cast` asks `casts.check` again with the operand's exact type, and lowers an `unsafe_cast` between a float and an integer as a `bitcast` and an integer to a pointer as `inttoptr`. |
 | final | `check_shared_types` | Checks every `[Shared]` struct: each field must be `const` (on the declaration) and of a thread-safe type (on each concrete struct, so `Atomic<String>` is reported at the code that names it). A `shared` function type is thread-safe; a plain one is not. Then checks every module-scope variable, exported or not, by the same two rules, as if it were a field of a `[Shared]` struct (any function can hand a global to any thread). A `[ThreadLocal]` variable is exempt from the `const` rule (each thread has its own copy) but keeps the type rule, since a non-thread-safe value parked in one from under a lock would escape `check_confinement`, and its initializer must fold to a constant (`thread_local_constant`), the image every thread starts from. The builder rejects `[ThreadLocal]` on a field or parameter (`reject_thread_local`). |
-| final | `tuples.lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
-| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `lower_moved_arguments` wraps in `Expression.Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when it is the only holder (`Region.holders`) of an unshared, untainted region, and a `[Move]` parameter starts in a fresh region of its own; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; an argument to a `[Locked]` parameter must be a closure literal, whose lifted `__call` is walked with its parameters as a `Locked` region of their own (`check_locked_closure`; such closures are summary roots, so their callees are summarized); `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. For the build cache (`Module.record_summaries`), it summarizes every function and hands out, by location, the summaries that reach no trait call (`summaries_to_record`); a build that skips a cached unit's bodies seeds those (`recorded_summaries`, §4.3). |
+| final | `destructures.lower_destructures` | Checks each destructuring's element count against its value's tuple type (`cannot destructure '(int, int)' into 3 values: it has 2 elements`, `cannot destructure 'String': it is not a tuple`) and replaces the `Destructure` node with its value. Reports an element that does not exist (`no member named '2' in '(int, int)'`) and an assignment to an element (`tuple elements are immutable`). |
+| final | `check_confinement` | The confinement rule for `with` blocks over `[Isolated]` guards (`MutexGuard`, `ThreadLocalGuard`), recognized by the builder's lowering (a hidden `__with_scope_N` local of an `[Isolated]` type). A flow-insensitive union-find over **regions** (`Fresh`, `Outer`: parameters, `this` and locals declared before the block, `Locked(n)`: the binding) links a call's operands as its callee's **link summary** says and an assignment's target with its value; linking `Outer` with `Locked`, or two locks, is an error at the value that would cross ("'line' cannot move into the value locked by 'names'", "'list[0]' is part of the value locked by 'names' and cannot outlive the lock"), as are returning a locked value from the block and a closure capturing one. Link summaries (for each function: which operand slots, `this` first, its body links together and into its result, and whether the result is tainted) come from the same walk over the callee, as a least fixed point over a worklist seeded with the functions that have `with` blocks or `[Move]` calls (callees start at the bottom, callers re-run when one changes). A result is **fresh** when no operand is in its class and it is not tainted (`returns_fresh`, shown by the LSP's hover). A tuple result has one result slot per element, and a tuple value one region per element (a literal keeps its elements apart, `t.0` reads one, a destructuring's hidden local takes the value's shape), so each element of `var (a, b) = f()` gets its own bit; passing a whole tuple as an operand links all its elements. `copy(x)` is fresh; an `extern` call links nothing and marks a returned pointer untracked, as is a pointer read from a thread-safe object's field (raw memory a `[Shared]` struct holds), so a reference read through either is tainted; `move(x)` (the runtime's `move<T>`, whose `[MoveSource]` argument `_lower_moved_arguments` wraps in `Expression.Move`) out of raw memory, `move(p[i])`, is fresh (runtime files only, checked against the discovered runtime directory); a moved local is fresh when it is the only holder (`_Region.holders`) of an unshared, untainted region, and a `[Move]` parameter starts in a fresh region of its own; a call through a function value, and a closure capture, taint; a trait call joins every implementation's summary; unknown callees link everything. Raw pointers carry the region they were read from (`this._data` is `this`'s), and raw reads are typed by their pointee. Also checks: an `[Isolated]` value anywhere but a `with` header (or inside the guard's own struct and functions returning one) or in a field; `[Move]` arguments must be disconnected (thread-safe, or a call whose result class holds only disconnected operands and is not tainted), with a note at the `return` that keeps a callee from being fresh; `ThreadLocal<T>.get()` for a non-thread-safe `T`; `Mutex` of a number; an argument to a `[Locked]` parameter must be a closure literal, whose lifted `__call` is walked with its parameters as a `Locked` region of their own (`_check_locked_closure`; such closures are summary roots, so their callees are summarized); `move` of anything but a sole-holder local or a runtime raw slot, and use after move (`_Moves`, a flow-sensitive dataflow over each function that moves: a loop reruns its body unless every path leaves it). A syntactic prefilter skips functions that mention no trigger name. For the build cache (`Module.record_summaries`), it summarizes every function and hands out, by location, the summaries that reach no trait call (`summaries_to_record`); a build that skips a cached unit's bodies seeds those (`recorded_summaries`, §4.3). |
 | final | `lower_with_blocks` | Picks each `with` condition by `enter()`'s final type: a null test for a struct or pointer, no branch otherwise (a `void` result becomes an expression statement). Reports the `with` errors (no `enter()`, binding a `void` result, `else` on a non-nullable result, assigning to the binding). |
-| final | `enums.lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (a guarded arm's patterns handle nothing, but one after an unguarded arm for its case is still handled twice) (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `module.warnings`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`check_arm_types`). `check_function_types` keeps enums apart from integers and from each other (`Kind.Enum`). Over a trait value (`trait_arm`, §4.2) each pattern's `ty` must name a struct that declares the trait or another trait (`trait_target`), each type is handled once, a binding becomes `FromTrait`, and a `match` expression needs an `else`. A case pattern's values (`enum_test`) are tested on their payload fields after the tag (`element_test` over `case_field`, typed by `case_payload_types`), and the `CaseValue`s the builder left in nested tests are lowered to fields (`lower_case_values`, `typed_path`). A pattern nested in a case's values handles part of the case: it is a row of the match's `spaces`, and `check_exhaustive` counts a case no pattern handles whole as handled when those rows cover it, else names the value they miss. A `match` over a tuple (`lower_tuple_arm`) tests each element on its path (`element_test`, `&&` over the elements), resolves each bare element name to a case or a binding and drops the local of one that is a case (reporting one that binds where it may not), and checks coverage with the usefulness algorithm (`useful` over `Space`s, a case with the spaces of its values, with each enum's and `bool`'s cases and their value types as `Domains`): a pattern the earlier ones cover is an error, a value no arm covers is reported with an example (`does not handle '(Line, _)'`), and an `else` after full coverage is a warning. |
-| final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type.of`, goes to `module.warnings`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures.inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
-| final | `check_hash_keys` | Errors: for each key type of a `_HashTable<K, V>` specialization (every `HashMap` and `HashSet` key), a struct that declares `==(other: K)` but no `hash<K>` override (a function of that name with no type parameters; the generic's own specialization keeps them), and a reference struct with the override but no `==`. Each is reported (`errors.report`) at the declaration to complete. Structs declared in the runtime (`RuntimeDirectory`, shared with `check_confinement`) are skipped, and so are `[Equatable]` structs, whose hash is derived; overriding `hash<T>` for one is an error at the override. |
+| final | `matches.lower_matches` | Turns each `MatchArm` test into `__match_N == Case || ...` (for a reference enum, `__match_N.__tag == tag || ...`, after a `_pep_assert` that the subject is not null; a literal pattern's own `==`) and each binding's `CaseValue` into its payload field (several patterns binding one name: an `if` chain on the tag that assigns it, or a `?:` on the tag inside a `match` expression). It checks each `match` (`MatchSite`): the subject must be an enum, an integer, `char`, `bool` or `String` (literal patterns), a pattern's qualifier must name it, each case or literal is handled once, and every case must be handled unless there is an `else` (a guarded arm's patterns handle nothing, but one after an unguarded arm for its case is still handled twice) (`match on 'E' does not handle ...`, at the keyword, with a note per missing case); a literal `match` needs an `else` unless it is a `bool` handling both values; an `is` test (`partial`) is not checked. An `else` after every case is a warning in `state.notes`. For a `match` expression it sets the `WithSubject`'s null-check message, drops the chain's `NoMatch` (the last arm's value stands alone), and reports arms whose values do not mix (`_ArmTypes`). `check_function_types` keeps enums apart from integers and from each other (`_TypeKind.Enum`). Over a trait value (`trait_arm`, §4.2) each pattern's `ty` must name a struct that declares the trait or another trait (`_trait_target`), each type is handled once, a binding becomes `FromTrait`, and a `match` expression needs an `else`. A case pattern's values (`enum_test`) are tested on their payload fields after the tag (`element_test` over `_case_field`, typed by `_case_payload_types`), and the `CaseValue`s the builder left in nested tests are lowered to fields (`_CaseValueLowering`, `typed_path`). A pattern nested in a case's values handles part of the case: it is a row of the match's `spaces`, and `check_exhaustive` counts a case no pattern handles whole as handled when those rows cover it, else names the value they miss. A `match` over a tuple (`tuple_arm`) tests each element on its path (`element_test`, `&&` over the elements), resolves each bare element name to a case or a binding and drops the local of one that is a case (reporting one that binds where it may not), and checks coverage with the usefulness algorithm (`useful` over `_Space`s, a case with the spaces of its values, with each enum's and `bool`'s cases and their value types as `_DomainCase`s): a pattern the earlier ones cover is an error, a value no arm covers is reported with an example (`does not handle '(Line, _)'`), and an `else` after full coverage is a warning. |
+| final | `check_deprecated_members` | Warnings only: each use of a field or method marked `[Deprecated]` (through `x.m`, `S.m()`, or a bare member in a method), found by the receiver's `static_type_of`, goes to `state.notes`. Skips uses inside deprecated functions, methods, and structs (a closure lifted out of one inherits its `[Deprecated]`, see `closures._inherit_deprecation`), uses whose source text is not the member's name (calls sema synthesized), and repeated locations (specializations). |
+| final | `check_hash_keys` | Errors: for each key type of a `_HashTable<K, V>` specialization (every `HashMap` and `HashSet` key), a struct that declares `==(other: K)` but no `hash<K>` override (a function of that name with no type parameters; the generic's own specialization keeps them), and a reference struct with the override but no `==`. Each is reported (`errors.report`) at the declaration to complete. Structs declared in the runtime (`confinement._runtime_files`, shared with `check_confinement`) are skipped, and so are `[Equatable]` structs, whose hash is derived; overriding `hash<T>` for one is an error at the override. |
 | final | `check_lazy` (`sema/lazy.pep`) | Errors in the `[__Reads]` methods of a `[__Lazy]` struct (`Array<T>`), which run on a null `this` (§5, "Empty Arrays are null"): an assignment to a field of `this` or a slot of a buffer it holds, and a call on `this` of a method that is not `[__Reads]`. Each is reported at the write or call, with a note at the method. |
 | final | `exports.collect_exports` | Fills `Module.exports` with each `[Export]`ed free function C can call and the struct handles they pass (see [4.1](#41-object-emission-and-linking-driverbuildpep-driverpartspep-driverlinkerpep), "`[Export]`"). `[Export]` on anything else is a warning; a parameter or result C cannot hold, a duplicate C symbol, or a bad `name` is an error. |
-| last | `static_strings` | String literals as shared immortal objects (#410), after `checked.restore_bodies`, over every body. An operand slot of type `String` (a parameter, or `this` of a `String` method) is **free** when the body only reads its fields that hold no reference, passes it to free parameters of resolved calls (not an `extern`, a function value or a trait method; not `[Move]`), calls methods on it whose `this` is free, or compares it with null: the greatest fixed point over the call graph. Constructors, `__` methods, functions used as values (`FunctionRef`, `FunctionPointer`) and methods that implement a trait's are never free, since only a direct call can make the caller's copy (below). A literal (`String(raw, size, length)` matched by its loc) that is an argument to a free parameter, or the receiver of a method whose `this` is free, becomes `Expression.StaticString`, one immortal object that codegen's `static_string` emits; every other literal (a variable's, field's or element's value, a result, a capture) is still a new `String`, so `var s = "a"; s.append("b");` behaves as before. Free parameters are listed in `Module.caller_copies`, by codegen name: their caller makes the copy (§5). A caller depends on its callees' bodies here, so each recorded link summary carries its function's facts after `|s=` (`f` free, `k` kept, `-` not a `String`, per slot): they reach the file's interface hash (`summary_without_position` keeps them), and a body the cache skipped reads them back (a slot with none is kept). |
+| last | `static_strings` | String literals as shared immortal objects (#410), after `checked.restore_bodies`, over every body. An operand slot of type `String` (a parameter, or `this` of a `String` method) is **free** when the body only reads its fields that hold no reference, passes it to free parameters of resolved calls (not an `extern`, a function value or a trait method; not `[Move]`), calls methods on it whose `this` is free, or compares it with null: the greatest fixed point over the call graph. Constructors, `__` methods, functions used as values (`FunctionRef`, `FunctionPointer`) and methods that implement a trait's are never free, since only a direct call can make the caller's copy (below). A literal (`String(raw, size, length)` matched by its loc) that is an argument to a free parameter, or the receiver of a method whose `this` is free, becomes `Expression.StaticString`, one immortal object that codegen's `static_string` emits; every other literal (a variable's, field's or element's value, a result, a capture) is still a new `String`, so `var s = "a"; s.append("b");` behaves as before. Free parameters are listed in `Module.caller_copies`, by codegen name: their caller makes the copy (§5). A caller depends on its callees' bodies here, so each recorded link summary carries its function's facts after `|s=` (`f` free, `k` kept, `-` not a `String`, per slot): they reach the file's interface hash (`record.summary_without_place` keeps them), and a body the cache skipped reads them back (a slot with none is kept). |
 
-Shared helpers in `sema/passes.pep` are `walk_block`, `walk_statement`,
-`walk_expression`, `walk_function`, `walk_global`, and
-`replace_expression`; `visit_block`, `visit_statement`, `visit_expression`
-and `visit_function` are the same walks for a pass that only reads (never
-clone a body or an expression to walk it with `walk_*`); `children` and
-`children_mut` iterate a node's direct sub-expressions without allocating,
-for a walk that decides per node whether to descend. **When you add a model
-`Expression` variant, add it to `walk_expression`, `visit_expression`,
-`children` and `children_mut`.**
+The passes share the walks in `sema/walk.pep`: a `Rewriter` sees every
+expression of a block before its sub-expressions and may replace it
+(`rewrite_block`, `rewrite_statement`, `rewrite_expression`), and
+`rewrite_children` visits a node's direct sub-expressions, for a walk that
+decides per node whether to descend. `closure_sites.rewrite_module` applies
+a `Rewriter` to every body of the module, and
+`closure_sites.expression_children` lists a node's direct sub-expressions.
+**When you add a model `Expression` variant, add it to
+`rewrite_children`.**
 
 `resolve_implicit_types` runs eight times and loops inside each run, so its
 helpers skip work that cannot change anything: `sync_closures` learns
@@ -1166,56 +1166,54 @@ holds generic bases' fields too, so a closure created in a generic closure's
 method can type what it captures from `this`, and learning stops once it
 has; `bind_function_values` types expressions only when some name could
 still bind to an overload, and `bind_generic_function_values` only when an
-untyped name of a generic function appears; `infer_type_arguments` and
-`resolve_method_overload` check that a name is a generic function, a generic
+untyped name of a generic function appears; `_ImplicitResolver._infer_type_arguments` and
+`_resolve_method_overload` check that a name is a generic function, a generic
 method or a method overload set before typing the receiver or the
-arguments, and `overload_call` checks that a call names a set
+arguments, and `_TypeScopes.overload_call` checks that a call names a set
 (`Overloads.call_set_name`) before parsing its type arguments; and
 `traits.used_trait_types` prints and parses only types that spell a
 trait's name as a whole word (`ArrayIterator` does not mention
 `Iterator`). `specialize_methods` builds its `StructTable` only once a call
-names a generic method. Compare a type to a spelling with
-`TypeName.is_spelled`, not `to_string() ==`, in a loop.
+names a generic method.
 
 `resolve_type_aliases` also expands aliases in constraints, in the arguments
 of each `TypeUse` (not its head, whose own constraints are checked), and in
 restated extension constraints, and keeps the aliases that constrain a
 parameter in `Module.constrained_aliases` so their uses can be checked.
 
-`struct_body.apply`'s `resolve_type_aliases` reports a recursive alias
+`resolve_type_aliases` reports a recursive alias
 at the alias's name (`type alias 'A' refers to itself`, with a note at each
 alias the cycle passes through). Because `check_function_types` is a
 transform step, the driver and the LSP both run it.
 
 Error reporting inside passes goes through `state.report(diag)`, which
 keeps only the **first** diagnostic of a run. Other per-run state is in
-the `PassState` too, the target among it. The counters that number synthesized
-names (the builder's `FOR_LOOPS`, `WITH_BLOCKS`, `TUPLES` and `MATCHES`,
-closure structs' `CLOSURES`) restart at the start of every `load_program`
-(`reset_program_counters`). This lets tests compile
+the `PassState` too, the target among it. No counter that numbers synthesized
+names is process-wide: closure structs are numbered in
+`PassState.closure_counts`, and the builder's counters (`_Builder.for_loops`,
+`with_blocks`, `tuples`, `matches`, `tries`) belong to the builder of one
+file. This lets tests compile
 concurrently on separate threads. `resolve_operators` numbers its
 `_idx_tmp_N` temporaries within each function, after any that function
 already declares, so they do not depend on the order functions are
-resolved in. The builder's counters also restart for
-each file (`build_file`), so the hidden locals of one file, and the bitcode
+resolved in. Since the builder's counters start over for
+each file (`build_file`), the hidden locals of one file, and the bitcode
 of its build cache unit, do not depend on which files the program built
 before it.
 
 **Output is deterministic**: the same program compiles to the same IR and
 object bytes on any thread, after any other programs, in any process. So
 never let a `HashMap`/`HashSet` iteration order decide what is emitted or in
-what order (`gather_generics` collects specializations in `BTreeSet`s),
+what order (`gather_generics` keeps the uses it finds in a sorted `Map`),
 and never number synthesized names with a process-wide or never-reset
 counter. The build cache, which reuses per-file objects and checked
 compilation units, depends on this.
 
-`resolve_implicit_types` builds its program-wide lookup tables (`Tables`:
+`resolve_implicit_types` builds its program-wide lookup tables (`ImplicitTables`:
 struct fields and methods, function return types, function values,
 generic signatures, globals) once per call, as hash maps, and every
-function's `Scopes` borrows them; the struct being resolved overrides its
-own entries through `Scopes.own`. Before this it cloned and linearly
-scanned vectors of every table per function, which was most of sema's
-time. `TypeName.is_auto` tests for `auto` without building a string.
+function's `_TypeScopes` shares them; the struct being resolved overrides its
+own entries through `_TypeScopes.own`. `TypeName.is_auto` tests for `auto` without building a string.
 
 ---
 
@@ -1231,19 +1229,19 @@ as one module, recording in `owners` the file that declares each symbol;
    first (a field may name a struct declared later). Then:
    `instantiate_struct` (LLVM struct body, in which a struct-typed field is
    a `ptr` slot, so a struct may hold its own type) → ABI sizes via
-   `TargetData.get_abi_size` → `instantiate_methods` → `instantiate_ctor`
+   the target machine's `size_of` → `instantiate_methods` → `instantiate_ctor`
    → `instantiate_extern` → `instantiate_function`. Generic bases (`st.name
    == st.ty.name` with generic `ty`, or `is_generic_func`) are skipped;
    sema has already cloned the concrete specializations.
 2. **`emit_globals`.** Module-scope variables become LLVM globals. A
    constant initializer is set directly. Other initializers go into
    `__pep_global_init`, registered in `llvm.global_ctors`, in the order of
-   `module.globals` (see `Program.initialization_order`). A `[ThreadLocal]`
-   global (`VariableDef.is_thread_local`; `codegen/globals.pep`) is an LLVM
+   `module.globals` (see `initialization_order`, `sema/program.pep`). A `[ThreadLocal]`
+   global (`is_thread_local`; `codegen/globals.pep`) is an LLVM
    `thread_local` in the initial-exec model, with the constant initializer
-   `check_shared_types.thread_local_constant` folds and no debug info. The
+   `shared_type_checks.thread_local_constant` folds and no debug info. The
    program module then defines `_pep_release_thread_locals` (a cached unit
-   only sees the runtime's `extern` for it; `partition.finish` leaves the
+   only sees the runtime's `extern` for it; `partition.prepare` leaves the
    name unspelled and external): for each thread-local holding references,
    last declared first and in four passes, it stores the default and
    releases the old value. `async`'s `_async_thread_main` calls it after the
@@ -1253,7 +1251,7 @@ as one module, recording in `owners` the file that declares each symbol;
 3. **Codegen.** `codegen_struct` (patched ctor plus methods, mangled as
    `Struct.method` with an implicit `this` parameter 0; static methods have
    no `this`) and `codegen_function`. Then the module is verified
-   (`ir.verify()`). IR it rejects is a type check sema missed; `verification_error` locates the
+   (`ir.verify()`, in `Generator.generate_items`). IR it rejects is a type check sema missed; `verification_error` locates the
    error at the first function the verifier rejects, and names it.
 
 How the language lowers:
@@ -1268,7 +1266,7 @@ How the language lowers:
 - **Stores are type-checked** (`codegen/address.pep`). LLVM accepts a store of any
   type through an opaque pointer, so a value wider than its slot silently
   overwrites the next field or the next heap object. `Address.store`, and
-  the raw `build_store`s into a local, the return slot, or an array element,
+  the raw `builder.store`s into a local, the return slot, or an array element,
   first call `check_store_type`. It fails with `internal error: storing a
   value of LLVM type 'X' into 'name' ('T', LLVM type 'Y')`, located at the
   node being generated, whenever the two LLVM types differ, except into a
@@ -1276,7 +1274,7 @@ How the language lowers:
   that is `cannot infer the type of 'name'; write its type in place of
   'var'`, the user's workaround for an inference gap. A field's
   `Address` takes its LLVM type from the object's layout
-  (`get_field_type_at_index`), so a struct-typed field is a `ptr` slot
+  (the struct type's `field(index)`), so a struct-typed field is a `ptr` slot
   there, not the struct body. A new store into a typed slot goes through
   the same check.
 - **Types** (`codegen/types.pep`): `Types.get(name)` maps primitive aliases (`int`
@@ -1288,7 +1286,7 @@ How the language lowers:
   looks up `Array<int>` by its full name.
 - **Externs**: declared with the C prototype. Variadic externs use C default
   promotions. Narrow integer arguments get `signext`/`zeroext`.
-  `[Link(name = "sym")]` changes the symbol (`ExternDef.link_name`). A string
+  `[Link(name = "sym")]` changes the symbol (`extern_symbol`). A string
   literal passed to an extern is passed as its raw NUL-terminated global.
   A call to an extern whose C symbol is `memcpy`, `memmove` or `memset`
   lowers to the LLVM intrinsic (`build_memory_intrinsic`), since a `void`
@@ -1302,22 +1300,24 @@ How the language lowers:
   scratch module and running the verifier, so a mismatch is an error at the
   extern. `codegen_call` checks each argument the intrinsic marks `immarg`
   is a constant (`check_intrinsic_argument`), located at the argument.
-  `partition.finish` leaves `llvm.*` symbols alone. The runtime's integer
+  `partition.prepare` leaves `llvm.*` symbols alone. The runtime's integer
   bit methods, float functions (`runtime/number.pep`) and the `hint` module
   are written with these.
 - **Branch hints**: `[Likely]` or `[Unlikely]` above an `if` or a `match`
-  arm is parsed into that block's attributes (`marked_branch`, and the arm
-  loop of `match_statement`); the builder checks them
+  arm is parsed into that block's attributes (`Parser`, where it reads an
+  `if` and a `match` arm); the builder checks them
   (`check_branch_hints`), and a `match` lowers to branches whose blocks
   are the arms' blocks, so they arrive on `Branch.if_block` or
   `else_block`. `weigh_branch` turns them into `!prof` branch weights
-  (`ast.branch_hint`).
+  (`branch_hint`).
 - **Cold functions**: `[Cold]` on a function, method or constructor
-  (#640) is checked by `cold.check_cold` (no arguments, functions only)
-  and gives the LLVM function `cold` and `noinline` (`mark_cold`, from
-  `instantiate_function_unlocated` and the method declarations), as
-  `T.__last_release` already has. The allocator's slow paths use it so
-  `_pep_malloc` and `_pep_free` stay small enough to inline.
+  (#640) marks it rarely called, as `T.__last_release` is (`cold` and
+  `noinline`, `codegen/refs.pep`); the allocator's slow paths use it so
+  `_pep_malloc` and `_pep_free` stay small enough to inline. `Cold` is a
+  built-in attribute name (`static_blocks._is_built_in_name`);
+  `platform._check_cold` rejects arguments and a target that is not a
+  function, and `functions.mark_cold` gives the LLVM function `cold` and
+  `noinline`.
 - **Builtins resolved by name in `codegen_call`**: `release<T>(v)`,
   `__is_pod`, and `__default<T>`. `__caller_location()` is handled in
   `codegen_expr` (#354): a constant C string `file:line:col`
@@ -1338,11 +1338,11 @@ How the language lowers:
   `check.fail` block calling `_pep_panic("integer overflow in 'int'
   addition", "file:line:col")` (`llvm.trap` without the runtime). Two constant operands
   are checked at compile time instead, an error at the operator.
-  `CodeGenerator.runtime_checks` turns kinds off: overflow then wraps, a
+  `Generator.runtime_checks` turns kinds off: overflow then wraps, a
   shift count is masked, a division is plain `sdiv`/`udiv`. The struct,
-  `RuntimeChecks`, lives in `codegen/checks.pep` (re-exported by
-  `codegen/checks.pep`), which also reads and checks `[Unsafe("overflow,bounds")]`
-  (`check_unsafe`, run by `apply_platform_filters`; `function_checks`).
+  `RuntimeChecks`, lives in `codegen/checks.pep`, which also reads
+  `[Unsafe("overflow,bounds")]` (`function_checks`; a list it cannot read
+  keeps every check).
   `codegen_function` narrows `runtime_checks` to the function's own for its
   body, and `sema/closures.pep` copies `[Unsafe]` onto the closures lifted
   out of it. A per-function `bounds` reaches into the runtime's indexers
@@ -1354,7 +1354,7 @@ How the language lowers:
   compute at `int` (C promotion), so only `int` and wider overflow.
   The arithmetic intrinsics `__wrapping_add/sub/mul(a, b)` and
   `__add/sub/mul_overflows(a, b)` are `BinaryOp` variants that the builder
-  makes from those calls (`BinaryOp.intrinsic`); the overflow tests work at
+  makes from those calls (`builder._intrinsic`); the overflow tests work at
   the lhs's own width and give `bool`. The integer types' `wrapping_`,
   `checked_`, `saturating_` and `overflowing_` methods (`runtime/number.pep`)
   are written with them. `call_function` declares unknown
@@ -1382,23 +1382,23 @@ How the language lowers:
   read (`copy_arm`), as C++ yields a prvalue copy there. Numeric arms of
   different types convert, each in its own block before the branch, to
   `arithmetic.conditional_result` of the two (`convert_arm`), the type
-  sema's `static_type.of` and codegen's `value_sema_type` report for the
+  sema's `static_type_of` and codegen's `value_sema_type` report for the
   `?:`, so a `return`, initializer, argument or assignment converts from it.
 - **Enum cases that carry nothing**: `StaticCase` (`static_case`) is the
   global `<Enum>.case<tag>`, the enum's struct with its counts at
   `STATIC_REFCOUNT` and 1, its `__tag` set and every other field zero. It
   is emitted with external linkage, like a function, and
-  `partition.finish` makes it `linkonce_odr` (in a comdat), so the units
+  `partition.prepare` makes it `linkonce_odr` (in a comdat), so the units
   that use it share one object and `===` holds across files. A reference enum with such a case
   gets the same guard as a plain function type (`skip_static_objects`,
-  added by `struct_body.apply_synthesized`): its `__acquire` and
+  added by `synthesize.apply_synthesized`): its `__acquire` and
   `__release` leave a count at or above `STATIC_REFCOUNT` alone, so the
   object any thread may reach is only ever read.
 - **Shared string literals**: `StaticString` (`static_string`) is one
   private constant global per literal and unit, `{ String, [n x i8] }`:
   the `String` object, its counts at `STATIC_REFCOUNT` and 1, `_size` and
   `_length` set and `_data` pointing at the NUL-terminated bytes that
-  follow it. Named `str.object` so `partition.finish` orders it with the
+  follow it. Named `str.object` so `partition.prepare` orders it with the
   other string constants. pepc names it `str.object.<hash of its text>`
   (`codegen/calls.pep`): `partition.prepare` makes it `linkonce_odr`, and
   a numbered name would let an object kept in the build cache meet a
@@ -1409,7 +1409,7 @@ How the language lowers:
   (`__function_object.<name>`, or `__function_object.shared.<name>` for a
   `shared` function type) whose `__invoke` points at a thunk
   (`__function_thunk.<name>`, one per function; for an `extern` function,
-  which `function_types.referenceable_functions` lists unless it is
+  which `resolve_implicit_types._referenceable_functions` lists unless it is
   variadic, the thunk calls the C function). Its strong count starts at
   `STATIC_REFCOUNT`, so it is never freed. `codegen_invoke` loads `__invoke` and calls
   it with the signature of the static type. A callee of C function pointer
@@ -1422,7 +1422,7 @@ How the language lowers:
   expressions. `missing_args` pads trailing arguments at the call site and
   reports `too many/too few arguments to 'f'`.
 - **Control flow**: nested blocks, branches, and loops get their own basic
-  blocks. `frame.exited` suppresses dead code after
+  blocks. `Frame.exited` suppresses dead code after
   `return`/`break`/`continue`. Every unterminated block is patched to branch
   to the function's return block. Return values go through a `retval`
   alloca in the entry block. Locals get their slots there too
@@ -1433,12 +1433,13 @@ How the language lowers:
   turns the error into a `Diagnostic` there.
 - **Target** (`codegen/target.pep`): `initialize_backends` registers the
   x86, AArch64 and WebAssembly backends on every host, so `--target` can
-  name any, and `target_machine` makes the machine for the target's
-  triple (`triple`: `--target`'s, else LLVM's default). Every call site
-  shares these. Read that file's header before touching backend
-  registration. For `wasm32-wasip1`, `write_object` renames `main` to
+  name any, and `target_triple` names the target's triple (`--target`'s,
+  else LLVM's default), for which the driver makes the machine
+  (`llvm.TargetMachine.create`). Every call site shares these. Read that
+  file's header before touching backend registration. For
+  `wasm32-wasip1`, the driver's `place_constructors` renames `main` to
   `__main_void` (`use_wasi_main`), which wasi-libc's `_start` calls.
-- **32-bit targets** (`target.is_32_bit`, wasm32): an extern's `long` and
+- **32-bit targets** (wasm32): an extern's `long` and
   `ulong` are declared as C's pointer-sized `i32` (`c_abi_type`) and the
   result widened back (`widen_c_result`, recorded in
   `extern_narrow_results`), in direct calls, extern function values and
@@ -1457,7 +1458,7 @@ How the language lowers:
   `stat`/`dirent` layouts with `OS(Wasi)` declarations. Threads, fibers,
   sockets, TLS and processes are stubs that panic or return `ENOTSUP`.
 - **Runtime on iOS and Android.** The target's `os` is `"ios"` or
-  `"android"`, and `matches_os_value` makes `OS(Mac)` hold on iOS and
+  `"android"`, and `_os_matches` (`link/platform.pep`) makes `OS(Mac)` hold on iOS and
   `OS(Linux)` on Android (as `TARGET_OS_MAC` and `__linux__` do), so the
   macOS and Linux code serves them; the few declarations that differ add
   `!OS(IOS)` or `!OS(Android)` and a variant: bionic's `__errno`, the
@@ -1504,9 +1505,9 @@ value is a struct reference with its concrete type erased, like a
   every method call works on trait values without special cases. The
   release thunk runs the concrete `__release`, so the last release runs the
   concrete destructor.
-- **Converting back** (`enums.lower_matches`, codegen
+- **Converting back** (`matches.lower_matches`, codegen
   `codegen_from_trait`). Every vtable ends with its struct's type id
-  (`type_id`, a hash of the struct's name: a vtable is private to its
+  (`type_id_value`, a hash of the struct's name: a vtable is private to its
   unit, so its address is no identity). A type pattern over a trait value
   (`is Circle`, `Circle(c) =>`, and `as?`, which the builder lowers to a
   `match`) becomes `Expression.FromTrait`: with `test`, whether the id is
@@ -1525,7 +1526,7 @@ value is a struct reference with its concrete type erased, like a
   head's weak count, freeing at 0); `codegen_weak` takes the object out of
   the pair and upgrades to the same pair, or a null one. A value struct's
   box (`box_member`) gives up the strong references' weak reference at
-  its last release, as `struct_body` does, so a weak reference keeps the
+  its last release, as `synthesize` does for a struct, so a weak reference keeps the
   box's memory.
 - **Identity.** `==`/`!=` on trait values compare objects, and
   `store_refcount_ops` treats the same object as self-assignment.
@@ -1601,7 +1602,7 @@ ignores. For WebAssembly, `main` is renamed `__main_void` for wasi-libc's
 the running compiler, on the PATH (`clang`, then `clang-<major>`), and in
 the folders LLVM's packages install it in off the PATH (`llvm_install_dirs`);
 an installed compiler has no prefix variable, and with no clang at all the
-link fails naming what to install (`missing_link_driver`). On a Linux
+link fails naming what to install (`_missing_link_driver`). On a Linux
 host it links with `ld.lld` when `find_lld` finds it (`-fuse-ld=lld
 --ld-path=...`), much faster than BFD `ld`. For
 another platform it adds `--target=<triple>`, LLVM's linker
@@ -1626,7 +1627,7 @@ NDK's own clang (`AndroidNdk.locate`: `--sysroot` naming the NDK or its
 libunwind. The default system libraries and the debug options
 follow the target's OS.
 
-**Optimization** (`codegen/target.pep`). `OptLevel` is `-O0` through
+**Optimization** (`codegen/target.pep`). `BuildOptions.opt_level` is `-O0` through
 `-O3`: `-O<n>`, else `PEPPER_OPT_LEVEL`, else `-O0` (a bare `-O` is `-O2`,
 and `-O main.pep` does not read the file as a level). Each part runs LLVM's
 `default<On>` pipeline (nothing at `-O0`) before its object is written by
@@ -1891,25 +1892,26 @@ keeping `-g` objects apart and `--debug-static` both ways.
 A `[Value]` struct is a tuple with names and methods: no allocation, no
 counts of its own, one reference held per reference field.
 
-- **Sema.** `struct_body` gives it no count fields and no `__acquire`,
+- **Sema.** `synthesize` gives it no count fields and no `__acquire`,
   `__release` or destructor bodies, and its constructor starts with
   `var this: V = Default(V)` instead of allocating; `zero_for` is
   `Default(V)`. `copies` gives it `_pep_copy_value` (`var __made = this;`
   then each counted field copied), and `check_shared_types` treats it as
   thread-safe when every field is (a fixpoint over value fields).
 - **Representation.** Codegen names its LLVM struct `value.<Name>`
-  (`types.VALUE_PREFIX`), which `types.is_object` excludes, so slots,
+  (`types._VALUE_PREFIX`), which `types.is_object` excludes, so slots,
   parameters, returns and array strides keep it by value, as for a tuple.
   `instantiate_struct` records its field types in `values`, and
   `aggregate_elements` answers for tuples and values alike, so equality,
   hashing (`Address`), stores, moves and the field refcount paths share the
   tuple code. `__acquire`/`__release` are `emit_tuple_refcount_thunk`
   thunks over the fields, declared before any tuple thunk is emitted, since
-  a tuple or another value can hold a value (`(int, Optional<Box>)`). A
-  unit declares them all but defines only the
-  ones its code calls (`pending_value_thunks`, in `codegen_unit`'s loop):
-  the runtime's iterators are values, and a thunk for every instantiation
-  in the program would make a unit's code depend on the rest of it.
+  a tuple or another value can hold a value (`(int, Optional<Box>)`;
+  `Generator.generate_items`). Like any instantiation they are
+  `linkonce_odr`, kept only in the parts whose code calls them
+  (`partition.prepare`, `keep_part`): the runtime's iterators are values,
+  and a thunk for every instantiation in the program would make a unit's
+  code depend on the rest of it.
 - **`this`.** A method's `this` parameter is a pointer to the receiver's
   storage (`value_this`), so a change through it lands in the caller's
   value; a `MethodCall` passes the receiver's address (`value_address`), and
@@ -1931,16 +1933,16 @@ counts of its own, one reference held per reference field.
   place (no `iterate()`) binds the hidden iterator to that place's address
   instead of a copy (`codegen_var_def_unlocated`), so `break` and a second
   loop resume it.
-- **One layout per type.** `value_structs.canonical` spells a value
-  struct's name with omitted type arguments filled from their defaults and
-  `__ptr<T>` as `T*`; `Types.ensure_value_opaque` keys the LLVM struct by
+- **One layout per type.** `Generator.generate_items` records in
+  `Types.canonical` each value struct's name with omitted type arguments
+  filled from their defaults (`sema.fill_defaults`); `Types.ensure_value_opaque` keys the LLVM struct by
   it, so `Result<int>` and `Result<int, Error>` (separate specializations)
   store into each other.
 - **Value enums.** `builder.reference_enum_def` keeps `[Value]` on the
   lowered struct, so a payload enum becomes a value struct: every case is a
   constructor call (no shared `StaticCase` object), the zero value is the
-  first case, and `enums` emits no null assert for its `match` (neither in
-  `lower_declaration` nor as a `WithSubject.null_message`). Equality and
+  first case, and `matches` emits no null assert for its `match` (neither
+  a `_pep_assert` before the chain nor a `WithSubject.null_message`). Equality and
   hashing guard each reference field (`unless_null`), since unused case
   fields are null. `Optional` and `Result` are value enums.
 
@@ -1950,22 +1952,21 @@ counts of its own, one reference held per reference field.
 runtime over one built-in type, so everything a value struct gets (inline
 storage, copies, fields, arrays, `copy`, `[Shared]`) comes for free.
 
-- **Number type arguments.** `type_argument` in `parse/parser.pep` parses a
+- **Number type arguments.** `Parser._type_arguments` in `parse/parser.pep` parses a
   run of decimal digits as a `TypeName` named by the digits, so `N` in
   `Vector<int, 4>` substitutes by name like any type parameter and the
   specialization is `Vector<int,4>`. Nothing evaluates it: only
-  `__simd<T, N>` reads it (`codegen/simd.pep.shape`), and
+  `__simd<T, N>` reads it (`types.simd_shape`), and
   `check_simd_shapes` (§3) validates it.
-- **`__simd<T, N>`** (`type_name.SIMD`, `TypeName.is_simd`) is LLVM's
-  `<N x T>`, a `bool` lane an `i1` (`codegen/types.pep` `scalar_type` through
-  `simd.vector_type`). It is not a struct (`is_struct` excludes it), its
-  zero is `Default` (`struct_body.zero_for`) and codegen's `const_zero`
-  arms for `VectorType`; `check_shared_types` counts it thread-safe; debug
+- **`__simd<T, N>`** (`type_name.SIMD`) is LLVM's
+  `<N x T>`, a `bool` lane an `i1` (`codegen/types.pep` `scalar_type`).
+  It is not a struct, its
+  zero is `Default` (`synthesize.zero_for`); `check_shared_types` counts it thread-safe; debug
   info describes it as an array of lanes, or a bool vector as an unsigned
-  integer of its bits (`debug_types.debug_vector`).
-- **One node.** Every operation is `Expression::Simd { op: SimdOp, ty,
+  integer of its bits (`debug_types._debug_vector`).
+- **One node.** Every operation is `Expression.Simd { op: SimdOp, ty,
   args, loc }`, from a `__simd_<op><V>(args)` call (`convert_intrinsics`).
-  `SimdOp.result(ty)` types it (a comparison gives `__simd<bool, N>`, a
+  `simd_op_result(op, ty)` types it (a comparison gives `__simd<bool, N>`, a
   reduction or `extract` the lane type, `to_bits` a `ulong`).
   `codegen_simd` lowers each op to LLVM vector instructions or the
   `llvm.vector.reduce.*`, `llvm.smin`/`umin`/`minnum`, `llvm.fshl` (rotates),
@@ -1986,8 +1987,8 @@ storage, copies, fields, arrays, `copy`, `[Shared]`) comes for free.
   whole vectors and lane comparisons are methods returning `Mask<N>`. Checks
   (division, shifts, lane indexes, array spans, alignment) panic at the
   caller through `__caller_location()` parameters.
-- **Inlining.** `CodeGenerator.inline_vector_methods`, run at the end of
-  `generate` before `facts.annotate`, marks every method and constructor of
+- **Inlining.** `Generator.inline_vector_methods`, run at the end of
+  `generate` before `annotate_facts`, marks every method and constructor of
   a value struct holding a `__simd` field `alwaysinline` and, at `-O0`,
   runs LLVM's `always-inline` pass, so a vector expression has no calls even
   unoptimized. At `-O0` the inlined code still spills each lane vector
@@ -2002,7 +2003,7 @@ std::shared_ptr<T> passed by value"). This section maps each rule to the
 code that implements it. Every rule is emitted in
 `codegen/generator.pep` through `acquire_ref` and `release_ref`,
 which stand for `T.__acquire` and `T.__release`. Both are synthesized by
-`struct_body.apply_synthesized` and are null-safe.
+`synthesize.apply_synthesized` and are null-safe.
 
 For a struct with the standard counts (`StructDesc.inline_counts`, set by
 `standard_counts`: not a weak view, a function type's object, or a
@@ -2037,7 +2038,7 @@ entry, whose caller may pass its only reference) keep both steps.
 
 | shared_ptr construct | Where |
 | --- | --- |
-| `make_shared` | The constructor's `return this` is an lvalue read of `this`, so the return site acquires (`Statement.Return` → `is_lvalue_read` → `acquire_ref`). The constructor's `this` is a tracked local that owns the object's first reference (`struct_body.finish` starts `__refcount` at 1), so passing `this` on from the constructor copies it and the copy's release cannot destroy the object under construction. Its scope exit releases that reference after the return acquires the caller's, so a constructor result arrives with one reference. |
+| `make_shared` | The constructor's `return this` is an lvalue read of `this`, so the return site acquires (`Statement.Return` → `is_lvalue_read` → `acquire_ref`). The constructor's `this` is a tracked local that owns the object's first reference (`synthesize.finish` starts `__refcount` at 1), so passing `this` on from the constructor copies it and the copy's release cannot destroy the object under construction. Its scope exit releases that reference after the return acquires the caller's, so a constructor result arrives with one reference. |
 | `var x = expr` | `codegen_var_def_unlocated`: acquire when `expr` is an lvalue read. An owned rvalue (a call result, see `is_owned_rvalue`) moves in. The slot is registered with `track_scope_local`. |
 | `x = y`, field and element stores | `store_refcount_ops`: if the new pointer equals the old one (self-assignment), do nothing; otherwise acquire the new value, store it, then release the old, so a destructor the release runs that reads the slot finds the new value (as `shared_ptr.operator=`). Fields use `field_refcount_ops` and indexed slots use `index_refcount_ops`. |
 | By-value parameter | `codegen_function_unlocated`: acquire each struct parameter on entry (`this` excepted) and track it in the function scope. A `[Move]` parameter is not acquired: the caller hands its reference over (`pass_argument`: an owned temporary is not released after the call, an lvalue is acquired for it). |
@@ -2052,11 +2053,11 @@ entry, whose caller may pass its only reference) keep both steps.
 | Destruction | At zero, `__release` calls `__dtor`, which runs the user's `destruct` body, then the field releases added by `release_field_refs`. `__release` then drops the strong references' weak reference and frees the object if `__weakcount` reached 0. |
 | Closures | `MakeClosure` is an owned rvalue like the constructor call it wraps (`make_shared`): each captured value is a constructor argument, acquired into its field. The value's type is the function type, so every other row applies through `__function<…>.__acquire`/`__release`. At zero, the function type's `__dtor` calls `__destroy`, the closure's `__dtor`, whose `release_field_refs` releases the captures. |
 | `std::weak_ptr<T>` | `__weak<T>` (`sema/function_types.pep`): a synthesized struct that is a view of `T`'s two head fields, so the rows above apply to weak slots through its `__acquire` (`++__weakcount`) and `__release` (`--__weakcount`, free at 0), atomic when `T` is `[Shared]`. `__weak_from<T>`, `__weak_upgrade<T>` and `__weak_expired<T>` are `Expression.Weak` nodes (`codegen_weak`); the first two are owned rvalues. `__weak_upgrade` is a compare-and-swap loop that increments the strong count only while it is non-zero (`weak_ptr.lock`). `check_function_types` rejects implicit `T` ↔ `__weak<T>` conversions. |
-| Threads | Counts are plain by default. A `[Shared]` struct (`StructDef.is_shared`) and every `shared` function type (`shared (T) => R`) step them atomically (`CountStep`), like `std::shared_ptr`'s control block; plain function types count plainly. `sema/shared_type_checks.pep` keeps non-thread-safe values (plain function values included) out of shared structs and globals, and `sema/shared_functions.pep` lets a closure become `shared` only when its captures are thread-safe, and wraps a `shared` value used as a plain one in a plain adapter that holds it (a struct holding a `shared_ptr` field). |
+| Threads | Counts are plain by default. A `[Shared]` struct and every `shared` function type (`shared (T) => R`) step them atomically (`CountStep`, codegen's `atomic_counts`), like `std::shared_ptr`'s control block; plain function types count plainly. `sema/shared_type_checks.pep` keeps non-thread-safe values (plain function values included) out of shared structs and globals, and `sema/shared_functions.pep` lets a closure become `shared` only when its captures are thread-safe, and wraps a `shared` value used as a plain one in a plain adapter that holds it (a struct holding a `shared_ptr` field). |
 | By-value parameter the caller copies | For a parameter listed in `Module.caller_copies` (a `String` parameter the function neither keeps nor changes, `static_strings`), the caller constructs and destroys the copy around the call, as the Itanium C++ ABI does: `copy_argument` (from `pass_argument` and `default_temp`) acquires an lvalue argument before the call and puts it on `owned_arg_temps`, released after; an owned temporary is the copy; a shared string literal (`StaticString`) needs none. The callee neither acquires nor tracks the parameter (`codegen_function_unlocated`, `copied_params`). Passing such a parameter on to another one copies it with `guarded_step`, which leaves a count at or above `STATIC_REFCOUNT` alone, since it may be a shared literal (`guarded_temps` releases it the same way). |
 
 **Empty Arrays are null** (#652). `Array<T>` is `[__Lazy]`
-(`StructDef.is_lazy`, `StructDesc.lazy`): the model above is unchanged,
+(`Generator.is_lazy`, `StructDesc.lazy`): the model above is unchanged,
 but an empty Array has no object until a second name for it exists or it is
 written. Codegen implements this in four places:
 - `codegen_call` makes a zero-argument constructor call of a lazy struct
@@ -2158,7 +2159,7 @@ diagnostics"). The mechanics:
 - `Diagnostic` (`diagnostic/diagnostic.pep`) has a severity, a message, a
   location, notes (each a diagnostic of its own) and suggested fixes.
 - Rendering spells mangled private names as written
-  (`namespace.demangle`), so messages may name model
+  (`diagnostic.demangle`), so messages may name model
   types and functions directly, **in single quotes**: only quoted names
   are demangled, so a path or string holding an `@` is left alone.
 - Rendering goes through `render_all(diagnostics, sources)`, the sources a
@@ -2173,7 +2174,7 @@ diagnostics"). The mechanics:
   `to_string<T>` made for the user's `expect_equal(mode, ...)`) gets a
   note per `Module.spec_requests` link back to the non-generic code that
   asked for it: the pass runner passes each error through
-  `gather_generics.with_instantiation`, which finds the specialization
+  `instantiation.with_instantiation`, which finds the specialization
   whose body holds the error's location (narrowed by the types the message
   quotes, since instances share their base's locations) and adds
   `with_requests`' notes.
@@ -2181,9 +2182,9 @@ diagnostics"). The mechanics:
   one has the code `deprecated`, and may carry a `Fix` whose `Edit`s replace
   source spans; the renderer prints the fix under the caret, and the
   language server offers it as a quick fix. There are two kinds:
-  - Deprecated syntax: the parser's `deprecated_syntax` builds
-    `Diagnostic.deprecated(what, instead, loc, fix)` (always with a fix)
-    into `ast.Module.warnings`. The book lists these in
+  - Deprecated syntax: the parser records a `SyntaxWarning` in
+    `ast.Module.warnings`, which `Program.warnings` turns into
+    `Diagnostic.deprecated(what, instead, loc, fix)` (always with a fix). The book lists these in
     `docs/src/language/compiler-errors.md`.
   - Uses of a declaration marked `[Deprecated("message", "replacement")]`
     (`link/deprecation.pep`):
@@ -2195,8 +2196,8 @@ diagnostics"). The mechanics:
     lists; `check_deprecated_members` finds member uses on the
     model, which knows receiver types.
 - How warnings flow: `Program.warnings()` is the parser's warnings plus
-  `check_uses`; `compiler.merge` seeds `module.warnings` with them, the
-  passes append the member warnings (`state.notes`), and the driver prints
+  `check_uses`; the passes collect the member warnings in `state.notes`,
+  which the driver adds to them, and it prints
   them sorted by location (`report_warnings`) after the passes, whether or
   not they failed. The language server publishes the ones located in the
   open document.
@@ -2237,7 +2238,7 @@ diagnostics"). The mechanics:
 | `tls/` | The `tls` module (`import tls`): `stream.pep` (`TlsConnector`, `TlsAcceptor`, `TlsStream`) over a `_tls_sys_*` layer in `openssl.pep` (Linux, macOS) and `schannel.pep` (Windows: SSPI over buffers, checking the server's certificate itself with `CertVerifyCertificateChainPolicy`, and importing a server's PKCS #8 key into the user's key storage provider under a per-process name that freeing the context deletes). `openssl.pep` loads libssl with `dlopen` on first use (`_OpenSsl`, a `[Shared]` table of C function pointers behind a `Lazy`), so programs link nothing extra and Homebrew's OpenSSL needs no search path. Each connection's bytes go through a custom BIO whose callbacks call `io._io_sys_socket_receive`/`_send`: those wait (parking a task) when the socket would block, so OpenSSL never sees `SSL_ERROR_WANT_*`, and an io error a callback meets is kept in the session block and returned instead of OpenSSL's report. |
 | `http/` | The `http` module (`import http`): `message.pep` (`Headers`, `Request`, `Response`), `client.pep` (`Client`: parses the URL with `Uri`, opens a `TcpStream` and, for `https://`, a `TlsStream`, sends one request with `Connection: close` and reads the response), `server.pep` (`Server.serve`: `spawn_on_each_worker` accept loops on a `SharedTcpListener`, one `spawn_local` task per connection, keep-alive, `100-continue`, 400/413/431 refusals) and `wire.pep` (`_HttpConnection`, plain or TLS; `_HttpReader`, a buffered reader of lines and byte runs; header, Content-Length, chunked and read-to-close body parsing; a field line that is not UTF-8, such as Latin-1 obs-text, is read with U+FFFD in place of those bytes). |
 | `process/` | The `process` module (`import process`): `command.pep` (`Command`, `Stream`, `Output`; `run()` reads standard output in the calling task and standard error on its own thread), `child.pep` (`Child`, `ExitStatus`; `wait()` runs the blocking wait through `run_blocking`, encoding the status in one `long`), `current.pep` (`arguments`, `exit`, `id`, `executable_path`, working directory), over a `_process_sys_*` layer in `sys_posix.pep` (`posix_spawnp` with file actions; close-on-exec pipes; macOS adds `POSIX_SPAWN_CLOEXEC_DEFAULT`; the inherited `environ` comes from the `os` module) and `sys_windows.pep` (`CreateProcessW` with the C runtime's argument quoting and a UTF-16 environment block; the child's inheritable handles exist only under `_process_spawn_lock`). `arguments` and `exit` are declared as `_process_arguments`/`_process_exit` and re-exported under their names, because the deprecated prelude functions in `runtime/process.pep` still hold those names until per-module export namespaces (#244). |
-| `debug/` | The `debug` module (`import debug`): `backtrace.pep` (`StackFrame`, `Backtrace`, `capture`, `print_backtrace`, the symbol demangler that undoes `partition.symbol_name`, and `_debug_panic_backtrace`), `debugger.pep` (`output`, `is_debugger_attached`, `breakpoint` through `llvm.debugtrap`), `dwarf.pep` (DWARF 2-4 readers shared by Linux and macOS: `.debug_line` for positions, and `.debug_info`/`.debug_abbrev`/`.debug_str`/`.debug_ranges` for the `DW_TAG_inlined_subroutine` chains `_debug_dwarf_frames` expands into `inlined` frames), `symbols_elf.pep` (Linux: maps `/proc/self/exe`, reads `.symtab` and the DWARF sections, places frames with `dladdr` and `AT_ENTRY`), `symbols_macho.pep` (macOS: the in-memory `LC_SYMTAB` and the `.dSYM` the driver's `write_dsym` runs `dsymutil` for), over a `_debug_sys_*` layer in `sys_posix.pep` (`backtrace()`, `TracerPid`/`P_TRACED`), `sys_windows.pep` (`RtlCaptureStackBackTrace`, DbgHelp under a spin lock with its inline-context APIs for inlined frames, `OutputDebugStringW`) and `sys_wasi.pep` (empty backtraces). The prelude imports it: `_pep_panic` calls `debug._debug_panic_backtrace()` after the message, which prints when `PEPPER_BACKTRACE` says so or, unset, when `_pep_backtrace_default()` is true; codegen makes that so by calling `_pep_set_backtrace_default()` first thing in `main` at `-O0` (`codegen_function_unlocated`). |
+| `debug/` | The `debug` module (`import debug`): `backtrace.pep` (`StackFrame`, `Backtrace`, `capture`, `print_backtrace`, the symbol demangler that undoes `names.symbol_name`, and `_debug_panic_backtrace`), `debugger.pep` (`output`, `is_debugger_attached`, `breakpoint` through `llvm.debugtrap`), `dwarf.pep` (DWARF 2-4 readers shared by Linux and macOS: `.debug_line` for positions, and `.debug_info`/`.debug_abbrev`/`.debug_str`/`.debug_ranges` for the `DW_TAG_inlined_subroutine` chains `_debug_dwarf_frames` expands into `inlined` frames), `symbols_elf.pep` (Linux: maps `/proc/self/exe`, reads `.symtab` and the DWARF sections, places frames with `dladdr` and `AT_ENTRY`), `symbols_macho.pep` (macOS: the in-memory `LC_SYMTAB` and the `.dSYM` the driver's `_write_dsym` runs `dsymutil` for), over a `_debug_sys_*` layer in `sys_posix.pep` (`backtrace()`, `TracerPid`/`P_TRACED`), `sys_windows.pep` (`RtlCaptureStackBackTrace`, DbgHelp under a spin lock with its inline-context APIs for inlined frames, `OutputDebugStringW`) and `sys_wasi.pep` (empty backtraces). The prelude imports it: `_pep_panic` calls `debug._debug_panic_backtrace()` after the message, which prints when `PEPPER_BACKTRACE` says so or, unset, when `_pep_backtrace_default()` is true; codegen makes that so by calling `_pep_set_backtrace_default()` first thing in `main` at `-O0` (`codegen_function_unlocated`). |
 | `os/` | The `os` module (`import os`): `environment.pep` (`environment`, `environment_variables`; read-only, since `setenv` races with `getenv` on POSIX), `time.pep` (`Duration`, `Instant`, `SystemTime`: value structs counting nanoseconds), `machine.pep` (system name and version, architecture, host name, processor counts forwarded to `async`, memory, page size) and `user.pep` (user name, home and temporary directories), over a `_os_sys_*` layer in `sys_posix.pep` (`getenv`; `environ` through `dlsym` on Linux and `_NSGetEnviron` on macOS; `clock_gettime`; `uname`/`sysctlbyname`; `getpwuid_r`, reading `pw_name` and `pw_dir` at their per-OS offsets) and `sys_windows.pep` (`GetEnvironmentVariableW`, `QueryPerformanceCounter`, `GetSystemTimePreciseAsFileTime`, `RtlGetVersion` from ntdll, `GetUserNameW` from advapi32). The `process` module takes the inherited environment from `_os_environment_entries` and, on POSIX, `_os_environ`. |
 | `time/` | The `time` module (`import time`): `civil.pep` (`Date`, `Time`, `DateTime`, `Weekday`: value structs on the proleptic Gregorian calendar, with Howard Hinnant's `days_from_civil` arithmetic), `offset.pep` (`Offset`, `OffsetDateTime`), `format.pep` (`_TimeScanner`, which reads ISO 8601 / RFC 3339 pieces; `strftime` codes; HTTP dates) and `zone.pep` (`TimeZone`: fixed, local, the transitions of a TZif file (RFC 8536) plus its POSIX TZ footer rule (`_TimeRule`), or ICU; `at_local` resolves gaps and overlaps from the offsets a day either side), over a `_time_sys_*` layer: `sys_posix.pep` (`localtime_r`'s `tm_gmtoff`; TZif files under `TZDIR` or `/usr/share/zoneinfo`), `sys_windows.pep` (`SystemTimeToTzSpecificLocalTime`; `ucal_*` from `icu.dll` for IANA names) and `sys_wasi.pep` (UTC; TZif files). |
 | `cli/` | The `cli` module (`import cli`): `parser.pep` (`Parser`, and the handles `Flag`, `Argument`, `ArgumentList`). Each declaration is a private `_CliArgument` record (names, help, kind: flag, single or list, required, default, and the values and count a parse fills in) that the parser lists and its handle shares, so parsing writes what the handle reads. `_parse` walks the arguments once, left to right, and hands the rest to a subcommand's own `Parser` when it meets the command's name (recursion one level per declared command, never per input). Errors are `Result` errors; the parser that failed records its usage on the top-level parser for `parse` to print. Suggestions for misspelled options and commands use a byte edit distance (`_cli_edit_distance`, at most 2). |

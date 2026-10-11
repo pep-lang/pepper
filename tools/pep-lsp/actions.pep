@@ -205,8 +205,9 @@ _edit_action(document: lsp.TextDocument, shown: lsp.Diagnostic, title: String, e
     for (var e in edits) {
         edit.add(document.uri, e);
     }
-    # The kind is passed: its default, a constant of the `lsp` package,
-    # makes the Rust compiler emit a call LLVM rejects.
+    # The kind is passed: for its default, a constant of the `lsp` package,
+    # the Rust compiler that once built the server emitted a call LLVM
+    # rejected.
     var action = lsp.CodeAction(title, lsp.QUICK_FIX);
     action.diagnostics = Optional<Array<lsp.Diagnostic>>.Value([shown]);
     action.edit = Optional<lsp.WorkspaceEdit>.Value(edit);

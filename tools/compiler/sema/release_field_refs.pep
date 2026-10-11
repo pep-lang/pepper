@@ -1,5 +1,4 @@
-## A struct's destructor releases its struct fields:
-## `release_field_refs` in Pepper.
+## A struct's destructor releases its struct fields: `release_field_refs`.
 
 import "apply_extensions";
 import "function_types";

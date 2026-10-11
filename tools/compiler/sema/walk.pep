@@ -1,7 +1,5 @@
-## Walks over the sema model's expressions, as `pepper_sema::passes`'
-## `rewrite_block`, `rewrite_expression` and `children_mut` do: a `Rewriter` sees
-## every expression of a block, before its sub-expressions, and may replace
-## it.
+## Walks over the sema model's expressions: a `Rewriter` sees every
+## expression of a block, before its sub-expressions, and may replace it.
 
 import [Block, CasePattern, Declaration, Expression, Statement, StaticItem] from "model";
 

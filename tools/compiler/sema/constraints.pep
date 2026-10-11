@@ -159,8 +159,7 @@ export struct Conformance {
     var _shared: HashSet<String> = HashSet<String>();
     var _state: PassState;
 
-    ## Collects what deciding conformance needs from `module`:
-    ## `Conformance::of`.
+    ## Collects what deciding conformance needs from `module`.
     ##
     ## @param module the model
     ## @param state the passes' state
@@ -425,8 +424,7 @@ export struct Conformance {
         return error;
     }
 
-    ## Returns whether `arg` meets constraint `required` (concrete types):
-    ## `Conformance::meets`.
+    ## Returns whether `arg` meets constraint `required` (concrete types).
     ##
     ## @param arg the type argument
     ## @param required the constraint
@@ -1423,8 +1421,8 @@ export withhold(module: Module, conformance: Conformance, base: StructDef, speci
 }
 
 ## The error for a call of generic method `base` at `spec` whose type
-## arguments do not meet its constraints, as `Conformance::check_call`
-## does: at the argument that fixes the unmet parameter, else the call.
+## arguments do not meet its constraints: at the argument that fixes the
+## unmet parameter, else the call.
 ##
 ## @param conformance the program's conformances
 ## @param module the model

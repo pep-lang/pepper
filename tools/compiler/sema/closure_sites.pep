@@ -1,7 +1,6 @@
 ## Expression sites with the type of the slot each flows into, and keeping
-## closure types in step: `pepper_sema::passes::closures`' `sync_closures`,
-## `for_each_site`, `for_each_applied_site_in` and
-## `for_each_expression_mut` in Pepper.
+## closure types in step: `sync_closures`, `for_each_site`,
+## `for_each_applied_site` and `rewrite_module`.
 
 import [checked_decls, unit_decls] from "checked";
 import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
@@ -15,7 +14,7 @@ import [FUNCTION, VOID] from "type_name";
 import [Rewriter, rewrite_block, rewrite_children, rewrite_expression] from "walk";
 
 ## Returns the direct sub-expressions of `e`, in order, as
-## `passes::children` lists them.
+## `rewrite_children` visits them.
 ##
 ## @param e the expression
 ## @returns its children

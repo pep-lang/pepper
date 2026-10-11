@@ -1,6 +1,6 @@
-# `--emit-static` (`driver/emit_static.pep`): the program's source with
-# each `static` block replaced by what it emits, which must build into the
-# same program. The intent of the Rust compiler's `emit_static_tests.rs`.
+# `--emit-static` (`driver/emit_static.pep`): the program's source with each
+# `static` block replaced by what it emits, which must build into the same
+# program.
 
 import compiler.driver;
 import [Directory, File, Path] from io;

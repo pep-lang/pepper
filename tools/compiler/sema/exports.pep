@@ -1,5 +1,4 @@
-## `[Export]`: free functions that C code calls, as `passes::exports` in
-## Pepper.
+## `[Export]`: free functions that C code calls.
 ##
 ## `[Export]` on a free function gives it a C symbol, its declared name or
 ## the one `[Export(name = "c_name")]` gives. Each parameter and the result
@@ -468,8 +467,7 @@ _header_type(ty: TypeName, handles: Handle[], representations: HashMap<String, (
 }
 
 ## Returns the declarations of a C header for `exports`: the handle types,
-## their retain and release functions, and each exported function, as
-## `header_declarations` in `passes/exports.rs` writes them. `header`
+## their retain and release functions, and each exported function. `header`
 ## wraps them in an include guard.
 ##
 ## @param exports what the program exports

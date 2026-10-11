@@ -1,7 +1,6 @@
-## Checks on local bindings: `pepper_sema::passes::check_bindings` in
-## Pepper. A scope declares each name once, and a `const` binding is
-## assigned only by its initializer (a struct's const fields also in its
-## constructors).
+## Checks on local bindings: `check_bindings`. A scope declares each name
+## once, and a `const` binding is assigned only by its initializer (a
+## struct's const fields also in its constructors).
 
 import [Location] from compiler.diagnostic;
 import "closures";

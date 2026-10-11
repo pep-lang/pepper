@@ -1,5 +1,4 @@
-## Assignments whose target is still a call: `resolve_operators::
-## check_assignment_targets` in Pepper.
+## Assignments whose target is still a call: `check_assignment_targets`.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import "closures";

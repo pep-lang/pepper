@@ -1,7 +1,6 @@
 # io.Path: joining, parent, file name, stem and extension, components,
 # normalizing, and the POSIX and Windows rules for absolute paths and
-# separators. Pure Pepper: `io_tests::path_functions_on_every_platform`
-# also runs these tests under every simulated platform's rules.
+# separators, in pure Pepper.
 
 import io;
 

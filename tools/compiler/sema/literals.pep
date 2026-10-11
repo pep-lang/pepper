@@ -1,6 +1,6 @@
-## Literals: `pepper_sema::passes::resolve_literals` and
-## `convert_string_literals` in Pepper. `-1` and `-2.5` become literals of
-## their own, and each string literal a `String` built from a raw one.
+## Literals: `resolve_literals` and `convert_string_literals`. `-1` and
+## `-2.5` become literals of their own, and each string literal a `String`
+## built from a raw one.
 
 import [Expression, FunctionCallExpression, FunctionDef, Module, StringLiteralExpression, UnaryOp] from "model";
 import [Rewriter, rewrite_block, rewrite_expression] from "walk";

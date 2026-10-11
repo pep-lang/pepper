@@ -1,9 +1,8 @@
 ## A file's interface hash: the part of the file that code in other
-## compilation units can depend on, as `pepper_sema::interface` computes it.
-## A unit's key names the files it reads from other units by their
-## interface hashes rather than their text, so an edit that leaves a file's
-## interface alone (a body, a comment, a moved declaration) rebuilds only
-## that file's unit: early cutoff.
+## compilation units can depend on. A unit's key names the files it reads
+## from other units by their interface hashes rather than their text, so an
+## edit that leaves a file's interface alone (a body, a comment, a moved
+## declaration) rebuilds only that file's unit: early cutoff.
 ##
 ## The interface is the file's tokens, without comments, whitespace or
 ## positions, with each non-generic body sema settled a link summary for

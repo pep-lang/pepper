@@ -1,9 +1,8 @@
-## Enum cases written in code: `pepper_sema::enums::resolve_enum_cases` in
-## Pepper. Every `Color.Red` becomes `Red`'s value typed `Color`, a
-## reference enum's case that carries nothing becomes a call of its static
-## method, an enum's static methods are called as functions, and each enum
-## gets its built-in methods `name` and `from_value`. Lowering `match`
-## comes later.
+## Enum cases written in code: `resolve_enum_cases`. Every `Color.Red`
+## becomes `Red`'s value typed `Color`, a reference enum's case that carries
+## nothing becomes a call of its static method, an enum's static methods are
+## called as functions, and each enum gets its built-in methods `name` and
+## `from_value`. Lowering `match` comes later.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [demangle_name] from compiler.link;
@@ -118,9 +117,9 @@ _resolve_defaults(function: FunctionDef, resolver: Rewriter) {
     }
 }
 
-## Every function body and method body in the module, in the order
-## `enums::for_each_body_in` visits them; each first gets its enum locals'
-## defaults.
+## Every function body and method body in the module: structs' methods,
+## constructors, destructors and count methods, then extensions' and traits'
+## methods, then free functions; each first gets its enum locals' defaults.
 _for_each_body(module: Module, resolver: _CaseResolver) {
     for (var st in module.structs) {
         var methods = Array<FunctionDef>();

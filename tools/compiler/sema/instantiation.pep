@@ -1,5 +1,5 @@
-## The specializations an error came from: `gather_generics`'
-## `with_instantiation` and `with_requests` in Pepper.
+## The specializations an error came from: `with_instantiation` and
+## `with_requests`.
 
 import [demangle, Diagnostic, Location] from compiler.diagnostic;
 import "common";

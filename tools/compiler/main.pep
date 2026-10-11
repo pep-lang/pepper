@@ -1,11 +1,11 @@
 # pepc: the Pepper compiler written in Pepper (#225), built and shipped as
 # `pep-build`: the same command line, `pep-build --help` for the options.
-# Every option of the Rust compiler's `pep-build` is here, with its
-# meaning. `--target` compiles for another platform, `--sysroot` names its
-# system libraries for the link, and `-march`, `-mcpu`, `-mtune`,
-# `-m<feature>` choose the CPU (`codegen.Cpu.from_options`). `-g` emits
-# debug info (`codegen/debug.pep`), and `--debug-static` picks where the
-# debugger shows a `static` block's code.
+# `pep-build --help` lists every option, with its meaning. `--target`
+# compiles for another platform, `--sysroot` names its system libraries for
+# the link, and `-march`, `-mcpu`, `-mtune`, `-m<feature>` choose the CPU
+# (`codegen.Cpu.from_options`). `-g` emits debug info (`codegen/debug.pep`),
+# and `--debug-static` picks where the debugger shows a `static` block's
+# code.
 #
 # With no `--emit-*` option it builds the program into an executable: `-o
 # out`, else the file's stem in the current directory, or the project of

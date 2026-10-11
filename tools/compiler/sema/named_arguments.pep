@@ -220,8 +220,8 @@ export check_link_attributes(module: Module, state: PassState) {
     }
 }
 
-## The error in an extern's `[Link]` attributes, as `ExternDef::link`
-## finds it.
+## The error in an extern's `[Link]` attributes: the removed `[LinkName]`,
+## or a malformed `[Link]`.
 _link_error(name: String, attributes: ast.Attribute[], file: uint): Diagnostic? {
     var name_at = Optional<Loc>.Empty;
     for (var attribute in attributes) {
@@ -869,10 +869,9 @@ _checked_callees(module: Module, state: PassState): Callees {
     return built;
 }
 
-## The callees of a module, by how calls name them:
-## `named_arguments::Callees` over a module with no checked runtime.
-## Trait types' methods are not gathered: only `bind_method_call` reads
-## them.
+## The callees of a module, by how calls name them, over a module with no
+## checked runtime. Trait types' methods are not gathered: only
+## `bind_method_call` reads them.
 export struct Callees {
     ## Free functions (and value-type methods, `E::m`) by overload set.
     var functions: HashMap<String, Callee[]> = HashMap<String, Callee[]>();

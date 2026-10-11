@@ -587,9 +587,8 @@ build_options_come_from_the_initialization_options() {
     expect_equal(build_options(Optional<JsonValue>.Empty).count, 0 as ulong);
 }
 
-# Ported from tools/lsp/src/tests.rs. Each test collects its failed checks
-# (label: actual value) and reports them all at its end, so one failure
-# does not hide the rest.
+# Each test collects its failed checks (label: actual value) and reports
+# them all at its end, so one failure does not hide the rest.
 
 const GEOMETRY_MODULE = "import \"shapes\";\n\nexport struct Point { var x: int; var y: int; }\nexport make(x: int, y: int): Point {\n    var p = Point();\n    p.x = x;\n    p.y = y;\n    return p;\n}\nexport area as rect_area;\nexport Box;\n## Half of `x`.\nhalf(x: int): int { return x / 2; }\n";
 const GEOMETRY_SHAPES = "import \"module\";\n\nexport area(w: int, h: int): int { return w * h; }\nexport struct Box<T> { var value: T; }\nexport unit(): Point { return make(half(2), 1); }\n";
@@ -597,7 +596,7 @@ const SOLIDS_MODULE = "export * from \"cube\";\nexport [volume as size] from \"c
 const SOLIDS_CUBE = "export volume(s: int): int { return s * s * s; }\nexport edge(s: int): int { return s; }\n";
 const UTIL = "export twice(x: int): int { return x * 2; }\nstruct Tally { var n: int; }\n## Counts; ask jane@corp.com.\nexport tally(): Tally { return Tally(); }\n";
 
-# Writes the Rust tests' file tree (`deps/geometry`, `deps/solids`,
+# Writes the tests' file tree (`deps/geometry`, `deps/solids`,
 # `util.pep`) and `main` as `main.pep` to the temporary folder for `test`,
 # with a `pep.toml` making `deps` an import folder (pep-lsp takes no `-I`);
 # returns the URI of `root` there.
@@ -1253,10 +1252,9 @@ extension_members_and_arguments() {
 
 const MATCHED = "enum Found {\n    Hit(hash: int),\n    Miss,\n}\nlook(f: Found): int {\n    match (f) {\n        Hit(hash) => { return hash; }\n        Miss => { return 0; }\n    }\n    return 0;\n}\nconst doubled = (hash: int): int => hash * 2;\n";
 
-# The Rust fixture names the closure `double`; the self-hosted compiler
-# then resolves the runtime's `double` type to it, so it is `doubled` here.
-# A closure constant is not thread-safe, so the analysis does not pass;
-# the Rust test loaded it leniently.
+# The closure is `doubled`: named `double`, it would be what the runtime's
+# `double` type resolves to. A closure constant is not thread-safe, so the
+# analysis does not pass, and the test loads it leniently.
 [Test]
 a_match_binding_is_local() {
     var c = loaded_anyway("match_binding", MATCHED, "main.pep");

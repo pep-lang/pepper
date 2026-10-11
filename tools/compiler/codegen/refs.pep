@@ -38,8 +38,8 @@ _base_name(name: String): String {
     return name.substr_bytes(0, open as ulong);
 }
 
-## The byte offset of a head count in every object (`CountField::offset`):
-## the strong count at 0, the weak count at 4.
+## The byte offset of a head count in every object: the strong count at 0,
+## the weak count at 4.
 export count_field_offset(field: CountField): ulong {
     match (field) {
         Strong => {
@@ -803,7 +803,7 @@ extend Generator {
     release_temp(ty: String, val: llvm.Value): Result<void> {
         for (var at in 0..guarded_temps.count) {
             if (guarded_temps[at].same(val)) {
-                # `swap_remove`.
+                # Move the last entry into its place.
                 var last = guarded_temps.count - 1;
                 guarded_temps[at] = guarded_temps[last];
                 guarded_temps.truncate(last);

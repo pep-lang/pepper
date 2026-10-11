@@ -1,6 +1,5 @@
 ## Named arguments left unbound, and the parameter names of literal
-## arguments: `named_arguments::check_unbound` and `record_argument_names`
-## in Pepper.
+## arguments: `check_unbound` and `record_argument_names`.
 
 import [error_at] from "common";
 import [Loc] from "loc";
@@ -116,7 +115,7 @@ export record_argument_names(module: Module, state: PassState) {
         }
         return x.span.start < y.span.start ? -1 : (x.span.start > y.span.start ? 1 : 0);
     });
-    # Drop repeats, as `Vec::dedup` does.
+    # Drop consecutive repeats.
     var kept = Array<(Loc, String)>();
     for (var (at, name) in found) {
         if (kept.count > 0) {
@@ -233,7 +232,8 @@ _parameter_names(function: FunctionDef): String[] {
     return names;
 }
 
-## The constructor a call of `function` names: `Module::constructor_of`.
+## The constructor a call of `function` names: the one of that name of the
+## struct its set name spells, else the struct's only constructor.
 _constructor_of(module: Module, function: String): FunctionDef? {
     var ty = set_name(function);
     for (var st in module.structs) {

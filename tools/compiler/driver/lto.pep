@@ -1,5 +1,4 @@
-## Link-time optimization (`--lto=full`, the default at `-O2` and `-O3`),
-## as `crates/pepper-driver/src/lto.rs` does.
+## Link-time optimization (`--lto=full`, the default at `-O2` and `-O3`).
 ##
 ## Each part is optimized alone, so a call into another unit (user code
 ## calling the runtime's `_pep_malloc`, or `String.__acquire`) stays a

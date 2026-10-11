@@ -1,9 +1,9 @@
-## Uses of deprecated members: `check_deprecated_members` in Pepper. A
-## field or method (an extension's included) marked `[Deprecated(...)]`,
-## reached as `x.name`, `x.name(...)`, a static `S.name(...)`, or a bare
-## `name` inside a method. Which struct a member belongs to depends on the
-## type of `x`, so this runs once every type is final; uses of top-level
-## names are found when linking. Each warning goes to `state.notes`.
+## Uses of deprecated members: `check_deprecated_members`. A field or method
+## (an extension's included) marked `[Deprecated(...)]`, reached as
+## `x.name`, `x.name(...)`, a static `S.name(...)`, or a bare `name` inside
+## a method. Which struct a member belongs to depends on the type of `x`, so
+## this runs once every type is final; uses of top-level names are found
+## when linking. Each warning goes to `state.notes`.
 ##
 ## A use is reported only where the source spells the member's name at the
 ## use's location, which leaves out the calls sema synthesizes (a `for`

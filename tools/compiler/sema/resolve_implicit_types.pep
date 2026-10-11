@@ -1845,7 +1845,7 @@ struct _SubjectTyper {
 
 extend _SubjectTyper with Rewriter;
 
-## What `resolve_each` does at each expression.
+## What resolving implicit types does at each expression.
 struct _ImplicitResolver {
     var scopes: _TypeScopes;
     var current: TypeName?;

@@ -66,9 +66,9 @@ _expression_refs(expr: Expression): SymbolRefExpression[] {
     return refs.found;
 }
 
-## Adds the variable reads in `statement` to `refs`, in visiting order
-## (`pepper_sema::passes::visit_statement`; `static` blocks are expanded
-## before codegen).
+## Adds the variable reads in `statement` to `refs`, in visiting order (a
+## condition before its blocks; `static` blocks are expanded before
+## codegen).
 _statement_refs(statement: Statement, refs: _SymbolRefs) {
     match (statement) {
         Expression(e) => {

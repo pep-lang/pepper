@@ -1,9 +1,8 @@
-# Debug info (`-g`, `codegen/debug.pep`): compile units, subprograms,
-# line locations, variables and types in the IR; a program built with it
-# carries DWARF that gdb reads, optimized too; the build cache keeps `-g`
-# objects apart; and `static` blocks step pass by pass, as written or
-# (`--debug-static=expanded`) in an expanded copy of the file. The intent
-# of the Rust compiler's `debug_info_tests.rs`.
+# Debug info (`-g`, `codegen/debug.pep`): compile units, subprograms, line
+# locations, variables and types in the IR; a program built with it carries
+# DWARF that gdb reads, optimized too; the build cache keeps `-g` objects
+# apart; and `static` blocks step pass by pass, as written or
+# (`--debug-static=expanded`) in an expanded copy of the file.
 
 import compiler.codegen;
 import compiler.driver;

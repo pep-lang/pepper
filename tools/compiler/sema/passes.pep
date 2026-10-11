@@ -73,8 +73,9 @@ import [check_withheld] from "withheld";
 ## How many steps come before the specialization loop.
 export const PORTED_STEPS: ulong = 39;
 
-## The name of each step before the specialization loop, as the Rust
-## compiler's `checked::run_steps` names it (`--emit-steps`).
+## The name of each step before the specialization loop, as `--emit-steps`
+## prints it: the call the step makes, spelled as the steps have always been
+## named.
 _step_name(index: ulong): String {
     var names = [
         "apply_platform_filters(module)",
@@ -120,9 +121,9 @@ _step_name(index: ulong): String {
     return names[index];
 }
 
-## Runs the first `limit` steps of the passes over `module` (all those
-## ported, through the specialization loop, when `limit` is larger),
-## stopping at the first that reports an error.
+## Runs the first `limit` steps of the passes over `module` (all of them,
+## through the specialization loop, when `limit` is larger), stopping at the
+## first that reports an error.
 ##
 ## @param module the model `merge` built, changed in place
 ## @param target the compile target
@@ -189,8 +190,7 @@ export run_steps_with(module: Module, state: PassState, limit: ulong): Result<ul
     return Result<ulong, Diagnostic>.Ok(steps.ran);
 }
 
-## Counts the steps as `checked::run_steps`' `step!` does, and stops at the
-## first error or at the limit.
+## Counts the steps, and stops at the first error or at the limit.
 struct _Steps {
     var ran: ulong = 0;
     var limit: ulong;
@@ -215,8 +215,8 @@ struct _Steps {
     }
 
     ## Names step `ran`, which just ran, in `PassState.step_names`, and with
-    ## `-T passes` adds its time to its pass's when `timed_pass` (the Rust
-    ## compiler times the steps of its `transform_steps` alone).
+    ## `-T passes` adds its time to its pass's when `timed_pass` (the steps
+    ## after the struct bodies are made are timed, not those before).
     record_step(call: String, timed_pass: bool) {
         state.step_names.append(call);
         if (state.pass_times.is_value()) {
@@ -286,8 +286,7 @@ struct _Steps {
 }
 
 ## The second pass: specializing can expose further generic uses, so the
-## specializations repeat until no new one appears, as in
-## `checked::run_steps`.
+## specializations repeat until no new one appears.
 _specialization_loop(module: Module, state: PassState, steps: _Steps) {
     for (var round in 0..4096) {
         var structs = module.structs.count;
@@ -360,9 +359,9 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
     }
 }
 
-## The steps once every specialization is made, as far as they are
-## ported: generic code's `static` blocks go, then the checks and
-## conversions repeat over the specialized code.
+## The steps once every specialization is made: generic code's `static`
+## blocks go, then the checks and conversions repeat over the specialized
+## code.
 _after_specializing(module: Module, state: PassState, steps: _Steps) {
     remove_from_generic_code(module);
     check_interpolations(module, state);

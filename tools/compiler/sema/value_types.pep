@@ -274,7 +274,8 @@ _is_ascii_punctuation(b: u8): bool {
     return (b >= 33 and b <= 47) or (b >= 58 and b <= 64) or (b >= 91 and b <= 96) or (b >= 123 and b <= 126);
 }
 
-## Method `m` of value type `key` as its function `key::m`.
+## Method `m` of value type `key` as its function `key::m` (the name
+## `enum_method_name` gives it).
 _as_function(m: FunctionDef, key: String): FunctionDef {
     var f = m.copy();
     f.name = enum_method_name(key, m.name);
@@ -334,8 +335,7 @@ struct _StaticCalls {
 
 extend _StaticCalls with Rewriter;
 
-## Applies `rewriter` to every expression in the module that
-## `closures::for_each_expression_mut` reaches: field defaults, the
+## Applies `rewriter` to every expression in the module: field defaults, the
 ## parameter defaults and bodies of methods, constructors, destructors and
 ## functions, extension methods, and globals.
 ##
@@ -486,8 +486,7 @@ _substitute_expression(e: Expression, type_map: Array<(String, TypeName)>) {
     rewrite_expression(e, _Substituter(type_map));
 }
 
-## What `specialize_structs::substitute_expression` does at each
-## expression.
+## Substitutes the type arguments of `type_map` at each expression.
 struct _Substituter {
     var type_map: Array<(String, TypeName)>;
 

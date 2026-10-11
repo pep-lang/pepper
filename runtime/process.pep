@@ -34,7 +34,7 @@ export arguments(): Array<String> {
 }
 
 # The arguments a `main(args: String[])` receives: the compiler's
-# synthesized `main()` calls this (sema's `passes::entry_point`), under a
+# synthesized `main()` calls this (sema's `lower_main_arguments`), under a
 # name a program's own `arguments` cannot shadow. `process.arguments()`
 # calls it too.
 export _pep_arguments(): Array<String> {

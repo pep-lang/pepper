@@ -653,7 +653,7 @@ enum _CtValue {
         }
     }
 
-    # `display`, with a string in quotes (`quote_debug`).
+    # `display`, with a string in quotes.
     quoted(): String {
         if (this is Text(value)) {
             return _debug_string(value);
@@ -3262,7 +3262,7 @@ _slots(module: Module, st: StructDef): Result<_Slot[], Diagnostic> {
                     }
                 }
             }
-            # What `struct_body` synthesized (allocation, field initializers).
+            # What `synthesize` made (allocation, field initializers).
             bool synthesized = false;
             match (statement) {
                 Declaration(declaration) => {

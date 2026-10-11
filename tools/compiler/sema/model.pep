@@ -1517,7 +1517,7 @@ export enum Expression {
     }
 }
 
-## The fields of `Expression::SymbolRef`.
+## The fields of `Expression.SymbolRef`.
 export struct SymbolRefExpression {
     var id: String;
     var ty: TypeName;
@@ -1553,7 +1553,7 @@ export struct SymbolRefExpression {
     }
 }
 
-## The fields of `Expression::MemberRef`.
+## The fields of `Expression.MemberRef`.
 export struct MemberRefExpression {
     var lhs: Expression;
     var name: String;
@@ -1589,7 +1589,7 @@ export struct MemberRefExpression {
     }
 }
 
-## The fields of `Expression::StringLiteral`.
+## The fields of `Expression.StringLiteral`.
 export struct StringLiteralExpression {
     var value: String;
     var is_raw: bool;
@@ -1625,7 +1625,7 @@ export struct StringLiteralExpression {
     }
 }
 
-## The fields of `Expression::Binary`.
+## The fields of `Expression.Binary`.
 export struct BinaryExpression {
     var op: BinaryOp;
     var lhs: Expression;
@@ -1665,7 +1665,7 @@ export struct BinaryExpression {
     }
 }
 
-## The fields of `Expression::Unary`.
+## The fields of `Expression.Unary`.
 export struct UnaryExpression {
     var op: UnaryOp;
     var operand: Expression;
@@ -1701,7 +1701,7 @@ export struct UnaryExpression {
     }
 }
 
-## The fields of `Expression::Cast`.
+## The fields of `Expression.Cast`.
 export struct CastExpression {
     var expr: Expression;
     var ty: TypeName;
@@ -1741,7 +1741,7 @@ export struct CastExpression {
     }
 }
 
-## The fields of `Expression::Ternary`.
+## The fields of `Expression.Ternary`.
 export struct TernaryExpression {
     var condition: Expression;
     var true_expr: Expression;
@@ -1779,7 +1779,7 @@ export struct TernaryExpression {
     }
 }
 
-## The fields of `Expression::Index`.
+## The fields of `Expression.Index`.
 export struct IndexExpression {
     var lhs: Expression;
     var rhs: Expression;
@@ -1815,7 +1815,7 @@ export struct IndexExpression {
     }
 }
 
-## The fields of `Expression::ArrayIndex`.
+## The fields of `Expression.ArrayIndex`.
 export struct ArrayIndexExpression {
     var ty: TypeName;
     var lhs: Expression;
@@ -1855,7 +1855,7 @@ export struct ArrayIndexExpression {
     }
 }
 
-## The fields of `Expression::Simd`.
+## The fields of `Expression.Simd`.
 export struct SimdExpression {
     var op: SimdOp;
     var ty: TypeName;
@@ -1911,7 +1911,7 @@ export struct SimdExpression {
     }
 }
 
-## The fields of `Expression::CountStep`.
+## The fields of `Expression.CountStep`.
 export struct CountStepExpression {
     var field: CountField;
     var increment: bool;
@@ -1947,7 +1947,7 @@ export struct CountStepExpression {
     }
 }
 
-## The fields of `Expression::FunctionPointer`.
+## The fields of `Expression.FunctionPointer`.
 export struct FunctionPointerExpression {
     var owner: TypeName?;
     var function: String;
@@ -1992,7 +1992,7 @@ export struct FunctionPointerExpression {
     }
 }
 
-## The fields of `Expression::FunctionCall`.
+## The fields of `Expression.FunctionCall`.
 export struct FunctionCallExpression {
     var function: String;
     var args: Array<Expression>;
@@ -2039,7 +2039,7 @@ export struct FunctionCallExpression {
     }
 }
 
-## The fields of `Expression::NamedArgument`.
+## The fields of `Expression.NamedArgument`.
 export struct NamedArgumentExpression {
     var name: String;
     var value: Expression;
@@ -2075,7 +2075,7 @@ export struct NamedArgumentExpression {
     }
 }
 
-## The fields of `Expression::DefaultArgument`.
+## The fields of `Expression.DefaultArgument`.
 export struct DefaultArgumentExpression {
     var ty: TypeName;
 
@@ -2103,7 +2103,7 @@ export struct DefaultArgumentExpression {
     }
 }
 
-## The fields of `Expression::MethodCall`.
+## The fields of `Expression.MethodCall`.
 export struct MethodCallExpression {
     var this_value: Expression;
     var method: String;
@@ -2158,7 +2158,7 @@ export struct MethodCallExpression {
     }
 }
 
-## The fields of `Expression::FunctionRef`.
+## The fields of `Expression.FunctionRef`.
 export struct FunctionRefExpression {
     var function: String;
     var ty: TypeName;
@@ -2194,7 +2194,7 @@ export struct FunctionRefExpression {
     }
 }
 
-## The fields of `Expression::Invoke`.
+## The fields of `Expression.Invoke`.
 export struct InvokeExpression {
     var callee: Expression;
     var args: Array<Expression>;
@@ -2237,7 +2237,7 @@ export struct InvokeExpression {
     }
 }
 
-## The fields of `Expression::MakeClosure`.
+## The fields of `Expression.MakeClosure`.
 export struct MakeClosureExpression {
     var value: Expression;
     var closure: String;
@@ -2279,7 +2279,7 @@ export struct MakeClosureExpression {
     }
 }
 
-## The fields of `Expression::CallPointer`.
+## The fields of `Expression.CallPointer`.
 export struct CallPointerExpression {
     var pointer: Expression;
     var args: Array<Expression>;
@@ -2322,7 +2322,7 @@ export struct CallPointerExpression {
     }
 }
 
-## The fields of `Expression::Move`.
+## The fields of `Expression.Move`.
 export struct MoveExpression {
     var value: Expression;
     var loc: Loc;
@@ -2354,7 +2354,7 @@ export struct MoveExpression {
     }
 }
 
-## The fields of `Expression::Destructure`.
+## The fields of `Expression.Destructure`.
 export struct DestructureExpression {
     var value: Expression;
     var count: ulong;
@@ -2390,7 +2390,7 @@ export struct DestructureExpression {
     }
 }
 
-## The fields of `Expression::StaticCase`.
+## The fields of `Expression.StaticCase`.
 export struct StaticCaseExpression {
     var ty: TypeName;
     var tag: long;
@@ -2422,7 +2422,7 @@ export struct StaticCaseExpression {
     }
 }
 
-## The fields of `Expression::StaticString`.
+## The fields of `Expression.StaticString`.
 export struct StaticStringExpression {
     var value: String;
     var loc: Loc;
@@ -2454,7 +2454,7 @@ export struct StaticStringExpression {
     }
 }
 
-## The fields of `Expression::Subject`.
+## The fields of `Expression.Subject`.
 export struct SubjectExpression {
     var id: ulong;
     var ty: TypeName;
@@ -2490,7 +2490,7 @@ export struct SubjectExpression {
     }
 }
 
-## The fields of `Expression::ToTrait`.
+## The fields of `Expression.ToTrait`.
 export struct ToTraitExpression {
     var value: Expression;
     var from: TypeName;
@@ -2532,7 +2532,7 @@ export struct ToTraitExpression {
     }
 }
 
-## The fields of `Expression::FromTrait`.
+## The fields of `Expression.FromTrait`.
 export struct FromTraitExpression {
     var value: Expression;
     var from: TypeName;
@@ -4103,7 +4103,7 @@ export enum StaticConstant {
     }
 }
 
-## The fields of `StaticConstant::Record`.
+## The fields of `StaticConstant.Record`.
 export struct RecordStaticConstant {
     var name: String;
     var fields: Array<(String, StaticConstant)>;
@@ -4428,7 +4428,7 @@ export enum StaticItem {
     }
 }
 
-## The fields of `StaticItem::For`.
+## The fields of `StaticItem.For`.
 export struct ForStaticItem {
     var name: String;
     var iterable: ast.Expression;
@@ -4480,7 +4480,7 @@ export struct ForStaticItem {
     }
 }
 
-## The fields of `StaticItem::While`.
+## The fields of `StaticItem.While`.
 export struct WhileStaticItem {
     var condition: ast.Expression;
     var body: Array<StaticItem>;
@@ -4526,7 +4526,7 @@ export struct WhileStaticItem {
     }
 }
 
-## The fields of `StaticItem::Jump`.
+## The fields of `StaticItem.Jump`.
 export struct JumpStaticItem {
     var kind: LoopBreakKind;
     var loc: Loc;
@@ -4557,7 +4557,7 @@ export struct JumpStaticItem {
     }
 }
 
-## The fields of `StaticItem::If`.
+## The fields of `StaticItem.If`.
 export struct IfStaticItem {
     var condition: ast.Expression;
     var then_items: Array<StaticItem>;
@@ -4623,7 +4623,7 @@ export struct IfStaticItem {
     }
 }
 
-## The fields of `StaticItem::EmitIf`.
+## The fields of `StaticItem.EmitIf`.
 export struct EmitIfStaticItem {
     var condition: Expression;
     var then_items: Array<StaticItem>;
@@ -4691,7 +4691,7 @@ export struct EmitIfStaticItem {
     }
 }
 
-## The fields of `StaticItem::Var`.
+## The fields of `StaticItem.Var`.
 export struct VarStaticItem {
     var name: String;
     var value: ast.Expression;

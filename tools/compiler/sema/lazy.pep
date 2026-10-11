@@ -1,9 +1,9 @@
-## The `[__Reads]` methods of a `[__Lazy]` struct: `passes::check_lazy` in
-## Pepper. Such a method runs on a null `this` when the object is empty and
-## not yet allocated (`Array<T>`), reading its fields as zero. So it must not
-## write a field of `this`, nor call a method on `this` that is not
-## `[__Reads]` itself: either would write through null. Each is an error at
-## the write or the call.
+## The `[__Reads]` methods of a `[__Lazy]` struct: `check_lazy`. Such a
+## method runs on a null `this` when the object is empty and not yet
+## allocated (`Array<T>`), reading its fields as zero. So it must not write
+## a field of `this`, nor call a method on `this` that is not `[__Reads]`
+## itself: either would write through null. Each is an error at the write or
+## the call.
 
 import [Location] from compiler.diagnostic;
 import "builder";

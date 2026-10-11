@@ -338,7 +338,7 @@ _actual_type(ty: TypeName): TypeName {
     return ty.is_auto() ? TypeName.void() : ty;
 }
 
-## A struct, not a number, `bool`, enum or SIMD vector: `TypeName::is_struct`.
+## A struct, not a number, `bool`, enum or SIMD vector.
 _is_struct_type(ty: TypeName, state: PassState): bool {
     return ty.is_scalar() and !state.is_integral(ty.name) and ty.name != SIMD;
 }

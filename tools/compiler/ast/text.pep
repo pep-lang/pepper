@@ -1,7 +1,6 @@
 ## A syntax tree as source-like text, for `pep-build --emit-ast` (and
-## `--emit-ast=text`): the Rust parser's `Display` for its `Module`, in
-## Pepper. Every binary is in parentheses, a block's statements are
-## indented one level from its braces, and a module's declarations come
+## `--emit-ast=text`). Every binary is in parentheses, a block's statements
+## are indented one level from its braces, and a module's declarations come
 ## after its imports and exports, one per line.
 
 import "ast";

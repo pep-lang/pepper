@@ -1,12 +1,11 @@
-## `--verify-cache`: checks the build cache, for testing the compiler, as
-## the Rust compiler's `--verify-cache` does. A build that reused objects
-## from the cache skipped the bodies of the files they came from, and
-## linked objects an earlier build made; checking builds the same program
-## again with an empty cache of its own, so every unit and compilation unit is
-## generated from its sources with every body read, and fails if any
-## object it stores differs from the one the build's cache holds under the
-## same key: a cache hit whose code is stale, or a unit whose code changed
-## because other units' bodies were skipped.
+## `--verify-cache`: checks the build cache, for testing the compiler. A
+## build that reused objects from the cache skipped the bodies of the files
+## they came from, and linked objects an earlier build made; checking builds
+## the same program again with an empty cache of its own, so every unit and
+## compilation unit is generated from its sources with every body read, and
+## fails if any object it stores differs from the one the build's cache
+## holds under the same key: a cache hit whose code is stale, or a unit
+## whose code changed because other units' bodies were skipped.
 
 import [Cache] from compiler.incremental;
 import [Directory, File, Path] from io;

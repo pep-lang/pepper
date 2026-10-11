@@ -1,7 +1,7 @@
-## Struct specializations: `pepper_sema::passes::specialize_structs` in
-## Pepper. Each requested `Box<int>` is cloned from its generic base, the
-## frozen template once the constraints are checked, with the type
-## arguments substituted into its fields, methods and bodies.
+## Struct specializations: `specialize_structs`. Each requested `Box<int>`
+## is cloned from its generic base, the frozen template once the constraints
+## are checked, with the type arguments substituted into its fields, methods
+## and bodies.
 
 import compiler.diagnostic;
 import [Diagnostic] from compiler.diagnostic;
@@ -37,9 +37,8 @@ import [Rewriter, rewrite_block, rewrite_expression] from "walk";
 ## How long a chain of specializations asking for each other may get.
 const _SPECIALIZATION_LIMIT: ulong = 64;
 
-## Freezes `module`'s generic bases, as `Templates::freeze` does. The
-## templates of checked bases (a reused runtime's) stay as they were frozen
-## when it was checked.
+## Freezes `module`'s generic bases. The templates of checked bases (a
+## reused runtime's) stay as they were frozen when it was checked.
 ##
 ## @param module the model
 ## @returns the templates

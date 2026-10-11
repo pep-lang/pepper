@@ -1,7 +1,7 @@
-## Function specializations: `pepper_sema::passes::specialize_functions`
-## in Pepper. Each requested `larger<int>` is cloned from its generic base,
-## the frozen template once the constraints are checked, with the type
-## arguments substituted into its signature and body.
+## Function specializations: `specialize_functions`. Each requested
+## `larger<int>` is cloned from its generic base, the frozen template once
+## the constraints are checked, with the type arguments substituted into its
+## signature and body.
 
 import [Module, Statement, StaticItem, TypeName] from "model";
 import "replace_types";

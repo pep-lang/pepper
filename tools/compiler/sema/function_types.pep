@@ -1,10 +1,9 @@
 ## The structs of function, tuple and weak reference types:
-## `pepper_sema::passes::function_types::synthesize_function_types` in
-## Pepper, with `tuples::tuple_struct` and `weak_types::weak_struct`. Each
+## `synthesize_function_types`, with `tuple_struct` and `weak_struct`. Each
 ## distinct function type (`__function<R, P...>`) a module uses becomes a
 ## counted struct holding `__invoke` and `__destroy`; each tuple type a
-## struct with a `const` field per element; each `__weak<T>` a view of
-## `T`'s object head that steps the weak count.
+## struct with a `const` field per element; each `__weak<T>` a view of `T`'s
+## object head that steps the weak count.
 
 import [has_bare_attribute, SHARED_ATTRIBUTE] from "builder";
 import [DESTROY_FIELD, empty_function, field_def, INVOKE_FIELD] from "closures";

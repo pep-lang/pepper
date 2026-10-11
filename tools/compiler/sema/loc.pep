@@ -1,5 +1,4 @@
-## Where a sema node came from: a byte span in one of the program's files,
-## as `pepper_parser::diagnostic::Loc` is.
+## Where a sema node came from: a byte span in one of the program's files.
 
 import compiler.ast;
 import json;

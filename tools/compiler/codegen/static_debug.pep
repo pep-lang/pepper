@@ -1,5 +1,4 @@
-## The debugger's view of an expanded `static` block (`-g`):
-## `crates/pepper-codegen/src/static_debug.rs` in Pepper (see INTERNALS.md
+## The debugger's view of an expanded `static` block (`-g`; see INTERNALS.md
 ## §4.4). `static_blocks.pep` starts each pass of an unrolled compile-time
 ## loop, and the branch a compile-time `if` kept, with a `StaticPass`. Here
 ## it becomes:

@@ -179,9 +179,9 @@ The whole model, as a construct mapping:
   exit — exactly like a shared_ptr local going out of scope.
   The one exception is where the copy is made, never whether: for a
   `String` parameter the function neither keeps nor changes
-  (`passes::static_strings`), the caller makes the copy before the call
-  and drops it after, as the Itanium C++ ABI does, so a shared string
-  literal passes with no count step.
+  (`share_string_literals`, `sema/static_strings.pep`), the caller makes
+  the copy before the call and drops it after, as the Itanium C++ ABI
+  does, so a shared string literal passes with no count step.
 - `x.m()` ≡ `x->m()`: the receiver is accessed as `this`, a reference — no
   copy, no refcount work on the receiver. The call result is a temporary
   owning one reference: the return site acquires when it copies `this`, a
@@ -215,7 +215,7 @@ implicitly.
 ## Compiler errors are clang-style diagnostics, located at the exact token
 
 Every error the compiler, the language server, or a test harness shows is a
-`pepper_parser::diagnostic::Diagnostic`, rendered like clang:
+`Diagnostic` (`tools/compiler/diagnostic/diagnostic.pep`), rendered like clang:
 
 ```
 main.pep:3:16: error: use of undeclared identifier 'nope'
@@ -228,9 +228,9 @@ main.pep:1:1: note: declared here
 - **Always attach a location.** An error without `file:line:col` and a caret
   is a bug. Locate it at the token the user must change: the name, the
   operator, the attribute. Do not use the enclosing statement or function.
-  Use a note (`with_note(message, Some(loc))`) when a second place explains
-  the first, such as "declared here", "to match this '{'", or "type alias X
-  declared here".
+  Use a note (`with_note(message, Optional<Location>.Value(at))`) when a
+  second place explains the first, such as "declared here", "to match this
+  '{'", or "type alias X declared here".
 - **Word messages like clang.** Start in lowercase, with no trailing period.
   Put identifiers and types in single quotes (`'x'`, `'Box<int>'`). Say what
   is wrong and, when it is cheap, what to do instead.

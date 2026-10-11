@@ -1,8 +1,7 @@
-## Closure literals: lifting, from `pepper_sema::passes::closures`. Each
-## literal becomes a synthesized struct (`__closure_N@<namespace>`) whose
-## `__call` runs its body and whose fields hold what it captures, and the
-## literal becomes the `MakeClosure` that constructs it. A captured local
-## may never be assigned.
+## Closure literals: lifting (`lift_closures`). Each literal becomes a
+## synthesized struct (`__closure_N@<namespace>`) whose `__call` runs its
+## body and whose fields hold what it captures, and the literal becomes the
+## `MakeClosure` that constructs it. A captured local may never be assigned.
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;

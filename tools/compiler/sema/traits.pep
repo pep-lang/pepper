@@ -1,6 +1,5 @@
-## Traits used as types (`Shape s`, `Array<Shape>`): `pepper_sema::traits`
-## in Pepper, as far as the passes ported so far ask about them. A module
-## with no checked runtime is assumed.
+## Traits used as types (`Shape s`, `Array<Shape>`), as far as the passes
+## ask about them. A module with no checked runtime is assumed.
 
 import [drop_body] from "checked";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";

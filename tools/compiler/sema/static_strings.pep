@@ -1,5 +1,4 @@
-## String literals as immortal static objects: `passes::static_strings` in
-## Pepper.
+## String literals as immortal static objects: `share_string_literals`.
 ##
 ## A literal can share one immortal object wherever its use neither keeps
 ## nor changes the object: an argument whose parameter is free, or the

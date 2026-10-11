@@ -1,5 +1,4 @@
-## Names as the user writes them, for messages: `pepper_parser::namespace`'s
-## `display_name` in Pepper.
+## Names as the user writes them, for messages: `display_name`.
 
 import [demangle] from compiler.diagnostic;
 import [OVERLOAD_SEPARATOR] from compiler.link;

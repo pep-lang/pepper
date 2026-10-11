@@ -642,7 +642,7 @@ struct _Desugarer {
                 }
                 return desugar_interpolated(rewritten, span);
             }
-            # Only ever a call's first argument, which `format_call`
+            # Only ever a call's first argument, which `desugar_format_call`
             # rewrites with the call.
             FormatString(_, _, _, _) => {}
             Parenthesized(value, _) => {

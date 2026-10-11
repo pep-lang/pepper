@@ -1,9 +1,9 @@
-## The compiler's intrinsics: `pepper_sema::passes::convert_intrinsics` in
-## Pepper. Calls such as `__is_pod<T>()`, `__address<T>(v)`, the atomics,
-## the weak-reference operations and `__simd_<op>` become the intrinsic
-## nodes codegen lowers; `__function_pointer(f)` becomes a
-## `FunctionPointer`. Pointer types need nothing here: `__ptr<T>` is the
-## only spelling of one, which the parser makes of C's `T*`.
+## The compiler's intrinsics: `convert_intrinsics`. Calls such as
+## `__is_pod<T>()`, `__address<T>(v)`, the atomics, the weak-reference
+## operations and `__simd_<op>` become the intrinsic nodes codegen lowers;
+## `__function_pointer(f)` becomes a `FunctionPointer`. Pointer types need
+## nothing here: `__ptr<T>` is the only spelling of one, which the parser
+## makes of C's `T*`.
 
 import "common";
 import [Loc] from "loc";

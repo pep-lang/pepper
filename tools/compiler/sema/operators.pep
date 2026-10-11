@@ -1,4 +1,4 @@
-## What operators mean for typing: `BinaryOp::op_name`, `is_comparison`,
+## What operators mean for typing: `op_name`, `is_comparison`,
 ## `is_overflow_test`, and the result types of `WeakOp` and `SimdOp`.
 
 import [BinaryOp, SimdOp, TypeName, WeakOp] from "model";

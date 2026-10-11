@@ -12,9 +12,9 @@ import [StaticRecording] from "static_source";
 import [StructInfo] from "struct_info";
 import [is_integral_name] from "type_name";
 
-## How long each pass took, summed over its runs, for `-T passes`: the
-## Rust compiler's `pass_timer`. One is shared by every run of the passes
-## that a build makes (the compilation units', the program's).
+## How long each pass took, summed over its runs, for `-T passes`. One is
+## shared by every run of the passes that a build makes (the compilation
+## units', the program's).
 export struct PassTimes {
     ## Each pass's nanoseconds and runs, by name (`pass_name`).
     var times: HashMap<String, (ulong, uint)> = HashMap<String, (ulong, uint)>();
@@ -101,10 +101,10 @@ export struct PassTimes {
     }
 }
 
-## The name of the pass step `call` runs, as the Rust compiler's
-## `pass_timer::pass_name` gives it: its function, and the file it is in
-## when the two differ (`check_casts` for `check_casts::check_casts(module)`,
-## `value_structs::check` for `crate::value_structs::check(module)`).
+## The name of the pass step `call` runs: its function, and the file it is
+## in when the two differ (`check_casts` for
+## `check_casts::check_casts(module)`, `value_structs::check` for
+## `crate::value_structs::check(module)`), as the steps are spelled.
 ##
 ## @param call the step, as `--emit-steps` names it
 ## @returns the pass's name
@@ -148,8 +148,8 @@ export struct PassState {
     var closure_counts: HashMap<long, ulong> = HashMap<long, ulong>();
     ## Each enum's representation and default value, by name.
     var enum_representations: HashMap<String, (String, long)> = HashMap<String, (String, long)>();
-    ## The value structs' names (`[Value]`), as `value_structs::install`
-    ## records them.
+    ## The value structs' names (`[Value]`), as `synthesize` and
+    ## `check_value_structs` record them.
     var value_structs: HashSet<String> = HashSet<String>();
     ## While `--emit-static` or `--debug-static=expanded` records them, the
     ## `static` blocks' expansions as source (`static_source.pep`).
@@ -162,24 +162,24 @@ export struct PassState {
     ## order.
     var notes: Diagnostic[] = Array<Diagnostic>();
     ## Each value type's methods (`Color::name`, `i32::doubled`): whether
-    ## each is static, keyed by `method_key`, as `enums::install_methods`
+    ## each is static, keyed by `method_key`, as `enums.install_methods`
     ## records them.
     var enum_methods: HashMap<String, bool> = HashMap<String, bool>();
     ## The reference enums by name (without type arguments), as
-    ## `enums::install_reference_enums` records them.
+    ## `enums.install_reference_enums` records them.
     var reference_enums: HashMap<String, ReferenceEnum> = HashMap<String, ReferenceEnum>();
-    ## The next `WithSubject` id no `match` uses, as
-    ## `named_arguments::next_subject` numbers them.
+    ## The next `WithSubject` id no `match` uses, as named-argument binding
+    ## (`_hoist`) numbers them.
     var next_subject: ulong = 9223372036854775807;
-    ## `Module::settle_overloads_by_arity`: no argument type is still to
-    ## come, so overload resolution may settle a call by arity alone.
+    ## No argument type is still to come, so overload resolution may settle
+    ## a call by arity alone.
     var settle_overloads_by_arity: bool = false;
     ## The traits each struct declares, by its spelled type and, for a
     ## generic base, by its name with its parameters, as
-    ## `type_arguments::record_conformances` sets them.
+    ## `type_arguments.record_conformances` sets them.
     var conformances: HashMap<String, (String[], TypeName[])> = HashMap<String, (String[], TypeName[])>();
     ## Every trait's name, for a `match` on a trait value, as
-    ## `enums::install_traits` records them.
+    ## `enums.install_traits` records them.
     var trait_names: HashSet<String> = HashSet<String>();
     ## Each concrete struct: its type, its canonical spelling and the
     ## canonical spellings of the traits it declares.
@@ -187,11 +187,10 @@ export struct PassState {
     ## Which extension (by index) was applied to which struct (by name), as
     ## `apply_extensions` records them: `"{index}\n{name}"`.
     var applied_extensions: HashSet<String> = HashSet<String>();
-    ## The program's files' text, by file index, for fixes that edit near
-    ## a declaration (`Module::sources`).
+    ## The program's files' text, by file index, for fixes that edit near a
+    ## declaration.
     var sources: SourceText[] = Array<SourceText>();
-    ## What the program exports to C, as `exports::collect_exports` finds
-    ## it (`Module::exports`).
+    ## What the program exports to C, as `exports.collect_exports` finds it.
     var exports: Exports = Exports();
     ## What `resolve_implicit_types` saw when it last ran, so its next run
     ## walks only the code a change since can affect.

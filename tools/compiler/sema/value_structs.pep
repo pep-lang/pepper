@@ -1,9 +1,10 @@
-## How the program uses its value structs (`[Value]`): `value_structs::
-## check` in Pepper. A value struct has no object, so identity, `__null`,
-## `__weak`, `__refcount` and C need a reference type; a value struct that
-## contains itself would be infinitely large; and a change that would land
-## in a copy and be lost (a field of a temporary, a mutating method called
-## on one, `this` in a closure) or that a `const` forbids is an error.
+## How the program uses its value structs (`[Value]`):
+## `check_value_structs`. A value struct has no object, so identity,
+## `__null`, `__weak`, `__refcount` and C need a reference type; a value
+## struct that contains itself would be infinitely large; and a change that
+## would land in a copy and be lost (a field of a temporary, a mutating
+## method called on one, `this` in a closure) or that a `const` forbids is
+## an error.
 
 import [Diagnostic, Location] from compiler.diagnostic;
 import [stashed_member] from "checked";

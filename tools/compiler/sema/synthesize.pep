@@ -1,8 +1,7 @@
-## Synthesized struct members: `pepper_sema::struct_body`'s
-## `apply_synthesized` and `finish` in Pepper. A counted struct gets its
-## head fields (`__refcount`, `__weakcount`) and the bodies of `__acquire`
-## and `__release`; every constructor gets the allocation prologue, the
-## field initializations and `return this`.
+## Synthesized struct members: `apply_synthesized` and `finish`. A counted
+## struct gets its head fields (`__refcount`, `__weakcount`) and the bodies
+## of `__acquire` and `__release`; every constructor gets the allocation
+## prologue, the field initializations and `return this`.
 
 import [Diagnostic] from compiler.diagnostic;
 import [has_bare_attribute, payload_field, SHARED_ATTRIBUTE, TAG_FIELD] from "builder";

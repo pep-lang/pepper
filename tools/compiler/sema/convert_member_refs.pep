@@ -1,8 +1,7 @@
-## Bare names in struct methods: `pepper_sema::passes::convert_member_refs`
-## in Pepper. An unresolved symbol naming a field becomes `this.<field>`; a
-## plain call naming a method becomes a method call (on `this`, or on the
-## struct for a static method, as `S.f()` would be written); parameters and
-## locals are exempt.
+## Bare names in struct methods: `convert_member_refs`. An unresolved symbol
+## naming a field becomes `this.<field>`; a plain call naming a method
+## becomes a method call (on `this`, or on the struct for a static method,
+## as `S.f()` would be written); parameters and locals are exempt.
 
 import "closures";
 import [error_at] from "common";

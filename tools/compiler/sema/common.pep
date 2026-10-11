@@ -59,7 +59,7 @@ _is_generic_base(st: StructDef): bool {
     return st.ty.sub_types.count > 0 and st.name == st.ty.name;
 }
 
-## Returns the location of an expression in the model: `Expression::loc`.
+## Returns the location of an expression in the model.
 ##
 ## @param e the expression
 ## @returns its location, `Loc.none()` for one with none

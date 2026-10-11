@@ -1,10 +1,8 @@
 # The command line as `pep-build` reads it, run on the compiler under test
 # (`pep-build` beside the test or on the PATH, as `scripts/pepper-tests.sh`
-# puts the stage-1 build there): `--help` lists every option the Rust
-# compiler has; `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`,
-# `-m`, `--lib`, `--lto`, `--verify-cache` and `--MSVC` do what its
-# options did. The intent of the Rust driver's `options.rs` tests and its
-# integration tests of each option.
+# puts the stage-1 build there): `--help` lists every option;
+# `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`, `-m`, `--lib`,
+# `--lto`, `--verify-cache` and `--MSVC` do what they document.
 
 import [Directory, File, Path] from io;
 import os;

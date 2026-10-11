@@ -265,7 +265,7 @@ extend Generator {
                 return codegen_move(node.value);
             }
             Destructure(_) => {
-                # tuples::lower_destructures replaces every one before codegen.
+                # `lower_destructures` replaces every one before codegen.
                 return fail<llvm.Value>("internal error: unlowered destructuring");
             }
             MatchArm(_) => {
@@ -523,9 +523,9 @@ extend Generator {
         return fail<llvm.Value>($"unknown type name '{name}' in 'sizeof'");
     }
 
-    ## `__allocate<T>()`: a zeroed object of the struct's ABI size, both head
-    ## counts 1: the reference it hands out, and the weak reference all
-    ## strong ones hold together (see `struct_body`).
+    ## `__allocate<T>()`: a zeroed object of the struct's ABI size, both
+    ## head counts 1: the reference it hands out, and the weak reference all
+    ## strong ones hold together (see `synthesize`).
     codegen_allocate_expr(ty: TypeName): Result<llvm.Value> {
         var name = ty.to_string();
         var desc = structs.try_get(name);
@@ -554,7 +554,7 @@ extend Generator {
         var lowered = found.value();
         match (lowered.kind()) {
             Integer => {
-                # An enum's default is a case (`EnumDef::default_value`).
+                # An enum's default is a case (`PassState.enum_default`).
                 if (sema.is_enum(state, name)) {
                     return Result<llvm.Value>.ok(lowered.const_int(state.enum_default(name).value_or(0)));
                 }

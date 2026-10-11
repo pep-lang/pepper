@@ -1,8 +1,7 @@
-## Tuple literals before their type is known: `pepper_sema::passes::tuples`'
-## `literal_type`, `constructor_labels` and `labeled_literal_type` in
-## Pepper. A literal `(a, b)` is built as a call of `__tuple` (or
-## `__tuple(line,column)` when labeled), which `resolve_implicit_types`
-## renames to the literal's type once its elements' types are known.
+## Tuple literals before their type is known. A literal `(a, b)` is built as
+## a call of `__tuple` (or `__tuple(line,column)` when labeled), which
+## `resolve_implicit_types` renames to the literal's type once its elements'
+## types are known.
 
 import [TypeName] from "model";
 import [TUPLE] from "type_name";

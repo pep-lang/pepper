@@ -8,7 +8,7 @@ import [parse_type_string, replace_map] from "type_name";
 import [Rewriter, rewrite_statement] from "walk";
 
 ## Replaces the types `type_map` names in `statement`, as
-## `specialize_functions::replace_body_types` does for one statement.
+## `replace_body_types` does for a block.
 ##
 ## @param statement the statement, changed in place
 ## @param type_map the types to replace

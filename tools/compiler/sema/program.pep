@@ -224,7 +224,8 @@ _extension_scopes(program: Program): ExtensionScopes {
     return out;
 }
 
-## Appends `other`'s declarations to `module`'s, as `Module::merge` does.
+## Appends `other`'s declarations to `module`'s, offsetting the indices that
+## point into its tables.
 _join(module: Module, other: Module) {
     module.imports.append_all(other.imports);
     module.structs.append_all(other.structs);
@@ -303,9 +304,9 @@ enum _Step {
 }
 
 ## Returns `value` as compact JSON: object keys sorted by their bytes,
-## numbers in their shortest form (`_shortest_json`: `1.0`, `1e+20`,
-## `1.5e-7`; `null` for one that is not finite), and an
-## `unsigned_json` value past `long`'s range as its digits.
+## numbers in their shortest form (`ryu_text`: `1.0`, `1e+20`, `1.5e-7`;
+## `null` for one that is not finite), and an `unsigned_json` value past
+## `long`'s range as its digits.
 ##
 ## @param value the value
 ## @returns the text

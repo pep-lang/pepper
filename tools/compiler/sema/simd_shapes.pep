@@ -1,7 +1,7 @@
-## The lane count of a SIMD vector: `check_simd_shapes` in Pepper. A
-## generic struct whose field is the built-in `__simd<T, N>` takes its lane
-## count as an integer type argument; each specialization's count must be
-## a power of two from 1 to 64, so a mask's lanes fit a `ulong`.
+## The lane count of a SIMD vector: `check_simd_shapes`. A generic struct
+## whose field is the built-in `__simd<T, N>` takes its lane count as an
+## integer type argument; each specialization's count must be a power of two
+## from 1 to 64, so a mask's lanes fit a `ulong`.
 
 import "common";
 import [Loc] from "loc";

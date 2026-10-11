@@ -739,18 +739,16 @@ export struct Cpu {
         return Cpu(device ? "apple-a7" : (apple ? "apple-m1" : "generic"), "", "");
     }
 
-    ## The CPU clang's `-m` options choose for `triple`, as
-    ## `Cpu::from_options` in `crates/pepper-codegen/src/target.rs`: each of
-    ## `machine` is what follows `-m`, in order (`arch=x86-64-v3`,
-    ## `cpu=native`, `tune=znver4`, `avx2`, `no-avx2`). On x86, `-march`
-    ## names the CPU (`native` the host's) and `-mcpu` is an error; without
-    ## `-march` the code is tuned for `generic`. On AArch64, `-mcpu` names
-    ## the CPU and `-march` the architecture (`armv8.2-a`), each with
-    ## `+<extension>` or `+no<extension>` after it. On WebAssembly, `-mcpu`
-    ## names the CPU and `-march` is an error. `-mtune` names the CPU to
-    ## schedule for, `-m<feature>` adds an LLVM feature and
-    ## `-mno-<feature>` removes one, after those the CPU implies. The last
-    ## of each option wins.
+    ## The CPU clang's `-m` options choose for `triple`: each of `machine`
+    ## is what follows `-m`, in order (`arch=x86-64-v3`, `cpu=native`,
+    ## `tune=znver4`, `avx2`, `no-avx2`). On x86, `-march` names the CPU
+    ## (`native` the host's) and `-mcpu` is an error; without `-march` the
+    ## code is tuned for `generic`. On AArch64, `-mcpu` names the CPU and
+    ## `-march` the architecture (`armv8.2-a`), each with `+<extension>` or
+    ## `+no<extension>` after it. On WebAssembly, `-mcpu` names the CPU and
+    ## `-march` is an error. `-mtune` names the CPU to schedule for,
+    ## `-m<feature>` adds an LLVM feature and `-mno-<feature>` removes one,
+    ## after those the CPU implies. The last of each option wins.
     ##
     ## @param triple the target triple
     ## @param machine the options, without their `-m`
@@ -862,7 +860,7 @@ export struct Cpu {
     }
 
     ## The CPU, features and tuning as one line, for the build cache's key
-    ## (`x86-64-v3+avx512f@generic`), as `Cpu::key` writes it.
+    ## (`x86-64-v3+avx512f@generic`).
     ##
     ## @returns the line
     key(): String {

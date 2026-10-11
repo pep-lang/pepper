@@ -1,8 +1,7 @@
-## Platform selection over the model: `pepper_sema::passes::platform`'s
-## `apply_platform_filters` in Pepper. Drops the declarations, members and
-## attributed blocks whose `Target(...)` attributes do not hold on the
-## compile target, after reporting a malformed attribute anywhere, kept or
-## not, and a malformed `[Test]`.
+## Platform selection over the model: `apply_platform_filters`. Drops the
+## declarations, members and attributed blocks whose `Target(...)`
+## attributes do not hold on the compile target, after reporting a malformed
+## attribute anywhere, kept or not, and a malformed `[Test]`.
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;

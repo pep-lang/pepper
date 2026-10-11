@@ -1,8 +1,8 @@
 ## Values whose type does not match the typed slot they flow into:
-## `check_function_types` in Pepper. Function values, numbers, enums,
-## structs, pointers, weak references and C function pointers each convert
-## only as their kind allows, a `void` call is never a value, and enums and
-## structs take part only in the comparisons they support.
+## `check_function_types`. Function values, numbers, enums, structs,
+## pointers, weak references and C function pointers each convert only as
+## their kind allows, a `void` call is never a value, and enums and structs
+## take part only in the comparisons they support.
 
 import compiler.ast;
 import [Location] from compiler.diagnostic;
@@ -871,7 +871,7 @@ struct _FunctionTypes {
             }
             # `c ? a : b` has the true arm's type, so the false arm must
             # convert to it. A `match` expression's arms are checked by
-            # `enums::check_arm_types`.
+            # `lower_matches` (`matches.pep`).
             Ternary(node) => {
                 if (_is_arm_test(node.condition)) {
                     return;
@@ -1056,9 +1056,8 @@ struct _FunctionTypes {
     }
 }
 
-## The struct and constructor a call of `function` names:
-## `Module::constructor_of`, through `structs`, the first struct of each
-## name or type spelling.
+## The struct and constructor a call of `function` names, through `structs`,
+## the first struct of each name or type spelling.
 _constructor_owner(structs: HashMap<String, StructDef>, function: String): (StructDef, FunctionDef)? {
     var found = structs.try_get(set_name(function));
     if (!found.is_value()) {

@@ -1,7 +1,6 @@
-## The program's entry point: `pepper_sema::passes::entry_point` in
-## Pepper. A `main(args: String[])` is renamed `MAIN_WITH_ARGUMENTS`, and a
-## `main()` that calls it with the runtime's `_pep_arguments()` takes its
-## place.
+## The program's entry point: `lower_main_arguments`. A
+## `main(args: String[])` is renamed `MAIN_WITH_ARGUMENTS`, and a `main()`
+## that calls it with the runtime's `_pep_arguments()` takes its place.
 
 import [Location] from compiler.diagnostic;
 import [error_at, location_of] from "common";

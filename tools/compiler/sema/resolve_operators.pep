@@ -464,8 +464,8 @@ struct _IndexLowering {
 extend _IndexLowering with Rewriter;
 
 ## `x[y] = z` as `x.__index_set(y, z)` when the container is a struct
-## declaring the setter: `lower_index_assign`. Plain assignment only; a
-## compound one through an index expands at statement level.
+## declaring the setter. Plain assignment only; a compound one through an
+## index expands at statement level.
 _index_assignment(resolver: _OperatorResolver, e: Expression): Expression? {
     if (e is Binary(node)) {
         if (node.op == BinaryOp.Assign) {

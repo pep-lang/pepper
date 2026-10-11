@@ -1,11 +1,10 @@
-## Overload resolution: `pepper_sema::passes::overloads::Overloads` in
-## Pepper. Picks the member of an overload set (free functions, methods,
-## constructors) a call's arguments select. Each argument ranks against its
-## parameter (0 exact, 1 promotion, 2 conversion, 3 an `[Implicit]`
-## constructor; among integer widenings the narrower target ranks better),
-## and the winner is no worse than every other viable member in every
-## argument and better in at least one; a non-generic member beats a
-## generic one, and the more specialized of two generic ones wins.
+## Overload resolution: `Overloads`. Picks the member of an overload set
+## (free functions, methods, constructors) a call's arguments select. Each
+## argument ranks against its parameter (0 exact, 1 promotion, 2 conversion,
+## 3 an `[Implicit]` constructor; among integer widenings the narrower
+## target ranks better), and the winner is no worse than every other viable
+## member in every argument and better in at least one; a non-generic member
+## beats a generic one, and the more specialized of two generic ones wins.
 
 import [demangle_name] from compiler.link;
 import [int_literal_type, is_numeric_type] from "arithmetic";
@@ -348,7 +347,7 @@ export struct Overloads {
     var conformance: Conformance? = Optional<Conformance>.Empty;
     var state: PassState;
 
-    ## Returns the overload sets of `module`, as `Overloads::build` does.
+    ## Returns the overload sets of `module`.
     ##
     ## @param module the model
     ## @param state the passes' state

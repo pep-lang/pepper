@@ -1,14 +1,13 @@
-## Debug types for `-g` (see `debug.pep`): `crates/pepper-codegen/src/debug_types.rs`
-## in Pepper. Pepper's numeric types are base types under their Pepper
-## names; a raw pointer (`__ptr<T>`) points at its pointee's type; a plain
-## enum is an enumeration; a tuple a structure with members `0`, `1`, and
-## so on; a trait value its object and vtable pointers; a struct reference
-## (which covers a generic's instantiation such as `Array<int>`, an enum
-## with payloads and a function type's object) a pointer to a structure
-## type with every field, the `__refcount`/`__weakcount` head included, so
-## ownership bugs can be diagnosed in the debugger; and a value struct
-## (`[Value]`, such as `Optional<T>` and `Result<T>`) the structure itself,
-## which has no head.
+## Debug types for `-g` (see `debug.pep`). Pepper's numeric types are base
+## types under their Pepper names; a raw pointer (`__ptr<T>`) points at its
+## pointee's type; a plain enum is an enumeration; a tuple a structure with
+## members `0`, `1`, and so on; a trait value its object and vtable
+## pointers; a struct reference (which covers a generic's instantiation such
+## as `Array<int>`, an enum with payloads and a function type's object) a
+## pointer to a structure type with every field, the
+## `__refcount`/`__weakcount` head included, so ownership bugs can be
+## diagnosed in the debugger; and a value struct (`[Value]`, such as
+## `Optional<T>` and `Result<T>`) the structure itself, which has no head.
 ##
 ## Types refer to each other through fields and elements, in cycles too
 ## (`struct Node { Node next; }`). A struct's type is built after its

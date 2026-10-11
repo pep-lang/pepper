@@ -70,14 +70,14 @@ export struct Target {
     }
 
     ## The target `triple` names (`aarch64-apple-darwin`,
-    ## `x86_64-pc-windows-msvc`), with no build options, as
-    ## `pepper_sema::Target::parse` reads it: clang's spellings of the
-    ## architectures (`x86_64`, `amd64`; `aarch64`, `arm64`) and operating
-    ## systems (`linux-gnu`, `darwin` or `macosx`, `windows-msvc`), with any
-    ## vendor and an OS version (`arm64-apple-macosx14.0`). WebAssembly is
-    ## `wasm32-wasip1`, also spelled `wasm32-wasi` or `wasm32-unknown-wasi`;
-    ## an iOS or Android triple without a version or API level gets
-    ## `DEFAULT_IOS_VERSION` or `DEFAULT_ANDROID_API`.
+    ## `x86_64-pc-windows-msvc`), with no build options, read from clang's
+    ## spellings of the architectures (`x86_64`, `amd64`; `aarch64`,
+    ## `arm64`) and operating systems (`linux-gnu`, `darwin` or `macosx`,
+    ## `windows-msvc`), with any vendor and an OS version
+    ## (`arm64-apple-macosx14.0`). WebAssembly is `wasm32-wasip1`, also
+    ## spelled `wasm32-wasi` or `wasm32-unknown-wasi`; an iOS or Android
+    ## triple without a version or API level gets `DEFAULT_IOS_VERSION` or
+    ## `DEFAULT_ANDROID_API`.
     ##
     ## @param triple the triple
     ## @returns the target, or why it is not one Pepper compiles for

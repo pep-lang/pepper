@@ -1,6 +1,5 @@
 ## What a `static` block expands to, written back out as source, for
-## `--emit-static` (Pepper's `cc -E`): `pepper_sema::passes::static_source`
-## in Pepper.
+## `--emit-static` (Pepper's `cc -E`).
 ##
 ## While a `PassState` records (`StaticRecording`), `static_blocks.expand`
 ## renders each block it expands as text beside the statements it builds:

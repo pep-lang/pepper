@@ -1,5 +1,4 @@
-## Struct values left in a boolean context: `unary_operators::
-## check_conditions` in Pepper.
+## Struct values left in a boolean context: `check_conditions`.
 
 import [Location] from compiler.diagnostic;
 import "common";

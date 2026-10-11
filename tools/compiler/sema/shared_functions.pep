@@ -1,5 +1,5 @@
 ## Conversions between plain and thread-safe function types:
-## `shared_functions` in Pepper.
+## `shared_functions`.
 ##
 ## Wherever a function value flows into a typed slot (a variable's
 ## initializer, an assignment, an argument, a return), a named function or

@@ -2,8 +2,8 @@
 # Regenerates tools/compiler/sema/model.pep, the sema model in Pepper, from
 # its own declarations: each struct's and enum's fields as model.pep
 # declares them, with a constructor, a deep `copy()`, a `fingerprint()` and
-# a `to_json()` (what serde writes for the Rust passes' model, which
-# passes_test compares against). To change the model, change a type's
+# a `to_json()` (what `pep-build --emit-model` prints, which passes_test
+# compares against). To change the model, change a type's
 # fields in model.pep, run this, then format the result:
 #
 #   python3 scripts/gen-sema-model.py tools/compiler/sema/model.pep
@@ -431,7 +431,7 @@ for name in [k for k in items if k in reach]:
             else:
                 sname=vv['name']+name
                 lines.append(f'    {vv["name"]}(node: {sname}),')
-                extra.append(gen_struct(sname,vv['fields'],f'The fields of `{name}::{vv["name"]}`.'))
+                extra.append(gen_struct(sname,vv['fields'],f'The fields of `{name}.{vv["name"]}`.'))
         lines.append('')
         lines.append('    ## Adds this to `into`: equal values add the same.')
         lines.append('    ##')
@@ -524,8 +524,8 @@ for name in [k for k in items if k in reach]:
 header='''## The sema model: the tree the builder makes of the linked program and
 ## the passes rewrite. Each enum variant with named fields holds a struct of
 ## its own (`SymbolRefExpression` for `Expression.SymbolRef`), so a pass can
-## change a node's fields in place. Each type's `to_json()` writes what
-## serde writes for the Rust passes' model.
+## change a node's fields in place. Each type's `to_json()` writes it as
+## `pep-build --emit-model` prints it.
 ##
 ## The fields declared here are the model; the rest of each type is
 ## generated from them: change a type's fields, then run

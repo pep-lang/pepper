@@ -759,8 +759,7 @@ struct Parser {
     }
 
     # Ends a simple statement or declaration: takes its `;`, or fails with
-    # `expected ';'` right after its last token, as the compiler's
-    # `missing_semicolon` does.
+    # `expected ';'` right after its last token.
     _finish_statement() {
         if (_at(";")) {
             _advance();
@@ -921,8 +920,8 @@ struct Parser {
 
     # ── Types ────────────────────────────────────────────────────────────
 
-    # The compiler's `type_name`: a function type, or a named type with
-    # array and pointer suffixes.
+    # A type: a function type, or a named type with array and pointer
+    # suffixes.
     _type_name(): TypeName {
         _type_depth += 1;
         var out = _type_name_at_depth();
@@ -999,10 +998,10 @@ struct Parser {
     }
 
     # Whether the `?` at the current token makes an optional type while
-    # probing, where `a ? b : c` may be a ternary instead: the compiler's
-    # `optional_suffix_in_probe`. It does when it closes or separates type
-    # arguments, or when a name follows that ends the declaration
-    # (`Node? x;`, `Node? x = y`, `Node? x` at the end of the line).
+    # probing, where `a ? b : c` may be a ternary instead. It does when it
+    # closes or separates type arguments, or when a name follows that ends
+    # the declaration (`Node? x;`, `Node? x = y`, `Node? x` at the end of
+    # the line).
     _optional_suffix_in_probe(): bool {
         var next = _peek_at(1);
         if (next.is(_source, ">") or next.is(_source, ",")) {
@@ -1106,8 +1105,8 @@ struct Parser {
     }
 
     # A name, qualified by `.name`s written directly after it, then generic
-    # arguments: the compiler's `type_name_base`. Sets `_type_qualified`,
-    # `_type_generic` and `_type_last_name` for it.
+    # arguments. Sets `_type_qualified`, `_type_generic` and
+    # `_type_last_name` for it.
     _type_base(): TypeName {
         if (!_at_name()) {
             _fail("expected a type");
@@ -1159,8 +1158,7 @@ struct Parser {
         _advance();
         while (true) {
             if (_peek_at(0).kind == TokenKind.Number) {
-                # A lane count, `16` in `__simd<byte, 16>`: the compiler's
-                # `type_argument`.
+                # A lane count, `16` in `__simd<byte, 16>`.
                 out.append(TypeName(_text(_position), _token_span(_position)));
                 _advance();
             } else {
@@ -1340,8 +1338,7 @@ struct Parser {
         return _prefix_increment();
     }
 
-    # `a..b` or `a..>b`, between the shift and `is` levels as in the
-    # compiler's `range`. Not associative.
+    # `a..b` or `a..>b`, between the shift and `is` levels. Not associative.
     _range(): Expression {
         var lhs = _binary_level(7);
         if (_failed or !(_at("..>") or _at(".."))) {
@@ -1356,9 +1353,8 @@ struct Parser {
         return Expression.Binary(lhs, _text(op), rhs, Span(_start(op), _last_end()));
     }
 
-    # `value is Pattern`, between the relational and shift levels as in the
-    # compiler's `is_test`. `is` is a keyword only here, so it stays usable
-    # as a name.
+    # `value is Pattern`, between the relational and shift levels. `is` is a
+    # keyword only here, so it stays usable as a name.
     _is_test(): Expression {
         var value = _range();
         if (_failed or !_at_word("is")) {
@@ -1375,7 +1371,7 @@ struct Parser {
         );
     }
 
-    # A left-associative binary level, the compiler's `binary_left`.
+    # A left-associative binary level.
     _binary_level(level: int): Expression {
         var lhs = _binary_operand(level);
         if (_failed) {
@@ -1595,11 +1591,10 @@ struct Parser {
     }
 
     # Whether the `?` at the current token is the postfix propagation
-    # operator (`f()?`) rather than the start of a ternary's branches: the
-    # compiler's `propagates`. It is when what follows cannot start an
-    # expression, not when an operand follows, and, when the next token
-    # could do either (`-`, `*`, `(`, ...), unless an expression and a `:`
-    # follow.
+    # operator (`f()?`) rather than the start of a ternary's branches. It is
+    # when what follows cannot start an expression, not when an operand
+    # follows, and, when the next token could do either (`-`, `*`, `(`,
+    # ...), unless an expression and a `:` follow.
     _propagates(): bool {
         var next = _peek_at(1);
         if (next.kind == TokenKind.End) {
@@ -2768,9 +2763,8 @@ struct Parser {
         return out;
     }
 
-    # The compiler's `decl_boundary` or `missing_decl_semicolon`: what may
-    # follow a `Type name` statement. After a line break it is one whose `;`
-    # is missing, which `_finish_statement` then reports.
+    # What may follow a `Type name` statement. After a line break it is one
+    # whose `;` is missing, which `_finish_statement` then reports.
     _declaration_boundary(): bool {
         return _at_end() or _at(";") or _at("}") or _peek().newlines_before > 0;
     }
@@ -3776,8 +3770,7 @@ struct Parser {
 
     # `enum Name [: Type] { cases, methods and properties }`, a struct with
     # an enum body. A case list ends at a case without a `,`, or at a name
-    # that starts a method or a property, as in the compiler's
-    # `enum_declaration`.
+    # that starts a method or a property.
     _enum(prefix: Prefix): StructDecl {
         var out = StructDecl();
         var body = EnumBody();
@@ -4732,8 +4725,8 @@ struct Parser {
     }
 }
 
-# Returns whether `token` is one of the words the compiler's `identifier()`
-# refuses as names (`struct`, `if`, `and`, ...), compared in place.
+# Returns whether `token` is one of the words `_at_name` refuses as names
+# (`struct`, `if`, `and`, ...), compared in place.
 is_reserved_word(source: String, token: Token): bool {
     if (token.kind != TokenKind.Identifier) {
         return false;
@@ -4778,8 +4771,8 @@ is_reserved_word(source: String, token: Token): bool {
 }
 
 # Returns whether `token` is one of the words that stop a statement from
-# being read as a `Type name` declaration (the list in the compiler's
-# `statement()`), compared in place.
+# being read as a `Type name` declaration (in `_statement`), compared in
+# place.
 is_statement_keyword(source: String, token: Token): bool {
     if (token.kind != TokenKind.Identifier) {
         return false;

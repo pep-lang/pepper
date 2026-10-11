@@ -67,8 +67,8 @@ const AARCH64_PREPARE = "\n    and x9, x0, #0xfffffffffffffff0\n    sub x9, x9, 
 
 # Exports
 
-## What a C entry point's name starts with until `partition::finish`
-## names it by its C symbol.
+## What a C entry point's name starts with until `partition.prepare` names
+## it by its C symbol.
 export const EXPORT_PREFIX = "__export.";
 
 ## The runtime functions (runtime/string.pep) that make a `String` from
@@ -302,14 +302,14 @@ extend Generator {
                 if (value_kind == llvm.TypeKind.Integer
                     and slot_kind == llvm.TypeKind.Integer
                     and !value_ty.same(slot)) {
-                    # `build_int_cast`: a signed integer cast.
+                    # A signed integer cast.
                     if (value_ty.int_width() > slot.int_width()) {
                         value = builder.truncate(value, slot, $"{name}w");
                     } else {
                         value = builder.sign_extend(value, slot, $"{name}w");
                     }
                 } else if (is_float_type_kind(value_kind) and is_float_type_kind(slot_kind) and !value_ty.same(slot)) {
-                    # `build_float_cast`: `fptrunc` or `fpext`.
+                    # A float cast: `fptrunc` or `fpext`.
                     if (value_kind == llvm.TypeKind.Double and slot_kind == llvm.TypeKind.Float) {
                         value = builder.float_truncate(value, slot, $"{name}w");
                     } else {
@@ -363,8 +363,7 @@ extend Generator {
     }
 
     ## The address of global `id` for the code being generated: its
-    ## `global_addrs` entry (the JIT's emulated thread-locals are not
-    ## ported).
+    ## `global_addrs` entry.
     global_address(id: String): Result<Address?> {
         return Result<Address?>.ok(global_addrs.try_get(id));
     }

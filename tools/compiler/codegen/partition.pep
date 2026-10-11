@@ -115,9 +115,8 @@ export prepare(
     var functions = ir.functions();
     var part_of = HashMap<String, uint>();
     var names = HashMap<String, String>();
-    # The C entry points of `[Export]`ed functions, named by their C
-    # symbols once every Pepper symbol has its spelling (a Pepper `add` is
-    # `_Padd`), as `partition::finish` names them.
+    # The C entry points of `[Export]`ed functions, named by their C symbols
+    # once every Pepper symbol has its spelling (a Pepper `add` is `_Padd`).
     var exports = Array<llvm.Value>();
     var values = Array<llvm.Value>();
     values.append_all(functions);

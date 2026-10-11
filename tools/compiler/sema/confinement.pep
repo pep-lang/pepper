@@ -1,4 +1,4 @@
-## Confinement: `check_confinement` in Pepper. What a `with` block over an
+## Confinement: `check_confinement`. What a `with` block over an
 ## `[Isolated]` guard (a `Mutex<T>`'s lock, a `ThreadLocal<T>`'s value) may
 ## do, and the checks that make it sound.
 ##

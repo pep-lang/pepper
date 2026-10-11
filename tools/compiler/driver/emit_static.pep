@@ -1,6 +1,5 @@
 ## `--emit-static`: the program's source with each `static` block replaced
-## by the code it emits, Pepper's `cc -E`: `crates/pepper-driver/src/emit_static.rs`
-## in Pepper.
+## by the code it emits, Pepper's `cc -E`.
 ##
 ## Sema records each expansion as source (`sema.StaticRecording`); this
 ## writes a copy of every file of the program under the entry file's
@@ -310,7 +309,8 @@ struct _Override {
     }
 }
 
-# Orders type argument lists as Rust orders vectors of pairs.
+# Orders type argument lists pair by pair (by name, then by type), a list
+# before a longer one it starts.
 _compare_arguments(a: Array<(String, String)>, b: Array<(String, String)>): int {
     var count = a.count < b.count ? a.count : b.count;
     for (var i in 0..count) {

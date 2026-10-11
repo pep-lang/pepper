@@ -348,7 +348,7 @@ extend Generator {
     }
 
     ## Whether the caller makes the copy of parameter `index` of `callee`
-    ## (`Module::caller_copies`).
+    ## (`Module.caller_copies`).
     copied_param(callee: String, index: ulong): bool {
         var copies = caller_copies.try_get(callee);
         if (!copies.is_value() or index >= copies.value().count) {
@@ -587,7 +587,7 @@ extend Generator {
     }
 
     ## The object of a reference enum's case that carries no values
-    ## (`Expression::StaticCase`): an immortal global whose counts start at
+    ## (`Expression.StaticCase`): an immortal global whose counts start at
     ## `STATIC_REFCOUNT` and 1, whose tag is `tag`, and whose other fields
     ## are zero.
     static_case(ty: TypeName, tag: long): Result<llvm.Value> {
@@ -621,14 +621,14 @@ extend Generator {
                 values.append(field_type.zero());
             }
         }
-        # External like a function definition: `partition::finish` makes it
+        # External like a function definition: `partition.prepare` makes it
         # `linkonce_odr` in a comdat when units are split.
         var object = ir.add_global(struct_type, global_name);
         object.set_initializer(struct_type.const_struct(values));
         return Result<llvm.Value>.ok(object);
     }
 
-    ## The immortal `String` of a shared literal (`Expression::StaticString`):
+    ## The immortal `String` of a shared literal (`Expression.StaticString`):
     ## one constant global holding the object, whose counts start at
     ## `STATIC_REFCOUNT` and 1, followed by its NUL-terminated bytes, which
     ## `_data` points to. Named by a hash of its text, so every part that
@@ -691,7 +691,7 @@ extend Generator {
 
     ## A `match` expression or `is` test: evaluate the subject once, check a
     ## reference enum is not null, then the body, which reads the subject
-    ## through `Expression::Subject`. An owned subject is a temporary of the
+    ## through `Expression.Subject`. An owned subject is a temporary of the
     ## full expression: the body's value may be one of its fields.
     with_subject(subject_with: WithSubject): Result<llvm.Value> {
         var temp = owned_temp_type(subject_with.subject);

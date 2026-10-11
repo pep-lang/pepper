@@ -1,7 +1,7 @@
-## What threads may share: `check_shared_types` in Pepper. A `[Shared]`
-## struct's fields must be `const` and thread-safe, a module-scope variable
-## must be `const` and thread-safe, and a `[ThreadLocal]` one must be
-## thread-safe and start from a constant.
+## What threads may share: `check_shared_types`. A `[Shared]` struct's
+## fields must be `const` and thread-safe, a module-scope variable must be
+## `const` and thread-safe, and a `[ThreadLocal]` one must be thread-safe
+## and start from a constant.
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;

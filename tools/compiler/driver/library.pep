@@ -1,6 +1,5 @@
-## `--lib static|shared`: a library C code links, instead of an executable,
-## as `crates/pepper-driver/src/library.rs` builds it (see the book's
-## "Calling Pepper from C").
+## `--lib static|shared`: a library C code links, instead of an executable
+## (see the book's "Calling Pepper from C").
 ##
 ## A static library is an archive of the program's objects, written here in
 ## the target's format (`write_archive`), so no archiver needs to be

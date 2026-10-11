@@ -1,8 +1,7 @@
 # Calling Pepper from C (`--lib static|shared`), link-time optimization
-# (`--lto`) and the CPU the `-m` options choose, as the Rust compiler's
-# `c_export_tests.rs` and `ir_facts_tests.rs` test them: each kind of
-# library is built, a C program compiled against it with the clang the
-# compiler links with, and run.
+# (`--lto`) and the CPU the `-m` options choose: each kind of library is
+# built, a C program compiled against it with the clang the compiler links
+# with, and run.
 
 import compiler.codegen;
 import compiler.driver;
