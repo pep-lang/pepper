@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -716,6 +716,20 @@ one first flushes what <code>print</code> has buffered.</p>
 <ul>
 <li>a File on standard error, named <code>&lt;stderr&gt;</code></li>
 </ul>
+<h4 id="adopt"><a class="header" href="#adopt">adopt</a></h4>
+<pre><code class="language-pepper">static adopt(transfer: FileTransfer): IoResult&lt;File&gt;
+</code></pre>
+<p>Takes the handle out of <code>transfer</code> (see <code>into_transfer</code>) into a new
+File on the calling thread, whose <code>path</code> is empty. Only the first
+<code>adopt</code> of a token gets the handle.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transfer</code> — the token from <code>into_transfer</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the File; an error when the token is empty (already adopted, or made from a closed File)</li>
+</ul>
 <h4 id="read_bytes"><a class="header" href="#read_bytes">read_bytes</a></h4>
 <pre><code class="language-pepper">static read_bytes(path: Path): IoResult&lt;u8[]&gt;
 </code></pre>
@@ -1159,6 +1173,101 @@ process; this forces them out of the operating system’s cache.</p>
 <ul>
 <li>an Ok result once the data is durable; an error when the File is closed or the device reports a failure, or another platform error</li>
 </ul>
+<h4 id="lock"><a class="header" href="#lock">lock</a></h4>
+<pre><code class="language-pepper">lock(): IoResult&lt;void&gt;
+</code></pre>
+<p>Takes an exclusive advisory lock on the whole file, waiting until no
+other holder has a lock on it, shared or exclusive. Modeled on Rust’s
+<code>File::lock</code>.</p>
+<p>The lock belongs to this File: another File opened on the same path
+(in this process or another) contends with it, and it is released by
+<code>unlock</code>, by <code>close</code>, or when the File is destroyed. Taking a lock
+while this File already holds one is platform-defined, as in Rust:
+POSIX converts the lock, Windows may wait forever. The lock is
+advisory on POSIX (<code>flock(LOCK_EX)</code>): it binds only those who also
+lock. On Windows (<code>LockFileEx</code>) it also stops other handles from
+reading or writing the file while held. The wait blocks the calling
+thread, also inside a task. WASI has no file locks.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is held; an error when the File is closed, on WASI, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>try_lock</code></li>
+<li><code>unlock</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var f = OpenOptions().write(true).create(true).open(Path(".pep/fetch.lock")).value();
+if (f.lock().is_ok()) {
+    # ... work no other locker does at the same time ...
+    f.unlock();
+}
+</code></pre>
+<h4 id="lock_shared"><a class="header" href="#lock_shared">lock_shared</a></h4>
+<pre><code class="language-pepper">lock_shared(): IoResult&lt;void&gt;
+</code></pre>
+<p>Takes a shared advisory lock on the whole file, waiting until no
+other holder has an exclusive lock on it. Any number of Files can
+hold a shared lock at once. Modeled on Rust’s <code>File::lock_shared</code>;
+otherwise as <code>lock</code> (<code>flock(LOCK_SH)</code> on POSIX, <code>LockFileEx</code> without
+<code>LOCKFILE_EXCLUSIVE_LOCK</code> on Windows).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is held; an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
+<h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
+<pre><code class="language-pepper">try_lock(): IoResult&lt;bool&gt;
+</code></pre>
+<p>Takes an exclusive advisory lock on the whole file if no other
+holder has a lock on it, without waiting. Modeled on Rust’s
+<code>File::try_lock</code>; otherwise as <code>lock</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the lock is now held, false when another holder has a lock on the file (Rust’s <code>TryLockError::WouldBlock</code>); an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var held = f.try_lock();
+if (held.is_ok() &amp;&amp; !held.value()) {
+    print("another process holds the lock\n");
+}
+</code></pre>
+<h4 id="try_lock_shared"><a class="header" href="#try_lock_shared">try_lock_shared</a></h4>
+<pre><code class="language-pepper">try_lock_shared(): IoResult&lt;bool&gt;
+</code></pre>
+<p>Takes a shared advisory lock on the whole file if no other holder
+has an exclusive lock on it, without waiting. Modeled on Rust’s
+<code>File::try_lock_shared</code>; otherwise as <code>lock_shared</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the lock is now held, false when another holder has an exclusive lock on the file; an error as for <code>lock</code></li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock_shared</code></li>
+</ul>
+<h4 id="unlock"><a class="header" href="#unlock">unlock</a></h4>
+<pre><code class="language-pepper">unlock(): IoResult&lt;void&gt;
+</code></pre>
+<p>Releases the lock this File holds, shared or exclusive. Releasing a
+File that holds none is not an error. Closing or destroying the File
+releases its lock too. Modeled on Rust’s <code>File::unlock</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result once the lock is released; an error when the File is closed, on WASI, or another platform error</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>lock</code></li>
+</ul>
 <h4 id="metadata-2"><a class="header" href="#metadata-2">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
@@ -1302,6 +1411,48 @@ if (f.close().is_err()) {
     return 1;
 }
 </code></pre>
+<h4 id="into_transfer"><a class="header" href="#into_transfer">into_transfer</a></h4>
+<pre><code class="language-pepper">into_transfer(): FileTransfer
+</code></pre>
+<p>Moves the file’s handle into a <code>FileTransfer</code>, which another thread
+takes with <code>File.adopt</code>, and leaves this File closed. A File is not
+thread-safe, so this is how a thread hands one to another, such as
+the pipe from a child process’s standard output to the thread that
+reads it while this one writes to the child.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the token; for a closed File, one that <code>adopt</code> fails on</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+import [File, Path] from io;
+
+var transfer = File.open(Path("notes.txt")).value().into_transfer();
+var reader = async.Thread.spawn(() =&gt; {
+    var mine = File.adopt(transfer).value();
+    var text = mine.read_all();
+});
+reader.join();
+</code></pre>
+<h2 id="filetransfer"><a class="header" href="#filetransfer">FileTransfer</a></h2>
+<pre><code class="language-pepper">[Shared] struct FileTransfer
+</code></pre>
+<p>A file’s handle on its way from one thread to another: made by
+<code>File.into_transfer</code>, taken by <code>File.adopt</code>. Unlike a File, it is
+thread-safe, so a <code>shared</code> function (a body for <code>async.spawn</code> or
+<code>Thread.spawn</code>) can capture it and a <code>Channel</code> can carry it. If no one
+adopts it, the handle is closed when the last reference goes, unless it
+is one the File did not own (a standard stream).</p>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="filetransfer-1"><a class="header" href="#filetransfer-1">FileTransfer()</a></h4>
+<pre><code class="language-pepper">construct(handle: FileHandle, owned: bool)
+</code></pre>
+<p>Wraps a file handle. <code>File.into_transfer</code> makes these; use it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>handle</code> — the handle, or an invalid one for an empty token</li>
+<li><code>owned</code> — whether the File the token came from closed its handle</li>
+</ul>
 
                     </main>
 

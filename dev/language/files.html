@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -356,6 +356,39 @@ main(): int {
 </code></pre>
 <p>Making a symlink on Windows needs Developer Mode or an administrator;
 without either it fails with <code>is_permission_denied()</code>.</p>
+<h2 id="moving-a-file-to-another-thread"><a class="header" href="#moving-a-file-to-another-thread">Moving a file to another thread</a></h2>
+<p>A <code>File</code> is not thread-safe, so a thread cannot capture one. To hand an
+open file to another thread, such as the pipe from a child process’s
+output to a thread that reads it while this one writes to the child,
+<code>file.into_transfer()</code> moves its handle into an <code>io.FileTransfer</code>, a
+thread-safe token that a <code>shared</code> function can capture or a <code>Channel</code> can
+carry, and <code>io.File.adopt(transfer)</code> takes it out again on the other
+thread. The File it came from is closed afterwards, only the first <code>adopt</code>
+gets the handle, and a token no one adopts closes the file when it goes.
+A stream moves the same way, as a <code>SocketTransfer</code> (see
+<a href="tasks.html#moving-a-stream-to-another-worker">Moving a stream to another worker</a>).</p>
+<pre><code class="language-pepper"># Hand an open File to another thread with into_transfer and adopt.
+import async;
+import io;
+
+main(): int {
+    var path = io.Directory.temp().join("pepper-files-transfer-example.txt");
+    io.File.write_text(path, "read on another thread").value();
+    var file = io.File.open(path).value();
+    # A File is not thread-safe; its transfer token is.
+    var transfer = file.into_transfer();
+    var size = async.Atomic&lt;ulong&gt;(0);
+    var reader = async.Thread.spawn(() =&gt; {
+        var mine = io.File.adopt(transfer).value();
+        size.store(mine.read_all().value().count);
+    });
+    reader.join();
+    assert(size.load() == 22, "the other thread read the file");
+    assert(!file.is_open(), "the File it came from is closed");
+    io.File.remove(path);
+    return 0;
+}
+</code></pre>
 <h2 id="archives"><a class="header" href="#archives">Archives</a></h2>
 <p><code>archive.TarReader.extract</code> uses all of the above: it restores each file’s
 mode and modification time and makes the archive’s symlinks, as long as

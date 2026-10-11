@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -216,7 +216,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--emit-steps</code></td><td>Print the names of the sema steps, one per line, instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
 <tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
-<tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
+<tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code> (<code>-m &lt;option&gt;</code>)</td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
 <tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
 <tr><td><code>--frame-pointers</code></td><td>Keep every function’s frame pointer, for profilers</td><td>off</td></tr>
@@ -308,11 +308,26 @@ Windows and the name has no extension. Windows runs only files ending in
 header beside it that declares the program’s <code>[Export]</code>ed functions. No
 <code>main</code> is needed.</p>
 <ul>
-<li><code>--lib static</code> writes an archive: <code>libname.a</code> (<code>name.lib</code> on Windows).</li>
+<li><code>--lib static</code> writes an archive: <code>libname.a</code> (<code>name.lib</code> on Windows),
+holding the objects of the whole program, the runtime’s included, with the
+index of their symbols that linkers search. The compiler writes it itself
+in the target’s format (GNU’s for Linux and Android, the BSD format
+Apple’s linkers read for macOS and iOS, the COFF archive for Windows), so
+no archiver needs to be installed, and building one for another platform
+needs no system root: nothing is linked. A program linking it also links
+the libraries the program does, which the header names in a comment
+(<code>/* Link the static library with: -lm */</code>).</li>
 <li><code>--lib shared</code> links a shared library: <code>libname.so</code>, <code>libname.dylib</code> on
-macOS, <code>name.dll</code> on Windows.</li>
+macOS, <code>name.dll</code> (and its import library <code>name.lib</code>) on Windows. Its
+<code>soname</code> is its file name; on macOS and iOS its install name is
+<code>@rpath/&lt;file name&gt;</code>, so a program that links it finds it on its run
+path. Linking one for another platform needs its system root, as an
+executable does (<code>--sysroot</code>).</li>
 </ul>
-<p>See <a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
+<p>The header goes beside the library, named for it without the <code>lib</code> prefix
+(<code>libname.a</code> has <code>name.h</code>). A library that exports nothing is built with a
+warning. See
+<a href="../language/c-interop.html#calling-pepper-from-c">Calling Pepper from C</a>.</p>
 <h3 id="--test"><a class="header" href="#--test"><code>--test</code></a></h3>
 <p>Builds the entry file’s tests into a test program, which
 <a href="pep-test.html">pep-test</a> runs. A build without it leaves every <code>[Test]</code>
@@ -468,9 +483,17 @@ whole program is optimized again as one module, so a call into another file
 (the runtime included) can be inlined. <code>--lto=off</code> optimizes each file
 alone, which links sooner. The default is <code>full</code> at <code>-O2</code> and <code>-O3</code> and
 <code>off</code> below; <code>--lto=full</code> at <code>-O0</code> is an error that asks for <code>-O</code>.</p>
+<p>With it, each file is optimized by LLVM’s pre-link pipeline and kept as
+bitcode (in the build cache, as an object is), then the compiler links
+them into one module, makes every symbol internal but <code>main</code> and the C
+exports of <code>[Export]</code> functions, runs LLVM’s link-time pipeline over the
+whole program and writes one object, which links as usual. No linker
+plugin is involved, so it works on every target. It applies to a library
+too (<code>--lib</code>).</p>
 <h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
 <p>The <code>-m</code> options choose the CPU the code is generated for, with clang’s
-names and meanings:</p>
+names and meanings (<code>-m &lt;option&gt;</code>, with a space, is the same as
+<code>-m&lt;option&gt;</code>):</p>
 <ul>
 <li>On x86-64, <code>-march=&lt;cpu&gt;</code> names the CPU: <code>x86-64-v3</code>, <code>znver4</code>, or
 <code>native</code> for the machine compiling.</li>
@@ -482,8 +505,13 @@ one (<code>-mno-avx2</code>).</li>
 </ul>
 <p>Without them the program runs on any machine of its kind: clang’s default
 CPU for the target (<code>x86-64</code>; <code>apple-m1</code> on Apple arm64). An option the
-target’s architecture does not know is an error. The chosen CPU is part of
-the build cache’s key.</p>
+target’s architecture does not take is an error worded as clang words it:
+<code>-mcpu=</code> on x86-64 (<code>unsupported option '-mcpu=' for target ...; use '-march' or '-mtune'</code>), <code>-march=</code> on WebAssembly, an AArch64 <code>-march=</code>
+that is not <code>armv&lt;version&gt;-a</code> (<code>invalid arch name</code>), <code>native</code> for another
+platform’s target, or an empty value. A CPU or feature name LLVM does not
+know is passed on, and LLVM warns about it. The last of each option wins;
+the features come after those the CPU implies. The chosen CPU, its
+features and its tuning are part of the build cache’s key.</p>
 <h3 id="-g---emit-debug"><a class="header" href="#-g---emit-debug"><code>-g</code>, <code>--emit-debug</code></a></h3>
 <p>Emits debug info for gdb, lldb, Visual Studio and WinDbg: DWARF 4 in the
 executable on Linux and macOS, and CodeView on Windows, where the linker
@@ -625,7 +653,11 @@ cache would reuse is compiled anyway, and the build fails if its code
 differs from the cached object’s, or if skipping the reused files’ bodies
 changes another file’s code. Setting <code>PEPPER_CACHE_VERIFY</code> to anything but
 empty or <code>0</code> does the same. <code>--no-verify-cache</code> turns it off even when
-<code>PEPPER_CACHE_VERIFY</code> is set. The two options cannot be combined.</p>
+<code>PEPPER_CACHE_VERIFY</code> is set. The two options cannot be combined.
+It builds the program a second time, with an empty cache of its own in the
+build folder, and compares each object that build makes with the one the
+cache holds under the same key, so a check costs about a build from
+scratch. A failure names the cached objects that differ.</p>
 <h2 id="tracing-and-diagnostics"><a class="header" href="#tracing-and-diagnostics">Tracing and diagnostics</a></h2>
 <h3 id="-t-channel---tall"><a class="header" href="#-t-channel---tall"><code>-T &lt;channel&gt;</code>, <code>--Tall</code></a></h3>
 <p><code>-T</code> turns on a trace channel, which prints to standard error. Repeat it for
@@ -634,7 +666,8 @@ more channels; <code>--Tall</code> turns on every one.</p>
 <li><code>-T time</code> prints how long each stage of the compile took
 (<code>time: check and build    470.763 ms</code>).</li>
 <li><code>-T passes</code> prints how long each pass of the checker took, summed over its
-runs, slowest first.</li>
+runs, slowest first (<code>pass:  3116.171 ms   16x resolve_implicit_types</code>),
+the passes run checking the runtime and each module included.</li>
 <li><code>-T cache</code> prints how the build cache supplied each object: <code>hit</code> (its
 sources, and its imports’ declarations, are unchanged), <code>hit (same code)</code>
 (compiled again, to the same code), or <code>miss</code>; and whether linking was
@@ -668,7 +701,7 @@ a terminal; set <code>NO_COLOR</code> to turn color off. See
 <tr><td><code>PEPPER_CACHE_DIR</code></td><td>The build cache folder</td><td><code>--cache</code>, <code>--no-cache</code></td></tr>
 <tr><td><code>PEPPER_CACHE_VERIFY</code></td><td>Anything but empty or <code>0</code> checks the build cache</td><td><code>--no-verify-cache</code></td></tr>
 <tr><td><code>PEPPER_LLVM_PREFIX</code></td><td>The LLVM install whose <code>clang</code> and <code>lld</code> link the program</td><td></td></tr>
-<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20); <code>cargo setup</code> records the LLVM it provisions in <code>.pep/llvm-prefix</code> and in cargo’s config, and in CI exports this variable</td><td></td></tr>
+<tr><td><code>LLVM_SYS_&lt;major&gt;1_PREFIX</code></td><td>The same, when <code>PEPPER_LLVM_PREFIX</code> is not set (<code>LLVM_SYS_201_PREFIX</code> for LLVM 20)</td><td></td></tr>
 <tr><td><code>PEPPER_PACKAGE_GITHUB_URL</code>, <code>PEPPER_PACKAGE_GITLAB_URL</code>, <code>PEPPER_PACKAGE_CODEBERG_URL</code></td><td>Where a build fetching a project’s locked dependencies clones that host’s repositories from, when <code>pep-package</code> is not installed (see <a href="pep-package.html#environment-variables">pep-package</a>)</td><td></td></tr>
 <tr><td><code>NO_COLOR</code></td><td>Set and not empty: errors are not colored</td><td></td></tr>
 </tbody>

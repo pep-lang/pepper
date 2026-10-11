@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Setting up LLVM: cargo setup - The Pepper Programming Language</title>
+        <title>Setting up LLVM: setup-llvm.sh - The Pepper Programming Language</title>
 
 
         <!-- Custom HTML head -->
@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,61 +181,53 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="setting-up-llvm-cargo-setup"><a class="header" href="#setting-up-llvm-cargo-setup">Setting up LLVM: cargo setup</a></h1>
-<p>The compiler links against LLVM, which cargo cannot build. <code>xtask</code>, a small
-program in this repository with no dependencies, provisions it, so it works
-on a fresh clone with nothing else installed:</p>
-<pre><code class="language-bash">cargo run -p xtask -- setup --devtools     # the first time
-cargo setup --devtools                     # afterwards
+                        <h1 id="setting-up-llvm-setup-llvmsh"><a class="header" href="#setting-up-llvm-setup-llvmsh">Setting up LLVM: setup-llvm.sh</a></h1>
+<p>The compiler, <code>pep-build</code> (<code>tools/compiler</code>), links LLVM 20 through the
+<code>pepper-llvm</code> package, so building it from source needs an LLVM 20
+development install. The setup scripts provision one:</p>
+<pre><code class="language-bash">./scripts/setup-llvm.sh --devtools            # Linux and macOS
+pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 </code></pre>
-<p>The first run writes <code>.cargo/config.toml</code>, which points the build at the
-LLVM it settled on (<code>LLVM_SYS_&lt;major&gt;1_PREFIX</code>) and defines the <code>cargo setup</code>
-alias, and <code>.pep/llvm-prefix</code>, which holds the same prefix for everything
-that is not cargo. Run it again on each new machine rather than copying
-those files. The
+<p>They record the LLVM they settled on in <code>.pep/llvm-prefix</code> (gitignored),
+which <code>scripts/pepper-tests.sh</code>, the release scripts and the workflows read.
+Run them again on each new machine rather than copying that file. The
 README’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">Setting up a development environment</a>
-says what each platform needs first and how the versions are chosen.</p>
-<pre><code class="language-text">cargo setup [options]
-cargo run -p xtask -- setup [options]
+says what each platform needs first.</p>
+<pre><code class="language-text">scripts/setup-llvm.sh [options]
+pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
 </code></pre>
 <h2 id="what-it-does"><a class="header" href="#what-it-does">What it does</a></h2>
-<p><code>cargo setup</code> runs the platform’s script (<code>scripts/setup-llvm.sh</code> on Linux
-and macOS, <code>scripts/setup-llvm.ps1</code> on Windows), which:</p>
 <ul>
-<li>provisions LLVM, cheapest source first: an LLVM of the wanted major that
-is already installed, else the platform’s package manager (apt or
-Homebrew), else the LLVM release archive (cached, so a second run is
-free);</li>
-<li>writes <code>.cargo/config.toml</code>, so plain <code>cargo</code> commands build against it
-with no environment variables set;</li>
-<li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout
-(gitignored), where <code>scripts/pepper-tests.sh</code>, the release scripts and
-the workflows read it;</li>
+<li>provisions LLVM 20, the one LLVM major Pepper builds with, cheapest source
+first: an LLVM 20 that is already installed, else the platform’s package
+manager (apt <code>llvm-20-dev</code> or Homebrew <code>llvm@20</code>), else the LLVM release
+archive (cached, so a second run is free). Windows always uses the archive:
+no Windows package ships <code>llvm-config</code> and the component libraries;</li>
+<li>writes the prefix, one line, to <code>.pep/llvm-prefix</code> in the checkout;</li>
 <li>does nothing more when a valid install is already there.</li>
 </ul>
-<p>When it provisions an LLVM other than the default (20), it prints the
-<code>--features</code> flag cargo needs for it, such as
-<code>cargo build --no-default-features --features llvm19-1</code>.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
+<p><code>scripts/setup-llvm.sh</code> takes these; <code>--help</code> prints them.</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Option</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>--llvm &lt;major&gt;</code>, <code>--llvm=&lt;major&gt;</code></td><td>Provision this LLVM major (18 to 22) instead of the default, 20</td></tr>
-<tr><td><code>--devtools</code></td><td>Also set up the <code>lldb</code> debugger: installed into the same prefix on Windows; on Linux and macOS, checked for, with instructions when it is missing</td></tr>
+<tr><td><code>--devtools</code></td><td>Also check for the <code>lldb</code> debugger, with instructions when it is missing</td></tr>
 <tr><td><code>--no-devtools</code></td><td>Skip the debugger, even when <code>PEPPER_SETUP_DEVTOOLS</code> is set</td></tr>
 <tr><td><code>--no-packages</code></td><td>Do not use apt or Homebrew: use an LLVM already installed, or the release archive</td></tr>
-<tr><td><code>--check</code></td><td>Report what is configured and the command to build with it, changing nothing</td></tr>
+<tr><td><code>--check</code></td><td>Report the LLVM it would use and what <code>.pep/llvm-prefix</code> records, changing nothing; the status is 0 only when they agree</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td></tr>
 </tbody>
 </table>
 </div>
-<p>Of <code>--devtools</code> and <code>--no-devtools</code>, the last one given wins. <code>--check</code> wins
-over everything else. An unknown argument is an error that prints the
-options and exits with status 1.</p>
+<p>Of <code>--devtools</code> and <code>--no-devtools</code>, the last one given wins. An unknown
+argument is an error that exits with status 2.</p>
+<p><code>scripts/setup-llvm.ps1</code> takes <code>-DevTools</code>, which installs <code>lldb</code>,
+<code>lldb-dap</code> and <code>lldb-server</code> into the same prefix, and <code>-Force</code>, which
+downloads and extracts the archive again even when a valid install is there.</p>
 <h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
 <div class="table-wrapper">
 <table>
@@ -243,7 +235,6 @@ options and exits with status 1.</p>
 <tr><th>Variable</th><th>What it does</th></tr>
 </thead>
 <tbody>
-<tr><td><code>PEPPER_LLVM_MAJOR</code></td><td>The LLVM major to provision, as <code>--llvm</code> gives it</td></tr>
 <tr><td><code>PEPPER_SETUP_DEVTOOLS</code></td><td><code>1</code> sets up the debugger on every run, as <code>--devtools</code> does, so it can be turned on once per machine</td></tr>
 </tbody>
 </table>

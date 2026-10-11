@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -242,15 +242,16 @@ unknown command exits with 1. Otherwise the exit status is the command’s.</p>
 </tbody>
 </table>
 </div>
-<p>Every one of them but <code>pep-build</code> is a Pepper program, built with
-<code>pep-build</code>; <code>pep-build</code> itself is too (<code>tools/compiler</code>).</p>
+<p>Every one of them, <code>pep-build</code> included, is a Pepper program under <code>tools/</code>,
+built with <code>pep-build</code>.</p>
 <h2 id="building-it"><a class="header" href="#building-it">Building it</a></h2>
-<p>Build the compiler with cargo, then build <code>pepper</code> with the compiler and put
-it next to it:</p>
-<pre><code class="language-bash">cargo build --release
-target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
+<p>Build <code>pepper</code> with a <code>pep-build</code> (an installed one, or one you built from
+<code>tools/compiler</code>; see
+<a href="../tutorial/getting-started.html#building-from-source">Building from source</a>)
+and put it next to it:</p>
+<pre><code class="language-bash">target/bin/pep-build -I tools tools/pepper/main.pep -o target/bin/pepper
 </code></pre>
-<p>On Windows, name the output <code>target\release\pepper.exe</code>.</p>
+<p>On Windows, name the output <code>target\bin\pepper.exe</code>.</p>
 <h2 id="how-it-finds-a-command"><a class="header" href="#how-it-finds-a-command">How it finds a command</a></h2>
 <p>Outside a Pepper home, <code>pepper &lt;command&gt;</code> looks for <code>pep-&lt;command&gt;</code> (<code>pep-&lt;command&gt;.exe</code> on
 Windows) in the directory that holds the running <code>pepper</code> first, then in

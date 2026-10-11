@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -187,11 +187,8 @@
 (<a href="../tools/pep-test.html"><code>pep-test</code></a>) builds and runs. They cover the
 runtime and the Pepper tools, the compiler written in Pepper
 (<code>tools/compiler</code>) among them.</p>
-<p>The Rust compiler’s own tests (<code>crates/*/tests/</code>, the root package’s
-<code>tests/*.rs</code>; see <code>INTERNALS.md</code>, section 9) are still in the repository,
-and <code>cargo test --workspace</code> runs them, but neither CI nor the pre-merge
-checks do: the Rust compiler is not expected to change much, and new tests
-go in Pepper.</p>
+<p>They are the whole suite: Pepper is written in Pepper, and so are its
+tests.</p>
 <h2 id="where-runtime-tests-live"><a class="header" href="#where-runtime-tests-live">Where runtime tests live</a></h2>
 <div class="table-wrapper">
 <table>
@@ -202,7 +199,7 @@ go in Pepper.</p>
 <tr><td>A module, <code>runtime/&lt;module&gt;/</code></td><td><code>runtime/&lt;module&gt;/test/&lt;topic&gt;_test.pep</code>, which imports the module</td></tr>
 <tr><td>A prelude file, <code>runtime/&lt;name&gt;.pep</code></td><td><code>runtime/test/&lt;topic&gt;_test.pep</code></td></tr>
 <tr><td>A file’s private functions</td><td><code>[Test]</code> functions in that file itself</td></tr>
-<tr><td>A Pepper tool, <code>tools/&lt;tool&gt;/</code></td><td><code>tools/&lt;tool&gt;/&lt;topic&gt;_test.pep</code>, which imports the tool’s files (<code>import "format";</code>)</td></tr>
+<tr><td>A Pepper tool, <code>tools/&lt;tool&gt;/</code></td><td><code>tools/&lt;tool&gt;/&lt;topic&gt;_test.pep</code>, which imports the tool’s files (<code>import "format";</code>), or runs the built tool (see <a href="#tests-that-run-the-tools">Tests that run the tools</a>)</td></tr>
 </tbody>
 </table>
 </div>
@@ -221,7 +218,7 @@ needs no <code>##</code> comments.</p>
 <pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev        # the build of main; see below
 scripts/pepper-tests.sh                          # every runtime and tool test
 scripts/pepper-tests.sh -f parses                # by name, in each run
-scripts/pepper-tests.sh target/release           # with a cargo build instead
+scripts/pepper-tests.sh target/bin               # with a pep-build you built
 </code></pre>
 <p>The tests build with the installed toolchain’s <code>pep-build</code>, the one
 <code>pepper install which</code> names. Every merge into main that changes the
@@ -229,9 +226,12 @@ compiler, the runtime or the tools publishes the build of main as a
 prerelease named by the version the <code>VERSION</code> file holds (<code>0.4.0-dev</code>), replacing
 the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
-refresh it). Only a change to the Rust compiler itself (<code>crates/</code>) needs its
-own build: pass its folder as the first argument, as CI does for a pull
-request that changes <code>crates/</code>.</p>
+refresh it). The compiler’s own tests (<code>tools/compiler/*_test.pep</code>) build
+the compiler’s sources into their test programs, so they test a change to
+it. To run the whole suite with the changed compiler too, build it from
+<code>tools/compiler</code> (see the README’s
+<a href="https://github.com/justinboswell/pepper#build-and-test">Build and test</a>)
+and pass its folder as the first argument.</p>
 <p>The script builds the Pepper tools (<code>pepper</code>, <code>pep-test</code>, <code>pep-doc</code> and the
 others) from the checkout with that <code>pep-build</code>, against the checkout’s
 runtime, into <code>target/pepper-tests/bin</code> beside a link to the <code>pep-build</code>,
@@ -244,8 +244,9 @@ libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a fo
 holding <code>zlib.lib</code>, and is skipped without it);</li>
 <li>in <code>tools/</code>, with <code>-I .</code>, the tools’ tests.</li>
 </ul>
-<p>The tools’ run, the longest, starts as soon as <code>pepper</code> and <code>pep-test</code>
-are built and runs beside the runtime’s runs; its output is printed after
+<p>The tools’ run, the longest, starts as soon as the tools its tests run
+(<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code> and <code>pep-package</code>) are
+built, and runs beside the runtime’s runs; its output is printed after
 theirs.</p>
 <p>Once <code>pepper</code> is built, run any part of them by hand:</p>
 <pre><code class="language-bash">cd runtime
@@ -258,8 +259,10 @@ files kept beside it by a path from there (<code>archive/test/gnu.tar.gz</code>)
 The builds go to <code>runtime/.pep/</code>, which git ignores. A test that writes
 files uses a fresh folder under the system’s temporary folder
 (<code>TempFolder</code> in the <code>testing</code> module makes and removes one).</p>
-<p>CI runs <code>scripts/pepper-tests.sh</code> after <code>cargo build --release</code> on
-Linux, macOS and Windows.</p>
+<p>CI runs <code>scripts/pepper-tests.sh</code> with the installed build of main on
+Linux, macOS and Windows. A PR that changes the compiler (<code>tools/compiler/</code>)
+is tested with that compiler instead: CI builds it with the build of main
+first (<code>scripts/ci-build-compiler.sh</code>) and runs the suite with it.</p>
 <p>Two Pepper tools depend on private repositories. The compiler written in
 Pepper, <code>tools/compiler</code>, depends on <code>justinboswell/pepper-llvm</code>, and the
 language server <code>tools/pep-lsp</code> depends on <code>justinboswell/pepper-lsp</code>. CI
@@ -273,6 +276,44 @@ its own repository. It points git at the aliases through <code>GIT_CONFIG_*</cod
 <code>GIT_SSH_COMMAND</code> variables of the test step only. Without a secret (in a
 fork, say) the step says so in a notice, and the tests of the tool that
 uses that package fail when they fetch it.</p>
+<h2 id="tests-that-run-the-tools"><a class="header" href="#tests-that-run-the-tools">Tests that run the tools</a></h2>
+<p>Some tests run programs rather than call functions: <code>pep-build</code> on
+programs, and the Pepper tools on files and folders, checking their
+output and exit status as a user would see them.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Test</th><th>What it runs</th></tr>
+</thead>
+<tbody>
+<tr><td><code>tools/compiler/corpus_test.pep</code></td><td><code>pep-build -I tests</code> on each <code>tests/&lt;Name&gt;/test.pep</code>, then the program from the repository’s root, which must exit with 0. With <code>WASI_SDK_PATH</code> set and wasmtime on the PATH (or <code>WASMTIME</code> naming it), each again for <code>wasm32-wasip1</code> under wasmtime; it says it skipped otherwise. A new <code>tests/&lt;Name&gt;/test.pep</code> joins the run.</td></tr>
+<tr><td><code>tools/compiler/programs_test.pep</code></td><td><code>pep-build</code> on the programs of <code>tools/compiler/testdata/</code>, each run with the arguments and environment it needs: <code>cli</code>’s <code>parse</code> and an <code>add_options</code> error, <code>os</code>’s environment and host, <code>time</code>’s zones (TZif files under <code>TZDIR</code>, <code>TZ</code>, the system’s database), and <code>process</code>’s arguments, <code>exit</code>, <code>main</code>’s arguments, children that are copies of the program, and <code>exec</code>.</td></tr>
+<tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="docs.html">Building this documentation</a>).</td></tr>
+<tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
+<tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>
+<tr><td><code>tools/pepper/pepper_test.pep</code></td><td><code>pepper</code>, copied beside stand-in tools built from <code>tools/pepper/testdata/</code>; and every tool’s <code>--version</code> against the version in each <code>tools/*/main.pep</code>.</td></tr>
+<tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes, from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite’s own run skips them).</td></tr>
+<tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
+<tr><td><code>tools/pep-profile/profile_test.pep</code></td><td><code>pep-profile</code> on the recordings in <code>tools/pep-profile/testdata/</code>, and on a real program when samply or a working perf is installed (skipped otherwise).</td></tr>
+</tbody>
+</table>
+</div>
+<p>They find <code>pep-build</code> and the tools beside the test program or on the
+PATH (<code>process.find_companion</code>), where <code>scripts/pepper-tests.sh</code> puts the
+ones it builds from the checkout, so they test this checkout’s tools. To
+run one by hand, put that folder first on the PATH (after a run of the
+script, or with the tools built there as the script builds them):</p>
+<pre><code class="language-bash">export PATH="$PWD/target/pepper-tests/bin:$PATH"
+cd tools &amp;&amp; pepper test -I . pep-fmt/cli_test.pep
+</code></pre>
+<p>The <code>tool_testing</code> module (<code>tools/tool_testing/</code>) holds what they share:
+<code>tool(name)</code> finds a tool, <code>run</code> and <code>run_with_input</code> run a
+<code>process.Command</code> and read its output with Windows’ line ends made
+<code>\n</code>, <code>build_program</code> builds a program with <code>pep-build</code>, and
+<code>expect_exit</code>, <code>expect_contains</code>, <code>expect_starts_with</code> and
+<code>expect_ends_with</code> show the program’s output when they fail.
+<code>tool_testing.server</code>’s <code>serve_folder</code> serves a folder over HTTP on
+loopback, for a test that downloads (<code>pep-install</code>, <code>pep-package</code>).</p>
 <h2 id="leaks-fail-a-test"><a class="header" href="#leaks-fail-a-test">Leaks fail a test</a></h2>
 <p>Each test counts the runtime’s live allocations before and after it runs,
 and fails when they differ:</p>

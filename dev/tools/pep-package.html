@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -348,8 +348,7 @@ declares, and <code>pep-package</code> says which requirement it overrode.</li>
 edits <code>pep.toml</code> and <code>pep.lock</code> with the runtime’s
 <a href="../reference/toml-module.html">toml module</a>, so building it needs no
 network:</p>
-<pre><code class="language-bash">cargo build --release
-target/release/pep-build tools/pep-package/main.pep -o target/release/pep-package
+<pre><code class="language-bash">pepper build tools/pep-package/main.pep -o pep-package
 </code></pre>
 
                     </main>

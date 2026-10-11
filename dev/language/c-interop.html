@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1035,6 +1035,14 @@ and C’s buffer stays C’s.</p>
 import library <code>name.lib</code>. <code>-o</code> chooses another name. Either way the header
 is written beside the library, named for it without the <code>lib</code> prefix
 (<code>counter.h</code>).</p>
+<p>The compiler writes the archive itself, in the format of the platform it
+builds for (with <code>--target</code>, another one’s: GNU’s for Linux and Android,
+the BSD format Apple’s linkers read for macOS and iOS, the COFF archive for
+Windows), with the index of the symbols its objects define, so no archiver
+needs to be installed and a static library for another platform needs no
+system root. A shared library links like an executable, with clang. At
+<code>-O2</code> and <code>-O3</code> the library is optimized as one module first, as an
+executable is (see <code>--lto</code> in <a href="../tools/pep-build.html">pep-build</a>).</p>
 <ul>
 <li>A library needs no <code>main</code>. One that has a <code>main</code> keeps it, and C code that
 links the library cannot have its own.</li>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,13 +186,14 @@
 <a href="../reference/README.html">standard library reference</a> from the runtime’s
 <a href="../language/doc-comments.html">documentation comments</a>, checks the book, and
 renders it with <a href="https://rust-lang.github.io/mdBook/">mdBook</a>, which must be
-on the <code>PATH</code> (<code>cargo install mdbook --locked</code>).</p>
+on the <code>PATH</code> (a binary from
+<a href="https://github.com/rust-lang/mdBook/releases">its releases</a>).</p>
 <p>It is a Pepper program (<code>tools/pep-doc</code>), and it works on the Pepper
 checkout that holds the folder it is run in. <code>scripts/pepper-tests.sh</code>
 builds it beside <code>pep-build</code>, with the other Pepper tools, and <code>pepper doc</code>
 runs it. To build it alone, from the repository root:</p>
-<pre><code class="language-bash">target/release/pep-build -O -I tools tools/pep-doc/main.pep -o target/release/pep-doc
-target/release/pep-doc reference
+<pre><code class="language-bash">pepper build -O -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
+target/bin/pep-doc reference
 </code></pre>
 <pre><code class="language-text">pep-doc [&lt;command&gt;] [options]
 </code></pre>
@@ -227,9 +228,7 @@ tools’ (<code>pepper</code>, <code>pep-fmt</code>, <code>pep-profile</code>, <
 first.</p>
 <ul>
 <li><code>--tools &lt;DIR&gt;</code>: the folder holding the built tools (default:
-<code>target/pepper-tests/bin</code> under <code>$CARGO_TARGET_DIR</code> or <code>target/</code> when it
-holds <code>pep-build</code>, else the release build’s folder when it does, else the
-debug build’s).</li>
+<code>target/pepper-tests/bin</code> under <code>$PEPPER_TARGET_DIR</code> or <code>target/</code>).</li>
 </ul>
 <p>CI runs it, after the tests.</p>
 <h3 id="pep-doc-build"><a class="header" href="#pep-doc-build"><code>pep-doc build</code></a></h3>

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,15 +201,16 @@ afterwards. <a href="../tools/install.html">Installing Pepper</a> covers the opt
 it installs, and uninstalling.</p>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
 <p>To work on Pepper itself, or on a platform with no prebuilt binaries, build
-the compiler from source. The compiler is a Rust program that generates code
-through LLVM. Building it takes three steps on every platform. The
-repository’s
+the toolchain from source. Pepper is written in Pepper: the compiler,
+<code>pep-build</code>, is the Pepper program in <code>tools/compiler</code>, and it generates code
+through LLVM. Building it takes a Pepper compiler, so the first one comes from
+a published toolchain. The repository’s
 <a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">README</a>
 has the full details for each platform; this is the short version.</p>
 <ol>
 <li>
-<p><strong>Install Rust</strong> with <a href="https://rustup.rs">rustup</a>. You need Rust 1.85 or
-newer. On Windows, use the default <code>x86_64-pc-windows-msvc</code> toolchain.</p>
+<p><strong>Install Pepper</strong> as above, the build of main: <code>sh scripts/install.sh --version 0.4.0-dev</code> from a clone of the repository (the version its
+<code>VERSION</code> file holds; <code>install.ps1 -Version 0.4.0-dev</code> on Windows).</p>
 </li>
 <li>
 <p><strong>Install the platform prerequisites</strong>, which provide the C toolchain that
@@ -223,32 +224,31 @@ standalone Build Tools), and PowerShell.</li>
 </ul>
 </li>
 <li>
-<p><strong>Set up LLVM.</strong> Clone the repository, then run the setup command from its
-root:</p>
-<pre><code class="language-sh">git clone https://github.com/justinboswell/pepper
-cd pepper
-cargo run -p xtask -- setup --devtools
+<p><strong>Set up LLVM 20</strong>, which the compiler links. From the repository’s root:</p>
+<pre><code class="language-sh">./scripts/setup-llvm.sh --devtools            # Linux and macOS
+pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 </code></pre>
-<p>This installs a development build of LLVM (from apt, Homebrew, or the
-official release archive on Windows) and writes <code>.cargo/config.toml</code> so
-that plain <code>cargo</code> commands find it (and <code>.pep/llvm-prefix</code>, for the
-scripts). <code>--devtools</code> also sets up the <code>lldb</code>
-debugger; you can leave it out. Run <code>cargo setup --check</code> at any time to see
-what is configured.</p>
+<p>This installs a development build of LLVM 20 (from apt, Homebrew, or the
+official release archive on Windows) and records where in
+<code>.pep/llvm-prefix</code>. <code>--devtools</code> also sets up the <code>lldb</code> debugger; you
+can leave it out. Run <code>./scripts/setup-llvm.sh --check</code> at any time to
+see what is configured.</p>
 </li>
 </ol>
-<p>Now build the compiler, then the <code>pepper</code> command with it:</p>
-<pre><code class="language-sh">cargo build --release
-target/release/pep-build -I tools tools/pepper/main.pep -o target/release/pepper
+<p>Now build the compiler with the installed one, then the <code>pepper</code> command with
+the compiler you built:</p>
+<pre><code class="language-sh">export PEPPER_RUNTIME="$PWD/runtime"
+pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build
+target/bin/pep-build -O -I tools tools/pepper/main.pep -o target/bin/pepper
 </code></pre>
-<p>On Windows, name the output <code>target\release\pepper.exe</code>. The compiler is
-<code>target/release/pep-build</code>; <code>pepper</code> is the entry point to every Pepper tool,
-so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
+<p>On macOS and Windows the compiler’s build also needs LLVM’s library folder:
+add <code>-L "$(head -1 .pep/llvm-prefix)/lib"</code>. On Windows, name the outputs
+<code>.exe</code> and copy <code>LLVM-C.dll</code> from the LLVM’s <code>bin</code> folder beside
+<code>pep-build.exe</code>. The compiler depends on the <code>pepper-llvm</code> package, which the
+first build fetches with git. <code>pepper</code> is the entry point to every Pepper
+tool, so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
 <a href="../tools/pepper.html">The pepper command</a>). To check that everything works,
-run the tests with <code>scripts/pepper-tests.sh</code>. Add <code>target/release</code> to
-your <code>PATH</code> to run <code>pepper</code> from anywhere; from the repository root, you can
-also run the compiler through cargo: <code>cargo run --release -- hello.pep -o hello</code>
-runs <code>pep-build</code> directly.</p>
+run the tests with <code>scripts/pepper-tests.sh target/bin</code>.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -287,7 +287,7 @@ then <code>../runtime/</code>, <code>../../runtime/</code>, and so on, up to fiv
 <code>runtime/</code> beside it, then in each parent directory, up to five levels up.</li>
 </ol>
 <p>So an installed compiler, in <code>~/.pepper/bin</code>, finds <code>~/.pepper/runtime</code>, and
-one built in <code>target/release</code> finds the runtime of the clone it was built
+one built in <code>target/bin</code> finds the runtime of the clone it was built
 from, wherever you run it. To use a different runtime, set
 <code>PEPPER_RUNTIME</code> or link the runtime into a project’s <code>.pep</code> folder:</p>
 <pre><code class="language-sh">mkdir .pep

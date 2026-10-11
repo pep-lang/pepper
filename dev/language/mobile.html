@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1850ef6a.js";
+            window.path_to_searchindex_js = "../searchindex-bc3141e9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-215b8fb0.js"></script>
+        <script src="../toc-e4845a93.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -230,7 +230,10 @@ x64 code uses SSE4.2 and POPCNT, which the Android x86_64 ABI requires.</p>
 <pre><code class="language-sh">pepper build --target aarch64-apple-ios --lib static greeter.pep -o ios/libgreeter.a
 pepper build --target aarch64-linux-android --lib static greeter.pep -o android/libgreeter.a
 </code></pre>
-<p>Each writes <code>greeter.h</code> beside the library. Build the library once for each
+<p>The compiler writes each archive itself, in the format the platform’s
+linkers read (BSD’s for iOS, GNU’s for Android), so nothing from Xcode or
+the NDK is needed to make it. Each writes <code>greeter.h</code> beside the library.
+Build the library once for each
 target the app ships: the device and the simulator on iOS, and each
 Android ABI.</p>
 <p>Linking, for a shared library or an executable to run in the simulator or
@@ -379,7 +382,7 @@ in the emulator, starts it and checks its log.</li>
 it builds every documentation example for the iOS simulator and for Android,
 runs each in the simulator (<code>xcrun simctl spawn</code>) and in the emulator
 (<code>adb shell</code>), then builds and runs the two apps.</p>
-<pre><code class="language-sh">bash scripts/mobile-test.sh target/debug/pep-build /tmp/mobile all
+<pre><code class="language-sh">bash scripts/mobile-test.sh target/bin/pep-build /tmp/mobile all
 </code></pre>
 <h2 id="not-supported-yet"><a class="header" href="#not-supported-yet">Not supported yet</a></h2>
 <ul>
