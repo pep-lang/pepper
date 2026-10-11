@@ -14,6 +14,11 @@ import [display_name] from "names";
 ## The attribute that marks a unit test: `[Test]`.
 const _TEST_ATTRIBUTE = "Test";
 
+## The attribute that keeps a function out of line (#640): a function rarely
+## called, such as a slow path, gets LLVM's `cold` and `noinline`
+## (`Generator.mark_cold`), so its callers' fast paths stay small.
+export const COLD_ATTRIBUTE = "Cold";
+
 ## The attribute that makes a `[Test]` pass only when it panics.
 const _SHOULD_PANIC_ATTRIBUTE = "ShouldPanic";
 
@@ -25,6 +30,10 @@ const _SHOULD_PANIC_ATTRIBUTE = "ShouldPanic";
 ## @returns the first error: a malformed test or platform attribute
 export apply_platform_filters(module: Module, target: Target): Diagnostic? {
     var error = _check_tests(module);
+    if (error.is_value()) {
+        return error;
+    }
+    error = _check_cold(module);
     if (error.is_value()) {
         return error;
     }
@@ -301,6 +310,62 @@ _attribute_name_location(attribute: ast.Attribute, file: uint): Location {
         else => {}
     }
     return Location(file as ulong, span);
+}
+
+## The first `[Cold]` with arguments, or on anything but a function, method
+## or constructor.
+_check_cold(module: Module): Diagnostic? {
+    var functions = Array<FunctionDef>();
+    functions.append_all(module.functions);
+    for (var s in module.structs) {
+        functions.append_all(s.method_members);
+        functions.append_all(s.constructors);
+        functions.append_all(s.generic_methods);
+    }
+    for (var t in module.traits) {
+        functions.append_all(t.methods);
+    }
+    for (var e in module.extensions) {
+        functions.append_all(e.methods);
+    }
+    for (var f in functions) {
+        for (var attribute in f.attributes) {
+            if (attribute.name() != COLD_ATTRIBUTE) {
+                continue;
+            }
+            match (attribute.body) {
+                SymbolRef(_, _) => {}
+                else => {
+                    return Optional<Diagnostic>.Value(
+                        Diagnostic.error(
+                            "'Cold' takes no arguments"
+                        ).at(Location(f.loc.file as ulong, attribute.body.span()))
+                    );
+                }
+            }
+        }
+    }
+    for (var s in module.structs) {
+        var misplaced = Array<(ast.Attribute, Loc)>();
+        for (var attribute in s.attributes) {
+            misplaced.append((attribute, s.loc));
+        }
+        for (var field in s.field_members) {
+            for (var attribute in field.attributes) {
+                misplaced.append((attribute, field.loc));
+            }
+        }
+        for (var (attribute, loc) in misplaced) {
+            if (attribute.name() == COLD_ATTRIBUTE) {
+                return Optional<Diagnostic>.Value(
+                    Diagnostic.error(
+                        "'Cold' applies only to a function, method or constructor"
+                    ).at(_attribute_name_location(attribute, loc.file))
+                );
+            }
+        }
+    }
+    return Optional<Diagnostic>.Empty;
 }
 
 ## The first `[Test]` that is not on a free function taking and returning

@@ -81,7 +81,7 @@ const _MAX_ITERATIONS: long = 100000;
 ## attribute must name an `[Attribute]` struct.
 _is_built_in_name(name: String): bool {
     match (name) {
-        "Alias", "Attribute", "BuildOption", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "ThreadLocal", "Value", "__BuiltIn", "__Lazy", "__Reads" => {
+        "Alias", "Attribute", "BuildOption", "Cold", "Deprecated", "Equatable", "Export", "Implicit", "Isolated", "Link", "LinkName", "Locked", "Move", "MoveSource", "NotCopyable", "Rename", "Sending", "Shared", "Target", "ThreadLocal", "Value", "__BuiltIn", "__Lazy", "__Reads" => {
             return true;
         }
         else => {

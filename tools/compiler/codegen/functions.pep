@@ -192,6 +192,7 @@ extend Generator {
                 fn_type = llvm_fn_type(context, return_type.value(), param_types, false);
             }
             var fn_value = ir.add_function(mangled, fn_type);
+            mark_cold(fn_value, method.attributes);
             set_private_linkage(fn_value, mangled);
             # A member the passes synthesize for a use (`__copy`, placed at the
             # struct) has no owner: a compilation unit that reads the struct's
@@ -355,6 +356,17 @@ extend Generator {
         return Optional<llvm.Attribute>.Value(context.attribute(kind));
     }
 
+    ## Gives a `[Cold]` function (#640) LLVM's `cold` and `noinline`, so it
+    ## stays out of line however small or rarely called.
+    mark_cold(function: llvm.Value, attributes: ast.Attribute[]) {
+        if (!ast.has_attribute(attributes, sema.COLD_ATTRIBUTE)) {
+            return;
+        }
+        for (var attribute in ["cold", "noinline"]) {
+            function.add_function_attribute(context.attribute(attribute));
+        }
+    }
+
     instantiate_function(function: FunctionDef): Result<void> {
         var result = instantiate_function_unlocated(function);
         locate(result, function.loc);
@@ -383,6 +395,7 @@ extend Generator {
             fn_type = llvm_fn_type(context, return_type.value(), param_types, false);
         }
         var fn_value = ir.add_function(function.name, fn_type);
+        mark_cold(fn_value, function.attributes);
         set_private_linkage(fn_value, function.name);
         own_function(function.name, function.loc);
         functions[function.name] = fn_value;

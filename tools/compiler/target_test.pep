@@ -255,3 +255,39 @@ links_libpthread_and_libdl_only_before_glibc_2_34() {
     expect_false(driver.glibc_before_2_34("2.34"));
     expect_false(driver.glibc_before_2_34("2.39"));
 }
+
+# `[Cold]` (#640) keeps a function out of line: LLVM's `cold` and
+# `noinline` on it, and on nothing else.
+[Test]
+a_cold_function_is_cold_and_never_inlined() {
+    var ir = _ir(
+        "[Cold]\nslow(n: int): int {\n    return n * 2;\n}\n\nfast(n: int): int {\n    return n + 1;\n}\n\nmain(): int {\n    return slow(fast(1)) - 4;\n}\n",
+        link.Target()
+    );
+    expect_equal(_attributes_of(ir, "slow"), "cold noinline");
+    expect_equal(_attributes_of(ir, "fast"), "");
+}
+
+# Which of `cold` and `noinline` the IR's definition of `name` carries.
+_attributes_of(ir: String, name: String): String {
+    var group = "";
+    for (var line in ir.split("\n")) {
+        if (line.starts_with("define ") and line.contains($"@{name}(")) {
+            var hash = line.rfind("#");
+            if (hash >= 0) {
+                group = line.substr_bytes(hash as ulong, line.size - hash as ulong).split(" ")[0];
+            }
+        }
+    }
+    var found = Array<String>();
+    for (var line in ir.split("\n")) {
+        if (!group.is_empty and line.starts_with($"attributes {group} = ")) {
+            for (var attribute in ["cold", "noinline"]) {
+                if (line.contains($" {attribute} ")) {
+                    found.append(attribute);
+                }
+            }
+        }
+    }
+    return " ".join(found);
+}

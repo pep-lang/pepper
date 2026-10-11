@@ -791,7 +791,11 @@ error_programs(): String[] {
         "# expect: main.pep:12:13: error: cannot copy 'H' because it contains 'R', which is not trivially copyable\nstruct R {\n    var n: int;\n    destruct { n = 0; }\n}\nstruct H {\n    var r: R;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var h = H();\n    var c = copy(h);\n    return 0;\n}\n",
         "# expect: main.pep:7:13: error: cannot copy 'P', which is not trivially copyable\nstruct P {\n    var p: __ptr<char>;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(P());\n    return 0;\n}\n",
         "# expect: main.pep:20:13: error: cannot copy 'W' because it contains 'F', which cannot be copied\n[Attribute]\nstruct NotCopyable {\n    var reason: String;\n}\nstruct String {\n    var data: __ptr<char>;\n    construct(raw: __ptr<char>, size: long, length: long) {}\n}\n[NotCopyable(\"it owns a handle\")]\nstruct F {\n    var n: int;\n}\nstruct W {\n    var f: F;\n    var g: (int) => int;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(W());\n    return 0;\n}\n",
-        "# expect: main.pep:7:13: error: cannot copy 'W' because it contains '(int) => int', which is a plain function value\nstruct W {\n    var g: (int) => int;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(W());\n    return 0;\n}\n"
+        "# expect: main.pep:7:13: error: cannot copy 'W' because it contains '(int) => int', which is a plain function value\nstruct W {\n    var g: (int) => int;\n}\ncopy<T>(value: T): T { return value; }\nmain(): int {\n    var c = copy(W());\n    return 0;\n}\n",
+        # 'Cold' takes no arguments
+        "# expect: main.pep:2:2: error: 'Cold' takes no arguments\n[Cold(\"rarely\")]\nf(): int {\n    return 1;\n}\n\nmain(): int {\n    return f();\n}\n",
+        # 'Cold' applies only to a function, method or constructor
+        "# expect: main.pep:2:2: error: 'Cold' applies only to a function, method or constructor\n[Cold]\nstruct S {}\n\nmain(): int {\n    return 0;\n}\n"
     ];
 }
 

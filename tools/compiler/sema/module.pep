@@ -16,6 +16,7 @@ export [constraint_spelled] from "common";
 export [error_at] from "common";
 export [returns_fresh, takes_over] from "confinement";
 export [LAZY_ATTRIBUTE, READS_ATTRIBUTE] from "lazy";
+export [COLD_ATTRIBUTE] from "platform";
 export [is_enum, is_trait, method_of] from "enums";
 export [HASH_METHOD] from "equatable";
 export [Exports, STRING_FREE, is_export_string] from "export_table";
