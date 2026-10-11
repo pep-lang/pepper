@@ -44,7 +44,7 @@ import toolchain;
 # The release this entry point belongs to. `pep-doc check` keeps it equal
 # to the version in VERSION.
 version(): String {
-    return "0.9.0";
+    return "0.9.1";
 }
 
 main(args: String[]): int {
