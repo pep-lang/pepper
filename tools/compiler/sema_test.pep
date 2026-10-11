@@ -4,6 +4,7 @@
 
 import io;
 import [Directory, File, Path] from io;
+import json;
 import compiler.link;
 import compiler.sema;
 import [TempFolder] from testing;
@@ -175,6 +176,29 @@ records_read_back_what_they_wrote() {
     var input = sema.RecordIn(cut);
     sema.read_module(input);
     expect_false(input.done());
+}
+
+# A string that starts with `UNSIGNED_MARK` stays a quoted string in the
+# model's JSON, and a value past `long`'s range is its bare digits (#821).
+[Test]
+model_json_keeps_strings_apart_from_large_unsigned_values() {
+    var folder = TempFolder("sema_unsigned");
+    var path = folder.path.join("main.pep");
+    File.write_text(
+        path, "main(): int {\n    print(\"\\u{1}unsigned\");\n    print(\"\\u{1}unsigned:123\");\n    return 0;\n}\n"
+    );
+    var program = link.load_program(path, link.Setup());
+    expect_true(program.is_ok());
+    var built = sema.merge(program.value());
+    expect_true(built.is_ok());
+    var text = sema.model_json(built.value());
+    expect_true(json.parse(text).is_ok());
+    expect_true(text.contains("\"value\":\"\\u0001unsigned\""));
+    expect_true(text.contains("\"value\":\"\\u0001unsigned:123\""));
+    var object = json.JsonValue.object();
+    object["id"] = sema.unsigned_json(0xffffffffffffffff);
+    object["count"] = sema.unsigned_json(7);
+    expect_equal(sema.canonical_json(object), "{\"count\":7,\"id\":18446744073709551615}");
 }
 
 # `module` written to a record and read back, as JSON.

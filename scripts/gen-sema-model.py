@@ -540,12 +540,14 @@ import [UnitDecls, PendingBody] from "pending";
 
 '''
 footer='''
-## What `unsigned_json` writes before the digits of a value too large for
-## `JsonValue.Integer`; `canonical_json` writes those digits bare.
-export const UNSIGNED_MARK = "\\u{1}unsigned:";
+## The one key of the object `unsigned_json` makes for a value too large
+## for `JsonValue.Integer`; `canonical_json` writes that object as the
+## value's digits. A key, not a string prefix: the model's strings hold
+## the program's text, but its keys are field names and identifiers (#821).
+export const UNSIGNED_MARK = "\\u{1}unsigned";
 
 ## Returns `value` as JSON: an integer, or for one past `long`'s range (a
-## `WithSubject` id), its digits behind `UNSIGNED_MARK`.
+## `WithSubject` id), an object holding its digits under `UNSIGNED_MARK`.
 ##
 ## @param value the value
 ## @returns the JSON
@@ -553,7 +555,7 @@ export unsigned_json(value: ulong): JsonValue {
     if (value <= 9223372036854775807) {
         return JsonValue.Integer(value as long);
     }
-    return JsonValue.String($"{UNSIGNED_MARK}{value}");
+    return _tagged(UNSIGNED_MARK, JsonValue.String($"{value}"));
 }
 
 _tagged(name: String, value: JsonValue): JsonValue {

@@ -306,7 +306,7 @@ enum _Step {
 ## Returns `value` as compact JSON: object keys sorted by their bytes,
 ## numbers in their shortest form (`ryu_text`: `1.0`, `1e+20`, `1.5e-7`;
 ## `null` for one that is not finite), and an `unsigned_json` value past
-## `long`'s range as its digits.
+## `long`'s range as its bare digits.
 ##
 ## @param value the value
 ## @returns the text
@@ -337,6 +337,11 @@ export canonical_json(value: JsonValue): String {
                         }
                     }
                     Object(members) => {
+                        var digits = members.try_get(UNSIGNED_MARK);
+                        if (members.count == 1 and digits.is_value()) {
+                            out.append(digits.value().as_string().value());
+                            continue;
+                        }
                         out.append("{");
                         steps.append(_Step.Text("}"));
                         var keys = Array<String>();
@@ -363,11 +368,7 @@ export canonical_json(value: JsonValue): String {
                         out.append(ryu_text(number));
                     }
                     String(text) => {
-                        if (text.starts_with(UNSIGNED_MARK)) {
-                            out.append(text.substr_bytes(UNSIGNED_MARK.size, text.size - UNSIGNED_MARK.size));
-                        } else {
-                            out.append(_quoted(text));
-                        }
+                        out.append(_quoted(text));
                     }
                     Integer(number) => {
                         out.append($"{number}");
