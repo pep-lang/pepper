@@ -53,6 +53,18 @@ export enum Job {
 ## @param results where finished analyses go
 ## @param client where the diagnostics go
 export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client) {
+    var fillers = Array<process.Child>();
+    _analyze_documents(jobs, results, client, fillers);
+    # A filler still running is stopped; its workers end with its pipes.
+    for (var filler in fillers) {
+        filler.kill();
+        filler.wait();
+    }
+}
+
+# `analyze_documents`, keeping in `fillers` the `--fill-cache` children
+# the analyses start.
+_analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client, fillers: process.Child[]) {
     # The newest text of each document waiting for analysis, by URI.
     var pending = HashMap<String, String>();
     var order = Array<String>();
@@ -95,9 +107,15 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
         }
         pending.remove(uri);
         var start = os.Instant.now();
+        # The next analysis reads the compilation units a filler is still
+        # checking.
+        for (var filler in fillers) {
+            filler.wait();
+        }
+        fillers.clear();
         # Copies, so the analysis shares nothing with `pending` and can move
         # to the server's thread.
-        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true);
+        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true, fillers = fillers);
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
         var newer = _take_jobs(jobs, pending, order, build_options);
@@ -224,15 +242,27 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ## interfaces below changed, is checked again; the rest load, and their bodies
 ## are not even read.
 ##
+## With `workers`, a cache without the runtime's compilation unit (the first
+## analysis of a project, or with a new pep-lsp) is filled by a `pep-lsp
+## --fill-cache` child, added to `fillers`, while the program is checked whole
+## in this process, which gives the diagnostics sooner than compilation units
+## checked one after another with nothing to load.
+##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
 ## @param build_options the build options (`-D`) to analyze with, by name
 ## @param workers whether compilation units the cache lacks may be checked in
 ##   `--compilation-unit-worker` children of this executable: only when it is
 ##   pep-lsp
+## @param fillers where a `--fill-cache` child started goes, for the
+##   caller to wait for before the next analysis
 ## @returns the diagnostics and how the analysis went
 export analyze(
-    uri: String, text: String, build_options: HashMap<String, String> = HashMap<String, String>(), workers: bool = false
+    uri: String,
+    text: String,
+    build_options: HashMap<String, String> = HashMap<String, String>(),
+    workers: bool = false,
+    fillers: process.Child[] = Array<process.Child>()
 ): Analysis {
     var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
@@ -286,11 +316,23 @@ export analyze(
     }
     var folder = _project_folder(Path(path.value()));
     var cache = incremental.default_cache(folder);
-    # The compilation units below the document's that the cache does not have
-    # are checked in parallel, in worker children, as `pepc` checks them.
     var below = own.is_value() ? own.value() : units.count - 1;
     var prechecked = HashMap<ulong, (u8[], String, String)>();
-    if (workers and below > 1) {
+    # A cache without the runtime's compilation unit lacks the rest too: the
+    # program is checked whole here while a `--fill-cache` child fills the
+    # cache. Otherwise the compilation units below the document's that the cache
+    # does not have are checked in parallel, in worker children, as `pepc`
+    # checks them.
+    bool cold = workers and below > 1 and _cold(units, cache, program);
+    if (cold) {
+        var dir = _workers_folder(folder);
+        if (!_prepare_workers(dir, path.value(), text, out.os, build_options).is_value()) {
+            var filler = _start_filler(dir);
+            if (filler.is_value()) {
+                fillers.append(filler.value());
+            }
+        }
+    } else if (workers and below > 1) {
         var parallel = _check_in_workers(
             program, units, below, cache, prechecked, folder, path.value(), text, out.os, build_options
         );
@@ -303,28 +345,30 @@ export analyze(
     }
     var warnings = Array<Diagnostic>();
     var replayed = Array<String>();
-    var checked = incremental.check_compilation_units(
-        program,
-        units,
-        cache,
-        Optional<incremental.Reused>.Empty,
-        program.sources(),
-        warnings,
-        replayed,
-        incremental.Clock(false),
-        false,
-        false,
-        prechecked,
-        stop = own
-    );
+    var result = cold ?
+        check_whole(program, warnings) :
+        incremental.check_compilation_units(
+            program,
+            units,
+            cache,
+            Optional<incremental.Reused>.Empty,
+            program.sources(),
+            warnings,
+            replayed,
+            incremental.Clock(false),
+            false,
+            false,
+            prechecked,
+            stop = own
+        );
     # Warnings of the program's files, and of its own compilation unit's
     # checking.
     for (var warning in warnings) {
         reporter.add_if_in_document(warning);
     }
-    if (checked.is_err()) {
+    if (result.is_err()) {
         out.outcome = "found an error";
-        match (checked.error()) {
+        match (result.error()) {
             Unread(message) => {
                 reporter.out.append(lsp.Diagnostic(lsp.Range(), message));
             }
@@ -351,8 +395,8 @@ export analyze(
         out.diagnostics = reporter.out;
         return out;
     }
-    out.model = Optional<sema.Module>.Value(checked.value().module);
-    out.state = Optional<sema.PassState>.Value(checked.value().state);
+    out.model = Optional<sema.Module>.Value(result.value().module);
+    out.state = Optional<sema.PassState>.Value(result.value().state);
     out.outcome = "passed";
     out.diagnostics = reporter.out;
     return out;
@@ -390,11 +434,98 @@ _compilation_units(program: link.Program): incremental.CompilationUnit[] {
     return incremental.compilation_units(program, keys.base());
 }
 
+# Whether the build cache lacks the runtime's compilation unit, the first: then
+# it lacks every compilation unit above it too, whose keys its own interface is
+# part of.
+_cold(units: incremental.CompilationUnit[], cache: incremental.Cache, program: link.Program): bool {
+    var runtime = units[0];
+    runtime.key = incremental.compilation_unit_key(runtime, Array<String>());
+    return incremental.find_checked(cache, program, runtime).is_empty();
+}
+
+## Checks `program` whole, as one compilation unit on nothing: on an empty
+## cache, one pass over every file is sooner than the compilation units one
+## after another, each on the records of those it reads.
+##
+## @param program the program, its bodies deferred or not
+## @param warnings where its warnings go
+## @returns the module checked and its passes' state, or why not
+export check_whole(program: link.Program, warnings: Diagnostic[]): Result<incremental.Checked, incremental.CheckError> {
+    var unread = program.link_bodies(incremental.every_file(program));
+    if (unread.is_value()) {
+        return Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Unread(unread.value()));
+    }
+    var errors = program.check_diagnostics();
+    if (errors.count > 0) {
+        return Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Linking(errors));
+    }
+    warnings.append_all(program.warnings());
+    var whole = incremental.CompilationUnit("program");
+    for (var i in 0..program.files.count) {
+        whole.files.append(i);
+    }
+    var empty = incremental.merged_module(program, HashMap<ulong, u8[]>(), Array<ulong>());
+    var checked = incremental.check_compilation_unit(
+        program, empty.value(), whole, Optional<incremental.Reused>.Empty, program.sources(), warnings
+    );
+    if (checked.is_err()) {
+        return Result<incremental.Checked, incremental.CheckError>.err(
+            incremental.CheckError.Checking(checked.error())
+        );
+    }
+    var (module, state, _) = checked.value();
+    return Result<incremental.Checked, incremental.CheckError>.ok(incremental.Checked(module, state));
+}
+
+# The folder an analysis's compilation unit workers share, in the build folder
+# of the project `folder`.
+_workers_folder(folder: Path): Path {
+    return folder.join(Path(".pep")).join(Path("build")).join(Path($"lsp-compilation-units.{process.id()}"));
+}
+
+# Creates `dir` with the program the workers load: `root`, the OS it is
+# analyzed for and the build options, a line each, in `<dir>/program`,
+# and the root's `text` in `<dir>/root.text`. Returns why it could not, if
+# it could not.
+_prepare_workers(
+    dir: Path, root: String, text: String, os_name: String, build_options: HashMap<String, String>
+): String? {
+    Directory.remove_all(dir);
+    var created = Directory.create_all(dir);
+    if (created.is_err()) {
+        return Optional<String>.Value($"cannot create {dir}: {created.error().message}");
+    }
+    var job = StringBuilder();
+    job.append($"{root}\n{os_name}\n");
+    for (var (name, value) in build_options) {
+        job.append($"{name}={value}\n");
+    }
+    if (File.write_text(dir.join(Path("program")), job.to_string()).is_err()
+        or File.write_text(dir.join(Path("root.text")), text).is_err()) {
+        Directory.remove_all(dir);
+        return Optional<String>.Value($"cannot write to {dir}");
+    }
+    return Optional<String>.Empty;
+}
+
+# Starts `pep-lsp --fill-cache <dir>` on the program `dir` holds, if it
+# can: its standard output is not the protocol's.
+_start_filler(dir: Path): process.Child? {
+    var executable = process.executable_path();
+    if (executable.is_err()) {
+        return Optional<process.Child>.Empty;
+    }
+    var command = process.Command(executable.value().to_string());
+    command.argument("--fill-cache").argument(dir.to_string());
+    command.stdin(process.Stream.Null).stdout(process.Stream.Null);
+    var spawned = command.spawn();
+    return spawned.is_ok() ? Optional<process.Child>.Value(spawned.value()) : Optional<process.Child>.Empty;
+}
+
 # Checks compilation units `0..count` of `program` in `pep-lsp
 # --compilation-unit-worker` children (`incremental.check_in_workers`), each
 # loading the program as `analyze` did: `root`, with the document's `text`, for
-# `os_name`, with `build_options`, as `<dir>/program` and `<dir>/root.text` give
-# them.
+# `os_name`, with `build_options`.
 _check_in_workers(
     program: link.Program,
     units: incremental.CompilationUnit[],
@@ -407,21 +538,10 @@ _check_in_workers(
     os_name: String,
     build_options: HashMap<String, String>
 ): Result<void, String> {
-    var dir = folder.join(Path(".pep")).join(Path("build")).join(Path($"lsp-compilation-units.{process.id()}"));
-    Directory.remove_all(dir);
-    var created = Directory.create_all(dir);
-    if (created.is_err()) {
-        return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
-    }
-    var job = StringBuilder();
-    job.append($"{root}\n{os_name}\n");
-    for (var (name, value) in build_options) {
-        job.append($"{name}={value}\n");
-    }
-    if (File.write_text(dir.join(Path("program")), job.to_string()).is_err()
-        or File.write_text(dir.join(Path("root.text")), text).is_err()) {
-        Directory.remove_all(dir);
-        return Result<void, String>.err($"cannot write to {dir}");
+    var dir = _workers_folder(folder);
+    var prepared = _prepare_workers(dir, root, text, os_name, build_options);
+    if (prepared.is_value()) {
+        return Result<void, String>.err(prepared.value());
     }
     var checked = incremental.check_in_workers(
         program,
@@ -440,25 +560,19 @@ _check_in_workers(
     return checked;
 }
 
-## A `pep-lsp --compilation-unit-worker <dir>` child of an analysis
-## (`incremental.serve_compilation_units`): loads the program `<dir>/program`
-## names (its root, the OS it is analyzed for and the build options, a line
-## each, the root's text in `<dir>/root.text`), and checks each compilation unit
-## it is given, storing its record in the build cache.
-##
-## @param dir the folder the analysis and its workers share
-## @returns the exit code: 0 once standard input ends
-export compilation_unit_worker(dir: Path): int {
+# The program `<dir>/program` names, loaded as `analyze` loaded it: its
+# root, the OS it is analyzed for and the build options, a line each, the
+# root's text in `<dir>/root.text`. Returns the program and its root, or
+# why it did not load.
+_load_job(dir: Path): Result<(link.Program, Path), String> {
     var job = File.read_to_string(dir.join(Path("program")));
     var text = File.read_to_string(dir.join(Path("root.text")));
     if (job.is_err() or text.is_err()) {
-        File.stderr().write_all($"pep-lsp: no program to check in {dir}\n");
-        return 1;
+        return Result<(link.Program, Path), String>.err($"no program to check in {dir}");
     }
     var lines = job.value().split("\n");
     if (lines.count < 2) {
-        File.stderr().write_all($"pep-lsp: no program to check in {dir}\n");
-        return 1;
+        return Result<(link.Program, Path), String>.err($"no program to check in {dir}");
     }
     var root = Path(lines[0]);
     var host = link.Target();
@@ -471,10 +585,70 @@ export compilation_unit_worker(dir: Path): int {
     }
     var loaded = _load(root, text.value(), target_for(host, lines[1]));
     if (loaded.is_err()) {
+        return Result<(link.Program, Path), String>.err(loaded.error());
+    }
+    return Result<(link.Program, Path), String>.ok((loaded.value(), root));
+}
+
+## A `pep-lsp --fill-cache <dir>` child of an analysis that checked its program
+## whole: checks the compilation units below the document's that the build cache
+## lacks, in `--compilation-unit-worker` children through `dir`, as `analyze`
+## does, so that the next analysis loads them. Removes `dir` when done.
+##
+## @param dir the folder holding the program (`_load_job`), which its
+##   workers share
+## @returns the exit code: 0 once the compilation units are checked
+export fill_cache(dir: Path): int {
+    var loaded = _load_job(dir);
+    if (loaded.is_err()) {
+        File.stderr().write_all($"pep-lsp: {loaded.error()}\n");
+        Directory.remove_all(dir);
+        return 1;
+    }
+    var (program, root) = loaded.value();
+    var units = _compilation_units(program);
+    var below = units.count - 1;
+    for (var k in 0..units.count) {
+        if (units[k].files.contains(0)) {
+            below = k;
+        }
+    }
+    var checked = incremental.check_in_workers(
+        program,
+        units,
+        below,
+        incremental.default_cache(_project_folder(root)),
+        async.logical_cpus(),
+        HashMap<ulong, (u8[], String, String)>(),
+        dir,
+        Array<String>(),
+        Optional<process.Child>.Empty,
+        false,
+        (k) => true
+    );
+    Directory.remove_all(dir);
+    if (checked.is_err()) {
+        File.stderr().write_all($"pep-lsp: {checked.error()}\n");
+        return 1;
+    }
+    return 0;
+}
+
+## A `pep-lsp --compilation-unit-worker <dir>` child of an analysis
+## (`incremental.serve_compilation_units`): loads the program `<dir>/program`
+## names (its root, the OS it is analyzed for and the build options, a line
+## each, the root's text in `<dir>/root.text`), and checks each compilation unit
+## it is given, storing its record in the build cache.
+##
+## @param dir the folder the analysis and its workers share
+## @returns the exit code: 0 once standard input ends
+export compilation_unit_worker(dir: Path): int {
+    var loaded = _load_job(dir);
+    if (loaded.is_err()) {
         File.stderr().write_all($"pep-lsp: {loaded.error()}\n");
         return 1;
     }
-    var program = loaded.value();
+    var (program, root) = loaded.value();
     var units = _compilation_units(program);
     var cache = incremental.default_cache(_project_folder(root));
     var sources = program.sources();

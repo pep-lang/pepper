@@ -56,10 +56,15 @@ depends on changed. The cache outlives the server, so a restarted editor
 answers quickly once the files have been checked once. Delete the folder
 to start over.
 
-The first time, when the cache has nothing yet, the server checks the
-compilation units the file depends on in parallel: it starts copies of itself
+The first time, when the cache has nothing yet (it lacks even the standard
+library's compilation unit), the server checks the whole program at once,
+which is quicker than one compilation unit after another, and meanwhile a
+copy of itself (`pep-lsp --fill-cache`) fills the cache: it checks the
+compilation units the file depends on in parallel, in more copies
 (`pep-lsp --compilation-unit-worker`), one per processor at most, as
-`pepper build` does.
+`pepper build` does. The next check waits for it, then loads them. When the
+cache has some compilation units but not others, the server checks the
+missing ones that way itself.
 
 ## Command-line options
 
@@ -72,6 +77,7 @@ pep-lsp [--stdio]
 | `--stdio` | Talk over standard input and output: the default, accepted for editors that pass it |
 | `--serve` | Internal: run the server in this process, without the supervisor that restarts it. The supervisor starts it so |
 | `--compilation-unit-worker <dir>` | Internal: check compilation units for the server that started it, which passes them through `<dir>`. The server starts these itself. `--layer-worker` is its deprecated spelling |
+| `--fill-cache <dir>` | Internal: check the compilation units the build cache lacks, in `--compilation-unit-worker` copies, for the server that started it, which passes the program through `<dir>`. The server starts it itself when the cache is empty |
 | `-h`, `--help` | Print the options and exit |
 | `-V`, `--version` | Print `pep-lsp` and its version, and exit |
 

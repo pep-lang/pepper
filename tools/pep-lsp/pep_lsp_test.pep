@@ -2,6 +2,7 @@
 # and go-to-definition.
 
 import [Channel, Thread] from async;
+import [Diagnostic] from compiler.diagnostic;
 import [Directory, File, Path] from io;
 import json;
 import [JsonValue] from json;
@@ -1525,6 +1526,38 @@ fixing_an_import_that_did_not_load_refreshes_the_analysis() {
     expect_true(analyze(uri, text).outcome != "passed");
     temp_file_in(test, "broken.pep", "export f(): int { return 1; }\n# Fixed.\n");
     expect_equal(outcome_of(analyze(uri, text)), "passed");
+}
+
+# The program rooted at `name` in a new temporary folder for `test`, whose
+# text is `text`, loaded as an analysis loads it.
+loaded_program(test: String, name: String, text: String): link.Program {
+    var path = Path(lsp.uri_to_path(fresh_file(test, name, text)).value());
+    var setup = link.Setup();
+    setup.defer_bodies = true;
+    return link.load_program(path, setup).value();
+}
+
+[Test]
+a_program_checked_whole_passes_or_finds_its_error() {
+    # What an analysis on an empty cache does (`check_whole`).
+    var warnings = Array<Diagnostic>();
+    var passed = check_whole(loaded_program("whole_passes", "main.pep", "main(): int { return 2; }"), warnings);
+    expect_true(passed.is_ok());
+    bool has_main = false;
+    for (var f in passed.value().module.functions) {
+        has_main = has_main or f.name == "main";
+    }
+    expect_true(has_main);
+    var failed = check_whole(loaded_program("whole_fails", "main.pep", "main(): int { return \"two\"; }"), warnings);
+    expect_true(failed.is_err());
+    match (failed.error()) {
+        Checking(error) => {
+            expect_true(error.message.contains("String"));
+        }
+        else => {
+            expect_true(false);
+        }
+    }
 }
 
 [Test]

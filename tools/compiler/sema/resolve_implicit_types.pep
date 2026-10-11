@@ -148,10 +148,11 @@ _referenceable_functions(
 ): Array<(String, TypeName)> {
     var out = Array<(String, TypeName)>();
     for (var f in module.functions) {
-        if (f.is_generic_func or f.name.contains("<") or !has_body(module, state, f)) {
+        # The cheapest test first: most of a compilation unit's functions are checked.
+        if (checked.is_value() and is_checked_function(module, f) != checked.value()) {
             continue;
         }
-        if (checked.is_value() and is_checked_function(module, f) != checked.value()) {
+        if (f.is_generic_func or f.name.contains("<") or !has_body(module, state, f)) {
             continue;
         }
         var params = Array<TypeName>();
@@ -2329,6 +2330,13 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
     while (s < module.structs.count) {
         var st = module.structs[s];
         s += 1;
+        # A checked unit's structs were resolved when it was checked, their
+        # field defaults and methods; only those specialized on top of it
+        # (`_find<Point>`) have bodies. (Resolving their defaults again also
+        # added their call targets again.)
+        if (module.checked.structs.contains(st.name) and !_has_body(st)) {
+            continue;
+        }
         var place = $"s{st.ty.to_string()}";
         var struct_read = _type_read(st.ty.to_string());
         var struct_base = _base_read(st.ty.to_string());
@@ -2355,11 +2363,6 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
                     rewrite_expression(field.default.value(), _OverloadOnly(scopes, current))
                 );
             }
-        }
-        # A checked unit's methods were resolved when it was checked; only
-        # those specialized on top of it (`_find<Point>`) have bodies.
-        if (module.checked.structs.contains(st.name) and !_has_body(st)) {
-            continue;
         }
         # Method bodies see this struct's resolved fields and its methods
         # in place of its table entries.
@@ -2425,9 +2428,12 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
     ulong f = 0;
     while (f < module.functions.count) {
         var function = module.functions[f];
-        var at = $"f{function.name}";
         f += 1;
-        if (!function.body.is_value() or is_checked_function(module, function) or !work.needs(at, function)) {
+        if (!function.body.is_value() or is_checked_function(module, function)) {
+            continue;
+        }
+        var at = $"f{function.name}";
+        if (!work.needs(at, function)) {
             continue;
         }
         var none = Optional<TypeName>.Empty;

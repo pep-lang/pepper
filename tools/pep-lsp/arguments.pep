@@ -26,12 +26,16 @@ Options:
   --compilation-unit-worker <dir>
                  check compilation units for the server that started it (internal: the
                  server starts these itself)
+  --fill-cache <dir>
+                 check the compilation units the build cache lacks, in
+                 compilation unit workers, for the server that started it
+                 (internal: the server starts it itself)
   -h, --help     show this help
   -V, --version  show pep-lsp's version
 ";
 
 ## Handles the command line: prints the help or the version, runs a compilation
-## unit worker, or rejects an unknown argument.
+## unit worker or a cache filler, or rejects an unknown argument.
 ##
 ## @param args the arguments, the program's name first
 ## @returns Empty when the server should start, else the exit code of what
@@ -45,6 +49,9 @@ export handle_arguments(args: String[]): int? {
         # `--layer-worker` is the deprecated spelling.
         if ((arg == "--compilation-unit-worker" or arg == "--layer-worker") and i + 1 < args.count) {
             return Optional<int>.Value(compilation_unit_worker(Path(args[i + 1])));
+        }
+        if (arg == "--fill-cache" and i + 1 < args.count) {
+            return Optional<int>.Value(fill_cache(Path(args[i + 1])));
         }
         if (arg == "-h" or arg == "--help") {
             File.stdout().write_all(HELP);

@@ -2316,7 +2316,15 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   own loads from its record when its key is there, without reading its
   bodies, so an edit checks the document's compilation unit, and a change on disk
   the compilation units it reaches. The records of a first analysis stay for the
-  next session. The compilation units below the document's that the cache lacks are
+  next session. A cache without the runtime's compilation unit (`_cold`) lacks
+  them all: the program is then checked whole, as one compilation unit
+  (`check_whole`, `check_compilation_unit` on an empty module), since on an
+  empty cache one pass is sooner than ~30 compilation units in sequence, each
+  paying the passes' walks over everything it reads; meanwhile a
+  `pep-lsp --fill-cache <dir>` child (`fill_cache`) checks the compilation
+  units below the document's in workers, and the next analysis waits for it
+  (`analyze_documents`' `fillers`). Otherwise the compilation units below the
+  document's that the cache lacks are
   checked first in `pep-lsp --compilation-unit-worker <dir>` children
   (`incremental.check_in_workers`, `serve_compilation_units`, `check_for_worker`),
   which load the program `<dir>/program` names, with the document's text
@@ -2408,7 +2416,8 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   until its next change, sent then as a `didOpen`; after five ends in a
   row it gives up.
 - `arguments.pep`: the command line (`handle_arguments`): `--help`,
-  `--version` and `--compilation-unit-worker` answer without starting the server;
+  `--version`, `--compilation-unit-worker` and `--fill-cache` answer without
+  starting the server;
   `main.pep` only starts it.
 - Sema takes seconds per analysis (1.5 s for a program that is only the
   runtime, 20 s for pep-doc), which is why requests never wait for it.

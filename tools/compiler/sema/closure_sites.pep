@@ -1282,8 +1282,11 @@ extend _Signatures with Rewriter;
 ## @param state the passes' state
 ## @returns whether anything changed
 export sync_closures(module: Module, state: PassState): bool {
+    # A checked unit's closures are in step already, and no code walked
+    # here creates one: only the compilation unit's own closures can change.
+    var own = unit_decls(module).structs;
     bool any = false;
-    for (var st in module.structs) {
+    for (var st in own) {
         if (is_closure_struct(st.name)) {
             any = true;
         }
@@ -1294,7 +1297,7 @@ export sync_closures(module: Module, state: PassState): bool {
     # Only functions creating a closure with an unknown type have anything
     # to teach.
     var unknown = HashSet<String>();
-    for (var st in module.structs) {
+    for (var st in own) {
         if (is_closure_struct(st.name) and _has_unknown_types(st)) {
             unknown.insert(st.ty.to_string());
             unknown.insert(st.name);
@@ -1316,7 +1319,7 @@ export sync_closures(module: Module, state: PassState): bool {
         learned = learner.learned;
     }
     bool changed = false;
-    for (var st in module.structs) {
+    for (var st in own) {
         if (!is_closure_struct(st.name)) {
             continue;
         }
@@ -1344,7 +1347,7 @@ export sync_closures(module: Module, state: PassState): bool {
     }
     # Each creation's function type follows its closure's `__call`.
     var signatures = HashMap<String, TypeName>();
-    for (var st in module.structs) {
+    for (var st in own) {
         if (!is_closure_struct(st.name)) {
             continue;
         }

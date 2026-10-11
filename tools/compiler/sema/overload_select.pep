@@ -391,9 +391,18 @@ export struct Overloads {
                 }
             }
         }
+        # Only the sets' members are looked up.
+        var wanted = HashSet<String>();
+        for (var (_, names) in module.overload_sets) {
+            for (var m in names) {
+                wanted.insert(m);
+            }
+        }
         var functions = HashMap<String, FunctionDef>();
         for (var f in module.functions) {
-            functions[f.name] = f;
+            if (wanted.contains(f.name)) {
+                functions[f.name] = f;
+            }
         }
         for (var (set, names) in module.overload_sets) {
             var members = Array<Member>();
@@ -444,11 +453,16 @@ export struct Overloads {
                 }
             }
         }
+        # A type with no traits needs no entry: one with none reads the same.
         for (var st in module.structs) {
-            _conform(st.ty.to_string(), st.traits);
+            if (st.traits.count > 0) {
+                _conform(st.ty.to_string(), st.traits);
+            }
         }
         for (var ext in module.extensions) {
-            _conform(ext.target.to_string(), ext.traits);
+            if (ext.traits.count > 0) {
+                _conform(ext.target.to_string(), ext.traits);
+            }
             for (var m in ext.methods) {
                 extension_methods[m.loc] = (ext.is_exported, ext.is_private);
             }
