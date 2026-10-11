@@ -96,6 +96,23 @@ it points to. `Directory.remove_all` removes links and never follows them.
 Making a symlink on Windows needs Developer Mode or an administrator;
 without either it fails with `is_permission_denied()`.
 
+## Moving a file to another thread
+
+A `File` is not thread-safe, so a thread cannot capture one. To hand an
+open file to another thread, such as the pipe from a child process's
+output to a thread that reads it while this one writes to the child,
+`file.into_transfer()` moves its handle into an `io.FileTransfer`, a
+thread-safe token that a `shared` function can capture or a `Channel` can
+carry, and `io.File.adopt(transfer)` takes it out again on the other
+thread. The File it came from is closed afterwards, only the first `adopt`
+gets the handle, and a token no one adopts closes the file when it goes.
+A stream moves the same way, as a `SocketTransfer` (see
+[Moving a stream to another worker](tasks.md#moving-a-stream-to-another-worker)).
+
+```pepper
+{{#include ../../examples/files-transfer.pep}}
+```
+
 ## Archives
 
 `archive.TarReader.extract` uses all of the above: it restores each file's

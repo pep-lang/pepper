@@ -4,6 +4,7 @@
 # their interfaces), and an unchanged program is not built again.
 
 import compiler.driver;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import os;
@@ -42,7 +43,7 @@ _load(root: Path): link.Program {
 _build(root: Path): driver.Built {
     var output = root.join(Path("main"));
     var options = driver.BuildOptions(output, root.join(Path("build")));
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
     options.in_process = true;
     var built = driver.build(_load(root), options);
     if (built.is_err()) {
@@ -255,7 +256,7 @@ keeps_no_copy_of_the_bodies_it_decodes() {
         setup.defer_bodies = true;
         var output = root.join(Path("main"));
         var options = driver.BuildOptions(output, root.join(Path("build")));
-        options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
         options.in_process = true;
         options.verify_cutoff = true;
         var program = link.load_program(root.join(Path("main.pep")), setup);
@@ -277,7 +278,7 @@ keeps_no_copy_of_the_bodies_it_decodes() {
 keeps_the_objects_another_build_stored_first() {
     var folder = TempFolder("store_twice");
     var root = folder.path;
-    var cache = driver.Cache(root.join(Path("cache")));
+    var cache = incremental.Cache(root.join(Path("cache")));
     var first = root.join(Path("first"));
     Directory.create_all(first);
     File.write_text(first.join(Path("0.o")), "first");
@@ -303,7 +304,7 @@ keeps_the_objects_another_build_stored_first() {
 prunes_neither_reused_nor_recent_keys() {
     var folder = TempFolder("prune");
     var root = folder.path;
-    var cache = driver.Cache(root.join(Path("cache")));
+    var cache = incremental.Cache(root.join(Path("cache")));
     var hour: long = 3600000000000;
     var now = os.SystemTime.now().unix_nanoseconds();
     for (var i in 0..8) {
@@ -374,7 +375,7 @@ keeps_string_literals_apart_across_units() {
     var build = () => {
         var output = root.join(Path("main"));
         var options = driver.BuildOptions(output, root.join(Path("build")));
-        options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
         options.in_process = true;
         var program = link.load_program(root.join(Path("main.pep")), setup);
         expect_true(program.is_ok());
@@ -418,7 +419,7 @@ _build_deferred(root: Path): bool {
     setup.defer_bodies = true;
     var output = root.join(Path("main"));
     var options = driver.BuildOptions(output, root.join(Path("build")));
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
     options.in_process = true;
     var program = link.load_program(root.join(Path("main.pep")), setup);
     expect_true(program.is_ok());

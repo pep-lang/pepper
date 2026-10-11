@@ -5,6 +5,33 @@ import compiler.ast;
 import async;
 import compiler.codegen;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
+import [
+    Cache,
+    check_layer,
+    check_layers,
+    Clock,
+    compare_locations,
+    every_file,
+    find_checked,
+    Keys,
+    Layer,
+    layer_key,
+    LayerError,
+    layers,
+    merged_module,
+    render_warnings,
+    reuse,
+    reuse_after_sema,
+    Reused,
+    check_for_worker,
+    check_in_workers,
+    layer_file,
+    mark,
+    serve_layers,
+    store_checked,
+    warnings_in,
+    write_record
+] from compiler.incremental;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -12,9 +39,7 @@ import llvm;
 import os;
 import process;
 import compiler.sema;
-import "cache";
 import "emit_static";
-import "layers";
 import "library";
 import "linker";
 import "lto";
@@ -101,25 +126,8 @@ report_warnings(warnings: Diagnostic[], sources: SourceText[]) {
     for (var w in warnings) {
         ordered.append(w);
     }
-    ordered.sort((a, b) => _compare_locations(a, b));
+    ordered.sort((a, b) => compare_locations(a, b));
     File.stderr().write_all(render_all(ordered, sources) + "\n");
-}
-
-## Orders diagnostics by file, then by where in it they start; those
-## without a location first.
-_compare_locations(a: Diagnostic, b: Diagnostic): int {
-    if (!a.location.is_value() or !b.location.is_value()) {
-        return (a.location.is_value() ? 1 : 0) - (b.location.is_value() ? 1 : 0);
-    }
-    var x = a.location.value();
-    var y = b.location.value();
-    if (x.file != y.file) {
-        return x.file < y.file ? -1 : 1;
-    }
-    if (x.span.start != y.span.start) {
-        return x.span.start < y.span.start ? -1 : 1;
-    }
-    return 0;
 }
 
 ## The libraries `[Link("lib")]` names on the program's externs, and the
@@ -281,31 +289,6 @@ export struct Built {
     construct() {}
 }
 
-## Whether `PEPC_VERIFY_CUTOFF` checks every layer loaded by early cutoff
-## again and compares: its record, written on an earlier check of the
-## layers below, must be what checking it on them now gives.
-_verify_cutoff(): bool {
-    var named = os.environment("PEPC_VERIFY_CUTOFF");
-    return named.is_value() and !named.value().is_empty;
-}
-
-## Whether `PEPC_TRACE_LAYERS` prints, for each layer, the layers it
-## reads and the hash of what it changed in the interface
-## (`sema.DeltaBase.own_hash`).
-_trace_layers(): bool {
-    var named = os.environment("PEPC_TRACE_LAYERS");
-    return named.is_value() and !named.value().is_empty;
-}
-
-## Whether `PEPC_RECORD_STATS` prints the bytes each field of the module
-## took in each delta record stored.
-_record_stats(): bool {
-    var named = os.environment("PEPC_RECORD_STATS");
-    return named.is_value() and !named.value().is_empty;
-}
-
-## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
-## builds with and without them.
 # `program.link_bodies(bodies)`; a syntax error it reads is printed as pepc
 # prints one loading the program, which it would have been then, and the
 # error returned is empty: printed already.
@@ -318,215 +301,31 @@ _link_bodies(program: link.Program, bodies: bool[]): String? {
     return Optional<String>.Empty;
 }
 
-# Every file of `program`, for `Program.link_bodies`.
-_every_file(program: link.Program): bool[] {
-    var out = Array<bool>();
-    for (var _ in program.files) {
-        out.append(true);
-    }
-    return out;
-}
-
-# The ones of `warnings` in a file of `layer`.
-_warnings_in(warnings: Diagnostic[], layer: Layer): Diagnostic[] {
-    var files = HashSet<ulong>();
-    for (var file in layer.files) {
-        files.insert(file);
-    }
-    var out = Array<Diagnostic>();
-    for (var w in warnings) {
-        if (w.location.is_value() and files.contains(w.location.value().file)) {
-            out.append(w);
+# `error` as the build reports it, rendered; a file whose bodies did not
+# read prints as `_link_bodies` prints it, and the error is empty.
+_layer_error(error: LayerError, sources: SourceText[]): String {
+    match (error) {
+        Unread(message) => {
+            print($"pepc: {message}");
+            return "";
+        }
+        Linking(diagnostics) => {
+            return render_all(diagnostics, sources);
+        }
+        Checking(diagnostic) => {
+            return render_all([diagnostic], sources);
+        }
+        Failed(message) => {
+            return message;
         }
     }
-    return out;
 }
 
-# `warnings` in order of their places, rendered as the build prints them,
-# or empty: what a layer's record keeps to print again when it is loaded.
-_render_warnings(warnings: Diagnostic[], sources: SourceText[]): String {
-    if (warnings.is_empty) {
-        return "";
-    }
-    var ordered = Array<Diagnostic>();
-    ordered.append_all(warnings);
-    ordered.sort((a, b) => _compare_locations(a, b));
-    return render_all(ordered, sources) + "\n";
-}
-
+## Whether `PEPC_NO_LAYERS` turns checked layers off, for comparing
+## builds with and without them.
 _layers_off(): bool {
     var named = os.environment("PEPC_NO_LAYERS");
     return named.is_value() and !named.value().is_empty;
-}
-
-# What `_check_layers` gives: the module checked and the state of the last
-# layer's passes; or, when the cache has the last layer's objects
-# (`_store_last`), only their folder.
-struct _Checked {
-    var module: sema.Module;
-    var state: sema.PassState;
-    var last: Path? = Optional<Path>.Empty;
-
-    construct(module: sema.Module, state: sema.PassState) {
-        this.module = module;
-        this.state = state;
-    }
-}
-
-## Checks `program` layer by layer (`layers.pep`). Each layer is keyed on
-## its files and the own interfaces of the layers it reads; the cache's
-## record under that key is loaded, else the layer is checked on the module
-## of the layers it reads, their records merged, and its record stored. The
-## last layer, the program's own, has no record: it is checked unless, with
-## `last_extension`, the cache has its objects under its key. A layer loaded
-## prints the warnings its check gave, which its record keeps.
-##
-## @param last_extension the objects' extension when the cache may hold the
-##   last layer's objects (`_store_last`), else empty
-## @returns what was checked (`_Checked`), or the error, rendered
-_check_layers(
-    program: link.Program,
-    layered: Layer[],
-    cache: Cache,
-    reused: Reused?,
-    sources: SourceText[],
-    warnings: Diagnostic[],
-    clock: _Clock,
-    trace: bool,
-    verify: bool,
-    prechecked: HashMap<ulong, (u8[], String, String)> = HashMap<ulong, (u8[], String, String)>(),
-    last_extension: String = "",
-    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
-): Result<_Checked, String> {
-    var module = sema.Module();
-    var state = sema.PassState(program.target);
-    # Each layer's own interface and record, as loaded or checked.
-    var owns = Array<String>();
-    for (var _ in 0..layered.count) {
-        owns.append("");
-    }
-    var records = HashMap<ulong, u8[]>();
-    # The layers loaded, whose files' bodies are not linked.
-    var loaded = HashSet<ulong>();
-    bool checked_any = false;
-    bool verify_cutoff = verify or _verify_cutoff();
-    bool trace_layers = _trace_layers();
-    for (var k in 0..layered.count) {
-        layered[k].key = layer_key(layered[k], owns);
-        var layer = layered[k];
-        # The last layer is the program's own, checked on every build that
-        # gets this far.
-        if (k + 1 < layered.count) {
-            # What this build's workers found or made, else the cache's: the
-            # cache may have changed since, as builds share it.
-            var found = prechecked.contains(k) ?
-                Optional<(u8[], String, String)>.Value(prechecked[k]) :
-                find_checked(cache, program, layer);
-            if (found.is_value()) {
-                var (bytes, own, warned) = found.value();
-                # Its warnings, as checking it gave them.
-                if (!warned.is_empty) {
-                    File.stderr().write_all(warned);
-                }
-                if (verify_cutoff and checked_any) {
-                    var wrong = _verify_reuse_merged(program, layered, records, k, bytes, reused, sources, warnings);
-                    if (wrong.is_value()) {
-                        return Result<_Checked, String>.err($"PEPC_VERIFY_CUTOFF: {wrong.value()}");
-                    }
-                }
-                owns[k] = own;
-                records[k] = bytes;
-                loaded.insert(k);
-                clock.lap($"find {layer.name}");
-                if (trace_layers) {
-                    File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} loaded\n");
-                }
-                if (trace) {
-                    var how = checked_any ? "unchanged interface below" : "checked already";
-                    File.stderr().write_all($"cache: layer {layer.name} {how}\n");
-                }
-                continue;
-            }
-        }
-        # The last layer's objects, when a build compiled them under its key
-        # (`_store_last`): nothing is checked or generated, as Go links a
-        # `main` package whose inputs did not change from its cache.
-        if (k + 1 == layered.count and !last_extension.is_empty) {
-            var folder = cache.objects($"layer {layer.name}", layer.key);
-            if (folder.join(Path($"entry.{last_extension}")).is_file()) {
-                var out = _Checked(module, state);
-                out.last = Optional<Path>.Value(folder);
-                return Result<_Checked, String>.ok(out);
-            }
-        }
-        # The first layer to check: the files of the layers not loaded are
-        # linked and checked before it. Those of the layers loaded are as
-        # they were when checked, without an error or a warning (see
-        # `store`).
-        if (!checked_any) {
-            var bodies = _every_file(program);
-            for (var j in loaded) {
-                for (var file in layered[j].files) {
-                    bodies[file] = false;
-                }
-            }
-            var unread = _link_bodies(program, bodies);
-            if (unread.is_value()) {
-                return Result<_Checked, String>.err(unread.value());
-            }
-            var errors = program.check();
-            if (errors.is_value()) {
-                return Result<_Checked, String>.err(errors.value());
-            }
-            warnings.append_all(program.warnings());
-            clock.lap("link bodies");
-        }
-        # The layers it reads, their records merged.
-        var merged = merged_module(program, records, layer.reads);
-        if (merged.is_err()) {
-            return Result<_Checked, String>.err($"the layers layer {layer.name} reads do not merge: {merged.error()}");
-        }
-        module = merged.value();
-        clock.lap($"merge {layer.name}");
-        # What its record is a delta on, indexed before the layer changes it.
-        var base = sema.DeltaBase();
-        if (k + 1 < layered.count) {
-            sema.index_module(module, base);
-            clock.lap("index");
-        }
-        var checked = _check_layer(program, module, layer, reused, sources, warnings, times);
-        if (checked.is_err()) {
-            return Result<_Checked, String>.err(checked.error());
-        }
-        var (after, ran_state, aliases) = checked.value();
-        module = after;
-        state = ran_state;
-        checked_any = true;
-        clock.lap($"layer {layer.name}");
-        if (k + 1 == layered.count) {
-            break;
-        }
-        var unit = sema.finish_checked(module, state, aliases);
-        # A layer with a warning is checked again on each build, which
-        # reports it again; so a layer loaded had none.
-        var (
-            bytes, own
-        ) = store_checked(cache, program, layer, unit, base, _render_warnings(_warnings_in(warnings, layer), sources));
-        owns[k] = own;
-        records[k] = bytes;
-        clock.lap("store");
-        if (_record_stats()) {
-            _print_record_stats(layer.name, base);
-        }
-        if (trace_layers) {
-            File.stderr().write_all($"layers: {layer.name} own {own.substr(0, 16)} checked\n");
-        }
-    }
-    if (trace) {
-        File.stderr().write_all($"cache: {loaded.count} of {layered.count} layers checked already\n");
-    }
-    var out = _Checked(module, state);
-    return Result<_Checked, String>.ok(out);
 }
 
 # The symbols `ir`, a layer's module just compiled with `partition`,
@@ -560,9 +359,9 @@ _defines(ir: llvm.Module, partition: codegen.Partition): String {
 # read it.
 _copy_defines(cache: Cache, layer: Layer, dir: Path, k: ulong) {
     var text = File.read_to_string(cache.objects($"layer {layer.name}", layer.key).join(Path("defines")));
-    var partial = _layer_file(dir, k, $"defines.{process.id()}");
+    var partial = layer_file(dir, k, $"defines.{process.id()}");
     File.write_text(partial, text.is_ok() ? text.value() : "");
-    File.rename(partial, _layer_file(dir, k, "defines"));
+    File.rename(partial, layer_file(dir, k, "defines"));
 }
 
 # The symbols the objects of the layers numbered `ks` define (`_defines`),
@@ -571,7 +370,7 @@ _defined_by(cache: Cache, layered: Layer[], ks: ulong[], dir: Path?): HashSet<St
     var out = HashSet<String>();
     for (var k in ks) {
         var path = dir.is_value() ?
-            _layer_file(dir.value(), k, "defines") :
+            layer_file(dir.value(), k, "defines") :
             cache.objects($"layer {layered[k].name}", layered[k].key).join(Path("defines"));
         var text = File.read_to_string(path);
         if (text.is_err()) {
@@ -766,30 +565,11 @@ _layer_jobs(options: BuildOptions): ulong {
     return options.layer_jobs != 0 ? options.layer_jobs : async.logical_cpus();
 }
 
-# The files a layer worker and the build pass layer `k` through, in `dir`.
-_layer_file(dir: Path, k: ulong, what: String): Path {
-    return dir.join(Path($"{k}.{what}"));
-}
-
-# A layer worker child: its process, and the layer it checks, if any.
-struct _Worker {
-    var child: process.Child;
-    var layer: long = -1;
-    ## Whether it was told which layers were done (its first line).
-    var told: bool = false;
-
-    construct(child: process.Child) {
-        this.child = child;
-    }
-}
-
 # Checks every layer but the last, the program's own, in up to `jobs`
-# `--layer-worker` children, each layer once the layers it reads are done,
-# and puts in `prechecked` the record, own interface and warnings of every
-# layer, found in the cache or checked: `_check_layers` takes them from
-# there, not from the cache again, which builds running at once may have
-# changed since, so its keys are the ones the objects were found or stored
-# under.
+# `--layer-worker` children (`incremental.check_in_workers`), each of which
+# also compiles the layer into its object, and puts in `prechecked` the
+# record, own interface and warnings of every layer, found in the cache or
+# checked.
 _check_in_workers(
     program: link.Program,
     layered: Layer[],
@@ -806,11 +586,36 @@ _check_in_workers(
     if (created.is_err()) {
         return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
     }
-    var checked = _check_in_workers_at(program, layered, options, jobs, prechecked, dir);
+    var cache = options.cache.value();
+    var extension = _object_extension(options, codegen.target_triple(program.target));
+    var checked = check_in_workers(
+        program,
+        layered,
+        layered.count - 1,
+        cache,
+        jobs,
+        prechecked,
+        dir,
+        options.worker_args,
+        options.early_worker,
+        options.trace_time,
+        (k) => {
+            # A layer's object goes with its record: one without it (pruned,
+            # say) is checked again, which compiles it.
+            if (!_layer_object(cache, layered[k], extension).is_file()) {
+                return false;
+            }
+            # Reused now: no build pruning the cache removes it before this
+            # one links it.
+            cache.used(cache.objects($"layer {layered[k].name}", layered[k].key));
+            _copy_defines(cache, layered[k], dir, k);
+            return true;
+        }
+    );
     # With `-T passes`, the time each worker's passes took (`<k>.passes`).
     if (options.pass_times.is_value()) {
         for (var k in 0..layered.count) {
-            var passes = File.read_to_string(_layer_file(dir, k, "passes"));
+            var passes = File.read_to_string(layer_file(dir, k, "passes"));
             if (passes.is_ok()) {
                 options.pass_times.value().add_all(sema.PassTimes.parse(passes.value()));
             }
@@ -820,213 +625,6 @@ _check_in_workers(
         Directory.remove_all(dir);
     }
     return checked;
-}
-
-# `_check_in_workers`, passing the layers through `dir`.
-_check_in_workers_at(
-    program: link.Program,
-    layered: Layer[],
-    options: BuildOptions,
-    jobs: ulong,
-    prechecked: HashMap<ulong, (u8[], String, String)>,
-    dir: Path
-): Result<void, String> {
-    var cache = options.cache.value();
-    var extension = _object_extension(options, codegen.target_triple(program.target));
-    var executable = process.executable_path();
-    if (executable.is_err()) {
-        return Result<void, String>.err($"cannot find this compiler: {executable.error().message}");
-    }
-    var count = layered.count - 1;
-    var owns = Array<String>();
-    # A layer's record is ready (`checked`), then its object (`done`).
-    var checked = Array<bool>();
-    var done = Array<bool>();
-    var started = Array<bool>();
-    # With `-T time`, when each layer a worker checked began and ended, in
-    # milliseconds from the start, with the layers it reads (`schedule`, as
-    # Ninja's `.ninja_log`): the chain of layers that bounds the build.
-    var clock_start = os.Instant.now();
-    var schedule = StringBuilder();
-    var began = HashMap<ulong, ulong>();
-    for (var _ in 0..layered.count) {
-        owns.append("");
-        checked.append(false);
-        done.append(false);
-        started.append(false);
-    }
-    var ready = Array<ulong>();
-    var workers = Array<_Worker>();
-    if (options.early_worker.is_value()) {
-        workers.append(_Worker(options.early_worker.value()));
-    }
-    ulong left = count;
-    var failure = Optional<String>.Empty;
-    while (left > 0 and !failure.is_value()) {
-        bool progressed = false;
-        for (var k in 0..count) {
-            if (started[k]) {
-                continue;
-            }
-            # A layer is checked on the records of the layers it reads.
-            bool reads_done = true;
-            for (var d in layered[k].reads) {
-                reads_done = reads_done and checked[d];
-            }
-            if (!reads_done) {
-                continue;
-            }
-            started[k] = true;
-            progressed = true;
-            layered[k].key = layer_key(layered[k], owns);
-            var found = find_checked(cache, program, layered[k]);
-            # A layer's object goes with its record: one without it (pruned,
-            # say) is checked again, which compiles it.
-            if (found.is_value() and _layer_object(cache, layered[k], extension).is_file()) {
-                # Reused now: no build pruning the cache removes it before
-                # this one links it.
-                cache.used(cache.objects($"layer {layered[k].name}", layered[k].key));
-                var (bytes, own, warned) = found.value();
-                File.write_bytes(_layer_file(dir, k, "rec"), bytes);
-                _copy_defines(cache, layered[k], dir, k);
-                owns[k] = own;
-                prechecked[k] = (bytes, own, warned);
-                checked[k] = true;
-                done[k] = true;
-                left -= 1;
-            } else {
-                ready.append(k);
-            }
-        }
-        # Each ready layer to an idle worker, starting one while fewer than
-        # `jobs` are checking or compiling: one waiting for the objects of
-        # the layers it reads uses no processor, but holds the program in
-        # memory (at most half again as many workers, and two more).
-        while (!ready.is_empty) {
-            var idle = Optional<ulong>.Empty;
-            ulong active = 0;
-            for (var w in 0..workers.count) {
-                var at = workers[w].layer;
-                if (at < 0) {
-                    if (!idle.is_value()) {
-                        idle = Optional<ulong>.Value(w);
-                    }
-                } else if (!checked[at as ulong] or _layer_file(dir, at as ulong, "compiling").is_file()) {
-                    active += 1;
-                }
-            }
-            if (active >= jobs) {
-                break;
-            }
-            if (!idle.is_value()) {
-                if (workers.count as ulong >= jobs + jobs / 2 + 2) {
-                    break;
-                }
-                var command = process.Command(executable.value().to_string());
-                for (var arg in options.worker_args) {
-                    command.argument(arg);
-                }
-                command.argument("--layer-worker").argument(dir.to_string());
-                command.stdin(process.Stream.Pipe);
-                var spawned = command.spawn();
-                if (spawned.is_err()) {
-                    failure = Optional<String>.Value($"cannot run {executable.value()}: {spawned.error().message}");
-                    break;
-                }
-                workers.append(_Worker(spawned.value()));
-                idle = Optional<ulong>.Value(workers.count - 1);
-            }
-            var k = ready.remove_at(0);
-            var worker = workers[idle.value()];
-            var line = StringBuilder();
-            if (!worker.told) {
-                # The layers done already, whose files' bodies the worker
-                # need not read, as the build's own process does not.
-                line.append("done");
-                for (var d in 0..layered.count) {
-                    if (checked[d]) {
-                        line.append($" {d}");
-                    }
-                }
-                line.append("\n");
-                worker.told = true;
-            }
-            line.append($"{k} {layered[k].key}\n");
-            var sent = worker.child.stdin().write_all(line.to_string());
-            if (sent.is_err()) {
-                failure = Optional<String>.Value($"a layer worker stopped: {sent.error().message}");
-                break;
-            }
-            worker.layer = k as long;
-            began[k] = (os.Instant.now() - clock_start).milliseconds() as ulong;
-            progressed = true;
-        }
-        for (var worker in workers) {
-            if (worker.layer < 0) {
-                continue;
-            }
-            var k = worker.layer as ulong;
-            if (!checked[k] and _layer_file(dir, k, "checked").is_file()) {
-                var record = _read_worker_record(dir, k, layered[k]);
-                if (record.is_err()) {
-                    failure = Optional<String>.Value(record.error());
-                    continue;
-                }
-                var (bytes, own, warned) = record.value();
-                owns[k] = own;
-                prechecked[k] = (bytes, own, warned);
-                checked[k] = true;
-                progressed = true;
-            }
-            if (!_layer_file(dir, k, "done").is_file()) {
-                var ended = worker.child.try_wait();
-                if (ended.is_err() or ended.value().is_value()) {
-                    failure = Optional<String>.Value($"the worker checking layer {layered[k].name} ended");
-                }
-                continue;
-            }
-            worker.layer = -1;
-            progressed = true;
-            if (options.trace_time) {
-                var reads = StringBuilder();
-                for (var d in layered[k].reads) {
-                    reads.append($" {d}");
-                }
-                var ended = (os.Instant.now() - clock_start).milliseconds();
-                schedule.append($"{k} {layered[k].name} {began[k]} {ended}{reads.to_string()}\n");
-            }
-            var error = File.read_to_string(_layer_file(dir, k, "err"));
-            if (error.is_ok()) {
-                failure = Optional<String>.Value(error.value());
-                continue;
-            }
-            if (!checked[k]) {
-                failure = Optional<String>.Value($"the worker checking layer {layered[k].name} left no record");
-                continue;
-            }
-            done[k] = true;
-            left -= 1;
-        }
-        if (!progressed and !failure.is_value()) {
-            async.Thread.sleep(2);
-        }
-    }
-    if (options.trace_time) {
-        File.write_text(dir.join(Path("schedule")), schedule.to_string());
-    }
-    for (var worker in workers) {
-        worker.child.stdin().close();
-    }
-    for (var worker in workers) {
-        if (failure.is_value()) {
-            worker.child.kill();
-        }
-        worker.child.wait();
-    }
-    if (failure.is_value()) {
-        return Result<void, String>.err(failure.value());
-    }
-    return Result<void, String>.ok();
 }
 
 ## A `--layer-worker` child of a build with `options`: loads the layers as
@@ -1048,7 +646,7 @@ export layer_worker(program: link.Program, options: BuildOptions, dir: Path): in
         File.stderr().write_all("pepc: a layer worker needs the build cache\n");
         return 1;
     }
-    var clock = _Clock(options.trace_time);
+    var clock = Clock(options.trace_time);
     var cache = options.cache.value();
     var triple = codegen.target_triple(program.target);
     var units = link.units(program);
@@ -1059,74 +657,16 @@ export layer_worker(program: link.Program, options: BuildOptions, dir: Path): in
     clock.lap("worker reuse");
     var layered = layers(program, link.layer_units(program), keys.base());
     clock.lap("worker layers");
-    # The files whose bodies are read: all but those of the layers done
-    # when the worker started (its first line, `done k...`), which it is
-    # never given; linked at the first layer it is.
-    var bodies = _every_file(program);
-    bool linked = false;
     var sources = program.sources();
-    for (var read in File.stdin().lines()) {
-        if (read.is_err()) {
-            break;
-        }
-        var parts = read.value().trim().split(" ");
-        if (parts.count > 0 and parts[0] == "done") {
-            for (var i in 1..parts.count) {
-                var d = ulong.parse(parts[i]);
-                if (d.is_value() and d.value() < layered.count) {
-                    for (var file in layered[d.value()].files) {
-                        bodies[file] = false;
-                    }
-                }
-            }
-            continue;
-        }
-        if (parts.count != 2) {
-            continue;
-        }
-        if (!linked) {
-            var unread = _link_bodies(program, bodies);
-            if (unread.is_value()) {
-                File.stderr().write_all($"{unread.value()}\n");
-                return 1;
-            }
-            linked = true;
-            clock.lap("worker link bodies");
-        }
-        var number = ulong.parse(parts[0]);
-        if (!number.is_value() or number.value() >= layered.count) {
-            continue;
-        }
-        var k = number.value();
-        var layer = layered[k];
-        layer.key = parts[1];
-        var records = HashMap<ulong, u8[]>();
-        String? error;
-        for (var d in layer.reads) {
-            var bytes = File.read_bytes(_layer_file(dir, d, "rec"));
-            if (bytes.is_err()) {
-                error = Optional<String>.Value($"no record of layer {layered[d].name} for layer {layer.name}");
-                break;
-            }
-            records[d] = bytes.value();
-        }
-        if (!error.is_value()) {
-            error = _work_on(program, layer, records, cache, reused, sources, dir, k, options);
-        }
-        if (error.is_value()) {
-            File.write_text(_layer_file(dir, k, "err"), error.value());
-        }
-        var partial = _layer_file(dir, k, $"done.{process.id()}");
-        File.write_text(partial, "");
-        File.rename(partial, _layer_file(dir, k, "done"));
-    }
-    return 0;
+    return serve_layers(program, layered, dir, clock, (k, records) => {
+        return _work_on(program, layered[k], records, cache, reused, sources, dir, k, options);
+    });
 }
 
 # Checks `layer` (number `k`) for a layer worker on the merged `records`
-# of the layers it reads, stores its record and leaves it in `dir`: the
-# error, if any.
-
+# of the layers it reads, stores its record and leaves it in `dir`
+# (`incremental.check_for_worker`), then compiles its object: the error, if
+# any.
 _work_on(
     program: link.Program,
     layer: Layer,
@@ -1138,61 +678,27 @@ _work_on(
     k: ulong,
     options: BuildOptions
 ): String? {
-    bool trace = options.trace_time;
-    var t0 = os.Instant.now();
-    var stages = "";
-    var merged = merged_module(program, records, layer.reads);
-    if (merged.is_err()) {
-        return Optional<String>.Value($"the layers layer {layer.name} reads do not merge: {merged.error()}");
-    }
-    var module = merged.value();
-    var t1 = os.Instant.now();
-    stages = stages + $"merge {(t1 - t0).milliseconds()}\n";
-    var base = sema.DeltaBase();
-    sema.index_module(module, base);
-    var t2 = os.Instant.now();
-    stages = stages + $"index {(t2 - t1).milliseconds()}\n";
-    var warnings = Array<Diagnostic>();
+    var stages = StringBuilder();
     var times = options.pass_times.is_value() ?
         Optional<sema.PassTimes>.Value(sema.PassTimes()) :
         Optional<sema.PassTimes>.Empty;
-    var checked = _check_layer(program, module, layer, reused, sources, warnings, times);
+    var checked = check_for_worker(program, layer, records, cache, reused, sources, dir, k, stages, times);
     if (checked.is_err()) {
         return Optional<String>.Value(checked.error());
     }
-    if (times.is_value()) {
-        File.write_text(_layer_file(dir, k, "passes"), times.value().to_text());
-    }
-    var t3 = os.Instant.now();
-    stages = stages + $"check {(t3 - t2).milliseconds()}\n";
-    var (after, state, aliases) = checked.value();
-    var unit = sema.finish_checked(after, state, aliases);
-    var t4 = os.Instant.now();
-    stages = stages + $"finish {(t4 - t3).milliseconds()}\n";
-    var warned = _render_warnings(warnings, sources);
-    var (bytes, own) = store_checked(cache, program, layer, unit, base, warned);
+    var (after, state) = checked.value();
     var t5 = os.Instant.now();
-    stages = stages + $"store {(t5 - t4).milliseconds()}\n";
-    # The record first: the layers that read this one are checked on it
-    # while its object compiles (pipelining, as a build system starts a
-    # library's dependents on its interface while its code generates).
-    File.write_bytes(_layer_file(dir, k, "rec"), bytes);
-    File.write_text(_layer_file(dir, k, "own"), own);
-    if (!warned.is_empty) {
-        File.write_text(_layer_file(dir, k, "warn"), warned);
-    }
-    _mark(dir, k, "checked");
     # Its object declares what the objects of the layers it reads define:
     # it waits for them.
     for (var d in layer.reads) {
-        while (!_layer_file(dir, d, "defines").is_file()) {
+        while (!layer_file(dir, d, "defines").is_file()) {
             async.Thread.sleep(2);
         }
     }
     var below = _defined_by(cache, Array<Layer>(), layer.reads, Optional<Path>.Value(dir));
     var t6 = os.Instant.now();
-    stages = stages + $"wait {(t6 - t5).milliseconds()}\n";
-    _mark(dir, k, "compiling");
+    stages.append($"wait {(t6 - t5).milliseconds()}\n");
+    mark(dir, k, "compiling");
     # Its object, which code generation of the program does not make again.
     var compiled = _compile_layer(program, layer, after, state, below, options, cache, dir);
     if (compiled.is_value()) {
@@ -1200,225 +706,11 @@ _work_on(
     }
     _copy_defines(cache, layer, dir, k);
     var t7 = os.Instant.now();
-    stages = stages + $"object {(t7 - t6).milliseconds()}\nreads {layer.reads.count}\n";
-    if (trace) {
-        File.write_text(_layer_file(dir, k, "stages"), stages);
+    stages.append($"object {(t7 - t6).milliseconds()}\nreads {layer.reads.count}\n");
+    if (options.trace_time) {
+        File.write_text(layer_file(dir, k, "stages"), stages.to_string());
     }
     return Optional<String>.Empty;
-}
-
-# The record, own interface and warnings a worker left for layer `k` in
-# `dir`.
-_read_worker_record(dir: Path, k: ulong, layer: Layer): Result<(u8[], String, String), String> {
-    var bytes = File.read_bytes(_layer_file(dir, k, "rec"));
-    var own = File.read_to_string(_layer_file(dir, k, "own"));
-    if (bytes.is_err() or own.is_err()) {
-        return Result<(u8[], String, String), String>.err($"the worker checking layer {layer.name} left no record");
-    }
-    # Its warnings `_check_layers` prints, with the record.
-    var warned = File.read_to_string(_layer_file(dir, k, "warn"));
-    return Result<(u8[], String, String), String>.ok(
-        (bytes.value(), own.value(), warned.is_ok() ? warned.value() : "")
-    );
-}
-
-# Leaves the empty file `<k>.<what>` in `dir`, whole, by a rename.
-_mark(dir: Path, k: ulong, what: String) {
-    var partial = _layer_file(dir, k, $"{what}.{process.id()}");
-    File.write_text(partial, "");
-    File.rename(partial, _layer_file(dir, k, what));
-}
-
-# Checks layer `layer`'s files on top of `module`, the layers before it:
-# the module after, the passes' state and the type aliases as built.
-_check_layer(
-    program: link.Program,
-    module: sema.Module,
-    layer: Layer,
-    reused: Reused?,
-    sources: SourceText[],
-    warnings: Diagnostic[],
-    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
-): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String> {
-    # The specializations the checked layers asked for met their
-    # constraints when they were checked.
-    var checked_specs = (module.struct_specs.count, module.func_specs.count);
-    var built = sema.build_on(program, module, layer.files);
-    if (built.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.err(
-            render_all([built.error()], sources)
-        );
-    }
-    var after = built.value();
-    var aliases = Array<sema.TypeAliasDef>();
-    for (var alias in after.type_aliases) {
-        aliases.append(alias.copy());
-    }
-    # Summaries for the build cache's skipped bodies; a layer records the
-    # ones it makes either way (`settled_summaries`).
-    after.record_summaries = reused.is_value();
-    if (reused.is_value()) {
-        after.cached_files = reused.value().files;
-        for (var (loc, text) in reused.value().summaries) {
-            after.recorded_summaries[loc] = text;
-        }
-    }
-    var state = sema.PassState(program.target);
-    state.sources = sources;
-    state.checked_specs = checked_specs;
-    state.pass_times = times;
-    # No lazy methods: a later layer may use a method this one would drop
-    # from a specialization it made.
-    var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
-    for (var note in state.notes) {
-        warnings.append(note);
-    }
-    if (ran.is_err()) {
-        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.err(
-            render_all([ran.error()], sources)
-        );
-    }
-    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), String>.ok((after, state, aliases));
-}
-
-# For `PEPC_VERIFY_CUTOFF`: checks layer `k`, loaded by early cutoff, again
-# on the layers it reads, merged, and compares the result with its record.
-_verify_reuse_merged(
-    program: link.Program,
-    layered: Layer[],
-    records: HashMap<ulong, u8[]>,
-    k: ulong,
-    bytes: u8[],
-    reused: Reused?,
-    sources: SourceText[],
-    warnings: Diagnostic[]
-): String? {
-    var merged = merged_module(program, records, layered[k].reads);
-    if (merged.is_err()) {
-        return Optional<String>.Value($"the layers layer {layered[k].name} reads do not merge: {merged.error()}");
-    }
-    var reads = Array<ulong>();
-    reads.append_all(layered[k].reads);
-    reads.append(k);
-    var all = HashMap<ulong, u8[]>();
-    for (var (d, b) in records) {
-        all[d] = b;
-    }
-    all[k] = bytes;
-    var loaded = merged_module(program, all, reads);
-    if (loaded.is_err()) {
-        return Optional<String>.Value($"the record of layer {layered[k].name} does not merge: {loaded.error()}");
-    }
-    # Checked again, then resumed and settled as merging leaves a module.
-    var checked = _check_layer(program, merged.value(), layered[k], reused, sources, warnings);
-    if (checked.is_err()) {
-        return Optional<String>.Value($"layer {layered[k].name} does not check again: {checked.error()}");
-    }
-    var (after, state, aliases) = checked.value();
-    var again = sema.resume_checked(sema.finish_checked(after, state, aliases));
-    sema.settle_merged(again);
-    sema.sort_globals(program, again);
-    # Which files' objects the cache holds is this build's, not the layer's.
-    again.cached_files = loaded.value().cached_files;
-    return _differ(layered[k], sema.CheckedUnit(loaded.value()), sema.CheckedUnit(again));
-}
-
-# What differs between `unit`, layer `layer`'s record as loaded, and
-# `again`, the layer checked again; none when nothing does.
-_differ(layer: Layer, unit: sema.CheckedUnit, again: sema.CheckedUnit): String? {
-    var expected = sema.RecordOut();
-    again.write(expected);
-    var actual = sema.RecordOut();
-    unit.write(actual);
-    if (!(expected.finish() == actual.finish())) {
-        # Name what differs: the fields, structs and functions.
-        var was = HashMap<String, String>();
-        for (var (what, hash) in sema.interface_fields(again.module, false)) {
-            was[what] = hash;
-        }
-        var differ = Array<String>();
-        for (var (what, hash) in sema.interface_fields(unit.module, false)) {
-            var had = was.try_get(what);
-            if (!had.is_value() or had.value() != hash) {
-                differ.append(what);
-            }
-            was.remove(what);
-        }
-        for (var (what, _) in was) {
-            differ.append(what + " (only checked again)");
-        }
-        # The checked summaries that differ, by key: as loaded, then as
-        # checked again.
-        var fresh = again.module.checked.summaries;
-        var kept = unit.module.checked.summaries;
-        ulong told = 0;
-        for (var (key, (loc, text)) in kept) {
-            var other = fresh.try_get(key);
-            var same = false;
-            if (other.is_value()) {
-                var (other_loc, other_text) = other.value();
-                same = other_loc == loc and other_text == text;
-            }
-            if (!same and told < 8) {
-                var shown_other = "none";
-                if (other.is_value()) {
-                    var (other_loc, other_text) = other.value();
-                    shown_other = $"{other_loc.file}:{other_loc.span.start} {other_text}";
-                }
-                differ.append($"summary {key}: {loc.file}:{loc.span.start} {text} / {shown_other}");
-                told += 1;
-            }
-        }
-        for (var (key, _) in fresh) {
-            if (!kept.contains(key) and told < 8) {
-                differ.append($"summary {key} only checked again");
-                told += 1;
-            }
-        }
-        for (var name in again.module.checked.functions) {
-            if (!unit.module.checked.functions.contains(name) and told < 12) {
-                differ.append($"checked function {name} only checked again");
-                told += 1;
-            }
-        }
-        for (var name in unit.module.checked.functions) {
-            if (!again.module.checked.functions.contains(name) and told < 16) {
-                differ.append($"checked function {name} only loaded");
-                told += 1;
-            }
-        }
-        if (unit.module.checked.extensions != again.module.checked.extensions) {
-            differ.append($"checked extensions {unit.module.checked.extensions} / {again.module.checked.extensions}");
-        }
-        var shown = Array<String>();
-        for (var i in 0..(differ.count < 40 ? differ.count : 40)) {
-            shown.append(differ[i]);
-        }
-        return Optional<String>.Value(
-            $"the record of layer {layer.name} loaded by early cutoff differs from the layer checked again in {differ.count} parts: {", ".join(shown)}"
-        );
-    }
-    return Optional<String>.Empty;
-}
-
-# Prints the bytes and counts `PEPC_RECORD_STATS` gathered for one record.
-_print_record_stats(name: String, base: sema.DeltaBase) {
-    var sizes = Array<(String, ulong)>();
-    for (var (field, bytes) in base.stats) {
-        sizes.append((field, bytes));
-    }
-    sizes.sort((a, b) => {
-        var (_, x) = a;
-        var (_, y) = b;
-        return x > y ? -1 : (x < y ? 1 : 0);
-    });
-    for (var (field, bytes) in sizes) {
-        if (field.ends_with(" count")) {
-            File.stderr().write_all($"record: {name} {field} {bytes}\n");
-        } else if (bytes >= 1024) {
-            File.stderr().write_all($"record: {name} {field} {bytes / 1024} KB\n");
-        }
-    }
 }
 
 ## Builds `program` into an executable: merge, the sema passes, code
@@ -1436,7 +728,7 @@ _print_record_stats(name: String, base: sema.DeltaBase) {
 ## @returns what the build did, or the error, rendered
 export build(program: link.Program, options: BuildOptions): Result<Built, String> {
     var report = Built();
-    var clock = _Clock(options.trace_time);
+    var clock = Clock(options.trace_time);
     var triple = codegen.target_triple(program.target);
     var cpu = options.cpu.is_value() ? options.cpu.value() : codegen.Cpu.default_for(triple);
     # Link-time optimization needs an optimized build.
@@ -1486,7 +778,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
     # Checking layers links the bodies it needs when it gets to them.
     var warnings = Array<Diagnostic>();
     if (layered.count <= 1) {
-        var unread = _link_bodies(program, _every_file(program));
+        var unread = _link_bodies(program, every_file(program));
         if (unread.is_value()) {
             return Result<Built, String>.err(unread.value());
         }
@@ -1513,23 +805,29 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         } else {
             _stop_early_worker(options);
         }
-        var checked = _check_layers(
+        var replayed = Array<String>();
+        var checked = check_layers(
             program,
             layered,
             options.cache.value(),
             reused,
             sources,
             warnings,
+            replayed,
             clock,
             options.trace_cache,
             options.verify_cutoff,
             prechecked,
             layer_objects ? triple_extension : "",
-            options.pass_times
+            times = options.pass_times
         );
+        # The warnings of the layers loaded, as checking them gave them.
+        for (var warned in replayed) {
+            File.stderr().write_all(warned);
+        }
         if (checked.is_err()) {
             report_warnings(warnings, sources);
-            return Result<Built, String>.err(checked.error());
+            return Result<Built, String>.err(_layer_error(checked.error(), sources));
         }
         module = checked.value().module;
         state = checked.value().state;
@@ -1691,7 +989,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
             link_text = _link_attributes(module);
             var stored = _store_last(
-                options.cache.value(), last, folder, link_text, _render_warnings(_warnings_in(warnings, last), sources)
+                options.cache.value(), last, folder, link_text, render_warnings(warnings_in(warnings, last), sources)
             );
             if (stored.is_err()) {
                 Directory.remove_all(work);
@@ -2088,25 +1386,4 @@ _link_text(options: BuildOptions): String {
         text.append($"--sysroot {options.sysroot.value()}\n");
     }
     return text.to_string();
-}
-
-## Prints how long each stage of a build took (`-T time`).
-struct _Clock {
-    var on: bool;
-    var start: os.Instant;
-
-    construct(on: bool) {
-        this.on = on;
-        start = os.Instant.now();
-    }
-
-    ## Prints how long `stage` took, since the last stage ended.
-    lap(stage: String) {
-        if (!on) {
-            return;
-        }
-        var now = os.Instant.now();
-        File.stderr().write_all($"time: {stage} {(now - start).milliseconds()} ms\n");
-        start = now;
-    }
 }

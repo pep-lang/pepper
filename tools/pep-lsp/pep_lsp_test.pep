@@ -1,6 +1,7 @@
 # pep-lsp's tests: the outline, analysis of documents on disk, and hover
 # and go-to-definition.
 
+import [Channel, Thread] from async;
 import [Directory, File, Path] from io;
 import json;
 import [JsonValue] from json;
@@ -9,6 +10,7 @@ import lsp;
 import compiler.parse;
 import "actions";
 import "analysis";
+import "arguments";
 import "completion";
 import "edits";
 import "hints";
@@ -252,6 +254,15 @@ edit_map_carries_offsets_around_the_edit() {
     edits = EditMap(p, q);
     expect_true(edits.to_earlier(q, at(q, "x;", 0)).is_empty());
     expect_equal(edits.to_earlier(q, at(q, "b;", 0)).value(), at(p, "b;", 0));
+    # So do answers that came from it, such as a hint around `x`.
+    var earlier_p = lsp.TextDocument("", p);
+    var x = earlier_p.range_of(at(p, "x;", 0), at(p, "x;", 1));
+    expect_true(edits.line_range_to_current(p, q, x).is_empty());
+    var b = earlier_p.range_of(at(p, "b;", 0), at(p, "b;", 1));
+    var kept = edits.line_range_to_current(p, q, b).value();
+    expect_equal(kept.start.line, b.start.line);
+    expect_equal(kept.start.character, b.start.character);
+    expect_equal(kept.end.character, b.end.character);
 
     # An edit inside a multi-byte character splits at a character boundary.
     var acute = "a = \"é\";\nb";
@@ -453,6 +464,7 @@ syntax_offers_quick_fixes() {
     var at = (line: int, character: int) => lsp.Range(lsp.Position(line, character), lsp.Position(line, character));
     var actions = code_actions(document, none, Array<lsp.CodeAction>(), at(2, 5));
     expect_equal(action_list(actions), "Replace `new` with `construct` [2:4-2:7 construct]");
+    expect_equal(actions[0].kind.value(), lsp.QUICK_FIX);
     var shown = actions[0].diagnostics.value()[0];
     expect_equal(shown.severity.value(), lsp.SEVERITY_WARNING);
     expect_equal(shown.tags.value()[0], lsp.TAG_DEPRECATED);
@@ -547,6 +559,14 @@ a_file_for_another_os_is_analyzed_for_it() {
     var module = parse.parse(linux_only).value();
     expect_equal(analysis_os(linux_only, module, target_of("windows")), "linux");
     expect_equal(analysis_os(linux_only, module, target_of("linux")), "linux");
+    # Analyzed as Linux, its names have types; for Windows its code is
+    # still dimmed.
+    var context = analyzed(temp_file("linux_only.pep", linux_only), linux_only);
+    var shown = hover_text(context, at(linux_only, "socket.handle", 0));
+    expect_true(shown.contains("`socket` — `Socket`"));
+    expect_equal(
+        inactive_hints(lsp.TextDocument("file:///a.pep", linux_only), module, target_of("windows")).count, 2 as ulong
+    );
     # Code for both the build target and another OS: the build target's.
     var both = linux_only + "[Target(OS(Windows))]\nwindows_only(): int { return 1; }\n";
     expect_equal(analysis_os(both, parse.parse(both).value(), target_of("windows")), "windows");
@@ -1025,7 +1045,7 @@ hover_on_an_enum_case_shows_its_value_and_docs() {
 const SHAPES = "## A shape to draw.\nenum Shape {\n    ## A circle.\n    Circle(radius: int),\n    Rect(width: int, height: int),\n    Empty,\n}\n\narea(s: Shape): int {\n    match (s) {\n        Empty => { return 0; }\n    }\n    return 0;\n}\n\ntest(): int { return area(Shape.Rect(2, 3)); }\n";
 
 [Test]
-hover_shows_the_values_a_case_carries() {
+hover_and_completion_show_the_values_a_case_carries() {
     var complete = SHAPES.replace("Empty => { return 0; }", "Empty => { return 0; }\n        else => { return 1; }");
     var c = loaded("payload_hover", complete, "main.pep");
     var failed = Array<String>();
@@ -1034,7 +1054,24 @@ hover_shows_the_values_a_case_carries() {
     c = loaded_anyway("payload_hover_broken", SHAPES, "main.pep");
     shown = hover_text(c, at(SHAPES, "Shape.Rect", 7));
     check(failed, "broken", shown.contains("Shape.Rect(width: int, height: int)"), shown);
+    # Completion after the enum's name, inside a call's arguments.
+    var text = SHAPES.replace("Shape.Rect(2, 3)", "Shape.");
+    var none = Optional<Analysis>.Empty;
+    var items = completion_at(lsp.TextDocument("file:///nowhere/a.pep", text), none, none, at(text, "Shape.)", 6));
+    var listed = ", ".join(labels(items));
+    check(failed, "completion", listed == "Circle, Rect, Empty", listed);
+    var detail = items.count == 0 ? "<none>" : items[0].detail.value();
+    check(failed, "completion detail", detail == "Shape.Circle(radius: int)", detail);
     all_passed(failed);
+}
+
+[Test]
+a_match_missing_cases_with_values_binds_them() {
+    var analysis = analyze(temp_file("payload_missing_arms.pep", SHAPES), SHAPES);
+    expect_equal(
+        actions_at(analysis, 9, 6),
+        "Add the missing cases of 'Shape' [11:0-11:0         Circle(radius) => {}\n        Rect(width, height) => {}\n]"
+    );
 }
 
 const OVERLOADED_METHODS = "struct Meter {\n    var n: int;\n    ## Adds a whole number.\n    add(x: int): int { return n + x; }\n    ## Adds a fraction.\n    add(x: double): double { return 0.5; }\n}\n\nmain(): int {\n    var m = Meter();\n    var a = m.add(2.5);\n    return m.add(1);\n}\n";
@@ -1446,4 +1483,92 @@ a_name_after_a_non_ascii_character_does_not_panic() {
     var none = Optional<Analysis>.Empty;
     completion_at(lsp.TextDocument("file:///nowhere/a.pep", text), none, none, text.size);
     completion_at(lsp.TextDocument("file:///nowhere/a.pep", text), none, none, offset);
+}
+
+# Writes `text` to `name` in the emptied temporary folder for `test`;
+# returns its URI.
+fresh_file(test: String, name: String, text: String): String {
+    Directory.remove_all(Directory.temp().join(Path($"pep-lsp-test-{test}")));
+    return temp_file_in(test, name, text);
+}
+
+# The line of the first definition at `offset` in the analysis of `text`
+# as `uri`; -1 when there is none.
+definition_line(uri: String, text: String, offset: ulong): int {
+    var found = definition_at(analyzed(uri, text), offset);
+    return found.count == 0 ? -1 : found[0].range.start.line;
+}
+
+[Test]
+a_changed_import_refreshes_the_analysis() {
+    # The build cache keeps each checked layer; a file an import reaches
+    # that changes on disk is read again, though the document is the same.
+    var test = "changed_import";
+    var text = "import \"util\";\nmain(): int { return twice(2); }\n";
+    var uri = fresh_file(test, "main.pep", text);
+    var twice = "export twice(x: int): int { return x * 2; }\n";
+    temp_file_in(test, "util.pep", twice);
+    var call = at(text, "twice(2)", 1);
+    expect_equal(definition_line(uri, text, call), 0);
+    temp_file_in(test, "util.pep", "# Moved down a line.\n" + twice);
+    expect_equal(definition_line(uri, text, call), 1);
+}
+
+[Test]
+fixing_an_import_that_did_not_load_refreshes_the_analysis() {
+    var test = "failed_import";
+    var text = "import \"broken\";\nmain(): int { return f(); }\n";
+    var uri = fresh_file(test, "main.pep", text);
+    # Not there yet, then not parsing: the analysis does not pass, and
+    # passes once the file is fixed.
+    expect_true(analyze(uri, text).outcome != "passed");
+    temp_file_in(test, "broken.pep", "export f(): int { return 1 + ; }\n");
+    expect_true(analyze(uri, text).outcome != "passed");
+    temp_file_in(test, "broken.pep", "export f(): int { return 1; }\n# Fixed.\n");
+    expect_equal(outcome_of(analyze(uri, text)), "passed");
+}
+
+[Test]
+arguments_start_the_server_or_answer_without_it() {
+    expect_true(handle_arguments(["pep-lsp"]).is_empty());
+    expect_true(handle_arguments(["pep-lsp", "--stdio"]).is_empty());
+    expect_equal(handle_arguments(["pep-lsp", "--version"]).value(), 0);
+    expect_equal(handle_arguments(["pep-lsp", "--help"]).value(), 0);
+    expect_equal(handle_arguments(["pep-lsp", "--port", "9000"]).value(), 2);
+}
+
+# How deep the Rust parser let source nest (`MAX_NESTING`, 256), less the
+# levels the wrapper adds.
+const DEEPEST: ulong = 252;
+
+# A program whose `main` runs `body`.
+deepest_program(body: String): String {
+    return "f(x: int): int { return x; }\nexport main(): int {\n    var x = 1;\n" + body + "\n    return x;\n}\n";
+}
+
+[Test]
+deepest_source_fits_the_server_stack() {
+    # The server analyzes on a thread of its own, with the default stack:
+    # a stack overflow cannot be caught, and ends the server.
+    var n = DEEPEST;
+    var programs = [
+        deepest_program("    x = 1" + " + x".repeat(n) + ";"),
+        deepest_program("    x = " + "(".repeat(n) + "x" + ")".repeat(n) + ";"),
+        deepest_program("    x = " + "f(".repeat(n / 2) + "x" + ")".repeat(n / 2) + ";"),
+        deepest_program("if (x == 1) {\n".repeat(n) + "x = 2;" + "}\n".repeat(n)),
+        deepest_program("    if (x == 0) { x = 1; }" + " else if (x == 2) { x = 3; }".repeat(n / 2)),
+        deepest_program("    x = " + "- ".repeat(n) + "x;"),
+        deepest_program("    var s = \"a\"" + " + \"a\"".repeat(n) + ";"),
+    ];
+    var documents = Channel<String>();
+    var outcomes = Channel<String>();
+    for (var i in 0..programs.count) {
+        documents.send(temp_file_in("deepest", "main.pep", programs[i]));
+        documents.send(copy(programs[i]));
+        Thread.spawn(() => {
+            var uri = documents.receive().value();
+            outcomes.send(copy(outcome_of(analyze(uri, documents.receive().value()))));
+        }, "pep-lsp-analysis").join();
+        expect_equal($"{i}: " + outcomes.receive().value(), $"{i}: passed");
+    }
 }

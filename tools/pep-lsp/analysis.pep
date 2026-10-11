@@ -13,10 +13,12 @@ import compiler.ast;
 import async;
 import [Channel] from async;
 import io;
-import [Path] from io;
+import [Directory, File, Path] from io;
 import os;
+import process;
 
 import [demangle, Diagnostic, DEPRECATED_CODE, Severity] from compiler.diagnostic;
+import compiler.incremental;
 import compiler.link;
 import lsp;
 import compiler.parse;
@@ -95,7 +97,7 @@ export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client:
         var start = os.Instant.now();
         # Copies, so the analysis shares nothing with `pending` and can move
         # to the server's thread.
-        var analysis = analyze(copy(uri), copy(text.value()), build_options);
+        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true);
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
         var newer = _take_jobs(jobs, pending, order, build_options);
@@ -215,12 +217,20 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ## imports, linking and visibility errors, then the first error type
 ## checking finds) and its warnings, all as they apply to the document.
 ##
+## The program is checked layer by layer, as `pepc` builds it
+## (`incremental.check_layers`): the build cache in the project's `.pep`
+## folder keeps each layer's checked record, so only the document's own
+## layer, and any layer whose files or interfaces below changed, is
+## checked again; the rest load, and their bodies are not even read.
+##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
 ## @param build_options the build options (`-D`) to analyze with, by name
+## @param workers whether layers the cache lacks may be checked in
+##   `--layer-worker` children of this executable: only when it is pep-lsp
 ## @returns the diagnostics and how the analysis went
 export analyze(
-    uri: String, text: String, build_options: HashMap<String, String> = HashMap<String, String>()
+    uri: String, text: String, build_options: HashMap<String, String> = HashMap<String, String>(), workers: bool = false
 ): Analysis {
     var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
@@ -244,10 +254,7 @@ export analyze(
         host.build_options[name] = value;
     }
     out.os = analysis_os(text, parsed, host);
-    var setup = link.Setup();
-    setup.target = target_for(host, out.os);
-    setup.sources[link.path_key(Path(path.value()))] = text;
-    var loaded = link.load_program(Path(path.value()), setup);
+    var loaded = _load(Path(path.value()), text, target_for(host, out.os));
     if (loaded.is_err()) {
         out.diagnostics.append(lsp.Diagnostic(lsp.Range(), loaded.error()));
         return out;
@@ -259,13 +266,100 @@ export analyze(
     out.actions = reporter.actions;
     # Code the build target leaves out, dimmed.
     reporter.out.append_all(inactive_hints(document, parsed, host));
-    for (var warning in program.warnings()) {
+    if (program.errors.count > 0) {
+        _add_program_errors(reporter, program);
+        out.diagnostics = reporter.out;
+        out.outcome = "found an error";
+        return out;
+    }
+    var layered = _layers(program);
+    # The document's own layer is checked last: the layers after it
+    # (its importers, in a cycle with a module file) do not change what it
+    # shows.
+    var own = Optional<ulong>.Empty;
+    for (var k in 0..layered.count) {
+        if (layered[k].files.contains(0)) {
+            own = Optional<ulong>.Value(k);
+        }
+    }
+    var folder = _project_folder(Path(path.value()));
+    var cache = incremental.default_cache(folder);
+    # The layers below the document's that the cache does not have are
+    # checked in parallel, in worker children, as `pepc` checks them.
+    var below = own.is_value() ? own.value() : layered.count - 1;
+    var prechecked = HashMap<ulong, (u8[], String, String)>();
+    if (workers and below > 1) {
+        var parallel = _check_in_workers(
+            program, layered, below, cache, prechecked, folder, path.value(), text, out.os, build_options
+        );
+        if (parallel.is_err()) {
+            reporter.out.append(lsp.Diagnostic(lsp.Range(), parallel.error()));
+            out.diagnostics = reporter.out;
+            out.outcome = "found an error";
+            return out;
+        }
+    }
+    var warnings = Array<Diagnostic>();
+    var replayed = Array<String>();
+    var checked = incremental.check_layers(
+        program,
+        layered,
+        cache,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        warnings,
+        replayed,
+        incremental.Clock(false),
+        false,
+        false,
+        prechecked,
+        stop = own
+    );
+    # Warnings of the program's files, and of its own layer's checking.
+    for (var warning in warnings) {
         reporter.add_if_in_document(warning);
     }
-    # Unresolved imports are warnings: the editor does not know the `-I`
-    # folders a build passes, so the compiler may still find them. An
-    # error in another file shows at the document's start, since it stops
-    # the analysis before sema.
+    if (checked.is_err()) {
+        out.outcome = "found an error";
+        match (checked.error()) {
+            Unread(message) => {
+                reporter.out.append(lsp.Diagnostic(lsp.Range(), message));
+            }
+            Linking(errors) => {
+                if (program.errors.count > 0) {
+                    _add_program_errors(reporter, program);
+                } else {
+                    for (var error in errors) {
+                        reporter.add_if_in_document(error);
+                    }
+                }
+            }
+            Checking(error) => {
+                var shown = reporter.add(error);
+                var arms = missing_arms(document, program, error, shown);
+                if (arms is Value(action)) {
+                    out.actions.append(action);
+                }
+            }
+            Failed(message) => {
+                reporter.out.append(lsp.Diagnostic(lsp.Range(), message));
+            }
+        }
+        out.diagnostics = reporter.out;
+        return out;
+    }
+    out.model = Optional<sema.Module>.Value(checked.value().module);
+    out.state = Optional<sema.PassState>.Value(checked.value().state);
+    out.outcome = "passed";
+    out.diagnostics = reporter.out;
+    return out;
+}
+
+# Adds `program`'s linking errors. Unresolved imports are warnings: the
+# editor does not know the `-I` folders a build passes, so the compiler may
+# still find them. An error in another file shows at the document's start,
+# since it stops the analysis before sema.
+_add_program_errors(reporter: _Reporter, program: link.Program) {
     for (var error in program.errors) {
         var diagnostic = reporter.convert(error.to_diagnostic());
         if (error.unresolved) {
@@ -273,46 +367,144 @@ export analyze(
         }
         reporter.out.append(diagnostic);
     }
-    if (program.errors.count > 0) {
-        out.diagnostics = reporter.out;
-        out.outcome = "found an error";
-        return out;
+}
+
+# Loads the program rooted at `root`, whose text is `text`, for `target`,
+# its bodies deferred: `incremental.check_layers` links those of the layers
+# it checks.
+_load(root: Path, text: String, target: link.Target): Result<link.Program, String> {
+    var setup = link.Setup();
+    setup.target = target;
+    setup.sources[link.path_key(root)] = text;
+    setup.defer_bodies = true;
+    return link.load_program(root, setup);
+}
+
+# `program`'s layers, keyed for the language server: its own compiler
+# identity, no code generation.
+_layers(program: link.Program): incremental.Layer[] {
+    var keys = incremental.Keys(program, link.units(program), "pep-lsp");
+    return incremental.layers(program, link.layer_units(program), keys.base());
+}
+
+# Checks layers `0..count` of `program` in `pep-lsp --layer-worker`
+# children (`incremental.check_in_workers`), each loading the program as
+# `analyze` did: `root`, with the document's `text`, for `os_name`, with
+# `build_options`, as `<dir>/program` and `<dir>/root.text` give them.
+_check_in_workers(
+    program: link.Program,
+    layered: incremental.Layer[],
+    count: ulong,
+    cache: incremental.Cache,
+    prechecked: HashMap<ulong, (u8[], String, String)>,
+    folder: Path,
+    root: String,
+    text: String,
+    os_name: String,
+    build_options: HashMap<String, String>
+): Result<void, String> {
+    var dir = folder.join(Path(".pep")).join(Path("build")).join(Path($"lsp-layers.{process.id()}"));
+    Directory.remove_all(dir);
+    var created = Directory.create_all(dir);
+    if (created.is_err()) {
+        return Result<void, String>.err($"cannot create {dir}: {created.error().message}");
     }
-    var checked = program.check_diagnostics();
-    if (checked.count > 0) {
-        for (var error in checked) {
-            reporter.add_if_in_document(error);
+    var job = StringBuilder();
+    job.append($"{root}\n{os_name}\n");
+    for (var (name, value) in build_options) {
+        job.append($"{name}={value}\n");
+    }
+    if (File.write_text(dir.join(Path("program")), job.to_string()).is_err()
+        or File.write_text(dir.join(Path("root.text")), text).is_err()) {
+        Directory.remove_all(dir);
+        return Result<void, String>.err($"cannot write to {dir}");
+    }
+    var checked = incremental.check_in_workers(
+        program,
+        layered,
+        count,
+        cache,
+        async.logical_cpus(),
+        prechecked,
+        dir,
+        Array<String>(),
+        Optional<process.Child>.Empty,
+        false,
+        (k) => true
+    );
+    Directory.remove_all(dir);
+    return checked;
+}
+
+## A `pep-lsp --layer-worker <dir>` child of an analysis
+## (`incremental.serve_layers`): loads the program `<dir>/program` names
+## (its root, the OS it is analyzed for and the build options, a line
+## each, the root's text in `<dir>/root.text`), and checks each layer it is
+## given, storing its record in the build cache.
+##
+## @param dir the folder the analysis and its workers share
+## @returns the exit code: 0 once standard input ends
+export layer_worker(dir: Path): int {
+    var job = File.read_to_string(dir.join(Path("program")));
+    var text = File.read_to_string(dir.join(Path("root.text")));
+    if (job.is_err() or text.is_err()) {
+        File.stderr().write_all($"pep-lsp: no program to check in {dir}\n");
+        return 1;
+    }
+    var lines = job.value().split("\n");
+    if (lines.count < 2) {
+        File.stderr().write_all($"pep-lsp: no program to check in {dir}\n");
+        return 1;
+    }
+    var root = Path(lines[0]);
+    var host = link.Target();
+    for (var i in 2..lines.count) {
+        var equals = lines[i].find("=");
+        if (equals >= 0) {
+            var at = equals as ulong;
+            host.build_options[lines[i].substr_bytes(0, at)] = lines[i].substr_bytes(at + 1, lines[i].size - at - 1);
         }
-        out.diagnostics = reporter.out;
-        out.outcome = "found an error";
-        return out;
     }
-    var built = sema.build(program);
-    if (built.is_err()) {
-        reporter.add(built.error());
-        out.diagnostics = reporter.out;
-        out.outcome = "found an error";
-        return out;
+    var loaded = _load(root, text.value(), target_for(host, lines[1]));
+    if (loaded.is_err()) {
+        File.stderr().write_all($"pep-lsp: {loaded.error()}\n");
+        return 1;
     }
-    var model = built.value();
-    var ran = sema.run_passes(model, program.target, program.sources());
-    if (ran.is_err()) {
-        var shown = reporter.add(ran.error());
-        var arms = missing_arms(document, program, ran.error(), shown);
-        if (arms is Value(action)) {
-            out.actions.append(action);
+    var program = loaded.value();
+    var layered = _layers(program);
+    var cache = incremental.default_cache(_project_folder(root));
+    var sources = program.sources();
+    return incremental.serve_layers(
+        program,
+        layered,
+        dir,
+        incremental.Clock(false),
+        (k, records) => {
+            var checked = incremental.check_for_worker(
+                program,
+                layered[k],
+                records,
+                cache,
+                Optional<incremental.Reused>.Empty,
+                sources,
+                dir,
+                k,
+                StringBuilder()
+            );
+            return checked.is_err() ? Optional<String>.Value(checked.error()) : Optional<String>.Empty;
         }
-        out.outcome = "found an error";
-    } else {
-        for (var note in ran.value().notes) {
-            reporter.add_if_in_document(note);
-        }
-        out.model = Optional<sema.Module>.Value(model);
-        out.state = Optional<sema.PassState>.Value(ran.value());
-        out.outcome = "passed";
+    );
+}
+
+# The folder whose `.pep` holds the build cache for `file`: its project's
+# (`link.find_project`), else its own.
+_project_folder(file: Path): Path {
+    var project = link.find_project(file);
+    if (project.is_value()) {
+        return project.value();
     }
-    out.diagnostics = reporter.out;
-    return out;
+    var parent = file.parent();
+    return parent.is_value() ? parent.value() : Path(".");
 }
 
 # Converts the compiler's diagnostics to the protocol's, on the document.

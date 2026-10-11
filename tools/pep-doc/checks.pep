@@ -12,7 +12,7 @@
 # | `pepper`, `pep-fmt`, `pep-profile`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-doc` | its own help (`HELP` in main.pep) | `docs/src/tools/pep-doc.md` |
-# | `pep-lsp` | `HELP` in `tools/pep-lsp/main.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
+# | `pep-lsp` | `HELP` in `tools/pep-lsp/arguments.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
 # | `setup-llvm.sh` | its usage text, which `--help` prints | `docs/src/contributing/setup.md` |
 # | `install.sh` | its `usage` text | `docs/src/tools/install.md` |
 # | `install.ps1` | its `param()` block | `docs/src/tools/install.md` |
@@ -532,7 +532,7 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
     return Result<String[]>.ok(problems);
 }
 
-# pep-lsp: its options (`HELP` in tools/pep-lsp/main.pep), the
+# pep-lsp: its options (`HELP` in tools/pep-lsp/arguments.pep), the
 # initialization options the server reads (`json_flag(params.
 # initialization_options, ["inlayHints", "parameterNames"], ...)` and
 # `options.value().contains("buildOptions")` in tools/pep-lsp/server.pep,
@@ -540,11 +540,11 @@ export undocumented_tool_options(root: Path, tools: Path, pep_doc_help: String):
 # (`pepper.lspPath`).
 _lsp(root: Path, problems: String[]): Result<void> {
     var page = "docs/src/tools/pep-lsp.md";
-    var main = _repository_file(root, "tools/pep-lsp/main.pep")?;
+    var main = _repository_file(root, "tools/pep-lsp/arguments.pep")?;
     var help_start = "const HELP = \"";
     var help_at = main.find(help_start);
     if (help_at < 0) {
-        return Result<void>.Err("tools/pep-lsp/main.pep declares no HELP");
+        return Result<void>.Err("tools/pep-lsp/arguments.pep declares no HELP");
     }
     var help_from = help_at as ulong + help_start.size;
     var help = slice(main, help_from, find_byte(main, '"', help_from, main.size));

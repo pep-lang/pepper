@@ -8,11 +8,11 @@
 ## same key: a cache hit whose code is stale, or a unit whose code changed
 ## because other units' bodies were skipped.
 
+import [Cache] from compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 import "build";
-import "cache";
 
 ## Builds `program` again as `options` say, with an empty cache in a
 ## folder of its own, and compares every object that build stores with the

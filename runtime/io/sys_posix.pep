@@ -332,6 +332,18 @@ _io_sys_handle_valid(h: FileHandle): bool {
     return h >= 0;
 }
 
+# `h` as a number, for a `FileTransfer`.
+[Target(!OS(Windows))]
+_io_sys_handle_bits(h: FileHandle): long {
+    return h as long;
+}
+
+# The handle `_io_sys_handle_bits` gave `bits` for.
+[Target(!OS(Windows))]
+_io_sys_handle_from_bits(bits: long): FileHandle {
+    return bits as FileHandle;
+}
+
 [Target(!OS(Windows))]
 _io_sys_std_handle(stream: StdStream): FileHandle {
     return match (stream) {

@@ -728,6 +728,22 @@ one first flushes what `print` has buffered.
 **Returns**
 - a File on standard error, named `<stderr>`
 
+#### adopt
+
+```pepper
+static adopt(transfer: FileTransfer): IoResult<File>
+```
+
+Takes the handle out of `transfer` (see `into_transfer`) into a new
+File on the calling thread, whose `path` is empty. Only the first
+`adopt` of a token gets the handle.
+
+**Parameters**
+- `transfer` — the token from `into_transfer`
+
+**Returns**
+- the File; an error when the token is empty (already adopted, or made from a closed File)
+
 #### read_bytes
 
 ```pepper
@@ -1534,3 +1550,58 @@ if (f.close().is_err()) {
     return 1;
 }
 ```
+
+#### into_transfer
+
+```pepper
+into_transfer(): FileTransfer
+```
+
+Moves the file's handle into a `FileTransfer`, which another thread
+takes with `File.adopt`, and leaves this File closed. A File is not
+thread-safe, so this is how a thread hands one to another, such as
+the pipe from a child process's standard output to the thread that
+reads it while this one writes to the child.
+
+**Returns**
+- the token; for a closed File, one that `adopt` fails on
+
+**Example**
+```pepper
+import async;
+import [File, Path] from io;
+
+var transfer = File.open(Path("notes.txt")).value().into_transfer();
+var reader = async.Thread.spawn(() => {
+    var mine = File.adopt(transfer).value();
+    var text = mine.read_all();
+});
+reader.join();
+```
+
+## FileTransfer
+
+```pepper
+[Shared] struct FileTransfer
+```
+
+A file's handle on its way from one thread to another: made by
+`File.into_transfer`, taken by `File.adopt`. Unlike a File, it is
+thread-safe, so a `shared` function (a body for `async.spawn` or
+`Thread.spawn`) can capture it and a `Channel` can carry it. If no one
+adopts it, the handle is closed when the last reference goes, unless it
+is one the File did not own (a standard stream).
+
+### Constructor
+
+#### FileTransfer()
+
+```pepper
+construct(handle: FileHandle, owned: bool)
+```
+
+Wraps a file handle. `File.into_transfer` makes these; use it.
+
+**Parameters**
+- `handle` — the handle, or an invalid one for an empty token
+- `owned` — whether the File the token came from closed its handle

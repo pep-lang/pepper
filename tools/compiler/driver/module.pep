@@ -3,7 +3,6 @@
 ## objects, optimize them as one with LTO, link or archive).
 
 export * from "build";
-export * from "cache";
 export * from "library";
 export * from "linker";
 export * from "lto";

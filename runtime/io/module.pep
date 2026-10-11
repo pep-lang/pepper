@@ -8,7 +8,7 @@
 ## [`IoError`](io-types.md#ioerror).
 ##
 ## - [Path](io-path.md): building, splitting, and inspecting paths
-## - [File](io-file.md): opening, reading, writing, and locking files, and whole-file helpers
+## - [File](io-file.md): opening, reading, writing, and locking files, whole-file helpers, and `FileTransfer`
 ## - [Directory](io-directory.md): listing, creating, and removing directories
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
@@ -70,6 +70,7 @@ export Metadata;
 export SeekFrom;
 export StdStream;
 export File;
+export FileTransfer;
 export Print;
 export Reader;
 export Writer;

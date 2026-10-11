@@ -7,46 +7,19 @@
 #
 #     PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o pep-lsp
 
-import [File] from io;
 import lsp;
+import "arguments";
 import "server";
-
-# The release this tool belongs to, as the other Pepper tools give it.
-version(): String {
-    return "0.4.0-dev";
-}
-
-# What `pep-lsp --help` prints.
-const HELP = "The Pepper language server. Editors start it and talk to it over standard
-input and output; its settings arrive as LSP initialization options.
-
-usage: pep-lsp [options]
-
-Options:
-  --stdio        talk over standard input and output (the default; accepted
-                 for editors that pass it)
-  -h, --help     show this help
-  -V, --version  show pep-lsp's version
-";
+import "supervisor";
 
 main(args: String[]): int {
-    for (var i in 1..args.count) {
-        var arg = args[i];
-        if (arg == "--stdio") {
-            continue;
-        }
-        if (arg == "-h" or arg == "--help") {
-            File.stdout().write_all(HELP);
-            return 0;
-        }
-        if (arg == "-V" or arg == "--version") {
-            File.stdout().write_all($"pep-lsp {version()}\n");
-            return 0;
-        }
-        File.stderr().write_all(
-            $"pep-lsp: error: unknown argument '{arg}'\nusage: pep-lsp [--stdio]; pep-lsp --help lists the options\n"
-        );
-        return 2;
+    if (handle_arguments(args) is Value(code)) {
+        return code;
+    }
+    # The editor talks to a supervisor, which runs the server in a child
+    # (`--serve`) and starts another if it panics (`supervisor.pep`).
+    if (!args.contains("--serve")) {
+        return supervise();
     }
     String current = version();
     return lsp.serve_stdio<PepperServer>((client) => PepperServer(client, current));

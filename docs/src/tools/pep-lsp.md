@@ -28,6 +28,38 @@ a checkout of the repository, with this checkout's standard library:
 PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
 ```
 
+## When the server crashes
+
+`pep-lsp` runs the server in a child process (`pep-lsp --serve`) and
+passes messages between the editor and it. If the server crashes (a bug in
+the compiler or the server ends it with a panic), `pep-lsp` answers the
+requests it left unanswered with an empty result, logs `the server ended
+...; restarting it` to the editor's output, and starts a new one, which
+gets the open documents again. If the new one crashes too before you
+change anything, the document you changed last is left out until you
+change it again, so one text that crashes the server cannot keep it down;
+after five crashes in a row `pep-lsp` gives up and exits.
+
+## Checking as you type
+
+The server checks a file as the root of its own program, the way
+`pepper build` checks one: one group of files at a time, starting with the
+standard library and working up through each file's imports. Files that
+import each other in a cycle form one group. It saves what it learned
+about each group in the build cache, in the `.pep/cache` folder of the
+file's project (the folder holding its `pep.toml`, else the file's own
+folder), or in `$PEPPER_CACHE_DIR` when that is set. When you edit a file,
+only the file you are editing is checked again. Every other group loads
+from the cache, unless its files changed on disk or a declaration it
+depends on changed. The cache outlives the server, so a restarted editor
+answers quickly once the files have been checked once. Delete the folder
+to start over.
+
+The first time, when the cache has nothing yet, the server checks the
+groups the file depends on in parallel: it starts copies of itself
+(`pep-lsp --layer-worker`), one per processor at most, as `pepper build`
+does.
+
 ## Command-line options
 
 ```text
@@ -37,6 +69,8 @@ pep-lsp [--stdio]
 | Option | What it does |
 | --- | --- |
 | `--stdio` | Talk over standard input and output: the default, accepted for editors that pass it |
+| `--serve` | Internal: run the server in this process, without the supervisor that restarts it. The supervisor starts it so |
+| `--layer-worker <dir>` | Internal: check layers for the server that started it, which passes them through `<dir>`. The server starts these itself |
 | `-h`, `--help` | Print the options and exit |
 | `-V`, `--version` | Print `pep-lsp` and its version, and exit |
 

@@ -7,6 +7,7 @@
 
 import compiler.codegen;
 import compiler.driver;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import os;
@@ -337,7 +338,7 @@ the_build_cache_keeps_g_objects_apart() {
     var output = folder.path.join(Path("main"));
     var options = driver.BuildOptions(output, folder.path.join(Path("build")));
     options.in_process = true;
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(folder.path.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(folder.path.join(Path("cache"))));
     var plain = driver.build(program, options);
     expect_true(plain.is_ok());
     # The same program with `-g` is another build: none of its objects is

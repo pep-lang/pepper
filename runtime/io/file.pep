@@ -1,5 +1,6 @@
 # OpenOptions, Metadata, File.
 
+import async;
 import text;
 import "lock_posix";
 import "lock_wasi";
@@ -1148,6 +1149,47 @@ export struct File {
         return _io_sys_close(h);
     }
 
+    ## Moves the file's handle into a `FileTransfer`, which another thread
+    ## takes with `File.adopt`, and leaves this File closed. A File is not
+    ## thread-safe, so this is how a thread hands one to another, such as
+    ## the pipe from a child process's standard output to the thread that
+    ## reads it while this one writes to the child.
+    ##
+    ## @returns the token; for a closed File, one that `adopt` fails on
+    ## @example
+    ##     import async;
+    ##     import [File, Path] from io;
+    ##
+    ##     var transfer = File.open(Path("notes.txt")).value().into_transfer();
+    ##     var reader = async.Thread.spawn(() => {
+    ##         var mine = File.adopt(transfer).value();
+    ##         var text = mine.read_all();
+    ##     });
+    ##     reader.join();
+    into_transfer(): FileTransfer {
+        var h = _handle;
+        _handle = _io_sys_invalid_handle();
+        return FileTransfer(h, _owned);
+    }
+
+    ## Takes the handle out of `transfer` (see `into_transfer`) into a new
+    ## File on the calling thread, whose `path` is empty. Only the first
+    ## `adopt` of a token gets the handle.
+    ##
+    ## @param transfer the token from `into_transfer`
+    ## @returns the File; an error when the token is empty (already adopted,
+    ##   or made from a closed File)
+    static adopt(transfer: FileTransfer): IoResult<File> {
+        var h = transfer._take();
+        if (!_io_sys_handle_valid(h)) {
+            return IoResult<File>.err(IoError(_io_sys_code_not_found(), "the file was adopted already, or closed"));
+        }
+        var file = File();
+        file._handle = h;
+        file._owned = transfer._owned;
+        return IoResult<File>.ok(file);
+    }
+
     # ── Whole-file conveniences (Rust fs::read, fs::write, ...) ─────────────
 
     ## Reads the whole file at `path` into a byte array (Rust's
@@ -1370,5 +1412,42 @@ export struct File {
     ##     }
     static remove(path: Path): IoResult<void> {
         return _io_sys_unlink(path);
+    }
+}
+
+## A file's handle on its way from one thread to another: made by
+## `File.into_transfer`, taken by `File.adopt`. Unlike a File, it is
+## thread-safe, so a `shared` function (a body for `async.spawn` or
+## `Thread.spawn`) can capture it and a `Channel` can carry it. If no one
+## adopts it, the handle is closed when the last reference goes, unless it
+## is one the File did not own (a standard stream).
+[Shared]
+export struct FileTransfer {
+    # The handle as a number (`_io_sys_handle_bits`), or the invalid
+    # handle's once taken.
+    const _handle: async.Atomic<long>;
+    # Whether the File owned the handle and closed it.
+    const _owned: bool;
+
+    ## Wraps a file handle. `File.into_transfer` makes these; use it.
+    ##
+    ## @param handle the handle, or an invalid one for an empty token
+    ## @param owned whether the File the token came from closed its handle
+    construct(handle: FileHandle, owned: bool) {
+        _handle = async.Atomic<long>(_io_sys_handle_bits(handle));
+        _owned = owned;
+    }
+
+    ## Closes the handle if no one adopted it and the File owned it.
+    destruct {
+        var h = _take();
+        if (_owned and _io_sys_handle_valid(h)) {
+            _io_sys_close(h);
+        }
+    }
+
+    # Takes the handle out, leaving the token empty.
+    _take(): FileHandle {
+        return _io_sys_handle_from_bits(_handle.exchange(_io_sys_handle_bits(_io_sys_invalid_handle())));
     }
 }

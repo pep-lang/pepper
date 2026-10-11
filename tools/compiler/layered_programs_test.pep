@@ -4,6 +4,7 @@
 # run.
 
 import compiler.driver;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import process;
@@ -27,7 +28,7 @@ _builds_and_runs(name: String, files: Array<(String, String)>) {
         var output = root.join(Path(cached ? "layered" : "whole"));
         var options = driver.BuildOptions(output, root.join(Path("build")));
         if (cached) {
-            options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+            options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
         }
         options.in_process = true;
         var built = driver.build(program.value(), options);
@@ -151,7 +152,7 @@ _build_with(root: Path, imports: Path, cache: Path) {
     expect_true(program.is_ok());
     var output = root.join(Path("main"));
     var options = driver.BuildOptions(output, root.join(Path("build")));
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(cache));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(cache));
     options.in_process = true;
     var built = driver.build(program.value(), options);
     if (built.is_err()) {

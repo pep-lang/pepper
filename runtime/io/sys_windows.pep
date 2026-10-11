@@ -239,6 +239,18 @@ _io_sys_handle_valid(h: FileHandle): bool {
     return h != __null && unsafe_cast<long>(h) != -1;
 }
 
+# `h` as a number, for a `FileTransfer`.
+[Target(OS(Windows))]
+_io_sys_handle_bits(h: FileHandle): long {
+    return unsafe_cast<long>(h);
+}
+
+# The handle `_io_sys_handle_bits` gave `bits` for.
+[Target(OS(Windows))]
+_io_sys_handle_from_bits(bits: long): FileHandle {
+    return unsafe_cast<FileHandle>(bits);
+}
+
 # STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE are (DWORD)-10,
 # -11 and -12.
 [Target(OS(Windows))]

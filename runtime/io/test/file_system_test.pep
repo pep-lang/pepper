@@ -2,8 +2,9 @@
 # seeking, set_length, metadata, whole-file locks, directories, copy, rename and remove, the
 # error kinds each reports, a File closing its handle on last release, the
 # io enums (ErrorKind, SeekFrom, FileType, StdStream), streaming a directory
-# and a file's lines.
+# and a file's lines, and a File moved to another thread (FileTransfer).
 
+import async;
 import [
     File,
     OpenOptions,
@@ -44,6 +45,30 @@ temp_is_an_absolute_folder() {
     var temp = Directory.temp();
     expect_true(temp.is_absolute());
     expect_true(temp.is_dir());
+}
+
+[Test]
+a_file_moves_to_another_thread() {
+    var folder = TempFolder("a_file_moves_to_another_thread");
+    var path = folder.path.join("moved.txt");
+    expect_true(File.write_text(path, "carried over").is_ok());
+    var file = File.open(path).value();
+    var transfer = file.into_transfer();
+    # The File it came from is closed; the handle travels with the token.
+    expect_false(file.is_open());
+    var read = async.Atomic<long>(-1);
+    var reader = async.Thread.spawn(() => {
+        var mine = File.adopt(transfer);
+        if (mine.is_ok()) {
+            var bytes = mine.value().read_all();
+            read.store(bytes.is_ok() ? bytes.value().count as long : -2);
+        }
+    });
+    reader.join();
+    expect_equal(read.load(), 12);
+    # A token gives its handle once.
+    expect_true(File.adopt(transfer).is_err());
+    expect_true(File.adopt(File().into_transfer()).is_err());
 }
 
 [Test]

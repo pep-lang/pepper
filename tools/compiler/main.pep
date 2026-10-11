@@ -34,6 +34,7 @@ import compiler.ast;
 import compiler.codegen;
 import [render_all] from compiler.diagnostic;
 import compiler.driver;
+import compiler.incremental;
 import io;
 import [Directory, File, Path] from io;
 import compiler.link;
@@ -555,8 +556,8 @@ main(args: String[]): int {
             # A cached unit's sema is skipped, so its expansions would not be
             # written for `--debug-static=expanded`.
             if (!no_cache and !options.debug_static_expanded) {
-                options.cache = Optional<driver.Cache>.Value(
-                    cache_dir.is_value() ? driver.Cache(Path(cache_dir.value())) : driver.default_cache(work)
+                options.cache = Optional<incremental.Cache>.Value(
+                    cache_dir.is_value() ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work)
                 );
             }
             # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but

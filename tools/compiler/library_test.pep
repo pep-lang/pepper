@@ -6,6 +6,7 @@
 
 import compiler.codegen;
 import compiler.driver;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import llvm;
@@ -85,7 +86,7 @@ c_programs_call_a_static_and_a_shared_library() {
     expect_equal(archive.file_name().value(), "libcounter.a");
     var options = driver.BuildOptions(archive, root.join(Path("build")));
     options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
     _build(root, _LIBRARY, options, true);
     var header = File.read_to_string(root.join(Path("counter.h"))).value();
     expect_true(header.contains("Counter* counter_new(int32_t start);"));
@@ -105,7 +106,7 @@ c_programs_call_a_static_and_a_shared_library() {
     expect_equal(shared.file_name().value(), "libcounter.so");
     options = driver.BuildOptions(shared, root.join(Path("build")));
     options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Shared);
-    options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
     _build(root, _LIBRARY, options, true);
     # Linked by its file name, which is its `soname`.
     var dynamic = _run(process.Command("readelf").argument("-d").argument(shared.to_string()));
@@ -274,7 +275,7 @@ links_an_optimized_program_as_one_module() {
         options.lto = true;
         options.in_process = true;
         if (cached) {
-            options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+            options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
         }
         var built = driver.build(program.value(), options);
         if (built.is_err()) {
@@ -360,7 +361,7 @@ another_cpu_misses_the_cache_and_marks_every_function() {
         var options = driver.BuildOptions(root.join(Path("libmain.a")), root.join(Path("build")));
         options.library = Optional<driver.LibraryKind>.Value(driver.LibraryKind.Static);
         options.cpu = Optional<codegen.Cpu>.Value(codegen.Cpu.from_options(target.triple, machine).value());
-        options.cache = Optional<driver.Cache>.Value(driver.Cache(root.join(Path("cache"))));
+        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
         options.in_process = true;
         var built = driver.build(program.value(), options);
         expect_true(built.is_ok());
