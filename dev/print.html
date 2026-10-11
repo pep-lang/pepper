@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a821ef30.js";
+            window.path_to_searchindex_js = "searchindex-6d9c8bdc.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e4845a93.js"></script>
@@ -20258,8 +20258,10 @@ version everywhere a tool reads it; the same pull request sets the VS
 Code extension’s <code>package.json</code> and <code>package-lock.json</code> to match.</li>
 <li>Tag that merge <code>v0.9.0</code> and push the tag. The workflow checks that the
 commit holds that version, builds it and publishes the release; the
-<code>VSIX</code> and <code>Docs</code> workflows publish the extension and the docs from
-the same tag.</li>
+<code>Docs</code> workflow publishes the docs from the same tag, and once the
+release’s archives are up the workflow dispatches <code>VSIX</code> on the tag,
+which builds the extension with them and publishes it as
+<code>vsix-v&lt;extension version&gt;</code>.</li>
 <li>Once it is published, the workflow opens a pull request that starts
 the next minor version on main (<code>0.10.0-dev</code>) and merges itself once
 its checks pass, unless main has already moved on; a major version is
