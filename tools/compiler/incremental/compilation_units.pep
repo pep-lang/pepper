@@ -170,6 +170,29 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
         skip.append(runtime_cycle[u] or through[u]);
     }
     var order = _components(reads, skip);
+    # The last compilation unit is the program's own, which defines the entry
+    # points: the root file's. Files of the root's module it never reads can
+    # come after it in that order (#839); move it last when nothing reads it,
+    # else check the program whole.
+    var root = cycle_of[0];
+    for (var g in 0..order.count) {
+        if (!order[g].contains(root)) {
+            continue;
+        }
+        var group = order.remove_at(g);
+        for (var u in 0..cycles.count) {
+            if (group.contains(u) or skip[u]) {
+                continue;
+            }
+            for (var read in group) {
+                if (reads[u].contains(read)) {
+                    return Array<CompilationUnit>();
+                }
+            }
+        }
+        order.append(group);
+        break;
+    }
     var out = Array<CompilationUnit>();
     var unit_of = Array<ulong>();
     for (var _ in 0..cycles.count) {

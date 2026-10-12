@@ -2817,8 +2817,11 @@ units are therefore the nodes of a DAG, and that order is a topological
 order of it. `CompilationUnit.reads` is the transitive closure of the
 compilation units it reads, the runtime always among them, in ascending
 order. A compilation unit is named after its first file's namespace. The
-last one holds the program's own files: it is checked on every build and
-never stored.
+last one holds the program's own files, the root file's: it is checked on
+every build and never stored. An entry file inside a module's folder (a
+package's example) loads the module's files, which can sort after it, so
+the root's compilation unit is moved last; when another compilation unit
+reads it, the program is checked whole instead (#839).
 
 **Keys.** A compilation unit's key (`compilation_unit_key`) hashes:
 
@@ -2897,7 +2900,9 @@ last compilation unit's (`0.o`) and the entry points' (`entry.o`), are cached un
 key with the program's `[Link]` arguments (`link`, `_link_attributes`) and
 its warnings (`_store_last`): a build whose last compilation unit has the same key
 checks and generates nothing and links, as Go links a `main` package from
-its cache. Otherwise the build's process checks the last compilation unit, generates
+its cache. The link takes the objects of the compilation units the last one
+reads, not every one: the module files an entry file never reaches are
+checked but not linked, as whole-program code generation leaves them out. Otherwise the build's process checks the last compilation unit, generates
 it and the entry points, compiles the two, and stores them. So an edit
 generates and optimizes the IR of the compilation units it reaches and nothing else.
 Without workers (one job, two compilation units or fewer, a test program) the build

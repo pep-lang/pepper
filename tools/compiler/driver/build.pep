@@ -972,11 +972,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 }
                 part_of_file.append(own.contains(i) ? 0 : 2);
             }
-            var lower = Array<ulong>();
-            for (var k in 0..units.count - 1) {
-                lower.append(k);
-            }
-            var below = _defined_by(options.cache.value(), units, lower, Optional<Path>.Empty);
+            var below = _defined_by(options.cache.value(), units, last.reads, Optional<Path>.Empty);
             var generated = codegen.generate(
                 module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
             );
@@ -1013,7 +1009,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             }
             last_folder = Optional<Path>.Value(stored.value());
         }
-        for (var k in 0..units.count - 1) {
+        # Only the compilation units the program's own reads: others, files of
+        # the entry's module it never reaches, are not linked (#839).
+        for (var k in last.reads) {
             var folder = options.cache.value().objects($"compilation unit {units[k].name}", units[k].key);
             options.cache.value().used(folder);
             objects.append(folder.join(Path($"0.{extension}")));

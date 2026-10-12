@@ -2,12 +2,14 @@
 # (`pep-build` beside the test or on the PATH, as `scripts/pepper-tests.sh`
 # puts the stage-1 build there): `--help` lists every option;
 # `--emit-steps`, `--emit-ast`, `--emit-llvm`, `-T passes`, `-m`, `--lib`,
-# `--lto`, `--verify-cache` and `--MSVC` do what they document.
+# `--lto`, `--verify-cache` and `--MSVC` do what they document; a cached
+# build of an entry file inside a module's folder links.
 
 import [Directory, File, Path] from io;
 import os;
 import process;
 import [TempFolder] from testing;
+import toolchain;
 
 const _PROGRAM = "square(x: int): int {\n    return x * x;\n}\n\nmain(): int {\n    var total = 0;\n    for (var i in 0..4) {\n        total += square(i);\n    }\n    return total - 14;\n}\n";
 
@@ -323,6 +325,43 @@ verify_cache_finds_a_cached_object_that_differs() {
     var both = _pep_build(folder.path, ["main.pep", "--verify-cache", "--no-verify-cache"]);
     expect_equal(_code(both), 2);
     expect_true(both.stderr.contains("'--verify-cache' cannot be used with '--no-verify-cache'"));
+}
+
+# An entry file in a module's folder (a package's example) brings in the
+# module's files, which come before it in namespace order. Built from the
+# cache, cold and warm, its compilation unit is still the program's own,
+# defining `main`, and the module's files it never reads are not linked
+# (#839).
+[Test]
+builds_an_entry_inside_a_modules_folder_with_the_cache() {
+    var folder = TempFolder("options_module_entry");
+    var module = folder.path.join(Path("pkg"));
+    Directory.create_all(module.join(Path("app")));
+    File.write_text(module.join(Path("module.pep")), "export * from \"extra\";\n");
+    # Defined nowhere: linking `extra.pep`'s object fails.
+    File.write_text(
+        module.join(Path("extra.pep")),
+        "extern int _pepper_missing_839();\n\nexport extra(): int {\n    return _pepper_missing_839();\n}\n"
+    );
+    File.write_text(module.join(Path("app")).join(Path("main.pep")), _PROGRAM);
+    # `-o` names the file as given, so it carries the platform's suffix.
+    var program = "main" + toolchain.executable_suffix();
+    for (var _ in 0..2) {
+        var command = process.Command(_compiler().to_string());
+        command.arguments(["pkg/app/main.pep", "-o", program, "--build", "build", "--cache", "cache"]);
+        # Compilation unit workers, which compile each unit's object, even on
+        # one CPU.
+        command.working_directory(folder.path).environment("PEPC_COMPILATION_UNIT_JOBS", "2");
+        command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+        var built = command.run();
+        expect_true(built.is_ok());
+        if (!built.value().status.success()) {
+            print(built.value().stderr);
+        }
+        expect_true(built.value().status.success());
+        var ran = process.Command(folder.path.join(Path(program)).to_string()).run();
+        expect_true(ran.is_ok() and ran.value().status.success());
+    }
 }
 
 # Every object (`.o`, `.obj`, `.bc`) under `folder`.
