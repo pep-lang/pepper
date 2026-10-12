@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d9c8bdc.js";
+            window.path_to_searchindex_js = "../searchindex-8cb31727.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -308,9 +308,10 @@ same copies.</p>
 <p><code>pepper package</code> fetches them there and records the commit of each, the
 dependencies’ dependencies included, in <code>pep.lock</code> beside <code>pep.toml</code>; commit
 <code>pep.lock</code> with <code>pep.toml</code>. <code>pepper build</code> fetches what <code>pep.lock</code> lists and
-<code>.pep/deps</code> lacks, so a fresh clone builds with <code>pepper build</code> alone, with
-git or, where git is missing, by downloading each locked commit’s archive
-over HTTPS and checking it against the checksum <code>pep.lock</code> records. See
+<code>.pep/deps</code> lacks or holds at another commit, so a fresh clone builds with
+<code>pepper build</code> alone, with git or, where git is missing, by downloading each
+locked commit’s archive over HTTPS and checking it against the checksum
+<code>pep.lock</code> records. See
 <a href="pep-package.html">The package manager: pep-package</a>, which also says how
 versions are chosen when several packages need one.</p>
 <pre><code class="language-bash">pepper package add someone/geometry       # adds it to pep.toml and fetches it
