@@ -132,9 +132,10 @@ same copies.
 `pepper package` fetches them there and records the commit of each, the
 dependencies' dependencies included, in `pep.lock` beside `pep.toml`; commit
 `pep.lock` with `pep.toml`. `pepper build` fetches what `pep.lock` lists and
-`.pep/deps` lacks, so a fresh clone builds with `pepper build` alone, with
-git or, where git is missing, by downloading each locked commit's archive
-over HTTPS and checking it against the checksum `pep.lock` records. See
+`.pep/deps` lacks or holds at another commit, so a fresh clone builds with
+`pepper build` alone, with git or, where git is missing, by downloading each
+locked commit's archive over HTTPS and checking it against the checksum
+`pep.lock` records. See
 [The package manager: pep-package](pep-package.md), which also says how
 versions are chosen when several packages need one.
 

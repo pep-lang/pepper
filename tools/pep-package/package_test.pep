@@ -228,6 +228,21 @@ builds_fetch_what_pep_lock_lists() {
 }
 
 [Test]
+builds_move_a_checkout_pep_lock_has_moved_past() {
+    if (!has_git()) {
+        return;
+    }
+    var hosts = Hosts("build_stale");
+    var project = Project("build_stale", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    expect_exit(hosts.package(project.dir, ["fetch"]), 0);
+    # A checkout from before pep.lock moved to 1.1.0 (#845): the build
+    # moves it to the locked commit.
+    var geometry = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("geometry");
+    git(geometry, ["checkout", "--quiet", "--detach", "v1.0.0"]);
+    expect_equal(hosts.build_and_run(project.dir), "1.1.0 1.3.1\n");
+}
+
+[Test]
 builds_side_by_side_fetch_once() {
     if (!has_git()) {
         return;

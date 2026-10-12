@@ -93,10 +93,13 @@ project's dependencies, and its `[build]` table's `include` folders and
 `link` libraries apply to it as well.
 
 Before compiling a program in a project, the compiler fetches whatever
-`pep.lock` lists and the project's `.pep/deps` lacks, and the dependencies
-`pep.toml` names that `pep.lock` does not list yet, by running
-`pep-package fetch` (beside `pep-build`, else on the `PATH`). Without
-`pep-package`, it checks the locked commits out with `git` itself. See
+`pep.lock` lists and the project's `.pep/deps` lacks or holds at another
+commit, and the dependencies `pep.toml` names that `pep.lock` does not list
+yet, by running `pep-package fetch` (beside `pep-build`, else on the
+`PATH`). Without
+`pep-package`, it checks the missing commits out with `git` itself, and
+asks for `pepper package fetch` to move a checkout at another commit. A
+dependency checked out on a branch is left as it is. See
 [The package manager: pep-package](pep-package.md).
 
 ### `-I <dir>`

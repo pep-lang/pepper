@@ -2,7 +2,7 @@
 ## fetching its dependencies.
 
 import io;
-import [Directory, Path] from io;
+import [Directory, File, Path] from io;
 import compiler.link;
 import process;
 
@@ -133,8 +133,8 @@ export fetch_dependencies(entry: Path): Result<void, String> {
     return fetched;
 }
 
-## What a project lacks: the locked packages missing from `.pep/deps`, and
-## whether `pep.toml` names a dependency `pep.lock` does not list.
+## What a project lacks: the locked packages missing from `.pep/deps` or
+## checked out there at another commit, and whether `pep.toml` names a dependency `pep.lock` does not list.
 struct _Missing {
     var packages: link.LockedPackage[] = Array<link.LockedPackage>();
     var unlocked: bool = false;
@@ -152,7 +152,8 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
     }
     var missing = _Missing();
     for (var package in locked.value()) {
-        if (!link.package_directory(project, package.host, package.repository).is_directory()) {
+        var dir = link.package_directory(project, package.host, package.repository);
+        if (!dir.is_directory() or _is_stale(dir, package)) {
             missing.packages.append(package);
         }
     }
@@ -172,6 +173,25 @@ _needs_fetch(project: Path, manifest: link.Manifest): Result<_Missing, String> {
         }
     }
     return Result<_Missing, String>.ok(missing);
+}
+
+## Whether `dir`, a checkout of `package`, is at another commit than
+## pep.lock's (#845): a detached git checkout's HEAD, or an unpacked
+## archive's `.pep-commit`. A checkout on a branch is someone's work, so it
+## stays as it is.
+_is_stale(dir: Path, package: link.LockedPackage): bool {
+    var head = File.read_to_string(dir.join(Path(".git")).join(Path("HEAD")));
+    if (head.is_err()) {
+        head = File.read_to_string(dir.join(Path(".pep-commit")));
+    }
+    if (head.is_err()) {
+        return false;
+    }
+    var at = head.value().trim();
+    if (at.starts_with("ref:")) {
+        return false;
+    }
+    return at != package.commit;
 }
 
 ## Fetches what `project` lacks, holding the fetch lock: another build may
@@ -214,6 +234,13 @@ _fetch_locked(project: Path, manifest: link.Manifest): Result<void, String> {
         );
     }
     for (var package in missing) {
+        var dir = link.package_directory(project, package.host, package.repository);
+        if (dir.is_directory()) {
+            # A stale checkout may hold edits: pep-package moves it, never deletes it.
+            return Result<void, String>.err(
+                $"{dir} is not at the commit {project.join(Path(link.LOCK_FILE))} locks; run 'pepper package fetch'"
+            );
+        }
         var checked = _check_out(project, package);
         if (checked.is_err()) {
             return checked;
