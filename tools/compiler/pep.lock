@@ -5,5 +5,5 @@ version = 1
 [[package]]
 name = "llvm"
 source = "github:justinboswell/pepper-llvm"
-commit = "429ae67322a3edca444e7e93f9f35800a1f3f33c"
-sha256 = "0517dd4e5a24d1c3695fb069b30ab8fdb436949eae99376c4848df8738e6704a"
+commit = "c5099c0ca61252d66494d20baf244572c7c525f7"
+sha256 = "579c672bab319fe0fb971609c42fa61360b44ca9b7f65a8ac7314f3ff696974c"

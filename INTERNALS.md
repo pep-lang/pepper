@@ -1827,7 +1827,9 @@ package lacks are declared in `debug.pep`.
   a debug record. Module-scope variables get a
   `DIGlobalVariableExpression` (`declare_global`, from `emit_globals`);
   `keep_parts` drops the `!dbg` of a global a part only declares, and the
-  part that defines it describes it.
+  part that defines it describes it. A body `keep_parts` deletes takes its
+  debug records with it (pepper-llvm's `delete_body`), so later copies of
+  the module and their parts stay valid (#835).
 - **Types** (`debug_types.pep`, `Generator.debug_type`): numbers under
   their written names, raw pointers (`__ptr<T>` for `T*`), a plain enum as
   an enumeration, a tuple as a structure of `0`, `1`, ..., a trait value as

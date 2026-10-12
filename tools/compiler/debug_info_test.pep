@@ -9,6 +9,7 @@ import compiler.driver;
 import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
+import llvm;
 import os;
 import process;
 import compiler.sema;
@@ -306,6 +307,47 @@ g_gives_each_static_pass_a_stop_and_its_compile_time_variables() {
     expect_true(ir.contains("c\"y\\00\""));
     # Code without `-g` has no stops.
     expect_false(_ir(_STATIC, false).contains("asm sideeffect \"nop\""));
+}
+
+[Test]
+g_parts_each_verify_after_the_split() {
+    # Each part is kept in a copy of the whole module made after the parts
+    # before it deleted their copies' bodies, as a build compiling its
+    # parts in one process does: no deleted body's debug records may turn
+    # up in a later copy's functions (#835).
+    var folder = TempFolder("debug_parts");
+    var program = _load(folder.path, _PROGRAM);
+    var module = sema.merge(program);
+    expect_true(module.is_ok());
+    var state = sema.run_passes(module.value(), program.target, program.sources());
+    expect_true(state.is_ok());
+    var namespaces = Array<String>();
+    var part_of_file = Array<uint>();
+    uint parts = 8;
+    for (var i in 0..program.files.count) {
+        namespaces.append(program.files[i].namespace);
+        part_of_file.append((i % (parts as ulong - 1)) as uint + 1);
+    }
+    codegen.initialize_backends();
+    var triple = codegen.target_triple(program.target);
+    var cpu = codegen.Cpu.default_for(triple);
+    var machine = llvm.TargetMachine.create(triple, cpu.name, cpu.features, llvm.OptLevel.O0);
+    expect_true(machine.is_ok());
+    var setup = codegen.Build(machine.value(), cpu);
+    setup.debug_info = true;
+    var owners = HashMap<String, uint>();
+    var ir = codegen.generate(module.value(), state.value(), namespaces, "main", setup, owners);
+    expect_true(ir.is_ok());
+    var partition = codegen.prepare(ir.value(), owners, part_of_file, 0, parts);
+    for (var part in 0..parts) {
+        var copy = ir.value().clone();
+        expect_true(codegen.keep_part(copy, partition, part).is_ok());
+        var verified = copy.verify();
+        if (verified.is_err()) {
+            print($"part {part}: {verified.error().message}");
+        }
+        expect_true(verified.is_ok());
+    }
 }
 
 [Test]
