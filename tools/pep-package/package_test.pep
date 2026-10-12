@@ -57,13 +57,16 @@ struct Hosts {
     }
 
     # The command that runs `program` with `arguments` in `dir`, with this
-    # stand-in for github.com.
+    # stand-in for github.com, and GitLab and Codeberg in folders that do not
+    # exist, so a lookup never leaves the machine (`add` asks every host).
     command(program: String, dir: Path, arguments: Array<String>): process.Command {
         return process
             .Command(program)
             .arguments(arguments)
             .working_directory(dir)
-            .environment("PEPPER_PACKAGE_GITHUB_URL", url);
+            .environment("PEPPER_PACKAGE_GITHUB_URL", url)
+            .environment("PEPPER_PACKAGE_GITLAB_URL", url + "/gitlab")
+            .environment("PEPPER_PACKAGE_CODEBERG_URL", url + "/codeberg");
     }
 
     # Runs pep-package with `arguments` in `dir`.
@@ -111,6 +114,7 @@ git(dir: Path, arguments: Array<String>) {
     var output = run(
         process
             .Command("git")
+            .arguments(["-c", "core.fsmonitor=false"])
             .arguments(arguments)
             .working_directory(dir)
             .environment("GIT_AUTHOR_NAME", "test")

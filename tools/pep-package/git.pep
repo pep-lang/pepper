@@ -43,12 +43,15 @@ export repository_url(host: String, repository: String): String {
 # Runs git with `arguments`, in `directory` when it is not empty, and
 # returns what it printed, or what went wrong.
 export git(arguments: Array<String>, directory: String = ""): Result<String> {
-    var command = process.Command("git").arguments(arguments);
+    # No fsmonitor daemon for a checkout pep-package owns: each would
+    # outlive the command (with `core.fsmonitor = true` in a user's config).
+    var command = process.Command("git").arguments(["-c", "core.fsmonitor=false"]).arguments(arguments);
     if (!directory.is_empty) {
         command.working_directory(Path(directory));
     }
     # Never stop to ask for a password: a repository that needs one fails.
-    command.environment("GIT_TERMINAL_PROMPT", "0");
+    # Git Credential Manager (Windows) asks in a window unless told not to.
+    command.environment("GIT_TERMINAL_PROMPT", "0").environment("GCM_INTERACTIVE", "never");
     var output = command.run();
     if (output.is_err()) {
         return Result<String>.Err($"cannot run git: {output.error().message}");

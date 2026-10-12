@@ -94,6 +94,9 @@ if [ "$(uname -s)" != Linux ]; then
   [ -z "$exe" ] || llvm_path="$(cygpath -u "$llvm_prefix")/bin"
 fi
 
+# A Windows path (`D:/x`) would split the PATH entry below at its colon.
+[ -z "$exe" ] || target="$(cygpath -u "$target")"
+
 # The tools get a folder of their own, with a link to the compiler (a copy
 # on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
 # never written to.
@@ -109,6 +112,10 @@ if [ "$compiler" != "$bin" ]; then
     ln -sf "$compiler/pep-build" "$bin/pep-build"
   fi
 fi
+
+# A test that reaches a git remote fails instead of waiting for a login
+# prompt (Git Credential Manager on Windows) that nobody answers.
+export GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never
 
 # Everything builds against this checkout's runtime, not the toolchain's.
 export PEPPER_RUNTIME="$root/runtime"

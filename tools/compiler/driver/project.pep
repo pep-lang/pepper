@@ -255,7 +255,12 @@ _check_out(project: Path, package: link.LockedPackage): Result<void, String> {
 
 ## Runs git with `arguments`, in `dir` when given.
 _git(arguments: String[], dir: Path?): Result<void, String> {
-    var command = process.Command("git").arguments(arguments).environment("GIT_TERMINAL_PROMPT", "0");
+    # No fsmonitor daemon, which would outlive the build, for a dependency's checkout.
+    var command = process
+        .Command("git")
+        .arguments(["-c", "core.fsmonitor=false"])
+        .arguments(arguments)
+        .environment("GIT_TERMINAL_PROMPT", "0");
     if (dir.is_value()) {
         command.working_directory(dir.value());
     }
