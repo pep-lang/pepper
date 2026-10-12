@@ -40,9 +40,10 @@ _load(root: Path): link.Program {
 }
 
 # Builds the program in `root` with the cache in it, and runs it.
-_build(root: Path): driver.Built {
+_build(root: Path, debug: bool = false): driver.Built {
     var output = root.join(Path("main"));
     var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.debug = debug;
     options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
     options.in_process = true;
     var built = driver.build(_load(root), options);
@@ -336,6 +337,50 @@ prunes_neither_reused_nor_recent_keys() {
     expect_true(cache.store(recent, "unit", "key9").is_ok());
     for (var i in [0, 2, 3, 4, 5, 6, 7, 8, 9]) {
         expect_true(cache.objects("unit", $"key{i}").exists());
+    }
+}
+
+# A build with debug info whose every unit is a hit still defines `main`,
+# which only the entry part, compiled every build, holds (#827); and the
+# hits' parts count as just reused, so a build storing newer keys of them
+# does not prune them while this one links them.
+[Test]
+builds_with_debug_info_from_every_unit_in_the_cache() {
+    var folder = TempFolder("debug_hits");
+    var root = folder.path;
+    _write_program(root);
+    # Code of its own beside `main`, so `main.pep`'s unit has an object
+    # to reuse.
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nimport \"b\";\nimport geo;\n_total(): int {\n    return a_value() + b_value() + geo.area(2, 3);\n}\nmain(): int {\n    return _total() - 9;\n}\n"
+    );
+    var first = _build(root, true);
+    expect_true(first.hits.is_empty);
+
+    var parts = Array<Path>();
+    var units = root.join(Path("cache")).join(Path("v1")).join(Path("units"));
+    var hours_ago = os.SystemTime.now().unix_nanoseconds() - 10 * 3600000000000;
+    for (var entry in Directory.open(units).value().entries().value()) {
+        if (!entry.name.contains("#")) {
+            continue;
+        }
+        for (var key in Directory.open(units.join(Path(entry.name))).value().entries().value()) {
+            var part = units.join(Path(entry.name)).join(Path(key.name));
+            part.set_modified(hours_ago);
+            parts.append(part);
+        }
+    }
+    expect_false(parts.is_empty);
+
+    # The output gone, so the program is built again, all from the cache.
+    File.remove(root.join(Path("main")));
+    var again = _build(root, true);
+    expect_false(again.unchanged);
+    expect_true(again.misses.is_empty);
+    expect_false(again.hits.is_empty);
+    for (var part in parts) {
+        expect_true(part.metadata().value().modified > hours_ago);
     }
 }
 

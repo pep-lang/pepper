@@ -595,6 +595,12 @@ _objects_in(cache: Cache, folder: Path, extension: String): Path[] {
             }
             found.append(object);
         }
+        # A part's folder is pruned on its own age: mark each as reused too,
+        # or a build storing a newer key of that part removes it while this
+        # one links it.
+        for (var object in found) {
+            cache.used(object.parent().value());
+        }
         return found;
     }
     while (true) {

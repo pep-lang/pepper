@@ -28,7 +28,7 @@ extend _ClosureNames with Rewriter;
 
 ## Drops the bodies `module.cached_files` allows: of a cached file's
 ## function that no generic, trait default or inferred return type needs,
-## and whose link summary the cache recorded.
+## and whose link summary the cache recorded; never `main`'s.
 ##
 ## @param module the model, changed in place
 export strip_bodies(module: Module) {
@@ -48,7 +48,10 @@ export strip_bodies(module: Module) {
     var strip = (function: FunctionDef) => {
         var loc = function.loc;
         bool in_cached = !loc.is_none() and (loc.file as ulong) < cached.count and cached[loc.file as ulong];
+        # `main` is in the entry part, compiled every build, never in its
+        # unit's cached object.
         if (in_cached
+            and function.name != "main"
             and function.owner.is_none()
             and function.generic_params.count == 0
             and !function.ty.is_auto()

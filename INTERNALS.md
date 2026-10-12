@@ -1764,7 +1764,8 @@ changed.
   the files it reads from other units are, which a hit's record gives; a
   hit whose link summaries were recorded marks its files in
   `Module.cached_files`, so `strip_bodies` skips their bodies and codegen
-  only declares them (`Generator.stripped`). After sema, `reuse_after_sema`
+  only declares them (`Generator.stripped`); never `main`'s, which the
+  entry part, compiled every build, defines. After sema, `reuse_after_sema`
   hashes the other files' interfaces from their tokens and
   `summaries_to_record`, keys the remaining units, and a unit that hits
   then generates no objects. A function whose link summary calls through a
@@ -1782,7 +1783,10 @@ changed.
   written to the build folder and moved into place as one. The same key
   gives the same objects, so they never change once there, and builds share
   the cache without locks or copies: a hit is linked where it is. Each
-  unit, and each part, keeps its newest eight keys.
+  unit, and each part, keeps its newest eight keys, and none stored or
+  reused in the last ten minutes, since a build may be linking it; a unit
+  hit marks its parts reused too, so a build storing newer keys of a part
+  does not remove one another build is about to link.
 - **Programs.** A program's key (`Keys.program`) hashes every file and what
   the link takes (output, `-l`, `-L`, the current folder); when
   `programs/<hash of the output path>` records that key and the output's
