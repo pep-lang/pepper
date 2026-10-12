@@ -326,6 +326,12 @@ prunes_neither_reused_nor_recent_keys() {
     expect_true(cache.objects("unit", "key0").exists());
     expect_false(cache.objects("unit", "key1").exists());
     expect_true(cache.objects("unit", "key2").exists());
+    # The pruned key left by a rename, and nothing of it stays behind; a
+    # build reusing it finds it gone, and compiles it.
+    expect_false(cache.used(cache.objects("unit", "key1")));
+    expect_equal(
+        Directory.open(cache.objects("unit", "key0").parent().value()).value().entries().value().count, 8 as ulong
+    );
 
     # Within the grace period nothing goes, however many keys there are.
     var recent = root.join(Path("built9"));

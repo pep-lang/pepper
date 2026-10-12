@@ -99,14 +99,16 @@ fi
 
 # The tools get a folder of their own, with a link to the compiler (a copy
 # on Windows, with the LLVM-C.dll it loads), so a toolchain's folder is
-# never written to.
+# never written to. The copy keeps the compiler's time: the build cache
+# keys on the compiler's path, size and time (`compiler_identity`), so a
+# fresh time would rebuild everything on every pass (#662).
 bin="$target/pepper-tests/bin"
 mkdir -p "$bin"
 if [ "$compiler" != "$bin" ]; then
   if [ -n "$exe" ]; then
-    cp -f "$compiler/pep-build$exe" "$bin/"
+    cp -fp "$compiler/pep-build$exe" "$bin/"
     if [ -f "$compiler/LLVM-C.dll" ]; then
-      cp -f "$compiler/LLVM-C.dll" "$bin/"
+      cp -fp "$compiler/LLVM-C.dll" "$bin/"
     fi
   else
     ln -sf "$compiler/pep-build" "$bin/pep-build"

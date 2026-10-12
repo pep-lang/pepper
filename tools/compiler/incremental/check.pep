@@ -247,7 +247,7 @@ export check_compilation_units(
         # a `main` package whose inputs did not change from its cache.
         if (k == last and !last_extension.is_empty) {
             var folder = cache.objects($"compilation unit {unit.name}", unit.key);
-            if (folder.join(Path($"entry.{last_extension}")).is_file()) {
+            if (cache.used(folder) and folder.join(Path($"entry.{last_extension}")).is_file()) {
                 var out = Checked(module, state);
                 out.last = Optional<Path>.Value(folder);
                 return Result<Checked, CheckError>.ok(out);

@@ -610,14 +610,13 @@ _check_in_workers(
         options.early_worker,
         options.trace_time,
         (k) => {
-            # A compilation unit's object goes with its record: one without it
-            # (pruned, say) is checked again, which compiles it.
-            if (!_compilation_unit_object(cache, units[k], extension).is_file()) {
+            # Reused now, so no build pruning the cache removes it before this
+            # one links it. A compilation unit's object goes with its record:
+            # one without it (pruned, say) is checked again, which compiles it.
+            if (!cache.used(cache.objects($"compilation unit {units[k].name}", units[k].key))
+                or !_compilation_unit_object(cache, units[k], extension).is_file()) {
                 return false;
             }
-            # Reused now: no build pruning the cache removes it before this
-            # one links it.
-            cache.used(cache.objects($"compilation unit {units[k].name}", units[k].key));
             _copy_defines(cache, units[k], dir, k);
             return true;
         }
@@ -1111,8 +1110,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 var cached = options.cache.value().part(translation_units[u].name, i, part_key);
                 var object = cached.join(Path($"0.{extension}"));
                 parts.append(object);
-                if (object.is_file()) {
-                    options.cache.value().used(cached);
+                if (options.cache.value().used(cached) and object.is_file()) {
                     report.part_hits.append($"{translation_units[u].name}#{i}");
                     hits += 1;
                     continue;

@@ -67,11 +67,13 @@ export struct Cache {
     }
 
     ## Marks the objects in `folder`, a key's, as just reused, so the
-    ## unit's pruning counts them as its newest.
+    ## unit's pruning counts them as its newest. Mark a key before checking
+    ## its objects are there: a build pruning it then keeps it (`_prune`).
     ##
     ## @param folder the key's folder (`objects`)
-    used(folder: Path) {
-        folder.set_modified(os.SystemTime.now().unix_nanoseconds());
+    ## @returns whether it was marked; not when a build pruned it first
+    used(folder: Path): bool {
+        return folder.set_modified(os.SystemTime.now().unix_nanoseconds()).is_ok();
     }
 
     ## Moves `built`, a folder of objects just written, to where the objects
@@ -171,7 +173,11 @@ export default_cache(work: Path): Cache {
 
 ## Removes the oldest keys' objects in `folder` beyond the newest `_KEEP`,
 ## but none stored or reused within `_GRACE`: a build running at the same
-## time may be linking them.
+## time may be linking them. A key's folder leaves by a rename, whole, as it
+## came, so a removal that stops partway (a file open on Windows) leaves no
+## key without its objects. A key a build reused (`used`) after the listing
+## here is put back: that build checks its objects after marking it, so
+## either it finds the key gone and compiles, or the key stays.
 _prune(folder: Path) {
     var entries = Directory.open(folder);
     if (entries.is_err()) {
@@ -200,7 +206,17 @@ _prune(folder: Path) {
         if (now - modified < _GRACE) {
             continue;
         }
-        Directory.remove_all(path);
+        # A name no key has; a leftover is pruned again later.
+        var removing = folder.join(Path($".removing.{process.id()}.{i}"));
+        if (File.rename(path, removing).is_err()) {
+            continue;
+        }
+        var renamed = removing.metadata();
+        if (renamed.is_ok() and now - renamed.value().modified < _GRACE) {
+            File.rename(removing, path);
+            continue;
+        }
+        Directory.remove_all(removing);
     }
 }
 
@@ -500,12 +516,14 @@ export reuse(
             reused.keys[u] = key;
             progress = true;
             var folder = cache.objects(units[u].name, key.value());
+            if (!cache.used(folder)) {
+                continue;
+            }
             var found = _objects_in(cache, folder, extension);
             var interfaces = File.read_to_string(folder.join(Path(_INTERFACES)));
             if (found.is_empty or interfaces.is_err()) {
                 continue;
             }
-            cache.used(folder);
             reused.objects[u] = found;
             for (var line in interfaces.value().split("\n")) {
                 var fields = line.split_once("\t");
@@ -571,8 +589,7 @@ export reuse_after_sema(
         var key = keys.unit(program, units, u, reused.interfaces);
         reused.keys[u] = key;
         var folder = cache.objects(units[u].name, key.value());
-        if (folder.join(Path(_INTERFACES)).is_file()) {
-            cache.used(folder);
+        if (cache.used(folder) and folder.join(Path(_INTERFACES)).is_file()) {
             reused.objects[u] = _objects_in(cache, folder, extension);
         }
     }
@@ -590,16 +607,13 @@ _objects_in(cache: Cache, folder: Path, extension: String): Path[] {
                 continue;
             }
             var object = cache.dir.join(Path(line));
-            if (!object.is_file()) {
+            # A part's folder is pruned on its own age: mark each as reused
+            # too, or a build storing a newer key of that part removes it
+            # while this one links it.
+            if (!cache.used(object.parent().value()) or !object.is_file()) {
                 return Array<Path>();
             }
             found.append(object);
-        }
-        # A part's folder is pruned on its own age: mark each as reused too,
-        # or a build storing a newer key of that part removes it while this
-        # one links it.
-        for (var object in found) {
-            cache.used(object.parent().value());
         }
         return found;
     }
