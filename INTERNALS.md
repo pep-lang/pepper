@@ -3271,9 +3271,11 @@ compiler and pep-lsp depend on are cloned with deploy keys
 - **`ci.yml`** (PRs, and dispatch):
   - `test` is the required check: a gate job that always runs (`if:
     always()`, so never skipped, since a skipped job counts as passing) and
-    passes only when `test-windows` and `test-linux` succeeded, the PR is
-    prose only, or the PR is still a draft (asked again of the API at gate
-    time). It fails on a cancelled run. On a ready PR, `changes` first posts
+    passes only when `test-windows`, `test-linux` and `test-macos`
+    succeeded, the PR is prose only, or the PR is still a draft (asked again
+    of the API at gate time). It fails on a cancelled run, and on a ready PR
+    whose base is not main (#822): that run tested against another base, and
+    its pass would let the PR merge the moment it is retargeted to main. On a ready PR, `changes` first posts
     an in-progress `test` check run that `test` completes with its verdict,
     so a pass left by a draft run cannot let the PR merge while the ready
     run is still testing it.

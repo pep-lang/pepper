@@ -29,7 +29,7 @@
 #
 # A skipped job reports success to branch protection, so the required check
 # is never a job that can be skipped: `test` always runs and fails unless
-# `test-windows` and `test-linux` succeeded, the PR is prose
+# `test-windows`, `test-linux` and `test-macos` succeeded, the PR is prose
 # only, or the PR is still a draft. Before it existed, #279
 # merged untested: marking it ready and pushing raced, and a run whose event
 # payload still said "draft" cancelled the ready run and skipped every job,
@@ -43,6 +43,11 @@
 # window, `changes` on a ready PR first posts a `test` check run of its own,
 # in progress, which holds the PR unmergeable; the gate completes it with its
 # own verdict.
+#
+# A ready PR whose base is not main (a stacked PR) always fails `test`, even
+# when its tests pass: they ran against the other base, and the pass would
+# stay on the commit. #814 merged that way the second it was retargeted to
+# main, on a pass from a run that had skipped every job (#822).
 #
 # Pushes to main do not run CI: main must be up to date before a PR merges, so
 # the merged commit is the one the PR already tested. Run it by hand
@@ -608,6 +613,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.ref }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
           CHANGES: ${{ needs.changes.result }}
           DRAFT: ${{ needs.changes.outputs.draft }}
           CODE: ${{ needs.changes.outputs.code }}
@@ -635,6 +642,13 @@ jobs:
               fi
               echo "draft PR: tests run once it is marked ready for review"
               return 0
+            fi
+            # A pass stays on the commit, and the ruleset takes any passing
+            # `test` on the head: one from a run against another base would
+            # let the PR merge the moment it is retargeted (#822).
+            if [ "$EVENT" = "pull_request" ] && [ "$BASE" != "$DEFAULT" ]; then
+              echo "this run tested against $BASE, not $DEFAULT; retargeting the PR to $DEFAULT starts the run that decides"
+              return 1
             fi
             if [ "$CODE" = "false" ]; then
               echo "prose-only change: no tests needed"
