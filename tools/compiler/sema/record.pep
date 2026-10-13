@@ -447,18 +447,18 @@ export struct DeltaBase {
     }
 
     ## Reads what `write_checked` wrote on `base`, the base's checked
-    ## declarations, which it leaves as they are.
+    ## declarations, which it leaves as they are unless `input.consumes_base`
+    ## says the base is dropped after the read: then they are changed in
+    ## place.
     ##
     ## @param input the record
     ## @param base the base's checked declarations
     ## @returns the checked declarations
     static read_checked(input: RecordIn, base: Checked): Checked {
-        var sets = Array<HashSet<String>>();
-        for (var had in [base.structs, base.functions, base.globals]) {
-            var names = HashSet<String>();
-            for (var name in had) {
-                names.insert(name);
-            }
+        # Copying the base for each of a closure's records made merging the
+        # closure quadratic in its size.
+        var out = input.consumes_base ? base : base.copy();
+        for (var names in [out.structs, out.functions, out.globals]) {
             var lost = input.count();
             for (var _ in 0..lost) {
                 names.remove(input.text());
@@ -467,24 +467,19 @@ export struct DeltaBase {
             for (var _ in 0..gained) {
                 names.insert(input.text());
             }
-            sets.append(names);
         }
-        var extensions = input.unsigned();
-        var summaries = HashMap<String, (Loc, String)>();
-        for (var (key, value) in base.summaries) {
-            summaries[key] = value;
-        }
+        out.extensions = input.unsigned();
         var lost = input.count();
         for (var _ in 0..lost) {
-            summaries.remove(input.text());
+            out.summaries.remove(input.text());
         }
         var count = input.count();
         for (var _ in 0..count) {
             var key = input.text();
             var loc = input.loc();
-            summaries[key] = (loc, input.text());
+            out.summaries[key] = (loc, input.text());
         }
-        return Checked(sets[0], sets[1], sets[2], extensions, summaries);
+        return out;
     }
 
     ## Adds `bytes` to the bytes counted under `what`, and one to its count
@@ -779,6 +774,10 @@ export struct RecordIn {
     ## New elements go after the base's, a patched struct is found by name, and
     ## a list written by place cannot be read so (`error`).
     var merging: bool = false;
+    ## Whether the base a delta is read on is dropped after the read, as
+    ## merging a closure's records does: what the read changes of the base's
+    ## checked declarations is then changed in place rather than in a copy.
+    var consumes_base: bool = false;
 
     ## Starts reading `data`, a whole record. A record that is not one
     ## leaves `error` set and reads as zeros.

@@ -3001,6 +3001,10 @@ whole module: externs sorted by file, trait types by name, each extension
 marked applied. When two compilation units both made the same specialization, only the
 first is kept: they are the same, made from the same declarations.
 `sort_globals` orders globals by their files' initialization order.
+Each base is dropped once the next record is read onto it, so the read
+changes the base's checked names and summaries in place
+(`RecordIn.consumes_base`) rather than copying them: a copy per record made
+merging a closure quadratic in its size.
 
 **Link summaries.** `check_confinement` keeps with each compilation unit the link
 summary of every function it summarized (`Checked.summaries`, by summary

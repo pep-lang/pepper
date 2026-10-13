@@ -594,7 +594,8 @@ _record_bytes(program: link.Program, checked_unit: sema.CheckedUnit, base: sema.
 
 # Reads the unit in record `bytes`, its slots mapped to the program's files by
 # `slots`: a delta merged onto `base`, the module of the compilation units
-# before.
+# before, which the read may change (`sema.RecordIn.consumes_base`): the
+# caller drops it.
 _read_record(
     slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?, merging: bool
 ): Result<sema.CheckedUnit, String> {
@@ -603,6 +604,7 @@ _read_record(
     # each is decoded when one needs it (`sema.PendingBody`).
     input.lazy_bodies = true;
     input.merging = merging;
+    input.consumes_base = true;
     var count = input.count();
     for (var _ in 0..count) {
         var file = slots.try_get(input.text());
