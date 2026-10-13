@@ -369,7 +369,8 @@ With it, each file is optimized by LLVM's pre-link pipeline and kept as
 bitcode (in the build cache, as an object is), then the compiler links
 them into one module, makes every symbol internal but `main` and the C
 exports of `[Export]` functions, runs LLVM's link-time pipeline over the
-whole program and writes one object, which links as usual. No linker
+whole program, and writes its objects, one per logical CPU in parallel,
+which link as usual. No linker
 plugin is involved, so it works on every target. It applies to a library
 too (`--lib`).
 

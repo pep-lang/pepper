@@ -1662,8 +1662,13 @@ object, its members named `p<n>.o` since cached objects are all `0.o`.
 and is written, and cached, as bitcode (`0.bc`; the key gains `-lto`);
 then the parts are linked into one module (`LLVMLinkModules2`), every
 definition but `main` and the default-visible C exports is made internal
-and leaves its comdat, `lto<On>` runs over the whole program, the
-constructors move to `.init_array`, and one object links.
+and leaves its comdat, and `lto<On>` runs over the whole program. Writing
+the objects is then split across the CPUs (`lto.split`): the optimized
+module is cut into one run of its definitions per logical CPU, its local
+definitions made external and hidden, and `compile_parts` writes each
+run's object in a `--compile-part` child without optimizing it again (the
+plan's mode line says `optimized`); the constructors move to
+`.init_array` in part 0. In process (`in_process`), one object is written.
 
 **Target CPU** (`Cpu` in `codegen/generator.pep`). Code is generated for
 clang's default CPU of the target triple (`Cpu.default_for`: `x86-64` tuned

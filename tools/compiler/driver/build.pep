@@ -1187,14 +1187,21 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         clock.lap("objects");
     }
     if (lto) {
-        var whole = work.join(Path($"{stem}.lto.{triple.contains("-windows") ? "obj" : "o"}"));
-        var optimized = optimize_whole(objects, whole, machine.value(), options.opt_level);
+        var optimized = optimize_whole(
+            objects,
+            work,
+            triple.contains("-windows") ? "obj" : "o",
+            machine.value(),
+            cpu,
+            options.opt_level,
+            options.in_process,
+            clock
+        );
         if (optimized.is_err()) {
             Directory.remove_all(work);
             return Result<Built, String>.err(optimized.error());
         }
-        objects = [whole];
-        clock.lap("link-time optimization");
+        objects = optimized.value();
     }
 
     # Search order: `-L`, then `[Link(path = ...)]`.

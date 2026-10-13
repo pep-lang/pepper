@@ -52,6 +52,8 @@ export struct PartJob {
 ## @param partial whether other units' objects come from the build cache
 ## @param lto whether each part is written as bitcode after the pre-link
 ##   pipeline, for link-time optimization, rather than as an object
+## @param optimized whether `ir` is already optimized (the whole program
+##   after link-time optimization), so each part's object is only written
 ## @returns nothing, or why a part failed
 export compile_parts(
     ir: llvm.Module,
@@ -64,12 +66,13 @@ export compile_parts(
     trace_time: bool = false,
     in_process: bool = false,
     partial: bool = false,
-    lto: bool = false
+    lto: bool = false,
+    optimized: bool = false
 ): Result<void, String> {
     if (jobs.count == 1 or in_process) {
         for (var i in 0..jobs.count) {
             var module = i + 1 < jobs.count ? ir.clone() : ir;
-            var compiled = _compile(module, partition, jobs[i], machine, opt_level, trace_time, lto);
+            var compiled = _compile(module, partition, jobs[i], machine, opt_level, trace_time, lto, optimized);
             if (compiled.is_err()) {
                 return compiled;
             }
@@ -89,7 +92,10 @@ export compile_parts(
         return Result<void, String>.err(written.error().message);
     }
     var plan = StringBuilder();
-    plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n{lto}\n");
+    # The last line before the symbols: whether the parts are kept as
+    # bitcode (`true`), already optimized (`optimized`), or neither.
+    var mode = lto ? "true" : (optimized ? "optimized" : "false");
+    plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n{mode}\n");
     for (var (symbol, part) in partition.part_of) {
         plan.append($"{part} {symbol}\n");
     }
@@ -178,9 +184,10 @@ _size_of(sizes: ulong[], part: uint): ulong {
     return (part as ulong) < sizes.count ? sizes[part as ulong] : 0;
 }
 
-## Keeps `job`'s part of `ir`, optimizes it and writes its object, or with
-## `lto` its bitcode after the pre-link pipeline: the static constructors
-## then stay in `llvm.global_ctors` until the whole program is optimized.
+## Keeps `job`'s part of `ir`, optimizes it (unless it is `optimized`
+## already) and writes its object, or with `lto` its bitcode after the
+## pre-link pipeline: the static constructors then stay in
+## `llvm.global_ctors` until the whole program is optimized.
 _compile(
     ir: llvm.Module,
     partition: codegen.Partition,
@@ -188,7 +195,8 @@ _compile(
     machine: llvm.TargetMachine,
     opt_level: uint,
     trace_time: bool,
-    lto: bool
+    lto: bool,
+    optimized: bool
 ): Result<void, String> {
     var start = os.Instant.now();
     # `PEPC_TRACE_PARTS` names each stage before it runs and verifies the
@@ -199,12 +207,12 @@ _compile(
     if (kept.is_err()) {
         return Result<void, String>.err($"cannot split part {job.part}: {kept.error().message}");
     }
-    if (opt_level > 0) {
+    if (opt_level > 0 and !optimized) {
         _stage(tracing, ir, job, "optimize");
         var pipeline = lto ? "lto-pre-link" : "default";
-        var optimized = ir.run_passes($"{pipeline}<O{opt_level}>", machine);
-        if (optimized.is_err()) {
-            return Result<void, String>.err($"cannot optimize: {optimized.error().message}");
+        var ran = ir.run_passes($"{pipeline}<O{opt_level}>", machine);
+        if (ran.is_err()) {
+            return Result<void, String>.err($"cannot optimize: {ran.error().message}");
         }
     }
     if (lto) {
@@ -266,8 +274,9 @@ _keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[], parti
 
 ## Compiles `jobs`, parts of the program `compile_parts` split into `dir`:
 ## reads the bitcode once, and for each part keeps it (in a copy, but for
-## the last), optimizes it at the plan's level and writes its object (or
-## its bitcode, for link-time optimization).
+## the last), optimizes it at the plan's level (unless the program is
+## optimized already) and writes its object (or its bitcode, for link-time
+## optimization).
 ## `pepc --compile-part` runs it.
 ##
 ## @param dir the folder holding the bitcode and the plan
@@ -289,6 +298,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     var part_of = HashMap<String, uint>();
     var trace_time = lines[4] == "true";
     var lto = lines[5] == "true";
+    var optimized = lines[5] == "optimized";
     for (var index in 6..lines.count) {
         var line = lines[index];
         var space = line.find(" ");
@@ -329,7 +339,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     }
     for (var i in 0..jobs.count) {
         var module = i + 1 < jobs.count ? ir.value().clone() : ir.value();
-        var compiled = _compile(module, partition, jobs[i], machine.value(), level.value(), trace_time, lto);
+        var compiled = _compile(module, partition, jobs[i], machine.value(), level.value(), trace_time, lto, optimized);
         if (compiled.is_err()) {
             return compiled;
         }
