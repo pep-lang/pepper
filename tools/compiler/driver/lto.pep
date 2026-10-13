@@ -19,10 +19,6 @@ import llvm;
 import "build";
 import "parts";
 
-# `LLVMLinkModules2` links `source` into `destination` and disposes of
-# `source`; nonzero when the two do not link.
-extern int LLVMLinkModules2(void* destination, void* source);
-extern void* LLVMCloneModule(void* module);
 extern int LLVMGetVisibility(void* global);
 extern void LLVMSetComdat(void* global, void* comdat);
 extern int LLVMIsGlobalConstant(void* global);
@@ -68,9 +64,7 @@ export optimize_whole(
         if (part.is_err()) {
             return Result<Path[], String>.err(part.error().message);
         }
-        # The link disposes of the module it links in, which `part` still
-        # owns: it gets a copy.
-        if (LLVMLinkModules2(ir.ref, LLVMCloneModule(part.value().ref)) != 0) {
+        if (ir.link(part.value()).is_err()) {
             return Result<Path[], String>.err($"cannot link {bitcode[i]} into the program");
         }
     }
