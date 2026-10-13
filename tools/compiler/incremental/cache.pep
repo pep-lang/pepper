@@ -4,11 +4,11 @@
 ## program built, so an unchanged program is not built again.
 ##
 ## A unit is compiled as one part or more, and each part's object is kept on
-## its own, `<cache>/v1/units/<unit>#<n>/<key>/0.o`, under a key of its
+## its own, `<cache>/v2/units/<unit>#<n>/<key>/0.o`, under a key of its
 ## file's text and the interfaces of everything else it reads
 ## (`Keys.part`): like a C file's object, which depends on its text and its
 ## headers, so a body edit in one file compiles that file's parts again,
-## and no other file's. A unit's own key (`<cache>/v1/units/<unit>/<key>/`) keeps what a later build needs to
+## and no other file's. A unit's own key (`<cache>/v2/units/<unit>/<key>/`) keeps what a later build needs to
 ## skip its bodies, and the list of its parts' objects (`parts`). Each is
 ## written to a folder of the build and moved into place as one, and never
 ## changed after, since the same key gives the same objects. So builds share the cache with no lock, and link
@@ -16,7 +16,10 @@
 ## (`_KEEP`), so switching between builds that differ (`-O` levels,
 ## programs with other overrides) does not rebuild every time; reusing a key
 ## makes it the newest, and a key stored or reused lately (`_GRACE`) is
-## kept regardless, since another build may be linking it.
+## kept regardless, since another build may be linking it. A unit's
+## folder spells its name's `/` as `.` (`process.command`), so it holds only
+## its own keys: nested, unit `process` would prune the folders of units
+## `process/test/...` beside its keys (#851).
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
@@ -29,7 +32,7 @@ import compiler.sema;
 import "interface";
 
 ## The cache layout's version: a new layout gets a new folder.
-const _VERSION = "v1";
+const _VERSION = "v2";
 ## How many keys' objects each unit keeps.
 const _KEEP = 8;
 ## How long a key's objects are kept after they were stored or last reused,
@@ -52,7 +55,8 @@ export struct Cache {
     ## @param key its key
     ## @returns the folder, which need not exist
     objects(unit: String, key: String): Path {
-        return dir.join(Path("units")).join(Path(unit)).join(Path(key));
+        # A namespace never holds `.`, so no two units share a folder.
+        return dir.join(Path("units")).join(Path(unit.replace("/", "."))).join(Path(key));
     }
 
     ## Returns the folder of the object of part `n` of `unit` built under

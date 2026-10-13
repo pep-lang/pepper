@@ -346,6 +346,44 @@ prunes_neither_reused_nor_recent_keys() {
     }
 }
 
+# Pruning a unit's keys leaves the units named below it alone: unit
+# `process` (`process.pep`) beside units `process/test/...` (the files of
+# `process/test/`) once removed their folders whole, objects a build was
+# about to link among them (#851).
+[Test]
+prunes_no_other_units_keys() {
+    var folder = TempFolder("prune_nested");
+    var root = folder.path;
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var hours_ago = os.SystemTime.now().unix_nanoseconds() - 10 * 3600000000000;
+    var below = root.join(Path("below"));
+    Directory.create_all(below);
+    File.write_text(below.join(Path("0.o")), "below");
+    var kept = cache.store(below, "process/test/fork_test#0", "key");
+    expect_true(kept.is_ok());
+    for (var i in 0..9) {
+        var built = root.join(Path($"built{i}"));
+        Directory.create_all(built);
+        File.write_text(built.join(Path("0.o")), $"{i}");
+        var stored = cache.store(built, "process", $"key{i}");
+        expect_true(stored.is_ok());
+        # Oldest first, a second apart (NTFS keeps 100 ns), and the other
+        # unit's folders older still.
+        stored.value().set_modified(hours_ago + (i as long) * 1000000000);
+        var up = kept.value();
+        while (up.to_string() != cache.dir.to_string()) {
+            up.set_modified(hours_ago - 1000000000);
+            up = up.parent().value();
+        }
+    }
+    var newest = root.join(Path("newest"));
+    Directory.create_all(newest);
+    File.write_text(newest.join(Path("0.o")), "newest");
+    expect_true(cache.store(newest, "process", "key9").is_ok());
+    expect_false(cache.objects("process", "key0").exists());
+    expect_true(kept.value().join(Path("0.o")).is_file());
+}
+
 # A build with debug info whose every unit is a hit still defines `main`,
 # which only the entry part, compiled every build, holds (#827); and the
 # hits' parts count as just reused, so a build storing newer keys of them
@@ -365,7 +403,7 @@ builds_with_debug_info_from_every_unit_in_the_cache() {
     expect_true(first.hits.is_empty);
 
     var parts = Array<Path>();
-    var units = root.join(Path("cache")).join(Path("v1")).join(Path("units"));
+    var units = root.join(Path("cache")).join(Path("v2")).join(Path("units"));
     var hours_ago = os.SystemTime.now().unix_nanoseconds() - 10 * 3600000000000;
     for (var entry in Directory.open(units).value().entries().value()) {
         if (!entry.name.contains("#")) {

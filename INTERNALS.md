@@ -1771,11 +1771,11 @@ changed.
   then generates no objects. A function whose link summary calls through a
   trait (a dependent summary) has no facts: its body stands in the
   interface instead.
-- **The store.** A unit's folder, `<cache>/v1/units/<unit>/<key>/`, holds
+- **The store.** A unit's folder, `<cache>/v2/units/<unit>/<key>/`, holds
   `interfaces`, its files' interface hashes, `summaries`, its functions'
   link summaries (none when the build warned about the unit, so it is
   checked, and warns, again), and `parts`, the list of its parts' objects.
-  Each part is cached on its own, `<cache>/v1/units/<unit>#<n>/<key>/0.o`,
+  Each part is cached on its own, `<cache>/v2/units/<unit>#<n>/<key>/0.o`,
   keyed like a C file's object (`Keys.part`): the part's files by their
   text, and every other file the unit reads by its interface hash. So when
   a body edit misses a unit, only the edited file's part is optimized and
@@ -1786,7 +1786,11 @@ changed.
   unit, and each part, keeps its newest eight keys, and none stored or
   reused in the last ten minutes, since a build may be linking it; a unit
   hit marks its parts reused too, so a build storing newer keys of a part
-  does not remove one another build is about to link.
+  does not remove one another build is about to link. A unit's folder
+  spells the `/` of its name as `.` (`units/process.command#0/`), so each
+  folder holds only its own keys: nested, the folder of unit `process`
+  held the folders of units `process/...`, and its pruning removed them
+  whole, objects a build was about to link among them (#851).
 - **Programs.** A program's key (`Keys.program`) hashes every file and what
   the link takes (output, `-l`, `-L`, the current folder); when
   `programs/<hash of the output path>` records that key and the output's
@@ -2891,7 +2895,7 @@ a struct below (`_pep_copy_value`), which has no owner there
 member in each object that uses it. A declaration keeps an owner (`DECLARED_ONLY` for an
 instantiation), so `prepare` gives it the linker spelling of its definition.
 The object is cached under the compilation unit's key (`_compilation_unit_object`:
-`<cache>/v1/units/compilation unit <name>/<key>/0.o` and `defines`; the key already
+`<cache>/v2/units/compilation unit <name>/<key>/0.o` and `defines`; the key already
 holds the codegen options), and a compilation unit counts as done from the cache only
 when both its record and its object are there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this
