@@ -74,7 +74,9 @@ struct _TestCase {
 ##   when it returns, or with 1 when it left an allocation behind (or
 ##   released one too many); a panic aborts the program. With a timeout above 0, a
 ##   test still running after that many seconds ends the program with exit
-##   status 124 and a message on standard error.
+##   status 124 and a message on standard error, and ends every process the
+##   test started with it (a job object on Windows, a process group
+##   elsewhere), so none holds `pep-test`'s pipes to its output open.
 export struct TestRunner {
     var _file: String;
     var _adding: String;
@@ -161,6 +163,7 @@ export struct TestRunner {
             var message = $"error: test '{name}' timed out after {limit} {limit == 1 ? "second" : "seconds"}\n";
             var text = _pep_malloc(message.size + 1) as __ptr<char>;
             memcpy(text, message.c_str(), message.size + 1);
+            var tree = _own_the_process_tree();
             # The watchdog is left running: the program ends when the test
             # returns, or the watchdog ends it. The test waits until the
             # watchdog sleeps, so that nothing the new thread allocates as
@@ -170,7 +173,7 @@ export struct TestRunner {
                 sleeping.store(1);
                 async.Thread.sleep(limit * 1000);
                 _pep_write_error(text);
-                process.exit(124);
+                _end_the_process_tree(tree, 124);
             });
             while (sleeping.load() == 0) {
                 async.Thread.sleep(1);
@@ -226,3 +229,96 @@ _end_crashes_at_once() {
 
 [Target(!OS(Windows))]
 _end_crashes_at_once() {}
+
+# A timeout ends the processes the test started too, not just the program:
+# one left running holds pep-test's pipes to the program's output open,
+# and pep-test, reading them to their end, waits for it forever (#842).
+# The program starts its own process tree before the test runs, and the
+# timeout ends that tree.
+#
+# On Windows the tree is a job object (null when the program cannot join
+# one); every process the test starts joins it, unless it breaks away.
+[Target(OS(Windows))]
+type _ProcessTree = __ptr<void>;
+
+[Target(OS(Windows))]
+extern void* CreateJobObjectW(void* attributes, ushort* name);
+[Target(OS(Windows))]
+extern int AssignProcessToJobObject(void* job, void* process);
+[Target(OS(Windows))]
+extern int TerminateJobObject(void* job, uint code);
+[Target(OS(Windows))]
+extern void* GetCurrentProcess();
+
+[Target(OS(Windows))]
+_own_the_process_tree(): _ProcessTree {
+    var job = CreateJobObjectW(__null, __null);
+    if (job == __null) {
+        return job;
+    }
+    if (AssignProcessToJobObject(job, GetCurrentProcess()) == 0) {
+        return __null;
+    }
+    return job;
+}
+
+[Target(OS(Windows))]
+_end_the_process_tree(tree: _ProcessTree, code: int) {
+    if (tree != __null) {
+        # Ends the program too, with `code`.
+        TerminateJobObject(tree, code as uint);
+    }
+    process.exit(code);
+}
+
+# On POSIX the tree is a process group the program leads, which its
+# children and theirs join, unless they start a group of their own. The
+# program's first group is kept (-1 when it cannot lead one), to step
+# back into before it ends the group, so that it exits with its own code
+# rather than the kill's signal. A program in a group of its own no longer
+# gets the terminal's Ctrl-C; its timeout still ends it.
+[Target(!OS(Windows) && !OS(Wasi))]
+type _ProcessTree = int;
+
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int getpgrp();
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int setpgid(int pid, int group);
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int getpid();
+[Target(!OS(Windows) && !OS(Wasi))]
+extern int kill(int pid, int signal);
+
+[Target(!OS(Windows) && !OS(Wasi))]
+_own_the_process_tree(): _ProcessTree {
+    var first = getpgrp();
+    if (setpgid(0, 0) != 0) {
+        return -1;
+    }
+    return first;
+}
+
+[Target(!OS(Windows) && !OS(Wasi))]
+_end_the_process_tree(tree: _ProcessTree, code: int) {
+    if (tree != -1) {
+        # When stepping back fails, the kill ends the program too.
+        var group = getpid();
+        setpgid(0, tree);
+        kill(-group, 9);  # SIGKILL
+    }
+    process.exit(code);
+}
+
+# WASI starts no processes.
+[Target(OS(Wasi))]
+type _ProcessTree = int;
+
+[Target(OS(Wasi))]
+_own_the_process_tree(): _ProcessTree {
+    return 0;
+}
+
+[Target(OS(Wasi))]
+_end_the_process_tree(tree: _ProcessTree, code: int) {
+    process.exit(code);
+}

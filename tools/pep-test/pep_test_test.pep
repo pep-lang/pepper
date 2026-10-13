@@ -148,3 +148,22 @@ write_tests(folder: Path, modifier: String) {
         );
     }
 }
+
+[Test]
+ends_what_a_test_that_times_out_started() {
+    # The child holds pep-test's pipes to the test's output open: unless
+    # the timeout ends it too, pep-test never finishes (#842).
+    var folder = TempFolder("pep_test_tree");
+    write_file(
+        folder.path.join("tree_test.pep"),
+        "import async;\nimport process;\n\n"
+            + "[Test]\nstarts_a_child_that_hangs() {\n"
+            + "    process.Command(process.executable_path().value().to_string()).arguments([\"--run\", \"hangs\"]).spawn();\n"
+            + "    hangs();\n}\n\n"
+            + "[Test]\nhangs() {\n    async.Thread.sleep(1000000);\n}\n"
+    );
+    var ran = pep_test(folder.path, ["--timeout", "1", "-f", "starts_a_child"]);
+    expect_exit(ran, 1);
+    expect_contains(ran.stdout + ran.stderr, "error: test 'starts_a_child_that_hangs' timed out after 1 second\n");
+    expect_ends_with(ran.stdout, "0 passed, 1 failed, 1 filtered out\n");
+}
