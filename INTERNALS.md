@@ -3265,8 +3265,9 @@ Every job in every workflow runs on a self-hosted runner, never a
 GitHub-hosted one: **`pepper-windows`** and **`pepper-linux`** (x64), and
 **`pepper-macos`** (arm64). A new job picks one of those labels. Every job
 installs the published build of main (`scripts/ci-install-toolchain.sh`,
-#713) and builds and tests with it, except where the compiler changed: a PR
-that changes `tools/compiler/` (`changes` classifies it) has each test and
+#713) and builds and tests with it, except where the compiler changed: a merge
+that changes `tools/compiler/` (`changes` classifies it), or a dispatch on
+a branch, has each test and
 cross-link job build that compiler with the installed one first
 (`scripts/ci-build-compiler.sh`, the release's stage 1), and every later
 step uses it, so the whole suite tests the changed compiler. `ci.yml` jobs build into a folder beside the checkout
@@ -3275,22 +3276,17 @@ compiler and pep-lsp depend on are cloned with deploy keys
 (`scripts/ci-package-auth.sh`, secrets `PEPPER_LLVM_DEPLOY_KEY` and
 `PEPPER_LSP_DEPLOY_KEY`).
 
-- **`ci.yml`** (PRs, and dispatch):
-  - `test` is the required check: a gate job that always runs (`if:
-    always()`, so never skipped, since a skipped job counts as passing) and
-    passes only when `test-windows`, `test-linux` and `test-macos`
-    succeeded, the PR is prose only, or the PR is still a draft (asked again
-    of the API at gate time). It fails on a cancelled run, and on a ready PR
-    whose base is not main (#822): that run tested against another base, and
-    its pass would let the PR merge the moment it is retargeted to main. On a ready PR, `changes` first posts
-    an in-progress `test` check run that `test` completes with its verdict,
-    so a pass left by a draft run cannot let the PR merge while the ready
-    run is still testing it.
+- **`ci.yml`** (pushes to main, and dispatch; not pull requests, so test a
+  PR with the pre-merge checks or dispatch CI on its branch):
+  - `test` is the gate: a job that always runs (`if: always()`, so never
+    skipped, since a skipped job counts as passing) and passes only when
+    `test-windows`, `test-linux` and `test-macos` succeeded or the commit
+    is prose only. It fails on a cancelled run.
   - `test-windows` (**`pepper-windows`**): provision LLVM 20
     (`ci-provision-llvm.sh`, cached; the compiler's tests link it through
     pepper-llvm), install the build of main (the newest `x.y.z-dev`
     prerelease `release.yml` publishes on each merge, through `install.sh` /
-    `install.ps1`), build `tools/compiler` with it when the PR changes it
+    `install.ps1`), build `tools/compiler` with it when it changed
     (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
     check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
@@ -3308,11 +3304,11 @@ compiler and pep-lsp depend on are cloned with deploy keys
     (`scripts/ci-cross-link.sh build`); `cross-run` runs what the others
     built for its OS and diffs the output with its native build's
     (`ci-cross-link.sh run`).
-  - `changes` runs first. It asks the API whether the PR is a draft now (the
-    event payload can be stale when a push races "ready for review"), and
-    diffs the PR against its base. A draft, or a PR that changed only prose
-    (`*.md` other than `docs/src/SUMMARY.md` and `docs/src/reference/`, or
-    `.agents/`/`.claude/`), skips the test jobs.
+  - `changes` runs first. On a push it diffs the merge against its parent;
+    one that changed only prose (`*.md` other than `docs/src/SUMMARY.md` and
+    `docs/src/reference/`, or `.agents/`/`.claude/`) skips the test jobs. A
+    dispatch tests everything, building the branch's compiler unless the
+    branch is main.
 - **`platform-test.yml`**: runs on dispatch only, for any script on
   Linux/macOS/Windows (`gh workflow run platform-test.yml -f platforms=…
   -f script=…`; the default runs `scripts/pepper-tests.sh` with the build

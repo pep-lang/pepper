@@ -12,8 +12,8 @@ description: >
 
 # Platform test
 
-CI (`.github/workflows/ci.yml`) gates merges on Windows, and also runs the
-suite on Linux and macOS against the default LLVM. Other LLVM majors run only
+CI (`.github/workflows/ci.yml`) runs the suite on Windows, Linux and macOS
+on each merge to main (and on dispatch) against the default LLVM. Other LLVM majors run only
 in `.github/workflows/llvm-versions.yml`: on a release tag, before the
 extension is packaged and the docs are published, or when dispatched.
 Anything CI does not reach (another LLVM on a branch, a script, a probe of a

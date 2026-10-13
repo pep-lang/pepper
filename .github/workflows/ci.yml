@@ -1,15 +1,16 @@
-# Required check for merging into main: `test`, a gate that passes only when
+# `test` is the gate: it passes only when
 # `test-windows` -- the Pepper test suite (scripts/pepper-tests.sh) on
 # Windows, the platform the compiler is developed against -- `test-linux`
 # and `test-macos`, the same suite on Linux and macOS, all ran and passed on
-# this commit (or the PR changes only prose; see `changes`). A cancelled or
+# this commit (or the commit changes only prose; see `changes`). A cancelled or
 # timed-out job fails the gate like a failed one. Every job uses LLVM 20, the
 # one the compiler binds (scripts/setup-llvm.sh).
 #
 # Every job tests with the published build of main (#713): the toolchain
 # release.yml builds on each merge, installed with the install scripts as a
-# user installs it (scripts/ci-install-toolchain.sh). A PR that changes the
-# compiler (tools/compiler/) is tested with that compiler instead: each job
+# user installs it (scripts/ci-install-toolchain.sh). A commit that changes
+# the compiler (tools/compiler/), or a dispatch on a branch other than main,
+# is tested with its own compiler instead: each job
 # builds it with the installed pep-build (scripts/ci-build-compiler.sh, the
 # release's stage 1), and every later step uses it.
 #
@@ -19,146 +20,82 @@
 # The Linux runner has LLVM 20 preinstalled and may `sudo apt-get` to add
 # packages.
 #
-# Draft PRs run no build or tests (only `changes` and `test`, seconds each on
-# pepper-linux) until the PR is marked ready for review, which starts a full
-# run. The runners share the maintainer's machine, so
-# draft pushes would otherwise queue behind and slow ready PRs. A PR that
-# changes only prose skips them too (see `changes`). On a draft, `test`
-# passes: a draft cannot merge, and a red check on every draft hid the
-# failures that mattered.
+# CI runs on each push to main (a merge) and by hand (workflow_dispatch),
+# not on pull requests: the runners share the maintainer's machine, and a run
+# per PR push queued behind itself. Test a PR before merging it with the
+# pre-merge checks, or run CI on its branch from the Actions tab ("Run
+# workflow", pick the branch) or `gh workflow run ci.yml --ref <branch>`.
 #
-# A skipped job reports success to branch protection, so the required check
-# is never a job that can be skipped: `test` always runs and fails unless
-# `test-windows`, `test-linux` and `test-macos` succeeded, the PR is prose
-# only, or the PR is still a draft. Before it existed, #279
-# merged untested: marking it ready and pushing raced, and a run whose event
-# payload still said "draft" cancelled the ready run and skipped every job,
-# which counted as a pass. For the same reason `changes` asks the API whether
-# the PR is a draft now, rather than trusting the payload, and `test` asks
-# again before passing a draft.
-#
-# A draft's passing `test` stays on its commit after the PR is marked ready,
-# and the ready run's own `test` job does not exist until the three test jobs
-# finish, so for those minutes the commit would read as tested. To close that
-# window, `changes` on a ready PR first posts a `test` check run of its own,
-# in progress, which holds the PR unmergeable; the gate completes it with its
-# own verdict.
-#
-# A ready PR whose base is not main (a stacked PR) always fails `test`, even
-# when its tests pass: they ran against the other base, and the pass would
-# stay on the commit. #814 merged that way the second it was retargeted to
-# main, on a pass from a run that had skipped every job (#822).
-#
-# Pushes to main do not run CI: main must be up to date before a PR merges, so
-# the merged commit is the one the PR already tested. Run it by hand
-# (workflow_dispatch) when main needs a fresh result.
+# A skipped job reports success, so `test` is never a job that can be
+# skipped: it always runs and fails unless `test-windows`, `test-linux` and
+# `test-macos` succeeded, or the commit changes only prose (see `changes`).
 name: CI
 
 on:
-  pull_request:
-    # The defaults plus ready_for_review, so leaving draft runs the full suite.
-    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
 
-# A newer commit on a PR makes its older runs irrelevant, so cancel them.
-# Manual runs queue instead, so each one finishes with a result.
+# Runs queue instead of cancelling, so each one finishes with a result.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  # Whether the PR touches anything the build or the tests read. A PR that
-  # changes only prose (Markdown outside docs/src/SUMMARY.md and the generated
-  # docs/src/reference/, which `pep-doc check` reads, or agent skills
-  # under .agents/ and .claude/) skips every test job below, and so does a
-  # draft. docs/examples/ is code: tools/pep-doc/examples_test.pep builds and
-  # runs it.
+  # Whether the commit touches anything the build or the tests read. A merge
+  # that changes only prose (Markdown outside docs/src/SUMMARY.md and the
+  # generated docs/src/reference/, which `pep-doc check` reads, or agent
+  # skills under .agents/ and .claude/) skips every test job below.
+  # docs/examples/ is code: tools/pep-doc/examples_test.pep builds and runs it.
   changes:
     runs-on: pepper-linux
     # It takes seconds. A run cancelled while this job is being handed to a
-    # runner has hung here until the timeout, holding the PR's next run (same
+    # runner has hung here until the timeout, holding the next run (same
     # concurrency group) behind it, so keep the timeout short.
     timeout-minutes: 2
     permissions:
       contents: read
-      pull-requests: read
-      checks: write
     outputs:
-      draft: ${{ steps.draft.outputs.draft }}
       code: ${{ steps.classify.outputs.code }}
       compiler: ${{ steps.classify.outputs.compiler }}
-      hold: ${{ steps.hold.outputs.id }}
     steps:
-      # The PR's draft state now, from the API: the event payload is a
-      # snapshot, and a push racing "ready for review" can deliver a payload
-      # that still says draft after the PR has left it.
-      - id: draft
-        env:
-          EVENT: ${{ github.event_name }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          draft=false
-          if [ "$EVENT" = "pull_request" ]; then
-            draft=$(gh api "repos/$REPO/pulls/$NUMBER" --jq .draft)
-          fi
-          echo "draft=$draft"
-          echo "draft=$draft" >> "$GITHUB_OUTPUT"
-
-      # A ready PR's head may still carry a passing `test` from a draft run.
-      # Post an in-progress `test` check run on it now, so the PR cannot merge
-      # on that stale pass while this run tests it; `test` completes it.
-      - id: hold
-        if: github.event_name == 'pull_request' && steps.draft.outputs.draft != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          id=$(gh api "repos/$REPO/check-runs" -X POST \
-            -f name=test -f head_sha="$SHA" -f status=in_progress \
-            -f 'output[title]=Testing' \
-            -f 'output[summary]=The CI run testing this commit has not finished.' \
-            --jq .id)
-          echo "id=$id"
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-
-      # A pull_request run checks out the merge commit, whose first parent is
-      # the base; depth 2 is enough to diff the two.
+      # Merges into main are squashed, so the commit's parent is the base;
+      # depth 2 is enough to diff the two.
       - uses: actions/checkout@v7
-        if: steps.draft.outputs.draft != 'true'
         with:
           fetch-depth: 2
 
       - id: classify
-        if: steps.draft.outputs.draft != 'true'
         env:
           EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref_name }}
+          DEFAULT: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" != "pull_request" ]; then
-            # A dispatch tests everything, with main's published compiler.
+          if [ "$EVENT" != "push" ]; then
+            # A dispatch tests everything. On main it uses main's published
+            # compiler; on another branch (a PR) it builds the branch's.
             echo "code=true" >> "$GITHUB_OUTPUT"
-            echo "compiler=false" >> "$GITHUB_OUTPUT"
+            if [ "$REF" = "$DEFAULT" ]; then
+              echo "compiler=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "compiler=true" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
           code=false
           compiler=false
           # The runner's checkout persists between runs, and a shallow one
-          # can lack the merge commit's base: fetch it. Without the paths,
-          # everything is tested; classifying no paths would pass the
-          # change untested.
+          # can lack the parent: fetch it. Without the paths, everything is
+          # tested; classifying no paths would pass the change untested.
           if ! git rev-parse -q --verify 'HEAD^1' >/dev/null; then
             git fetch --no-tags --deepen=1 origin "$GITHUB_SHA" || true
           fi
           if ! paths=$(git diff --name-only 'HEAD^1' HEAD); then
-            echo "cannot diff the merge commit against its base: testing everything"
+            echo "cannot diff the commit against its parent: testing everything"
             paths=""
             code=true
             compiler=true
@@ -180,7 +117,7 @@ jobs:
   test-windows:
     runs-on: pepper-windows
     needs: changes
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     # Provisioning LLVM costs ~5 minutes on a cold cache. 45 leaves room for
     # a slow download without hanging forever.
     timeout-minutes: 45
@@ -267,7 +204,7 @@ jobs:
   test-macos:
     runs-on: pepper-macos
     needs: changes
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     # 10 more for building a changed compiler.
     timeout-minutes: 40
 
@@ -339,7 +276,7 @@ jobs:
   test-linux:
     runs-on: pepper-linux
     needs: changes
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     # 10 more for building a changed compiler.
     timeout-minutes: 35
     # build_cache_tests verify the cache (`--verify-cache`) on every
@@ -444,7 +381,7 @@ jobs:
   # `xwin`, cached on the runner (ci-provision-cross.sh).
   cross-sysroots:
     needs: changes
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -472,7 +409,7 @@ jobs:
 
   cross-link:
     needs: [changes, cross-sysroots]
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -564,7 +501,7 @@ jobs:
 
   cross-run:
     needs: [changes, cross-link]
-    if: needs.changes.outputs.draft != 'true' && needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -585,19 +522,11 @@ jobs:
           set -euxo pipefail
           bash scripts/ci-cross-link.sh run "$RUNNER_TEMP/cross"
 
-  # The required check. It always runs, even when the run is cancelled, so it
-  # can never report the success a skipped job does: it passes only when
-  # test-windows and test-linux passed on this commit, the PR
-  # changes only prose, or the PR is still a draft (a draft cannot merge;
-  # marking it ready starts the run that tests it). It only reads the results
-  # of the jobs it needs, and completes the in-progress `test` check run that
-  # `changes` posted with the same verdict.
-  #
-  # When a need was cancelled (a newer push cancels the PR's older runs), the
-  # verdict is a foregone failure, but it still runs: a skipped `test` on a
-  # cancelled run of the PR's latest commit would count as passing. It runs
-  # on pepper-linux like the rest (two runners), never on a GitHub-hosted
-  # one, whose Actions quota the account spends in days.
+  # The gate. It always runs, even when the run is cancelled, so it can never
+  # report the success a skipped job does: it passes only when test-windows,
+  # test-linux and test-macos passed on this commit, or the commit changes
+  # only prose. It runs on pepper-linux like the rest, never on a
+  # GitHub-hosted runner, whose Actions quota the account spends in days.
   test:
     if: always()
     needs: [changes, test-windows, test-linux, test-macos]
@@ -605,83 +534,35 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: read
-      checks: write
     steps:
       - env:
-          EVENT: ${{ github.event_name }}
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number }}
-          BASE: ${{ github.event.pull_request.base.ref }}
-          DEFAULT: ${{ github.event.repository.default_branch }}
           CHANGES: ${{ needs.changes.result }}
-          DRAFT: ${{ needs.changes.outputs.draft }}
           CODE: ${{ needs.changes.outputs.code }}
-          HOLD: ${{ needs.changes.outputs.hold }}
           WINDOWS: ${{ needs.test-windows.result }}
           LINUX: ${{ needs.test-linux.result }}
           MACOS: ${{ needs.test-macos.result }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "changes=$CHANGES draft=$DRAFT code=$CODE hold=$HOLD test-windows=$WINDOWS test-linux=$LINUX test-macos=$MACOS"
-
-          verdict() {
-            if [ "$CHANGES" != "success" ]; then
-              echo "changes did not succeed ($CHANGES), so nothing was tested"
-              return 1
-            fi
-            if [ "$DRAFT" = "true" ]; then
-              # Ask again: if the PR left draft since `changes` looked, the
-              # ready run decides, and this run must not leave a pass behind.
-              if [ "$EVENT" = "pull_request" ] &&
-                [ "$(gh api "repos/$REPO/pulls/$NUMBER" --jq .draft)" != "true" ]; then
-                echo "the PR left draft during this run; the ready run tests it"
-                return 1
-              fi
-              echo "draft PR: tests run once it is marked ready for review"
-              return 0
-            fi
-            # A pass stays on the commit, and the ruleset takes any passing
-            # `test` on the head: one from a run against another base would
-            # let the PR merge the moment it is retargeted (#822).
-            if [ "$EVENT" = "pull_request" ] && [ "$BASE" != "$DEFAULT" ]; then
-              echo "this run tested against $BASE, not $DEFAULT; retargeting the PR to $DEFAULT starts the run that decides"
-              return 1
-            fi
-            if [ "$CODE" = "false" ]; then
-              echo "prose-only change: no tests needed"
-              return 0
-            fi
-            if [ "$WINDOWS" != "success" ]; then
-              echo "test-windows did not pass ($WINDOWS)"
-              return 1
-            fi
-            if [ "$LINUX" != "success" ]; then
-              echo "test-linux did not pass ($LINUX)"
-              return 1
-            fi
-            if [ "$MACOS" != "success" ]; then
-              echo "test-macos did not pass ($MACOS)"
-              return 1
-            fi
-            echo "test-windows, test-linux and test-macos passed"
-            return 0
-          }
-
-          status=0
-          message=$(verdict) || status=$?
-          if [ "$status" = 0 ]; then
-            conclusion=success
-            echo "$message"
-          else
-            conclusion=failure
-            echo "::error::$message"
+          echo "changes=$CHANGES code=$CODE test-windows=$WINDOWS test-linux=$LINUX test-macos=$MACOS"
+          if [ "$CHANGES" != "success" ]; then
+            echo "::error::changes did not succeed ($CHANGES), so nothing was tested"
+            exit 1
           fi
-          if [ -n "$HOLD" ]; then
-            gh api "repos/$REPO/check-runs/$HOLD" -X PATCH \
-              -f status=completed -f conclusion="$conclusion" \
-              -f 'output[title]=Tested' -f "output[summary]=$message" > /dev/null
+          if [ "$CODE" = "false" ]; then
+            echo "prose-only change: no tests needed"
+            exit 0
           fi
-          exit "$status"
+          if [ "$WINDOWS" != "success" ]; then
+            echo "::error::test-windows did not pass ($WINDOWS)"
+            exit 1
+          fi
+          if [ "$LINUX" != "success" ]; then
+            echo "::error::test-linux did not pass ($LINUX)"
+            exit 1
+          fi
+          if [ "$MACOS" != "success" ]; then
+            echo "::error::test-macos did not pass ($MACOS)"
+            exit 1
+          fi
+          echo "test-windows, test-linux and test-macos passed"

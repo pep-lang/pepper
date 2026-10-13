@@ -215,8 +215,8 @@ gh pr view --json statusCheckRollup,mergeable,mergeStateStatus
   in the meantime — so once it resolves, loop back and re-run the "Check
   CI" command above rather than merging off the stale payload, then fall
   through to whichever case below the fresh result actually matches.
-- **No checks configured at all** — this repo may have no CI workflows yet,
-  in which case `statusCheckRollup` comes back empty. That's not a green
+- **No checks on the PR** — CI here runs on merges to main and by hand, not
+  on pull requests, so `statusCheckRollup` normally comes back empty. That's not a green
   light by omission: fall back to running the repo's own verification
   locally (see the **build** and **test** skills — `scripts/pepper-tests.sh`)
   and treat that result as this phase's gate.
