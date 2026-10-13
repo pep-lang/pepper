@@ -279,6 +279,30 @@ builds_side_by_side_fetch_once() {
 }
 
 [Test]
+fetches_start_no_fsmonitor_daemon() {
+    if (!has_git()) {
+        return;
+    }
+    # As with `core.fsmonitor = true` in a user's git config (#843), where
+    # every checkout would start a daemon that outlives the command.
+    var hosts = Hosts("fsmonitor");
+    var project = Project("fsmonitor", "geometry = { github = \"someone/geometry\", version = \"1.0\" }\n");
+    var fetch = hosts
+        .command(tool("pep-package").to_string(), project.dir, ["fetch"])
+        .environment("GIT_CONFIG_COUNT", "1")
+        .environment("GIT_CONFIG_KEY_0", "core.fsmonitor")
+        .environment("GIT_CONFIG_VALUE_0", "true");
+    expect_exit(run(fetch), 0);
+    var geometry = project.dir.join(".pep").join("deps").join("github.com").join("someone").join("geometry");
+    # `status` fails when no daemon runs, and where git has no fsmonitor.
+    var status = run(process.Command("git").arguments(["fsmonitor--daemon", "status"]).working_directory(geometry));
+    if (status.status.success()) {
+        run(process.Command("git").arguments(["fsmonitor--daemon", "stop"]).working_directory(geometry));
+        panic($"pep-package fetch left an fsmonitor daemon running for {geometry}");
+    }
+}
+
+[Test]
 the_project_overrides_a_dependency_and_update_says_what_holds_one_back() {
     if (!has_git()) {
         return;
