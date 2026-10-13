@@ -123,7 +123,8 @@ work with `help` and the old form too.
 Installed by [pep-install](pep-install.md), `pepper` lives in the Pepper
 home's `bin` folder (`~/.pepper/bin`, `%LOCALAPPDATA%\pepper\bin` on
 Windows), beside the installed toolchains, and runs the tools of one of
-them. The first of these that names a toolchain picks it:
+them, or of a toolchain in a folder `PEPPER_TOOLCHAIN_PATH` lists (see
+[More toolchain folders](pep-install.md#more-toolchain-folders)). The first of these that names a toolchain picks it:
 
 1. `+<version>` before the command: `pepper +0.3.0 build`;
 2. the `PEPPER_TOOLCHAIN` environment variable;

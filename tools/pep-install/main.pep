@@ -12,14 +12,15 @@
 # Toolchains go in the Pepper home (`PEPPER_HOME`, else
 # `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere); see
 # tools/toolchain for its layout and for how a folder's toolchain is
-# chosen.
+# chosen. `--path <dir>` and `PEPPER_TOOLCHAIN_PATH` add folders that
+# toolchains are found in, but never installed in or removed from.
 #
 # Build it from the repository root, next to the compiler:
 #
 #     pep-build -I tools tools/pep-install/main.pep -o target/bin/pep-install
 
 import cli;
-import [Directory, File] from io;
+import [Directory, File, Path] from io;
 import os;
 import toolchain;
 import "commands";
@@ -39,25 +40,36 @@ main(args: String[]): int {
     var available = list.flag("available", "a", "list the releases with an archive for this machine instead");
     var add = parser.command("add", "install a toolchain; the default stays as it is, unless there was none");
     var add_version = add.positional("version", "0.3.0, 0.3 for its newest patch, or latest");
+    var add_force = add.flag("force", "f", "install it again even when it is installed, replacing it");
     var use = parser.command("use", "make an installed toolchain the default");
     var use_version = use.positional("version", "0.3.0, or 0.3 for the newest installed 0.3.x");
     var update = parser.command("update", "install the newest release and make it the default");
+    var update_force = update.flag("force", "f", "install it again even when it is installed, replacing it");
     var remove = parser.command("remove", "remove an installed toolchain other than the default");
     var remove_version = remove.positional("version", "the installed toolchain, such as 0.2.1");
     var which = parser.command("which", "show the toolchain this folder uses, why, and its pep-build");
+    var path = parser.multiple<Path>(
+        "path", "", "also find toolchains in DIR, laid out as the home's toolchains folder", "DIR", global = true
+    );
     if (!parser.parse(args)) {
         return 2;
     }
     var home = toolchain.find_home();
+    # --path's folders come before PEPPER_TOOLCHAIN_PATH's.
+    var search = path.values();
+    for (var folder in home.search) {
+        search.append(folder);
+    }
+    home.search = search;
     var ran = Result<String>.ok(parser.help());
     if (list.is_selected) {
         ran = available.is_set ? _available(home) : Result<String>.ok(installed_list(home, _chosen(home)));
     } else if (add.is_selected) {
-        ran = _add(home, add_version.value());
+        ran = _add(home, add_version.value(), add_force.is_set);
     } else if (use.is_selected) {
         ran = _with_spec(use_version.value(), (spec) => use_toolchain(home, spec));
     } else if (update.is_selected) {
-        ran = _update(home);
+        ran = _update(home, update_force.is_set);
     } else if (remove.is_selected) {
         ran = _with_spec(remove_version.value(), (spec) => remove_toolchain(home, spec));
     } else if (which.is_selected) {
@@ -105,16 +117,16 @@ _available(home: toolchain.Home): Result<String> {
     return Result<String>.ok(available_list(home, releases));
 }
 
-_add(home: toolchain.Home, text: String): Result<String> {
+_add(home: toolchain.Home, text: String, force: bool): Result<String> {
     var spec = toolchain.parse_spec(text);
     if (spec.is_empty()) {
         return Result<String>.Err($"'{text}' is not a version such as 0.3.0, 0.3 or latest");
     }
     var releases = _releases()?;
-    return add_toolchain(home, releases, spec.value());
+    return add_toolchain(home, releases, spec.value(), force);
 }
 
-_update(home: toolchain.Home): Result<String> {
+_update(home: toolchain.Home, force: bool): Result<String> {
     var releases = _releases()?;
-    return update_toolchain(home, releases);
+    return update_toolchain(home, releases, force);
 }

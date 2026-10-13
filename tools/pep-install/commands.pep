@@ -9,8 +9,9 @@ import toolchain;
 import "releases";
 import "zip";
 
-# The installed toolchains, newest first, one a line, marking the default
-# and `in_use`, the one this folder uses.
+# The installed toolchains, newest first, one a line, marking the default,
+# `in_use`, the one this folder uses, and where those outside the home's
+# `toolchains` are.
 export installed_list(home: toolchain.Home, in_use: toolchain.Choice?): String {
     var installed = home.installed();
     if (installed.is_empty) {
@@ -27,6 +28,10 @@ export installed_list(home: toolchain.Home, in_use: toolchain.Choice?): String {
         var used = in_use.is_value() and in_use.value().source != toolchain.Source.Default;
         if (used and in_use.value().version.is_value() and in_use.value().version.value() == version) {
             notes.append("in use here, " + in_use.value().reason());
+        }
+        var folder = home.installed_at(version);
+        if (folder.to_string() != home.toolchain(version).to_string()) {
+            notes.append("in " + folder.to_string());
         }
         text = text + version.to_string() + (notes.is_empty ? "" : " (" + ", ".join(notes) + ")") + "\n";
     }
@@ -48,13 +53,18 @@ export available_list(home: toolchain.Home, releases: Array<Release>): String {
 }
 
 # Installs the newest of `releases` that `spec` names, unless it is
-# installed. The first toolchain installed becomes the default; otherwise
-# the default stays as it is.
-export add_toolchain(home: toolchain.Home, releases: Array<Release>, spec: toolchain.VersionSpec): Result<String> {
+# installed and not `force`d; forced, it is installed again over the home's
+# copy. The first toolchain installed becomes the default; otherwise the
+# default stays as it is.
+export add_toolchain(
+    home: toolchain.Home, releases: Array<Release>, spec: toolchain.VersionSpec, force: bool = false
+): Result<String> {
     var release = _newest_release(releases, spec)?;
     var version = release.version.to_string();
-    if (home.installed().contains(release.version)) {
-        return Result<String>.ok($"{version} is already installed\n");
+    if (!force and home.installed().contains(release.version)) {
+        return Result<String>.ok(
+            $"{version} is already installed; reinstall it with 'pepper install add --force {version}'\n"
+        );
     }
     install_release(home, release)?;
     if (home.default_version().is_empty()) {
@@ -64,13 +74,13 @@ export add_toolchain(home: toolchain.Home, releases: Array<Release>, spec: toolc
     return Result<String>.ok($"installed {version}; make it the default with 'pepper install use {version}'\n");
 }
 
-# Installs the newest release, unless it is installed, and makes it the
-# default. Older toolchains stay installed. The home's `pepper` and
-# `pep-install` are then updated from that toolchain.
-export update_toolchain(home: toolchain.Home, releases: Array<Release>): Result<String> {
+# Installs the newest release, unless it is installed and not `force`d,
+# and makes it the default. Older toolchains stay installed. The home's
+# `pepper` and `pep-install` are then updated from that toolchain.
+export update_toolchain(home: toolchain.Home, releases: Array<Release>, force: bool = false): Result<String> {
     var release = _newest_release(releases, toolchain.VersionSpec())?;
     var version = release.version.to_string();
-    var installed = home.installed().contains(release.version);
+    var installed = !force and home.installed().contains(release.version);
     if (!installed) {
         install_release(home, release)?;
     }
@@ -186,6 +196,12 @@ export remove_toolchain(home: toolchain.Home, spec: toolchain.VersionSpec): Resu
         return Result<String>.Err($"{spec.to_string()} names {", ".join(names)}; name one of them");
     }
     var version = matching[0];
+    var folder = home.installed_at(version);
+    if (folder.to_string() != home.toolchain(version).to_string()) {
+        return Result<String>.Err(
+            $"{version.to_string()} is in {folder.to_string()}, outside the Pepper home; pep-install removes only the toolchains it installs"
+        );
+    }
     var default_version = home.default_version();
     if (default_version.is_value() and default_version.value() == version) {
         return Result<String>.Err(
@@ -232,7 +248,8 @@ _newest_release(releases: Array<Release>, spec: toolchain.VersionSpec): Result<R
 }
 
 # Downloads and unpacks `release` into its folder of `home`. It is unpacked
-# beside that folder first, so only a complete toolchain takes its place.
+# beside that folder first, so only a complete toolchain takes its place,
+# and a toolchain already there is moved aside until it has.
 export install_release(home: toolchain.Home, release: Release): Result<void> {
     var created = Directory.create_all(home.toolchains);
     if (created.is_err()) {
@@ -247,14 +264,27 @@ export install_release(home: toolchain.Home, release: Release): Result<void> {
         Directory.remove_all(partial);
         return installed;
     }
+    var old = Path(target.to_string() + ".old");
+    if (old.exists()) {
+        Directory.remove_all(old);
+    }
     if (target.exists()) {
-        Directory.remove_all(target);
+        # Fails on Windows while a program of it runs, leaving it as it is.
+        var aside = File.rename(target, old);
+        if (aside.is_err()) {
+            Directory.remove_all(partial);
+            return Result<void>.Err($"cannot move {target.to_string()} aside: {aside.error().message}");
+        }
     }
     var moved = File.rename(partial, target);
     if (moved.is_err()) {
         Directory.remove_all(partial);
+        if (old.exists()) {
+            File.rename(old, target);
+        }
         return Result<void>.Err($"cannot move {partial.to_string()} to {target.to_string()}: {moved.error().message}");
     }
+    Directory.remove_all(old);
     return Result<void>.ok();
 }
 

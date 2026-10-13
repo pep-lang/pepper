@@ -67,7 +67,11 @@ reads_prerelease_versions() {
 
 # Makes a toolchain folder that `Home.installed` counts.
 fake_toolchain(home: toolchain.Home, version: String) {
-    var bin = home.toolchain(toolchain.parse_version(version).value()).join("bin");
+    fake_toolchain_in(home.toolchains, version);
+}
+
+fake_toolchain_in(folder: Path, version: String) {
+    var bin = folder.join(version).join("bin");
     Directory.create_all(bin).value();
     var compiler = bin.join("pep-build" + toolchain.executable_suffix());
     File.write_text(compiler, "").value();
@@ -144,6 +148,39 @@ uses_and_removes_installed_toolchains() {
     expect_equal(remove_toolchain(home, toolchain.parse_spec("0.2.1").value()).value(), "removed 0.2.1\n");
     expect_false(home.toolchain(toolchain.Version(0, 2, 1)).exists());
     expect_equal(home.installed().count, 2);
+}
+
+[Test]
+finds_toolchains_in_the_search_folders() {
+    var folder = TempFolder("finds_toolchains_in_the_search_folders");
+    var home = toolchain.Home(folder.path.join("home"));
+    var extra = folder.path.join("extra");
+    fake_toolchain(home, "0.2.1");
+    fake_toolchain_in(extra, "0.2.1");
+    fake_toolchain_in(extra, "0.3.0");
+    expect_equal(home.installed().count, 1);
+    home.search = [extra];
+    expect_equal(home.installed().count, 2);
+    var found = toolchain.Version(0, 3, 0);
+    expect_equal(home.installed_at(found).to_string(), extra.join("0.3.0").to_string());
+    # The home's own copy comes first.
+    var own = toolchain.Version(0, 2, 1);
+    expect_equal(home.installed_at(own).to_string(), home.toolchain(own).to_string());
+    expect_equal(
+        installed_list(home, Optional<toolchain.Choice>.Empty), $"0.3.0 (in {extra.join("0.3.0").to_string()})\n0.2.1\n"
+    );
+
+    expect_equal(use_toolchain(home, toolchain.parse_spec("0.3").value()).value(), "0.3.0 is the default\n");
+    var chosen = toolchain.choose_toolchain(home, "", "", folder.path).value();
+    var compiler = extra.join("0.3.0").join("bin").join("pep-build" + toolchain.executable_suffix());
+    expect_equal(which_toolchain(home, chosen).value(), $"0.3.0 (the default)\n{compiler.to_string()}\n");
+    home.set_default(own).value();
+    expect_true(
+        remove_toolchain(
+            home, toolchain.parse_spec("0.3.0").value()
+        ).error().message.contains("outside the Pepper home")
+    );
+    expect_true(extra.join("0.3.0").exists());
 }
 
 [Test]
@@ -291,8 +328,18 @@ installs_and_updates_from_the_releases() {
             );
             expect_equal(
                 add_toolchain(home, releases, toolchain.parse_spec("0.3.0").value()).value(),
-                "0.3.0 is already installed\n"
+                "0.3.0 is already installed; reinstall it with 'pepper install add --force 0.3.0'\n"
             );
+            # --force installs it again over a clean folder.
+            var reinstalled = home.toolchain(toolchain.Version(0, 3, 0));
+            File.write_text(reinstalled.join("stale.txt"), "stale").value();
+            expect_equal(
+                add_toolchain(home, releases, toolchain.parse_spec("0.3.0").value(), force = true).value(),
+                "installed 0.3.0; make it the default with 'pepper install use 0.3.0'\n"
+            );
+            expect_false(reinstalled.join("stale.txt").exists());
+            expect_false(Path(reinstalled.to_string() + ".old").exists());
+            expect_true(reinstalled.join("runtime").join("core.pep").is_file());
             expect_true(
                 add_toolchain(
                     home, releases, toolchain.parse_spec("0.5").value()
@@ -317,6 +364,9 @@ installs_and_updates_from_the_releases() {
                 update_toolchain(home, releases).value(),
                 $"0.3.1, the newest release, is installed and the default\nupdated pep-install in {home.bin.to_string()}\n"
             );
+            expect_equal(
+                update_toolchain(home, releases, force = true).value(), "installed 0.3.1 and made it the default\n"
+            );
             expect_equal(home.installed().count, 3);
 
             # A download that does not match its .sha256 installs nothing.
@@ -333,6 +383,21 @@ installs_and_updates_from_the_releases() {
             expect_false(home.toolchain(toolchain.Version(0, 4, 0)).exists());
             expect_false(Path(home.toolchain(toolchain.Version(0, 4, 0)).to_string() + ".partial").exists());
             expect_equal(home.installed().count, 3);
+
+            # Nor does a forced one, which keeps the toolchain it would replace.
+            var replaced = publish(
+                served, base, "0.3.1", "0000000000000000000000000000000000000000000000000000000000000000"
+            );
+            File.write_text(served.join("releases.json"), "[" + replaced + "]").value();
+            var mismatched = fetch_releases(base + "releases.json", "linux-x64").value();
+            expect_true(update_toolchain(home, mismatched, force = true).is_err());
+            expect_equal(File.read_to_string(entry_point).value(), "pepper 0.3.1");
+            expect_true(
+                home
+                    .toolchain_bin(toolchain.Version(0, 3, 1))
+                    .join("pep-build" + toolchain.executable_suffix())
+                    .is_file()
+            );
         }
     );
 }
