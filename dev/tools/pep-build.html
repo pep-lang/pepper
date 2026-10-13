@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9311746c.js";
+            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -490,7 +490,8 @@ alone, which links sooner. The default is <code>full</code> at <code>-O2</code> 
 bitcode (in the build cache, as an object is), then the compiler links
 them into one module, makes every symbol internal but <code>main</code> and the C
 exports of <code>[Export]</code> functions, runs LLVM’s link-time pipeline over the
-whole program and writes one object, which links as usual. No linker
+whole program, and writes its objects, one per logical CPU in parallel,
+which link as usual. No linker
 plugin is involved, so it works on every target. It applies to a library
 too (<code>--lib</code>).</p>
 <h3 id="-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><a class="header" href="#-marchcpu--mcpucpu--mtunecpu--mfeature--mno-feature"><code>-march=&lt;cpu&gt;</code>, <code>-mcpu=&lt;cpu&gt;</code>, <code>-mtune=&lt;cpu&gt;</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code></a></h3>
