@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-743de6df.js";
+            window.path_to_searchindex_js = "searchindex-9311746c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e4845a93.js"></script>
@@ -21829,8 +21829,9 @@ the panic must contain.</li>
 returns having released everything it allocated; a test that leaves an
 allocation behind (or releases one too many) exits with 1 and says so on
 standard error. A panic aborts the program; a test that runs past the timeout
-ends it with exit status 124, along with every process the test started
-(a job object on Windows, a process group elsewhere): one left running
+ends it with exit status 124. However the program ends (the test returns,
+panics, crashes or times out), every process the test started ends with
+it (a job object on Windows, a process group elsewhere): one left running
 would hold the pipes to its output open, and <code>pep-test</code> would wait on it.</li>
 </ul>
 <p>On Windows, a test program turns off Windows Error Reporting for its
@@ -51549,8 +51550,9 @@ which tells apart tests of one name in two files) and exits with 0
 when it returns, or with 1 when it left an allocation behind (or
 released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
-status 124 and a message on standard error, and ends every process the
-test started with it (a job object on Windows, a process group
+status 124 and a message on standard error. However the program ends
+(the test returns, panics, crashes or times out), every process the
+test started ends with it (a job object on Windows, a process group
 elsewhere), so none holds <code>pep-test</code>’s pipes to its output open.</li>
 </ul>
 <h3 id="constructor-56"><a class="header" href="#constructor-56">Constructor</a></h3>
