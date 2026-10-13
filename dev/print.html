@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-cd9f8f2c.js";
+            window.path_to_searchindex_js = "searchindex-743de6df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e4845a93.js"></script>
@@ -20393,7 +20393,8 @@ work with <code>help</code> and the old form too.</p>
 <p>Installed by <a href="#toolchains-pep-install">pep-install</a>, <code>pepper</code> lives in the Pepper
 home’s <code>bin</code> folder (<code>~/.pepper/bin</code>, <code>%LOCALAPPDATA%\pepper\bin</code> on
 Windows), beside the installed toolchains, and runs the tools of one of
-them. The first of these that names a toolchain picks it:</p>
+them, or of a toolchain in a folder <code>PEPPER_TOOLCHAIN_PATH</code> lists (see
+<a href="#more-toolchain-folders">More toolchain folders</a>). The first of these that names a toolchain picks it:</p>
 <ol>
 <li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.3.0 build</code>;</li>
 <li>the <code>PEPPER_TOOLCHAIN</code> environment variable;</li>
@@ -20435,6 +20436,7 @@ pepper install list --available   # the releases with an archive for this machin
 pepper install add 0.3            # installs the newest 0.3.x; the default stays as it is
 pepper install use 0.3.0          # makes it the default
 pepper install update             # installs the newest release and makes it the default
+pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
 pepper install remove 0.2.1
 pepper install which              # the toolchain this folder uses, why, and its pep-build
 </code></pre>
@@ -20456,10 +20458,13 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 <tr><td><code>list</code></td><td>Lists the installed toolchains, newest first, marking the default and the one the current folder uses, with why</td></tr>
 <tr><td><code>list --available</code>, <code>-a</code></td><td>Lists the releases that have an archive for this machine instead, marking those installed</td></tr>
 <tr><td><code>add &lt;version&gt;</code></td><td>Installs the newest release <code>&lt;version&gt;</code> names, unless it is installed; it becomes the default only when there was none</td></tr>
+<tr><td><code>add --force &lt;version&gt;</code>, <code>-f</code></td><td>Installs it even when it is installed, replacing the home’s copy</td></tr>
 <tr><td><code>use &lt;version&gt;</code></td><td>Makes the newest installed toolchain <code>&lt;version&gt;</code> names the default</td></tr>
 <tr><td><code>update</code></td><td>Installs the newest release, unless it is installed, and makes it the default; older toolchains stay installed. Then updates the home’s <code>pepper</code> and <code>pep-install</code> from it</td></tr>
+<tr><td><code>update --force</code>, <code>-f</code></td><td>Installs the newest release even when it is installed, replacing the home’s copy</td></tr>
 <tr><td><code>remove &lt;version&gt;</code></td><td>Removes the installed toolchain <code>&lt;version&gt;</code> names; it must name just one, and not the default</td></tr>
 <tr><td><code>which</code></td><td>Prints the toolchain the current folder uses and why, then the path of its <code>pep-build</code>; fails when that toolchain is not installed</td></tr>
+<tr><td><code>--path &lt;dir&gt;</code></td><td>Also finds toolchains in <code>&lt;dir&gt;</code>, before those <code>PEPPER_TOOLCHAIN_PATH</code> lists; repeatable, before or after the command (see <a href="#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the commands; after a command, that command’s options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
 </tbody>
@@ -20489,9 +20494,36 @@ toolchain’s when they differ. Each is written beside the old one and
 renamed into place, the old one first moved aside to <code>&lt;name&gt;.old</code>; on
 Windows, where a running program cannot be removed, that <code>.old</code> file is
 removed by the next <code>update</code>.</p>
+<p><code>add --force</code> and <code>update --force</code> install a toolchain that is already
+installed again, the way a fresh one is: downloaded, checked and unpacked
+beside its folder. The old folder is then moved aside, the new one put in
+its place and the old one removed, so no stale files remain, and a failed
+download or unpack leaves the old toolchain as it was. On Windows a
+toolchain one of whose programs is running (a <code>pep-lsp</code> the editor
+started, say) cannot be moved, and the install fails, leaving it in place.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
+<h2 id="more-toolchain-folders"><a class="header" href="#more-toolchain-folders">More toolchain folders</a></h2>
+<p>Toolchains are also found in the folders <code>PEPPER_TOOLCHAIN_PATH</code> lists,
+separated as <code>PATH</code> separates them (<code>;</code> on Windows, <code>:</code> elsewhere), and for
+<code>pep-install</code> in each <code>--path</code> folder, which come first. Each is laid out
+as the home’s <code>toolchains</code> folder is, a folder per toolchain named by its
+version:</p>
+<pre><code class="language-text">/opt/pepper/0.3.0/bin/pep-build
+/opt/pepper/0.3.0/runtime/
+</code></pre>
+<pre><code class="language-bash">PEPPER_TOOLCHAIN_PATH=/opt/pepper pepper +0.3.0 build main.pep
+pepper install --path /opt/pepper use 0.3.0
+</code></pre>
+<p>The home’s own <code>toolchains</code> folder is searched first, so a toolchain there
+wins over one of the same version elsewhere. <code>list</code> marks a toolchain found
+elsewhere with its folder; <code>use</code>, <code>which</code> and <code>pepper +&lt;version&gt;</code> take it
+as they take one in the home, and <code>add</code> and <code>update</code> count it as
+installed (<code>--force</code> installs into the home all the same). <code>remove</code> removes
+only toolchains in the home: a toolchain in another folder is left to
+whoever put it there. A project’s <code>pep.toml</code> cannot add folders, since
+where toolchains are differs from one machine to the next.</p>
 <h2 id="editors"><a class="header" href="#editors">Editors</a></h2>
 <p>The VS Code extension runs the language server of the toolchain the
 workspace uses, as <code>pepper install which</code> reports it; see
@@ -20509,6 +20541,7 @@ a download that fails or does not match its checksum leaves nothing behind.</p>
 </thead>
 <tbody>
 <tr><td><code>PEPPER_HOME</code></td><td>Where toolchains go, when <code>pep-install</code> does not run from a home</td></tr>
+<tr><td><code>PEPPER_TOOLCHAIN_PATH</code></td><td>More folders to find toolchains in (see <a href="#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>PEPPER_INSTALL_RELEASES_URL</code></td><td>Lists the releases from this URL instead of GitHub’s API, for a mirror; it serves the same JSON</td></tr>
 <tr><td><code>GITHUB_TOKEN</code>, <code>GH_TOKEN</code></td><td>A token sent to GitHub’s API while the repository is private, and to nothing else</td></tr>
 </tbody>

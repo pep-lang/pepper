@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-cd9f8f2c.js";
+            window.path_to_searchindex_js = "../searchindex-743de6df.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -290,7 +290,8 @@ work with <code>help</code> and the old form too.</p>
 <p>Installed by <a href="pep-install.html">pep-install</a>, <code>pepper</code> lives in the Pepper
 home’s <code>bin</code> folder (<code>~/.pepper/bin</code>, <code>%LOCALAPPDATA%\pepper\bin</code> on
 Windows), beside the installed toolchains, and runs the tools of one of
-them. The first of these that names a toolchain picks it:</p>
+them, or of a toolchain in a folder <code>PEPPER_TOOLCHAIN_PATH</code> lists (see
+<a href="pep-install.html#more-toolchain-folders">More toolchain folders</a>). The first of these that names a toolchain picks it:</p>
 <ol>
 <li><code>+&lt;version&gt;</code> before the command: <code>pepper +0.3.0 build</code>;</li>
 <li>the <code>PEPPER_TOOLCHAIN</code> environment variable;</li>
