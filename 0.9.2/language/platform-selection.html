@@ -1,0 +1,520 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Platform selection - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-8cb31727.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-e4845a93.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/platform-selection.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="platform-selection"><a class="header" href="#platform-selection">Platform selection</a></h1>
+<p>Some code only makes sense on one platform: a Windows API call, a
+Linux-specific constant, a type whose size differs between operating systems.
+The <code>[Target(...)]</code> attribute keeps a declaration or a block only when you
+compile for a matching platform, so one source file can hold every platform’s
+version side by side.</p>
+<p>The target is the platform you compile on, unless you name another with
+<code>--target</code> (see <a href="#cross-compiling">Cross-compiling</a> below).</p>
+<h2 id="writing-a-condition"><a class="header" href="#writing-a-condition">Writing a condition</a></h2>
+<p><code>Target</code> takes one boolean condition built from these predicates:</p>
+<ul>
+<li><code>OS(...)</code> is true on the named operating system: <code>Windows</code>, <code>Mac</code> (or
+<code>MacOS</code>), <code>Linux</code>, <code>Wasi</code> (WebAssembly, see <a href="#webassembly">below</a>),
+<code>IOS</code> or <code>Android</code> (see <a href="mobile.html">iOS and Android</a>). As in C, where
+<code>TARGET_OS_MAC</code> holds on every Apple OS and <code>__linux__</code> on Android,
+<code>OS(Mac)</code> is also true on iOS and <code>OS(Linux)</code> on Android: they share
+the kernel and most of the C library, so code for macOS or Linux usually
+works there unchanged. Write <code>OS(Mac) &amp;&amp; !OS(IOS)</code> for macOS alone, and
+<code>OS(Linux) &amp;&amp; !OS(Android)</code> for desktop and server Linux alone.</li>
+<li><code>Arch(...)</code> is true on the named processor architecture: <code>x64</code>,
+<code>aarch64</code>, or <code>wasm32</code>.</li>
+<li><code>BuildOption(NAME)</code> is true when the build defines <code>NAME</code> with <code>-D</code>, and
+can be compared with a literal (<code>BuildOption(LOG_LEVEL) &gt;= 2</code>); see
+<a href="build-options.html">Build options</a>.</li>
+</ul>
+<p>Values are matched case-insensitively, so <code>OS(windows)</code> works too. Combine
+predicates with <code>&amp;&amp;</code> (or <code>and</code>), <code>||</code> (or <code>or</code>), <code>!</code>, and parentheses:</p>
+<pre><code class="language-pepper">[Target(OS(Windows))]                     # Windows
+[Target(!OS(Windows))]                    # Linux and macOS
+[Target(OS(Linux) &amp;&amp; Arch(x64))]          # Linux on x64 only
+[Target(OS(Windows) || OS(Mac))]          # Windows and macOS
+[Target(!(OS(Windows) || OS(Mac)))]       # Linux
+</code></pre>
+<p>An item may carry several attributes. They are combined with “and”: the item
+is kept only when every <code>Target</code> on it matches. Other attributes on the same
+item, such as <code>[Link(...)]</code>, do not affect the selection.</p>
+<h2 id="what-it-applies-to"><a class="header" href="#what-it-applies-to">What it applies to</a></h2>
+<p>Put <code>[Target(...)]</code> before any top-level declaration: a function, an <code>extern</code>,
+a struct, an enum, a trait, an extension, a type alias, a module-scope
+variable, an <code>import</code>, or a re-export. It also works on the methods inside a
+struct, trait or extension, and on an enum’s cases. When two declarations share a name, give them conditions that
+never match on the same platform, so exactly one survives:</p>
+<pre><code class="language-pepper"># One name, a different declaration per platform.
+
+# Type aliases: a Windows HANDLE is a pointer, a POSIX descriptor an int.
+[Target(OS(Windows))] type Handle = __ptr&lt;void&gt;;
+[Target(!OS(Windows))] type Handle = int;
+
+# Module-scope variables (const and thread-safe, like every global).
+[Target(OS(Windows))] const max_path = 260;
+[Target(!OS(Windows))] const max_path = 4096;
+
+# Functions.
+[Target(OS(Windows))]
+platform_name(): String { return "Windows"; }
+
+[Target(OS(Mac))]
+platform_name(): String { return "macOS"; }
+
+[Target(OS(Linux))]
+platform_name(): String { return "Linux"; }
+
+# Structs, and methods inside them.
+[Target(Arch(x64))]
+struct Cpu {
+    var name: String = "x64";
+}
+
+[Target(Arch(aarch64))]
+struct Cpu {
+    var name: String = "aarch64";
+}
+
+struct Word {
+    [Target(Arch(x64) || Arch(aarch64))]
+    bits(): int { return 64; }
+}
+
+main(): int {
+    var name = platform_name();
+    print(name);
+    print(Cpu().name);
+    assert(Word().bits() == 64, "every supported target is 64-bit");
+
+    [Target(OS(Windows))] {
+        assert(sizeof&lt;Handle&gt;() == 8, "a HANDLE is a pointer");
+        assert(name == "Windows", "the Windows function was kept");
+    }
+    [Target(!OS(Windows))] {
+        assert(sizeof&lt;Handle&gt;() == 4, "a descriptor is an int");
+        assert(max_path == 4096, "the POSIX variable was kept");
+    }
+    return 0;
+}
+</code></pre>
+<p>The attribute goes before <code>export</code>, not after it:
+<code>[Target(OS(Windows))] export f()</code>. Writing <code>export [Target(OS(Windows))] f()</code>
+is a parse error.</p>
+<h2 id="blocks-inside-a-function"><a class="header" href="#blocks-inside-a-function">Blocks inside a function</a></h2>
+<p>Inside a function body, attach <code>[Target(...)]</code> to a block <code>{ ... }</code>. The block
+is kept or removed like a declaration. Blocks may nest, and may appear inside
+<code>if</code> and loop bodies.</p>
+<p>This is the usual way to wrap C functions that differ per platform: declare
+each platform’s <code>extern</code> with its own condition, and call each one from a
+block with the same condition.</p>
+<pre><code class="language-pepper"># A portable wrapper over a C function that has a different name on
+# each platform. kernel32 is linked by default on Windows, and getpid is
+# in the C library everywhere else.
+
+[Target(OS(Windows))] extern uint GetCurrentProcessId();
+[Target(!OS(Windows))] extern int getpid();
+
+process_id(): long {
+    [Target(OS(Windows))] {
+        return GetCurrentProcessId() as long;
+    }
+    [Target(!OS(Windows))] {
+        return getpid() as long;
+    }
+}
+
+main(): int {
+    var id = process_id();
+    print($"process {id}");
+    assert(id &gt; 0, "a running process has a positive id");
+    return 0;
+}
+</code></pre>
+<h2 id="what-happens-to-code-that-does-not-match"><a class="header" href="#what-happens-to-code-that-does-not-match">What happens to code that does not match</a></h2>
+<p>Code whose condition does not match is removed before type checking. That is
+what makes the examples above work: a call to <code>GetCurrentProcessId</code>, which
+exists only on Windows, is fine in a block that is removed everywhere else.
+Removed code is not checked for errors beyond parsing, so a typo in it goes
+unnoticed until you build on the platform that keeps it. The VS Code
+extension shows it dimmed, from its attribute to its end, with a hint saying
+it is not compiled for the platform you are building on. A file that is
+mostly code for another OS (a Linux-only file opened on Windows) is still
+checked as that OS’s build would check it, so hover and go-to-definition
+work in it. In such a file, an error only your own platform’s build would
+report (portable code calling a function only the other OS has) appears
+when you build, not in the editor.</p>
+<p>It still has to parse, and every <code>Target</code> condition is validated on every
+platform, even one inside removed code. A misspelled value is always an error,
+never a silent “no match”:</p>
+<pre><code class="language-pepper">[Target(OS(Darwin))]
+f(): int { return 1; }
+</code></pre>
+<pre><code class="language-text">main.pep:1:1: error: unknown OS value `Darwin` (expected Windows, Mac, MacOS, Linux, Wasi, IOS, Android) in [Target(OS(Darwin))]
+    1 | [Target(OS(Darwin))]
+      | ^~~~~~~~~~~~~~~~~~~~
+</code></pre>
+<p>Other mistakes the compiler reports:</p>
+<ul>
+<li><code>Target</code> takes exactly one condition: <code>[Target(OS(Windows), Arch(x64))]</code> is
+an error; write <code>[Target(OS(Windows) &amp;&amp; Arch(x64))]</code>.</li>
+<li>Only <code>OS(...)</code>, <code>Arch(...)</code> and <code>BuildOption(...)</code> may appear inside it. A bare name
+(<code>[Target(Windows)]</code>), another call (<code>[Target(Foo(x))]</code>), <code>not</code> in place of
+<code>!</code>, or a nested <code>Target</code> is an error.</li>
+<li><code>OS(...)</code> and <code>Arch(...)</code> are only valid inside <code>Target(...)</code>, and the
+brackets hold one attribute: <code>[OS(Windows)]</code> and
+<code>[Target(OS(Windows)) &amp;&amp; Export]</code> are parse errors.</li>
+<li>Struct fields cannot carry <code>[Target(...)]</code>. Select the whole struct instead,
+as <code>Cpu</code> does in the first example.</li>
+</ul>
+<h2 id="cross-compiling"><a class="header" href="#cross-compiling">Cross-compiling</a></h2>
+<p><code>--target &lt;triple&gt;</code> compiles for another platform: <code>[Target(...)]</code> selects
+that platform’s code, and the compiler emits that platform’s machine code
+and object format. The supported targets are each OS on each architecture:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Triple</th><th>OS</th><th>Arch</th></tr>
+</thead>
+<tbody>
+<tr><td><code>x86_64-unknown-linux-gnu</code></td><td>Linux</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-unknown-linux-gnu</code></td><td>Linux</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-apple-darwin</code></td><td>macOS</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-apple-darwin</code></td><td>macOS</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-pc-windows-msvc</code></td><td>Windows</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-pc-windows-msvc</code></td><td>Windows</td><td><code>aarch64</code></td></tr>
+<tr><td><code>wasm32-wasip1</code></td><td>Wasi</td><td><code>wasm32</code></td></tr>
+<tr><td><code>aarch64-apple-ios</code></td><td>iOS</td><td><code>aarch64</code></td></tr>
+<tr><td><code>aarch64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-apple-ios-simulator</code></td><td>iOS (simulator)</td><td><code>x64</code></td></tr>
+<tr><td><code>aarch64-linux-android</code></td><td>Android</td><td><code>aarch64</code></td></tr>
+<tr><td><code>x86_64-linux-android</code></td><td>Android</td><td><code>x64</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>clang’s other spellings work too: <code>arm64</code> for <code>aarch64</code>, <code>amd64</code> for
+<code>x86_64</code>, any vendor, and an OS version (<code>arm64-apple-macosx14.0</code>,
+<code>aarch64-apple-ios17.0</code>, <code>aarch64-linux-android33</code>). Any other triple is an
+error that lists these. <code>wasm32-wasi</code>, <code>wasm32-unknown-wasi</code> and
+<code>wasm32-unknown-wasip1</code> all mean <code>wasm32-wasip1</code>. The iOS and Android
+targets, their versions and their SDKs are described in
+<a href="mobile.html">iOS and Android</a>.</p>
+<pre><code class="language-sh">pepper build --target aarch64-unknown-linux-gnu main.pep -o main
+</code></pre>
+<p>Linking an executable for another platform needs that platform’s system
+libraries and LLVM’s linker, <code>lld</code>: the compiler looks for it beside clang,
+in its LLVM install and on the <code>PATH</code>, also under the versioned name
+Ubuntu’s <code>lld-20</code> package uses (<code>ld.lld-20</code>). Name
+the directory that holds the libraries (the sysroot) with <code>--sysroot &lt;dir&gt;</code>,
+or set <code>PEPPER_SYSROOT_&lt;TRIPLE&gt;</code>, the triple in capitals with <code>_</code> for each
+<code>-</code> (<code>PEPPER_SYSROOT_AARCH64_APPLE_DARWIN</code>):</p>
+<ul>
+<li>
+<p><strong>Linux:</strong> a directory with the target’s glibc and GCC runtime
+(<code>/usr/aarch64-linux-gnu</code> from Debian’s or Ubuntu’s
+<code>libc6-dev-arm64-cross</code> and <code>libgcc-13-dev-arm64-cross</code>, which clang
+also finds without <code>--sysroot</code>). From another OS, copy a Linux machine’s
+at the same paths: the C startup files and <code>libc</code>, <code>libm</code>, <code>libgcc_s</code>
+and the dynamic loader from <code>/usr/lib/x86_64-linux-gnu</code>, and
+<code>crtbegin*.o</code>, <code>crtend*.o</code> and <code>libgcc*</code> from
+<code>/usr/lib/gcc/x86_64-linux-gnu/&lt;version&gt;</code>.</p>
+</li>
+<li>
+<p><strong>macOS:</strong> a macOS SDK (<code>MacOSX.sdk</code>, <code>xcrun --show-sdk-path</code> on a Mac).
+Linking reads only its <code>SDKSettings.json</code> and the library stubs in
+<code>usr/lib</code>.</p>
+</li>
+<li>
+<p><strong>Windows:</strong> a directory laid out like a Visual Studio install, with the
+MSVC libraries and the Windows SDK, as
+<a href="https://github.com/Jake-Shadle/xwin">xwin</a> writes it:</p>
+<pre><code class="language-sh">xwin --accept-license --arch x86_64 splat --use-winsysroot-style --preserve-ms-arch-notation --output ~/winsysroot
+</code></pre>
+</li>
+</ul>
+<p>CI links each of these from the other two (from Linux x64, macOS arm64 and
+Windows x64, for <code>x86_64-unknown-linux-gnu</code>, <code>aarch64-apple-darwin</code> and
+<code>x86_64-pc-windows-msvc</code>) and runs the programs on their own OS; its scripts,
+<code>scripts/ci-export-sysroot.sh</code> and <code>scripts/ci-provision-cross.sh</code>, show the
+setup end to end.</p>
+<p>When the link fails, the error ends with a note naming what is missing:</p>
+<pre><code class="language-text">note: linking for 'x86_64-pc-windows-msvc' needs that platform's system libraries and LLVM's linker (lld): pass '--sysroot &lt;dir&gt;' or set PEPPER_SYSROOT_X86_64_PC_WINDOWS_MSVC
+</code></pre>
+<p>The <code>-m</code> options are read for the target: <code>-mcpu</code> is an AArch64 option
+and <code>-march=x86-64-v3</code> an x86 one, and <code>native</code>, which names the CPU of the
+machine you compile on, is an error for a target of another architecture.</p>
+<p>The compiler only builds for the target; copy the executable to a machine
+of that platform to run it.</p>
+<h2 id="webassembly"><a class="header" href="#webassembly">WebAssembly</a></h2>
+<p><code>--target wasm32-wasip1</code> compiles to a WebAssembly module for
+<a href="https://wasi.dev">WASI</a> preview 1, which runtimes such as
+<a href="https://wasmtime.dev">wasmtime</a> run from the command line:</p>
+<pre><code class="language-sh">pep-build --target wasm32-wasip1 --sysroot /opt/wasi-sdk main.pep -o main.wasm
+wasmtime run --dir . main.wasm
+</code></pre>
+<p>Linking needs a <a href="https://github.com/WebAssembly/wasi-sdk">wasi-sdk</a> (its
+sysroot holds wasi-libc and clang’s builtins) and LLVM’s <code>wasm-ld</code>, which the
+compiler finds as it finds <code>lld</code> (also as <code>wasm-ld-20</code>). Name the SDK
+directory, or its <code>share/wasi-sysroot</code>, with <code>--sysroot</code>, or set
+<code>PEPPER_SYSROOT_WASM32_WASIP1</code> or <code>WASI_SDK_PATH</code>. wasi-sdk 25 is the version
+tested. The program needs a runtime’s <code>--dir</code> to reach a directory and
+<code>-S inherit-env</code> (wasmtime) to see the environment. <code>Directory.temp()</code> is
+<code>TMPDIR</code>, else <code>/tmp</code>, so grant one (<code>--dir /tmp</code>) to use it.</p>
+<p>WASI preview 1 is a small system, and <code>wasm32</code> is a 32-bit target, so some
+things work differently:</p>
+<ul>
+<li><code>OS(Wasi)</code> code selects the WASI versions of the runtime’s platform layer.
+Code written for <code>!OS(Windows)</code> also compiles for WASI, so check that it
+only calls what wasi-libc has.</li>
+<li>There are no threads and no stack switching: <code>Thread.spawn</code> panics, and
+so does starting tasks (<code>async.run</code>, <code>async.run_with</code>). Mutexes, channels
+and atomics still work, as long as nothing waits for another thread.</li>
+<li>Sockets, TLS, HTTP connections and starting processes return an
+<code>IoError</code> saying they are not supported on WASI.</li>
+<li>Files work through the directories the runtime grants. <code>Metadata</code> has no
+permission bits (<code>read_only</code> is false) and no creation time, and
+<code>set_permissions</code> and <code>set_read_only</code> return an error;
+<code>set_executable</code> and the <code>mode</code> of <code>OpenOptions</code> and <code>Directory.create</code>
+do nothing. Timestamps and symlinks work.</li>
+<li><code>os</code> reports <code>OperatingSystem.Wasi</code>, <code>"wasm32"</code>, an empty host name and
+version, and no total memory.</li>
+<li>Pointers and C’s <code>long</code> and <code>size_t</code> are 32 bits; see
+<a href="c-interop.html#32-bit-targets">32-bit targets</a>.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/c-interop.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/mobile.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/c-interop.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/mobile.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
