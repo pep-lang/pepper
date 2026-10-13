@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8cb31727.js";
+            window.path_to_searchindex_js = "../searchindex-cd9f8f2c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -231,7 +231,9 @@ which tells apart tests of one name in two files) and exits with 0
 when it returns, or with 1 when it left an allocation behind (or
 released one too many); a panic aborts the program. With a timeout above 0, a
 test still running after that many seconds ends the program with exit
-status 124 and a message on standard error.</li>
+status 124 and a message on standard error, and ends every process the
+test started with it (a job object on Windows, a process group
+elsewhere), so none holds <code>pep-test</code>’s pipes to its output open.</li>
 </ul>
 <h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
 <h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>

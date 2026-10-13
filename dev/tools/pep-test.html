@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8cb31727.js";
+            window.path_to_searchindex_js = "../searchindex-cd9f8f2c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -277,7 +277,9 @@ the panic must contain.</li>
 returns having released everything it allocated; a test that leaves an
 allocation behind (or releases one too many) exits with 1 and says so on
 standard error. A panic aborts the program; a test that runs past the timeout
-ends it with exit status 124.</li>
+ends it with exit status 124, along with every process the test started
+(a job object on Windows, a process group elsewhere): one left running
+would hold the pipes to its output open, and <code>pep-test</code> would wait on it.</li>
 </ul>
 <p>On Windows, a test program turns off Windows Error Reporting for its
 crashes and <code>abort()</code>, so a test that panics or crashes ends at once,
