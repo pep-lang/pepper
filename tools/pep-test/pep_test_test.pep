@@ -149,6 +149,16 @@ write_tests(folder: Path, modifier: String) {
     }
 }
 
+# A test file's `hang()`: a command that runs a long time, writing to the
+# output it inherits from the test program (pep-test's pipes).
+_hang_source(): String {
+    return "import async;\nimport process;\n\n"
+        + "[Target(OS(Windows))]\nhang(): process.Command {\n"
+        + "    return process.Command(\"ping\").arguments([\"-n\", \"1000\", \"127.0.0.1\"]);\n}\n\n"
+        + "[Target(!OS(Windows))]\nhang(): process.Command {\n"
+        + "    return process.Command(\"sleep\").argument(\"1000\");\n}\n\n";
+}
+
 [Test]
 ends_what_a_test_that_times_out_started() {
     # The child holds pep-test's pipes to the test's output open: unless
@@ -156,14 +166,34 @@ ends_what_a_test_that_times_out_started() {
     var folder = TempFolder("pep_test_tree");
     write_file(
         folder.path.join("tree_test.pep"),
-        "import async;\nimport process;\n\n"
+        _hang_source()
             + "[Test]\nstarts_a_child_that_hangs() {\n"
-            + "    process.Command(process.executable_path().value().to_string()).arguments([\"--run\", \"hangs\"]).spawn();\n"
-            + "    hangs();\n}\n\n"
-            + "[Test]\nhangs() {\n    async.Thread.sleep(1000000);\n}\n"
+            + "    hang().spawn();\n"
+            + "    async.Thread.sleep(1000000);\n}\n"
     );
-    var ran = pep_test(folder.path, ["--timeout", "1", "-f", "starts_a_child"]);
+    var ran = pep_test(folder.path, ["--timeout", "1"]);
     expect_exit(ran, 1);
     expect_contains(ran.stdout + ran.stderr, "error: test 'starts_a_child_that_hangs' timed out after 1 second\n");
-    expect_ends_with(ran.stdout, "0 passed, 1 failed, 1 filtered out\n");
+    expect_ends_with(ran.stdout, "0 passed, 1 failed\n");
+}
+
+[Test]
+ends_what_a_test_that_panics_or_returns_started() {
+    # As for a timeout: the children of a test that panics or returns end
+    # with it, or pep-test never finishes (#852). No timeout: the watchdog
+    # is not what ends them.
+    var folder = TempFolder("pep_test_tree");
+    write_file(
+        folder.path.join("tree_test.pep"),
+        _hang_source()
+            + "[Test]\nstarts_a_child_and_panics() {\n"
+            + "    hang().spawn();\n"
+            + "    panic(\"on purpose\");\n}\n\n"
+            + "[Test]\nstarts_a_child_and_returns() {\n"
+            + "    hang().spawn();\n}\n"
+    );
+    var ran = pep_test(folder.path, ["--timeout", "0"]);
+    expect_exit(ran, 1);
+    expect_contains(ran.stdout + ran.stderr, "panic: on purpose\n");
+    expect_ends_with(ran.stdout, "1 passed, 1 failed\n");
 }

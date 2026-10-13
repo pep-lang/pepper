@@ -66,8 +66,9 @@ The program answers two requests, both made by `pep-test`:
   when it returns, or with 1 when it left an allocation behind (or
   released one too many); a panic aborts the program. With a timeout above 0, a
   test still running after that many seconds ends the program with exit
-  status 124 and a message on standard error, and ends every process the
-  test started with it (a job object on Windows, a process group
+  status 124 and a message on standard error. However the program ends
+  (the test returns, panics, crashes or times out), every process the
+  test started ends with it (a job object on Windows, a process group
   elsewhere), so none holds `pep-test`'s pipes to its output open.
 
 ### Constructor

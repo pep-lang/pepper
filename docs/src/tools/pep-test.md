@@ -103,8 +103,9 @@ which `pep-test` runs with one of two requests:
   returns having released everything it allocated; a test that leaves an
   allocation behind (or releases one too many) exits with 1 and says so on
   standard error. A panic aborts the program; a test that runs past the timeout
-  ends it with exit status 124, along with every process the test started
-  (a job object on Windows, a process group elsewhere): one left running
+  ends it with exit status 124. However the program ends (the test returns,
+  panics, crashes or times out), every process the test started ends with
+  it (a job object on Windows, a process group elsewhere): one left running
   would hold the pipes to its output open, and `pep-test` would wait on it.
 
 On Windows, a test program turns off Windows Error Reporting for its
