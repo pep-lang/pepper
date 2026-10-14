@@ -3,5 +3,5 @@
 
 export * from "generator";
 export * from "partition";
-export [RuntimeChecks] from "checks";
+export [LOCATION_PREFIX, RuntimeChecks] from "checks";
 export [initialize_backends, target_triple] from "target";

@@ -457,6 +457,7 @@ _compile_unit(
     setup.opt_level = options.opt_level;
     setup.frame_pointers = options.frame_pointers;
     setup.runtime_checks = options.runtime_checks;
+    setup.separate_locations = true;
     var namespaces = Array<String>();
     for (var f in program.files) {
         namespaces.append(f.namespace);
@@ -479,8 +480,10 @@ _compile_unit(
         return Optional<String>.Value(render_all([generated.error()], program.sources()));
     }
     # The program's entry points are the last compilation unit's to compile.
-    var (part_of_file, parts) = _unit_parts(program, unit.files, generated.value(), owners, options.part_size);
-    var partition = codegen.prepare(generated.value(), owners, part_of_file, parts, parts + 2);
+    var (part_of_file, spread, parts) = _unit_parts(program, unit.files, generated.value(), owners, options.part_size);
+    var partition = codegen.prepare(
+        generated.value(), owners, part_of_file, parts, parts + 3, spread, Optional<uint>.Value(parts + 2)
+    );
     var folder = dir.join(Path($"{unit.name.replace("/", "_")}.object"));
     Directory.remove_all(folder);
     Directory.create_all(folder);
@@ -977,6 +980,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 }
             }
             var below = _defined_by(options.cache.value(), units, last.reads, Optional<Path>.Empty);
+            setup.separate_locations = true;
             var generated = codegen.generate(
                 module, state, namespaces, stem, setup, owners, others, Optional<HashSet<String>>.Value(below)
             );
@@ -984,8 +988,12 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 return Result<Built, String>.err(render_all([generated.error()], sources));
             }
             clock.lap("codegen");
-            var (part_of_file, parts) = _unit_parts(program, last.files, generated.value(), owners, options.part_size);
-            var partition = codegen.prepare(generated.value(), owners, part_of_file, parts, parts + 2);
+            var (
+                part_of_file, spread, parts
+            ) = _unit_parts(program, last.files, generated.value(), owners, options.part_size);
+            var partition = codegen.prepare(
+                generated.value(), owners, part_of_file, parts, parts + 3, spread, Optional<uint>.Value(parts + 2)
+            );
             var folder = work.join(Path("last"));
             Directory.create_all(folder);
             var jobs = _unit_jobs(folder, parts, extension);
@@ -1347,33 +1355,82 @@ _codegen_options(options: BuildOptions): String {
 ## Each file's part when compilation unit `files` alone is compiled
 ## (`_compile_unit`): its own files' parts from 0 (`_split`), so a large
 ## unit's object is compiled on several CPUs; the program's entry points
-## the next part; every other file, only declared, the one after. Returns
-## the parts and how many are the unit's own.
+## the next part; every other file, only declared, the one after; the
+## location strings (`codegen.Build.separate_locations`) the one after
+## that. A part `_split` gave one file alone spreads its symbols over
+## several parts (`_spread`), so an edit to that file compiles one of them
+## again. Returns each file's first part, how many parts it spreads over,
+## and how many parts are the unit's own.
 _unit_parts(
     program: link.Program, files: ulong[], ir: llvm.Module, owners: HashMap<String, uint>, part_size: ulong
-): (uint[], uint) {
-    var split = _split(program, files, codegen.file_sizes(ir, owners, program.files.count), 0, part_size);
-    uint parts = 1;
+): (uint[], uint[], uint) {
+    var sizes = codegen.file_sizes(ir, owners, program.files.count);
+    var split = _split(program, files, sizes, 0, part_size);
+    uint count = 1;
     for (var part in split) {
-        parts = part + 1 > parts ? part + 1 : parts;
+        count = part + 1 > count ? part + 1 : count;
+    }
+    # How many files each part `_split` made holds.
+    var held = Array<uint>();
+    for (var _ in 0..count) {
+        held.append(0);
+    }
+    for (var part in split) {
+        held[part] += 1;
+    }
+    # Each part's first number once spread, in order.
+    var first = Array<uint>();
+    var spreads = Array<uint>();
+    uint parts = 0;
+    for (var part in 0..count) {
+        uint over = 1;
+        for (var i in 0..files.count) {
+            if (split[i] == part and held[part] == 1) {
+                over = _spread(sizes[files[i]]);
+            }
+        }
+        first.append(parts);
+        spreads.append(over);
+        parts += over;
     }
     var part_of_file = Array<uint>();
+    var spread = Array<uint>();
     for (var _ in program.files) {
         part_of_file.append(parts + 1);
+        spread.append(1);
     }
     for (var i in 0..files.count) {
-        part_of_file[files[i]] = split[i];
+        part_of_file[files[i]] = first[split[i]];
+        spread[files[i]] = spreads[split[i]];
     }
-    return (part_of_file, parts);
+    return (part_of_file, spread, parts);
 }
 
+## How many parts a file of `size` (`codegen.file_sizes`) spreads its
+## symbols over: a power of two, so an edit that changes its size a little
+## leaves every symbol in its part.
+_spread(size: ulong): uint {
+    uint over = 1;
+    while (over < _MAX_SPREAD and size > (over as ulong) * _SPREAD_SIZE) {
+        over *= 2;
+    }
+    return over;
+}
+
+## About how much code (`codegen.file_sizes`) each part of a file spread
+## over several holds (`_spread`), and the most parts a file spreads over.
+const _SPREAD_SIZE: ulong = 2500;
+const _MAX_SPREAD: uint = 16;
+
 ## The jobs compiling a compilation unit's own `parts` into `folder`, as
-## `<part>.<extension>`.
+## `<part>.<extension>`, and its location strings' part (`_unit_parts`)
+## after them, as `<parts>.<extension>`.
 _unit_jobs(folder: Path, parts: uint, extension: String): PartJob[] {
     var jobs = Array<PartJob>();
     for (var part in 0..parts) {
         jobs.append(PartJob(part, folder.join(Path($"{part}.{extension}"))));
     }
+    jobs.append(PartJob(parts + 2, folder.join(Path($"{parts}.{extension}"))));
     return jobs;
 }
 

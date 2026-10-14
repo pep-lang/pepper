@@ -27,6 +27,9 @@ import "types";
 ## function passes as `__caller_location()`.
 const UNCHECKED_BOUNDS_MARK = "\x01";
 
+## The prefix of a location string's name with `Build.separate_locations`.
+export const LOCATION_PREFIX = "__pep_location.";
+
 ## The attribute that turns runtime checks off in one function's body.
 const UNSAFE_ATTRIBUTE = "Unsafe";
 
@@ -362,7 +365,7 @@ extend Generator {
     location_text(loc: Loc): llvm.Value {
         var text = location_string(loc);
         if (text.is_value()) {
-            return check_message(text.value());
+            return located_string(text.value());
         }
         return context.pointer_type().zero();
     }
@@ -371,7 +374,25 @@ extend Generator {
     ## location a call in an `[Unsafe("bounds")]` function passes.
     unchecked_location_text(loc: Loc): llvm.Value {
         var text = location_string(loc);
-        return check_message(UNCHECKED_BOUNDS_MARK + (text.is_value() ? text.value() : ""));
+        return located_string(UNCHECKED_BOUNDS_MARK + (text.is_value() ? text.value() : ""));
+    }
+
+    ## A location's constant C string: `check_message`'s, or with
+    ## `separate_locations` one named `__pep_location.<function>.<n>`,
+    ## the function's `n`th, whose name a line shift does not change.
+    located_string(text: String): llvm.Value {
+        if (!separate_locations) {
+            return check_message(text);
+        }
+        var function = builder.insert_block().parent().name();
+        var n = location_counts.try_get(function);
+        var count = n.is_value() ? n.value() : 0;
+        location_counts[function] = count + 1;
+        var bytes = context.const_string(text, true);
+        var global = ir.add_global(bytes.value_type(), $"{LOCATION_PREFIX}{_fnv1a(function):016x}.{count}");
+        global.set_initializer(bytes);
+        global.set_global_constant(true);
+        return global;
     }
 
     ## The null check `_pep_assert(condition, message, location)`, located

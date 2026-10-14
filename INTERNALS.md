@@ -1603,6 +1603,15 @@ module's name, the work folder's, left out). A part whose key the cache
 has copies its object and `.defines` from there rather than being
 optimized and emitted, so an edit that changes one file of a compilation
 unit compiles only the parts its code changed.
+Two things keep an edit's change to few parts. A compilation unit's code
+is generated with `Build.separate_locations`: the `file:line:col` strings
+of checks and `__caller_location()` are weak globals named by their
+function and their place in it (`__pep_location.<function hash>.<n>`), in
+a part of their own (`codegen.prepare`'s `locations_part`), so a line shift
+recompiles that small part, not the code below the edit. And a file that
+`_split` gave a part alone spreads its symbols over a power of two of
+parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
+symbol's hash, so an edit to one function recompiles one of them.
 For an ELF target the entry part's static constructors first move from
 `llvm.global_ctors` into an `.init_array` section (`place_constructors`,
 `use_init_array`): a machine made through the C API emits `.ctors`, which

@@ -32,6 +32,7 @@
 import [File] from io;
 import compiler.link;
 import llvm;
+import "checks";
 import [forget_global_debug_info] from "debug";
 import "globals";
 
@@ -101,9 +102,22 @@ export file_sizes(ir: llvm.Module, owners: HashMap<String, uint>, files: ulong):
 ## @param entry_part the part of the program's own entry points, and of
 ##   symbols whose owner is not a file of `part_of_file`
 ## @param parts how many parts there are, more than any part named
+## @param spread how many parts each file's symbols spread over, by file:
+##   a file's symbol goes to part `part_of_file[file] + h % spread[file]`,
+##   `h` its name's hash, so an edit to one function changes one part
+##   (none for one each)
+## @param locations_part the part of the location strings defined apart
+##   from the code (`Build.separate_locations`), which a line shift
+##   changes alone
 ## @returns the partition
 export prepare(
-    ir: llvm.Module, owners: HashMap<String, uint>, part_of_file: uint[], entry_part: uint, parts: uint
+    ir: llvm.Module,
+    owners: HashMap<String, uint>,
+    part_of_file: uint[],
+    entry_part: uint,
+    parts: uint,
+    spread: uint[] = Array<uint>(),
+    locations_part: uint? = Optional<uint>.Empty
 ): Partition {
     var sizes = Array<ulong>();
     for (var _ in 0..parts) {
@@ -135,6 +149,18 @@ export prepare(
             }
             continue;
         }
+        if (locations_part.is_value() and name.starts_with(LOCATION_PREFIX)) {
+            # Weak, not link-once: their part uses none of them, and keeps
+            # them all.
+            value.set_linkage(llvm.Linkage.WeakOdr);
+            value.set_visibility(llvm.Visibility.Hidden);
+            if (comdats) {
+                value.set_comdat(name);
+            }
+            part_of[name] = locations_part.value();
+            sizes[locations_part.value()] += _size(value);
+            continue;
+        }
         if (_is_entry(name)) {
             if (name.starts_with(EXPORT_PREFIX)) {
                 exports.append(value);
@@ -154,6 +180,9 @@ export prepare(
             }
             var file = owner.value() as ulong;
             var part = file < part_of_file.count ? part_of_file[file] : entry_part;
+            if (file < spread.count and spread[file] > 1) {
+                part += (_fnv1a(spelled) % spread[file] as ulong) as uint;
+            }
             part_of[spelled] = part;
             sizes[part] += _size(value);
             continue;

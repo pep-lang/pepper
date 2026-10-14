@@ -71,3 +71,34 @@ reuses_the_object_of_a_part_whose_code_is_the_same() {
     var compiled = File.read_to_string(object);
     expect_true(compiled.is_err() or compiled.value() != "kept");
 }
+
+# A file's symbols spread over its parts by their names' hashes, and the
+# location strings go to their own part, weak so it keeps them all.
+[Test]
+spreads_a_files_symbols_and_parts_its_locations() {
+    var context = llvm.Context();
+    var ir = llvm.Module(context, "spread");
+    var i32 = context.int32_type();
+    var owners = HashMap<String, uint>();
+    var builder = llvm.Builder(context);
+    for (var i in 0..16) {
+        var name = $"f{i}";
+        var function = ir.add_function(name, llvm.Type.function(i32, Array<llvm.Type>()));
+        builder.position_at_end(context.append_block(function, "entry"));
+        builder.return_value(i32.const_int(i as ulong));
+        owners[name] = 0;
+    }
+    var bytes = context.const_string("main.pep:1:1", true);
+    var location = ir.add_global(bytes.value_type(), $"{codegen.LOCATION_PREFIX}0.0");
+    location.set_initializer(bytes);
+    var partition = codegen.prepare(ir, owners, [0], 4, 6, [4], Optional<uint>.Value(5));
+    var used = HashSet<uint>();
+    for (var function in ir.functions()) {
+        var part = partition.part_of[function.name()];
+        expect_true(part < 4);
+        used.insert(part);
+    }
+    expect_true(used.count > 1);
+    expect_equal(partition.part_of[$"{codegen.LOCATION_PREFIX}0.0"], 5 as uint);
+    expect_true(location.linkage() == llvm.Linkage.WeakOdr);
+}

@@ -274,6 +274,11 @@ export struct Generator {
     ## The text of gdb's pretty-printers for the runtime's types, which a
     ## Linux program carries with `-g` (`DebugInfo.embed_gdb_printers`).
     var gdb_printers: String = "";
+    ## Whether `__caller_location()` strings are defined apart from the
+    ## code that uses them (`located_string`).
+    var separate_locations: bool = false;
+    ## How many such strings each function has used so far, by name.
+    var location_counts: HashMap<String, ulong> = HashMap<String, ulong>();
 
     ## The module's name.
     var ir_name: String;
@@ -912,6 +917,11 @@ export struct Build {
     ## The text of `runtime/debuggers/gdb_printers.py`, which a Linux
     ## program carries with `-g`; empty for none.
     var gdb_printers: String = "";
+    ## Whether the location strings of checks and `__caller_location()`
+    ## are defined apart from the code, under names that do not depend on
+    ## the lines (`Generator.located_string`), so code a line shift moves
+    ## stays the same (`codegen.prepare` gives them a part of their own).
+    var separate_locations: bool = false;
 
     construct(machine: llvm.TargetMachine, cpu: Cpu) {
         this.machine = machine;
@@ -956,6 +966,7 @@ export generate(
     generator.debug_info = build.debug_info;
     generator.static_locations = build.static_locations;
     generator.gdb_printers = build.gdb_printers;
+    generator.separate_locations = build.separate_locations;
     var generated = generator.generate(module);
     if (generated.is_err()) {
         return Result<llvm.Module, Diagnostic>.err(generated.error());
