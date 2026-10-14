@@ -237,10 +237,10 @@ shows_the_names_outside_plain_bodies() {
     expect_true(folder.path.is_dir());
 }
 
-# A compilation unit's key takes the entries of a function only its module
-# sees from another unit's own interface only when its code can name it.
+# A compilation unit's key takes the entries of a function that is not
+# generic from another unit's own interface only when its code can name it.
 [Test]
-keys_a_unit_on_the_hidden_functions_it_can_name() {
+keys_a_unit_on_the_functions_it_can_name() {
     var (
         folder,
         program

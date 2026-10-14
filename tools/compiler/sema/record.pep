@@ -330,14 +330,14 @@ export struct DeltaBase {
     # What the delta written on this base changed in the interface: an
     # entry for each element, entry or name it added, changed or dropped.
     var _own: Array<String> = Array<String>();
-    # The entries of `_own` about functions only their module sees, by
+    # The entries of `_own` about functions that are not generic, by
     # name: a unit that reads this one depends on them only when it can
     # name one (`own_text`).
     var _named: Array<(String, String)> = Array<(String, String)>();
-    # The delta's module's functions only their module sees and that are
-    # not generic, by full name and by location, as their names.
-    var _hidden_names: HashMap<String, String> = HashMap<String, String>();
-    var _hidden_locs: HashMap<Loc, String> = HashMap<Loc, String>();
+    # The delta's module's functions that are not generic, by full name
+    # and by location, as their names.
+    var _function_names: HashMap<String, String> = HashMap<String, String>();
+    var _function_locs: HashMap<Loc, String> = HashMap<Loc, String>();
     # Each list's elements' hashes, and its structs' names, in order.
     var _sequences: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
     # The base's checked names: structs, functions and globals, as indexed.
@@ -715,21 +715,20 @@ export struct DeltaBase {
     }
 
     ## Notes which functions of `module`, the module a delta is written
-    ## for, only their own module sees and are not generic: their entries
-    ## in the own interface go under their names (`own_text`). Another
-    ## module's code cannot name them, and code that does not name them
-    ## reaches them only through what other entries hold (an exported
-    ## function's return type and summary, a generic body).
+    ## for, are not generic: their entries in the own interface go under
+    ## their names (`own_text`). Code that does not name such a function
+    ## reaches it only through what other entries hold (another function's
+    ## return type and summary, a generic body).
     ##
     ## @param module the module
-    hide_private(module: Module) {
+    name_functions(module: Module) {
         for (var f in module.functions) {
-            if (!module.private_functions.contains(f.loc) or f.is_generic_func or f.generic_params.count > 0) {
+            if (f.is_generic_func or f.generic_params.count > 0) {
                 continue;
             }
-            var name = private_name(f.name);
-            _hidden_names[f.name] = name;
-            _hidden_locs[f.loc] = name;
+            var name = function_name(f.name);
+            _function_names[f.name] = name;
+            _function_locs[f.loc] = name;
         }
     }
 
@@ -748,7 +747,7 @@ export struct DeltaBase {
     ## @param loc the function's location
     ## @param hash its interface hash, or text
     own_at(what: String, loc: Loc, hash: String) {
-        var name = _hidden_locs.try_get(loc);
+        var name = _function_locs.try_get(loc);
         if (name.is_value()) {
             _named.append((name.value(), $"{what} {hash}"));
             return;
@@ -762,9 +761,9 @@ export struct DeltaBase {
     ## @param name the full name
     ## @param hash its interface hash, or text
     own_named(what: String, name: String, hash: String) {
-        var hidden = _hidden_names.try_get(name);
-        if (hidden.is_value()) {
-            _named.append((hidden.value(), $"{what} {hash}"));
+        var named = _function_names.try_get(name);
+        if (named.is_value()) {
+            _named.append((named.value(), $"{what} {hash}"));
             return;
         }
         own(what, hash);
@@ -773,9 +772,10 @@ export struct DeltaBase {
     ## Returns what the delta written on this base changed in the interface
     ## (`own`): unlike an interface hash of the whole module, it does not
     ## depend on the compilation units before. Its first line is the hash
-    ## of every entry but those of functions only their module sees; each
+    ## of every entry but those of functions that are not generic; each
     ## line after is one of those names and the hash of its entries,
-    ## sorted, which `own_key` takes only when the reader can name it.
+    ## sorted, which `compilation_unit_key` takes only when the reader can
+    ## name it.
     ##
     ## @returns the text
     own_text(): String {
@@ -1100,7 +1100,7 @@ export struct RecordIn {
 ##
 ## @param name the function's full name
 ## @returns the name
-export private_name(name: String): String {
+export function_name(name: String): String {
     var bytes = name.bytes();
     ulong end = 0;
     while (end < bytes.count and bytes[end] != '$' as u8 and bytes[end] != '@' as u8 and bytes[end] != '<' as u8) {

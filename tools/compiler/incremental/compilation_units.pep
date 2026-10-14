@@ -282,7 +282,7 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 
 ## Returns the key of compilation unit `k`'s record: its files and what it is
 ## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
-## unit it reads. Of the entries of functions only their module sees, it takes
+## unit it reads. Of the entries of functions that are not generic, it takes
 ## those its code can name: a name in its files, or one the files it reads
 ## show (`file_names`); all of the runtime's, which the compiler's own code
 ## calls. A change to a compilation unit it does not read, or one

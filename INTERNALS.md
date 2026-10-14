@@ -2851,20 +2851,19 @@ loaded rather than checked again (**early cutoff**). The own interface is
 stored beside the record (`<key>.rec.own`), so computing keys never reads a
 record.
 
-**Functions only their module sees.** The entries of a function that is not
-exported and not generic (`DeltaBase.hide_private`: its element, its
-`private_functions` entry, its checked name and summary, its recorded
-summary) are left out of that hash. Each such name gets a line of its own
-after it: the name and the hash of its entries. Code in another module
-cannot name such a function, and code that does not name it reaches it only
-through other entries: an exported function's return type and summary, or a
+**Functions by name.** The entries of a function that is not generic
+(`DeltaBase.name_functions`: its element, its `private_functions` entry,
+its checked name and summary, its recorded summary) are left out of that
+hash. Each such name gets a line of its own after it: the name and the hash
+of its entries. Code that does not name such a function reaches it only
+through other entries: another function's return type and summary, or a
 generic body or default value that calls it. So a reader's key takes the
 line only when the reader can name the function: a name in its own files
 (`CompilationUnit.mentions`), or one a file it reads shows
 (`CompilationUnit.shown`, from `file_names`: the identifiers outside the
 bodies of functions that are not generic, the functions' own names left
-out). Adding or changing a helper that no reader names checks only its own
-compilation unit again. The runtime's lines are always taken: the compiler's
+out). Adding or changing a function that no reader names, exported or not,
+checks only its own compilation unit again. The runtime's lines are always taken: the compiler's
 own code calls its functions by name (`_pep_panic`).
 
 **Checking in parallel.** With more than two compilation units and more than one job

@@ -115,7 +115,7 @@ export interface_hash(file: link.ProgramFile, index: uint, facts: HashMap<sema.L
 ## The names in a program file's code: every identifier in it, and those
 ## other units' code can reach through it, the identifiers outside the
 ## bodies of functions that are not generic, functions' own names left
-## out. A function only its module sees reaches a unit's code only by its
+## out. A function that is not generic reaches a unit's code only by its
 ## name, in the unit's own code or in what the files it reads show it (a
 ## generic body, a default value): `compilation_unit_key` takes its
 ## entries in another unit's own interface only then.
