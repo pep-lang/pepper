@@ -188,3 +188,76 @@ links_a_copy_method_the_cached_object_of_its_struct_lacks() {
         _build_with(program, root, root.join(Path("cache")));
     }
 }
+
+# Loads the program of `main.pep` and `lib/helpers.pep` (as `helpers`) with
+# no runtime.
+_load_two(name: String, main: String, helpers: String): (TempFolder, link.Program) {
+    var folder = TempFolder(name);
+    var root = folder.path;
+    Directory.create_all(root.join(Path("lib")));
+    File.write_text(root.join(Path("main.pep")), main);
+    File.write_text(root.join(Path("lib")).join(Path("helpers.pep")), helpers);
+    var setup = link.Setup();
+    setup.runtime = false;
+    setup.import_dirs.append(root);
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    return (folder, program.value());
+}
+
+_file_ending(program: link.Program, name: String): link.ProgramFile {
+    for (var file in program.files) {
+        if (file.name.ends_with(name)) {
+            return file;
+        }
+    }
+    expect_true(false);
+    return program.files[0];
+}
+
+# What a file shows other units' code: names outside the bodies of functions
+# that are not generic, the functions' own names left out.
+[Test]
+shows_the_names_outside_plain_bodies() {
+    var (
+        folder,
+        program
+    ) = _load_two(
+        "file_names",
+        "import \"lib/helpers\";\nmain(): int {\n    return shown_twice<int>(1) - 2;\n}\n",
+        "_plain(): int {\n    return 2;\n}\n_in_generic(): int {\n    return 2;\n}\n_in_default(): int {\n    return 1;\n}\nexport shown_twice<T>(x: int = _in_default()): int {\n    return x * _in_generic();\n}\nexport hidden_twice(x: int): int {\n    return x * _plain();\n}\n"
+    );
+    var (all, shown) = incremental.file_names(_file_ending(program, "helpers.pep"));
+    for (var name in ["_plain", "_in_generic", "_in_default", "shown_twice", "hidden_twice"]) {
+        expect_true(all.contains(name));
+    }
+    expect_true(shown.contains("_in_generic") and shown.contains("_in_default"));
+    expect_false(shown.contains("_plain"));
+    expect_false(shown.contains("shown_twice") or shown.contains("hidden_twice"));
+    expect_true(folder.path.is_dir());
+}
+
+# A compilation unit's key takes the entries of a function only its module
+# sees from another unit's own interface only when its code can name it.
+[Test]
+keys_a_unit_on_the_hidden_functions_it_can_name() {
+    var (
+        folder,
+        program
+    ) = _load_two(
+        "hidden_keys",
+        "import \"lib/helpers\";\nmain(): int {\n    return twice(1) - 2;\n}\n",
+        "export twice(x: int): int {\n    return x * 2;\n}\n"
+    );
+    var units = incremental.compilation_units(program, "base");
+    expect_true(units.count == 2);
+    var owns = ["public\n_unnamed 1\ntwice 1", ""];
+    var key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_unnamed 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) == key);
+    owns[0] = "public\n_unnamed 2\ntwice 2";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    owns[0] = "other\n_unnamed 1\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    expect_true(folder.path.is_dir());
+}

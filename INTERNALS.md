@@ -2839,9 +2839,10 @@ reads it, the program is checked whole instead (#839).
 - its `files_key`: the files' names, namespaces, preludes and texts, after
   the build's base key (compiler identity, target, options);
 - and, in the order of `reads`, the **own interface** of each compilation unit it
-  reads.
+  reads: its first line, and each line after it whose name the compilation
+  unit's code can name (below).
 
-A compilation unit's own interface (`DeltaBase.own_hash`) is a hash of what its checked
+A compilation unit's own interface (`DeltaBase.own_text`) is a hash of what its checked
 result adds to, changes in, or drops from the interface of the compilation units it
 was checked on. So a compilation unit's key changes only when its files change, or when
 a compilation unit in its closure changes its own interface. A body edit, or an edit in
@@ -2849,6 +2850,21 @@ a compilation unit outside the closure, keeps the key, and the record under it i
 loaded rather than checked again (**early cutoff**). The own interface is
 stored beside the record (`<key>.rec.own`), so computing keys never reads a
 record.
+
+**Functions only their module sees.** The entries of a function that is not
+exported and not generic (`DeltaBase.hide_private`: its element, its
+`private_functions` entry, its checked name and summary, its recorded
+summary) are left out of that hash. Each such name gets a line of its own
+after it: the name and the hash of its entries. Code in another module
+cannot name such a function, and code that does not name it reaches it only
+through other entries: an exported function's return type and summary, or a
+generic body or default value that calls it. So a reader's key takes the
+line only when the reader can name the function: a name in its own files
+(`CompilationUnit.mentions`), or one a file it reads shows
+(`CompilationUnit.shown`, from `file_names`: the identifiers outside the
+bodies of functions that are not generic, the functions' own names left
+out). Adding or changing a helper that no reader names checks only its own
+compilation unit again.
 
 **Checking in parallel.** With more than two compilation units and more than one job
 (one per logical CPU; `PEPC_COMPILATION_UNIT_JOBS` sets the number), `_check_in_workers`

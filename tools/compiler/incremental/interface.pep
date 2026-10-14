@@ -111,3 +111,65 @@ export interface_hash(file: link.ProgramFile, index: uint, facts: HashMap<sema.L
     }
     return hasher.finish_hex();
 }
+
+## The names in a program file's code: every identifier in it, and those
+## other units' code can reach through it, the identifiers outside the
+## bodies of functions that are not generic, functions' own names left
+## out. A function only its module sees reaches a unit's code only by its
+## name, in the unit's own code or in what the files it reads show it (a
+## generic body, a default value): `compilation_unit_key` takes its
+## entries in another unit's own interface only then.
+##
+## @param file the file
+## @returns every name, and the names shown
+export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>) {
+    var all = HashSet<String>();
+    var shown = HashSet<String>();
+    var tokens = syntax.lex(file.source);
+    if (tokens.is_err()) {
+        return (all, shown);
+    }
+    # Spans whose tokens other units' code does not see, by start.
+    var hidden = Array<ast.Span>();
+    var hide = (function: ast.FunctionDecl, generic: bool) => {
+        hidden.append(function.name_span);
+        if (function.body.is_value() and !generic and function.generic_params.count == 0) {
+            hidden.append(function.body.value().span);
+        }
+    };
+    for (var declaration in file.module.declarations) {
+        match (declaration) {
+            Function(decl) => {
+                hide(decl, false);
+            }
+            Struct(decl) => {
+                for (var method in decl.methods) {
+                    hide(method, decl.generic_params.count > 0);
+                }
+            }
+            Extend(decl) => {
+                for (var method in decl.methods) {
+                    hide(method, decl.target.generic_types.count > 0);
+                }
+            }
+            else => {}
+        }
+    }
+    hidden.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0));
+    ulong next = 0;
+    for (var token in tokens.value()) {
+        if (token.kind != syntax.TokenKind.Identifier) {
+            continue;
+        }
+        var text = token.text(file.source);
+        all.insert(text);
+        # The spans do not overlap: names and bodies of different functions.
+        while (next < hidden.count and hidden[next].end <= token.offset) {
+            next += 1;
+        }
+        if (next == hidden.count or token.offset < hidden[next].start) {
+            shown.insert(text);
+        }
+    }
+    return (all, shown);
+}

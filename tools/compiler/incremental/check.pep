@@ -44,7 +44,7 @@ _verify_cutoff(): bool {
 
 ## Whether `PEPC_TRACE_COMPILATION_UNITS` prints, for each compilation unit, the
 ## compilation units it reads and the hash of what it changed in the interface
-## (`sema.DeltaBase.own_hash`).
+## (`sema.DeltaBase.own_text`).
 _trace_compilation_units(): bool {
     var named = os.environment("PEPC_TRACE_COMPILATION_UNITS");
     return named.is_value() and !named.value().is_empty;
@@ -204,7 +204,7 @@ export check_compilation_units(
     bool verify_cutoff = verify or _verify_cutoff();
     bool trace_compilation_units = _trace_compilation_units();
     for (var k in 0..last + 1) {
-        units[k].key = compilation_unit_key(units[k], owns);
+        units[k].key = compilation_unit_key(units, k, owns);
         var unit = units[k];
         # The last compilation unit is the program's own, checked on every build
         # that gets this far.

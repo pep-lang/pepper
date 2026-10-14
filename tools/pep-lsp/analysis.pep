@@ -439,7 +439,7 @@ _compilation_units(program: link.Program): incremental.CompilationUnit[] {
 # part of.
 _cold(units: incremental.CompilationUnit[], cache: incremental.Cache, program: link.Program): bool {
     var runtime = units[0];
-    runtime.key = incremental.compilation_unit_key(runtime, Array<String>());
+    runtime.key = incremental.compilation_unit_key(units, 0, Array<String>());
     return incremental.find_checked(cache, program, runtime).is_empty();
 }
 

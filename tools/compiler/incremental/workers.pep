@@ -160,7 +160,7 @@ export check_in_workers(
             }
             started[k] = true;
             progressed = true;
-            units[k].key = compilation_unit_key(units[k], owns);
+            units[k].key = compilation_unit_key(units, k, owns);
             var found = find_checked(cache, program, units[k]);
             if (found.is_value() and usable(k)) {
                 var (bytes, own, warned) = found.value();

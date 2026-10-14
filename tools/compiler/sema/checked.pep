@@ -380,6 +380,7 @@ export struct CheckedUnit {
             # How many use contexts the base had: a merge moves the new
             # type uses' contexts by what it has instead.
             out.unsigned(base.value().size("use_contexts"));
+            base.value().hide_private(module);
             write_module_delta(out, module, base.value());
         } else {
             out.unsigned(0);
@@ -421,7 +422,7 @@ export struct CheckedUnit {
                 out.loc(loc);
                 out.text(summaries[loc]);
                 if (base.is_value()) {
-                    base.value().own("recorded summary", summary_without_place(summaries[loc]));
+                    base.value().own_at("recorded summary", loc, summary_without_place(summaries[loc]));
                 }
             }
         }

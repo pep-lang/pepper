@@ -6976,7 +6976,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1565.blank_locs = true;
                 _own1565.pending_as_bytes = true;
                 _m_FunctionDef_write(_own1565, value.functions[_i1564]);
-                base.own("functions", interface_text(_own1565));
+                base.own_function("functions", value.functions[_i1564], interface_text(_own1565));
             }
         }
         base.count("functions" + " changed", _changed1557.count);
@@ -6990,7 +6990,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1566.blank_locs = true;
                 _own1566.pending_as_bytes = true;
                 _m_FunctionDef_write(_own1566, value.functions[_i1564]);
-                base.own("functions", interface_text(_own1566));
+                base.own_function("functions", value.functions[_i1564], interface_text(_own1566));
             }
         }
         base.count("functions" + " merged", 0);
@@ -7008,7 +7008,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1567.blank_locs = true;
                 _own1567.pending_as_bytes = true;
                 _m_FunctionDef_write(_own1567, value.functions[_i1564]);
-                base.own("functions", interface_text(_own1567));
+                base.own_function("functions", value.functions[_i1564], interface_text(_own1567));
             }
         }
     }
@@ -8214,7 +8214,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _own2048.blank_locs = true;
             _own2048.pending_as_bytes = true;
             _own2048.loc(_okey2047);
-            base.own("private_functions", interface_text(_own2048));
+            base.own_at("private_functions", _okey2047, interface_text(_own2048));
         }
     } else {
         out.unsigned(0);
@@ -8241,7 +8241,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _own2055.blank_locs = true;
             _own2055.pending_as_bytes = true;
             _own2055.loc(_okey2054);
-            base.own("private_functions", interface_text(_own2055));
+            base.own_at("private_functions", _okey2054, interface_text(_own2055));
         }
         base.count("private_functions whole", 0);
     }
@@ -8286,7 +8286,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _own2074.blank_locs = true;
             _own2074.pending_as_bytes = true;
             _own2074.loc(_okey2073);
-            base.own("file_private_functions", interface_text(_own2074));
+            base.own_at("file_private_functions", _okey2073, interface_text(_own2074));
         }
     } else {
         out.unsigned(0);
@@ -8313,7 +8313,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
             _own2081.blank_locs = true;
             _own2081.pending_as_bytes = true;
             _own2081.loc(_okey2080);
-            base.own("file_private_functions", interface_text(_own2081));
+            base.own_at("file_private_functions", _okey2080, interface_text(_own2081));
         }
         base.count("file_private_functions whole", 0);
     }

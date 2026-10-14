@@ -11,7 +11,7 @@
 ## (`CompilationUnit.reads`): the records of the compilation units it reads,
 ## merged (`merged_module`). Its key (`compilation_unit_key`) hashes its
 ## files and the own interface of each compilation unit it reads
-## (`sema.DeltaBase.own_hash`), so an edit outside its closure, or one that
+## (`sema.DeltaBase.own_text`), so an edit outside its closure, or one that
 ## keeps every own interface in it, loads its record rather than checking it
 ## again (early cutoff). INTERNALS.md §8.1 describes the whole design.
 
@@ -22,6 +22,7 @@ import compiler.link;
 import process;
 import compiler.sema;
 import "cache";
+import [file_names] from "interface";
 
 ## The record format's version: a new format gets a new folder.
 const _RECORDS_FOLDER = "checked16";
@@ -45,6 +46,10 @@ export struct CompilationUnit {
     ## compilation units it reads (`compilation_unit_key`), set as the build
     ## reaches it.
     var key: String = "";
+    ## Every name in its files' code, and the names its files show the
+    ## compilation units that read it (`file_names`).
+    var mentions: HashSet<String> = HashSet<String>();
+    var shown: HashSet<String> = HashSet<String>();
 
     construct(name: String) {
         this.name = name;
@@ -262,30 +267,65 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
             hasher.update(f.source);
         }
         unit.files_key = hasher.finish_hex();
+        for (var file in unit.files) {
+            var (all, shown) = file_names(program.files[file]);
+            for (var name in all) {
+                unit.mentions.insert(name);
+            }
+            for (var name in shown) {
+                unit.shown.insert(name);
+            }
+        }
     }
     return out;
 }
 
-## Returns the key of `unit`'s record: its files and what it is checked on, the
-## own interface (`sema.DeltaBase.own_hash`) of each compilation unit it reads.
-## A change to a compilation unit it does not read, or one that keeps the own
-## interface of every compilation unit it reads, keeps the key: the record is
-## still good (early cutoff).
+## Returns the key of compilation unit `k`'s record: its files and what it is
+## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
+## unit it reads. Of the entries of functions only their module sees, it takes
+## those its code can name: a name in its files, or one the files it reads
+## show (`file_names`). A change to a compilation unit it does not read, or one
+## that keeps what it takes of every own interface in it, keeps the key: the
+## record is still good (early cutoff).
 ##
-## @param unit the compilation unit
-## @param owns each compilation unit's own interface, by index: those `unit`
+## @param units the compilation units
+## @param k the compilation unit's index
+## @param owns each compilation unit's own interface, by index: those unit `k`
 ##   reads set
 ## @returns the key, as hex
-export compilation_unit_key(unit: CompilationUnit, owns: String[]): String {
+export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]): String {
+    var unit = units[k];
     var hasher = digest.Blake3();
-    hasher.update("pepper checked compilation unit 4\n");
+    hasher.update("pepper checked compilation unit 5\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
     for (var d in unit.reads) {
-        hasher.update(owns[d]);
+        var lines = owns[d].split("\n");
+        hasher.update(lines[0]);
         hasher.update("\n");
+        for (var i in 1..lines.count) {
+            var name = lines[i].substr(0, lines[i].find(" ") as ulong);
+            if (_can_name(units, unit, name)) {
+                hasher.update(lines[i]);
+                hasher.update("\n");
+            }
+        }
     }
     return hasher.finish_hex();
+}
+
+# Whether `unit`'s code can name `name`: its files do, or a file it reads
+# shows it.
+_can_name(units: CompilationUnit[], unit: CompilationUnit, name: String): bool {
+    if (unit.mentions.contains(name)) {
+        return true;
+    }
+    for (var d in unit.reads) {
+        if (units[d].shown.contains(name)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 ## Returns the module the compilation units `reads` leave, their records merged
@@ -445,7 +485,7 @@ _record_folder(name: String): String {
 ## Writes `checked_unit`'s record, the record of `unit`: a delta on the module
 ## of the compilation units it reads, merged, which `base` indexes. Returns the
 ## record and the compilation unit's own interface, what the delta changed in
-## the interface (`sema.DeltaBase.own_hash`). The build cache keeps both under
+## the interface (`sema.DeltaBase.own_text`). The build cache keeps both under
 ## the compilation unit's key: the record, and beside it its own interface,
 ## which the keys of the compilation units that read it need without reading the
 ## record, and the warnings checking it gave, rendered, which a build that loads
@@ -468,7 +508,7 @@ export store_checked(
     warned: String
 ): (u8[], String) {
     var bytes = _record_bytes(program, checked_unit, base);
-    var own = base.own_hash();
+    var own = base.own_text();
     var path = record_path(cache, unit);
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {

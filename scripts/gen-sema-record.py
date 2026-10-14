@@ -582,7 +582,16 @@ def own_lines(label, expr, tree, blank_bodies='true'):
     return (['{', f'    var {o} = RecordOut();', f'    {o}.blank_bodies = {blank_bodies};', f'    {o}.blank_locs = true;',
              f'    {o}.pending_as_bytes = true;']
             + ['    ' + l for l in write_to(o, expr, tree)]
-            + [f'    base.own("{label}", interface_text({o}));', '}'])
+            + [_own_call(label, expr, f'interface_text({o})'), '}'])
+
+def _own_call(label, element, hash_expr):
+    """The call adding `element`'s entry to the own interface: a function
+    only its module sees goes under its name (`DeltaBase.own_function`)."""
+    if label == 'functions':
+        return f'    base.own_function("{label}", {element}, {hash_expr});'
+    if label in ('private_functions', 'file_private_functions'):
+        return f'    base.own_at("{label}", {element}, {hash_expr});'
+    return f'    base.own("{label}", {hash_expr});'
 
 def _list_delta(expr, et, key, base_list, category=None, merge=False, named=False, own=None, own_bodies='true', ref=None):
     """Write, read and index lines for list `expr` of element type `et`,
@@ -888,7 +897,7 @@ def _own_entries(label, expr, tree):
     lines += ['    ' + l for l in write_to(o, key, tree[1])]
     if tree[0] == 'map':
         lines += ['    ' + l for l in write_to(o, f'{expr}[{key}]', tree[2])]
-    lines += [f'    base.own("{label}", interface_text({o}));', '}']
+    lines += [_own_call(label, key, f'interface_text({o})'), '}']
     return lines
 
 def _additions_delta(fname, tree):

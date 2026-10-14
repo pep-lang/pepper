@@ -13,7 +13,7 @@ import io;
 import os;
 import [Utf8] from text;
 import [Loc, NO_FILE] from "loc";
-import [Checked, FunctionDef, StructDef] from "model";
+import [Checked, FunctionDef, Module, StructDef] from "model";
 import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
@@ -330,6 +330,14 @@ export struct DeltaBase {
     # What the delta written on this base changed in the interface: an
     # entry for each element, entry or name it added, changed or dropped.
     var _own: Array<String> = Array<String>();
+    # The entries of `_own` about functions only their module sees, by
+    # name: a unit that reads this one depends on them only when it can
+    # name one (`own_text`).
+    var _named: Array<(String, String)> = Array<(String, String)>();
+    # The delta's module's functions only their module sees and that are
+    # not generic, by full name and by location, as their names.
+    var _hidden_names: HashMap<String, String> = HashMap<String, String>();
+    var _hidden_locs: HashMap<Loc, String> = HashMap<Loc, String>();
     # Each list's elements' hashes, and its structs' names, in order.
     var _sequences: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
     # The base's checked names: structs, functions and globals, as indexed.
@@ -396,10 +404,10 @@ export struct DeltaBase {
                 }
             }
             for (var name in lost) {
-                own($"checked {i} lost", name);
+                own_named($"checked {i} lost", name, name);
             }
             for (var name in gained) {
-                own($"checked {i}", name);
+                own_named($"checked {i}", name, name);
             }
             for (var names in [lost, gained]) {
                 names.sort((a, b) => a.compare(b));
@@ -422,7 +430,7 @@ export struct DeltaBase {
         out.unsigned(lost.count);
         for (var key in lost) {
             out.text(key);
-            own("checked summary lost", key);
+            own_named("checked summary lost", key, key);
         }
         var changed = Array<String>();
         for (var (key, (loc, text)) in checked.summaries) {
@@ -442,7 +450,7 @@ export struct DeltaBase {
             out.text(key);
             out.loc(loc);
             out.text(text);
-            own("checked summary", $"{key} {summary_without_place(text)}");
+            own_named("checked summary", key, $"{key} {summary_without_place(text)}");
         }
     }
 
@@ -706,22 +714,105 @@ export struct DeltaBase {
         _own.append($"{what} {hash}");
     }
 
-    ## Returns the hash of what the delta written on this base changed in
-    ## the interface (`own`): unlike an interface hash of the whole module,
-    ## it does not depend on the compilation units before.
+    ## Notes which functions of `module`, the module a delta is written
+    ## for, only their own module sees and are not generic: their entries
+    ## in the own interface go under their names (`own_text`). Another
+    ## module's code cannot name them, and code that does not name them
+    ## reaches them only through what other entries hold (an exported
+    ## function's return type and summary, a generic body).
     ##
-    ## @returns the hash, as hex
-    own_hash(): String {
+    ## @param module the module
+    hide_private(module: Module) {
+        for (var f in module.functions) {
+            if (!module.private_functions.contains(f.loc) or f.is_generic_func or f.generic_params.count > 0) {
+                continue;
+            }
+            var name = private_name(f.name);
+            _hidden_names[f.name] = name;
+            _hidden_locs[f.loc] = name;
+        }
+    }
+
+    ## `own`, for an entry about function `f`.
+    ##
+    ## @param what the field
+    ## @param f the function
+    ## @param hash its interface hash
+    own_function(what: String, f: FunctionDef, hash: String) {
+        own_named(what, f.name, hash);
+    }
+
+    ## `own`, for an entry about the function at `loc`.
+    ##
+    ## @param what the field
+    ## @param loc the function's location
+    ## @param hash its interface hash, or text
+    own_at(what: String, loc: Loc, hash: String) {
+        var name = _hidden_locs.try_get(loc);
+        if (name.is_value()) {
+            _named.append((name.value(), $"{what} {hash}"));
+            return;
+        }
+        own(what, hash);
+    }
+
+    ## `own`, for an entry about the function, struct or global named `name`.
+    ##
+    ## @param what the field
+    ## @param name the full name
+    ## @param hash its interface hash, or text
+    own_named(what: String, name: String, hash: String) {
+        var hidden = _hidden_names.try_get(name);
+        if (hidden.is_value()) {
+            _named.append((hidden.value(), $"{what} {hash}"));
+            return;
+        }
+        own(what, hash);
+    }
+
+    ## Returns what the delta written on this base changed in the interface
+    ## (`own`): unlike an interface hash of the whole module, it does not
+    ## depend on the compilation units before. Its first line is the hash
+    ## of every entry but those of functions only their module sees; each
+    ## line after is one of those names and the hash of its entries,
+    ## sorted, which `own_key` takes only when the reader can name it.
+    ##
+    ## @returns the text
+    own_text(): String {
         var lines = Array<String>();
         lines.append_all(_own);
         lines.sort((a, b) => a.compare(b));
         var hasher = digest.Blake3();
-        hasher.update("pepper own interface 2\n");
+        hasher.update("pepper own interface 3\n");
         for (var line in lines) {
             hasher.update(line);
             hasher.update("\n");
         }
-        return hasher.finish_hex();
+        var out = StringBuilder();
+        out.append(hasher.finish_hex());
+        var by_name = HashMap<String, Array<String>>();
+        for (var (name, line) in _named) {
+            if (!by_name.contains(name)) {
+                by_name[name] = Array<String>();
+            }
+            by_name[name].append(line);
+        }
+        var names = Array<String>();
+        for (var (name, _) in by_name) {
+            names.append(name);
+        }
+        names.sort((a, b) => a.compare(b));
+        for (var name in names) {
+            var entries = by_name[name];
+            entries.sort((a, b) => a.compare(b));
+            var named = digest.Blake3();
+            for (var line in entries) {
+                named.update(line);
+                named.update("\n");
+            }
+            out.append($"\n{name} {named.finish_hex()}");
+        }
+        return out.to_string();
     }
 
     ## Returns the hashes of the elements of the base's list `list`, in
@@ -1002,4 +1093,18 @@ export struct RecordIn {
         }
         _next = _end;
     }
+}
+
+## The name code uses for function `name`: its name before any `$` (an
+## overload's), `@` (a file's) or `<` (a specialization's).
+##
+## @param name the function's full name
+## @returns the name
+export private_name(name: String): String {
+    var bytes = name.bytes();
+    ulong end = 0;
+    while (end < bytes.count and bytes[end] != '$' as u8 and bytes[end] != '@' as u8 and bytes[end] != '<' as u8) {
+        end += 1;
+    }
+    return name.substr_bytes(0, end);
 }
