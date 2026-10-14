@@ -2942,9 +2942,12 @@ the cache has one. Otherwise it checks the compilation unit:
    `SiteTable` works this way, and so do `resolve_implicit_types`' `ImplicitTables`,
    `Callees` and declaration fingerprints: they walk `unit_decls`, whose structs
    include every checked one the compilation unit extended or specialized a method for.
-   So do `synthesize_function_types` and the C-signature check of
-   `shared_functions`: a checked declaration's function, tuple and weak types got
-   their structs, and its signatures their check, with its own compilation unit.
+   So do `synthesize_function_types`, the C-signature check of
+   `shared_functions`, `lift_closures` and `resolve_type_aliases`: a checked
+   declaration's function, tuple and weak types got their structs, its signatures
+   their check, its closures their structs and its aliases their expansion with its
+   own compilation unit. `restore_bodies` puts back only what `stash_bodies` took
+   (`PassState.stashed_from`).
 5. `sema.finish_checked` makes the `CheckedUnit` (the module, the link
    summaries, the type aliases), and `store_checked` writes its record,
    own interface and warnings, rendered (`<key>.rec.warn`), under the key.

@@ -6,6 +6,7 @@
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
 import [is_deprecation, mangle] from compiler.link;
+import [unit_decls] from "checked";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [
@@ -851,6 +852,10 @@ export lift_closures(module: Module, state: PassState) {
     var struct_contexts = Array<_ClosureContext>();
     for (var st in module.structs) {
         var ctx = _ClosureContext();
+        struct_contexts.append(ctx);
+        if (module.checked.structs.contains(st.name) and !module.extended_checked.contains(st.name)) {
+            continue;
+        }
         ctx.generics = st.generic_params;
         ctx.this_ty = Optional<TypeName>.Value(st.ty);
         for (var f in st.field_members) {
@@ -864,7 +869,6 @@ export lift_closures(module: Module, state: PassState) {
         }
         _add_extension_methods(module, st.ty.name, ctx.methods);
         ctx.statics = _static_methods(st, module);
-        struct_contexts.append(ctx);
     }
     var extension_contexts = Array<_ClosureContext>();
     for (var ext in module.extensions) {
@@ -894,7 +898,8 @@ export lift_closures(module: Module, state: PassState) {
         extension_contexts.append(ctx);
     }
     var plain = _ClosureContext();
-    for (var function in module.functions) {
+    # A checked declaration's closures were lifted with its compilation unit.
+    for (var function in unit_decls(module).functions) {
         var before = lifted.count;
         _lift_function(state, function, plain, lifted);
         _inherit_deprecation([function.attributes], lifted, before);
@@ -902,6 +907,10 @@ export lift_closures(module: Module, state: PassState) {
     ulong s = 0;
     while (s < module.structs.count) {
         var st = module.structs[s];
+        if (module.checked.structs.contains(st.name) and !module.extended_checked.contains(st.name)) {
+            s += 1;
+            continue;
+        }
         var ctx = struct_contexts[s];
         var before = lifted.count;
         for (var f in st.field_members) {

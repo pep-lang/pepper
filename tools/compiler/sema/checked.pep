@@ -31,29 +31,33 @@ export stash_bodies(module: Module, state: PassState) {
         if (!f.body.is_value() or !is_checked_function(module, f)) {
             continue;
         }
-        _stash(state, $"f {f.name}", f);
+        _stash(state, "", "", f);
     }
     for (var st in module.structs) {
         if (!module.checked.structs.contains(st.name)) {
             continue;
         }
         for (var m in st.method_members) {
-            _stash(state, $"m {st.name} method {m.name}", m);
+            _stash(state, st.name, "method", m);
         }
         for (var c in st.constructors) {
-            _stash(state, $"m {st.name} constructor {c.name}", c);
+            _stash(state, st.name, "constructor", c);
         }
-        _stash(state, $"m {st.name} destructor {st.destructor.name}", st.destructor);
-        _stash(state, $"m {st.name} acquire {st.acquire.name}", st.acquire);
-        _stash(state, $"m {st.name} release {st.release.name}", st.release);
+        _stash(state, st.name, "destructor", st.destructor);
+        _stash(state, st.name, "acquire", st.acquire);
+        _stash(state, st.name, "release", st.release);
     }
     state.trait_memo.stashed = true;
 }
 
-_stash(state: PassState, key: String, function: FunctionDef) {
+# Stashes `function`'s body under `f {name}` for a free function, else
+# `m {owner} {kind} {name}`.
+_stash(state: PassState, owner: String, kind: String, function: FunctionDef) {
     if (!function.body.is_value()) {
         return;
     }
+    var key = kind.is_empty ? $"f {function.name}" : $"m {owner} {kind} {function.name}";
+    state.stashed_from.append((key, function));
     # A body the record's reader skipped stays undecoded.
     if (function.pending_body.is_value()) {
         state.stashed_pending[key] = function.pending_body.value();
@@ -253,27 +257,13 @@ export is_checked_function(module: Module, function: FunctionDef): bool {
 export restore_bodies(module: Module, state: PassState) {
     state.trait_memo.stashed = false;
     if (!has_stashed(state)) {
+        state.stashed_from.clear();
         return;
     }
-    for (var f in module.functions) {
-        if (is_checked_function(module, f)) {
-            _restore(state, $"f {f.name}", f);
-        }
+    for (var (key, function) in state.stashed_from) {
+        _restore(state, key, function);
     }
-    for (var st in module.structs) {
-        if (!module.checked.structs.contains(st.name)) {
-            continue;
-        }
-        for (var m in st.method_members) {
-            _restore(state, $"m {st.name} method {m.name}", m);
-        }
-        for (var c in st.constructors) {
-            _restore(state, $"m {st.name} constructor {c.name}", c);
-        }
-        _restore(state, $"m {st.name} destructor {st.destructor.name}", st.destructor);
-        _restore(state, $"m {st.name} acquire {st.acquire.name}", st.acquire);
-        _restore(state, $"m {st.name} release {st.release.name}", st.release);
-    }
+    state.stashed_from.clear();
     state.stashed = HashMap<String, Block>();
     state.stashed_pending = HashMap<String, PendingBody>();
 }

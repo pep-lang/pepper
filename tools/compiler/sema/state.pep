@@ -6,7 +6,7 @@ import [Diagnostic, SourceText] from compiler.diagnostic;
 import [Target] from compiler.link;
 import [Exports] from "export_table";
 import [Loc] from "loc";
-import [Block, EnumCaseDef, EnumDef, GenericParam, StructDef, TypeName] from "model";
+import [Block, EnumCaseDef, EnumDef, FunctionDef, GenericParam, StructDef, TypeName] from "model";
 import [CheckedDecls, PendingBody] from "pending";
 import [StaticRecording] from "static_source";
 import [StructInfo] from "struct_info";
@@ -213,6 +213,9 @@ export struct PassState {
     ## The stashed bodies a record's reader skipped, not decoded yet
     ## (`checked.stashed_body`), by the same keys.
     var stashed_pending: HashMap<String, PendingBody> = HashMap<String, PendingBody>();
+    ## The declarations a body was stashed from, with its key: what
+    ## `checked.restore_bodies` puts back.
+    var stashed_from: Array<(String, FunctionDef)> = Array<(String, FunctionDef)>();
     ## The declarations `checked.restore_bodies` put a stashed body back
     ## in, by the same keys.
     var restored: HashSet<String> = HashSet<String>();

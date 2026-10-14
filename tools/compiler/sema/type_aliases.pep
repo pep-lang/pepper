@@ -5,6 +5,7 @@
 ## the model.
 
 import [Diagnostic, Location] from compiler.diagnostic;
+import [unit_decls] from "checked";
 import [error_at, location_of] from "common";
 import [Loc] from "loc";
 import [
@@ -598,10 +599,12 @@ export resolve_type_aliases(module: Module, state: PassState) {
             resolver.subst_expression(global.default.value(), global_values);
         }
     }
-    for (var function in module.functions) {
+    # A checked declaration's aliases were expanded with its compilation unit.
+    var own = unit_decls(module);
+    for (var function in own.functions) {
         resolver.subst_function(function, global_values);
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         resolver.subst_params(st.generic_params);
         # Method bodies see the struct's fields as value symbols; field
         # defaults see globals and the fields themselves.
