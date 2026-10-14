@@ -2864,7 +2864,8 @@ line only when the reader can name the function: a name in its own files
 (`CompilationUnit.shown`, from `file_names`: the identifiers outside the
 bodies of functions that are not generic, the functions' own names left
 out). Adding or changing a helper that no reader names checks only its own
-compilation unit again.
+compilation unit again. The runtime's lines are always taken: the compiler's
+own code calls its functions by name (`_pep_panic`).
 
 **Checking in parallel.** With more than two compilation units and more than one job
 (one per logical CPU; `PEPC_COMPILATION_UNIT_JOBS` sets the number), `_check_in_workers`

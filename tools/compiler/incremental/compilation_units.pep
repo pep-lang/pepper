@@ -284,7 +284,8 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 ## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
 ## unit it reads. Of the entries of functions only their module sees, it takes
 ## those its code can name: a name in its files, or one the files it reads
-## show (`file_names`). A change to a compilation unit it does not read, or one
+## show (`file_names`); all of the runtime's, which the compiler's own code
+## calls. A change to a compilation unit it does not read, or one
 ## that keeps what it takes of every own interface in it, keeps the key: the
 ## record is still good (early cutoff).
 ##
@@ -303,9 +304,12 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
         var lines = owns[d].split("\n");
         hasher.update(lines[0]);
         hasher.update("\n");
+        # The compiler's own code calls the runtime's functions by name
+        # (`_pep_panic`): a reader can reach any of them.
+        bool runtime = units[d].name == "runtime";
         for (var i in 1..lines.count) {
             var name = lines[i].substr(0, lines[i].find(" ") as ulong);
-            if (_can_name(units, unit, name)) {
+            if (runtime or _can_name(units, unit, name)) {
                 hasher.update(lines[i]);
                 hasher.update("\n");
             }

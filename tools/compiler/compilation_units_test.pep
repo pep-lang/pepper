@@ -259,5 +259,11 @@ keys_a_unit_on_the_hidden_functions_it_can_name() {
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
     owns[0] = "other\n_unnamed 1\ntwice 1";
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    # The compiler's own code calls the runtime's functions by name.
+    owns[0] = "public\n_unnamed 1\ntwice 1";
+    units[0].name = "runtime";
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_unnamed 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
     expect_true(folder.path.is_dir());
 }
