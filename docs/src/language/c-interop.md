@@ -582,8 +582,8 @@ builds for (with `--target`, another one's: GNU's for Linux and Android,
 the BSD format Apple's linkers read for macOS and iOS, the COFF archive for
 Windows), with the index of the symbols its objects define, so no archiver
 needs to be installed and a static library for another platform needs no
-system root. A shared library links like an executable, with clang. At
-`-O2` and `-O3` the library is optimized as one module first, as an
+system root. A shared library links like an executable, with clang. With
+`--lto=full` the library is optimized as one module first, as an
 executable is (see `--lto` in [pep-build](../tools/pep-build.md)).
 
 - A library needs no `main`. One that has a `main` keeps it, and C code that

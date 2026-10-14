@@ -102,7 +102,7 @@ jobs:
           out="$RUNNER_TEMP/pep-lsp-${{ matrix.target }}"
           rm -rf "$out"
           mkdir -p "$out"
-          "$PEPPER_COMPILER_DIR/pep-build${{ matrix.exe }}" -O -I tools tools/pep-lsp/main.pep \
+          "$PEPPER_COMPILER_DIR/pep-build${{ matrix.exe }}" -O --lto=full -I tools tools/pep-lsp/main.pep \
             -o "$out/pep-lsp${{ matrix.exe }}" --build "$out/build" ${TRIPLE:+--target "$TRIPLE"}
           rm -f "$out"/*.pdb "$out"/*.ilk
           echo "PEPPER_LSP_BIN=$out/pep-lsp${{ matrix.exe }}" >> "$GITHUB_ENV"

@@ -62,7 +62,7 @@ function Install-PepperExtension {
         $out = Join-Path $repo "target/pep-lsp"
         New-Item -ItemType Directory -Force $out | Out-Null
         $env:PEPPER_RUNTIME = Join-Path $repo "runtime"
-        Invoke-Native { & $pepBuild -O -I tools tools/pep-lsp/main.pep -o (Join-Path $out "pep-lsp.exe") --build (Join-Path $out "build") }
+        Invoke-Native { & $pepBuild -O --lto=full -I tools tools/pep-lsp/main.pep -o (Join-Path $out "pep-lsp.exe") --build (Join-Path $out "build") }
 
         # The extension looks for server/<platform>-<arch>/ matching the VS Code
         # process, which follows the OS architecture.

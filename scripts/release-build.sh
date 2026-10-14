@@ -262,7 +262,7 @@ done
 "$stage0/pep-build$exe" -O -I tools tools/compiler/main.pep \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
 [ "$target" = windows-x64 ] && cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
-"$pepc_build/pepc-stage1$exe" -O -I tools tools/compiler/main.pep \
+"$pepc_build/pepc-stage1$exe" -O --lto=full -I tools tools/compiler/main.pep \
   -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
 "$stage/bin/pep-build$exe" --version
 
@@ -270,7 +270,7 @@ echo "=== build the Pepper tools"
 # With the pep-build that ships. pep-lsp depends on the private pepper-lsp
 # package (scripts/ci-package-auth.sh).
 for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc pep-lsp; do
-  "$stage/bin/pep-build$exe" -O -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
+  "$stage/bin/pep-build$exe" -O --lto=full -I tools "tools/$tool/main.pep" -o "$stage/bin/$tool$exe"
 done
 unset PEPPER_RUNTIME
 # Windows builds write a .pdb beside each program; the archive does not

@@ -1657,8 +1657,8 @@ COFF (both linker members), indexing the global definitions
 `defined_symbols` reads from each ELF, Mach-O 64 or COFF (`/bigobj` too)
 object, its members named `p<n>.o` since cached objects are all `0.o`.
 
-**Link-time optimization** (`--lto=full|off`, full by default at
-`-O2`/`-O3`; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`
+**Link-time optimization** (`--lto=full|off`, off by default, since it
+reruns over the whole program on every build; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`
 and is written, and cached, as bitcode (`0.bc`; the key gains `-lto`);
 then the parts are linked into one module (`LLVMLinkModules2`), every
 definition but `main` and the default-visible C exports is made internal

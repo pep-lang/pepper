@@ -294,7 +294,7 @@ pep-build tests/hello.pep -o hello.exe   # choose the output name
 pep-build tests/hello.pep -O            # optimize (-O2; -O0 to -O3, default -O0)
 pep-build tests/hello.pep -g            # debug info (DWARF; CodeView and a .pdb on Windows)
 pep-build tests/hello.pep -g --debug-static=expanded  # ...stepping through static blocks expanded (hello.static.pep)
-pep-build tests/hello.pep -O --lto=off  # optimize each file alone (no link-time optimization)
+pep-build tests/hello.pep -O --lto=full # optimize the program as one module too (link-time optimization)
 pep-build tests/hello.pep -O -march=x86-64-v3  # generate code for a CPU (clang's -march/-mcpu/-mtune/-m<feature>)
 pep-build tests/hello.pep --target aarch64-unknown-linux-gnu  # cross-compile; --sysroot <dir> names its libraries
 pep-build tests/hello.pep --target wasm32-wasip1 --sysroot /opt/wasi-sdk -o hello.wasm  # WebAssembly; run with wasmtime
@@ -355,11 +355,11 @@ up memory safety (see the book's
 [Integer overflow](docs/src/language/types-and-variables.md#integer-overflow)).
 
 `-O` runs LLVM's standard `default<O2>` pipeline (what clang runs at `-O2`)
-over each file's object; `-O1` and `-O3` run theirs. At `-O2` and `-O3` the
+over each file's object; `-O1` and `-O3` run theirs. With `--lto=full` the
 compiler also optimizes the program as a whole once every file is compiled
 (link-time optimization), so a call into another file, the runtime
-included, can inline; `--lto=off` optimizes each file alone, which links
-sooner. The code runs on any machine of its target: clang's default CPU
+included, can inline; it runs over the whole program on every build, so
+the release builds use it and the default, `--lto=off`, does not. The code runs on any machine of its target: clang's default CPU
 for it (`x86-64`; `apple-m1` on Apple arm64), unless `-march`, `-mcpu`,
 `-mtune` or `-m<feature>` (`-mavx2`, `-mno-avx2`) say otherwise, with
 clang's meanings; `-march=native` targets the machine compiling.

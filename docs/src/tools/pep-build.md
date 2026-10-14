@@ -36,7 +36,7 @@ short, and `pepper help build` runs it.
 | `--emit-model-step <N>` | With `--emit-model`, print the model after the first N sema steps | 0 |
 | `--emit-steps` | Print the names of the sema steps, one per line, instead of compiling | off |
 | `-O`, `-O0` to `-O3` | Optimization level | `-O0`, or `PEPPER_OPT_LEVEL` |
-| `--lto=full`, `--lto=off` | Link-time optimization | `full` at `-O2`/`-O3`, else `off` |
+| `--lto=full`, `--lto=off` | Link-time optimization | `off` |
 | `-march=`, `-mcpu=`, `-mtune=`, `-m<feature>`, `-mno-<feature>` (`-m <option>`) | The CPU to generate code for | clang's default for the target |
 | `-g`, `--emit-debug` | Emit debug info | off |
 | `--debug-static=source`, `--debug-static=expanded` | With `-g`, step through `static` blocks as written or expanded | `source` |
@@ -362,8 +362,9 @@ prints the message alone, unless the program runs with `PEPPER_BACKTRACE=1`
 Link-time optimization. With `--lto=full`, once every file is compiled the
 whole program is optimized again as one module, so a call into another file
 (the runtime included) can be inlined. `--lto=off` optimizes each file
-alone, which links sooner. The default is `full` at `-O2` and `-O3` and
-`off` below; `--lto=full` at `-O0` is an error that asks for `-O`.
+alone, which links sooner. The default is `off`: `full` optimizes the whole
+program again on every build, an edit's too, so it suits a release build.
+`--lto=full` at `-O0` is an error that asks for `-O`.
 
 With it, each file is optimized by LLVM's pre-link pipeline and kept as
 bitcode (in the build cache, as an object is), then the compiler links
