@@ -31,7 +31,7 @@ export [Fingerprint] from "fingerprint";
 export [
     CheckedUnit, finish_checked, full_body, function_facts, interface_hash, resume_checked, settle_merged
 ] from "checked";
-export [DeltaBase, RecordIn, RecordOut] from "record";
+export [DeltaBase, function_name, RecordIn, RecordOut] from "record";
 export [index_module, index_resumed, interface_fields, read_module, write_module] from "record_codec";
 export [PassState, PassTimes, pass_name] from "state";
 export [StaticExpansion, StaticRecording, substitute_names] from "static_source";

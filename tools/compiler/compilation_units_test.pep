@@ -215,8 +215,9 @@ _file_ending(program: link.Program, name: String): link.ProgramFile {
     return program.files[0];
 }
 
-# What a file shows other units' code: names outside the bodies of functions
-# that are not generic, the functions' own names left out.
+# What a file shows other units' code: a declaration's names outside the
+# bodies of functions that are not generic, only to code that names it, its
+# own name and its methods' left out.
 [Test]
 shows_the_names_outside_plain_bodies() {
     var (
@@ -225,20 +226,24 @@ shows_the_names_outside_plain_bodies() {
     ) = _load_two(
         "file_names",
         "import \"lib/helpers\";\nmain(): int {\n    return shown_twice<int>(1) - 2;\n}\n",
-        "_plain(): int {\n    return 2;\n}\n_in_generic(): int {\n    return 2;\n}\n_in_default(): int {\n    return 1;\n}\nexport shown_twice<T>(x: int = _in_default()): int {\n    return x * _in_generic();\n}\nexport hidden_twice(x: int): int {\n    return x * _plain();\n}\n"
+        "_plain(): int {\n    return 2;\n}\n_in_generic(): int {\n    return 2;\n}\n_in_default(): int {\n    return 1;\n}\nexport shown_twice<T>(x: int = _in_default()): int {\n    return x * _in_generic();\n}\nexport hidden_twice(x: int): int {\n    return x * _plain();\n}\nstruct _Leaf {\n    var next: _Leaf?;\n}\nstruct _Tree {\n    var leaf: _Leaf;\n    size(): int {\n        return _plain();\n    }\n}\n"
     );
-    var (all, shown) = incremental.file_names(_file_ending(program, "helpers.pep"));
-    for (var name in ["_plain", "_in_generic", "_in_default", "shown_twice", "hidden_twice"]) {
+    var (all, shown, shown_by) = incremental.file_names(_file_ending(program, "helpers.pep"));
+    for (var name in ["_plain", "_in_generic", "_in_default", "shown_twice", "hidden_twice", "_Leaf", "_Tree"]) {
         expect_true(all.contains(name));
+        expect_false(shown.contains(name));
     }
-    expect_true(shown.contains("_in_generic") and shown.contains("_in_default"));
-    expect_false(shown.contains("_plain"));
-    expect_false(shown.contains("shown_twice") or shown.contains("hidden_twice"));
+    expect_true(shown_by["shown_twice"].contains("_in_generic") and shown_by["shown_twice"].contains("_in_default"));
+    expect_false(shown_by["hidden_twice"].contains("_plain"));
+    expect_true(shown_by["_Tree"].contains("_Leaf"));
+    expect_false(shown_by["_Tree"].contains("_plain") or shown_by["_Tree"].contains("size"));
+    expect_false(shown_by.contains("_Leaf") and shown_by["_Leaf"].contains("_Leaf"));
     expect_true(folder.path.is_dir());
 }
 
-# A compilation unit's key takes the entries of a function that is not
-# generic from another unit's own interface only when its code can name it.
+# A compilation unit's key takes the entries of a function or struct that is
+# not generic from another unit's own interface only when its code can name
+# it, itself or through a declaration it names.
 [Test]
 keys_a_unit_on_the_functions_it_can_name() {
     var (
@@ -247,10 +252,18 @@ keys_a_unit_on_the_functions_it_can_name() {
     ) = _load_two(
         "hidden_keys",
         "import \"lib/helpers\";\nmain(): int {\n    return twice(1) - 2;\n}\n",
-        "export twice(x: int): int {\n    return x * 2;\n}\n"
+        "export twice(x: int): int {\n    return x * _Box().x;\n}\nexport boxed(): _Box {\n    return _Box();\n}\nstruct _Box {\n    var x: int;\n}\n"
     );
     var units = incremental.compilation_units(program, "base");
     expect_true(units.count == 2);
+    # `boxed` shows `_Box`, but `main` does not name `boxed`.
+    var boxes = ["public\n_Box 1\ntwice 1", ""];
+    var boxed = incremental.compilation_unit_key(units, 1, boxes);
+    boxes[0] = "public\n_Box 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, boxes) == boxed);
+    units[1].mentions.insert("boxed");
+    expect_true(incremental.compilation_unit_key(units, 1, boxes) != boxed);
+    units[1].mentions.remove("boxed");
     var owns = ["public\n_unnamed 1\ntwice 1", ""];
     var key = incremental.compilation_unit_key(units, 1, owns);
     owns[0] = "public\n_unnamed 2\ntwice 1";

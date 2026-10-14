@@ -585,12 +585,15 @@ def own_lines(label, expr, tree, blank_bodies='true'):
             + [_own_call(label, expr, f'interface_text({o})'), '}'])
 
 def _own_call(label, element, hash_expr):
-    """The call adding `element`'s entry to the own interface: a function
-    only its module sees goes under its name (`DeltaBase.own_function`)."""
+    """The call adding `element`'s entry to the own interface: a function,
+    struct or enum that is not generic goes under its name
+    (`DeltaBase.own_named`)."""
     if label == 'functions':
         return f'    base.own_function("{label}", {element}, {hash_expr});'
     if label in ('private_functions', 'file_private_functions'):
         return f'    base.own_at("{label}", {element}, {hash_expr});'
+    if label in ('structs', 'enums'):
+        return f'    base.own_named("{label}", {element}.name, {hash_expr});'
     return f'    base.own("{label}", {hash_expr});'
 
 def _list_delta(expr, et, key, base_list, category=None, merge=False, named=False, own=None, own_bodies='true', ref=None):

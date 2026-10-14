@@ -6773,7 +6773,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1508.blank_locs = true;
                 _own1508.pending_as_bytes = true;
                 _m_StructDef_write(_own1508, value.structs[_i1507]);
-                base.own("structs", interface_text(_own1508));
+                base.own_named("structs", value.structs[_i1507].name, interface_text(_own1508));
             }
         }
         out.unsigned(_news1505.count);
@@ -6788,7 +6788,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1509.blank_locs = true;
                 _own1509.pending_as_bytes = true;
                 _m_StructDef_write(_own1509, value.structs[_i1507]);
-                base.own("structs", interface_text(_own1509));
+                base.own_named("structs", value.structs[_i1507].name, interface_text(_own1509));
             }
         }
         base.count("s merged", 0);
@@ -7198,7 +7198,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1642.blank_locs = true;
                 _own1642.pending_as_bytes = true;
                 _m_EnumDef_write(_own1642, value.enums[_i1641]);
-                base.own("enums", interface_text(_own1642));
+                base.own_named("enums", value.enums[_i1641].name, interface_text(_own1642));
             }
         }
         base.count("enums" + " merged", 0);
@@ -7216,7 +7216,7 @@ _m_Module_write_delta(out: RecordOut, value: Module, base: DeltaBase) {
                 _own1643.blank_locs = true;
                 _own1643.pending_as_bytes = true;
                 _m_EnumDef_write(_own1643, value.enums[_i1641]);
-                base.own("enums", interface_text(_own1643));
+                base.own_named("enums", value.enums[_i1641].name, interface_text(_own1643));
             }
         }
     }

@@ -380,7 +380,7 @@ export struct CheckedUnit {
             # How many use contexts the base had: a merge moves the new
             # type uses' contexts by what it has instead.
             out.unsigned(base.value().size("use_contexts"));
-            base.value().name_functions(module);
+            base.value().name_declarations(module);
             write_module_delta(out, module, base.value());
         } else {
             out.unsigned(0);

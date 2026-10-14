@@ -46,10 +46,12 @@ export struct CompilationUnit {
     ## compilation units it reads (`compilation_unit_key`), set as the build
     ## reaches it.
     var key: String = "";
-    ## Every name in its files' code, and the names its files show the
-    ## compilation units that read it (`file_names`).
+    ## Every name in its files' code, the names its files show every
+    ## compilation unit that reads it, and those each of their declarations
+    ## shows code that names it (`file_names`).
     var mentions: HashSet<String> = HashSet<String>();
     var shown: HashSet<String> = HashSet<String>();
+    var shown_by: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
 
     construct(name: String) {
         this.name = name;
@@ -268,12 +270,20 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
         }
         unit.files_key = hasher.finish_hex();
         for (var file in unit.files) {
-            var (all, shown) = file_names(program.files[file]);
+            var (all, shown, shown_by) = file_names(program.files[file]);
             for (var name in all) {
                 unit.mentions.insert(name);
             }
             for (var name in shown) {
                 unit.shown.insert(name);
+            }
+            for (var (name, names) in shown_by) {
+                if (!unit.shown_by.contains(name)) {
+                    unit.shown_by[name] = HashSet<String>();
+                }
+                for (var shown_name in names) {
+                    unit.shown_by[name].insert(shown_name);
+                }
             }
         }
     }
@@ -282,10 +292,9 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 
 ## Returns the key of compilation unit `k`'s record: its files and what it is
 ## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
-## unit it reads. Of the entries of functions that are not generic, it takes
-## those its code can name: a name in its files, or one the files it reads
-## show (`file_names`); all of the runtime's, which the compiler's own code
-## calls. A change to a compilation unit it does not read, or one
+## unit it reads. Of the entries of functions, structs and enums that are not
+## generic, it takes those its code can name (`_names_reached`); all of the
+## runtime's, which the compiler's own code calls. A change to a compilation unit it does not read, or one
 ## that keeps what it takes of every own interface in it, keeps the key: the
 ## record is still good (early cutoff).
 ##
@@ -300,6 +309,7 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
     hasher.update("pepper checked compilation unit 5\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
+    var reach = _names_reached(units, unit);
     for (var d in unit.reads) {
         var lines = owns[d].split("\n");
         hasher.update(lines[0]);
@@ -309,7 +319,7 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
         bool runtime = units[d].name == "runtime";
         for (var i in 1..lines.count) {
             var name = lines[i].substr(0, lines[i].find(" ") as ulong);
-            if (runtime or _can_name(units, unit, name)) {
+            if (runtime or reach.contains(name)) {
                 hasher.update(lines[i]);
                 hasher.update("\n");
             }
@@ -318,18 +328,39 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
     return hasher.finish_hex();
 }
 
-# Whether `unit`'s code can name `name`: its files do, or a file it reads
-# shows it.
-_can_name(units: CompilationUnit[], unit: CompilationUnit, name: String): bool {
-    if (unit.mentions.contains(name)) {
-        return true;
+# The names `unit`'s code can name: those in its files, those the files it
+# reads show every reader, and, closing over them, those each declaration
+# so named shows.
+_names_reached(units: CompilationUnit[], unit: CompilationUnit): HashSet<String> {
+    var reach = HashSet<String>();
+    var pending = Array<String>();
+    var add = (name: String) => {
+        if (!reach.contains(name)) {
+            reach.insert(name);
+            pending.append(name);
+        }
+    };
+    for (var name in unit.mentions) {
+        add(name);
     }
     for (var d in unit.reads) {
-        if (units[d].shown.contains(name)) {
-            return true;
+        for (var name in units[d].shown) {
+            add(name);
         }
     }
-    return false;
+    while (pending.count > 0) {
+        var name = pending.pop();
+        for (var d in unit.reads) {
+            var shown = units[d].shown_by.try_get(name);
+            if (!shown.is_value()) {
+                continue;
+            }
+            for (var shown_name in shown.value()) {
+                add(shown_name);
+            }
+        }
+    }
+    return reach;
 }
 
 ## Returns the module the compilation units `reads` leave, their records merged

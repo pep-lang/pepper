@@ -113,24 +113,32 @@ export interface_hash(file: link.ProgramFile, index: uint, facts: HashMap<sema.L
 }
 
 ## The names in a program file's code: every identifier in it, and those
-## other units' code can reach through it, the identifiers outside the
-## bodies of functions that are not generic, functions' own names left
-## out. A function that is not generic reaches a unit's code only by its
-## name, in the unit's own code or in what the files it reads show it (a
-## generic body, a default value): `compilation_unit_key` takes its
-## entries in another unit's own interface only then.
+## other units' code can reach through it. A top-level function or struct
+## (an enum is one) shows the identifiers in it outside the bodies of
+## functions that are not generic, and outside the names of its own and
+## its methods, but only to code that names it; everything else in the
+## file shows its identifiers to all code that reads it.
+## `compilation_unit_key` takes the entries of a function, struct or enum
+## that is not generic in another unit's own interface only when the
+## unit's code can name it: in its own files, or in what the declarations
+## it reaches show.
 ##
 ## @param file the file
-## @returns every name, and the names shown
-export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>) {
+## @returns every name, the names shown to every reader, and the names
+##   each declaration shows, by its name
+export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>, HashMap<String, HashSet<String>>) {
     var all = HashSet<String>();
     var shown = HashSet<String>();
+    var shown_by = HashMap<String, HashSet<String>>();
     var tokens = syntax.lex(file.source);
     if (tokens.is_err()) {
-        return (all, shown);
+        return (all, shown, shown_by);
     }
     # Spans whose tokens other units' code does not see, by start.
     var hidden = Array<ast.Span>();
+    # The top-level functions and structs, in order, and their names.
+    var declared = Array<ast.Span>();
+    var declared_names = Array<String>();
     var hide = (function: ast.FunctionDecl, generic: bool) => {
         hidden.append(function.name_span);
         if (function.body.is_value() and !generic and function.generic_params.count == 0) {
@@ -141,11 +149,17 @@ export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>) {
         match (declaration) {
             Function(decl) => {
                 hide(decl, false);
+                declared.append(decl.span);
+                declared_names.append(sema.function_name(decl.name));
             }
             Struct(decl) => {
-                for (var method in decl.methods) {
-                    hide(method, decl.generic_params.count > 0);
+                for (var methods in [decl.methods, decl.constructors]) {
+                    for (var method in methods) {
+                        hide(method, decl.generic_params.count > 0);
+                    }
                 }
+                declared.append(decl.span);
+                declared_names.append(sema.function_name(decl.name));
             }
             Extend(decl) => {
                 for (var method in decl.methods) {
@@ -157,6 +171,7 @@ export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>) {
     }
     hidden.sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0));
     ulong next = 0;
+    ulong in_declared = 0;
     for (var token in tokens.value()) {
         if (token.kind != syntax.TokenKind.Identifier) {
             continue;
@@ -167,9 +182,26 @@ export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>) {
         while (next < hidden.count and hidden[next].end <= token.offset) {
             next += 1;
         }
-        if (next == hidden.count or token.offset < hidden[next].start) {
-            shown.insert(text);
+        if (next < hidden.count and token.offset >= hidden[next].start) {
+            continue;
         }
+        # A declaration out of order only shows its names to every reader.
+        while (in_declared < declared.count and declared[in_declared].end <= token.offset) {
+            in_declared += 1;
+        }
+        if (in_declared == declared.count or token.offset < declared[in_declared].start) {
+            shown.insert(text);
+            continue;
+        }
+        # Its own name, as written.
+        var name = declared_names[in_declared];
+        if (text == name) {
+            continue;
+        }
+        if (!shown_by.contains(name)) {
+            shown_by[name] = HashSet<String>();
+        }
+        shown_by[name].insert(text);
     }
-    return (all, shown);
+    return (all, shown, shown_by);
 }

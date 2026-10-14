@@ -330,12 +330,13 @@ export struct DeltaBase {
     # What the delta written on this base changed in the interface: an
     # entry for each element, entry or name it added, changed or dropped.
     var _own: Array<String> = Array<String>();
-    # The entries of `_own` about functions that are not generic, by
-    # name: a unit that reads this one depends on them only when it can
-    # name one (`own_text`).
+    # The entries of `_own` about functions, structs and enums that are
+    # not generic, by name: a unit that reads this one depends on them
+    # only when it can name one (`own_text`).
     var _named: Array<(String, String)> = Array<(String, String)>();
-    # The delta's module's functions that are not generic, by full name
-    # and by location, as their names.
+    # The delta's module's functions, structs and enums that are not
+    # generic, by full name, and its functions and methods by location, as
+    # their names (a method's is its struct's).
     var _function_names: HashMap<String, String> = HashMap<String, String>();
     var _function_locs: HashMap<Loc, String> = HashMap<Loc, String>();
     # Each list's elements' hashes, and its structs' names, in order.
@@ -714,14 +715,15 @@ export struct DeltaBase {
         _own.append($"{what} {hash}");
     }
 
-    ## Notes which functions of `module`, the module a delta is written
-    ## for, are not generic: their entries in the own interface go under
-    ## their names (`own_text`). Code that does not name such a function
-    ## reaches it only through what other entries hold (another function's
-    ## return type and summary, a generic body).
+    ## Notes which functions, structs and enums of `module`, the module a
+    ## delta is written for, are not generic: their entries in the own
+    ## interface go under their names (`own_text`), and a struct's methods'
+    ## under its name. Code that does not name such a declaration reaches
+    ## it only through what other entries hold (a signature, a field's
+    ## type, a generic body), which name it.
     ##
     ## @param module the module
-    name_functions(module: Module) {
+    name_declarations(module: Module) {
         for (var f in module.functions) {
             if (f.is_generic_func or f.generic_params.count > 0) {
                 continue;
@@ -729,6 +731,21 @@ export struct DeltaBase {
             var name = function_name(f.name);
             _function_names[f.name] = name;
             _function_locs[f.loc] = name;
+        }
+        for (var s in module.structs) {
+            if (s.generic_params.count > 0) {
+                continue;
+            }
+            var name = function_name(s.name);
+            _function_names[s.name] = name;
+            for (var methods in [s.method_members, s.constructors]) {
+                for (var m in methods) {
+                    _function_locs[m.loc] = name;
+                }
+            }
+        }
+        for (var e in module.enums) {
+            _function_names[e.name] = function_name(e.name);
         }
     }
 
@@ -762,6 +779,12 @@ export struct DeltaBase {
     ## @param hash its interface hash, or text
     own_named(what: String, name: String, hash: String) {
         var named = _function_names.try_get(name);
+        var method = name.split_once("\n");
+        if (!named.is_value() and method.is_value()) {
+            # A method's entry goes under its struct's name.
+            var (owner, _) = method.value();
+            named = _function_names.try_get(owner);
+        }
         if (named.is_value()) {
             _named.append((named.value(), $"{what} {hash}"));
             return;
