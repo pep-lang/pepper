@@ -329,30 +329,32 @@ _compilation_units_off(): bool {
     return named.is_value() and !named.value().is_empty;
 }
 
-# The symbols `ir`, a compilation unit's module just compiled with `partition`,
-# defines for other objects, a line each, by Pepper name: what survived
-# optimization, not local. The cache keeps them beside the compilation unit's
-# object (`defines`), and a compilation unit above only declares these
-# (`codegen.generate`'s `declared`); an instantiation the compilation unit's
-# object dropped (`linkonce_odr`, inlined everywhere) it defines itself, as a
-# compiler shares the generics a library exports.
-_defines(ir: llvm.Module, partition: codegen.Partition): String {
+# The symbols a compilation unit's parts, just compiled with `partition`,
+# define for other objects (each part's `<object>.defines`, which this
+# removes), a line each, by Pepper name. The cache keeps them beside the
+# compilation unit's objects (`defines`), and a compilation unit above only
+# declares these (`codegen.generate`'s `declared`); an instantiation the
+# compilation unit's objects dropped (`linkonce_odr`, inlined everywhere) it
+# defines itself, as a compiler shares the generics a library exports.
+_defines(partition: codegen.Partition, objects: Path[]): Result<String, String> {
     var out = StringBuilder();
-    var values = ir.functions();
-    for (var global in ir.globals()) {
-        values.append(global);
-    }
-    for (var value in values) {
-        var linkage = value.linkage();
-        if (value.is_declaration() or linkage == llvm.Linkage.Internal or linkage == llvm.Linkage.Private) {
-            continue;
+    for (var object in objects) {
+        var path = Path($"{object}.defines");
+        var text = File.read_to_string(path);
+        if (text.is_err()) {
+            return Result<String, String>.err($"cannot read {path}");
         }
-        var name = value.name();
-        var pepper = partition.names.try_get(name);
-        out.append(pepper.is_value() ? pepper.value() : name);
-        out.append("\n");
+        File.remove(path);
+        for (var name in text.value().split("\n")) {
+            if (name.is_empty) {
+                continue;
+            }
+            var pepper = partition.names.try_get(name);
+            out.append(pepper.is_value() ? pepper.value() : name);
+            out.append("\n");
+        }
     }
-    return out.to_string();
+    return Result<String, String>.ok(out.to_string());
 }
 
 # Leaves the symbols compilation unit `unit` (number `k`)'s object defines,
@@ -405,14 +407,14 @@ _object_extension(options: BuildOptions, triple: String): String {
     return triple.contains("-windows") ? "obj" : "o";
 }
 
-# The object of `unit` in the build cache, under its key: its files' code
-# and what it instantiated, as a compilation unit worker compiles it.
+# The first object of `unit` in the build cache, under its key: its files'
+# code and what it instantiated, as a compilation unit worker compiles it.
 _compilation_unit_object(cache: Cache, unit: CompilationUnit, extension: String): Path {
     return cache.objects($"compilation unit {unit.name}", unit.key).join(Path($"0.{extension}"));
 }
 
-# Keeps the last compilation unit's objects, `folder`'s `0.<ext>` and
-# `entry.<ext>`, in the build cache under its key, with the program's `[Link]`
+# Keeps the last compilation unit's objects, `folder`'s parts' (`0.<ext>` and
+# on) and `entry.<ext>`, in the build cache under its key, with the program's `[Link]`
 # arguments (`link`) and the warnings checking it gave (`warn`), rendered: a
 # later build whose last compilation unit has the same key links them, as Go
 # links a `main` package from its cache, and prints the warnings again. Returns
@@ -464,12 +466,10 @@ _compile_unit(
         own.insert(file);
     }
     var others = HashSet<uint>();
-    var part_of_file = Array<uint>();
     for (var i in 0..program.files.count) {
         if (!own.contains(i)) {
             others.insert(i as uint);
         }
-        part_of_file.append(own.contains(i) ? 0 : 2);
     }
     var owners = HashMap<String, uint>();
     var generated = codegen.generate(
@@ -478,29 +478,33 @@ _compile_unit(
     if (generated.is_err()) {
         return Optional<String>.Value(render_all([generated.error()], program.sources()));
     }
-    # Part 0 is the compilation unit's; the program's entry points (part 1) are
-    # the last compilation unit's to compile.
-    var partition = codegen.prepare(generated.value(), owners, part_of_file, 1, 3);
+    # The program's entry points are the last compilation unit's to compile.
+    var (part_of_file, parts) = _unit_parts(program, unit.files, generated.value(), owners, options.part_size);
+    var partition = codegen.prepare(generated.value(), owners, part_of_file, parts, parts + 2);
     var folder = dir.join(Path($"{unit.name.replace("/", "_")}.object"));
     Directory.remove_all(folder);
     Directory.create_all(folder);
     var compiled = compile_parts(
         generated.value(),
         partition,
-        [PartJob(0, folder.join(Path($"0.{extension}")))],
+        _unit_jobs(folder, parts, extension),
         machine.value(),
         cpu,
         options.opt_level,
         folder,
         options.trace_time,
-        true,
+        options.in_process,
         false,
         options.lto and options.opt_level > 0
     );
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
     }
-    if (File.write_text(folder.join(Path("defines")), _defines(generated.value(), partition)).is_err()) {
+    var defines = _defines(partition, _unit_objects(folder, extension));
+    if (defines.is_err()) {
+        return Optional<String>.Value(defines.error());
+    }
+    if (File.write_text(folder.join(Path("defines")), defines.value()).is_err()) {
         return Optional<String>.Value($"cannot write to {folder}");
     }
     var kept = cache.store(folder, $"compilation unit {unit.name}", unit.key);
@@ -965,12 +969,10 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 own.insert(file);
             }
             var others = HashSet<uint>();
-            var part_of_file = Array<uint>();
             for (var i in 0..program.files.count) {
                 if (!own.contains(i)) {
                     others.insert(i as uint);
                 }
-                part_of_file.append(own.contains(i) ? 0 : 2);
             }
             var below = _defined_by(options.cache.value(), units, last.reads, Optional<Path>.Empty);
             var generated = codegen.generate(
@@ -980,13 +982,16 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 return Result<Built, String>.err(render_all([generated.error()], sources));
             }
             clock.lap("codegen");
-            var partition = codegen.prepare(generated.value(), owners, part_of_file, 1, 3);
+            var (part_of_file, parts) = _unit_parts(program, last.files, generated.value(), owners, options.part_size);
+            var partition = codegen.prepare(generated.value(), owners, part_of_file, parts, parts + 2);
             var folder = work.join(Path("last"));
             Directory.create_all(folder);
+            var jobs = _unit_jobs(folder, parts, extension);
+            jobs.append(PartJob(parts, folder.join(Path($"entry.{extension}"))));
             var compiled = compile_parts(
                 generated.value(),
                 partition,
-                [PartJob(0, folder.join(Path($"0.{extension}"))), PartJob(1, folder.join(Path($"entry.{extension}")))],
+                jobs,
                 machine.value(),
                 cpu,
                 options.opt_level,
@@ -999,6 +1004,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             if (compiled.is_err()) {
                 return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
             }
+            _drop_defines(jobs);
             link_text = _link_attributes(module);
             var stored = _store_last(
                 options.cache.value(), last, folder, link_text, render_warnings(warnings_in(warnings, last), sources)
@@ -1014,9 +1020,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         for (var k in last.reads) {
             var folder = options.cache.value().objects($"compilation unit {units[k].name}", units[k].key);
             options.cache.value().used(folder);
-            objects.append(folder.join(Path($"0.{extension}")));
+            objects.append_all(_unit_objects(folder, extension));
         }
-        objects.append(last_folder.value().join(Path($"0.{extension}")));
+        objects.append_all(_unit_objects(last_folder.value(), extension));
         objects.append(last_folder.value().join(Path($"entry.{extension}")));
         clock.lap("objects");
     } else {
@@ -1048,7 +1054,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         var unit_parts = Array<uint[]>();
         uint parts = 0;
         for (var translation_unit in translation_units) {
-            var split = _split(program, translation_unit, sizes, parts, options.part_size);
+            var split = _split(program, translation_unit.files, sizes, parts, options.part_size);
             var own = Array<uint>();
             for (var part in split) {
                 if (!own.contains(part)) {
@@ -1058,7 +1064,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             for (var i in 0..translation_unit.files.count) {
                 part_of_file[translation_unit.files[i]] = split[i];
             }
-            unit_parts.append(_translation_unit_size(translation_unit, sizes) == 0 ? Array<uint>() : own);
+            unit_parts.append(_files_size(translation_unit.files, sizes) == 0 ? Array<uint>() : own);
             parts += own.count as uint;
         }
         var entry_part = parts;
@@ -1144,6 +1150,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
             # The bitcode and plan stay, so the failed part can be run again.
             return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
         }
+        _drop_defines(jobs);
         if (keys.is_value()) {
             for (var (u, i, part_key) in stored_parts) {
                 var kept = options.cache.value().store(
@@ -1333,6 +1340,59 @@ _codegen_options(options: BuildOptions): String {
     return out;
 }
 
+## Each file's part when compilation unit `files` alone is compiled
+## (`_compile_unit`): its own files' parts from 0 (`_split`), so a large
+## unit's object is compiled on several CPUs; the program's entry points
+## the next part; every other file, only declared, the one after. Returns
+## the parts and how many are the unit's own.
+_unit_parts(
+    program: link.Program, files: ulong[], ir: llvm.Module, owners: HashMap<String, uint>, part_size: ulong
+): (uint[], uint) {
+    var split = _split(program, files, codegen.file_sizes(ir, owners, program.files.count), 0, part_size);
+    uint parts = 1;
+    for (var part in split) {
+        parts = part + 1 > parts ? part + 1 : parts;
+    }
+    var part_of_file = Array<uint>();
+    for (var _ in program.files) {
+        part_of_file.append(parts + 1);
+    }
+    for (var i in 0..files.count) {
+        part_of_file[files[i]] = split[i];
+    }
+    return (part_of_file, parts);
+}
+
+## The jobs compiling a compilation unit's own `parts` into `folder`, as
+## `<part>.<extension>`.
+_unit_jobs(folder: Path, parts: uint, extension: String): PartJob[] {
+    var jobs = Array<PartJob>();
+    for (var part in 0..parts) {
+        jobs.append(PartJob(part, folder.join(Path($"{part}.{extension}"))));
+    }
+    return jobs;
+}
+
+## Removes what each of `jobs` defines (`<object>.defines`), which only a
+## compilation unit worker's `_defines` reads.
+_drop_defines(jobs: PartJob[]) {
+    for (var job in jobs) {
+        File.remove(Path($"{job.object}.defines"));
+    }
+}
+
+## The objects of a compilation unit's parts in `folder`: `0.<extension>`
+## and on, as many as `_unit_jobs` wrote.
+_unit_objects(folder: Path, extension: String): Path[] {
+    var objects = Array<Path>();
+    var at = folder.join(Path($"0.{extension}"));
+    while (at.is_file()) {
+        objects.append(at);
+        at = folder.join(Path($"{objects.count}.{extension}"));
+    }
+    return objects;
+}
+
 ## The largest part a unit is compiled in, in `codegen.file_sizes`'s
 ## measure (blocks and definitions): a larger unit is split into parts of
 ## about this size, so one large unit does not keep the build waiting on
@@ -1340,7 +1400,7 @@ _codegen_options(options: BuildOptions): String {
 ## objects stay the same from one program to the next.
 const _PART_SIZE = 20000;
 
-## The part of each of `translation_unit`'s files: as many parts as the unit's size
+## The part of each of a unit's `files`: as many parts as the unit's size
 ## needs (`part_size`), no more than its files, each a run of the unit's
 ## files in namespace order, a file in the part its middle falls in. Each
 ## part's object is cached under its files (`Keys.part`), so the split
@@ -1348,33 +1408,31 @@ const _PART_SIZE = 20000;
 ## only the files at its ends, and only when the edit is large, where
 ## filling the least loaded part first moved files all over the unit. The
 ## parts are numbered from `first`, with no gaps.
-_split(
-    program: link.Program, translation_unit: link.TranslationUnit, sizes: ulong[], first: uint, part_size: ulong
-): uint[] {
-    var total = _translation_unit_size(translation_unit, sizes);
+_split(program: link.Program, files: ulong[], sizes: ulong[], first: uint, part_size: ulong): uint[] {
+    var total = _files_size(files, sizes);
     var count = (total + part_size - 1) / part_size;
-    if (count > translation_unit.files.count) {
-        count = translation_unit.files.count;
+    if (count > files.count) {
+        count = files.count;
     }
     if (count < 1) {
         count = 1;
     }
     var order = Array<ulong>();
-    for (var i in 0..translation_unit.files.count) {
+    for (var i in 0..files.count) {
         order.append(i);
     }
     order.sort((a, b) => {
-        var x = program.files[translation_unit.files[a]].namespace;
-        var y = program.files[translation_unit.files[b]].namespace;
+        var x = program.files[files[a]].namespace;
+        var y = program.files[files[b]].namespace;
         return x < y ? -1 : (x > y ? 1 : 0);
     });
     var split = Array<uint>();
-    for (var _ in translation_unit.files) {
+    for (var _ in files) {
         split.append(0);
     }
     ulong before = 0;
     for (var i in order) {
-        var size = sizes[translation_unit.files[i]];
+        var size = sizes[files[i]];
         # Twice the file's middle, against twice each part's share, in
         # whole numbers.
         var part = total == 0 ? 0 : ((before * 2 + size) * count) / (total * 2);
@@ -1395,10 +1453,10 @@ _split(
     return split;
 }
 
-## How much code `translation_unit`'s files own.
-_translation_unit_size(translation_unit: link.TranslationUnit, sizes: ulong[]): ulong {
+## How much code `files` own.
+_files_size(files: ulong[], sizes: ulong[]): ulong {
     ulong total = 0;
-    for (var file in translation_unit.files) {
+    for (var file in files) {
         total += sizes[file];
     }
     return total;

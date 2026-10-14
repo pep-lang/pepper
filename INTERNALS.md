@@ -2889,9 +2889,12 @@ finds every compilation unit checked, and checks the last one in the build's pro
 **Objects per compilation unit.** A worker that checked a compilation unit also compiles it
 (`_compile_unit`), as a C compiler compiles one translation unit: it
 generates IR for the compilation unit's own files and for what the compilation units below do not
-define, and only declares what they do. Each compilation unit's object lists the
-symbols it defines once optimized (`defines`, `_defines`: not local, so not
-an instantiation every use inlined); a compilation unit declares exactly the symbols the
+define, and only declares what they do. A compilation unit larger than `_PART_SIZE`
+is split into parts as in §4.1 (`_unit_parts`), compiled at once in
+`--compile-part` children, so an edit to a large one does not wait on one CPU.
+Each part writes the symbols it defines once optimized beside its object
+(`<object>.defines`, `parts._write_defines`: not local, so not an instantiation
+every use inlined), and the compilation unit's `defines` lists them all (`_defines`); a compilation unit declares exactly the symbols the
 objects of the compilation units it reads list (`Generator.declared`, by Pepper
 name, which `Partition.names` gives back for each respelled one), and defines any other function it gives a body: an instantiation
 the compilation units below made but dropped, or a method a pass of this compilation unit added to
@@ -2900,12 +2903,13 @@ a struct below (`_pep_copy_value`), which has no owner there
 member in each object that uses it. A declaration keeps an owner (`DECLARED_ONLY` for an
 instantiation), so `prepare` gives it the linker spelling of its definition.
 The object is cached under the compilation unit's key (`_compilation_unit_object`:
-`<cache>/v2/units/compilation unit <name>/<key>/0.o` and `defines`; the key already
+`<cache>/v2/units/compilation unit <name>/<key>/0.o`, `1.o` and on for its other parts
+(`_unit_objects`), and `defines`; the key already
 holds the codegen options), and a compilation unit counts as done from the cache only
 when both its record and its object are there; a build marks the object
 used when it finds it, so no build pruning the cache removes it before this
 one links. The last compilation unit is keyed like the others, and its objects, the
-last compilation unit's (`0.o`) and the entry points' (`entry.o`), are cached under its
+last compilation unit's (`0.o` and on) and the entry points' (`entry.o`), are cached under its
 key with the program's `[Link]` arguments (`link`, `_link_attributes`) and
 its warnings (`_store_last`): a build whose last compilation unit has the same key
 checks and generates nothing and links, as Go links a `main` package from

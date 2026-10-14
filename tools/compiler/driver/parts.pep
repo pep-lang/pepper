@@ -221,6 +221,7 @@ _compile(
         if (written.is_err()) {
             return Result<void, String>.err($"cannot write {job.object}: {written.error().message}");
         }
+        _write_defines(ir, job)?;
         if (trace_time) {
             File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
         }
@@ -233,8 +234,31 @@ _compile(
     if (emitted.is_err()) {
         return Result<void, String>.err($"cannot write {job.object}: {emitted.error().message}");
     }
+    _write_defines(ir, job)?;
     if (trace_time) {
         File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
+    }
+    return Result<void, String>.ok();
+}
+
+## Writes the symbols part `ir`, compiled, defines for other objects beside
+## `job`'s object (`<object>.defines`), a line each, by LLVM name: what
+## survived optimization, not local.
+_write_defines(ir: llvm.Module, job: PartJob): Result<void, String> {
+    var out = StringBuilder();
+    var values = ir.functions();
+    values.append_all(ir.globals());
+    for (var value in values) {
+        var linkage = value.linkage();
+        if (value.is_declaration() or linkage == llvm.Linkage.Internal or linkage == llvm.Linkage.Private) {
+            continue;
+        }
+        out.append(value.name());
+        out.append("\n");
+    }
+    var path = $"{job.object}.defines";
+    if (File.write_text(Path(path), out.to_string()).is_err()) {
+        return Result<void, String>.err($"cannot write {path}");
     }
     return Result<void, String>.ok();
 }
