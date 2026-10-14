@@ -2643,8 +2643,10 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   looking up a declaration that changed (`_Declarations` fingerprints each
   struct's fields, each signature, global and overload set, and announces
   its keys when it differs; a change to what no key covers, traits,
-  extensions, enums and the like, walks everything); the model and errors
-  they give do not depend on that); then the `?` checks
+  extensions (their methods by signature, not code), enums and the like,
+  walks everything; a run whose last round changed nothing keeps that
+  round's closures and declarations rather than taking them again); the
+  model and errors they give do not depend on that); then the `?` checks
   (`check_tries.pep`), extension targets (`resolve_resolvables.pep`)
   and extensions applied to their structs, with each declared trait's
   members checked or defaulted (`apply_extensions.pep`), parameter names

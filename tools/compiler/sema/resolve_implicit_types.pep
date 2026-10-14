@@ -33,6 +33,7 @@ import [
     Block,
     Declaration,
     Expression,
+    ExtensionDef,
     FunctionCallExpression,
     FunctionDef,
     FunctionRefExpression,
@@ -252,6 +253,8 @@ struct _Worklist {
     ## Whether other passes may have changed code since the last run, so
     ## each callable's code is checked against its fingerprint.
     var checks_code: bool = true;
+    ## How many changes this run made to the code it walked.
+    var edits: ulong = 0;
 
     construct() {}
 
@@ -307,6 +310,7 @@ struct _Worklist {
 
     ## Finishes walking the callable `f` at `place`.
     finish(place: String, f: FunctionDef, tables: ImplicitTables, scopes: _TypeScopes) {
+        edits += scopes.edits;
         if (scopes.edits == 0) {
             reads[place] = tables.reads;
             prints[place] = _print(f);
@@ -321,6 +325,7 @@ struct _Worklist {
         changed = changing;
         changing = HashSet<String>();
         all = false;
+        edits = 0;
     }
 }
 
@@ -430,7 +435,7 @@ struct _Declarations {
         }
         rest.add(module.extensions.count);
         for (var x in module.extensions) {
-            x.fingerprint(rest);
+            into_extension(x, rest);
         }
         rest.add(module.enums.count);
         for (var x in module.enums) {
@@ -469,6 +474,30 @@ struct _Declarations {
             t.fingerprint(into);
         }
         into.add(st.constructors.count);
+    }
+
+    ## Adds what `x` declares to `into`: its methods' signatures, not their
+    ## code, which the walks never look up.
+    into_extension(x: ExtensionDef, into: Fingerprint) {
+        x.target.fingerprint(into);
+        into.add_text(x.resolved.is_value() ? x.resolved.value() : "");
+        into.add(x.traits.count);
+        for (var t in x.traits) {
+            t.fingerprint(into);
+        }
+        into.add(x.restated.count);
+        for (var (index, bound) in x.restated) {
+            into.add(index);
+            bound.fingerprint(into);
+        }
+        into.add(x.methods.count);
+        for (var m in x.methods) {
+            into.add(_signature(m));
+        }
+        into.add(x.attributes.count);
+        x.loc.fingerprint(into);
+        into.add(x.is_exported ? 1 : 0);
+        into.add(x.is_private ? 1 : 0);
     }
 
     ## Records declaration `id`; a name declared twice folds into one.
@@ -2364,6 +2393,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
                 );
             }
         }
+        work.edits += scopes.edits;
         # Method bodies see this struct's resolved fields and its methods
         # in place of its table entries.
         var own_methods = Array<(String, TypeName)>();
@@ -2469,6 +2499,7 @@ _resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: Ty
         }
         scopes.symbols[0].append((global.name, global.ty));
     }
+    work.edits += scopes.edits;
     if (resolved.count > 0) {
         inferred = true;
     }
@@ -2628,6 +2659,10 @@ export resolve_implicit_types(module: Module, state: PassState) {
         work.all = true;
     }
     ulong round = 0;
+    # Whether the last run changed nothing since its closures were synced,
+    # and whether its declarations were taken then too.
+    bool quiet = false;
+    bool declared = false;
     while (round < 8) {
         bool synced = sync_closures(module, state);
         var bindings = _bind_values(module, state);
@@ -2644,14 +2679,20 @@ export resolve_implicit_types(module: Module, state: PassState) {
         }
         bool inferred = _resolve_once(module, state, work, bindings.trait_types);
         if (!inferred and !synced and !bound) {
+            quiet = work.edits == 0 and work.changing.count == 0;
+            declared = work.checks_code;
             break;
         }
         work.next_run();
         round += 1;
     }
-    sync_closures(module, state);
+    if (!quiet) {
+        sync_closures(module, state);
+    }
     # What this run changed is the next run's to look for.
-    _Declarations(module, used_trait_types(module, state.trait_types_memo())).keep(memo);
+    if (!quiet or !declared) {
+        _Declarations(module, used_trait_types(module, state.trait_types_memo())).keep(memo);
+    }
     memo.reads = work.reads;
     memo.prints = work.prints;
     memo.pending = work.changing;
