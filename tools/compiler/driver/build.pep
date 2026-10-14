@@ -1398,7 +1398,7 @@ _unit_objects(folder: Path, extension: String): Path[] {
 ## about this size, so one large unit does not keep the build waiting on
 ## one process. The split depends only on the unit's own code, so its
 ## objects stay the same from one program to the next.
-const _PART_SIZE = 20000;
+const _PART_SIZE = 10000;
 
 ## The part of each of a unit's `files`: as many parts as the unit's size
 ## needs (`part_size`), no more than its files, each a run of the unit's
