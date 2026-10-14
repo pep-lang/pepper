@@ -2939,7 +2939,9 @@ the cache has one. Otherwise it checks the compilation unit:
    take in the compilation unit's own declarations and look a checked one up by name
    only when the compilation unit's code names it (`checked_decls`, built once per
    compilation unit), so a round costs in proportion to the compilation unit, not its closure.
-   `SiteTable` works this way.
+   `SiteTable` works this way, and so do `resolve_implicit_types`' `ImplicitTables`,
+   `Callees` and declaration fingerprints: they walk `unit_decls`, whose structs
+   include every checked one the compilation unit extended or specialized a method for.
 5. `sema.finish_checked` makes the `CheckedUnit` (the module, the link
    summaries, the type aliases), and `store_checked` writes its record,
    own interface and warnings, rendered (`<key>.rec.warn`), under the key.

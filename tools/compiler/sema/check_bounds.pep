@@ -9,7 +9,7 @@
 
 import compiler.ast;
 import [Diagnostic, Location] from compiler.diagnostic;
-import [drop_body] from "checked";
+import [copy_without_body] from "checked";
 import [expression_children] from "closure_sites";
 import "closures";
 import "common";
@@ -81,8 +81,7 @@ struct _Constrained {
                         own.append((n, t));
                     }
                 }
-                var m = method.copy();
-                drop_body(m);
+                var m = copy_without_body(method);
                 m.ty = _substitute_all(m.ty, own);
                 for (var p in m.parameters) {
                     p.ty = _substitute_all(p.ty, own);

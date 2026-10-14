@@ -129,6 +129,21 @@ export drop_body(function: FunctionDef) {
     function.pending_body = Optional<PendingBody>.Empty;
 }
 
+## A copy of `function` without its body: a signature, which copying the
+## body only to drop it made most of the cost of.
+##
+## @param function the function, as it was once this returns
+## @returns the copy
+export copy_without_body(function: FunctionDef): FunctionDef {
+    var body = function.body;
+    var pending = function.pending_body;
+    drop_body(function);
+    var out = function.copy();
+    function.body = body;
+    function.pending_body = pending;
+    return out;
+}
+
 ## Gives `function` its whole body, decoding one a record's reader skipped
 ## (`PendingBody`): what codegen and the passes that walk checked bodies
 ## after `restore_bodies` need.

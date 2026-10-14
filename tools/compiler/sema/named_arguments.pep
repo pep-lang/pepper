@@ -7,7 +7,7 @@ import compiler.ast;
 import [Diagnostic, Fix, Location] from compiler.diagnostic;
 import [attribute_arguments, attribute_name] from "attributes";
 import [enum_method_name] from "builder";
-import [is_checked_function] from "checked";
+import [is_checked_function, unit_decls] from "checked";
 import "common";
 import [Loc] from "loc";
 import [
@@ -911,13 +911,13 @@ export struct Callees {
         if (checked) {
             base = Optional<Callees>.Value(_checked_callees(module, state));
         }
-        for (var function in module.functions) {
-            if (checked and is_checked_function(module, function)) {
-                continue;
-            }
+        # The base holds the rest: a checked struct it does not cover is one
+        # the unit extended or specialized a method for, one of its own.
+        var own = unit_decls(module);
+        for (var function in own.functions) {
             _add_function(function);
         }
-        for (var st in module.structs) {
+        for (var st in own.structs) {
             if (checked and base.value().covers(st)) {
                 continue;
             }

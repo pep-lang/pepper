@@ -1,7 +1,7 @@
 ## Traits used as types (`Shape s`, `Array<Shape>`), as far as the passes
 ## ask about them. A module with no checked runtime is assumed.
 
-import [drop_body] from "checked";
+import [copy_without_body] from "checked";
 import [Block, FunctionDef, Module, StructDef, TraitDef, TraitType, TypeFlags, TypeName] from "model";
 import [TraitTypeMemo] from "state";
 import [parse_type_string] from "type_name";
@@ -65,8 +65,7 @@ export instance(def: TraitDef, ty: TypeName): TraitType {
         if (!is_dispatchable(m)) {
             continue;
         }
-        var method = m.copy();
-        drop_body(method);
+        var method = copy_without_body(m);
         _substitute_type(method.ty, type_map);
         for (var p in method.parameters) {
             _substitute_type(p.ty, type_map);

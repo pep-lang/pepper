@@ -10,7 +10,7 @@
 
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import [enum_method_name, getter_name] from "builder";
-import [has_body, is_checked_function] from "checked";
+import [has_body, is_checked_function, unit_decls] from "checked";
 import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
 ] from "closure_sites";
@@ -147,7 +147,9 @@ _referenceable_functions(
     module: Module, state: PassState, checked: bool? = Optional<bool>.Empty
 ): Array<(String, TypeName)> {
     var out = Array<(String, TypeName)>();
-    for (var f in module.functions) {
+    # The unchecked functions are the unit's own: no checked one to skip.
+    var functions = checked.is_value() and !checked.value() ? unit_decls(module).functions : module.functions;
+    for (var f in functions) {
         # The cheapest test first: most of a compilation unit's functions are checked.
         if (checked.is_value() and is_checked_function(module, f) != checked.value()) {
             continue;
@@ -362,7 +364,8 @@ struct _Declarations {
         # A checked unit's declarations do not change on top of it, so they
         # never announce anything: only its structs that got methods
         # specialized since (`_find<Point>`) count.
-        for (var st in module.structs) {
+        var own = unit_decls(module);
+        for (var st in own.structs) {
             if (module.checked.structs.contains(st.name) and !_has_body(st)) {
                 continue;
             }
@@ -389,10 +392,8 @@ struct _Declarations {
             ty.fingerprint(shape);
             _add($"t:{key}", shape.value, [_type_read(key), _base_read(key)]);
         }
-        for (var f in module.functions) {
-            if (!is_checked_function(module, f)) {
-                _add($"f:{f.name}", _signature(f), [_function_read(f.name)]);
-            }
+        for (var f in own.functions) {
+            _add($"f:{f.name}", _signature(f), [_function_read(f.name)]);
         }
         for (var e in module.externs) {
             var shape = Fingerprint();
@@ -594,7 +595,10 @@ export struct ImplicitTables {
         if (checked) {
             base = Optional<ImplicitTables>.Value(_checked_implicit(module, state, callees));
         }
-        for (var st in module.structs) {
+        # A checked struct the base does not cover is one the unit
+        # extended or specialized a method for: one of the unit's own.
+        var own = unit_decls(module);
+        for (var st in own.structs) {
             if (checked and base.value().covers(st)) {
                 continue;
             }
@@ -612,18 +616,14 @@ export struct ImplicitTables {
             }
         }
         _index();
-        for (var f in module.functions) {
-            if (!checked or !is_checked_function(module, f)) {
-                _first_wins(functions, f.name, f.ty);
-            }
+        for (var f in own.functions) {
+            _first_wins(functions, f.name, f.ty);
         }
         for (var e in module.externs) {
             _first_wins(functions, e.name, e.ty);
         }
-        for (var f in module.functions) {
-            if (f.is_generic_func
-                and !generic_functions.contains(f.name)
-                and (!checked or !is_checked_function(module, f))) {
+        for (var f in own.functions) {
+            if (f.is_generic_func and !generic_functions.contains(f.name)) {
                 generic_functions[f.name] = GenericSignature(f, state);
             }
         }
