@@ -11,6 +11,7 @@
 import [Location] from compiler.diagnostic;
 import text;
 import [is_numeric_type] from "arithmetic";
+import [unit_decls] from "checked";
 import [CALL_METHOD, closure_struct, field_def, is_closure_struct, THIS_FIELD] from "closures";
 import "common";
 import [RECEIVER_FIELD] from "function_references";
@@ -647,12 +648,14 @@ _function_variables(f: FunctionDef, out: VariableDef[]) {
 ## or parameter declares one, whose signature has a type C cannot pass.
 _check_c_signatures(module: Module, state: PassState) {
     var variables = Array<VariableDef>();
-    for (var f in module.functions) {
+    # A checked declaration's were checked with its unit.
+    var own = unit_decls(module);
+    for (var f in own.functions) {
         if (!f.is_generic_func) {
             _function_variables(f, variables);
         }
     }
-    for (var st in module.structs) {
+    for (var st in own.structs) {
         if (st.generic_params.count > 0) {
             continue;
         }

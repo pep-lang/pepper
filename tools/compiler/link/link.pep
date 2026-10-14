@@ -645,8 +645,8 @@ struct _Linker {
     # Per file, the names its module's other files declare (`_Bindings.module`).
     var module_names: HashMap<String, String>[] = Array<HashMap<String, String>>();
     # Per file, the other files of its module that declare each of those
-    # names.
-    var module_from: Array<HashMap<String, ulong[]>> = Array<HashMap<String, ulong[]>>();
+    # names, found on the file's first unknown name (`_module_from`).
+    var module_from: HashMap<ulong, HashMap<String, ulong[]>> = HashMap<ulong, HashMap<String, ulong[]>>();
     var unions: _Unions = _Unions();
     # Every type name declared at top level, in any file.
     var types: HashSet<String> = HashSet<String>();
@@ -684,7 +684,7 @@ struct _Linker {
     #
     # @returns whether it reported one
     report_unimported_mate(file: ulong, name: String, span: Span): bool {
-        var from = module_from[file].try_get(name);
+        var from = _module_from(file).try_get(name);
         if (!from.is_value() or from.value().is_empty) {
             return false;
         }
@@ -694,6 +694,31 @@ struct _Linker {
             $"'{name}' is declared in {file_names[from.value()[0]]}, another file of this module, which this file does not import; add an import for it"
         );
         return true;
+    }
+
+    # The other files of `file`'s module that declare each name it does not.
+    _module_from(file: ulong): HashMap<String, ulong[]> {
+        var found = module_from.try_get(file);
+        if (found.is_value()) {
+            return found.value();
+        }
+        var out = HashMap<String, ulong[]>();
+        for (var m in all_mates[file]) {
+            for (var d in named_decls(files[m].module)) {
+                if (d.is_private() or own[file].contains(d.declared_name())) {
+                    continue;
+                }
+                var name = d.declared_name();
+                if (!out.contains(name)) {
+                    out[name] = Array<ulong>();
+                }
+                if (!out[name].contains(m)) {
+                    out[name].append(m);
+                }
+            }
+        }
+        module_from[file] = out;
+        return out;
     }
 
     # Where an override may go: a module's files share their module, the
@@ -1105,32 +1130,15 @@ struct _Linker {
     # one overload set, a union. Externs keep their names. Any other name
     # declared by two files of one module is the first one's; the visibility
     # check reports the second. A `private` declaration is bound for no other
-    # file. Also, per file, the files of its module that declare each name
-    # it could import (`module_from`), to name the file in the error when it
-    # uses one without importing it.
+    # file.
     compute_module_names() {
         ulong i = 0;
         while (i < files.count) {
             module_names.append(HashMap<String, String>());
-            module_from.append(HashMap<String, ulong[]>());
             i += 1;
         }
         i = 0;
         while (i < files.count) {
-            for (var m in all_mates[i]) {
-                for (var d in named_decls(files[m].module)) {
-                    if (d.is_private() or own[i].contains(d.declared_name())) {
-                        continue;
-                    }
-                    var name = d.declared_name();
-                    if (!module_from[i].contains(name)) {
-                        module_from[i][name] = Array<ulong>();
-                    }
-                    if (!module_from[i][name].contains(m)) {
-                        module_from[i][name].append(m);
-                    }
-                }
-            }
             if (mates[i].count == 0) {
                 i += 1;
                 continue;

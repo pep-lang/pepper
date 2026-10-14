@@ -6,6 +6,7 @@
 ## object head that steps the weak count.
 
 import [has_bare_attribute, SHARED_ATTRIBUTE] from "builder";
+import [unit_decls] from "checked";
 import [DESTROY_FIELD, empty_function, field_def, INVOKE_FIELD] from "closures";
 import [Loc] from "loc";
 import [
@@ -42,7 +43,9 @@ import [Rewriter, rewrite_expression] from "walk";
 ## @param state the passes' state
 export synthesize_function_types(module: Module, state: PassState) {
     var found = _TypesFound();
-    for (var st in module.structs) {
+    # A checked declaration's types got their structs when its unit was checked.
+    var own = unit_decls(module);
+    for (var st in own.structs) {
         for (var field in st.field_members) {
             found.add(field.ty);
         }
@@ -54,7 +57,7 @@ export synthesize_function_types(module: Module, state: PassState) {
         }
         _function_types(st.destructor, found);
     }
-    for (var function in module.functions) {
+    for (var function in own.functions) {
         _function_types(function, found);
     }
     for (var ext in module.extensions) {
