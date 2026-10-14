@@ -3022,7 +3022,9 @@ and the rest of `record_codec.pep`, generated from the model by
   same way.
 - Sets and maps are written as the entries they gained; the checked names
   as the names they lost and gained; the checked summaries as the keys they
-  lost and the entries they changed.
+  lost and the entries they changed. A settled summary's blame is written
+  from its function's start (`settled_text`), so an edit that shifts the
+  function in its file leaves the entry, and the error it points at, right.
 - `conversions` and `argument_names` are rebuilt by passes over the whole
   module, so each record keeps the compilation unit's own entries: conversions not
   already in the base, and argument names merged by place.

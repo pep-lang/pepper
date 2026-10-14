@@ -275,6 +275,44 @@ keeps_no_copy_of_the_bodies_it_decodes() {
     build();
 }
 
+# A summary a compilation unit settles for a function below it blames a
+# place in that function counted from the function's start: an edit that
+# only moves the function keeps the record, and the place it points at
+# (`PEPC_VERIFY_CUTOFF` finds a stale one).
+[Test]
+keeps_a_settled_summary_right_when_its_function_moves() {
+    var folder = TempFolder("moved_blame");
+    var root = folder.path;
+    var callee = "export trait Measure {\n    measure(): int;\n}\nexport a_first(items: Measure[], extra: int = 0): Measure {\n    var total = extra;\n    for (var m in items) {\n        total += m.measure();\n    }\n    return items[0];\n}\n";
+    File.write_text(root.join(Path("a.pep")), callee);
+    File.write_text(
+        root.join(Path("b.pep")),
+        "import async;\nimport \"a\";\n[Shared]\nstruct _Count {\n    const value: async.Atomic<long>;\n    construct() {\n        this.value = async.Atomic<long>(0);\n    }\n}\nstruct _Three {\n    var n: int;\n    construct() {\n        this.n = 3;\n    }\n}\nextend _Three with Measure {\n    measure(): int {\n        return n;\n    }\n}\nexport b_value(): int {\n    var counter = async.Mutex<_Count>(_Count());\n    var items = Array<Measure>();\n    items.append(_Three());\n    var n = 0;\n    with (var c = counter.lock()) {\n        n = a_first(items).measure();\n    }\n    return n;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")), "import \"a\";\nimport \"b\";\nmain(): int {\n    return b_value() - 3;\n}\n"
+    );
+    var build = () => {
+        var setup = link.Setup();
+        setup.import_dirs.append(root);
+        var output = root.join(Path("main"));
+        var options = driver.BuildOptions(output, root.join(Path("build")));
+        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+        options.in_process = true;
+        options.verify_cutoff = true;
+        var program = link.load_program(root.join(Path("main.pep")), setup);
+        expect_true(program.is_ok());
+        var built = driver.build(program.value(), options);
+        if (built.is_err()) {
+            print(built.error());
+        }
+        expect_true(built.is_ok());
+    };
+    build();
+    File.write_text(root.join(Path("a.pep")), "# moved\n" + callee);
+    build();
+}
+
 [Test]
 keeps_the_objects_another_build_stored_first() {
     var folder = TempFolder("store_twice");

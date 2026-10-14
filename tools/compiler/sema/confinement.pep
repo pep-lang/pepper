@@ -326,11 +326,18 @@ struct _Summary {
     }
 
     ## The summary as recorded for the build cache: `classes;taints;blame`
-    ## (`0,1,0;0;12-30`).
-    encode(): String {
+    ## (`0,1,0;0;12-30`), the blame's span from `base` on (its function's
+    ## start, for a settled summary, so moving the function keeps it).
+    encode(base: Loc? = Optional<Loc>.Empty): String {
         var blamed = "-";
         if (blame.is_value()) {
-            blamed = $"{blame.value().span.start}-{blame.value().span.end}";
+            var at = blame.value().span;
+            if (!base.is_value()) {
+                blamed = $"{at.start}-{at.end}";
+            } else if (base.value().file == blame.value().file and at.start >= base.value().span.start) {
+                var start = base.value().span.start;
+                blamed = $"{at.start - start}-{at.end - start}";
+            }
         }
         return $"{links()};{blamed}";
     }
@@ -338,14 +345,16 @@ struct _Summary {
     ## The summary as a checked unit records it: `encode`, then a line for
     ## each call through a trait value it reaches, in order,
     ## `trait\tmethod\toperands\tresults\tlinks`.
-    settled_text(): String {
+    ##
+    ## @param base the function's location, which the blame is recorded from
+    settled_text(base: Loc): String {
         var calls = Array<String>();
         for (var (call, _) in dispatched) {
             calls.append(call);
         }
         calls.sort((a: String, b: String) => a < b ? -1 : (a > b ? 1 : 0));
         var out = StringBuilder();
-        out.append(encode());
+        out.append(encode(Optional<Loc>.Value(base)));
         for (var call in calls) {
             out.append($"\n{call}\t{dispatched[call]}");
         }
@@ -418,8 +427,10 @@ _numbers(field: String): ulong[]? {
     return Optional<ulong[]>.Value(out);
 }
 
-## A summary `_Summary.encode` wrote, for a function in `file`.
-_decode(text: String, file: uint): _Summary? {
+## A summary `_Summary.encode` wrote, for a function in `file`: its blame
+## from `base` on when given (a settled summary's, `base` its function's
+## start); none when the function is not found then.
+_decode(text: String, file: uint, base: ulong? = Optional<ulong>.Empty, settled: bool = false): _Summary? {
     var none = Optional<_Summary>.Empty;
     # What follows `|` is other passes'.
     var bar = text.find("|");
@@ -453,7 +464,13 @@ _decode(text: String, file: uint): _Summary? {
         if (!start.is_value() or !end.is_value()) {
             return none;
         }
-        summary.blame = Optional<Loc>.Value(Loc.at(file, ast.Span(start.value(), end.value())));
+        if (!settled) {
+            summary.blame = Optional<Loc>.Value(Loc.at(file, ast.Span(start.value(), end.value())));
+        } else if (base.is_value()) {
+            summary.blame = Optional<Loc>.Value(
+                Loc.at(file, ast.Span(start.value() + base.value(), end.value() + base.value()))
+            );
+        }
     }
     for (var i in 1..lines.count) {
         var tab = lines[i].rfind("\t");
@@ -807,7 +824,7 @@ struct _Confinement {
             return;
         }
         var (loc, text) = recorded.value();
-        var decoded = _decode(text, loc.file);
+        var decoded = _decode(text, loc.file, _function_start(key), true);
         if (decoded.is_value()) {
             summaries[key] = decoded.value();
             settled.insert(key);
@@ -914,6 +931,20 @@ struct _Confinement {
         _restored[key] = body;
         bodies.insert(key);
         return Optional<_Body>.Value(body);
+    }
+
+    # Where the function `key` names starts, compiled or checked.
+    _function_start(key: String): ulong? {
+        var function = function_of(key);
+        if (function.is_value()) {
+            return Optional<ulong>.Value(function.value().loc.span.start);
+        }
+        var stashed = _stashed(key);
+        if (!stashed.is_value()) {
+            return Optional<ulong>.Empty;
+        }
+        var (body, _) = stashed.value();
+        return Optional<ulong>.Value(body.function.loc.span.start);
     }
 
     # The checked function `key` names, as a body with its stash key.
@@ -1324,7 +1355,7 @@ _settle(program: _Confinement) {
             continue;
         }
         var blame = summary.blame.is_value() ? summary.blame.value() : function.value().loc;
-        program.state.settled_summaries[key] = (blame, summary.settled_text());
+        program.state.settled_summaries[key] = (blame, summary.settled_text(function.value().loc));
     }
 }
 
