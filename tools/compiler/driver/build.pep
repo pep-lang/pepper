@@ -495,7 +495,9 @@ _compile_unit(
         options.trace_time,
         options.in_process,
         false,
-        options.lto and options.opt_level > 0
+        options.lto and options.opt_level > 0,
+        false,
+        Optional<PartCache>.Value(PartCache(cache, $"part of compilation unit {unit.name}"))
     );
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
@@ -999,7 +1001,9 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 options.trace_time,
                 options.in_process,
                 true,
-                lto
+                lto,
+                false,
+                Optional<PartCache>.Value(PartCache(options.cache.value(), $"part of compilation unit {last.name}"))
             );
             if (compiled.is_err()) {
                 return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");

@@ -1596,6 +1596,13 @@ about the same size. Each reads the bitcode `compile_parts` wrote to
 `<build>/<name>.<pid>` (a folder per build, so builds at once do not meet)
 once, keeps all its parts (`codegen.keep_parts`), so the copy it makes for
 each part but the last is smaller, and keeps, optimizes and emits each.
+A compilation unit's parts, a worker's or the last's, are also cached by
+their code (`PartCache`): once a part is kept, its key (`_part_key`) hashes
+the compiler, the machine, level and mode, and the part's IR as text (the
+module's name, the work folder's, left out). A part whose key the cache
+has copies its object and `.defines` from there rather than being
+optimized and emitted, so an edit that changes one file of a compilation
+unit compiles only the parts its code changed.
 For an ELF target the entry part's static constructors first move from
 `llvm.global_ctors` into an `.init_array` section (`place_constructors`,
 `use_init_array`): a machine made through the C API emits `.ctors`, which

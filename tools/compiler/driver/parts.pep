@@ -8,6 +8,8 @@
 
 import async;
 import compiler.codegen;
+import digest;
+import [Cache, compiler_identity] from compiler.incremental;
 import [Directory, File, Path] from io;
 import llvm;
 import os;
@@ -16,10 +18,24 @@ import "build";
 
 ## The plan file beside the bitcode: the machine, the level, whether to
 ## print how long each part took, whether the parts are kept as bitcode
-## for link-time optimization, then one `<part> <symbol>` line per symbol
-## defined in exactly one part.
+## for link-time optimization, the build cache's folder and the name the
+## parts' objects go under there (empty when they are not cached), then one
+## `<part> <symbol>` line per symbol defined in exactly one part.
 const _PLAN_FILE = "plan";
 const _BITCODE_FILE = "program.bc";
+
+## Where parts' objects are kept by their code (`_part_key`): the build
+## cache, and the name they go under there, one per part, as
+## `Cache.part` names them.
+export struct PartCache {
+    var cache: Cache;
+    var unit: String;
+
+    construct(cache: Cache, unit: String) {
+        this.cache = cache;
+        this.unit = unit;
+    }
+}
 
 ## A part to compile, and where its object goes.
 export struct PartJob {
@@ -54,6 +70,8 @@ export struct PartJob {
 ##   pipeline, for link-time optimization, rather than as an object
 ## @param optimized whether `ir` is already optimized (the whole program
 ##   after link-time optimization), so each part's object is only written
+## @param cached where each part's object is kept by its code, so a part
+##   an edit leaves as it was is not compiled again
 ## @returns nothing, or why a part failed
 export compile_parts(
     ir: llvm.Module,
@@ -67,12 +85,19 @@ export compile_parts(
     in_process: bool = false,
     partial: bool = false,
     lto: bool = false,
-    optimized: bool = false
+    optimized: bool = false,
+    cached: PartCache? = Optional<PartCache>.Empty
 ): Result<void, String> {
+    # The last line before the symbols: whether the parts are kept as
+    # bitcode (`true`), already optimized (`optimized`), or neither.
+    var mode = lto ? "true" : (optimized ? "optimized" : "false");
+    var how = $"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{mode}";
     if (jobs.count == 1 or in_process) {
         for (var i in 0..jobs.count) {
             var module = i + 1 < jobs.count ? ir.clone() : ir;
-            var compiled = _compile(module, partition, jobs[i], machine, opt_level, trace_time, lto, optimized);
+            var compiled = _compile(
+                module, partition, jobs[i], machine, opt_level, trace_time, lto, optimized, cached, how
+            );
             if (compiled.is_err()) {
                 return compiled;
             }
@@ -92,10 +117,12 @@ export compile_parts(
         return Result<void, String>.err(written.error().message);
     }
     var plan = StringBuilder();
-    # The last line before the symbols: whether the parts are kept as
-    # bitcode (`true`), already optimized (`optimized`), or neither.
-    var mode = lto ? "true" : (optimized ? "optimized" : "false");
     plan.append($"{machine.triple()}\n{cpu.name}\n{cpu.features}\n{opt_level}\n{trace_time}\n{mode}\n");
+    if (cached.is_value()) {
+        plan.append($"{cached.value().cache.dir.parent().value()}\n{cached.value().unit}\n");
+    } else {
+        plan.append("\n\n");
+    }
     for (var (symbol, part) in partition.part_of) {
         plan.append($"{part} {symbol}\n");
     }
@@ -196,7 +223,9 @@ _compile(
     opt_level: uint,
     trace_time: bool,
     lto: bool,
-    optimized: bool
+    optimized: bool,
+    cached: PartCache?,
+    how: String
 ): Result<void, String> {
     var start = os.Instant.now();
     # `PEPC_TRACE_PARTS` names each stage before it runs and verifies the
@@ -206,6 +235,13 @@ _compile(
     var kept = codegen.keep_part(ir, partition, job.part, tracing);
     if (kept.is_err()) {
         return Result<void, String>.err($"cannot split part {job.part}: {kept.error().message}");
+    }
+    var key = cached.is_value() ? _part_key(ir, how) : "";
+    if (cached.is_value() and _reuse_part(cached.value(), job, key)) {
+        if (trace_time) {
+            File.stderr().write_all($"time: part {job.part} cached {start.elapsed().milliseconds()} ms\n");
+        }
+        return Result<void, String>.ok();
     }
     if (opt_level > 0 and !optimized) {
         _stage(tracing, ir, job, "optimize");
@@ -222,6 +258,7 @@ _compile(
             return Result<void, String>.err($"cannot write {job.object}: {written.error().message}");
         }
         _write_defines(ir, job)?;
+        _store_part(cached, job, key);
         if (trace_time) {
             File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
         }
@@ -235,10 +272,54 @@ _compile(
         return Result<void, String>.err($"cannot write {job.object}: {emitted.error().message}");
     }
     _write_defines(ir, job)?;
+    _store_part(cached, job, key);
     if (trace_time) {
         File.stderr().write_all($"time: part {job.part} {start.elapsed().milliseconds()} ms\n");
     }
     return Result<void, String>.ok();
+}
+
+## Returns the key a part's object is cached under: this compiler, how it
+## is compiled (`how`: the machine, the level, the mode), and the part's
+## code, `ir` as kept, but for its module's name, the work folder's.
+_part_key(ir: llvm.Module, how: String): String {
+    var text = ir.to_string();
+    var line_end = text.find("\n");
+    var hasher = digest.Blake3();
+    hasher.update($"pepper part object 1\n{compiler_identity()}\n{how}\n");
+    hasher.update(line_end >= 0 ? text.substr_bytes(line_end as ulong, text.size - line_end as ulong) : text);
+    return hasher.finish_hex();
+}
+
+## Copies the object of `job`'s part, and what it defines, from where
+## `cached` keeps it under `key`; returns whether it was there.
+_reuse_part(cached: PartCache, job: PartJob, key: String): bool {
+    var folder = cached.cache.part(cached.unit, job.part, key);
+    if (!cached.cache.used(folder)) {
+        return false;
+    }
+    return File.copy(folder.join(Path("object")), job.object).is_ok()
+        and File.copy(folder.join(Path("defines")), Path($"{job.object}.defines")).is_ok();
+}
+
+## Keeps the object `job` just wrote, and what it defines, where `cached`
+## keeps parts under `key`; a part that cannot be kept is compiled again
+## next time.
+_store_part(cached: PartCache?, job: PartJob, key: String) {
+    if (!cached.is_value()) {
+        return;
+    }
+    var folder = Path($"{job.object}.cached");
+    Directory.remove_all(folder);
+    if (Directory.create_all(folder).is_err()
+        or File.copy(job.object, folder.join(Path("object"))).is_err()
+        or File.copy(Path($"{job.object}.defines"), folder.join(Path("defines"))).is_err()) {
+        Directory.remove_all(folder);
+        return;
+    }
+    if (cached.value().cache.store(folder, $"{cached.value().unit}#{job.part}", key).is_err()) {
+        Directory.remove_all(folder);
+    }
 }
 
 ## Writes the symbols part `ir`, compiled, defines for other objects beside
@@ -312,7 +393,7 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
         return Result<void, String>.err($"cannot read the plan in {dir}: {read.error().message}");
     }
     var lines = read.value().split("\n");
-    if (lines.count < 6) {
+    if (lines.count < 8) {
         return Result<void, String>.err($"the plan in {dir} is incomplete");
     }
     var level = uint.parse(lines[3]);
@@ -323,7 +404,12 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     var trace_time = lines[4] == "true";
     var lto = lines[5] == "true";
     var optimized = lines[5] == "optimized";
-    for (var index in 6..lines.count) {
+    var cached = Optional<PartCache>.Empty;
+    if (lines.count >= 8 and !lines[6].is_empty) {
+        cached = Optional<PartCache>.Value(PartCache(Cache(Path(lines[6])), lines[7]));
+    }
+    var how = $"{lines[0]}\n{lines[1]}\n{lines[2]}\n{lines[3]}\n{lines[5]}";
+    for (var index in 8..lines.count) {
         var line = lines[index];
         var space = line.find(" ");
         if (space < 0) {
@@ -363,7 +449,9 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     }
     for (var i in 0..jobs.count) {
         var module = i + 1 < jobs.count ? ir.value().clone() : ir.value();
-        var compiled = _compile(module, partition, jobs[i], machine.value(), level.value(), trace_time, lto, optimized);
+        var compiled = _compile(
+            module, partition, jobs[i], machine.value(), level.value(), trace_time, lto, optimized, cached, how
+        );
         if (compiled.is_err()) {
             return compiled;
         }
