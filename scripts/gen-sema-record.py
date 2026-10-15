@@ -1334,6 +1334,7 @@ import [Loc] from "loc";
 import "model";
 import "pending";
 import [
+    anchors_of,
     compare_bytes,
     DeltaBase,
     interface_text,
@@ -1396,6 +1397,7 @@ export read_module_delta(input: RecordIn, base: Module): Module {
 ## @param base the index
 export index_module(module: Module, base: DeltaBase) {
     _m_Module_index(module, base);
+    base.anchors = anchors_of(module);
 }
 
 ## Indexes into `base` the fields of `module` that `resume_checked` replaces,

@@ -151,3 +151,110 @@ export struct LocShift {
         return _new[file][low] + (offset - old[low]);
     }
 }
+
+## The declarations of the files a record's compilation unit reads, by
+## name and where each starts (`anchors_of`): a record writes a location in
+## one of those files from the declaration at or before it, and reading it
+## puts it where that declaration is now. So a reader's record keeps its
+## copies of their code (a specialization, a member synthesized at a
+## struct) right when an edit moves them but leaves the reader's key.
+export struct LocAnchors {
+    # By file: the declarations' starts, ascending, and their names.
+    var _starts: HashMap<uint, ulong[]> = HashMap<uint, ulong[]>();
+    var _names: HashMap<uint, String[]> = HashMap<uint, String[]>();
+    # Each name's file and start; a name declared twice is in neither.
+    var _at: HashMap<String, (uint, ulong)> = HashMap<String, (uint, ulong)>();
+    var _twice: HashSet<String> = HashSet<String>();
+    var _sorted: bool = false;
+
+    construct() {}
+
+    ## Adds the declaration `name`, at `loc`.
+    ##
+    ## @param name the declaration's name
+    ## @param loc where it is
+    add(name: String, loc: Loc) {
+        if (loc.is_none() or _twice.contains(name)) {
+            return;
+        }
+        if (_at.contains(name)) {
+            _at.remove(name);
+            _twice.insert(name);
+            return;
+        }
+        _at[name] = (loc.file, loc.span.start);
+        _sorted = false;
+    }
+
+    ## Returns the declaration at or before `offset` in file `file`: its name
+    ## and start.
+    ##
+    ## @param file the file
+    ## @param offset the offset
+    ## @returns the name and start, or none before the first declaration
+    find(file: uint, offset: ulong): (String, ulong)? {
+        _sort();
+        var starts = _starts.try_get(file);
+        if (!starts.is_value() or starts.value().is_empty or offset < starts.value()[0]) {
+            return Optional<(String, ulong)>.Empty;
+        }
+        var all = starts.value();
+        ulong low = 0;
+        ulong high = all.count;
+        while (high - low > 1) {
+            var middle = (low + high) / 2;
+            if (all[middle] <= offset) {
+                low = middle;
+            } else {
+                high = middle;
+            }
+        }
+        return Optional<(String, ulong)>.Value((_names[file][low], all[low]));
+    }
+
+    ## Returns where declaration `name` starts in file `file`.
+    ##
+    ## @param name the declaration's name
+    ## @param file the file
+    ## @returns its start, or none when no one declaration of it is there
+    start(name: String, file: uint): ulong? {
+        var at = _at.try_get(name);
+        if (!at.is_value()) {
+            return Optional<ulong>.Empty;
+        }
+        var (in_file, start) = at.value();
+        return in_file == file ? Optional<ulong>.Value(start) : Optional<ulong>.Empty;
+    }
+
+    # Sorts each file's declarations by start, once all are added.
+    _sort() {
+        if (_sorted) {
+            return;
+        }
+        _sorted = true;
+        var by_file = HashMap<uint, Array<(ulong, String)>>();
+        for (var (name, (file, start)) in _at) {
+            if (!by_file.contains(file)) {
+                by_file[file] = Array<(ulong, String)>();
+            }
+            by_file[file].append((start, name));
+        }
+        _starts = HashMap<uint, ulong[]>();
+        _names = HashMap<uint, String[]>();
+        for (var (file, entries) in by_file) {
+            entries.sort((a, b) => {
+                var (x, m) = a;
+                var (y, n) = b;
+                return x < y ? -1 : (x > y ? 1 : m.compare(n));
+            });
+            var starts = Array<ulong>();
+            var names = Array<String>();
+            for (var (start, name) in entries) {
+                starts.append(start);
+                names.append(name);
+            }
+            _starts[file] = starts;
+            _names[file] = names;
+        }
+    }
+}

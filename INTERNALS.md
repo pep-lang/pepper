@@ -3111,6 +3111,18 @@ changes the base's checked names and summaries in place
 (`RecordIn.consumes_base`) rather than copying them: a copy per record made
 merging a closure quadratic in its size.
 
+**Locations in other compilation units' files.** A record can hold code from
+the files of the compilation units it reads: a specialization of a generic
+method, or a member the passes synthesize at a struct. An edit that moves
+that code but keeps the record's key would leave those locations pointing at
+the old bytes (#879). So a delta writes each location in a file of its base
+from the declaration at or before it (`LocAnchors`, from `anchors_of` the
+base: its structs, templates, traits and enums, their methods and
+constructors, and its functions, each by name), as the declaration's name, its
+start then, and the location's offsets from it. Reading the record onto a
+base puts it at that declaration's start there, or the start as written when
+no one declaration of that name is in that file now.
+
 **Link summaries.** `check_confinement` keeps with each compilation unit the link
 summary of every function it summarized (`Checked.summaries`, by summary
 key), so a compilation unit above summarizes only its own functions and the checked

@@ -12,13 +12,13 @@ import digest;
 import io;
 import os;
 import [Utf8] from text;
-import [Loc, LocShift, NO_FILE] from "loc";
+import [Loc, LocAnchors, LocShift, NO_FILE] from "loc";
 import [Checked, FunctionDef, Module, StructDef] from "model";
 import [set_name] from "names";
 import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
-export const MAGIC = "pepper record 2\n";
+export const MAGIC = "pepper record 3\n";
 
 ## A record being written.
 export struct RecordOut {
@@ -37,6 +37,9 @@ export struct RecordOut {
     ## interface): a body still undecoded (`PendingBody`) is written as the
     ## hash of its bytes in its record, not decoded and written again.
     var pending_as_bytes: bool = false;
+    ## For a delta: the declarations of the module it is written on, which
+    ## its locations in their files are written from (`LocAnchors`).
+    var anchors: LocAnchors? = Optional<LocAnchors>.Empty;
     # Each string's place in the list, by its text.
     var _places: HashMap<String, ulong> = HashMap<String, ulong>();
     # The strings' sizes, in their order.
@@ -139,13 +142,27 @@ export struct RecordOut {
         }
         if (value.file == NO_FILE) {
             unsigned(0);
-        } else if (files.is_empty) {
-            unsigned(value.file as ulong + 1);
-        } else {
-            unsigned(files[value.file] as ulong + 1);
+            unsigned(value.span.start);
+            unsigned(value.span.end);
+            return;
         }
-        unsigned(value.span.start);
-        unsigned(value.span.end);
+        var slot = (files.is_empty ? value.file : files[value.file]) as ulong + 1;
+        var anchor = anchors.is_value() ?
+            anchors.value().find(value.file, value.span.start) :
+            Optional<(String, ulong)>.Empty;
+        if (!anchor.is_value()) {
+            unsigned(slot << 1);
+            unsigned(value.span.start);
+            unsigned(value.span.end);
+            return;
+        }
+        # From the declaration at or before it: its name and start then.
+        var (name, start) = anchor.value();
+        unsigned((slot << 1) | 1);
+        text(name);
+        unsigned(start);
+        unsigned(value.span.start - start);
+        unsigned(value.span.end - start);
     }
 
     ## Returns an empty record whose locations name the same file slots, to
@@ -344,6 +361,9 @@ export struct DeltaBase {
     var _sequences: HashMap<String, Array<String>> = HashMap<String, Array<String>>();
     # The base's checked names: structs, functions and globals, as indexed.
     var _checked: Array<HashSet<String>> = Array<HashSet<String>>();
+    ## The base's declarations, which a delta's locations in their files are
+    ## written from (`RecordOut.anchors`).
+    var anchors: LocAnchors = LocAnchors();
     # The base's checked summaries, as indexed.
     var _summaries: HashMap<String, (Loc, String)> = HashMap<String, (Loc, String)>();
     ## The base's structs, functions and templates as indexed: the elements
@@ -915,6 +935,10 @@ export struct RecordIn {
     ## Where the record's locations are now, when it was written before an
     ## edit that kept them all but those in the bodies it changed.
     var shift: LocShift? = Optional<LocShift>.Empty;
+    ## The declarations of the module a delta is read on, as they are now,
+    ## which its locations written from one are put back from
+    ## (`RecordOut.anchors`).
+    var anchors: LocAnchors? = Optional<LocAnchors>.Empty;
 
     ## Starts reading `data`, a whole record. A record that is not one
     ## leaves `error` set and reads as zeros.
@@ -1002,6 +1026,7 @@ export struct RecordIn {
         }
         var out = PendingBody(_data, _strings, files, _next, _next + size);
         out.shift = shift;
+        out.anchors = anchors;
         _next += size;
         return out;
     }
@@ -1017,6 +1042,7 @@ export struct RecordIn {
         out._strings = pending.strings;
         out.files = pending.files;
         out.shift = pending.shift;
+        out.anchors = pending.anchors;
         out._next = pending.start;
         out._end = pending.end;
         out.lazy_bodies = false;
@@ -1101,15 +1127,14 @@ export struct RecordIn {
     ##
     ## @returns the location
     loc(): Loc {
-        var slot = unsigned();
-        var start = unsigned();
-        var end = unsigned();
-        if (slot == 0) {
+        var tag = unsigned();
+        if (tag == 0) {
             var none = Loc.none();
-            none.span = ast.Span(start, end);
+            var start = unsigned();
+            none.span = ast.Span(start, unsigned());
             return none;
         }
-        var file = (slot - 1) as uint;
+        var file = ((tag >> 1) - 1) as uint;
         if (!files.is_empty) {
             if (file >= files.count) {
                 _fail("a location in a file the record does not list");
@@ -1117,7 +1142,18 @@ export struct RecordIn {
             }
             file = files[file];
         }
-        var out = Loc.at(file, ast.Span(start, end));
+        ulong start = 0;
+        if (tag & 1 == 1) {
+            # From a declaration: where it is now, else where it was.
+            var name = text();
+            start = unsigned();
+            var now = anchors.is_value() ? anchors.value().start(name, file) : Optional<ulong>.Empty;
+            if (now.is_value()) {
+                start = now.value();
+            }
+        }
+        var from = unsigned();
+        var out = Loc.at(file, ast.Span(start + from, start + unsigned()));
         return shift.is_value() ? shift.value().map(out) : out;
     }
 
@@ -1169,4 +1205,47 @@ _method_line(owner: String, method: String): String {
         name = name.substr(0, angle as ulong);
     }
     return $"{owner}\t{name}";
+}
+
+## The declarations of `module` a record's locations are written from
+## (`LocAnchors`): its structs, templates, traits and enums, their methods
+## and constructors, and its functions. Members the passes synthesize
+## (`__copy`) are left out: a record may lose them.
+##
+## @param module the module
+## @returns the declarations
+export anchors_of(module: Module): LocAnchors {
+    var out = LocAnchors();
+    for (var structs in [module.structs, module.templates.structs]) {
+        for (var s in structs) {
+            if (s.name.contains("<")) {
+                continue;
+            }
+            out.add($"s {s.name}", s.loc);
+            for (var methods in [s.method_members, s.constructors, s.generic_methods]) {
+                for (var m in methods) {
+                    if (!m.name.starts_with("__")) {
+                        out.add($"m {s.name}\n{m.name}", m.loc);
+                    }
+                }
+            }
+        }
+    }
+    for (var functions in [module.functions, module.templates.functions]) {
+        for (var f in functions) {
+            if (!f.name.contains("<")) {
+                out.add($"f {f.name}", f.loc);
+            }
+        }
+    }
+    for (var t in module.traits) {
+        out.add($"t {t.name}", t.loc);
+        for (var m in t.methods) {
+            out.add($"m {t.name}\n{m.name}", m.loc);
+        }
+    }
+    for (var e in module.enums) {
+        out.add($"e {e.name}", e.loc);
+    }
+    return out;
 }

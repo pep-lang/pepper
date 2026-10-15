@@ -706,6 +706,7 @@ _prune_records(folder: Path) {
 # a delta on `base`.
 _record_bytes(program: link.Program, checked_unit: sema.CheckedUnit, base: sema.DeltaBase): u8[] {
     var out = sema.RecordOut();
+    out.anchors = Optional<sema.LocAnchors>.Value(base.anchors);
     # Slot i is program file i; the record keeps their names, so it loads
     # into a program whose files sit elsewhere.
     for (var i in 0..program.files.count) {
@@ -732,6 +733,10 @@ _read_record(
 ): Result<sema.CheckedUnit, String> {
     var input = sema.RecordIn(bytes);
     input.shift = shift;
+    # Before the read changes the base.
+    if (base.is_value()) {
+        input.anchors = Optional<sema.LocAnchors>.Value(sema.anchors_of(base.value()));
+    }
     # Most checked bodies are needed by neither the passes nor codegen:
     # each is decoded when one needs it (`sema.PendingBody`).
     input.lazy_bodies = true;

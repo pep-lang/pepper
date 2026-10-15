@@ -666,14 +666,14 @@ checks_again_only_the_bodies_an_edit_changed() {
     expect_true(declared.rechecked.is_empty);
 }
 
-# Writes a program whose `a.pep` declares struct `Thing` with `methods`
-# before `size` (after `pick`, whose specialization would keep its old place
-# otherwise), and whose `b.pep` calls `Thing.size` and a generic method, which
+# Writes a program whose `a.pep` starts with `top` and declares struct
+# `Thing` with `methods` before `size`, and whose `b.pep` calls `Thing.size` and a generic method, which
 # its record adds a specialization of to `Thing`.
-_write_methods(root: Path, methods: String) {
+_write_methods(root: Path, methods: String, top: String = "") {
     File.write_text(
         root.join(Path("a.pep")),
-        "export struct Thing {\n    var n: int;\n    construct(n: int) {\n        this.n = n;\n    }\n    pick<T>(x: T): T {\n        return x;\n    }\n"
+        top
+            + "export struct Thing {\n    var n: int;\n    construct(n: int) {\n        this.n = n;\n    }\n    pick<T>(x: T): T {\n        return x;\n    }\n"
             + methods
             + "    size(): int {\n        return n;\n    }\n}\n"
     );
@@ -728,4 +728,20 @@ keeps_the_readers_of_a_struct_a_method_edit_does_not_reach() {
     );
     _build_methods(root);
     expect_true(_records_of(root, b) == 2);
+}
+
+# An edit that moves what a reader's record copies from a file, and keeps
+# the reader's key, leaves the copies where the code is now: `b.pep`'s
+# specialization of `Thing.pick` (`PEPC_VERIFY_CUTOFF` finds a stale one).
+[Test]
+keeps_the_places_of_what_a_reader_copies_when_an_edit_moves_them() {
+    var folder = TempFolder("moved_copies");
+    var root = folder.path;
+    _write_methods(root, "");
+    _build_methods(root);
+    var program = _load(root);
+    var b = _unit_of(program, "b.pep");
+    _write_methods(root, "", "export unrelated_thing(): int {\n    return 3;\n}\n");
+    _build_methods(root);
+    expect_true(_records_of(root, b) == 1);
 }
