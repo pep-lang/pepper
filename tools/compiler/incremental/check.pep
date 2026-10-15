@@ -519,17 +519,11 @@ export recheck_compilation_unit(
     for (var alias in after.type_aliases) {
         aliases.append(alias.copy());
     }
-    # Each changed function, as checked, and its body as built now.
-    var by_loc = HashMap<sema.Loc, sema.FunctionDef>();
-    var repeated = HashSet<sema.Loc>();
-    for (var f in after.functions) {
-        if (by_loc.contains(f.loc)) {
-            repeated.insert(f.loc);
-        }
-        by_loc[f.loc] = f;
-    }
+    # Each changed function or method, as checked, and its body as built now.
+    var (by_loc, repeated) = _by_loc(after);
     var built = HashMap<uint, sema.Module>();
-    var rechecked = Array<(sema.FunctionDef, String)>();
+    var rechecked = Array<(sema.FunctionDef, String, String)>();
+    var methods = HashSet<String>();
     for (var (file, name, body) in base.changed) {
         if (!built.contains(file)) {
             var made = sema.build_file(program.files[file as ulong].module, file);
@@ -540,28 +534,33 @@ export recheck_compilation_unit(
         }
         var loc = sema.Loc.at(file, name);
         var old = by_loc.try_get(loc);
-        var fresh = Optional<sema.FunctionDef>.Empty;
-        for (var f in built[file].functions) {
-            if (f.loc == loc) {
-                fresh = Optional<sema.FunctionDef>.Value(f);
-            }
-        }
-        if (!old.is_value()
-            or repeated.contains(loc)
-            or !fresh.is_value()
-            or !fresh.value().body.is_value()
-            or !after.checked.functions.contains(old.value().name)) {
+        var (fresh_by_loc, _) = _by_loc(built[file]);
+        var fresh = fresh_by_loc.try_get(loc);
+        if (!old.is_value() or repeated.contains(loc) or !fresh.is_value() or !fresh.value().0.body.is_value()) {
             return _not_rechecked("match");
         }
-        var function = old.value();
-        rechecked.append((function, _facts(after, function)));
+        var (function, owner, kind) = old.value();
+        var checked = kind.is_empty ?
+            after.checked.functions.contains(function.name) :
+            after.checked.structs.contains(owner);
+        if (!checked or fresh.value().2 != kind) {
+            return _not_rechecked("match");
+        }
+        var key = _summary_key(function, owner, kind);
+        rechecked.append((function, key, _facts(after, function, key)));
         sema.drop_body(function);
-        function.body = fresh.value().body;
-        if (fresh.value().ty.is_auto()) {
+        function.body = fresh.value().0.body;
+        if (fresh.value().0.ty.is_auto()) {
             function.ty = sema.TypeName.auto();
         }
-        after.checked.functions.remove(function.name);
-        after.checked.summaries.remove(function.name);
+        if (kind.is_empty) {
+            after.checked.functions.remove(function.name);
+        } else {
+            # Its struct stays checked; the passes walk this body as one an
+            # extension added.
+            methods.insert($"m {owner} {kind} {function.name}");
+        }
+        after.checked.summaries.remove(key);
         after.recorded_summaries.remove(function.loc);
     }
     # The closures the old bodies made went with them; the new ones are
@@ -608,6 +607,7 @@ export recheck_compilation_unit(
     state.checked_specs = checked_specs;
     state.pass_times = times;
     state.closure_counts = counts;
+    state.rechecked_methods = methods;
     var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
     if (ran.is_err()) {
         return _not_rechecked($"an error: {ran.error().message}");
@@ -615,8 +615,8 @@ export recheck_compilation_unit(
     if (!state.notes.is_empty) {
         return _not_rechecked($"a warning: {state.notes[0].message}");
     }
-    for (var (function, facts) in rechecked) {
-        var now = _facts(after, function, Optional<sema.PassState>.Value(state));
+    for (var (function, key, facts) in rechecked) {
+        var now = _facts(after, function, key, Optional<sema.PassState>.Value(state));
         if (now != facts) {
             return _not_rechecked($"the facts of {function.name}: {facts} became {now}");
         }
@@ -643,18 +643,61 @@ _in_changed(base: RecheckBase, loc: sema.Loc): bool {
     return false;
 }
 
-# What other code was checked against of free function `function`: its
-# return type and settled link summary, without the blame's place.
+# What other code was checked against of function or method `function`,
+# whose summary key is `key`: its return type and settled link summary,
+# without the blame's place.
 _facts(
-    module: sema.Module, function: sema.FunctionDef, state: sema.PassState? = Optional<sema.PassState>.Empty
+    module: sema.Module,
+    function: sema.FunctionDef,
+    key: String,
+    state: sema.PassState? = Optional<sema.PassState>.Empty
 ): String {
-    var summary = module.checked.summaries.try_get(function.name);
+    var summary = module.checked.summaries.try_get(key);
     var text = summary.is_value() ? summary.value().1 : "";
     if (state.is_value()) {
-        var settled = state.value().settled_summaries.try_get(function.name);
+        var settled = state.value().settled_summaries.try_get(key);
         text = settled.is_value() ? settled.value().1 : "";
     }
     return $"{function.ty}\n{sema.summary_without_place(text)}";
+}
+
+# The link summary key of `function`: a free function's name, or its
+# struct's and its own (a constructor's as `__ctor`).
+_summary_key(function: sema.FunctionDef, owner: String, kind: String): String {
+    if (kind.is_empty) {
+        return function.name;
+    }
+    return kind == "constructor" ? sema.method_key(function.name, "__ctor") : sema.method_key(owner, function.name);
+}
+
+# The free functions of `module`, and the methods and constructors of its
+# structs that are not generic, by location, with their struct's name and
+# kind (`method`, `constructor`, empty for a free function); and the
+# locations more than one has.
+_by_loc(module: sema.Module): (HashMap<sema.Loc, (sema.FunctionDef, String, String)>, HashSet<sema.Loc>) {
+    var out = HashMap<sema.Loc, (sema.FunctionDef, String, String)>();
+    var repeated = HashSet<sema.Loc>();
+    var add = (function: sema.FunctionDef, owner: String, kind: String) => {
+        if (out.contains(function.loc)) {
+            repeated.insert(function.loc);
+        }
+        out[function.loc] = (function, owner, kind);
+    };
+    for (var f in module.functions) {
+        add(f, "", "");
+    }
+    for (var st in module.structs) {
+        if (st.generic_params.count > 0 or sema.is_closure_struct(st.name)) {
+            continue;
+        }
+        for (var m in st.method_members) {
+            add(m, st.name, "method");
+        }
+        for (var c in st.constructors) {
+            add(c, st.name, "constructor");
+        }
+    }
+    return (out, repeated);
 }
 
 # For `PEPC_VERIFY_CUTOFF`: checks compilation unit `k`, loaded by early cutoff,

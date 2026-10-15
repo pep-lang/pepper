@@ -576,6 +576,12 @@ _step(index: ulong, module: Module, state: PassState): Diagnostic? {
             # stay out of the passes. A new compilation unit: no checked struct
             # extended yet, nothing found for it.
             module.extended_checked = HashSet<String>();
+            # A struct whose method is checked again is walked as extended.
+            for (var key in state.rechecked_methods) {
+                var owner = key.split(" ")[1];
+                module.extended_checked.insert(owner);
+                state.extended_checked.insert(owner);
+            }
             module.own_decls = Optional<UnitDecls>.Empty;
             stash_bodies(module, state);
             state.install_enums(module.enums);

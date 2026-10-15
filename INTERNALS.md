@@ -3008,7 +3008,8 @@ a hash of the records of the compilation units it reads (`inputs_digest`),
 then each file's namespace, size and text. When a compilation unit has no
 record under its key, `check_unit` looks for its newest record with the
 same inputs, no warning, and files that differ from the text kept only
-inside the bodies of top-level functions that are not generic, or in
+inside the bodies of top-level functions that are not generic, and of the
+methods and constructors that are not generic of structs that are not, or in
 comments and spacing (`find_recheck_base`, `_align`, which compares the
 two texts' tokens outside those bodies). `recheck_compilation_unit` then:
 
@@ -3018,7 +3019,11 @@ two texts' tokens outside those bodies). `recheck_compilation_unit` then:
    body to that body's start);
 2. gives each changed function the body `sema.build_file` builds now, and
    drops it from the checked functions and summaries, so the passes walk
-   it as the compilation unit's own code again;
+   it as the compilation unit's own code again. A changed method's struct
+   stays checked: its body is left out of `stash_bodies`
+   (`PassState.rechecked_methods`) and the struct counts as extended
+   (`extended_checked`), so the passes walk it as a method an extension
+   added;
 3. drops the closure structs the old bodies lifted, and numbers new ones
    after every closure left in their files (`PassState.closure_counts`);
 4. runs every step, which walk only the unchecked bodies and the

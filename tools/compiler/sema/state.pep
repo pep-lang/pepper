@@ -146,6 +146,11 @@ export struct PassState {
     ## How many closures each file has (by file index; `-1` for code in no
     ## file).
     var closure_counts: HashMap<long, ulong> = HashMap<long, ulong>();
+    ## The methods and constructors of checked structs whose bodies are
+    ## checked again (a re-check of an edit), by stash key (`m <struct>
+    ## <kind> <name>`): their bodies stay in, and their structs count as
+    ## extended (`extended_checked`).
+    var rechecked_methods: HashSet<String> = HashSet<String>();
     ## Each enum's representation and default value, by name.
     var enum_representations: HashMap<String, (String, long)> = HashMap<String, (String, long)>();
     ## The value structs' names (`[Value]`), as `synthesize` and

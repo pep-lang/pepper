@@ -57,6 +57,9 @@ _stash(state: PassState, owner: String, kind: String, function: FunctionDef) {
         return;
     }
     var key = kind.is_empty ? $"f {function.name}" : $"m {owner} {kind} {function.name}";
+    if (state.rechecked_methods.contains(key)) {
+        return;
+    }
     state.stashed_from.append((key, function));
     # A body the record's reader skipped stays undecoded.
     if (function.pending_body.is_value()) {

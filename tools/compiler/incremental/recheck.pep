@@ -213,16 +213,29 @@ struct _TextReader {
 }
 
 ## The bodies an edit may change and a re-check checks again: those of the
-## top-level functions that are not generic.
+## top-level functions that are not generic, and of the methods and
+## constructors that are not generic of the structs that are not.
 ##
 ## @param module a file's syntax tree
 ## @returns each one's name span and body span, in order
 _bodies(module: ast.Module): Array<(ast.Span, ast.Span)> {
     var out = Array<(ast.Span, ast.Span)>();
+    var add = (decl: ast.FunctionDecl) => {
+        if (decl.body.is_value() and decl.generic_params.count == 0) {
+            out.append((decl.name_span, decl.body.value().span));
+        }
+    };
     for (var declaration in module.declarations) {
         if (declaration is Function(decl)) {
-            if (decl.body.is_value() and decl.generic_params.count == 0) {
-                out.append((decl.name_span, decl.body.value().span));
+            add(decl);
+        } else if (declaration is Struct(decl)) {
+            if (decl.generic_params.count == 0) {
+                for (var m in decl.methods) {
+                    add(m);
+                }
+                for (var c in decl.constructors) {
+                    add(c);
+                }
             }
         }
     }

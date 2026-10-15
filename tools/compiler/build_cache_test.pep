@@ -585,19 +585,23 @@ links_only_the_bodies_of_the_compilation_units_it_checks() {
     expect_false(_build_deferred(root));
 }
 
-# Writes a program whose `a.pep` starts with `top` and whose `a_value`
-# returns `value` of its argument, through a closure.
-_write_rechecked(root: Path, top: String, value: String) {
+# Writes a program whose `a.pep` starts with `top`, whose `a_value`
+# returns `value` of its argument, through a closure, and whose
+# `_Counter.next` returns `next`.
+_write_rechecked(root: Path, top: String, value: String, next: String = "n + 1") {
     File.write_text(
         root.join(Path("a.pep")),
         top
             + "export a_value(n: int): int {\n    var add = (x: int) => "
             + value
             + ";\n    return add(n);\n}\nexport a_fail(n: int): int {\n    if (n > 0) {\n        panic(\"stop\");\n    }\n    return n;\n}\n"
+            + "struct _Counter {\n    var n: int;\n    construct(n: int) {\n        this.n = n;\n    }\n    next(): int {\n        return "
+            + next
+            + ";\n    }\n}\nexport a_count(): int {\n    return _Counter(0).next();\n}\n"
     );
     File.write_text(
         root.join(Path("main.pep")),
-        "import \"a\";\nmain(args: String[]): int {\n    if (args.count > 1) {\n        return a_fail(1);\n    }\n    return a_value(0) == 1 ? 0 : 1;\n}\n"
+        "import \"a\";\nmain(args: String[]): int {\n    if (args.count > 1) {\n        return a_fail(1);\n    }\n    return a_value(0) == 1 and a_count() == 1 ? 0 : 1;\n}\n"
     );
 }
 
@@ -649,6 +653,11 @@ checks_again_only_the_bodies_an_edit_changed() {
     var (comment, moved) = _build_rechecked(root);
     expect_true(comment.rechecked.contains(a));
     expect_true(moved.contains("a.pep:8"));
+
+    # A method's body changed: its struct stays checked.
+    _write_rechecked(root, "# A comment.\n", "x * 2 + 1", "1 + n");
+    var (method, _) = _build_rechecked(root);
+    expect_true(method.rechecked.contains(a));
 
     # A new function is checked with the rest from the files.
     _write_rechecked(root, "_unused(): int {\n    return 0;\n}\n", "x * 2 + 1");
