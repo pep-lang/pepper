@@ -39,15 +39,39 @@ _needed_at_once(method: FunctionDef, trait_methods: HashSet<String>): bool {
     if (method.ty.is_auto() or method.trait_default.is_value()) {
         return true;
     }
+    return _built_in_or_implicit(name) or trait_methods.contains(name);
+}
+
+## Whether code may call a method named `name` without naming it: an
+## operator (`==`, `[]`, `<`), a built-in member (`__ctor`), a method the
+## passes or code generation call (`_called_implicitly`), or one the
+## builder's lowerings of `with` and `?` call. A trait's methods aside,
+## which a call through the trait names.
+##
+## @param name the method's name, without its overload's number
+## @returns whether it may
+export called_without_naming(name: String): bool {
+    match (name) {
+        "enter", "value", "_residual", "_propagates", "_weak", "copies" => {
+            return true;
+        }
+        else => {
+            return _built_in_or_implicit(name);
+        }
+    }
+}
+
+# Whether `name` is an operator's, a built-in member's or one of
+# `_called_implicitly`.
+_built_in_or_implicit(name: String): bool {
     if (name.starts_with("__") or name.size == 0) {
         return true;
     }
-    # An operator (`==`, `[]`, `<`).
     var first = name.byte_at(0);
     if (!((first >= 'a' and first <= 'z') or (first >= 'A' and first <= 'Z') or first == '_' or first >= 128)) {
         return true;
     }
-    return _called_implicitly(name) or trait_methods.contains(name);
+    return _called_implicitly(name);
 }
 
 ## The names of every trait's methods.

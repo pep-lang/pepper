@@ -274,6 +274,28 @@ keys_a_unit_on_the_functions_it_can_name() {
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
     owns[0] = "other\n_unnamed 1\ntwice 1";
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    # A method's line, when the reader names its struct: taken when it
+    # names the method too, or may call it without naming it.
+    units[1].mentions.insert("_Box");
+    units[1].reach = Optional<HashSet<String>>.Empty;
+    owns[0] = "public\n_Box\tlength 1\n_Box\t== 1\ntwice 1";
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_Box\tlength 2\n_Box\t== 1\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) == key);
+    owns[0] = "public\n_Box\tlength 2\n_Box\t== 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    units[1].mentions.insert("length");
+    units[1].reach = Optional<HashSet<String>>.Empty;
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_Box\tlength 3\n_Box\t== 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    units[1].mentions.remove("_Box");
+    units[1].reach = Optional<HashSet<String>>.Empty;
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_Box\tlength 4\n_Box\t== 3\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) == key);
+    units[1].mentions.remove("length");
+    units[1].reach = Optional<HashSet<String>>.Empty;
     # The compiler's own code calls the runtime's functions by name.
     owns[0] = "public\n_unnamed 1\ntwice 1";
     units[0].name = "runtime";

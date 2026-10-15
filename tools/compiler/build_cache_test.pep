@@ -665,3 +665,67 @@ checks_again_only_the_bodies_an_edit_changed() {
     expect_true(declared.misses.contains(a));
     expect_true(declared.rechecked.is_empty);
 }
+
+# Writes a program whose `a.pep` declares struct `Thing` with `methods`
+# before `size` (after `pick`, whose specialization would keep its old place
+# otherwise), and whose `b.pep` calls `Thing.size` and a generic method, which
+# its record adds a specialization of to `Thing`.
+_write_methods(root: Path, methods: String) {
+    File.write_text(
+        root.join(Path("a.pep")),
+        "export struct Thing {\n    var n: int;\n    construct(n: int) {\n        this.n = n;\n    }\n    pick<T>(x: T): T {\n        return x;\n    }\n"
+            + methods
+            + "    size(): int {\n        return n;\n    }\n}\n"
+    );
+    File.write_text(
+        root.join(Path("b.pep")),
+        "import \"a\";\nexport b_value(): int {\n    var t = Thing(2);\n    return t.size() + 1 + t.pick<int>(1);\n}\n"
+    );
+    File.write_text(root.join(Path("main.pep")), "import \"b\";\nmain(): int {\n    return b_value() - 4;\n}\n");
+}
+
+# Builds the program in `root`, checking every record early cutoff loads
+# again, and runs it.
+_build_methods(root: Path) {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    options.verify_cutoff = true;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+}
+
+# Adding or changing a method a reader does not call keeps the reader's
+# record, even one that adds to the struct; changing one it calls does not.
+[Test]
+keeps_the_readers_of_a_struct_a_method_edit_does_not_reach() {
+    var folder = TempFolder("method_keys");
+    var root = folder.path;
+    _write_methods(root, "");
+    _build_methods(root);
+    var program = _load(root);
+    var b = _unit_of(program, "b.pep");
+    expect_true(_records_of(root, b) == 1);
+    _write_methods(root, "    thing_doubled(): int {\n        return n * 2;\n    }\n");
+    _build_methods(root);
+    expect_true(_records_of(root, b) == 1);
+    _write_methods(root, "    thing_doubled(): long {\n        return n as long;\n    }\n");
+    _build_methods(root);
+    expect_true(_records_of(root, b) == 1);
+    _write_methods(
+        root,
+        "    thing_doubled(): long {\n        return n as long;\n    }\n    size(x: int): int {\n        return x;\n    }\n"
+    );
+    _build_methods(root);
+    expect_true(_records_of(root, b) == 2);
+}

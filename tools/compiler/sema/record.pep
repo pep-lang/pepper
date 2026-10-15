@@ -14,6 +14,7 @@ import os;
 import [Utf8] from text;
 import [Loc, LocShift, NO_FILE] from "loc";
 import [Checked, FunctionDef, Module, StructDef] from "model";
+import [set_name] from "names";
 import [PendingBody] from "pending";
 
 ## What every record starts with: the format's name and version.
@@ -738,10 +739,11 @@ export struct DeltaBase {
             }
             var name = function_name(s.name);
             _function_names[s.name] = name;
-            for (var methods in [s.method_members, s.constructors]) {
-                for (var m in methods) {
-                    _function_locs[m.loc] = name;
-                }
+            for (var m in s.method_members) {
+                _function_locs[m.loc] = _method_line(name, m.name);
+            }
+            for (var c in s.constructors) {
+                _function_locs[c.loc] = name;
             }
         }
         for (var e in module.enums) {
@@ -781,9 +783,9 @@ export struct DeltaBase {
         var named = _function_names.try_get(name);
         var method = name.split_once("\n");
         if (!named.is_value() and method.is_value()) {
-            # A method's entry goes under its struct's name.
-            var (owner, _) = method.value();
-            named = _function_names.try_get(owner);
+            var (owner, member) = method.value();
+            own_method(what, owner, member, hash);
+            return;
         }
         if (named.is_value()) {
             _named.append((named.value(), $"{what} {hash}"));
@@ -792,13 +794,31 @@ export struct DeltaBase {
         own(what, hash);
     }
 
+    ## `own`, for an entry about method `method` of struct `owner`: a struct
+    ## that is not generic keeps it under its name and the method's
+    ## (`own_text`), a constructor's under its name alone.
+    ##
+    ## @param what the field
+    ## @param owner the struct's full name
+    ## @param method the method's name
+    ## @param hash its interface hash, or text
+    own_method(what: String, owner: String, method: String, hash: String) {
+        var named = _function_names.try_get(owner);
+        if (!named.is_value()) {
+            own(what, hash);
+            return;
+        }
+        var line = method == "__ctor" ? named.value() : _method_line(named.value(), method);
+        _named.append((line, $"{what} {hash}"));
+    }
+
     ## Returns what the delta written on this base changed in the interface
     ## (`own`): unlike an interface hash of the whole module, it does not
     ## depend on the compilation units before. Its first line is the hash
     ## of every entry but those of functions that are not generic; each
     ## line after is one of those names and the hash of its entries,
     ## sorted, which `compilation_unit_key` takes only when the reader can
-    ## name it.
+    ## name it; a method's name is its struct's and its own, apart by a tab.
     ##
     ## @returns the text
     own_text(): String {
@@ -806,7 +826,7 @@ export struct DeltaBase {
         lines.append_all(_own);
         lines.sort((a, b) => a.compare(b));
         var hasher = digest.Blake3();
-        hasher.update("pepper own interface 3\n");
+        hasher.update("pepper own interface 4\n");
         for (var line in lines) {
             hasher.update(line);
             hasher.update("\n");
@@ -1136,4 +1156,17 @@ export function_name(name: String): String {
         end += 1;
     }
     return name.substr_bytes(0, end);
+}
+
+# The own-interface line name of method `method` of the struct named `owner`
+# (`DeltaBase.own_text`): the two names apart by a tab, the method's without
+# its overload's number or a specialization's type arguments (not an
+# operator's `<`).
+_method_line(owner: String, method: String): String {
+    var name = set_name(method);
+    var angle = name.find("<");
+    if (angle > 0) {
+        name = name.substr(0, angle as ulong);
+    }
+    return $"{owner}\t{name}";
 }

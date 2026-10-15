@@ -579,10 +579,22 @@ def own_lines(label, expr, tree, blank_bodies='true'):
     """Lines that add `expr`, of type `tree`, to the compilation unit's own interface
     (`DeltaBase.own`): its interface hash, under `label`."""
     o = fresh('_own')
-    return (['{', f'    var {o} = RecordOut();', f'    {o}.blank_bodies = {blank_bodies};', f'    {o}.blank_locs = true;',
-             f'    {o}.pending_as_bytes = true;']
-            + ['    ' + l for l in write_to(o, expr, tree)]
-            + [_own_call(label, expr, f'interface_text({o})'), '}'])
+    head = ['{', f'    var {o} = RecordOut();', f'    {o}.blank_bodies = {blank_bodies};', f'    {o}.blank_locs = true;',
+            f'    {o}.pending_as_bytes = true;']
+    if label != 'structs':
+        return head + ['    ' + l for l in write_to(o, expr, tree)] + [_own_call(label, expr, f'interface_text({o})'), '}']
+    # A struct's methods each get an entry of their own (`DeltaBase.own_method`),
+    # its shape the rest: a reader that names the struct but not a method
+    # keeps its key when that method changes.
+    s, ms, m, om = fresh('_s'), fresh('_methods'), fresh('_m'), fresh('_own')
+    return (head + [f'    var {s} = {expr};', f'    var {ms} = {s}.method_members;',
+                    f'    {s}.method_members = Array<FunctionDef>();']
+            + ['    ' + l for l in write_to(o, s, tree)]
+            + [f'    {s}.method_members = {ms};', _own_call(label, s, f'interface_text({o})'),
+               f'    for (var {m} in {ms}) {{', f'        var {om} = RecordOut();',
+               f'        {om}.blank_bodies = {blank_bodies};', f'        {om}.blank_locs = true;',
+               f'        {om}.pending_as_bytes = true;', f'        _m_FunctionDef_write({om}, {m});',
+               f'        base.own_method("{label}", {s}.name, {m}.name, interface_text({om}));', '    }', '}'])
 
 def _own_call(label, element, hash_expr):
     """The call adding `element`'s entry to the own interface: a function,

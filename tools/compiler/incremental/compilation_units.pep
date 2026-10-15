@@ -298,8 +298,9 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 ## Returns the key of compilation unit `k`'s record: its files and what it is
 ## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
 ## unit it reads. Of the entries of functions, structs and enums that are not
-## generic, it takes those its code can name (`_names_reached`); all of the
-## runtime's, which the compiler's own code calls. A change to a compilation unit it does not read, or one
+## generic, it takes those its code can name (`_names_reached`), and of a
+## struct's methods those it names or may call without naming (`_takes`);
+## all of the runtime's, which the compiler's own code calls. A change to a compilation unit it does not read, or one
 ## that keeps what it takes of every own interface in it, keeps the key: the
 ## record is still good (early cutoff).
 ##
@@ -311,7 +312,7 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]): String {
     var unit = units[k];
     var hasher = digest.Blake3();
-    hasher.update("pepper checked compilation unit 5\n");
+    hasher.update("pepper checked compilation unit 6\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
     if (!unit.reach.is_value()) {
@@ -327,13 +328,25 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
         bool runtime = units[d].name == "runtime";
         for (var i in 1..lines.count) {
             var name = lines[i].substr(0, lines[i].find(" ") as ulong);
-            if (runtime or reach.contains(name)) {
+            if (runtime or _takes(reach, name)) {
                 hasher.update(lines[i]);
                 hasher.update("\n");
             }
         }
     }
     return hasher.finish_hex();
+}
+
+# Whether a unit whose code can name `reach` takes the own-interface line of
+# `name`: a declaration it can name, or a method of a struct it can name that
+# it names too or that code may call without naming it.
+_takes(reach: HashSet<String>, name: String): bool {
+    var method = name.split_once("\t");
+    if (!method.is_value()) {
+        return reach.contains(name);
+    }
+    var (owner, member) = method.value();
+    return reach.contains(owner) and (reach.contains(member) or sema.called_without_naming(member));
 }
 
 # The names `unit`'s code can name: those in its files, those the files it

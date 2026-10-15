@@ -2887,8 +2887,20 @@ bodies of functions that are not generic and the names of its own and its
 methods, are shown by that declaration; the rest, extensions, globals and
 imports among them, are shown to every reader. Adding or changing a
 function, or a struct's field or method, that no reader can name checks only
-its own compilation unit again. The runtime's lines are always taken: the
-compiler's own code calls its functions by name (`_pep_panic`).
+its own compilation unit again. A struct's methods (not its constructors)
+get lines of their own, the struct's name and the method's apart by a tab
+(`DeltaBase.own_method`): each method's element and summaries, the rest of
+the struct under its name. A reader that can name the struct takes a
+method's line only when it can name the method too, or when code may call
+it without naming it (`sema.called_without_naming`: operators, built-in
+members such as accessors, and the methods the lowerings, passes and
+codegen call, like `to_string` or `enter`); a trait's methods are named in
+the trait, which every reader of it reaches. So adding or changing a method
+of a struct many units name checks again only the units that call it. A
+reader whose record patches the struct (an extension's methods) merges its
+additions after the struct's methods, whatever they are now. The runtime's
+lines are always taken: the compiler's own code calls its functions by name
+(`_pep_panic`).
 
 **Checking in parallel.** With more than two compilation units and more than one job
 (one per logical CPU; `PEPC_COMPILATION_UNIT_JOBS` sets the number), `_check_in_workers`
