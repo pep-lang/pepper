@@ -2998,6 +2998,37 @@ the cache has one. Otherwise it checks the compilation unit:
    compilers and ccache replay a unit's diagnostics, so a compilation unit that
    warned is not checked again to warn again.
 
+**Re-checking only the changed bodies.** Each record keeps beside it what
+it was checked on and its files' text (`<key>.rec.src`, `recheck_source`):
+a hash of the records of the compilation units it reads (`inputs_digest`),
+then each file's namespace, size and text. When a compilation unit has no
+record under its key, `check_unit` looks for its newest record with the
+same inputs, no warning, and files that differ from the text kept only
+inside the bodies of top-level functions that are not generic, or in
+comments and spacing (`find_recheck_base`, `_align`, which compares the
+two texts' tokens outside those bodies). `recheck_compilation_unit` then:
+
+1. reads that record onto the merged closure with its locations moved to
+   the edited files (`merged_onto` with a `sema.LocShift`: a kept token's
+   offset goes where the same token is now, and anything inside a changed
+   body to that body's start);
+2. gives each changed function the body `sema.build_file` builds now, and
+   drops it from the checked functions and summaries, so the passes walk
+   it as the compilation unit's own code again;
+3. drops the closure structs the old bodies lifted, and numbers new ones
+   after every closure left in their files (`PassState.closure_counts`);
+4. runs every step, which walk only the unchecked bodies and the
+   specializations they newly ask for.
+
+It gives up, and `check_compilation_unit` checks the compilation unit from
+its files, on an error or a warning, or when a changed function's return
+type or link summary (`summary_without_place`) came out other than the
+record's: code the record keeps was checked against them. Specializations
+only the old bodies asked for stay in the record as dead code. A body edit
+in `sema/builder.pep` builds in about 12 s instead of 24 s this way.
+`Built.rechecked` names the compilation units checked so;
+`PEPC_TRACE_COMPILATION_UNITS` says why one was not.
+
 The modules of the closures are rebuilt from bytes for each compilation unit checked.
 Loading a record costs a read and a merge, not a check.
 
@@ -3069,7 +3100,11 @@ So a summary that reaches such a call (a **dependent** one: its own trait
 calls, and those of the functions it calls by name) records it
 symbolically: after its first line, a line per call,
 `trait\tmethod\toperands\tresults`, then a tab and the `classes;taints`
-of the joined summary it was made with, never the structs it reached. A compilation unit uses a dependent summary only
+of the joined summary it was made with, never the structs it reached. A
+call that comes from a callee by name is recorded with its join as it is
+when the caller is summarized (`_Confinement.joined_links`), not as the
+callee saw it earlier in the fixed point, so every summary the pass ends
+with holds there. A compilation unit uses a dependent summary only
 while each of those joins is the same over the implementations its module
 holds now (`_stale`, which summarizes first the implementations that have
 no summary). One that no longer holds is dropped from the module's checked

@@ -12,6 +12,7 @@ import os;
 import compiler.sema;
 import "cache";
 import "compilation_units";
+import "recheck";
 
 ## Orders diagnostics by file, then by where in it they start; those
 ## without a location first.
@@ -129,6 +130,9 @@ export struct Checked {
     ## The cache's folder of the last compilation unit's objects, when it has
     ## them.
     var last: Path? = Optional<Path>.Empty;
+    ## The compilation units checked again from an earlier record of them
+    ## (`recheck_compilation_unit`), by name.
+    var rechecked: String[] = Array<String>();
 
     ## @param module the module checked
     ## @param state the state of its passes
@@ -201,6 +205,7 @@ export check_compilation_units(
     # The compilation units loaded, whose files' bodies are not linked.
     var loaded = HashSet<ulong>();
     bool checked_any = false;
+    var rechecked = Array<String>();
     bool verify_cutoff = verify or _verify_cutoff();
     bool trace_compilation_units = _trace_compilation_units();
     for (var k in 0..last + 1) {
@@ -293,11 +298,23 @@ export check_compilation_units(
             sema.index_module(module, base);
             clock.lap("index");
         }
-        var checked = check_compilation_unit(program, module, unit, reused, sources, warnings, times);
+        # The last compilation unit keeps no record to re-check from.
+        var checked = check_unit(
+            program,
+            module,
+            records,
+            unit,
+            k < last ? Optional<Cache>.Value(cache) : Optional<Cache>.Empty,
+            reused,
+            sources,
+            warnings,
+            rechecked,
+            times
+        );
         if (checked.is_err()) {
             return Result<Checked, CheckError>.err(CheckError.Checking(checked.error()));
         }
-        var (after, ran_state, aliases) = checked.value();
+        var (after, ran_state, aliases, kept) = checked.value();
         module = after;
         state = ran_state;
         checked_any = true;
@@ -312,7 +329,7 @@ export check_compilation_units(
             bytes,
             own
         ) = store_checked(
-            cache, program, unit, checked_unit, base, render_warnings(warnings_in(warnings, unit), sources)
+            cache, program, unit, checked_unit, base, render_warnings(warnings_in(warnings, unit), sources), kept
         );
         owns[k] = own;
         records[k] = bytes;
@@ -328,6 +345,7 @@ export check_compilation_units(
         File.stderr().write_all($"cache: {loaded.count} of {units.count} compilation units checked already\n");
     }
     var out = Checked(module, state);
+    out.rechecked = rechecked;
     return Result<Checked, CheckError>.ok(out);
 }
 
@@ -389,6 +407,254 @@ export check_compilation_unit(
         return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic>.err(ran.error());
     }
     return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[]), Diagnostic>.ok((after, state, aliases));
+}
+
+## Checks compilation unit `unit` on `module`, the records of the compilation
+## units it reads merged: again from an earlier record of it when the cache
+## has one an edit of only bodies left (`recheck_compilation_unit`), else from
+## its files (`check_compilation_unit`). Also returns what its record keeps
+## for a later re-check (`recheck_source`).
+##
+## @param program the program
+## @param module the records of the compilation units `unit` reads, merged
+## @param records each compilation unit's record, by index: those `unit` reads set
+## @param unit the compilation unit
+## @param cache the build cache, if any
+## @param reused the translation units whose objects the cache has, when the
+##   build generates code
+## @param sources the program's sources
+## @param warnings where its warnings go
+## @param rechecked where its name goes when it is checked again from a record
+## @param times where the time each pass took goes (`-T passes`), if anywhere
+## @returns as `check_compilation_unit`, and the text to keep
+export check_unit(
+    program: link.Program,
+    module: sema.Module,
+    records: HashMap<ulong, u8[]>,
+    unit: CompilationUnit,
+    cache: Cache?,
+    reused: Reused?,
+    sources: SourceText[],
+    warnings: Diagnostic[],
+    rechecked: String[],
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
+): Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic> {
+    var inputs = inputs_digest(records, unit);
+    var source = recheck_source(program, unit, inputs);
+    var found = cache.is_value() ?
+        find_recheck_base(cache.value(), program, unit, inputs) :
+        Optional<RecheckBase>.Empty;
+    var on = module;
+    if (found.is_value()) {
+        var again = recheck_compilation_unit(program, on, unit, found.value(), reused, sources, times);
+        if (_trace_compilation_units()) {
+            var how = again.is_value() ? "rechecked" : "not rechecked";
+            File.stderr().write_all(
+                $"compilation unit {unit.name} {how}: {found.value().changed.count} bodies changed\n"
+            );
+        }
+        if (again.is_value()) {
+            rechecked.append(unit.name);
+            var (after, state, aliases) = again.value();
+            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.ok(
+                (after, state, aliases, source)
+            );
+        }
+        # The re-check changed the merged records: merge them again.
+        var merged = merged_module(program, records, unit.reads);
+        if (merged.is_err()) {
+            return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.err(
+                Diagnostic.error(
+                    $"the compilation units that compilation unit {unit.name} reads do not merge: {merged.error()}"
+                )
+            );
+        }
+        on = merged.value();
+    }
+    var checked = check_compilation_unit(program, on, unit, reused, sources, warnings, times);
+    if (checked.is_err()) {
+        return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.err(checked.error());
+    }
+    var (after, state, aliases) = checked.value();
+    return Result<(sema.Module, sema.PassState, sema.TypeAliasDef[], String), Diagnostic>.ok(
+        (after, state, aliases, source)
+    );
+}
+
+## Checks compilation unit `unit` again from an earlier record of it
+## (`find_recheck_base`): the record, read onto `module` with its locations
+## moved, keeps everything but the changed bodies, which are checked on top
+## as the compilation unit's own code. Gives nothing back, to check the
+## compilation unit from its files instead, when a changed function's facts
+## (its return type, its link summary) came out other than the record's,
+## since code the record keeps was checked against them, or when anything
+## else does not fit.
+##
+## @param program the program
+## @param module the records of the compilation units `unit` reads, merged
+## @param unit the compilation unit
+## @param base the record to start from
+## @param reused the translation units whose objects the cache has, when the
+##   build generates code
+## @param sources the program's sources
+## @param times where the time each pass took goes (`-T passes`), if anywhere
+## @returns as `check_compilation_unit`, or nothing
+export recheck_compilation_unit(
+    program: link.Program,
+    module: sema.Module,
+    unit: CompilationUnit,
+    base: RecheckBase,
+    reused: Reused?,
+    sources: SourceText[],
+    times: sema.PassTimes? = Optional<sema.PassTimes>.Empty
+): (sema.Module, sema.PassState, sema.TypeAliasDef[])? {
+    var merged = merged_onto(program, module, base.bytes, base.shift);
+    if (merged.is_err()) {
+        return _not_rechecked("merge");
+    }
+    var after = merged.value();
+    # The record's specializations met their constraints when it was checked.
+    var checked_specs = (after.struct_specs.count, after.func_specs.count);
+    var aliases = Array<sema.TypeAliasDef>();
+    for (var alias in after.type_aliases) {
+        aliases.append(alias.copy());
+    }
+    # Each changed function, as checked, and its body as built now.
+    var by_loc = HashMap<sema.Loc, sema.FunctionDef>();
+    var repeated = HashSet<sema.Loc>();
+    for (var f in after.functions) {
+        if (by_loc.contains(f.loc)) {
+            repeated.insert(f.loc);
+        }
+        by_loc[f.loc] = f;
+    }
+    var built = HashMap<uint, sema.Module>();
+    var rechecked = Array<(sema.FunctionDef, String)>();
+    for (var (file, name, body) in base.changed) {
+        if (!built.contains(file)) {
+            var made = sema.build_file(program.files[file as ulong].module, file);
+            if (made.is_err()) {
+                return _not_rechecked("build");
+            }
+            built[file] = made.value();
+        }
+        var loc = sema.Loc.at(file, name);
+        var old = by_loc.try_get(loc);
+        var fresh = Optional<sema.FunctionDef>.Empty;
+        for (var f in built[file].functions) {
+            if (f.loc == loc) {
+                fresh = Optional<sema.FunctionDef>.Value(f);
+            }
+        }
+        if (!old.is_value()
+            or repeated.contains(loc)
+            or !fresh.is_value()
+            or !fresh.value().body.is_value()
+            or !after.checked.functions.contains(old.value().name)) {
+            return _not_rechecked("match");
+        }
+        var function = old.value();
+        rechecked.append((function, _facts(after, function)));
+        sema.drop_body(function);
+        function.body = fresh.value().body;
+        if (fresh.value().ty.is_auto()) {
+            function.ty = sema.TypeName.auto();
+        }
+        after.checked.functions.remove(function.name);
+        after.checked.summaries.remove(function.name);
+        after.recorded_summaries.remove(function.loc);
+    }
+    # The closures the old bodies made went with them; the new ones are
+    # numbered after every closure of their files.
+    var counts = HashMap<long, ulong>();
+    var kept = Array<sema.StructDef>();
+    for (var st in after.structs) {
+        if (!sema.is_closure_struct(st.name) or st.loc.is_none()) {
+            kept.append(st);
+            continue;
+        }
+        if (_in_changed(base, st.loc)) {
+            after.checked.structs.remove(st.name);
+            continue;
+        }
+        kept.append(st);
+        var digits = st.name.substr(sema.CLOSURE_PREFIX.size, st.name.size).split("@")[0];
+        ulong n = 0;
+        bool numbered = !digits.is_empty and digits.size < 10;
+        for (var b in digits.bytes()) {
+            numbered = numbered and b >= '0' as u8 and b <= '9' as u8;
+            if (numbered) {
+                n = n * 10 + (b - '0' as u8) as ulong;
+            }
+        }
+        if (!numbered) {
+            continue;
+        }
+        var key = st.loc.file as long;
+        if (!counts.contains(key) or counts[key] <= n) {
+            counts[key] = n + 1;
+        }
+    }
+    after.structs = kept;
+    after.record_summaries = reused.is_value();
+    if (reused.is_value()) {
+        after.cached_files = reused.value().files;
+        for (var (loc, text) in reused.value().summaries) {
+            after.recorded_summaries[loc] = text;
+        }
+    }
+    var state = sema.PassState(program.target);
+    state.sources = sources;
+    state.checked_specs = checked_specs;
+    state.pass_times = times;
+    state.closure_counts = counts;
+    var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
+    if (ran.is_err()) {
+        return _not_rechecked($"an error: {ran.error().message}");
+    }
+    if (!state.notes.is_empty) {
+        return _not_rechecked($"a warning: {state.notes[0].message}");
+    }
+    for (var (function, facts) in rechecked) {
+        var now = _facts(after, function, Optional<sema.PassState>.Value(state));
+        if (now != facts) {
+            return _not_rechecked($"the facts of {function.name}: {facts} became {now}");
+        }
+    }
+    return Optional<(sema.Module, sema.PassState, sema.TypeAliasDef[])>.Value((after, state, aliases));
+}
+
+# Nothing, after saying why with `PEPC_TRACE_COMPILATION_UNITS`.
+_not_rechecked(why: String): (sema.Module, sema.PassState, sema.TypeAliasDef[])? {
+    if (_trace_compilation_units()) {
+        File.stderr().write_all($"recheck: no, at {why}\n");
+    }
+    return Optional<(sema.Module, sema.PassState, sema.TypeAliasDef[])>.Empty;
+}
+
+# Whether `loc` is in a body `base` changed: where `LocShift` puts what was
+# in the old one.
+_in_changed(base: RecheckBase, loc: sema.Loc): bool {
+    for (var (file, _, body) in base.changed) {
+        if (loc.file == file and loc.span.start >= body.start and loc.span.end <= body.end) {
+            return true;
+        }
+    }
+    return false;
+}
+
+# What other code was checked against of free function `function`: its
+# return type and settled link summary, without the blame's place.
+_facts(
+    module: sema.Module, function: sema.FunctionDef, state: sema.PassState? = Optional<sema.PassState>.Empty
+): String {
+    var summary = module.checked.summaries.try_get(function.name);
+    var text = summary.is_value() ? summary.value().1 : "";
+    if (state.is_value()) {
+        var settled = state.value().settled_summaries.try_get(function.name);
+        text = settled.is_value() ? settled.value().1 : "";
+    }
+    return $"{function.ty}\n{sema.summary_without_place(text)}";
 }
 
 # For `PEPC_VERIFY_CUTOFF`: checks compilation unit `k`, loaded by early cutoff,

@@ -584,3 +584,75 @@ links_only_the_bodies_of_the_compilation_units_it_checks() {
     _write_deferred(root, "b_old()", 4);
     expect_false(_build_deferred(root));
 }
+
+# Writes a program whose `a.pep` starts with `top` and whose `a_value`
+# returns `value` of its argument, through a closure.
+_write_rechecked(root: Path, top: String, value: String) {
+    File.write_text(
+        root.join(Path("a.pep")),
+        top
+            + "export a_value(n: int): int {\n    var add = (x: int) => "
+            + value
+            + ";\n    return add(n);\n}\nexport a_fail(n: int): int {\n    if (n > 0) {\n        panic(\"stop\");\n    }\n    return n;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"a\";\nmain(args: String[]): int {\n    if (args.count > 1) {\n        return a_fail(1);\n    }\n    return a_value(0) == 1 ? 0 : 1;\n}\n"
+    );
+}
+
+# Builds the program in `root`, runs it, and returns the build and what the
+# program, failing on purpose, writes on standard error.
+_build_rechecked(root: Path): (driver.Built, String) {
+    var setup = link.Setup();
+    setup.import_dirs.append(root);
+    var output = root.join(Path("main"));
+    var options = driver.BuildOptions(output, root.join(Path("build")));
+    options.cache = Optional<incremental.Cache>.Value(incremental.Cache(root.join(Path("cache"))));
+    options.in_process = true;
+    var program = link.load_program(root.join(Path("main.pep")), setup);
+    expect_true(program.is_ok());
+    var built = driver.build(program.value(), options);
+    if (built.is_err()) {
+        print(built.error());
+    }
+    expect_true(built.is_ok());
+    var ran = process.Command(output.to_string()).run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+    var failed = process.Command(output.to_string()).argument("fail").run();
+    expect_true(failed.is_ok() and !failed.value().status.success());
+    return (built.value(), failed.value().stderr);
+}
+
+# An edit of only bodies (or comments) checks again just the bodies changed,
+# from the compilation unit's record before the edit, with its locations
+# moved to where they are now; any other edit checks the compilation unit
+# from its files.
+[Test]
+checks_again_only_the_bodies_an_edit_changed() {
+    var folder = TempFolder("rechecked");
+    var root = folder.path;
+    _write_rechecked(root, "", "x + 1");
+    var (first, _) = _build_rechecked(root);
+    expect_true(first.rechecked.is_empty);
+
+    # The closure's body changed.
+    _write_rechecked(root, "", "x * 2 + 1");
+    var program = _load(root);
+    var a = _unit_of(program, "a.pep");
+    var (body, failed) = _build_rechecked(root);
+    expect_true(body.rechecked.count == 1 and body.rechecked.contains(a));
+    expect_true(failed.contains("a.pep:7"));
+
+    # A comment moves `a_fail`'s `panic` a line down.
+    _write_rechecked(root, "# A comment.\n", "x * 2 + 1");
+    var (comment, moved) = _build_rechecked(root);
+    expect_true(comment.rechecked.contains(a));
+    expect_true(moved.contains("a.pep:8"));
+
+    # A new function is checked with the rest from the files.
+    _write_rechecked(root, "_unused(): int {\n    return 0;\n}\n", "x * 2 + 1");
+    var (declared, _) = _build_rechecked(root);
+    expect_true(declared.misses.contains(a));
+    expect_true(declared.rechecked.is_empty);
+}

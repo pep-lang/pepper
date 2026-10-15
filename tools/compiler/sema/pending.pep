@@ -1,6 +1,7 @@
 ## What the model holds in memory only (fields `model.pep` declares with a
 ## default): never fingerprinted, written as JSON or recorded.
 
+import [LocShift] from "loc";
 import [FunctionDef, StructDef, TypeName] from "model";
 
 ## A function body a checked unit's record holds that reading it skipped:
@@ -19,6 +20,8 @@ export struct PendingBody {
     ## Where the body's values start, and end.
     var start: ulong;
     var end: ulong;
+    ## Where the record's locations are now (`RecordIn.shift`).
+    var shift: LocShift? = Optional<LocShift>.Empty;
 
     construct(data: u8[], strings: String[], files: uint[], start: ulong, end: ulong) {
         this.data = data;

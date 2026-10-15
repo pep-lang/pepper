@@ -871,6 +871,19 @@ struct _Confinement {
         return joined.is_value() ? joined.value() : _top(operands, results);
     }
 
+    ## What a summary's `dispatched` call joins to now: its
+    ## implementations' summaries joined, as `links`; empty for a malformed
+    ## call.
+    joined_links(call: String): String {
+        var parts = call.split("\t");
+        var operands = parts.count == 4 ? ulong.parse(parts[2]) : Optional<ulong>.Empty;
+        var results = parts.count == 4 ? ulong.parse(parts[3]) : Optional<ulong>.Empty;
+        if (!operands.is_value() or !results.is_value()) {
+            return "";
+        }
+        return dispatch_summary(dispatched_call(call), operands.value(), results.value()).links();
+    }
+
     ## The keys of method `method` of every struct that implements trait
     ## `trait_name`, by struct name: what a call through the trait may
     ## reach.
@@ -1132,15 +1145,7 @@ _stale(program: _Confinement): String[] {
         for (var (call, links) in program.summaries[key].dispatched) {
             var now = joins.try_get(call);
             if (!now.is_value()) {
-                var parts = call.split("\t");
-                var operands = parts.count == 4 ? ulong.parse(parts[2]) : Optional<ulong>.Empty;
-                var results = parts.count == 4 ? ulong.parse(parts[3]) : Optional<ulong>.Empty;
-                var joined = "";
-                if (operands.is_value() and results.is_value()) {
-                    joined = program.dispatch_summary(
-                        program.dispatched_call(call), operands.value(), results.value()
-                    ).links();
-                }
+                var joined = program.joined_links(call);
                 joins[call] = joined;
                 now = Optional<String>.Value(joined);
             }
@@ -1492,8 +1497,12 @@ _summarize(program: _Confinement, body: _Body): (_Summary, String[]) {
         if (!known.is_value()) {
             continue;
         }
-        for (var (call, links) in known.value().dispatched) {
-            summary.dispatched[call] = links;
+        # Their joins as they are now: one made earlier in the fixed point
+        # may be below it.
+        for (var (call, _) in known.value().dispatched) {
+            if (!summary.dispatched.contains(call)) {
+                summary.dispatched[call] = program.joined_links(call);
+            }
         }
     }
     return (summary, walk.called);

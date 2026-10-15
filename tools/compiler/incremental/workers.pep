@@ -441,7 +441,9 @@ export check_for_worker(
     var t2 = os.Instant.now();
     stages.append($"index {(t2 - t1).milliseconds()}\n");
     var warnings = Array<Diagnostic>();
-    var checked = check_compilation_unit(program, module, unit, reused, sources, warnings, times);
+    var checked = check_unit(
+        program, module, records, unit, Optional<Cache>.Value(cache), reused, sources, warnings, Array<String>(), times
+    );
     if (checked.is_err()) {
         return Result<(sema.Module, sema.PassState), String>.err(render_all([checked.error()], sources));
     }
@@ -450,12 +452,12 @@ export check_for_worker(
     }
     var t3 = os.Instant.now();
     stages.append($"check {(t3 - t2).milliseconds()}\n");
-    var (after, state, aliases) = checked.value();
+    var (after, state, aliases, kept) = checked.value();
     var checked_unit = sema.finish_checked(after, state, aliases);
     var t4 = os.Instant.now();
     stages.append($"finish {(t4 - t3).milliseconds()}\n");
     var warned = render_warnings(warnings, sources);
-    var (bytes, own) = store_checked(cache, program, unit, checked_unit, base, warned);
+    var (bytes, own) = store_checked(cache, program, unit, checked_unit, base, warned, kept);
     var t5 = os.Instant.now();
     stages.append($"store {(t5 - t4).milliseconds()}\n");
     File.write_bytes(worker_file(dir, k, "rec"), bytes);

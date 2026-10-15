@@ -392,6 +392,29 @@ export merged_module(
     return Result<sema.Module, String>.ok(module);
 }
 
+## Returns `module` with record `bytes` merged on, as `merged_module` merges
+## each, its locations moved by `shift`; or why it does not merge.
+##
+## @param program the program
+## @param module the module the record's compilation unit reads, merged
+## @param bytes the record
+## @param shift where its locations are now
+## @returns the module
+export merged_onto(
+    program: link.Program, module: sema.Module, bytes: u8[], shift: sema.LocShift
+): Result<sema.Module, String> {
+    var read = _read_record(
+        _record_slots(program), bytes, Optional<sema.Module>.Value(module), true, Optional<sema.LocShift>.Value(shift)
+    );
+    if (read.is_err()) {
+        return Result<sema.Module, String>.err(read.error());
+    }
+    var out = sema.resume_checked(read.value());
+    sema.settle_merged(out);
+    sema.sort_globals(program, out);
+    return Result<sema.Module, String>.ok(out);
+}
+
 ## The nodes of `reads` but those `skip` names, in groups: the strongly
 ## connected components of the graph, each group after every group it
 ## reads (Tarjan's order, the reverse topological order of the
@@ -533,6 +556,7 @@ _record_folder(name: String): String {
 ## @param checked_unit the checked unit
 ## @param base the index of the module the compilation unit was checked on
 ## @param warned the compilation unit's warnings, rendered, or empty
+## @param source what a later re-check of it reads (`recheck_source`)
 ## @returns the record and the own interface
 export store_checked(
     cache: Cache,
@@ -540,11 +564,14 @@ export store_checked(
     unit: CompilationUnit,
     checked_unit: sema.CheckedUnit,
     base: sema.DeltaBase,
-    warned: String
+    warned: String,
+    source: String
 ): (u8[], String) {
     var bytes = _record_bytes(program, checked_unit, base);
     var own = base.own_text();
     var path = record_path(cache, unit);
+    var source_path = Path($"{path}.src");
+    var source_partial = Path($"{source_path}.{process.id()}");
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {
         return (bytes, own);
@@ -557,12 +584,15 @@ export store_checked(
     if (File.write_bytes(partial, bytes).is_err()
         or File.write_text(own_partial, own).is_err()
         or File.write_text(warn_partial, warned).is_err()
+        or File.write_text(source_partial, source).is_err()
+        or File.rename(source_partial, source_path).is_err()
         or File.rename(warn_partial, warn_path).is_err()
         or File.rename(own_partial, own_path).is_err()
         or File.rename(partial, path).is_err()) {
         File.remove(partial);
         File.remove(own_partial);
         File.remove(warn_partial);
+        File.remove(source_partial);
         return (bytes, own);
     }
     _prune_records(folder);
@@ -647,6 +677,7 @@ _prune_records(folder: Path) {
         File.remove(path);
         File.remove(_own_path(path));
         File.remove(_warn_path(path));
+        File.remove(Path($"{path}.src"));
     }
 }
 
@@ -672,9 +703,14 @@ _record_bytes(program: link.Program, checked_unit: sema.CheckedUnit, base: sema.
 # before, which the read may change (`sema.RecordIn.consumes_base`): the
 # caller drops it.
 _read_record(
-    slots: HashMap<String, uint>, bytes: u8[], base: sema.Module?, merging: bool
+    slots: HashMap<String, uint>,
+    bytes: u8[],
+    base: sema.Module?,
+    merging: bool,
+    shift: sema.LocShift? = Optional<sema.LocShift>.Empty
 ): Result<sema.CheckedUnit, String> {
     var input = sema.RecordIn(bytes);
+    input.shift = shift;
     # Most checked bodies are needed by neither the passes nor codegen:
     # each is decoded when one needs it (`sema.PendingBody`).
     input.lazy_bodies = true;

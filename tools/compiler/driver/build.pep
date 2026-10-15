@@ -286,6 +286,9 @@ export struct Built {
     ## The parts of the units compiled whose objects came from the build
     ## cache, as `<unit>#<n>`.
     var part_hits: String[] = Array<String>();
+    ## The compilation units checked again from an earlier record of them,
+    ## only their changed bodies checked, by name.
+    var rechecked: String[] = Array<String>();
 
     construct() {}
 }
@@ -856,6 +859,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         module = checked.value().module;
         state = checked.value().state;
         last_folder = checked.value().last;
+        report.rechecked = checked.value().rechecked;
         report_warnings(warnings, sources);
     } else {
         _stop_early_worker(options);

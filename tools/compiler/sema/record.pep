@@ -12,7 +12,7 @@ import digest;
 import io;
 import os;
 import [Utf8] from text;
-import [Loc, NO_FILE] from "loc";
+import [Loc, LocShift, NO_FILE] from "loc";
 import [Checked, FunctionDef, Module, StructDef] from "model";
 import [PendingBody] from "pending";
 
@@ -892,6 +892,9 @@ export struct RecordIn {
     ## merging a closure's records does: what the read changes of the base's
     ## checked declarations is then changed in place rather than in a copy.
     var consumes_base: bool = false;
+    ## Where the record's locations are now, when it was written before an
+    ## edit that kept them all but those in the bodies it changed.
+    var shift: LocShift? = Optional<LocShift>.Empty;
 
     ## Starts reading `data`, a whole record. A record that is not one
     ## leaves `error` set and reads as zeros.
@@ -978,6 +981,7 @@ export struct RecordIn {
             return PendingBody(_data, _strings, files, _end, _end);
         }
         var out = PendingBody(_data, _strings, files, _next, _next + size);
+        out.shift = shift;
         _next += size;
         return out;
     }
@@ -992,6 +996,7 @@ export struct RecordIn {
         out._data = pending.data;
         out._strings = pending.strings;
         out.files = pending.files;
+        out.shift = pending.shift;
         out._next = pending.start;
         out._end = pending.end;
         out.lazy_bodies = false;
@@ -1092,7 +1097,8 @@ export struct RecordIn {
             }
             file = files[file];
         }
-        return Loc.at(file, ast.Span(start, end));
+        var out = Loc.at(file, ast.Span(start, end));
+        return shift.is_value() ? shift.value().map(out) : out;
     }
 
     ## Notes a value whose tag names no case of its type.

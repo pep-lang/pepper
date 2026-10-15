@@ -23,17 +23,17 @@ export [Exports, STRING_FREE, is_export_string] from "export_table";
 export [header, header_declarations] from "exports";
 export [defaulted_params, fill_defaults] from "function_types_check";
 export [display_name, set_name] from "names";
-export [CALL_METHOD, is_closure_struct] from "closures";
+export [CALL_METHOD, CLOSURE_PREFIX, is_closure_struct] from "closures";
 export [is_comparison, is_overflow_test, op_name, simd_result, weak_result] from "operators";
 export [thread_local_constant] from "shared_type_checks";
 export [Fingerprint] from "fingerprint";
 ## Checked units and their records in the build cache.
 export [
-    CheckedUnit, finish_checked, full_body, function_facts, interface_hash, resume_checked, settle_merged
+    CheckedUnit, drop_body, finish_checked, full_body, function_facts, interface_hash, resume_checked, settle_merged
 ] from "checked";
-export [DeltaBase, function_name, RecordIn, RecordOut] from "record";
+export [DeltaBase, function_name, RecordIn, RecordOut, summary_without_place] from "record";
 export [index_module, index_resumed, interface_fields, read_module, write_module] from "record_codec";
-export [PassState, PassTimes, pass_name] from "state";
+export [method_key, PassState, PassTimes, pass_name] from "state";
 export [StaticExpansion, StaticRecording, substitute_names] from "static_source";
 export [attribute_arguments, attribute_name] from "attributes";
 export [expression_loc] from "common";
