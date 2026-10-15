@@ -3022,8 +3022,10 @@ record under its key, `check_unit` looks for its newest record with the
 same inputs, no warning, and files that differ from the text kept only
 inside the bodies of top-level functions that are not generic, and of the
 methods and constructors that are not generic of structs that are not, or in
-comments and spacing (`find_recheck_base`, `_align`, which compares the
-two texts' tokens outside those bodies). `recheck_compilation_unit` then:
+comments and spacing, or in whole such functions and methods the edit adds
+under a name that no other declares and no token of the old text spells
+(`find_recheck_base`, `_align`, which compares the two texts' tokens outside
+those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
 
 1. reads that record onto the merged closure with its locations moved to
    the edited files (`merged_onto` with a `sema.LocShift`: a kept token's
@@ -3036,9 +3038,14 @@ two texts' tokens outside those bodies). `recheck_compilation_unit` then:
    (`PassState.rechecked_methods`) and the struct counts as extended
    (`extended_checked`), so the passes walk it as a method an extension
    added;
-3. drops the closure structs the old bodies lifted, and numbers new ones
+3. puts each added function or method after the one before it in its file
+   (`_add`), its struct walked as for a changed method; it gives up when
+   the name is a trait's method, a member of the struct, a function already
+   declared, one code calls without naming (`called_without_naming`), a
+   constructor, or the first function of its file;
+4. drops the closure structs the old bodies lifted, and numbers new ones
    after every closure left in their files (`PassState.closure_counts`);
-4. runs every step, which walk only the unchecked bodies and the
+5. runs every step, which walk only the unchecked bodies and the
    specializations they newly ask for.
 
 It gives up, and `check_compilation_unit` checks the compilation unit from

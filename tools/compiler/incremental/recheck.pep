@@ -26,6 +26,9 @@ export struct RecheckBase {
     ## The changed bodies: the file, the function's name span and its
     ## body's span, in the edited file.
     var changed: Array<(uint, ast.Span, ast.Span)> = Array<(uint, ast.Span, ast.Span)>();
+    ## The functions and methods the edit added: the file, and the name's
+    ## span in the edited file.
+    var added: Array<(uint, ast.Span)> = Array<(uint, ast.Span)>();
 
     construct(bytes: u8[], shift: sema.LocShift) {
         this.bytes = bytes;
@@ -80,7 +83,8 @@ export recheck_path(path: Path): Path {
 }
 
 ## Returns an earlier record of `unit` that a re-check can start from: the
-## newest whose text differs from its files' only in bodies (`_align`), on
+## newest whose text differs from its files' only in bodies and in added
+## functions and methods no old text names (`_align`), on
 ## the same records below, and whose check warned of nothing.
 ##
 ## @param cache the build cache
@@ -146,6 +150,8 @@ _base_from(path: Path, program: link.Program, unit: CompilationUnit, inputs: Str
     }
     var shift = sema.LocShift();
     var changed = Array<(uint, ast.Span, ast.Span)>();
+    var added = Array<(uint, ast.Span)>();
+    var olds = Array<(String, syntax.Token[])>();
     for (var file in unit.files) {
         var f = program.files[file];
         var namespace = reader.line();
@@ -154,8 +160,19 @@ _base_from(path: Path, program: link.Program, unit: CompilationUnit, inputs: Str
             return none;
         }
         var old = reader.bytes(size.value());
-        if (!old.is_value() or !_align(old.value(), f, file as uint, shift, changed)) {
+        if (!old.is_value() or !_align(old.value(), f, file as uint, shift, changed, added, olds)) {
             return none;
+        }
+    }
+    # Code that named an added function or method meant something else.
+    for (var (file, name) in added) {
+        var text = program.files[file as ulong].source.substr_bytes(name.start, name.end - name.start);
+        for (var (old, tokens) in olds) {
+            for (var token in tokens) {
+                if (token.text(old) == text) {
+                    return none;
+                }
+            }
         }
     }
     var bytes = File.read_bytes(path);
@@ -164,6 +181,7 @@ _base_from(path: Path, program: link.Program, unit: CompilationUnit, inputs: Str
     }
     var out = RecheckBase(bytes.value(), shift);
     out.changed = changed;
+    out.added = added;
     return Optional<RecheckBase>.Value(out);
 }
 
@@ -248,10 +266,18 @@ _bodies(module: ast.Module): Array<(ast.Span, ast.Span)> {
 }
 
 # Whether the old text `old` of file `file` (program file `index`) differs
-# from its text now only inside the bodies `_bodies` finds; adds where its
-# kept tokens are now to `shift`, and the changed bodies to `changed`.
+# from its text now only inside the bodies `_bodies` finds and in whole
+# functions and methods it adds (`_added`); adds where its kept tokens are
+# now to `shift`, the changed bodies to `changed`, the added ones to
+# `added`, and its old text and tokens to `olds`.
 _align(
-    old: String, file: link.ProgramFile, index: uint, shift: sema.LocShift, changed: Array<(uint, ast.Span, ast.Span)>
+    old: String,
+    file: link.ProgramFile,
+    index: uint,
+    shift: sema.LocShift,
+    changed: Array<(uint, ast.Span, ast.Span)>,
+    added: Array<(uint, ast.Span)>,
+    olds: Array<(String, syntax.Token[])>
 ): bool {
     var parsed = parse.parse_declarations(old);
     var old_tokens = syntax.lex(old, false);
@@ -259,12 +285,32 @@ _align(
     if (parsed.is_err() or old_tokens.is_err() or new_tokens.is_err()) {
         return false;
     }
+    olds.append((old, old_tokens.value()));
+    var new_ones = _added(parsed.value(), file.module);
+    if (!new_ones.is_value()) {
+        return false;
+    }
+    # The added declarations' tokens and bodies are new; the rest lines up.
+    var kept = Array<syntax.Token>();
+    for (var token in new_tokens.value()) {
+        if (!_inside(new_ones.value(), token.offset)) {
+            kept.append(token);
+        }
+    }
     var old_bodies = _bodies(parsed.value());
-    var new_bodies = _bodies(file.module);
+    var new_bodies = Array<(ast.Span, ast.Span)>();
+    for (var (name, body) in _bodies(file.module)) {
+        if (!_inside(new_ones.value(), name.start)) {
+            new_bodies.append((name, body));
+        }
+    }
     if (old_bodies.count != new_bodies.count) {
         return false;
     }
-    var tokens = _Tokens(old, old_tokens.value(), file.source, new_tokens.value());
+    for (var (_, name) in new_ones.value()) {
+        added.append((index, name));
+    }
+    var tokens = _Tokens(old, old_tokens.value(), file.source, kept);
     var moved = Array<(ast.Span, ulong)>();
     for (var n in 0..old_bodies.count) {
         var (_, old_body) = old_bodies[n];
@@ -285,6 +331,77 @@ _align(
     }
     shift.add_file(index, tokens.old_offsets, tokens.new_offsets, moved);
     return true;
+}
+
+# The functions and methods file `now` declares that `old` does not, each
+# one's whole span and name span: free functions and methods of structs
+# that are not generic, with a body, no generic parameters and a name no
+# other declares. Nothing when `now` drops one `old` declares or adds
+# another kind.
+_added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
+    var none = Optional<Array<(ast.Span, ast.Span)>>.Empty;
+    var counts = HashMap<String, long>();
+    for (var (key, _, _, _) in _declared(old)) {
+        counts[key] = counts.try_get(key).value_or(0) - 1;
+    }
+    var declared = _declared(now);
+    for (var (key, _, _, _) in declared) {
+        counts[key] = counts.try_get(key).value_or(0) + 1;
+    }
+    var out = Array<(ast.Span, ast.Span)>();
+    for (var (key, span, name, simple) in declared) {
+        var count = counts[key];
+        if (count < 0 or count > 1) {
+            return none;
+        }
+        if (count == 0) {
+            continue;
+        }
+        if (!simple) {
+            return none;
+        }
+        out.append((span, name));
+    }
+    for (var (_, count) in counts) {
+        if (count < 0) {
+            return none;
+        }
+    }
+    return Optional<Array<(ast.Span, ast.Span)>>.Value(out);
+}
+
+# Each function, method and constructor of `module` by `{struct}\t{name}`
+# (a free function's with no struct, a constructor's as `construct`), with
+# its span, its name span, and whether a re-check could add it. Names are
+# without the `@namespace` a loaded file's carry.
+_declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
+    var out = Array<(String, ast.Span, ast.Span, bool)>();
+    var plain = (name: String) => name.split("@")[0];
+    for (var declaration in module.declarations) {
+        if (declaration is Function(decl)) {
+            var simple = decl.body.is_value() and decl.generic_params.count == 0 and !decl.external;
+            out.append(($"\t{plain(decl.name)}", decl.span, decl.name_span, simple));
+        } else if (declaration is Struct(decl)) {
+            for (var m in decl.methods) {
+                var simple = decl.generic_params.count == 0 and m.body.is_value() and m.generic_params.count == 0;
+                out.append(($"{plain(decl.name)}\t{plain(m.name)}", m.span, m.name_span, simple));
+            }
+            for (var c in decl.constructors) {
+                out.append(($"{plain(decl.name)}\tconstruct", c.span, c.name_span, false));
+            }
+        }
+    }
+    return out;
+}
+
+# Whether `offset` is in one of the spans `added` gives.
+_inside(added: Array<(ast.Span, ast.Span)>, offset: ulong): bool {
+    for (var (span, _) in added) {
+        if (offset >= span.start and offset < span.end) {
+            return true;
+        }
+    }
+    return false;
 }
 
 # Two texts' tokens, walked in step.

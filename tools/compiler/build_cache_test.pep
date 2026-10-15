@@ -586,18 +586,33 @@ links_only_the_bodies_of_the_compilation_units_it_checks() {
 }
 
 # Writes a program whose `a.pep` starts with `top`, whose `a_value`
-# returns `value` of its argument, through a closure, and whose
-# `_Counter.next` returns `next`.
-_write_rechecked(root: Path, top: String, value: String, next: String = "n + 1") {
+# returns `value` of its argument, through a closure, followed by
+# `functions`, whose `_Counter.next` returns `next`, followed by `methods`,
+# and whose `a_count` returns `count`.
+_write_rechecked(
+    root: Path,
+    top: String,
+    value: String,
+    next: String = "n + 1",
+    methods: String = "",
+    count: String = "_Counter(0).next()",
+    functions: String = ""
+) {
     File.write_text(
         root.join(Path("a.pep")),
         top
             + "export a_value(n: int): int {\n    var add = (x: int) => "
             + value
-            + ";\n    return add(n);\n}\nexport a_fail(n: int): int {\n    if (n > 0) {\n        panic(\"stop\");\n    }\n    return n;\n}\n"
+            + ";\n    return add(n);\n}\n"
+            + functions
+            + "export a_fail(n: int): int {\n    if (n > 0) {\n        panic(\"stop\");\n    }\n    return n;\n}\n"
             + "struct _Counter {\n    var n: int;\n    construct(n: int) {\n        this.n = n;\n    }\n    next(): int {\n        return "
             + next
-            + ";\n    }\n}\nexport a_count(): int {\n    return _Counter(0).next();\n}\n"
+            + ";\n    }\n"
+            + methods
+            + "}\nexport a_count(): int {\n    return "
+            + count
+            + ";\n}\n"
     );
     File.write_text(
         root.join(Path("main.pep")),
@@ -664,6 +679,40 @@ checks_again_only_the_bodies_an_edit_changed() {
     var (declared, _) = _build_rechecked(root);
     expect_true(declared.misses.contains(a));
     expect_true(declared.rechecked.is_empty);
+}
+
+# An edit that adds a function or a method no code named before checks
+# again only it and the bodies that changed; one named before checks the
+# compilation unit from its files.
+[Test]
+checks_again_only_the_functions_and_methods_an_edit_adds() {
+    var folder = TempFolder("added");
+    var root = folder.path;
+    _write_rechecked(root, "", "x + 1");
+    _build_rechecked(root);
+    var a = _unit_of(_load(root), "a.pep");
+
+    # A method, which a changed body calls.
+    var twice = "    twice(): int {\n        return n * 2;\n    }\n";
+    _write_rechecked(root, "", "x + 1", "n + 1", twice, "_Counter(0).next() + _Counter(0).twice()");
+    var (method, _) = _build_rechecked(root);
+    expect_true(method.rechecked.contains(a));
+
+    # A function after another, whose `panic` moves two lines down.
+    var zero = "_zero(): int {\n    return 0;\n}\n";
+    _write_rechecked(root, "", "x + 1 + _zero()", "n + 1", twice, "_Counter(0).next() + _Counter(0).twice()", zero);
+    var (function, failed) = _build_rechecked(root);
+    expect_true(function.rechecked.contains(a));
+    expect_true(failed.contains("a.pep:10"));
+
+    # A method named as the closure's variable was.
+    var add = "    add(): int {\n        return 0;\n    }\n";
+    _write_rechecked(
+        root, "", "x + 1 + _zero()", "n + 1", twice + add, "_Counter(0).next() + _Counter(0).twice()", zero
+    );
+    var (named, _) = _build_rechecked(root);
+    expect_true(named.misses.contains(a));
+    expect_true(named.rechecked.is_empty);
 }
 
 # Writes a program whose `a.pep` starts with `top` and declares struct

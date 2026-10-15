@@ -563,6 +563,18 @@ export recheck_compilation_unit(
         after.checked.summaries.remove(key);
         after.recorded_summaries.remove(function.loc);
     }
+    for (var (file, name) in base.added) {
+        if (!built.contains(file)) {
+            var made = sema.build_file(program.files[file as ulong].module, file);
+            if (made.is_err()) {
+                return _not_rechecked("build");
+            }
+            built[file] = made.value();
+        }
+        if (!_add(after, built[file], sema.Loc.at(file, name), methods)) {
+            return _not_rechecked("an added function");
+        }
+    }
     # The closures the old bodies made went with them; the new ones are
     # numbered after every closure of their files.
     var counts = HashMap<long, ulong>();
@@ -622,6 +634,108 @@ export recheck_compilation_unit(
         }
     }
     return Optional<(sema.Module, sema.PassState, sema.TypeAliasDef[])>.Value((after, state, aliases));
+}
+
+# Adds the function or method at `loc` in `fresh`, its file as built now,
+# to `after`, the record it is checked on top of, after the one before it
+# in its file, as checking the file would; a method's struct is walked
+# again (`methods`). Whether it could: no code the record keeps can call it,
+# or anything it declares already.
+_add(after: sema.Module, fresh: sema.Module, loc: sema.Loc, methods: HashSet<String>): bool {
+    var (by_loc, _) = _by_loc(fresh);
+    var found = by_loc.try_get(loc);
+    if (!found.is_value()) {
+        return false;
+    }
+    var (function, owner, kind) = found.value();
+    var name = sema.set_name(function.name);
+    if (kind == "constructor" or sema.called_without_naming(name) or !function.body.is_value()) {
+        return false;
+    }
+    # A trait's method of that name may dispatch to it.
+    for (var t in after.traits) {
+        for (var m in t.methods) {
+            if (sema.set_name(m.name) == name) {
+                return false;
+            }
+        }
+    }
+    if (kind.is_empty) {
+        for (var f in after.functions) {
+            if (sema.set_name(f.name) == name) {
+                return false;
+            }
+        }
+        # A file's first function has none before it to follow.
+        var at = _after_previous(fresh.functions, after.functions, loc);
+        if (!at.is_value() or at.value() == 0) {
+            return false;
+        }
+        after.functions.insert(at.value(), function);
+        if (fresh.private_functions.contains(loc)) {
+            after.private_functions.insert(loc);
+        }
+        if (fresh.file_private_functions.contains(loc)) {
+            after.file_private_functions.insert(loc);
+        }
+        return true;
+    }
+    if (!after.checked.structs.contains(owner)) {
+        return false;
+    }
+    for (var st in after.structs) {
+        if (st.name != owner) {
+            continue;
+        }
+        for (var m in st.method_members) {
+            if (sema.set_name(m.name) == name) {
+                return false;
+            }
+        }
+        for (var m in st.generic_methods) {
+            if (sema.set_name(m.name) == name) {
+                return false;
+            }
+        }
+        for (var field in st.field_members) {
+            if (field.name == name) {
+                return false;
+            }
+        }
+        for (var mine in fresh.structs) {
+            if (mine.name != owner) {
+                continue;
+            }
+            var at = _after_previous(mine.method_members, st.method_members, loc);
+            if (!at.is_value()) {
+                return false;
+            }
+            st.method_members.insert(at.value(), function);
+            methods.insert($"m {owner} method {function.name}");
+            return true;
+        }
+    }
+    return false;
+}
+
+# Where in `into` the function at `loc` in `fresh` goes: after the one
+# before it in `fresh`, by location, or first when none is before it.
+_after_previous(fresh: sema.FunctionDef[], into: sema.FunctionDef[], loc: sema.Loc): ulong? {
+    for (var i in 0..fresh.count) {
+        if (fresh[i].loc != loc) {
+            continue;
+        }
+        if (i == 0) {
+            return Optional<ulong>.Value(0);
+        }
+        for (var j in 0..into.count) {
+            if (into[j].loc == fresh[i - 1].loc) {
+                return Optional<ulong>.Value(j + 1);
+            }
+        }
+        return Optional<ulong>.Empty;
+    }
+    return Optional<ulong>.Empty;
 }
 
 # Nothing, after saying why with `PEPC_TRACE_COMPILATION_UNITS`.
