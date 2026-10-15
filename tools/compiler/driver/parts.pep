@@ -447,9 +447,53 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     if (trace_time) {
         File.stderr().write_all($"time: read {jobs.count} parts {start.elapsed().milliseconds()} ms\n");
     }
-    return _compile_halves(
+    return _compile_forked(
         ir.value(), partition, jobs, machine.value(), level.value(), trace_time, lto, optimized, cached, how
     );
+}
+
+## Compiles `jobs`, whose parts `ir` holds, as `_compile` does each: all
+## but the last in a copy of this process each (`process.fork`), which
+## keeps its part from `ir` as the copy shares it, with no clone, one after
+## another; the last here. Where processes cannot fork (Windows), as
+## `_compile_halves` does.
+_compile_forked(
+    ir: llvm.Module,
+    partition: codegen.Partition,
+    jobs: PartJob[],
+    machine: llvm.TargetMachine,
+    opt_level: uint,
+    trace_time: bool,
+    lto: bool,
+    optimized: bool,
+    cached: PartCache?,
+    how: String
+): Result<void, String> {
+    for (var i in 0..jobs.count - 1) {
+        var forked = process.fork();
+        if (forked.is_err()) {
+            var rest = Array<PartJob>();
+            for (var j in i..jobs.count) {
+                rest.append(jobs[j]);
+            }
+            return _compile_halves(ir, partition, rest, machine, opt_level, trace_time, lto, optimized, cached, how);
+        }
+        if (!forked.value().is_value()) {
+            var compiled = _compile(
+                ir, partition, jobs[i], machine, opt_level, trace_time, lto, optimized, cached, how
+            );
+            if (compiled.is_err()) {
+                File.stderr().write_all($"pepc: {compiled.error()}\n");
+                process.exit(1);
+            }
+            process.exit(0);
+        }
+        var status = forked.value().value().wait();
+        if (status.is_err() or !status.value().success()) {
+            return Result<void, String>.err($"part {jobs[i].part} failed");
+        }
+    }
+    return _compile(ir, partition, jobs[jobs.count - 1], machine, opt_level, trace_time, lto, optimized, cached, how);
 }
 
 ## Compiles `jobs`, whose parts `ir` holds, as `_compile` does each: keeps

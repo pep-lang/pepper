@@ -52,6 +52,9 @@ export struct CompilationUnit {
     var mentions: HashSet<String> = HashSet<String>();
     var shown: HashSet<String> = HashSet<String>();
     var shown_by: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
+    ## The compilation units whose `shown_by` has each name, by index: one
+    ## map every compilation unit of the program shares.
+    var shown_in: HashMap<String, ulong[]> = HashMap<String, ulong[]>();
     ## The names its code can name (`_names_reached`), once a key needed
     ## them: a build computes each key twice, scheduling the workers and
     ## checking. Empty again after `mentions`, `shown` or `shown_by`
@@ -295,6 +298,16 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
             }
         }
     }
+    var shown_in = HashMap<String, ulong[]>();
+    for (var u in 0..out.count) {
+        out[u].shown_in = shown_in;
+        for (var (name, _) in out[u].shown_by) {
+            if (!shown_in.contains(name)) {
+                shown_in[name] = Array<ulong>();
+            }
+            shown_in[name].append(u);
+        }
+    }
     return out;
 }
 
@@ -425,14 +438,24 @@ _names_reached(units: CompilationUnit[], unit: CompilationUnit): HashSet<String>
             add(name);
         }
     }
+    var reads = Array<bool>();
+    for (var _ in 0..units.count) {
+        reads.append(false);
+    }
+    for (var d in unit.reads) {
+        reads[d] = true;
+    }
     while (pending.count > 0) {
         var name = pending.pop();
-        for (var d in unit.reads) {
-            var shown = units[d].shown_by.try_get(name);
-            if (!shown.is_value()) {
+        var holders = unit.shown_in.try_get(name);
+        if (!holders.is_value()) {
+            continue;
+        }
+        for (var d in holders.value()) {
+            if (!reads[d]) {
                 continue;
             }
-            for (var shown_name in shown.value()) {
+            for (var shown_name in units[d].shown_by[name]) {
                 add(shown_name);
             }
         }
