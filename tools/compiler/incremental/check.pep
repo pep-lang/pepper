@@ -219,6 +219,11 @@ export check_compilation_units(
             var found = prechecked.contains(k) ?
                 Optional<(u8[], String, String)>.Value(prechecked[k]) :
                 find_checked(cache, program, unit);
+            if (found.is_value()
+                and !prechecked.contains(k)
+                and !fields_still_match(cache, unit, owns_read(unit, owns))) {
+                found = Optional<(u8[], String, String)>.Empty;
+            }
             if (found.is_value()) {
                 var (bytes, own, warned) = found.value();
                 # Its warnings, as checking it gave them.
@@ -329,7 +334,14 @@ export check_compilation_units(
             bytes,
             own
         ) = store_checked(
-            cache, program, unit, checked_unit, base, render_warnings(warnings_in(warnings, unit), sources), kept
+            cache,
+            program,
+            unit,
+            checked_unit,
+            base,
+            render_warnings(warnings_in(warnings, unit), sources),
+            kept,
+            owns_read(unit, owns)
         );
         owns[k] = own;
         records[k] = bytes;

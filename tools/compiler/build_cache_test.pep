@@ -804,3 +804,62 @@ keeps_the_places_of_what_a_reader_copies_when_an_edit_moves_them() {
     _build_methods(root);
     expect_true(_records_of(root, b) == 1);
 }
+
+# Adding a field a reader does not name keeps the reader's record; one that
+# copies the struct, which copies every field, is checked again
+# (`fields_still_match`).
+[Test]
+keeps_the_readers_of_a_struct_a_field_edit_does_not_reach() {
+    var folder = TempFolder("field_keys");
+    var root = folder.path;
+    _write_fields(root, "");
+    _build_methods(root);
+    var program = _load(root);
+    var b = _unit_of(program, "b.pep");
+    var c = _unit_of(program, "c.pep");
+    expect_true(_records_of(root, b) == 1);
+    expect_true(_records_of(root, c) == 1);
+    var kept = _kept_fields(root.join(Path("cache")), c);
+    expect_true(kept.contains("Thing "));
+    _write_fields(root, "    var m: int = 3;\n");
+    _build_methods(root);
+    expect_true(_records_of(root, b) == 1);
+    # Its key is the same; its record is checked again, on the new fields.
+    expect_true(_records_of(root, c) == 1);
+    expect_true(_kept_fields(root.join(Path("cache")), c) != kept);
+}
+
+# The struct lines kept beside the records of `unit` under `dir`, the cache.
+_kept_fields(dir: Path, unit: String): String {
+    var listing = Directory.open(dir);
+    if (listing.is_err()) {
+        return "";
+    }
+    var out = StringBuilder();
+    for (var entry in listing.value().entries().value()) {
+        if (entry.is_directory) {
+            out.append(_kept_fields(entry.path, unit));
+        } else if (entry.name.ends_with(".rec.fields") and dir.to_string().ends_with(unit)) {
+            out.append(File.read_to_string(entry.path).value());
+        }
+    }
+    return out.to_string();
+}
+
+# A struct `Thing` with `fields` after its first, which `b.pep` reads a field
+# of and `c.pep` copies.
+_write_fields(root: Path, fields: String) {
+    File.write_text(
+        root.join(Path("a.pep")),
+        "export struct Thing {\n    var n: int;\n" + fields + "    construct(n: int) {\n        this.n = n;\n    }\n}\n"
+    );
+    File.write_text(root.join(Path("b.pep")), "import \"a\";\nexport b_value(): int {\n    return Thing(2).n;\n}\n");
+    File.write_text(
+        root.join(Path("c.pep")),
+        "import \"a\";\nexport c_value(): int {\n    var t = Thing(1);\n    return copy(t).n;\n}\n"
+    );
+    File.write_text(
+        root.join(Path("main.pep")),
+        "import \"b\";\nimport \"c\";\nmain(): int {\n    return b_value() + c_value() - 3;\n}\n"
+    );
+}

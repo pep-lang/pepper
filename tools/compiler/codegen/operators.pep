@@ -495,7 +495,7 @@ extend Generator {
                     }
                     field_ty = resolved.value();
                 }
-                var gep = builder.field_pointer(desc.llvm_type, base_ptr, index, node.name);
+                var gep = field_address(desc, base_ptr, index, node.name);
                 if (lhs_temp.is_value()) {
                     deferred_temps.append(Temporary(this_ptr, lhs_temp.value()));
                 }

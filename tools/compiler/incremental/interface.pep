@@ -115,8 +115,8 @@ export interface_hash(file: link.ProgramFile, index: uint, facts: HashMap<sema.L
 ## The names in a program file's code: every identifier in it, and those
 ## other units' code can reach through it. A top-level function or struct
 ## (an enum is one) shows the identifiers in it outside the bodies of
-## functions that are not generic, and outside the names of its own and
-## its methods, but only to code that names it; everything else in the
+## functions that are not generic, and outside the names of its own, its
+## methods' and the fields it keys apart, but only to code that names it; everything else in the
 ## file shows its identifiers to all code that reads it.
 ## `compilation_unit_key` takes the entries of a function, struct or enum
 ## that is not generic in another unit's own interface only when the
@@ -156,6 +156,13 @@ export file_names(file: link.ProgramFile): (HashSet<String>, HashSet<String>, Ha
                 for (var methods in [decl.methods, decl.constructors]) {
                     for (var method in methods) {
                         hide(method, decl.generic_params.count > 0);
+                    }
+                }
+                # Fields its own interface keeps a line each for
+                # (`sema.splits_fields`), taken by code that names them.
+                if (decl.generic_params.count == 0 and decl.attributes.count == 0 and !decl.enumeration.is_value()) {
+                    for (var field in decl.fields) {
+                        hidden.append(field.name_span);
                     }
                 }
                 declared.append(decl.span);

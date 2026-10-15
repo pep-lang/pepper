@@ -12,7 +12,7 @@ import "address";
 import "calls";
 import "checks";
 import "functions";
-import [Generator, Temporary] from "generator";
+import [Generator, StructDesc, Temporary] from "generator";
 import "generator";
 import "globals";
 import "lazy";
@@ -452,7 +452,7 @@ extend Generator {
         if (!field_ty.is_value()) {
             return fail<llvm.Value>($"unknown field type {field_sema}");
         }
-        var gep = builder.field_pointer(desc.llvm_type, base_ptr, idx as uint, name);
+        var gep = field_address(desc, base_ptr, idx as uint, name);
         # Struct-typed fields store a reference (the heap object's pointer),
         # exactly like struct locals and params: load the stored pointer, not
         # the slot address.
@@ -500,6 +500,34 @@ extend Generator {
             deferred_temps.append(Temporary(slot_ptr, lhs_temp.value()));
         }
         return Result<llvm.Value>.ok(value);
+    }
+
+    ## The address of field `index` of the object at `base_ptr`, whose struct
+    ## `desc` describes: for an object of a struct a file declares, past an
+    ## offset loaded from a constant that file's part defines (and folds),
+    ## so other parts' code, and their cached objects, do not depend on the
+    ## layout, and a field added keeps them; else by the layout.
+    field_address(desc: StructDesc, base_ptr: llvm.Value, index: uint, name: String): llvm.Value {
+        if (desc.loc.is_none() or desc.name.contains("<") or !is_object(desc.llvm_type)) {
+            return builder.field_pointer(desc.llvm_type, base_ptr, index, name);
+        }
+        var (field_name, _) = desc.fields[index as ulong];
+        var global_name = $"{desc.name}.offset.{field_name}";
+        var i64 = context.int64_type();
+        var global = ir.global(global_name);
+        if (!global.is_value()) {
+            var made = ir.add_global(i64, global_name);
+            made.set_initializer(i64.const_uint(machine.offset_of(desc.llvm_type, index)));
+            made.set_global_constant(true);
+            own(global_name, desc.loc);
+            global = Optional<llvm.Value>.Value(made);
+        }
+        var offset = builder.load(i64, global.value(), "offset");
+        offset.set_metadata(
+            context.metadata_kind("invariant.load"),
+            context.metadata_value(context.metadata_node(Array<llvm.Metadata>()))
+        );
+        return builder.element_pointer(context.int8_type(), base_ptr, [offset], true, name);
     }
 
     ## `sizeof(T)`: a struct's slot is pointer-sized; any other type's ABI

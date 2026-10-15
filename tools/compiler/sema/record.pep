@@ -198,6 +198,18 @@ export struct RecordOut {
     }
 }
 
+## Whether struct `st`'s own interface keeps each field under a line of
+## its own (`S\t.{field}`), taken only by a reader that names the field:
+## a struct that is not generic, with no attributes (a value struct lays
+## its fields out in its readers, an attribute struct takes positional
+## arguments in their order), and no enum's.
+##
+## @param st the struct
+## @returns whether it does
+export splits_fields(st: StructDef): bool {
+    return st.generic_params.count == 0 and st.attributes.count == 0 and !st.enum_cases.is_value();
+}
+
 ## A record being read.
 ## Returns the hash of what was written to `out`, as hex.
 ##
@@ -846,7 +858,7 @@ export struct DeltaBase {
         lines.append_all(_own);
         lines.sort((a, b) => a.compare(b));
         var hasher = digest.Blake3();
-        hasher.update("pepper own interface 4\n");
+        hasher.update("pepper own interface 6\n");
         for (var line in lines) {
             hasher.update(line);
             hasher.update("\n");

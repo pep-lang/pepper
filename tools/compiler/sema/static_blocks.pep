@@ -2627,6 +2627,7 @@ struct _Expander {
                 ).with_note($"'{shown}' declared here", Optional<Location>.Value(location_of(st.loc)))
             );
         }
+        module.field_lists_read.insert(st.name);
         var found = Array<_Found>();
         var owner = demangle_name(st.ty.name);
         var properties = Array<PropertyDef>();

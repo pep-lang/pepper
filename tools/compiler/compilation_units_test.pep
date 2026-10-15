@@ -289,6 +289,18 @@ keys_a_unit_on_the_functions_it_can_name() {
     key = incremental.compilation_unit_key(units, 1, owns);
     owns[0] = "public\n_Box\tlength 3\n_Box\t== 2\ntwice 1";
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    # A field's line: taken only when the reader names the field.
+    owns[0] = "public\n_Box\tlength 3\n_Box\t== 2\n_Box\t.y 1\ntwice 1";
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_Box\tlength 3\n_Box\t== 2\n_Box\t.y 2\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) == key);
+    units[1].mentions.insert("y");
+    units[1].reach = Optional<HashSet<String>>.Empty;
+    key = incremental.compilation_unit_key(units, 1, owns);
+    owns[0] = "public\n_Box\tlength 3\n_Box\t== 2\n_Box\t.y 3\ntwice 1";
+    expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
+    units[1].mentions.remove("y");
+    units[1].reach = Optional<HashSet<String>>.Empty;
     units[1].mentions.remove("_Box");
     units[1].reach = Optional<HashSet<String>>.Empty;
     key = incremental.compilation_unit_key(units, 1, owns);

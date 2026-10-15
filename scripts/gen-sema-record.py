@@ -585,16 +585,32 @@ def own_lines(label, expr, tree, blank_bodies='true'):
         return head + ['    ' + l for l in write_to(o, expr, tree)] + [_own_call(label, expr, f'interface_text({o})'), '}']
     # A struct's methods each get an entry of their own (`DeltaBase.own_method`),
     # its shape the rest: a reader that names the struct but not a method
-    # keeps its key when that method changes.
-    s, ms, m, om = fresh('_s'), fresh('_methods'), fresh('_m'), fresh('_own')
+    # keeps its key when that method changes. So do the fields of a struct
+    # with no attributes (no value struct, no attribute struct), under
+    # `.{field}`: a reader that names none keeps its key when one is added
+    # (`DeltaBase.splits_fields`).
+    s, ms, fs, m, om, f, fo, of = (fresh('_s'), fresh('_methods'), fresh('_fields'), fresh('_m'), fresh('_own'),
+                                   fresh('_f'), fresh('_order'), fresh('_own'))
     return (head + [f'    var {s} = {expr};', f'    var {ms} = {s}.method_members;',
-                    f'    {s}.method_members = Array<FunctionDef>();']
+                    f'    {s}.method_members = Array<FunctionDef>();', f'    var {fs} = {s}.field_members;',
+                    f'    var split_{fs} = splits_fields({s});', f'    if (split_{fs}) {{',
+                    f'        {s}.field_members = Array<VariableDef>();', '    }']
             + ['    ' + l for l in write_to(o, s, tree)]
-            + [f'    {s}.method_members = {ms};', _own_call(label, s, f'interface_text({o})'),
+            + [f'    {s}.method_members = {ms};', f'    {s}.field_members = {fs};',
+               _own_call(label, s, f'interface_text({o})'),
                f'    for (var {m} in {ms}) {{', f'        var {om} = RecordOut();',
                f'        {om}.blank_bodies = {blank_bodies};', f'        {om}.blank_locs = true;',
                f'        {om}.pending_as_bytes = true;', f'        _m_FunctionDef_write({om}, {m});',
-               f'        base.own_method("{label}", {s}.name, {m}.name, interface_text({om}));', '    }', '}'])
+               f'        base.own_method("{label}", {s}.name, {m}.name, interface_text({om}));', '    }',
+               # The fields' order goes under `.#order`, which no reader
+               # names: only one that uses the whole list (`member_lines`)
+               # depends on it, so a field inserted keeps the others' lines.
+               f'    if (split_{fs}) {{', f'        var {fo} = StringBuilder();', f'        for (var {f} in {fs}) {{',
+               f'            var {of} = RecordOut();', f'            {of}.blank_locs = true;',
+               f'            _m_VariableDef_write({of}, {f});',
+               f'            base.own_method("{label}", {s}.name, "." + {f}.name, interface_text({of}));',
+               f'            {fo}.append({f}.name);', f'            {fo}.append(",");', '        }',
+               f'        base.own_method("{label}", {s}.name, ".#order", {fo}.to_string());', '    }', '}'])
 
 def _own_call(label, element, hash_expr):
     """The call adding `element`'s entry to the own interface: a function,
@@ -1341,6 +1357,7 @@ import [
     merge_by_place,
     RecordIn,
     RecordOut,
+    splits_fields,
     struct_named,
     summary_without_place,
     write_interface_checked_summaries,

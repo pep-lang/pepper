@@ -6244,6 +6244,9 @@ export struct Module {
     ## In memory only: kept by `copy()`, not fingerprinted, written as
     ## JSON or recorded.
     var extended_checked: HashSet<String> = HashSet<String>();
+    ## In memory only: kept by `copy()`, not fingerprinted, written as
+    ## JSON or recorded.
+    var field_lists_read: HashSet<String> = HashSet<String>();
     var imports: Array<ast.Import>;
     var structs: Array<StructDef>;
     var traits: Array<TraitDef>;
@@ -6535,6 +6538,7 @@ export struct Module {
         );
         _copy.own_decls = this.own_decls;
         _copy.extended_checked = this.extended_checked;
+        _copy.field_lists_read = this.field_lists_read;
         return _copy;
     }
 

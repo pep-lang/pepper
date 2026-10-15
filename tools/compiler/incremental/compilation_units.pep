@@ -329,7 +329,7 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]): String {
     var unit = units[k];
     var hasher = digest.Blake3();
-    hasher.update("pepper checked compilation unit 7\n");
+    hasher.update("pepper checked compilation unit 9\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
     if (!unit.reach.is_value()) {
@@ -391,8 +391,10 @@ struct _OwnLines {
             }
             var (owner, member) = method.value();
             names.append(owner);
-            members.append(member);
-            unnamed.append(sema.called_without_naming(member));
+            # A field's line (`.{field}`) goes by the field's name.
+            bool field = member.starts_with(".");
+            members.append(field ? member.substr_bytes(1, member.size - 1) : member);
+            unnamed.append(!field and sema.called_without_naming(member));
         }
         all = hasher.finish_hex();
     }
@@ -657,6 +659,9 @@ _record_folder(name: String): String {
 ## @param base the index of the module the compilation unit was checked on
 ## @param warned the compilation unit's warnings, rendered, or empty
 ## @param source what a later re-check of it reads (`recheck_source`)
+## @param read_owns the own interfaces of the compilation units it reads
+##   (`owns_read`), which the structs whose whole member lists it used are
+##   kept beside it from (`member_lines`)
 ## @returns the record and the own interface
 export store_checked(
     cache: Cache,
@@ -665,13 +670,17 @@ export store_checked(
     checked_unit: sema.CheckedUnit,
     base: sema.DeltaBase,
     warned: String,
-    source: String
+    source: String,
+    read_owns: String[]
 ): (u8[], String) {
     var bytes = _record_bytes(program, checked_unit, base);
     var own = base.own_text();
     var path = record_path(cache, unit);
     var source_path = Path($"{path}.src");
     var source_partial = Path($"{source_path}.{process.id()}");
+    var fields_path = _fields_path(path);
+    var fields_partial = Path($"{fields_path}.{process.id()}");
+    var fields = member_lines(read_owns, _whole_member_lists(checked_unit.module));
     var folder = path.parent().value();
     if (Directory.create_all(folder).is_err()) {
         return (bytes, own);
@@ -685,6 +694,8 @@ export store_checked(
         or File.write_text(own_partial, own).is_err()
         or File.write_text(warn_partial, warned).is_err()
         or File.write_text(source_partial, source).is_err()
+        or File.write_text(fields_partial, fields).is_err()
+        or File.rename(fields_partial, fields_path).is_err()
         or File.rename(source_partial, source_path).is_err()
         or File.rename(warn_partial, warn_path).is_err()
         or File.rename(own_partial, own_path).is_err()
@@ -693,6 +704,7 @@ export store_checked(
         File.remove(own_partial);
         File.remove(warn_partial);
         File.remove(source_partial);
+        File.remove(fields_partial);
         return (bytes, own);
     }
     _prune_records(folder);
@@ -722,6 +734,112 @@ export find_checked(cache: Cache, program: link.Program, unit: CompilationUnit):
     }
     var found = (bytes.value(), own.value(), warned.value());
     return Optional<(u8[], String, String)>.Value(found);
+}
+
+# Where the structs whose whole member lists the record at `path` used are
+# kept, with what they were (`member_lines`).
+_fields_path(path: Path): Path {
+    return Path($"{path}.fields");
+}
+
+## Whether the structs whose whole member lists `unit`'s record under its key
+## used (`store_checked`) have the member lines they had when it was checked:
+## a record that copied, extended or reflected on a struct of a compilation
+## unit it reads depends on fields its key does not take (the recorded
+## dependencies of Salsa's and Bazel's early cutoff). A build that finds
+## the record treats a difference as a miss.
+##
+## @param cache the build cache
+## @param unit the compilation unit, its key set
+## @param read_owns the own interfaces of the compilation units it reads
+##   (`owns_read`)
+## @returns whether they match
+export fields_still_match(cache: Cache, unit: CompilationUnit, read_owns: String[]): bool {
+    var kept = File.read_to_string(_fields_path(record_path(cache, unit)));
+    if (kept.is_err()) {
+        return false;
+    }
+    if (kept.value().is_empty) {
+        return true;
+    }
+    var names = Array<String>();
+    for (var line in kept.value().trim().split("\n")) {
+        names.append(line.substr(0, line.find(" ") as ulong));
+    }
+    return member_lines(read_owns, names) == kept.value();
+}
+
+## The own interfaces of the compilation units `unit` reads, in order.
+##
+## @param unit the compilation unit
+## @param owns each compilation unit's own interface, by number
+## @returns those it reads
+export owns_read(unit: CompilationUnit, owns: String[]): String[] {
+    var out = Array<String>();
+    for (var d in unit.reads) {
+        out.append(owns[d]);
+    }
+    return out;
+}
+
+## The own-interface lines of each of structs `names` in `owns`, the own
+## interfaces of the compilation units a compilation unit reads, hashed:
+## a line each, `<struct> <hash>`, sorted. A struct with none (one the
+## compilation unit declares) is left out.
+##
+## @param owns the own interfaces
+## @param names the structs' full names
+## @returns the lines
+export member_lines(owns: String[], names: String[]): String {
+    var found = HashMap<String, Array<String>>();
+    for (var name in names) {
+        found[sema.function_name(name)] = Array<String>();
+    }
+    if (found.count == 0) {
+        return "";
+    }
+    for (var own in owns) {
+        for (var line in own.split("\n")) {
+            var name = line.substr(0, line.find(" ") as ulong);
+            var tab = name.find("\t");
+            var owner = tab < 0 ? name : name.substr(0, tab as ulong);
+            if (found.contains(owner)) {
+                found[owner].append(line);
+            }
+        }
+    }
+    var plains = Array<String>();
+    for (var (plain, _) in found) {
+        plains.append(plain);
+    }
+    plains.sort((a, b) => a.compare(b));
+    var out = StringBuilder();
+    for (var plain in plains) {
+        var lines = found[plain];
+        if (lines.is_empty) {
+            continue;
+        }
+        var hasher = digest.Blake3();
+        for (var line in lines) {
+            hasher.update(line);
+            hasher.update("\n");
+        }
+        out.append($"{plain} {hasher.finish_hex()}\n");
+    }
+    return out.to_string();
+}
+
+# The structs of compilation units it read whose whole member lists checking
+# `module` used: those it extended, copied or reflected on.
+_whole_member_lists(module: sema.Module): String[] {
+    var out = Array<String>();
+    for (var name in module.extended_checked) {
+        out.append(name);
+    }
+    for (var name in module.field_lists_read) {
+        out.append(name);
+    }
+    return out;
 }
 
 # Where the warnings of the record at `path` are kept.
@@ -778,6 +896,7 @@ _prune_records(folder: Path) {
         File.remove(_own_path(path));
         File.remove(_warn_path(path));
         File.remove(Path($"{path}.src"));
+        File.remove(_fields_path(path));
     }
 }
 

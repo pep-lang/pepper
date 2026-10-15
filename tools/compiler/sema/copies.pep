@@ -377,6 +377,9 @@ _plan(module: Module, safe: ThreadSafeStructs, ty: TypeName): _CopyPlan {
     if (how.is_value()) {
         return _CopyPlan.Object(how);
     }
+    # Whether its fields can be copied: a record checked on them depends on
+    # them all (`Module.field_lists_read`).
+    module.field_lists_read.insert(st.name);
     if (st.destructor.body.is_value() and st.destructor.body.value().items.count > 0) {
         var blocker = _Blocker(_BlockerKind.Destructor, ty);
         blocker.loc = st.loc;
@@ -413,6 +416,7 @@ _contained(module: Module, ty: TypeName, copyable: bool): Array<(TypeName, _Hop)
         }
         return out;
     }
+    module.field_lists_read.insert(st.name);
     for (var f in st.field_members) {
         if (!_is_head_field(f) and !f.ty.is_weak()) {
             out.append((f.ty, _Hop(true, ty, f.name, TypeName(), _known_loc(f.type_loc, f.loc))));

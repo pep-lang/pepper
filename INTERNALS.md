@@ -1619,6 +1619,14 @@ recompiles that small part, not the code below the edit. And a file that
 `_split` gave a part alone spreads its symbols over a power of two of
 parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
 symbol's hash, so an edit to one function recompiles one of them.
+And code outside the file that declares an object struct reaches its
+fields by offset, not by layout (`field_address`): it loads the field's
+offset from `<struct>.offset.<field>`, an `i64` constant that the
+declaring file's part defines and folds (`!invariant.load`, so a loop
+hoists the load), and indexes the object by bytes. A field added to a
+struct many files use leaves their IR, and so their parts, as they were.
+A cold self-build with these loads took 475.0 / 454.2 s against 473.1 /
+459.3 s without (4 cloud cores, -O2).
 For an ELF target the entry part's static constructors first move from
 `llvm.global_ctors` into an `.init_array` section (`place_constructors`,
 `use_init_array`): a machine made through the C API emits `.ctors`, which
@@ -2900,7 +2908,21 @@ it without naming it (`sema.called_without_naming`: operators, built-in
 members such as accessors, and the methods the lowerings, passes and
 codegen call, like `to_string` or `enter`); a trait's methods are named in
 the trait, which every reader of it reaches. So adding or changing a method
-of a struct many units name checks again only the units that call it. A
+of a struct many units name checks again only the units that call it. The fields of a struct that splits them (`sema.splits_fields`: not
+generic, no attributes, not an enum; a value struct lays its fields out in
+its readers and an attribute struct takes positional arguments) get lines
+the same way, `S\t.f`, and their order one, `S\t.#order`, that no
+reader names (so a field inserted keeps the others' lines); the struct's line
+keeps the rest, its constructors among them, and `file_names` hides a
+field's name like a method's. A reader takes a field's line only when it
+names the field. Some checks use a foreign struct's whole field list
+without naming the fields: copying it (`copies._plan`, `_contained`),
+extending it (`Module.extended_checked`, which a record carries whole) and
+`members` reflection. Those structs go to `Module.field_lists_read`, and
+`store_checked` keeps their member lines' hashes beside the record
+(`.fields`, `member_lines`). A build that finds the record under its key
+takes it only when `fields_still_match`: the recorded dependencies of
+Salsa's and Bazel's early cutoff. A
 reader whose record patches the struct (an extension's methods) merges its
 additions after the struct's methods, whatever they are now. The runtime's
 lines are always taken: the compiler's own code calls its functions by name

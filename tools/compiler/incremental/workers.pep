@@ -160,9 +160,10 @@ export check_in_workers(
             progressed = true;
             units[k].key = compilation_unit_key(units, k, owns);
             var found = find_checked(cache, program, units[k]);
-            if (found.is_value() and usable(k)) {
+            if (found.is_value() and usable(k) and fields_still_match(cache, units[k], owns_read(units[k], owns))) {
                 var (bytes, own, warned) = found.value();
                 File.write_bytes(worker_file(dir, k, "rec"), bytes);
+                File.write_text(worker_file(dir, k, "own"), own);
                 owns[k] = own;
                 prechecked[k] = (bytes, own, warned);
                 checked[k] = true;
@@ -429,7 +430,14 @@ export check_for_worker(
     var t4 = os.Instant.now();
     stages.append($"finish {(t4 - t3).milliseconds()}\n");
     var warned = render_warnings(warnings, sources);
-    var (bytes, own) = store_checked(cache, program, unit, checked_unit, base, warned, kept);
+    # The own interfaces of what it reads, which its workers or the build
+    # left beside their records.
+    var read_owns = Array<String>();
+    for (var d in unit.reads) {
+        var read = File.read_to_string(worker_file(dir, d, "own"));
+        read_owns.append(read.is_ok() ? read.value() : "");
+    }
+    var (bytes, own) = store_checked(cache, program, unit, checked_unit, base, warned, kept, read_owns);
     var t5 = os.Instant.now();
     stages.append($"store {(t5 - t4).milliseconds()}\n");
     File.write_bytes(worker_file(dir, k, "rec"), bytes);
