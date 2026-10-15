@@ -2895,9 +2895,10 @@ compiler's own code calls its functions by name (`_pep_panic`).
 checks every compilation unit but the last in `pepc --compilation-unit-worker <dir>` children,
 started with the build's own command line. A compilation unit is handed to an idle
 worker once every compilation unit it reads is done, as its number and key on the
-worker's standard input; before its first compilation unit a worker is told the compilation units
-done when it got it (`done k...`), and reads and links the bodies of the
-other files only, as the build's own process skips the compilation units it loads. The
+worker's standard input; before each one a worker reads and links the
+bodies of its files only (`Program.link_bodies`, which links more files'
+bodies each time it is called), since the compilation units it reads come as
+records. The
 worker checks it as below and leaves its record, own interface, what its
 object defines, warnings or error in `<dir>` (`<k>.rec`, `<k>.own`,
 `<k>.defines`, `<k>.warn`, `<k>.err`), then `<k>.done`; the compilation units it reads

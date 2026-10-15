@@ -63,8 +63,6 @@ _read_worker_record(dir: Path, k: ulong, unit: CompilationUnit): Result<(u8[], S
 struct _Worker {
     var child: process.Child;
     var unit: long = -1;
-    ## Whether it was told which compilation units were done (its first line).
-    var told: bool = false;
 
     construct(child: process.Child) {
         this.child = child;
@@ -215,21 +213,7 @@ export check_in_workers(
             }
             var k = ready.remove_at(0);
             var worker = workers[idle.value()];
-            var line = StringBuilder();
-            if (!worker.told) {
-                # The compilation units done already, whose files' bodies the
-                # worker need not read, as the build's own process does not.
-                line.append("done");
-                for (var d in 0..units.count) {
-                    if (checked[d]) {
-                        line.append($" {d}");
-                    }
-                }
-                line.append("\n");
-                worker.told = true;
-            }
-            line.append($"{k} {units[k].key}\n");
-            var sent = worker.child.stdin().write_all(line.to_string());
+            var sent = worker.child.stdin().write_all($"{k} {units[k].key}\n");
             if (sent.is_err()) {
                 failure = Optional<String>.Value($"a compilation unit worker stopped: {sent.error().message}");
                 break;
@@ -311,10 +295,9 @@ export check_in_workers(
 ## A worker's side of `check_in_workers`: reads lines from standard input until
 ## it ends, and for each `<k> <key>` hands compilation unit `k`, with that key
 ## and the records of the compilation units it reads (`<d>.rec` in `dir`), to
-## `work`, leaves its error in `<k>.err` if it gives one, then `<k>.done`. The
-## first line, `done k...`, names the compilation units done when the worker
-## started, whose files' bodies it does not read; the others' are linked before
-## the first compilation unit it is given.
+## `work`, leaves its error in `<k>.err` if it gives one, then `<k>.done`. It
+## links the bodies of each compilation unit's own files before checking it
+## (`Program.link_bodies`); what it reads comes as records.
 ##
 ## @param program the program, loaded as the build loads it, its bodies
 ##   deferred
@@ -331,38 +314,13 @@ export serve_compilation_units(
     clock: Clock,
     work: (ulong, HashMap<ulong, u8[]>) => String?
 ): int {
-    # The files whose bodies are read: all but those of the compilation units
-    # done when the worker started (its first line, `done k...`), which it is
-    # never given; linked at the first compilation unit it is.
-    var bodies = every_file(program);
-    bool linked = false;
     for (var read in File.stdin().lines()) {
         if (read.is_err()) {
             break;
         }
         var parts = read.value().trim().split(" ");
-        if (parts.count > 0 and parts[0] == "done") {
-            for (var i in 1..parts.count) {
-                var d = ulong.parse(parts[i]);
-                if (d.is_value() and d.value() < units.count) {
-                    for (var file in units[d.value()].files) {
-                        bodies[file] = false;
-                    }
-                }
-            }
-            continue;
-        }
         if (parts.count != 2) {
             continue;
-        }
-        if (!linked) {
-            var unread = program.link_bodies(bodies);
-            if (unread.is_value()) {
-                File.stderr().write_all($"pepc: {unread.value()}\n");
-                return 1;
-            }
-            linked = true;
-            clock.lap("worker link bodies");
         }
         var number = ulong.parse(parts[0]);
         if (!number.is_value() or number.value() >= units.count) {
@@ -371,6 +329,20 @@ export serve_compilation_units(
         var k = number.value();
         var unit = units[k];
         unit.key = parts[1];
+        # Only its own files' bodies are read: what it reads comes as records.
+        var bodies = Array<bool>();
+        for (var _ in 0..program.files.count) {
+            bodies.append(false);
+        }
+        for (var file in unit.files) {
+            bodies[file] = true;
+        }
+        var unread = program.link_bodies(bodies);
+        if (unread.is_value()) {
+            File.stderr().write_all($"pepc: {unread.value()}\n");
+            return 1;
+        }
+        clock.lap("worker link bodies");
         var records = HashMap<ulong, u8[]>();
         String? error;
         for (var d in unit.reads) {

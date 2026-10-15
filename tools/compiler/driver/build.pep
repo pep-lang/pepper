@@ -655,8 +655,8 @@ _check_in_workers(
 ## object in the cache as the build would, and leaves in `dir` its record
 ## (`<k>.rec`), its own interface (`<k>.own`), what its object defines
 ## (`<k>.defines`), its warnings, rendered (`<k>.warn`), or its error
-## (`<k>.err`), then `<k>.done`. Its first line (`done k...`) names the
-## compilation units done when it started, whose files' bodies it does not read.
+## (`<k>.err`), then `<k>.done`. It reads the bodies of each compilation
+## unit's own files only.
 ##
 ## @param program the program, loaded and linked as the build loads it
 ## @param options the build's options

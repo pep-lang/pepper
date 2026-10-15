@@ -221,6 +221,21 @@ export struct PendingLink {
     finish(bodies: bool[]): Linked {
         return _linker.finish(bodies);
     }
+
+    ## After `finish`, rewrites file `file`'s bodies too, its module read
+    ## again whole.
+    ##
+    ## @param file the file
+    ## @returns its scope, and the errors in it
+    finish_bodies(file: ulong): (FileScope, ModuleError[]) {
+        var before = _linker.errors.count;
+        var scope = _linker.finish_file(file, true);
+        var errors = Array<ModuleError>();
+        for (var i in before.._linker.errors.count) {
+            errors.append(_linker.errors[i]);
+        }
+        return (scope, errors);
+    }
 }
 
 # Names a file declares, exports, or can see, each with the parameter
@@ -626,6 +641,8 @@ struct _Linker {
     # whose extensions it sees.
     var prepared_bindings: Array<_Bindings> = Array<_Bindings>();
     var prepared_extensions: Array<HashSet<ulong>> = Array<HashSet<ulong>>();
+    # `extended_by()`, as `finish` found it.
+    var _extended_by: HashSet<ulong>[] = Array<HashSet<ulong>>();
     # Per file, the names that denote a type there (struct, alias, trait).
     var types_of: HashSet<String>[] = Array<HashSet<String>>();
     # Per file, the names that denote a struct or type alias there.
@@ -2250,35 +2267,11 @@ struct _Linker {
     # `bodies` marks, and returns the scopes and every error.
     finish(bodies: bool[]): Linked {
         ulong n = files.count;
-        var bindings = prepared_bindings;
-        var extensions = prepared_extensions;
-        var extended_by = extended_by();
+        _extended_by = extended_by();
         var linked = Linked();
         ulong i = 0;
         while (i < n) {
-            var named = named_bindings(i, bindings[i]);
-            var rewriter = _Rewriter(this, i, bindings[i], extensions[i]);
-            rewriter.bodies = bodies[i];
-            rewriter.module(files[i].module);
-            var scope = FileScope();
-            scope.imported = rewriter.imported;
-            scope.named = named;
-            scope.extensions = extensions[i];
-            scope.extended_by = extended_by[i];
-            for (var (_, c) in bindings[i].unqualified) {
-                if (c.is_value()) {
-                    scope.bound.insert(c.value());
-                }
-            }
-            for (var (_, t) in bindings[i].qualified) {
-                for (var (_, c) in exports[t]) {
-                    scope.bound.insert(c);
-                }
-            }
-            for (var (_, c) in bindings[i].module) {
-                scope.bound.insert(c);
-            }
-            linked.scopes.append(scope);
+            linked.scopes.append(finish_file(i, bodies[i]));
             i += 1;
         }
         sort_errors(errors);
@@ -2289,6 +2282,35 @@ struct _Linker {
         }
         linked.overload_unions = unions.by_module();
         return linked;
+    }
+
+    # Rewrites file `i`'s spellings, its bodies too when `bodies` says, and
+    # returns its scope; its errors go to `errors`. After `finish`.
+    finish_file(i: ulong, bodies: bool): FileScope {
+        var bindings = prepared_bindings[i];
+        var named = named_bindings(i, bindings);
+        var rewriter = _Rewriter(this, i, bindings, prepared_extensions[i]);
+        rewriter.bodies = bodies;
+        rewriter.module(files[i].module);
+        var scope = FileScope();
+        scope.imported = rewriter.imported;
+        scope.named = named;
+        scope.extensions = prepared_extensions[i];
+        scope.extended_by = _extended_by[i];
+        for (var (_, c) in bindings.unqualified) {
+            if (c.is_value()) {
+                scope.bound.insert(c.value());
+            }
+        }
+        for (var (_, t) in bindings.qualified) {
+            for (var (_, c) in exports[t]) {
+                scope.bound.insert(c);
+            }
+        }
+        for (var (_, c) in bindings.module) {
+            scope.bound.insert(c);
+        }
+        return scope;
     }
 }
 

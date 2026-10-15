@@ -72,8 +72,10 @@ export struct Program {
     ## of the files `bodies` marks are linked, and only theirs are checked
     ## (`check`, `warnings`). A build leaves out the files whose compilation
     ## units its cache holds checked: they and what they import are as they
-    ## were, and checked without an error or a warning then. Without pending
-    ## linking, nothing.
+    ## were, and checked without an error or a warning then. Called again, it
+    ## links the bodies of the files `bodies` marks that it left out before,
+    ## as a compilation unit worker does for each compilation unit it is
+    ## given. Without pending linking, nothing.
     ##
     ## @param bodies per file, whether to link and check its bodies
     ## @returns a syntax error in a body read now, rendered as `load`
@@ -82,10 +84,11 @@ export struct Program {
         if (!_pending.is_value()) {
             return Optional<String>.Empty;
         }
+        bool again = this.bodies.count > 0;
         # Loading read only the declarations: these files are read again,
         # whole. The declarations come out the same.
         for (var i in 0..files.count) {
-            if (i < bodies.count and !bodies[i]) {
+            if ((i < bodies.count and !bodies[i]) or (again and this.bodies[i])) {
                 continue;
             }
             var f = files[i];
@@ -95,11 +98,23 @@ export struct Program {
                 return Optional<String>.Value(_render(f.name, f.source, error.span, error.message));
             }
             f.module = parsed.value();
+            if (again) {
+                var (scope, more) = _pending.value().finish_bodies(i);
+                scopes[i] = scope;
+                errors.append_all(more);
+                link.sort_errors(errors);
+                this.bodies[i] = true;
+            }
         }
-        var linked = _pending.value().finish(bodies);
-        _pending = Optional<link.PendingLink>.Empty;
-        _take_linked(linked);
-        this.bodies = bodies;
+        if (again) {
+            return Optional<String>.Empty;
+        }
+        var marked = Array<bool>();
+        for (var i in 0..files.count) {
+            marked.append(i >= bodies.count or bodies[i]);
+        }
+        _take_linked(_pending.value().finish(marked));
+        this.bodies = marked;
         return Optional<String>.Empty;
     }
 
