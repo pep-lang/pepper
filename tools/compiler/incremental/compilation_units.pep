@@ -57,6 +57,9 @@ export struct CompilationUnit {
     ## checking. Empty again after `mentions`, `shown` or `shown_by`
     ## change.
     var reach: HashSet<String>? = Optional<HashSet<String>>.Empty;
+    # Its own interface as `compilation_unit_key` reads it, once a key read
+    # it, and the text it was read from.
+    var _own_lines: _OwnLines? = Optional<_OwnLines>.Empty;
 
     construct(name: String) {
         this.name = name;
@@ -299,8 +302,9 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 ## checked on, the own interface (`sema.DeltaBase.own_text`) of each compilation
 ## unit it reads. Of the entries of functions, structs and enums that are not
 ## generic, it takes those its code can name (`_names_reached`), and of a
-## struct's methods those it names or may call without naming (`_takes`);
-## all of the runtime's, which the compiler's own code calls. A change to a compilation unit it does not read, or one
+## struct's methods those it names or may call without naming
+## (`_OwnLines.taken_by`); all of the runtime's, which the compiler's own
+## code calls. A change to a compilation unit it does not read, or one
 ## that keeps what it takes of every own interface in it, keeps the key: the
 ## record is still good (early cutoff).
 ##
@@ -312,7 +316,7 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
 export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]): String {
     var unit = units[k];
     var hasher = digest.Blake3();
-    hasher.update("pepper checked compilation unit 6\n");
+    hasher.update("pepper checked compilation unit 7\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
     if (!unit.reach.is_value()) {
@@ -320,16 +324,20 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
     }
     var reach = unit.reach.value();
     for (var d in unit.reads) {
-        var lines = owns[d].split("\n");
-        hasher.update(lines[0]);
+        var own = _own_lines_of(units[d], owns[d]);
+        hasher.update(own.first);
         hasher.update("\n");
         # The compiler's own code calls the runtime's functions by name
-        # (`_pep_panic`): a reader can reach any of them.
-        bool runtime = units[d].name == "runtime";
-        for (var i in 1..lines.count) {
-            var name = lines[i].substr(0, lines[i].find(" ") as ulong);
-            if (runtime or _takes(reach, name)) {
-                hasher.update(lines[i]);
+        # (`_pep_panic`): a reader can reach any of them, so it takes them
+        # all, as their hash.
+        if (units[d].name == "runtime") {
+            hasher.update(own.all);
+            hasher.update("\n");
+            continue;
+        }
+        for (var i in 0..own.lines.count) {
+            if (own.taken_by(reach, i)) {
+                hasher.update(own.lines[i]);
                 hasher.update("\n");
             }
         }
@@ -337,16 +345,64 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
     return hasher.finish_hex();
 }
 
-# Whether a unit whose code can name `reach` takes the own-interface line of
-# `name`: a declaration it can name, or a method of a struct it can name that
-# it names too or that code may call without naming it.
-_takes(reach: HashSet<String>, name: String): bool {
-    var method = name.split_once("\t");
-    if (!method.is_value()) {
-        return reach.contains(name);
+# An own interface's lines after its first, each with the name it is under:
+# a declaration's, or a method's struct and its own (`DeltaBase.own_text`).
+struct _OwnLines {
+    var text: String;
+    var first: String = "";
+    # The hash of every line after the first.
+    var all: String = "";
+    var lines: String[] = Array<String>();
+    var names: String[] = Array<String>();
+    var members: String[] = Array<String>();
+    # Whether code may call each method without naming it.
+    var unnamed: bool[] = Array<bool>();
+
+    construct(text: String) {
+        this.text = text;
+        var split = text.split("\n");
+        first = split[0];
+        var hasher = digest.Blake3();
+        for (var i in 1..split.count) {
+            var line = split[i];
+            hasher.update(line);
+            hasher.update("\n");
+            var name = line.substr(0, line.find(" ") as ulong);
+            var method = name.split_once("\t");
+            lines.append(line);
+            if (!method.is_value()) {
+                names.append(name);
+                members.append("");
+                unnamed.append(false);
+                continue;
+            }
+            var (owner, member) = method.value();
+            names.append(owner);
+            members.append(member);
+            unnamed.append(sema.called_without_naming(member));
+        }
+        all = hasher.finish_hex();
     }
-    var (owner, member) = method.value();
-    return reach.contains(owner) and (reach.contains(member) or sema.called_without_naming(member));
+
+    # Whether a unit whose code can name `reach` takes line `i`: a
+    # declaration it can name, or a method of a struct it can name that it
+    # names too or that code may call without naming it.
+    taken_by(reach: HashSet<String>, i: ulong): bool {
+        if (!reach.contains(names[i])) {
+            return false;
+        }
+        return members[i].is_empty or unnamed[i] or reach.contains(members[i]);
+    }
+}
+
+# `unit`'s own interface `own` as `compilation_unit_key` reads it, read once.
+_own_lines_of(unit: CompilationUnit, own: String): _OwnLines {
+    if (unit._own_lines.is_value() and unit._own_lines.value().text == own) {
+        return unit._own_lines.value();
+    }
+    var lines = _OwnLines(own);
+    unit._own_lines = Optional<_OwnLines>.Value(lines);
+    return lines;
 }
 
 # The names `unit`'s code can name: those in its files, those the files it
