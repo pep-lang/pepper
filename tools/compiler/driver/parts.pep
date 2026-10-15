@@ -447,10 +447,46 @@ export compile_part(dir: Path, jobs: PartJob[]): Result<void, String> {
     if (trace_time) {
         File.stderr().write_all($"time: read {jobs.count} parts {start.elapsed().milliseconds()} ms\n");
     }
+    return _compile_halves(
+        ir.value(), partition, jobs, machine.value(), level.value(), trace_time, lto, optimized, cached, how
+    );
+}
+
+## Compiles `jobs`, whose parts `ir` holds, as `_compile` does each: keeps
+## the first half's parts in a copy and the rest in `ir`, and compiles each
+## half so, so each part is kept from a module about twice its size rather
+## than from all the jobs' (a copy is most of the time a part takes when it
+## comes from the cache).
+_compile_halves(
+    ir: llvm.Module,
+    partition: codegen.Partition,
+    jobs: PartJob[],
+    machine: llvm.TargetMachine,
+    opt_level: uint,
+    trace_time: bool,
+    lto: bool,
+    optimized: bool,
+    cached: PartCache?,
+    how: String
+): Result<void, String> {
+    if (jobs.count == 1) {
+        return _compile(ir, partition, jobs[0], machine, opt_level, trace_time, lto, optimized, cached, how);
+    }
+    var halves = [Array<PartJob>(), Array<PartJob>()];
+    var parts = [HashSet<uint>(), HashSet<uint>()];
     for (var i in 0..jobs.count) {
-        var module = i + 1 < jobs.count ? ir.value().clone() : ir.value();
-        var compiled = _compile(
-            module, partition, jobs[i], machine.value(), level.value(), trace_time, lto, optimized, cached, how
+        var half = i < jobs.count / 2 ? 0 : 1;
+        halves[half].append(jobs[i]);
+        parts[half].insert(jobs[i].part);
+    }
+    var copy = ir.clone();
+    for (var (half, module) in [(0, copy), (1, ir)]) {
+        var kept = codegen.keep_parts(module, partition, parts[half]);
+        if (kept.is_err()) {
+            return Result<void, String>.err($"cannot split the parts: {kept.error().message}");
+        }
+        var compiled = _compile_halves(
+            module, partition, halves[half], machine, opt_level, trace_time, lto, optimized, cached, how
         );
         if (compiled.is_err()) {
             return compiled;

@@ -1594,8 +1594,11 @@ does not have: one in this process, more in `pepc --compile-part <dir>
 <part> <object>...` children, one per logical CPU at most, given parts of
 about the same size. Each reads the bitcode `compile_parts` wrote to
 `<build>/<name>.<pid>` (a folder per build, so builds at once do not meet)
-once, keeps all its parts (`codegen.keep_parts`), so the copy it makes for
-each part but the last is smaller, and keeps, optimizes and emits each.
+once, keeps all its parts (`codegen.keep_parts`), then halves them
+(`_compile_halves`): the first half's parts kept in a copy, the rest in the
+module, each half halved again, so each part is kept from a module about
+twice its size, not from all the child's parts (an edit keys every part,
+and the copies were most of that), and optimizes and emits each.
 A compilation unit's parts, a worker's or the last's, are also cached by
 their code (`PartCache`): once a part is kept, its key (`_part_key`) hashes
 the compiler, the machine, level and mode, and the part's IR as text (the
