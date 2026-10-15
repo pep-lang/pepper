@@ -3026,7 +3026,8 @@ record under its key, `check_unit` looks for its newest record with the
 same inputs, no warning, and files that differ from the text kept only
 inside the bodies of top-level functions that are not generic, and of the
 methods and constructors that are not generic of structs that are not, or in
-comments and spacing, or in whole such functions and methods the edit adds
+comments and spacing, or in whole such functions and methods, and structs
+that are not generic with no properties or attributes, that the edit adds
 under a name that no other declares and no token of the old text spells
 (`find_recheck_base`, `_align`, which compares the two texts' tokens outside
 those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
@@ -3042,8 +3043,11 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    (`PassState.rechecked_methods`) and the struct counts as extended
    (`extended_checked`), so the passes walk it as a method an extension
    added;
-3. puts each added function or method after the one before it in its file
-   (`_add`), its struct walked as for a changed method; it gives up when
+3. puts each added struct, function or method after the one before it in
+   its file (`_add`, `_add_struct`): a struct unchecked, so the passes
+   check it whole, and a method's struct walked as for a changed method; it
+   gives up on a struct its file declares first, and on a function or
+   method when
    the name is a trait's method, a member of the struct, a function already
    declared, one code calls without naming (`called_without_naming`), a
    constructor, or the first function of its file;

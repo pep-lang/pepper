@@ -642,6 +642,12 @@ export recheck_compilation_unit(
 # again (`methods`). Whether it could: no code the record keeps can call it,
 # or anything it declares already.
 _add(after: sema.Module, fresh: sema.Module, loc: sema.Loc, methods: HashSet<String>): bool {
+    # A struct's implicit constructor is where its name is, too.
+    for (var st in fresh.structs) {
+        if (st.loc == loc) {
+            return _add_struct(after, fresh, loc);
+        }
+    }
     var (by_loc, _) = _by_loc(fresh);
     var found = by_loc.try_get(loc);
     if (!found.is_value()) {
@@ -714,6 +720,31 @@ _add(after: sema.Module, fresh: sema.Module, loc: sema.Loc, methods: HashSet<Str
             methods.insert($"m {owner} method {function.name}");
             return true;
         }
+    }
+    return false;
+}
+
+# Adds the struct at `loc` in `fresh` to `after`, after the struct before
+# it in its file, unchecked, so the passes check it whole. Whether it could:
+# not the first struct of its file, and no struct of its name already.
+_add_struct(after: sema.Module, fresh: sema.Module, loc: sema.Loc): bool {
+    for (var i in 1..fresh.structs.count) {
+        if (fresh.structs[i].loc != loc) {
+            continue;
+        }
+        var added = fresh.structs[i];
+        for (var st in after.structs) {
+            if (st.name == added.name) {
+                return false;
+            }
+        }
+        for (var j in 0..after.structs.count) {
+            if (after.structs[j].loc == fresh.structs[i - 1].loc) {
+                after.structs.insert(j + 1, added);
+                return true;
+            }
+        }
+        return false;
     }
     return false;
 }

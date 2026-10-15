@@ -26,7 +26,7 @@ export struct RecheckBase {
     ## The changed bodies: the file, the function's name span and its
     ## body's span, in the edited file.
     var changed: Array<(uint, ast.Span, ast.Span)> = Array<(uint, ast.Span, ast.Span)>();
-    ## The functions and methods the edit added: the file, and the name's
+    ## The structs, functions and methods the edit added: the file, and the name's
     ## span in the edited file.
     var added: Array<(uint, ast.Span)> = Array<(uint, ast.Span)>();
 
@@ -267,7 +267,7 @@ _bodies(module: ast.Module): Array<(ast.Span, ast.Span)> {
 
 # Whether the old text `old` of file `file` (program file `index`) differs
 # from its text now only inside the bodies `_bodies` finds and in whole
-# functions and methods it adds (`_added`); adds where its kept tokens are
+# structs, functions and methods it adds (`_added`); adds where its kept tokens are
 # now to `shift`, the changed bodies to `changed`, the added ones to
 # `added`, and its old text and tokens to `olds`.
 _align(
@@ -333,10 +333,11 @@ _align(
     return true;
 }
 
-# The functions and methods file `now` declares that `old` does not, each
-# one's whole span and name span: free functions and methods of structs
-# that are not generic, with a body, no generic parameters and a name no
-# other declares. Nothing when `now` drops one `old` declares or adds
+# The structs, functions and methods file `now` declares that `old` does
+# not, each one's whole span and name span: structs that are not generic
+# with no properties or attributes, and free functions and methods of
+# structs that are not generic, with a body, no generic parameters and a
+# name no other declares. Nothing when `now` drops one `old` declares or adds
 # another kind.
 _added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
     var none = Optional<Array<(ast.Span, ast.Span)>>.Empty;
@@ -354,7 +355,8 @@ _added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
         if (count < 0 or count > 1) {
             return none;
         }
-        if (count == 0) {
+        # An added struct's methods come with it.
+        if (count == 0 or _inside(out, span.start)) {
             continue;
         }
         if (!simple) {
@@ -370,8 +372,9 @@ _added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
     return Optional<Array<(ast.Span, ast.Span)>>.Value(out);
 }
 
-# Each function, method and constructor of `module` by `{struct}\t{name}`
-# (a free function's with no struct, a constructor's as `construct`), with
+# Each struct by its name, and each function, method and constructor of
+# `module` by `{struct}\t{name}` (a free function's with no struct, a
+# constructor's as `construct`), with
 # its span, its name span, and whether a re-check could add it. Names are
 # without the `@namespace` a loaded file's carry.
 _declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
@@ -382,6 +385,16 @@ _declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
             var simple = decl.body.is_value() and decl.generic_params.count == 0 and !decl.external;
             out.append(($"\t{plain(decl.name)}", decl.span, decl.name_span, simple));
         } else if (declaration is Struct(decl)) {
+            # A plain struct, which `sema.build_file` builds alone.
+            var simple = decl.generic_params.count == 0
+                and !decl.enumeration.is_value()
+                and decl.properties.count == 0
+                and decl.attributes.count == 0
+                and !decl.is_private;
+            for (var m in decl.methods) {
+                simple = simple and m.body.is_value() and m.generic_params.count == 0;
+            }
+            out.append((plain(decl.name), decl.span, decl.name_span, simple));
             for (var m in decl.methods) {
                 var simple = decl.generic_params.count == 0 and m.body.is_value() and m.generic_params.count == 0;
                 out.append(($"{plain(decl.name)}\t{plain(m.name)}", m.span, m.name_span, simple));

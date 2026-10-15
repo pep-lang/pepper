@@ -588,7 +588,7 @@ links_only_the_bodies_of_the_compilation_units_it_checks() {
 # Writes a program whose `a.pep` starts with `top`, whose `a_value`
 # returns `value` of its argument, through a closure, followed by
 # `functions`, whose `_Counter.next` returns `next`, followed by `methods`,
-# and whose `a_count` returns `count`.
+# and whose `a_count` returns `count`, followed by `bottom`.
 _write_rechecked(
     root: Path,
     top: String,
@@ -596,7 +596,8 @@ _write_rechecked(
     next: String = "n + 1",
     methods: String = "",
     count: String = "_Counter(0).next()",
-    functions: String = ""
+    functions: String = "",
+    bottom: String = ""
 ) {
     File.write_text(
         root.join(Path("a.pep")),
@@ -613,6 +614,7 @@ _write_rechecked(
             + "}\nexport a_count(): int {\n    return "
             + count
             + ";\n}\n"
+            + bottom
     );
     File.write_text(
         root.join(Path("main.pep")),
@@ -681,11 +683,11 @@ checks_again_only_the_bodies_an_edit_changed() {
     expect_true(declared.rechecked.is_empty);
 }
 
-# An edit that adds a function or a method no code named before checks
+# An edit that adds a struct, a function or a method no code named before checks
 # again only it and the bodies that changed; one named before checks the
 # compilation unit from its files.
 [Test]
-checks_again_only_the_functions_and_methods_an_edit_adds() {
+checks_again_only_the_declarations_an_edit_adds() {
     var folder = TempFolder("added");
     var root = folder.path;
     _write_rechecked(root, "", "x + 1");
@@ -704,6 +706,14 @@ checks_again_only_the_functions_and_methods_an_edit_adds() {
     var (function, failed) = _build_rechecked(root);
     expect_true(function.rechecked.contains(a));
     expect_true(failed.contains("a.pep:10"));
+
+    # A struct after another, which a changed body uses.
+    var pair = "struct _Pair {\n    var x: int;\n}\n";
+    _write_rechecked(
+        root, "", "x + 1 + _zero()", "n + 1", twice, "_Counter(0).next() + _Counter(0).twice() + _Pair().x", zero, pair
+    );
+    var (structure, _) = _build_rechecked(root);
+    expect_true(structure.rechecked.contains(a));
 
     # A method named as the closure's variable was.
     var add = "    add(): int {\n        return 0;\n    }\n";
