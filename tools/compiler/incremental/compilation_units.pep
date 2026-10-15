@@ -52,6 +52,11 @@ export struct CompilationUnit {
     var mentions: HashSet<String> = HashSet<String>();
     var shown: HashSet<String> = HashSet<String>();
     var shown_by: HashMap<String, HashSet<String>> = HashMap<String, HashSet<String>>();
+    ## The names its code can name (`_names_reached`), once a key needed
+    ## them: a build computes each key twice, scheduling the workers and
+    ## checking. Empty again after `mentions`, `shown` or `shown_by`
+    ## change.
+    var reach: HashSet<String>? = Optional<HashSet<String>>.Empty;
 
     construct(name: String) {
         this.name = name;
@@ -309,7 +314,10 @@ export compilation_unit_key(units: CompilationUnit[], k: ulong, owns: String[]):
     hasher.update("pepper checked compilation unit 5\n");
     hasher.update(unit.files_key);
     hasher.update("\n");
-    var reach = _names_reached(units, unit);
+    if (!unit.reach.is_value()) {
+        unit.reach = Optional<HashSet<String>>.Value(_names_reached(units, unit));
+    }
+    var reach = unit.reach.value();
     for (var d in unit.reads) {
         var lines = owns[d].split("\n");
         hasher.update(lines[0]);

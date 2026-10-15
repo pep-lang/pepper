@@ -262,8 +262,10 @@ keys_a_unit_on_the_functions_it_can_name() {
     boxes[0] = "public\n_Box 2\ntwice 1";
     expect_true(incremental.compilation_unit_key(units, 1, boxes) == boxed);
     units[1].mentions.insert("boxed");
+    units[1].reach = Optional<HashSet<String>>.Empty;
     expect_true(incremental.compilation_unit_key(units, 1, boxes) != boxed);
     units[1].mentions.remove("boxed");
+    units[1].reach = Optional<HashSet<String>>.Empty;
     var owns = ["public\n_unnamed 1\ntwice 1", ""];
     var key = incremental.compilation_unit_key(units, 1, owns);
     owns[0] = "public\n_unnamed 2\ntwice 1";
