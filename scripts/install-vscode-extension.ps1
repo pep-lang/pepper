@@ -17,7 +17,7 @@
 # target/pep-lsp/pep-lsp.exe instead: every rebuild
 #
 #   $env:PEPPER_RUNTIME = "$PWD/runtime"
-#   pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe
+#   pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe
 #
 # then restarts the server with no install step at all.
 param(
@@ -62,7 +62,7 @@ function Install-PepperExtension {
         $out = Join-Path $repo "target/pep-lsp"
         New-Item -ItemType Directory -Force $out | Out-Null
         $env:PEPPER_RUNTIME = Join-Path $repo "runtime"
-        Invoke-Native { & $pepBuild -O --lto=full -I tools tools/pep-lsp/main.pep -o (Join-Path $out "pep-lsp.exe") --build (Join-Path $out "build") }
+        Invoke-Native { & $pepBuild -O --lto=full tools/pep-lsp/main.pep -o (Join-Path $out "pep-lsp.exe") --build (Join-Path $out "build") }
 
         # The extension looks for server/<platform>-<arch>/ matching the VS Code
         # process, which follows the OS architecture.

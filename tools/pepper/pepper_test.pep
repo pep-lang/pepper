@@ -5,7 +5,7 @@
 # from `testdata/`: `pep-echo` prints its arguments and exits with a
 # chosen status, and `pep-build` and `elsewhere/pep-elsewhere` are copies
 # of it; `pep-ask` prints a line, then reads its standard input to the
-# end. Run with `-I tools`.
+# end.
 
 import [Directory, Path] from io;
 import process;

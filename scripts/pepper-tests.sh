@@ -129,7 +129,7 @@ export PEPPER_RUNTIME="$root/runtime"
 # first five; the rest are waited for at the end.
 pids=()
 for tool in pepper pep-test pep-fmt pep-profile pep-package pep-install pep-doc; do
-  "$bin/pep-build$exe" -O -I "$root/tools" "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
+  "$bin/pep-build$exe" -O "$root/tools/$tool/main.pep" -o "$bin/$tool$exe" --build "$bin/pepper-tests-build/$tool" &
   pids+=($!)
 done
 for pid in "${pids[@]:0:5}"; do
@@ -158,7 +158,7 @@ tools_log="$bin/pepper-tests-tools.log"
     # timeout at -O0), and -O1 builds them quickly enough to save time
     # overall. They still take most of a minute each, so on a runner that
     # shares its host they get 300 s (`-t` in the arguments still wins).
-    PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run -I . "${llvm[@]+"${llvm[@]}"}" -t 300 "$@"
+    PEPPER_OPT_LEVEL="${PEPPER_OPT_LEVEL:-1}" run "${llvm[@]+"${llvm[@]}"}" -t 300 "$@"
   fi
   exit $failed
 ) > "$tools_log" 2>&1 &

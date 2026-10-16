@@ -1,8 +1,7 @@
 # The pep-fmt program end to end, the one beside the test program or on
 # the PATH (scripts/pepper-tests.sh builds it): standard input to
 # standard output, syntax errors where the compiler reports them, files
-# and folders with --check and -w, usage errors and --version. Run with
-# `-I tools`.
+# and folders with --check and -w, usage errors and --version.
 
 import [Directory, Path] from io;
 import process;

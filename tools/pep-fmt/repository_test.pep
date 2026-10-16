@@ -1,7 +1,7 @@
 # pep-fmt over every Pepper file of the repository (`runtime/`, `tools/`,
 # `tests/` and `docs/examples/`): each formats, formatting its output
 # changes nothing more, and the syntax tree stays the same. The runtime's
-# and the tools' files are already formatted. Run with `-I tools`.
+# and the tools' files are already formatted.
 
 import [File, Path] from io;
 import [JsonValue] from json;

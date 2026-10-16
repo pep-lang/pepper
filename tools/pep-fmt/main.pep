@@ -14,7 +14,7 @@
 #
 # Build it from the repository root with the tools folder on the import path:
 #
-#     pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+#     pepper build tools/pep-fmt/main.pep -o pep-fmt
 
 import cli;
 import [File, Path] from io;

@@ -13,7 +13,7 @@ builds it beside `pep-build`, with the other Pepper tools, and `pepper doc`
 runs it. To build it alone, from the repository root:
 
 ```bash
-pepper build -O -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
+pepper build -O tools/pep-doc/main.pep -o target/bin/pep-doc
 target/bin/pep-doc reference
 ```
 

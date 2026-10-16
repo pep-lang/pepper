@@ -36,8 +36,8 @@ From the repository root, against this checkout's runtime:
 ```bash
 export PEPPER_RUNTIME="$PWD/runtime"
 llvm="$(head -1 .pep/llvm-prefix)"
-pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build   # + -L "$llvm/lib" on macOS and Windows
-target/bin/pep-build -O -I tools tools/pep-fmt/main.pep -o target/bin/pep-fmt
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build   # + -L "$llvm/lib" on macOS and Windows
+target/bin/pep-build -O tools/pep-fmt/main.pep -o target/bin/pep-fmt
 ```
 
 - Windows: name outputs `.exe`, and copy `"$llvm/bin/LLVM-C.dll"` beside `pep-build.exe` (it loads the DLL from its own folder).

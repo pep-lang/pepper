@@ -2498,7 +2498,7 @@ same way with the installed toolchain's `pep-build`, packages the VSIX with
 branch.
 
 **`tools/syntax` and `tools/pep-fmt`** are Pepper programs, built with
-`pepper build -I tools tools/pep-fmt/main.pep`. They are the project's largest
+`pepper build tools/pep-fmt/main.pep`. They are the project's largest
 dogfooding of the language.
 
 - `tools/syntax` (a module: `module.pep` is two `export * from` lines) is
@@ -2548,7 +2548,7 @@ dogfooding of the language.
   `runtime/` and `tools/` must already be formatted. Its formatting cases
   (input and expected output) are in `tools/pep-fmt/format_test.pep`, and
   the program's command line in `cli_test.pep`, all run by
-  `scripts/pepper-tests.sh` (`pepper test -I .` in `tools/`).
+  `scripts/pepper-tests.sh` (`pepper test` in `tools/`).
 
 **The compiler's modules in detail.** Sections 2 to 4 follow a program
 through `tools/compiler`; these notes add what the modules do beyond that.
@@ -3270,7 +3270,7 @@ The tests are Pepper `[Test]` functions, run by `pepper test`
 (`docs/src/contributing/tests.md`). It builds the tools from the checkout
 with the `pep-build` it is given (default: the installed build of main)
 into `target/pepper-tests/bin`, puts that folder on the `PATH`, then runs
-the runtime's tests in `runtime/` and the tools' in `tools/` (`-I .`, at
+the runtime's tests in `runtime/` and the tools' in `tools/` (at
 `-O1`, 300 s a test). A test fails when it leaks: the `TestRunner` compares
 `_pep_live_allocs` before and after it.
 
@@ -3294,7 +3294,7 @@ To run a subset, build the tools once with the script, put them on the
 
 ```bash
 export PATH="$PWD/target/pepper-tests/bin:$PATH"
-(cd tools && pepper test -I . -t 300 compiler/passes_test.pep -f generics)
+(cd tools && pepper test -t 300 compiler/passes_test.pep -f generics)
 (cd runtime && pepper test json/test)
 ```
 

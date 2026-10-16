@@ -231,7 +231,10 @@ MB on Windows) that the build itself does not need. Platform notes:
 
 Build the compiler from `tools/compiler` with the installed toolchain's
 (`pepper build` runs its `pep-build`), against this checkout's runtime, then
-every tool with the compiler you built. On macOS and Windows the compiler's
+every tool with the compiler you built. Each tool is a project: its
+`tools/<tool>/pep.toml` adds `tools/` to the import search path, for the
+modules the tools share (`compiler.parse`, `syntax`, `toolchain`), and names
+the packages it depends on. On macOS and Windows the compiler's
 link needs LLVM's library folder (`-L`), and on Windows its `LLVM-C.dll`
 beside it:
 
@@ -239,10 +242,10 @@ beside it:
 export PEPPER_RUNTIME="$PWD/runtime"
 llvm="$(head -1 .pep/llvm-prefix)"
 mkdir -p target/bin
-pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
 # Windows: cp "$llvm/bin/LLVM-C.dll" target/bin/
 for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc pep-lsp; do
-  target/bin/pep-build -O -I tools "tools/$tool/main.pep" -o "target/bin/$tool"
+  target/bin/pep-build -O "tools/$tool/main.pep" -o "target/bin/$tool"
 done
 ```
 
@@ -413,7 +416,7 @@ compiler, with `tools/` on the import path, then run it on files or
 directories:
 
 ```bash
-pepper build -O -I tools tools/pep-fmt/main.pep -o pep-fmt    # pep-fmt.exe on Windows
+pepper build -O tools/pep-fmt/main.pep -o pep-fmt    # pep-fmt.exe on Windows
 ./pep-fmt -w src/          # rewrite files that are not formatted
 ./pep-fmt --check src/     # list them instead; exits with 1 if there are any
 ./pep-fmt < file.pep       # no files: standard input to standard output
@@ -436,7 +439,7 @@ a `.pep` file it first builds it with `-O -g --frame-pointers`. It is
 written in Pepper (`tools/pep-profile`):
 
 ```bash
-pepper build -O -I tools tools/pep-profile/main.pep -o target/bin/pep-profile
+pepper build -O tools/pep-profile/main.pep -o target/bin/pep-profile
 target/bin/pep-profile main.pep          # writes main.svg
 target/bin/pep-profile --pid 4242 -d 10  # a running process, for 10 seconds
 ```
@@ -452,7 +455,7 @@ parallel, reporting which pass. It is written in Pepper (`tools/pep-test`)
 and finds `pep-build` next to itself:
 
 ```bash
-pepper build -O -I tools tools/pep-test/main.pep -o target/bin/pep-test
+pepper build -O tools/pep-test/main.pep -o target/bin/pep-test
 target/bin/pep-test src                 # every test under src/
 target/bin/pep-test -f words src        # only tests whose name contains "words"
 ```
@@ -478,7 +481,7 @@ changes; a change to the extension's own code needs **Developer: Reload
 Window**. The script builds the server (`tools/pep-lsp`) with the installed
 toolchain's `pep-build`. When editing the server, setting `pepper.lspPath` to
 `target/pep-lsp/pep-lsp.exe` skips the install: each
-`pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe`
+`pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp.exe`
 (with `PEPPER_RUNTIME` set to the checkout's `runtime`) restarts the server
 in place.
 **Pepper: Restart Language Server** restarts it on demand. The **Pepper

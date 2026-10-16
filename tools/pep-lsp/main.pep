@@ -5,7 +5,7 @@
 # Releases and the VS Code extension ship it. Build it from the repository
 # root with a pep-build:
 #
-#     PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o pep-lsp
+#     PEPPER_RUNTIME=$PWD/runtime pep-build -O tools/pep-lsp/main.pep -o pep-lsp
 
 import lsp;
 import "arguments";

@@ -1,5 +1,5 @@
 # Golden tests of pep-fmt's style: each formats a snippet with
-# `format_source` and compares the text. Run with `-I tools`.
+# `format_source` and compares the text.
 
 import "format";
 

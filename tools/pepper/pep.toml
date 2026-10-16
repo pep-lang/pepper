@@ -1,0 +1,11 @@
+[package]
+name = "pepper"
+description = "The entry point to every Pepper tool"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pepper"
+# `toolchain` is a folder beside this one.
+include = [".."]

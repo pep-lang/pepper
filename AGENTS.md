@@ -315,7 +315,7 @@ not. So any change there, a new file or an edit, goes through `pep-fmt`
 before it is committed:
 
 ```bash
-pepper build -O -I tools tools/pep-fmt/main.pep -o pep-fmt
+pepper build -O tools/pep-fmt/main.pep -o pep-fmt
 ./pep-fmt -w runtime tools     # rewrite what is not formatted
 ./pep-fmt --check runtime tools  # lists nothing when all is formatted
 ```

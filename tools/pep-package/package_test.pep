@@ -4,7 +4,7 @@
 # `pep-build` fetches what `pep.lock` lists and `.pep/deps` lacks. The
 # packages come from bare git repositories in a test folder, which
 # `PEPPER_PACKAGE_GITHUB_URL` points the tools at. The tests skip when
-# git is missing. Run with `-I tools`.
+# git is missing.
 
 import async;
 import [Directory, File, Path] from io;

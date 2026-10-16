@@ -5,7 +5,7 @@
 # host's name; `time`'s zones from TZif files, `TZ` and the system's
 # database; `process`'s arguments, `exit`, `main`'s arguments, children
 # that are copies of the program, and `exec`. The programs are in
-# `testdata/`. Run with `-I tools`.
+# `testdata/`.
 
 import [File, Path] from io;
 import process;

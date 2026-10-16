@@ -1,0 +1,11 @@
+[package]
+name = "pep_install"
+description = "Installs Pepper toolchains side by side, run as `pepper install`"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-install"
+# `toolchain` is a folder beside this one.
+include = [".."]

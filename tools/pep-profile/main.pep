@@ -17,7 +17,7 @@
 # Build it from the repository root with the tools folder on the import
 # path:
 #
-#     pepper build -I tools tools/pep-profile/main.pep -o pep-profile
+#     pepper build tools/pep-profile/main.pep -o pep-profile
 
 import cli;
 import [Directory, File, Path] from io;

@@ -112,7 +112,7 @@ See
 [Dependencies and search paths](../language/modules.md#dependencies-and-search-paths).
 
 ```bash
-pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+pepper build tools/pep-fmt/main.pep -o pep-fmt
 ```
 
 ### `--import <name>`

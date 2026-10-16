@@ -63,7 +63,7 @@ and runs `pepper test`:
   `digest` tests with `-D USE_LIBCRYPTO`, which link the system's zlib and
   libcrypto (on Windows the zlib run needs `PEPPER_TEST_ZLIB_DIR`, a folder
   holding `zlib.lib`, and is skipped without it);
-- in `tools/`, with `-I .`, the tools' tests.
+- in `tools/`, the tools' tests, each under its tool's `pep.toml`.
 
 The tools' run, the longest, starts as soon as the tools its tests run
 (`pepper`, `pep-test`, `pep-fmt`, `pep-profile` and `pep-package`) are
@@ -131,7 +131,7 @@ script, or with the tools built there as the script builds them):
 
 ```bash
 export PATH="$PWD/target/pepper-tests/bin:$PATH"
-cd tools && pepper test -I . pep-fmt/cli_test.pep
+cd tools && pepper test pep-fmt/cli_test.pep
 ```
 
 The `tool_testing` module (`tools/tool_testing/`) holds what they share:

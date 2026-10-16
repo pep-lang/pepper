@@ -1,0 +1,11 @@
+[package]
+name = "pep_test"
+description = "Runs the `[Test]` functions of Pepper files, run as `pepper test`"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-test"
+# `tool_testing` is a folder beside this one.
+include = [".."]

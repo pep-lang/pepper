@@ -3,7 +3,7 @@
 # supports into folded stacks with readable names, and drawing them with
 # the built-in renderer. The recordings in `testdata/` are written by
 # hand, so these tests need no profiler; one profiles a real program when
-# samply or a working perf is installed. Run with `-I tools`.
+# samply or a working perf is installed.
 
 import [Path] from io;
 import os;

@@ -14,7 +14,7 @@ compiler does.
 Build it with the compiler, with the `tools` folder on the import path:
 
 ```bash
-pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+pepper build tools/pep-fmt/main.pep -o pep-fmt
 ```
 
 Give it files or directories, like `gofmt`:

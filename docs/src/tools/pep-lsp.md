@@ -25,7 +25,7 @@ for writing a language server for any language in Pepper. To build it from
 a checkout of the repository, with this checkout's standard library:
 
 ```bash
-PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+PEPPER_RUNTIME=$PWD/runtime pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
 ```
 
 ## When the server crashes

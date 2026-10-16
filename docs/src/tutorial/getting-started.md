@@ -66,8 +66,8 @@ the compiler you built:
 
 ```sh
 export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O -I tools tools/pepper/main.pep -o target/bin/pepper
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build
+target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
 ```
 
 On macOS and Windows the compiler's build also needs LLVM's library folder:
@@ -234,7 +234,7 @@ A few things are useful once it is installed:
   `match` arm's case and the names it binds (`Circle(r) => ...`), and on
   the values an enum case declares.
 - The `pepper.lspPath` setting points the extension at a language server you
-  built yourself (`pep-build -O -I tools tools/pep-lsp/main.pep -o
+  built yourself (`pep-build -O tools/pep-lsp/main.pep -o
   target/pep-lsp/pep-lsp` in a checkout of the repository; see
   [The language server: pep-lsp](../tools/pep-lsp.md)). The server
   restarts whenever that file changes.

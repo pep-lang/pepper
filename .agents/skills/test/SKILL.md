@@ -21,7 +21,7 @@ Run one test file while iterating, from the folder `scripts/pepper-tests.sh` run
 
 ```bash
 export PATH="$PWD/target/pepper-tests/bin:$PATH"
-(cd tools && pepper test -I . -t 300 pep-fmt/cli_test.pep)
+(cd tools && pepper test -t 300 pep-fmt/cli_test.pep)
 (cd runtime && pepper test json/test)
 ```
 

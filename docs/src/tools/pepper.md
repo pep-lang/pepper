@@ -68,7 +68,7 @@ Build `pepper` with a `pep-build` (an installed one, or one you built from
 and put it next to it:
 
 ```bash
-target/bin/pep-build -I tools tools/pepper/main.pep -o target/bin/pepper
+target/bin/pep-build tools/pepper/main.pep -o target/bin/pepper
 ```
 
 On Windows, name the output `target\bin\pepper.exe`.

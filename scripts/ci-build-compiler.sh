@@ -43,7 +43,7 @@ export PEPPER_RUNTIME="$root/runtime"
 echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 # Fetched up front, so a failed fetch shows pep-package's own error.
 "$stage0/pep-package$exe" -C tools/compiler fetch
-"$stage0/pep-build$exe" -O -I tools tools/compiler/main.pep \
+"$stage0/pep-build$exe" -O tools/compiler/main.pep \
   -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}"
 # pepc loads LLVM-C.dll from its own folder.
 if [ -n "$exe" ]; then

@@ -11,7 +11,7 @@
 # `parse.parse_recovering`, what the language server reads), and the
 # intact files through `parse_recovering` (`recover-intact`).
 #
-#     pep-build -O -I tools tools/compiler/parse_bench.pep -o parse_bench
+#     pep-build -O tools/compiler/parse_bench.pep -o parse_bench
 #     ./parse_bench [repository root] [lex|ast|written|broken|recover|recover-intact|all] [passes]
 
 import io;

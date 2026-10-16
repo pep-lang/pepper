@@ -57,11 +57,6 @@ Written 2026-10-06 (US Pacific times). Sources: `backlog.md` (ticket backlog, is
 - Status: not started.
 - Approach (ticket): CI (`ci.yml`, `platform-test.yml`, `docs.yml`) and worker setups install the toolchain by running `scripts/install.sh` / `install.ps1`, then build and test with that toolchain; no job runs `cargo build --release` for the compiler; `scripts/pepper-tests.sh` and the pre-merge checks use the installed toolchain. Workers run `pep-install update`. When a merged PR changes the compiler or runtime (decide paths, e.g. `tools/compiler/`, `runtime/`, `crates/`), a release is made automatically with the minor SemVer bumped (`release.yml`, `scripts/release-build.sh`). Decide how a change needing its own new compiler is tested before its release exists (build the PR's compiler with the published one, for that PR's tests only).
 
-### #696 Convert all tools to pep.toml projects after the cutover; update CI and release
-- Handoff: [backlog.md](todo/backlog.md#696-convert-all-tools-to-peptoml-projects-after-the-cutover-update-ci-and-release)
-- Priority: normal. PAUSED: starts after the #225 cutover is complete (Justin 10-05 11:58 PT).
-- Approach (ticket): give each tool under `tools/` a `pep.toml` (`[package]`, `[build] entry/output`); shared code (`tools/syntax`, `tools/toolchain`) becomes a path dependency instead of `-I tools`; build every tool through the self-hosted driver's project mode in CI, `scripts/pepper-tests.sh` and `scripts/release-build.sh` with the #225 build cache; update the release archive build, smoke test and docs (`AGENTS.md`, `docs/src/tools/*.md`, `docs/src/contributing/`); remove the `-I tools` builds.
-
 ### #697 Release a pepper-install-only archive; installer scripts bootstrap through it
 - Handoff: [backlog.md](todo/backlog.md#697-release-a-pepper-install-only-archive-installer-scripts-bootstrap-through-it)
 - Priority: normal. PAUSED. Depends on: nothing hard; #712 and #713 build on it.

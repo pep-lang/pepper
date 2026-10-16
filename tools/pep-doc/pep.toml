@@ -1,0 +1,11 @@
+[package]
+name = "pep_doc"
+description = "Builds and checks the Pepper book and reference, run as `pepper doc`"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-doc"
+# `compiler.parse` and the other shared modules are folders beside this one.
+include = [".."]

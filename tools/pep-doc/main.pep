@@ -8,7 +8,7 @@
 #
 # Build it from the repository root, next to the compiler:
 #
-#     pep-build -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
+#     pep-build tools/pep-doc/main.pep -o target/bin/pep-doc
 
 import [Directory, File, Path] from io;
 import process;

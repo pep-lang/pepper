@@ -4,7 +4,7 @@
 # `pep-build --test`, runs every test in a process of its own, and
 # reports. `testdata/math_test.pep.txt` is a test file whose tests pass,
 # fail, panic as they should and as they should not, and time out; its
-# name keeps the repository's own run from finding it. Run with `-I tools`.
+# name keeps the repository's own run from finding it.
 
 import [Directory, Path] from io;
 import process;

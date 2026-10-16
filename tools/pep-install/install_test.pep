@@ -1,7 +1,7 @@
 # pep-install's commands against a Pepper home in a test folder: versions
 # and how a folder's toolchain is chosen, the releases list, unpacking,
 # and installing from a server on loopback that stands in for GitHub.
-# Run with `-I tools`.
+#
 
 import archive;
 import async;

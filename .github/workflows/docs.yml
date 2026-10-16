@@ -104,7 +104,7 @@ jobs:
           PEPPER_RUNTIME: ${{ github.workspace }}/runtime
         run: |
           mkdir -p target/docs-tools
-          "$PEPPER_COMPILER_DIR/pep-build" -O -I tools tools/pep-doc/main.pep -o target/docs-tools/pep-doc
+          "$PEPPER_COMPILER_DIR/pep-build" -O tools/pep-doc/main.pep -o target/docs-tools/pep-doc
 
       - name: Build the docs
         run: target/docs-tools/pep-doc build --version "$DOCS_VERSION" --site site

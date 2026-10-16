@@ -14,7 +14,7 @@
 # it (`format` beyond `render`, `layout` beyond `parse`, ...). Reading the
 # files is timed once.
 #
-#     pepper build -O -I tools tools/pep-fmt/fmt_bench.pep -o fmt_bench
+#     pepper build -O tools/pep-fmt/fmt_bench.pep -o fmt_bench
 #     ./fmt_bench [repository root] [passes] [folder...]
 
 import [Directory, File, Path] from io;
