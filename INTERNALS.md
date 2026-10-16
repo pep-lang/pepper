@@ -3048,8 +3048,9 @@ record under its key, `check_unit` looks for its newest record with the
 same inputs, no warning, and files that differ from the text kept only
 inside the bodies of top-level functions that are not generic, and of the
 methods and constructors that are not generic of structs that are not, or in
-comments and spacing, or in whole such functions and methods, and structs
-that are not generic with no properties or attributes, that the edit adds
+comments and spacing, or in whole such functions and methods, structs
+that are not generic with no properties or attributes, and fields with no
+attributes of such structs with no generic methods, that the edit adds
 under a name that no other declares and no token of the old text spells
 (`find_recheck_base`, `_align`, which compares the two texts' tokens outside
 those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
@@ -3073,9 +3074,17 @@ those bodies and added declarations, `_added`). `recheck_compilation_unit` then:
    the name is a trait's method, a member of the struct, a function already
    declared, one code calls without naming (`called_without_naming`), a
    constructor, or the first function of its file;
-4. drops the closure structs the old bodies lifted, and numbers new ones
+4. replaces the struct of each added field with the one built now,
+   unchecked (`_add_field`), so the passes check it whole: its bodies, the
+   members synthesized from its fields (`__dtor`, copies) and its layout.
+   Code outside it reads fields by name and their offsets from code
+   generation (`S.offset.f`), so nothing else is checked again. It gives
+   up when one of the struct's methods or constructors is missing
+   afterwards, or its return type or link summary changed;
+5. drops the closure structs the old bodies and replaced structs lifted,
+   and numbers new ones
    after every closure left in their files (`PassState.closure_counts`);
-5. runs every step, which walk only the unchecked bodies and the
+6. runs every step, which walk only the unchecked bodies and the
    specializations they newly ask for.
 
 It gives up, and `check_compilation_unit` checks the compilation unit from

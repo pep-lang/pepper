@@ -151,6 +151,9 @@ export struct PassState {
     ## <kind> <name>`): their bodies stay in, and their structs count as
     ## extended (`extended_checked`).
     var rechecked_methods: HashSet<String> = HashSet<String>();
+    ## The structs a re-check replaced to add a field whose `__copy()` code
+    ## the record keeps calls, by name: `synthesize_copies` makes it again.
+    var copies_again: HashSet<String> = HashSet<String>();
     ## Each enum's representation and default value, by name.
     var enum_representations: HashMap<String, (String, long)> = HashMap<String, (String, long)>();
     ## The value structs' names (`[Value]`), as `synthesize` and

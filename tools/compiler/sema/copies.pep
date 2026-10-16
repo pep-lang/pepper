@@ -851,12 +851,22 @@ export synthesize_copies(module: Module, state: PassState): bool {
         _rewrite_function(function, collector);
     }
     var calls = collector.calls;
-    if (calls.count == 0) {
+    var needed = Array<(String, Optional<_CopyMethod>)>();
+    # A struct a re-check replaced whose `__copy()` code it kept calls.
+    for (var st in module.structs) {
+        if (!state.copies_again.contains(st.name)) {
+            continue;
+        }
+        var plan = _plan(module, safe, st.ty);
+        if (plan is Object(copyable)) {
+            _needs(needed, st.name, copyable);
+        }
+    }
+    if (calls.count == 0 and needed.count == 0) {
         return censuses_added or traits_added;
     }
     # What each `__copy<T>` becomes.
     var lowered = Array<(TypeName, _Lowering)>();
-    var needed = Array<(String, Optional<_CopyMethod>)>();
     for (var (ty, _) in calls) {
         var lowering = _Lowering(_LoweringKind.Same);
         match (_plan(module, safe, ty)) {

@@ -715,6 +715,21 @@ checks_again_only_the_declarations_an_edit_adds() {
     var (structure, _) = _build_rechecked(root);
     expect_true(structure.rechecked.contains(a));
 
+    # A field, which a changed body reads: its struct is checked again whole.
+    var extra = "    var extra: int = 1;\n";
+    _write_rechecked(
+        root,
+        "",
+        "x + 1 + _zero()",
+        "n + 1",
+        twice + extra,
+        "_Counter(0).next() + _Counter(0).twice() + _Counter(0).extra - 1 + _Pair().x",
+        zero,
+        pair
+    );
+    var (field, _) = _build_rechecked(root);
+    expect_true(field.rechecked.contains(a));
+
     # A method named as the closure's variable was.
     var add = "    add(): int {\n        return 0;\n    }\n";
     _write_rechecked(
@@ -723,6 +738,33 @@ checks_again_only_the_declarations_an_edit_adds() {
     var (named, _) = _build_rechecked(root);
     expect_true(named.misses.contains(a));
     expect_true(named.rechecked.is_empty);
+}
+
+# A field added to a struct that code the edit keeps copies: the struct's
+# `__copy()` is made again, and copies the new field.
+[Test]
+copies_the_field_an_edit_adds() {
+    var folder = TempFolder("added-field");
+    var root = folder.path;
+    var box = (field: String) => "struct _Box {\n    var n: int;\n"
+        + field
+        + "    construct(n: int) {\n        this.n = n;\n    }\n}\n";
+    var copied = "_copied(): _Box {\n    return copy(_Box(1));\n}\n";
+    _write_rechecked(root, "", "x + 1", "n + 1", "", "_Counter(0).next() + _copied().n - 1", box("") + copied);
+    _build_rechecked(root);
+    var a = _unit_of(_load(root), "a.pep");
+
+    _write_rechecked(
+        root,
+        "",
+        "x + 1",
+        "n + 1",
+        "",
+        "_Counter(0).next() + _copied().n - 1 + _copied().extra - 2",
+        box("    var extra: int = 2;\n") + copied
+    );
+    var (field, _) = _build_rechecked(root);
+    expect_true(field.rechecked.contains(a));
 }
 
 # Writes a program whose `a.pep` starts with `top` and declares struct

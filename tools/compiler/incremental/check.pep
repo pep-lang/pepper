@@ -5,6 +5,7 @@
 ## units it reaches. Nothing here generates code, so a program that only checks
 ## does not link LLVM.
 
+import compiler.ast;
 import [Diagnostic, SourceText, render_all] from compiler.diagnostic;
 import [File, Path] from io;
 import compiler.link;
@@ -575,6 +576,8 @@ export recheck_compilation_unit(
         after.checked.summaries.remove(key);
         after.recorded_summaries.remove(function.loc);
     }
+    # The structs an added field replaced, as the record had them.
+    var replaced = Array<sema.StructDef>();
     for (var (file, name) in base.added) {
         if (!built.contains(file)) {
             var made = sema.build_file(program.files[file as ulong].module, file);
@@ -583,9 +586,31 @@ export recheck_compilation_unit(
             }
             built[file] = made.value();
         }
-        if (!_add(after, built[file], sema.Loc.at(file, name), methods)) {
+        if (!_add(after, built[file], sema.Loc.at(file, name), methods, replaced)) {
             return _not_rechecked("an added function");
         }
+    }
+    # A replaced struct's members, checked again whole: what other code was
+    # checked against of each, and where its closures were.
+    var members = Array<(String, String, String, String)>();
+    var dropped = Array<sema.Loc>();
+    var copies = HashSet<String>();
+    for (var old in replaced) {
+        for (var (function, kind) in _members(old)) {
+            # Made because code the record keeps copies the struct.
+            if (function.name == "__copy") {
+                copies.insert(old.name);
+            }
+            var key = _summary_key(function, old.name, kind);
+            members.append((old.name, kind, function.name, _facts(after, function, key)));
+            after.checked.summaries.remove(key);
+            after.recorded_summaries.remove(function.loc);
+        }
+        var span = _struct_span(program, old.loc);
+        if (!span.is_value()) {
+            return _not_rechecked($"the span of {old.name}");
+        }
+        dropped.append(span.value());
     }
     # The closures the old bodies made went with them; the new ones are
     # numbered after every closure of their files.
@@ -596,7 +621,7 @@ export recheck_compilation_unit(
             kept.append(st);
             continue;
         }
-        if (_in_changed(base, st.loc)) {
+        if (_in_changed(base, st.loc) or _in_any(dropped, st.loc)) {
             after.checked.structs.remove(st.name);
             continue;
         }
@@ -632,6 +657,7 @@ export recheck_compilation_unit(
     state.pass_times = times;
     state.closure_counts = counts;
     state.rechecked_methods = methods;
+    state.copies_again = copies;
     var ran = sema.run_steps_with(after, state, 0xffffffffffffffff);
     if (ran.is_err()) {
         return _not_rechecked($"an error: {ran.error().message}");
@@ -645,19 +671,38 @@ export recheck_compilation_unit(
             return _not_rechecked($"the facts of {function.name}: {facts} became {now}");
         }
     }
+    for (var (owner, kind, name, facts) in members) {
+        var found = _member(after, owner, kind, name);
+        if (!found.is_value()) {
+            return _not_rechecked($"{owner}.{name}, which checking {owner} again dropped");
+        }
+        var key = _summary_key(found.value(), owner, kind);
+        var now = _facts(after, found.value(), key, Optional<sema.PassState>.Value(state));
+        if (now != facts) {
+            return _not_rechecked($"the facts of {owner}.{name}: {facts} became {now}");
+        }
+    }
     return Optional<(sema.Module, sema.PassState, sema.TypeAliasDef[])>.Value((after, state, aliases));
 }
 
-# Adds the function or method at `loc` in `fresh`, its file as built now,
-# to `after`, the record it is checked on top of, after the one before it
-# in its file, as checking the file would; a method's struct is walked
-# again (`methods`). Whether it could: no code the record keeps can call it,
-# or anything it declares already.
-_add(after: sema.Module, fresh: sema.Module, loc: sema.Loc, methods: HashSet<String>): bool {
+# Adds the function, method, struct or field at `loc` in `fresh`, its file
+# as built now, to `after`, the record it is checked on top of, after the
+# one before it in its file, as checking the file would; a method's struct
+# is walked again (`methods`), and a field's is replaced whole (`replaced`
+# gets the record's). Whether it could: no code the record keeps can call
+# it, or anything it declares already.
+_add(
+    after: sema.Module, fresh: sema.Module, loc: sema.Loc, methods: HashSet<String>, replaced: sema.StructDef[]
+): bool {
     # A struct's implicit constructor is where its name is, too.
     for (var st in fresh.structs) {
         if (st.loc == loc) {
             return _add_struct(after, fresh, loc);
+        }
+        for (var field in st.field_members) {
+            if (field.loc == loc) {
+                return _add_field(after, st, replaced);
+            }
         }
     }
     var (by_loc, _) = _by_loc(fresh);
@@ -757,6 +802,85 @@ _add_struct(after: sema.Module, fresh: sema.Module, loc: sema.Loc): bool {
             }
         }
         return false;
+    }
+    return false;
+}
+
+# Replaces the record's struct of the name of `fresh`, a struct as built now
+# with a field the record's lacks, with `fresh`, unchecked, so the passes
+# check it whole: its members' bodies, the members they synthesize from its
+# fields (`__dtor`, copies) and its layout. Code outside it reads its fields
+# by name and its layout from code generation, which the passes leave alone.
+# Adds the record's struct to `replaced`. Whether it could: the record has
+# the struct, checked, and is not generic.
+_add_field(after: sema.Module, fresh: sema.StructDef, replaced: sema.StructDef[]): bool {
+    for (var old in replaced) {
+        if (old.name == fresh.name) {
+            # Another field of it, which `fresh` has too.
+            return true;
+        }
+    }
+    if (fresh.generic_params.count > 0 or !after.checked.structs.contains(fresh.name)) {
+        return false;
+    }
+    for (var j in 0..after.structs.count) {
+        if (after.structs[j].name != fresh.name) {
+            continue;
+        }
+        replaced.append(after.structs[j]);
+        after.structs[j] = fresh;
+        after.checked.structs.remove(fresh.name);
+        after.extended_checked.remove(fresh.name);
+        return true;
+    }
+    return false;
+}
+
+# The methods and constructors of `st`, each with its kind.
+_members(st: sema.StructDef): Array<(sema.FunctionDef, String)> {
+    var out = Array<(sema.FunctionDef, String)>();
+    for (var m in st.method_members) {
+        out.append((m, "method"));
+    }
+    for (var c in st.constructors) {
+        out.append((c, "constructor"));
+    }
+    return out;
+}
+
+# The method or constructor (`kind`) `name` of struct `owner` in `module`.
+_member(module: sema.Module, owner: String, kind: String, name: String): sema.FunctionDef? {
+    for (var st in module.structs) {
+        if (st.name != owner) {
+            continue;
+        }
+        for (var (function, k) in _members(st)) {
+            if (k == kind and function.name == name) {
+                return Optional<sema.FunctionDef>.Value(function);
+            }
+        }
+    }
+    return Optional<sema.FunctionDef>.Empty;
+}
+
+# Where the whole struct whose name is at `loc` is in its file now.
+_struct_span(program: link.Program, loc: sema.Loc): sema.Loc? {
+    for (var declaration in program.files[loc.file as ulong].module.declarations) {
+        if (declaration is Struct(decl)) {
+            if (decl.name_span.start == loc.span.start and decl.name_span.end == loc.span.end) {
+                return Optional<sema.Loc>.Value(sema.Loc.at(loc.file, decl.span));
+            }
+        }
+    }
+    return Optional<sema.Loc>.Empty;
+}
+
+# Whether `loc` is inside one of `spans`, in the same file.
+_in_any(spans: sema.Loc[], loc: sema.Loc): bool {
+    for (var span in spans) {
+        if (loc.file == span.file and loc.span.start >= span.span.start and loc.span.end <= span.span.end) {
+            return true;
+        }
     }
     return false;
 }

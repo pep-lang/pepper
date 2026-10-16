@@ -26,8 +26,8 @@ export struct RecheckBase {
     ## The changed bodies: the file, the function's name span and its
     ## body's span, in the edited file.
     var changed: Array<(uint, ast.Span, ast.Span)> = Array<(uint, ast.Span, ast.Span)>();
-    ## The structs, functions and methods the edit added: the file, and the name's
-    ## span in the edited file.
+    ## The structs, fields, functions and methods the edit added: the file, and
+    ## the name's span in the edited file.
     var added: Array<(uint, ast.Span)> = Array<(uint, ast.Span)>();
 
     construct(bytes: u8[], shift: sema.LocShift) {
@@ -84,7 +84,7 @@ export recheck_path(path: Path): Path {
 
 ## Returns an earlier record of `unit` that a re-check can start from: the
 ## newest whose text differs from its files' only in bodies and in added
-## functions and methods no old text names (`_align`), on
+## structs, fields, functions and methods no old text names (`_align`), on
 ## the same records below, and whose check warned of nothing.
 ##
 ## @param cache the build cache
@@ -164,7 +164,7 @@ _base_from(path: Path, program: link.Program, unit: CompilationUnit, inputs: Str
             return none;
         }
     }
-    # Code that named an added function or method meant something else.
+    # Code that named an added declaration meant something else.
     for (var (file, name) in added) {
         var text = program.files[file as ulong].source.substr_bytes(name.start, name.end - name.start);
         for (var (old, tokens) in olds) {
@@ -267,7 +267,7 @@ _bodies(module: ast.Module): Array<(ast.Span, ast.Span)> {
 
 # Whether the old text `old` of file `file` (program file `index`) differs
 # from its text now only inside the bodies `_bodies` finds and in whole
-# structs, functions and methods it adds (`_added`); adds where its kept tokens are
+# structs, fields, functions and methods it adds (`_added`); adds where its kept tokens are
 # now to `shift`, the changed bodies to `changed`, the added ones to
 # `added`, and its old text and tokens to `olds`.
 _align(
@@ -286,7 +286,7 @@ _align(
         return false;
     }
     olds.append((old, old_tokens.value()));
-    var new_ones = _added(parsed.value(), file.module);
+    var new_ones = _added(parsed.value(), old, file.module, file.source);
     if (!new_ones.is_value()) {
         return false;
     }
@@ -333,19 +333,20 @@ _align(
     return true;
 }
 
-# The structs, functions and methods file `now` declares that `old` does
-# not, each one's whole span and name span: structs that are not generic
-# with no properties or attributes, and free functions and methods of
-# structs that are not generic, with a body, no generic parameters and a
-# name no other declares. Nothing when `now` drops one `old` declares or adds
-# another kind.
-_added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
+# The structs, fields, functions and methods file `now` (text `now_text`)
+# declares that `old` (text `old_text`) does not, each one's whole span and
+# name span: structs that are not generic with no properties or attributes,
+# fields of such structs with no generic methods, and free functions and
+# methods of structs that are not generic, with a body, no generic
+# parameters and a name no other declares. Nothing when `now` drops one
+# `old` declares or adds another kind.
+_added(old: ast.Module, old_text: String, now: ast.Module, now_text: String): Array<(ast.Span, ast.Span)>? {
     var none = Optional<Array<(ast.Span, ast.Span)>>.Empty;
     var counts = HashMap<String, long>();
-    for (var (key, _, _, _) in _declared(old)) {
+    for (var (key, _, _, _) in _declared(old, old_text)) {
         counts[key] = counts.try_get(key).value_or(0) - 1;
     }
-    var declared = _declared(now);
+    var declared = _declared(now, now_text);
     for (var (key, _, _, _) in declared) {
         counts[key] = counts.try_get(key).value_or(0) + 1;
     }
@@ -355,7 +356,7 @@ _added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
         if (count < 0 or count > 1) {
             return none;
         }
-        # An added struct's methods come with it.
+        # An added struct's fields and methods come with it.
         if (count == 0 or _inside(out, span.start)) {
             continue;
         }
@@ -372,12 +373,13 @@ _added(old: ast.Module, now: ast.Module): Array<(ast.Span, ast.Span)>? {
     return Optional<Array<(ast.Span, ast.Span)>>.Value(out);
 }
 
-# Each struct by its name, and each function, method and constructor of
-# `module` by `{struct}\t{name}` (a free function's with no struct, a
-# constructor's as `construct`), with
-# its span, its name span, and whether a re-check could add it. Names are
-# without the `@namespace` a loaded file's carry.
-_declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
+# Each struct by its name, each field by `{struct}\t.{name}`, and each
+# function, method and constructor of `module` (text `text`) by
+# `{struct}\t{name}` (a free function's with no struct, a constructor's as
+# `construct`), with its span (a field's through its `;`), its name span,
+# and whether a re-check could add it. Names are without the `@namespace` a
+# loaded file's carry.
+_declared(module: ast.Module, text: String): Array<(String, ast.Span, ast.Span, bool)> {
     var out = Array<(String, ast.Span, ast.Span, bool)>();
     var plain = (name: String) => name.split("@")[0];
     for (var declaration in module.declarations) {
@@ -395,6 +397,13 @@ _declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
                 simple = simple and m.body.is_value() and m.generic_params.count == 0;
             }
             out.append((plain(decl.name), decl.span, decl.name_span, simple));
+            # A re-check adds a field by checking its struct again
+            # (`_add_field`), which a generic method's specializations would
+            # not survive.
+            for (var f in decl.fields) {
+                var addable = simple and f.attributes.count == 0 and !f.is_const and !f.is_private;
+                out.append(($"{plain(decl.name)}\t.{f.name}", _with_semicolon(f.span, text), f.name_span, addable));
+            }
             for (var m in decl.methods) {
                 var simple = decl.generic_params.count == 0 and m.body.is_value() and m.generic_params.count == 0;
                 out.append(($"{plain(decl.name)}\t{plain(m.name)}", m.span, m.name_span, simple));
@@ -405,6 +414,18 @@ _declared(module: ast.Module): Array<(String, ast.Span, ast.Span, bool)> {
         }
     }
     return out;
+}
+
+# `span`, through the `;` right after it, if one is.
+_with_semicolon(span: ast.Span, text: String): ast.Span {
+    var at = span.end;
+    while (at < text.size and (text.byte_at(at) == ' ' or text.byte_at(at) == '\t')) {
+        at += 1;
+    }
+    if (at < text.size and text.byte_at(at) == ';') {
+        return ast.Span(span.start, at + 1);
+    }
+    return span;
 }
 
 # Whether `offset` is in one of the spans `added` gives.
