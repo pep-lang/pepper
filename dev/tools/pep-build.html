@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f388b58.js";
+            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4da10d20.js"></script>
@@ -201,6 +201,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>the project’s, from <code>pep.toml</code></td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
+<tr><td><code>--entry &lt;name&gt;</code></td><td>The function the program starts in, instead of <code>main</code>; it takes no parameters or one <code>String[]</code>, and every <code>main</code> is left out (not with <code>--test</code> or <code>--lib</code>)</td><td><code>main</code></td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>

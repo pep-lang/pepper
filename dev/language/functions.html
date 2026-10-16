@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f388b58.js";
+            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4da10d20.js"></script>
@@ -548,6 +548,11 @@ the program as it was started, and the arguments typed after it follow in
 order. Declare the parameter only when the program reads it, as a Windows
 console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
 parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
+<p><code>pepper build --entry &lt;name&gt;</code> (and <code>pepper run --entry &lt;name&gt;</code>) starts the
+program in the top-level function <code>name</code> instead, which takes either form
+of parameter list, as <code>main</code> does. Every <code>main</code> is then left out of the
+program, so a file can hold several entry points, such as a benchmark
+beside the tool it measures.</p>
 <p>Elsewhere, <code>process.arguments()</code> returns the same array, so code outside
 <code>main</code> can read the arguments without having them passed down.
 <code>process.exit(code)</code> ends the program at once with status <code>code</code>, from

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-9f388b58.js";
+            window.path_to_searchindex_js = "searchindex-f25ec418.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-4da10d20.js"></script>
@@ -4036,6 +4036,11 @@ the program as it was started, and the arguments typed after it follow in
 order. Declare the parameter only when the program reads it, as a Windows
 console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
 parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
+<p><code>pepper build --entry &lt;name&gt;</code> (and <code>pepper run --entry &lt;name&gt;</code>) starts the
+program in the top-level function <code>name</code> instead, which takes either form
+of parameter list, as <code>main</code> does. Every <code>main</code> is then left out of the
+program, so a file can hold several entry points, such as a benchmark
+beside the tool it measures.</p>
 <p>Elsewhere, <code>process.arguments()</code> returns the same array, so code outside
 <code>main</code> can read the arguments without having them passed down.
 <code>process.exit(code)</code> ends the program at once with status <code>code</code>, from
@@ -20621,6 +20626,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>&lt;entry.pep&gt;</code></td><td>The program’s entry file</td><td>the project’s, from <code>pep.toml</code></td></tr>
 <tr><td><code>-I &lt;dir&gt;</code></td><td>Add a folder to search for imported modules</td><td>the runtime’s folder only</td></tr>
 <tr><td><code>--import &lt;name&gt;</code></td><td>Load a module into every file of the program</td><td>none</td></tr>
+<tr><td><code>--entry &lt;name&gt;</code></td><td>The function the program starts in, instead of <code>main</code>; it takes no parameters or one <code>String[]</code>, and every <code>main</code> is left out (not with <code>--test</code> or <code>--lib</code>)</td><td><code>main</code></td></tr>
 <tr><td><code>--no-runtime</code></td><td>Compile without the standard library</td><td>the runtime is used</td></tr>
 <tr><td><code>-o &lt;file&gt;</code></td><td>Name the executable or library (with <code>--emit-static</code>, the folder)</td><td><code>&lt;entry stem&gt;</code> in the current folder; a project’s <code>name</code> in its folder</td></tr>
 <tr><td><code>--lib static</code>, <code>--lib shared</code></td><td>Build a library for C instead of an executable</td><td>an executable</td></tr>
@@ -21323,6 +21329,7 @@ executable to clean up. <code>pepper run</code> runs it with the same arguments.
 pepper run args.pep a b            # main sees a and b
 pepper run -O2 -D FAST main.pep    # build options go before the file
 pepper run -- --port 8080          # the project pep.toml describes
+pepper run --entry bench tool.pep  # start in bench() instead of main()
 </code></pre>
 <pre><code class="language-text">pep-run [BUILD OPTIONS] [&lt;entry.pep&gt;] [ARGUMENTS]...
 pep-run [BUILD OPTIONS] -- [ARGUMENTS]...
@@ -21351,6 +21358,7 @@ that exits with status 2.</li>
 <tr><th>Option</th><th>What it does</th></tr>
 </thead>
 <tbody>
+<tr><td><code>--entry &lt;name&gt;</code></td><td>Starts the program in the function <code>name</code> instead of <code>main</code>, as <code>pep-build --entry</code> does; it takes no parameters or one <code>String[]</code> (before the entry file only)</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage (before the entry file only)</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version (before the entry file only)</td></tr>
 </tbody>

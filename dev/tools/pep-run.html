@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9f388b58.js";
+            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-4da10d20.js"></script>
@@ -189,6 +189,7 @@ executable to clean up. <code>pepper run</code> runs it with the same arguments.
 pepper run args.pep a b            # main sees a and b
 pepper run -O2 -D FAST main.pep    # build options go before the file
 pepper run -- --port 8080          # the project pep.toml describes
+pepper run --entry bench tool.pep  # start in bench() instead of main()
 </code></pre>
 <pre><code class="language-text">pep-run [BUILD OPTIONS] [&lt;entry.pep&gt;] [ARGUMENTS]...
 pep-run [BUILD OPTIONS] -- [ARGUMENTS]...
@@ -217,6 +218,7 @@ that exits with status 2.</li>
 <tr><th>Option</th><th>What it does</th></tr>
 </thead>
 <tbody>
+<tr><td><code>--entry &lt;name&gt;</code></td><td>Starts the program in the function <code>name</code> instead of <code>main</code>, as <code>pep-build --entry</code> does; it takes no parameters or one <code>String[]</code> (before the entry file only)</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the usage (before the entry file only)</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version (before the entry file only)</td></tr>
 </tbody>
