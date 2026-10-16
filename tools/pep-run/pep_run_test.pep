@@ -48,6 +48,21 @@ builds_and_runs_a_program_in_the_folder_it_starts_in() {
     );
 }
 
+# `--entry` names the function the program starts in, and the program's
+# arguments still follow the file.
+[Test]
+starts_in_the_function_entry_names() {
+    var folder = TempFolder("pep_run_entry");
+    write_file(
+        folder.path.join("tool.pep"),
+        "main(): int {\n    return 7;\n}\n\nbench(args: String[]): int {\n    print($\"bench {args[1]}\");\n    return 4;\n}\n"
+    );
+    var started = pep_run(folder.path, ["--entry", "bench", "tool.pep", "x"]);
+    expect_exit(started, 4);
+    expect_equal(started.stdout, "bench x\n");
+    expect_exit(pep_run(folder.path, ["tool.pep"]), 7);
+}
+
 [Test]
 reports_a_compile_error_and_runs_nothing() {
     var folder = TempFolder("pep_run_broken");

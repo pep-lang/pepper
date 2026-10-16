@@ -290,6 +290,12 @@ order. Declare the parameter only when the program reads it, as a Windows
 console program declares `argc`/`argv` only when it needs them. Any other
 parameter list on `main` is an error, and so is declaring both forms.
 
+`pepper build --entry <name>` (and `pepper run --entry <name>`) starts the
+program in the top-level function `name` instead, which takes either form
+of parameter list, as `main` does. Every `main` is then left out of the
+program, so a file can hold several entry points, such as a benchmark
+beside the tool it measures.
+
 Elsewhere, `process.arguments()` returns the same array, so code outside
 `main` can read the arguments without having them passed down.
 `process.exit(code)` ends the program at once with status `code`, from

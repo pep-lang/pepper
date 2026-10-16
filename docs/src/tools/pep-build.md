@@ -22,6 +22,7 @@ short, and `pepper help build` runs it.
 | `<entry.pep>` | The program's entry file | the project's, from `pep.toml` |
 | `-I <dir>` | Add a folder to search for imported modules | the runtime's folder only |
 | `--import <name>` | Load a module into every file of the program | none |
+| `--entry <name>` | The function the program starts in, instead of `main`; it takes no parameters or one `String[]`, and every `main` is left out (not with `--test` or `--lib`) | `main` |
 | `--no-runtime` | Compile without the standard library | the runtime is used |
 | `-o <file>` | Name the executable or library (with `--emit-static`, the folder) | `<entry stem>` in the current folder; a project's `name` in its folder |
 | `--lib static`, `--lib shared` | Build a library for C instead of an executable | an executable |

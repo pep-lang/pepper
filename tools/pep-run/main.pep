@@ -4,6 +4,7 @@
 #     pep-run hello.pep                 # build hello.pep, then run it
 #     pep-run -O2 args.pep a b          # build options first; a b go to main
 #     pep-run -- a b                    # the project pep.toml describes
+#     pep-run --entry bench tool.pep    # start in bench(), not main()
 #
 # The arguments before the entry file (the first one ending in `.pep`) are
 # `pep-build`'s options; everything after it, or after `--`, goes to the
@@ -36,7 +37,7 @@ version(): String {
     return "0.9.3";
 }
 
-const HELP = "Builds a Pepper program and runs it.\n\nUsage: pep-run [BUILD OPTIONS] [<entry.pep>] [ARGUMENTS]...\n       pep-run [BUILD OPTIONS] -- [ARGUMENTS]...\n\nThe arguments before the entry file (the first ending in .pep) are pep-build's\noptions, such as -O2, -D NAME and -I DIR; those after it, or after --, go to\nthe program. With no file, runs the project whose pep.toml is in the current\nfolder or above. The options that choose what pep-build writes (-o, --lib,\n--test, --target and the --emit options) are not taken.\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version\n";
+const HELP = "Builds a Pepper program and runs it.\n\nUsage: pep-run [BUILD OPTIONS] [<entry.pep>] [ARGUMENTS]...\n       pep-run [BUILD OPTIONS] -- [ARGUMENTS]...\n\nThe arguments before the entry file (the first ending in .pep) are pep-build's\noptions, such as -O2, -D NAME and -I DIR; those after it, or after --, go to\nthe program. With no file, runs the project whose pep.toml is in the current\nfolder or above. --entry NAME starts the program in the function NAME instead\nof main. The options that choose what pep-build writes (-o, --lib,\n--test, --target and the --emit options) are not taken.\n\nOptions:\n      --entry <NAME>  Start the program in the function NAME instead of main\n  -h, --help          Print help\n  -V, --version       Print version\n";
 
 main(args: String[]): int {
     var build_options = Array<String>();
@@ -56,6 +57,13 @@ main(args: String[]): int {
         if (argument == "-V" or argument == "--version") {
             File.stdout().write_all($"pep-run {version()}\n");
             return 0;
+        }
+        # Its value is a function's name, never the entry file.
+        if (argument == "--entry" and index < args.count) {
+            build_options.append(argument);
+            build_options.append(args[index]);
+            index += 1;
+            continue;
         }
         if (argument.ends_with(".pep") and !argument.starts_with("-")) {
             entry = argument;

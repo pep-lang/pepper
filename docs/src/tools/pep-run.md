@@ -9,6 +9,7 @@ pepper run hello.pep               # build hello.pep, then run it
 pepper run args.pep a b            # main sees a and b
 pepper run -O2 -D FAST main.pep    # build options go before the file
 pepper run -- --port 8080          # the project pep.toml describes
+pepper run --entry bench tool.pep  # start in bench() instead of main()
 ```
 
 ```text
@@ -36,6 +37,7 @@ pep-run [BUILD OPTIONS] -- [ARGUMENTS]...
 
 | Option | What it does |
 | --- | --- |
+| `--entry <name>` | Starts the program in the function `name` instead of `main`, as `pep-build --entry` does; it takes no parameters or one `String[]` (before the entry file only) |
 | `-h`, `--help` | Prints the usage (before the entry file only) |
 | `-V`, `--version` | Prints the version (before the entry file only) |
 

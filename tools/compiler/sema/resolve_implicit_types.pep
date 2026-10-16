@@ -15,7 +15,7 @@ import [
     ModuleTables, rewrite_module, select_sites, select_sites_each, SiteFilter, SiteSelection, sync_closures
 ] from "closure_sites";
 import "closures";
-import [MAIN_WITH_ARGUMENTS] from "entry_point";
+import [entry_function, MAIN_WITH_ARGUMENTS] from "entry_point";
 import [call_on_value, case_value_type, FieldTypes, is_enum, method_read] from "enums";
 import [Fingerprint] from "fingerprint";
 import [
@@ -2318,7 +2318,10 @@ _finish_return_inference(function: FunctionDef, scopes: _TypeScopes): bool {
     var returns = scopes.returns.value();
     scopes.returns = Optional<Array<TypeName>>.Empty;
     if (returns.count == 0) {
-        bool entry = !function.parent.is_value() and (function.name == "main" or function.name == MAIN_WITH_ARGUMENTS);
+        bool entry = !function.parent.is_value()
+            and (function.name == "main"
+                or function.name == MAIN_WITH_ARGUMENTS
+                or function.name == entry_function(scopes.state.target));
         function.ty = TypeName.named(entry ? "int" : "void");
         return true;
     }

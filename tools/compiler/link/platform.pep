@@ -15,6 +15,10 @@ export const TEST_ATTRIBUTE = "Test";
 ## only when it is.
 export const TEST_BUILD_OPTION = "TEST";
 
+## The build option `pep-build --entry <name>` defines: the name of the
+## function the program starts in, when it is not `main`.
+export const ENTRY_BUILD_OPTION = "_PEP_ENTRY";
+
 ## The triples `--target` accepts: each supported OS on each supported
 ## architecture, as clang spells them, WebAssembly with WASI preview 1, and
 ## the mobile platforms (iOS devices and the simulator on Apple silicon and

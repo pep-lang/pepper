@@ -289,6 +289,45 @@ lib_and_lto_are_checked_and_name_their_output() {
     }
 }
 
+# `--entry` starts the program in the function it names, with the program's
+# arguments when it takes them, and leaves `main` out.
+[Test]
+entry_names_the_function_the_program_starts_in() {
+    var folder = _program(
+        "options_entry",
+        "main(): int {\n    return 7;\n}\n\nstart(args: String[]) {\n    print($\"start {args.count}\");\n}\n\nquiet(): int {\n    return 3;\n}\n"
+    );
+    var program = folder.path.join(Path("main")).to_string();
+    _succeeds(folder.path, ["--entry", "start", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
+    var started = process.Command(program).argument("a").stdout(process.Stream.Pipe).run();
+    expect_true(started.is_ok());
+    expect_equal(_code(started.value()), 0);
+    expect_equal(started.value().stdout.trim(), "start 2");
+    _succeeds(folder.path, ["--entry=quiet", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
+    var quiet = process.Command(program).run();
+    expect_true(quiet.is_ok());
+    expect_equal(_code(quiet.value()), 3);
+    for (var (
+        arguments,
+        code,
+        says
+    ) in [
+        (
+            ["--entry", "nope", "main.pep", "--no-cache"],
+            1,
+            "no function named 'nope' in 'main.pep' to start the program in"
+        ),
+        (["--entry", "start", "--test", "main.pep"], 2, "'--entry <NAME>' cannot be used with '--test'")
+    ]) {
+        var ran = _pep_build(folder.path, arguments);
+        expect_equal(_code(ran), code);
+        if (!ran.stderr.contains(says)) {
+            print(ran.stderr);
+        }
+        expect_true(ran.stderr.contains(says));
+    }
+}
+
 [Test]
 verify_cache_finds_a_cached_object_that_differs() {
     var folder = _program("options_verify", _PROGRAM);
