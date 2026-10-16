@@ -191,12 +191,14 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
 
 For each platform, `scripts/release-build.sh` builds the
 tools, lays them out as above, archives them as
-`pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`, and
-`scripts/release-smoke-test.sh` proves the archive works: unpacked outside the
+`pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`,
+packs `pep-install` alone as the installer archive,
+`pepper-install-<version>-<target>.tar.gz` (`.zip`) with its own `.sha256`,
+and `scripts/release-smoke-test.sh` proves the archives work: unpacked outside the
 repository with no LLVM variables set, `pepper build` must build and run a
 program, and the binaries must load nothing beyond the system's C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
-`manylinux_2_28` container). The workflow then installs each archive with
+`manylinux_2_28` container), and the installer's `pep-install` must run. The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
 `SHA256SUMS` and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.

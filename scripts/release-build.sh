@@ -26,7 +26,9 @@
 #   runtime/          the runtime, which the compiler finds from bin/..
 #   LICENSE.md
 #
-# Beside it lands `<archive>.sha256`, in `sha256sum`'s format.
+# Beside it lands `<archive>.sha256`, in `sha256sum`'s format, and the
+# installer the install scripts bootstrap with, `pepper-install-<version>-<target>.tar.gz`
+# (`.zip` on Windows), holding only `pep-install`, with its own `.sha256`.
 #
 # pep-build is pepc, the compiler written in Pepper (tools/compiler): built
 # by stage 0, the pep-build of a previously published toolchain (stage 1),
@@ -279,21 +281,32 @@ rm -f "$stage"/bin/*.pdb "$stage"/bin/*.ilk
 
 echo "=== package"
 cd "$output"
+installer_name="pepper-install-$version-$target"
 if [ "$target" = windows-x64 ]; then
   archive="$stage_name.zip"
-  rm -f "$archive"
+  installer="$installer_name.zip"
+  rm -f "$archive" "$installer"
   pwsh -NoProfile -Command "Compress-Archive -Path '$stage_name' -DestinationPath '$archive'"
+  pwsh -NoProfile -Command "Compress-Archive -Path '$stage_name/bin/pep-install.exe' -DestinationPath '$installer'"
 else
   archive="$stage_name.tar.gz"
-  tar -czf "$archive" "$stage_name"
+  installer="$installer_name.tar.gz"
+  # COPYFILE_DISABLE: macOS's tar would add an AppleDouble `._<name>` file
+  # for each file with extended attributes, which other tars, and
+  # pep-install's, unpack as files (a `._float_parse.pep` the compiler
+  # then fails to read).
+  COPYFILE_DISABLE=1 tar -czf "$archive" "$stage_name"
+  COPYFILE_DISABLE=1 tar -czf "$installer" -C "$stage_name/bin" pep-install
 fi
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "$archive" > "$archive.sha256"
-else
-  shasum -a 256 "$archive" > "$archive.sha256"
-fi
-cat "$archive.sha256"
-ls -l "$archive"
+for file in "$archive" "$installer"; do
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" > "$file.sha256"
+  else
+    shasum -a 256 "$file" > "$file.sha256"
+  fi
+  cat "$file.sha256"
+  ls -l "$file"
+done
 
 echo "=== smoke test"
 cd "$repo_root"

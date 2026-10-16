@@ -5,7 +5,8 @@
 # binaries load: on Linux only the C and C++ runtimes and libz, from glibc
 # 2.28 or older; on macOS only the system's libraries; on Windows,
 # pep-build starts with nothing but the system folder on the PATH
-# (LLVM-C.dll beside it).
+# (LLVM-C.dll beside it). The installer archive beside it,
+# `pepper-install-<version>-<target>`, must hold a `pep-install` that runs.
 #
 #   scripts/release-smoke-test.sh <archive> <target>
 set -euo pipefail
@@ -46,6 +47,16 @@ out=$("./hello$exe")
 echo "$out"
 [ "$out" = "Hello world!" ] || { echo "unexpected output from hello" >&2; exit 1; }
 "$bin/pepper$exe" fmt --check hello.pep
+
+echo "=== installer"
+installer="$(dirname "$archive")/$(basename "$archive" | sed 's/^pepper-/pepper-install-/')"
+mkdir "$work/installer"
+case "$installer" in
+  *.zip) unzip -q "$installer" -d "$work/installer" ;;
+  *) tar -xzf "$installer" -C "$work/installer" ;;
+esac
+ls -l "$work/installer"
+"$work/installer/pep-install$exe" --version
 
 echo "=== dependencies"
 case "$target" in

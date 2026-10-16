@@ -8,6 +8,8 @@
 #     pepper install update             # install the newest release and make it the default
 #     pepper install remove 0.2.1
 #     pepper install which              # the toolchain this folder uses, and why
+#     pepper install setup              # set this machine up: install, default, PATH, prerequisites
+#     pepper install uninstall          # remove the home and its PATH changes
 #
 # Toolchains go in the Pepper home (`PEPPER_HOME`, else
 # `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere); see
@@ -25,6 +27,7 @@ import os;
 import toolchain;
 import "commands";
 import "releases";
+import "setup";
 
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
@@ -48,6 +51,22 @@ main(args: String[]): int {
     var remove = parser.command("remove", "remove an installed toolchain other than the default");
     var remove_version = remove.positional("version", "the installed toolchain, such as 0.2.1");
     var which = parser.command("which", "show the toolchain this folder uses, why, and its pep-build");
+    var setup_command = parser.command(
+        "setup",
+        "set this machine up for Pepper: install a toolchain and make it the default, put pepper on the PATH, offer to install what linking needs, and build a program to check"
+    );
+    var setup_version = setup_command.positional(
+        "version", "0.3.0, 0.3 for its newest patch, or latest", required = false, default_value = "latest"
+    );
+    var setup_archive = setup_command.option(
+        "archive", "", "install this downloaded release archive instead, checked against FILE.sha256", "FILE"
+    );
+    var setup_yes = setup_command.flag("yes", "y", "install missing prerequisites without asking");
+    var setup_no_path = setup_command.flag("no-modify-path", "", "leave the PATH and the shell startup files alone");
+    var setup_no_prerequisites = setup_command.flag(
+        "no-prerequisites", "", "neither check for nor install clang and the other prerequisites"
+    );
+    var uninstall_command = parser.command("uninstall", "remove the Pepper home and the PATH changes setup made");
     var path = parser.multiple<Path>(
         "path", "", "also find toolchains in DIR, laid out as the home's toolchains folder", "DIR", global = true
     );
@@ -74,6 +93,17 @@ main(args: String[]): int {
         ran = _with_spec(remove_version.value(), (spec) => remove_toolchain(home, spec));
     } else if (which.is_selected) {
         ran = which_toolchain(home, _chosen(home));
+    } else if (setup_command.is_selected) {
+        var options = SetupOptions();
+        if (setup_archive.is_set) {
+            options.archive = Optional<Path>.Value(Path(setup_archive.value()));
+        }
+        options.assume_yes = setup_yes.is_set;
+        options.modify_path = !setup_no_path.is_set;
+        options.prerequisites = !setup_no_prerequisites.is_set;
+        ran = _with_spec(setup_version.value(), (spec) => _setup(home, spec, options));
+    } else if (uninstall_command.is_selected) {
+        ran = uninstall(home);
     }
     if (ran.is_err()) {
         File.stderr().write_all($"pep-install: error: {ran.error().message}\n");
@@ -124,6 +154,12 @@ _add(home: toolchain.Home, text: String, force: bool): Result<String> {
     }
     var releases = _releases()?;
     return add_toolchain(home, releases, spec.value(), force);
+}
+
+_setup(home: toolchain.Home, spec: toolchain.VersionSpec, options: SetupOptions): Result<String> {
+    options.spec = spec;
+    setup(home, options)?;
+    return Result<String>.ok("");
 }
 
 _update(home: toolchain.Home, force: bool): Result<String> {

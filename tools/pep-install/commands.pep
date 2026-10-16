@@ -3,8 +3,10 @@
 
 import archive;
 import compress;
+import digest;
 import [Directory, File, Path] from io;
 import io;
+import process;
 import toolchain;
 import "releases";
 import "zip";
@@ -251,19 +253,132 @@ _newest_release(releases: Array<Release>, spec: toolchain.VersionSpec): Result<R
 # beside that folder first, so only a complete toolchain takes its place,
 # and a toolchain already there is moved aside until it has.
 export install_release(home: toolchain.Home, release: Release): Result<void> {
+    var target = home.toolchain(release.version);
+    var partial = Path(target.to_string() + ".partial");
+    var download = Path(target.to_string() + ".download");
+    _prepare(home, partial)?;
+    var fetched = fetch_archive(release, download);
+    if (fetched.is_err()) {
+        File.remove(download);
+        return fetched;
+    }
+    var unpacked = _unpack_toolchain(download, release.archive_name, partial);
+    File.remove(download);
+    if (unpacked.is_err()) {
+        Directory.remove_all(partial);
+        return unpacked;
+    }
+    return _put_in_place(partial, target);
+}
+
+# Installs the release archive `file`, which a `.sha256` beside it must
+# match, into `home`, replacing any toolchain of its version there, and
+# returns that version: the one its name gives (`pepper-0.3.0-linux-x64.tar.gz`),
+# else, for a build named for no release (`pepper-dev-...`), the one its
+# pep-build reports.
+export install_archive(home: toolchain.Home, file: Path): Result<toolchain.Version> {
+    var name = file.file_name().value_or("");
+    var target = toolchain.target_name();
+    if (target.is_empty()) {
+        return Result<toolchain.Version>.Err("there are no Pepper releases for this machine");
+    }
+    var extension = target.value().starts_with("windows") ? ".zip" : ".tar.gz";
+    var suffix = $"-{target.value()}{extension}";
+    if (!name.starts_with("pepper-") or !name.ends_with(suffix)) {
+        return Result<toolchain.Version>.Err(
+            $"{file.to_string()} is not a release archive for this machine, pepper-<version>{suffix}"
+        );
+    }
+    check_file(file)?;
+    var partial = home.toolchains.join(name + ".partial");
+    _prepare(home, partial)?;
+    var unpacked = _unpack_toolchain(file, name, partial);
+    if (unpacked.is_err()) {
+        Directory.remove_all(partial);
+        return Result<toolchain.Version>.Err(unpacked.error());
+    }
+    var named = name.substr_bytes(7, name.size - 7 - suffix.size);
+    var version = _archive_version(named, partial);
+    if (version.is_err()) {
+        Directory.remove_all(partial);
+        return version;
+    }
+    _put_in_place(partial, home.toolchain(version.value()))?;
+    return version;
+}
+
+# The version of the toolchain unpacked in `folder` from an archive whose
+# name gives `named` for it: that, else the one its pep-build reports.
+_archive_version(named: String, folder: Path): Result<toolchain.Version> {
+    var version = toolchain.parse_version(named);
+    if (version.is_value()) {
+        return Result<toolchain.Version>.ok(version.value());
+    }
+    var compiler = folder.join("bin").join("pep-build" + toolchain.executable_suffix());
+    var ran = process.Command(compiler.to_string()).argument("--version").run();
+    if (ran.is_err() or !ran.value().status.success()) {
+        return Result<toolchain.Version>.Err($"cannot tell the version of the toolchain '{named}'");
+    }
+    var reported = ran.value().stdout.trim().replace("pep-build ", "");
+    var reported_version = toolchain.parse_version(reported);
+    if (reported_version.is_empty()) {
+        return Result<toolchain.Version>.Err($"cannot tell the version of the toolchain '{named}' from '{reported}'");
+    }
+    return Result<toolchain.Version>.ok(reported_version.value());
+}
+
+# Checks `file` against the `.sha256` beside it, in `sha256sum`'s format.
+export check_file(file: Path): Result<void> {
+    var name = file.file_name().value_or("");
+    var listed = File.read_to_string(Path(file.to_string() + ".sha256"));
+    if (listed.is_err()) {
+        return Result<void>.Err($"no {name}.sha256 beside {file.to_string()} to check it against");
+    }
+    var expected = listed.value().trim().split(" ")[0].lower();
+    var opened = File.open(file);
+    if (opened.is_err()) {
+        return Result<void>.Err($"cannot read {file.to_string()}: {opened.error().message}");
+    }
+    var hasher = digest.Sha256();
+    for (var chunk in opened.value().chunks(65536)) {
+        if (chunk.is_err()) {
+            return Result<void>.Err($"cannot read {file.to_string()}: {chunk.error().message}");
+        }
+        hasher.update(chunk.value());
+    }
+    var actual = digest.to_hex(hasher.finish());
+    if (actual != expected) {
+        return Result<void>.Err($"{name} does not match its .sha256: sha256 {actual}, expected {expected}");
+    }
+    return Result<void>.ok();
+}
+
+# Creates the home's `toolchains` folder, and removes what an earlier
+# install left at `partial`.
+_prepare(home: toolchain.Home, partial: Path): Result<void> {
     var created = Directory.create_all(home.toolchains);
     if (created.is_err()) {
         return Result<void>.Err($"cannot create {home.toolchains.to_string()}: {created.error().message}");
     }
-    var target = home.toolchain(release.version);
-    var partial = Path(target.to_string() + ".partial");
-    var download = Path(target.to_string() + ".download");
-    var installed = _download_and_unpack(release, download, partial);
-    File.remove(download);
-    if (installed.is_err()) {
+    if (partial.exists()) {
         Directory.remove_all(partial);
-        return installed;
     }
+    return Result<void>.ok();
+}
+
+# Unpacks the toolchain archive `file`, named `name`, into `partial`.
+_unpack_toolchain(file: Path, name: String, partial: Path): Result<void> {
+    unpack(file, name.ends_with(".zip"), partial)?;
+    var compiler = partial.join("bin").join("pep-build" + toolchain.executable_suffix());
+    if (!compiler.is_file()) {
+        return Result<void>.Err($"{name} holds no bin/pep-build");
+    }
+    return Result<void>.ok();
+}
+
+# Moves the unpacked toolchain `partial` to `target`, moving a toolchain
+# already there aside until it has.
+_put_in_place(partial: Path, target: Path): Result<void> {
     var old = Path(target.to_string() + ".old");
     if (old.exists()) {
         Directory.remove_all(old);
@@ -285,19 +400,6 @@ export install_release(home: toolchain.Home, release: Release): Result<void> {
         return Result<void>.Err($"cannot move {partial.to_string()} to {target.to_string()}: {moved.error().message}");
     }
     Directory.remove_all(old);
-    return Result<void>.ok();
-}
-
-_download_and_unpack(release: Release, download: Path, partial: Path): Result<void> {
-    if (partial.exists()) {
-        Directory.remove_all(partial);
-    }
-    fetch_archive(release, download)?;
-    unpack(download, release.archive_name.ends_with(".zip"), partial)?;
-    var compiler = partial.join("bin").join("pep-build" + toolchain.executable_suffix());
-    if (!compiler.is_file()) {
-        return Result<void>.Err($"{release.archive_name} holds no bin/pep-build");
-    }
     return Result<void>.ok();
 }
 

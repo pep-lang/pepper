@@ -13,6 +13,8 @@ pepper install update             # installs the newest release and makes it the
 pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
 pepper install remove 0.2.1
 pepper install which              # the toolchain this folder uses, why, and its pep-build
+pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
+pepper install uninstall          # removes the home and its PATH changes
 ```
 
 ```text
@@ -39,6 +41,12 @@ one the project's `pep.toml` pins with `toolchain = "0.3"`, else the default
 | `update --force`, `-f` | Installs the newest release even when it is installed, replacing the home's copy |
 | `remove <version>` | Removes the installed toolchain `<version>` names; it must name just one, and not the default |
 | `which` | Prints the toolchain the current folder uses and why, then the path of its `pep-build`; fails when that toolchain is not installed |
+| `setup [<version>]` | Sets this machine up for Pepper: installs the newest release `<version>` names (default `latest`), makes it the default, puts its `pepper` and `pep-install` in the home's `bin`, adds that to the PATH, offers to install what linking needs, and builds and runs a program to check (see [Setting a machine up](#setting-a-machine-up)) |
+| `setup --archive <file>` | Installs the downloaded release archive `<file>` instead, checked against `<file>.sha256` beside it |
+| `setup --yes`, `-y` | Installs missing prerequisites without asking |
+| `setup --no-modify-path` | Leaves the PATH and the shell startup files alone |
+| `setup --no-prerequisites` | Neither checks for nor installs clang and the other prerequisites |
+| `uninstall` | Removes the Pepper home and the PATH changes `setup` made for it |
 | `--path <dir>` | Also finds toolchains in `<dir>`, before those `PEPPER_TOOLCHAIN_PATH` lists; repeatable, before or after the command (see [More toolchain folders](#more-toolchain-folders)) |
 | `-h`, `--help` | Prints the commands; after a command, that command's options |
 | `-V`, `--version` | Prints the version |
@@ -86,6 +94,41 @@ started, say) cannot be moved, and the install fails, leaving it in place.
 The home is the folder above the running `pep-install` when that is a home
 (it has a `toolchains` folder), else `PEPPER_HOME`, else
 `%LOCALAPPDATA%\pepper` on Windows and `~/.pepper` elsewhere.
+
+## Setting a machine up
+
+`setup` is what the [install scripts](install.md) run, from the installer
+archive each release carries (`pepper-install-<version>-<target>.tar.gz`,
+`.zip` on Windows, holding only `pep-install`). It does what `add` and
+`use` do, then:
+
+- puts the toolchain's `pepper` and `pep-install` in the home's `bin`, as
+  `update` does;
+- unless that folder is on the PATH already or `--no-modify-path` is
+  given, adds it: on Windows to the user's PATH, elsewhere with a line in
+  `~/.profile`, and in `~/.bashrc`, `~/.bash_profile` and `~/.zshrc` when
+  they exist (`~/.zshrc` also when the shell is zsh), and in fish's
+  `conf.d/pepper.fish` when fish is installed. Each line follows a
+  `# Added by the Pepper installer` comment;
+- unless `--no-prerequisites` is given, checks for what linking a program
+  needs and offers to install what is missing, asking on the terminal
+  first unless `--yes` is given: Xcode's command line tools on macOS, the
+  Visual Studio Build Tools' C++ workload on Windows (with winget), and
+  clang when the check program's build finds none (apt, dnf, yum, pacman
+  or zypper on Linux, through sudo when not root; winget or Scoop on
+  Windows). It notes when OpenSSL 3, which the `tls` module loads, is
+  missing, and on macOS offers `brew install openssl@3`;
+- builds and runs a small program with the home's `pepper`, from an empty
+  folder, and fails when it cannot.
+
+A toolchain from before side-by-side toolchains, which has no `pepper` to
+put in `bin`, cannot be set up. An archive named for no release (a `dev`
+build, `pepper-dev-<target>`) is installed under the version its
+`pep-build` reports.
+
+`uninstall` removes the home, refusing a folder that holds neither
+`toolchains` nor `bin/pep-build`, and the PATH lines `setup` added for that
+home's `bin`.
 
 ## More toolchain folders
 

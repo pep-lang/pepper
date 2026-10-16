@@ -9,7 +9,8 @@
 # the other tools with the result, lays them out as an install (bin/,
 # runtime/), archives that as
 # `pepper-<version>-<target>.tar.gz` (`.zip` on Windows) with a `.sha256`
-# beside it, and smoke-tests the archive with scripts/release-smoke-test.sh:
+# beside it, packs `pep-install` alone as `pepper-install-<version>-<target>.tar.gz`
+# (`.zip`), the installer the install scripts bootstrap with, and smoke-tests the archive with scripts/release-smoke-test.sh:
 # unpacked outside the checkout with no LLVM variables set, `pepper build`
 # must build and run a program, and the binaries must load nothing a user
 # might not have.

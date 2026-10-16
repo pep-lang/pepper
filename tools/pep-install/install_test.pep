@@ -14,6 +14,7 @@ import tls;
 import toolchain;
 import "commands";
 import "releases";
+import "setup";
 import "zip";
 
 [Test]
@@ -400,4 +401,107 @@ installs_and_updates_from_the_releases() {
             );
         }
     );
+}
+
+# A release archive for this machine of the toolchain `version` in
+# `folder`, with its `.sha256` beside it (`checksum` instead of the right
+# one when it is not empty).
+local_archive(folder: Path, version: String, checksum: String): Path {
+    var target = toolchain.target_name().value();
+    var windows = toolchain.is_windows();
+    var file = folder.join($"pepper-{version}-{target}{windows ? ".zip" : ".tar.gz"}");
+    var data = windows ?
+        File.read_bytes(Path("pep-install/testdata/toolchain.zip")).value() :
+        toolchain_archive(version);
+    File.write_bytes(file, data).value();
+    var sha256 = checksum.is_empty ? digest.to_hex(digest.sha256(data)) : checksum;
+    File.write_text(Path(file.to_string() + ".sha256"), $"{sha256}  {file.file_name().value()}\n").value();
+    return file;
+}
+
+[Test]
+installs_a_downloaded_archive() {
+    var folder = TempFolder("installs_a_downloaded_archive");
+    var home = toolchain.Home(folder.path.join("home"));
+    var archive = local_archive(folder.path, "0.3.1", "");
+    expect_equal(install_archive(home, archive).value().to_string(), "0.3.1");
+    var compiler = home.toolchain_bin(toolchain.Version(0, 3, 1)).join("pep-build" + toolchain.executable_suffix());
+    expect_true(compiler.is_file());
+    expect_equal(home.installed().count, 1);
+    # Again, it replaces the one installed.
+    expect_equal(install_archive(home, archive).value().to_string(), "0.3.1");
+    expect_equal(home.installed().count, 1);
+
+    var tampered = local_archive(
+        folder.path, "0.3.2", "0000000000000000000000000000000000000000000000000000000000000000"
+    );
+    expect_true(install_archive(home, tampered).error().message.contains("does not match its .sha256"));
+    File.remove(Path(tampered.to_string() + ".sha256"));
+    expect_true(install_archive(home, tampered).error().message.contains("no "));
+    expect_false(home.toolchain(toolchain.Version(0, 3, 2)).exists());
+    expect_equal(home.installed().count, 1);
+
+    var misnamed = folder.path.join("toolchain.tar.gz");
+    File.write_text(misnamed, "").value();
+    expect_true(install_archive(home, misnamed).error().message.contains("is not a release archive for this machine"));
+}
+
+[Test]
+adds_and_removes_the_path_line() {
+    var folder = TempFolder("adds_and_removes_the_path_line");
+    var profile = folder.path.join(".profile");
+    var bin = folder.path.join("home").join("bin");
+    File.write_text(profile, "export EDITOR=vi\n").value();
+    expect_true(add_path_line(profile, bin).value());
+    expect_false(add_path_line(profile, bin).value());
+    var added = File.read_to_string(profile).value();
+    expect_equal(added, $"export EDITOR=vi\n\n{PATH_MARKER}\nexport PATH=\"{bin.to_string()}:$PATH\"\n");
+    # Another home's line stays.
+    expect_false(remove_path_lines(profile, folder.path.join("other").join("bin")).value());
+    expect_equal(File.read_to_string(profile).value(), added);
+    expect_true(remove_path_lines(profile, bin).value());
+    expect_equal(File.read_to_string(profile).value(), "export EDITOR=vi\n");
+    expect_false(remove_path_lines(profile, bin).value());
+
+    # A missing file is created with the line.
+    var zshrc = folder.path.join(".zshrc");
+    expect_true(add_path_line(zshrc, bin).value());
+    expect_true(File.read_to_string(zshrc).value().contains(PATH_MARKER));
+
+    var files = startup_files(folder.path, "zsh");
+    expect_equal(files.count, 2);
+    expect_equal(files[1].to_string(), zshrc.to_string());
+    expect_equal(startup_files(folder.path.join("empty"), "bash").count, 1);
+    expect_equal(
+        fish_file(folder.path).to_string(), folder.path.join("fish").join("conf.d").join("pepper.fish").to_string()
+    );
+}
+
+[Test]
+finds_a_folder_on_the_path() {
+    expect_true(path_lists("/usr/bin:/home/me/.pepper/bin", "/home/me/.pepper/bin", false));
+    expect_false(path_lists("/usr/bin:/home/me/.pepper/bin/", "/home/me/.pepper/bin", false));
+    expect_true(
+        path_lists(
+            "C:\\Windows;C:\\Users\\Me\\AppData\\Local\\Pepper\\Bin\\",
+            "c:\\users\\me\\appdata\\local\\pepper\\bin",
+            true
+        )
+    );
+    expect_false(path_lists("", "/home/me/.pepper/bin", false));
+}
+
+[Test]
+uninstalls_only_a_pepper_home() {
+    var folder = TempFolder("uninstalls_only_a_pepper_home");
+    var other = folder.path.join("other");
+    Directory.create_all(other).value();
+    expect_true(uninstall(toolchain.Home(other)).error().message.contains("does not look like a Pepper home"));
+    expect_true(other.exists());
+
+    var home = toolchain.Home(folder.path.join("home"));
+    fake_toolchain(home, "0.3.0");
+    expect_true(uninstall(home).value().contains($"removed {home.root.to_string()}"));
+    expect_false(home.root.exists());
+    expect_true(uninstall(home).value().contains("nothing is installed"));
 }
