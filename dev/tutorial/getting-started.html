@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
+            window.path_to_searchindex_js = "../searchindex-9f388b58.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-e4845a93.js"></script>
+        <script src="../toc-4da10d20.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -275,6 +275,14 @@ but does not run it, so run the result yourself:</p>
 not run a file without an extension, and run it as <code>.\hello.exe</code>. Without <code>-o</code>
 the executable is written to the current directory, named after the source
 file with no extension (<code>hello</code> for <code>hello.pep</code>).</p>
+<h3 id="running-a-program"><a class="header" href="#running-a-program">Running a program</a></h3>
+<p>To build and run in one step, as <code>python hello.py</code> does, use <code>pepper run</code>.
+It keeps the executable out of your folder, and runs it again at once when
+nothing changed:</p>
+<pre><code class="language-sh">pepper run hello.pep
+</code></pre>
+<p>Arguments after the file go to the program’s <code>main</code>; see
+<a href="../tools/pep-run.html">Running a program: pep-run</a>.</p>
 <h3 id="where-the-compiler-finds-the-standard-library"><a class="header" href="#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a></h3>
 <p>Every program is compiled together with Pepper’s standard library, the
 <code>runtime/</code> folder of the repository. The compiler looks for it in this order:</p>
