@@ -16,7 +16,22 @@ folder uses, as `pepper install which` reports it there, so the editor
 checks code with the same compiler and standard library as `pepper build`.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run **Pepper: Restart
-Language Server** after switching toolchains. For another editor, run the
+Language Server** after switching toolchains.
+
+The extension also offers to install what is missing, running it as a task
+whose terminal shows the progress and any error, then offers to reload the
+window to pick the toolchain up:
+
+- with no Pepper home, **Install Pepper** runs the
+  [install script](install.md);
+- when the toolchain the workspace uses is not installed, **Install** runs
+  the `pepper install add <version>` (or `pepper install update`) that
+  `pepper install which` suggests;
+- when the default toolchain is older than the extension, **Update** runs
+  `pepper install update`. A toolchain a project pins, or
+  `PEPPER_TOOLCHAIN` names, is left as it is.
+
+**Don't Ask Again** stops an offer for good. For another editor, run the
 toolchain's `pep-lsp` (or `pepper lsp`) for `.pep` files.
 
 The server is written in Pepper, in `tools/pep-lsp`, on the

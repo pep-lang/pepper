@@ -160,8 +160,9 @@ where toolchains are differs from one machine to the next.
 ## Editors
 
 The VS Code extension runs the language server of the toolchain the
-workspace uses, as `pepper install which` reports it; see
-[pep-lsp](pep-lsp.md).
+workspace uses, as `pepper install which` reports it, and offers to
+install Pepper, the toolchain the workspace needs, or a newer default when
+they are missing or old; see [pep-lsp](pep-lsp.md).
 
 ## Downloads
 
