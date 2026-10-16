@@ -290,7 +290,7 @@ function Install-Flat([string]$Unpacked) {
 
 function Install-Pepper {
     if ([Environment]::Is64BitOperatingSystem -eq $false -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64') {
-        Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://github.com/$Repo#setting-up-a-development-environment"
+        Fail "there is no prebuilt Pepper for this processor yet; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
     }
     $work = Join-Path ([IO.Path]::GetTempPath()) ("pepper-install-" + [Guid]::NewGuid())
     New-Item -ItemType Directory -Path $work | Out-Null

@@ -28,56 +28,8 @@ it installs, and uninstalling.
 ## Building from source
 
 To work on Pepper itself, or on a platform with no prebuilt binaries, build
-the toolchain from source. Pepper is written in Pepper: the compiler,
-`pep-build`, is the Pepper program in `tools/compiler`, and it generates code
-through LLVM. Building it takes a Pepper compiler, so the first one comes from
-a published toolchain. The repository's
-[README](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
-has the full details for each platform; this is the short version.
-
-1. **Install Pepper** as above, the build of main: `sh scripts/install.sh
-   --version 0.4.0-dev` from a clone of the repository (the version its
-   `VERSION` file holds; `install.ps1 -Version 0.4.0-dev` on Windows).
-
-2. **Install the platform prerequisites**, which provide the C toolchain that
-   links your programs:
-
-   - **Windows:** Visual Studio 2022 or newer with the C++ workload (or the
-     standalone Build Tools), and PowerShell.
-   - **macOS:** the Xcode Command Line Tools: `xcode-select --install`.
-   - **Linux** (Debian and Ubuntu package names):
-     `sudo apt install build-essential clang curl xz-utils`.
-
-3. **Set up LLVM 20**, which the compiler links. From the repository's root:
-
-   ```sh
-   ./scripts/setup-llvm.sh --devtools            # Linux and macOS
-   pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
-   ```
-
-   This installs a development build of LLVM 20 (from apt, Homebrew, or the
-   official release archive on Windows) and records where in
-   `.pep/llvm-prefix`. `--devtools` also sets up the `lldb` debugger; you
-   can leave it out. Run `./scripts/setup-llvm.sh --check` at any time to
-   see what is configured.
-
-Now build the compiler with the installed one, then the `pepper` command with
-the compiler you built:
-
-```sh
-export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
-```
-
-On macOS and Windows the compiler's build also needs LLVM's library folder:
-add `-L "$(head -1 .pep/llvm-prefix)/lib"`. On Windows, name the outputs
-`.exe` and copy `LLVM-C.dll` from the LLVM's `bin` folder beside
-`pep-build.exe`. The compiler depends on the `pepper-llvm` package, which the
-first build fetches with git. `pepper` is the entry point to every Pepper
-tool, so `pepper build` runs `pep-build` and `pepper fmt` runs `pep-fmt` (see
-[The pepper command](../tools/pepper.md)). To check that everything works,
-run the tests with `scripts/pepper-tests.sh target/bin`.
+the toolchain from source: see
+[Building Pepper from source](../contributing/building.md).
 
 ## Your first program
 
@@ -254,8 +206,7 @@ A few things are useful once it is installed:
 
 To install the extension from the branch you have checked out instead of the
 release, see
-[VS Code extension from any branch](https://github.com/justinboswell/pepper#vs-code-extension-from-any-branch)
-in the README.
+[The VS Code extension from a branch](../contributing/building.md#the-vs-code-extension-from-a-branch).
 
 ## What to read next
 

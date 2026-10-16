@@ -4,8 +4,8 @@ A map of the compiler for people and agents about to change it: where each
 stage lives, how a program travels from source text to an executable, and the
 patterns the code follows. It complements two other files:
 
-- [README.md](README.md): setting up LLVM, building, running the CLI. Not
-  repeated here.
+- [Building Pepper from source](docs/src/contributing/building.md): setting
+  up LLVM, building and testing. Not repeated here.
 - [AGENTS.md](AGENTS.md): the rules (workflow, CLI string handling, CI
   hygiene, the reference-counting model, the diagnostic standard, the
   library documentation standard). This file links to them and does not
@@ -55,7 +55,7 @@ member of a Pepper type, and `module.name` a function of a module or file.
 | `tools/toolchain` | The module `pepper` and `pep-install` share: toolchain versions and the versions a command names (`version.pep`), the Pepper home's layout (`home.pep`), and which toolchain a folder uses (`choose.pep`: `+<version>`, `PEPPER_TOOLCHAIN`, `pep.toml`'s `toolchain`, the default). |
 | `tools/pepper` | `pepper`, the entry point: `pepper <command>` runs `pep-<command>` found next to it or on the `PATH` (`pepper build` runs the compiler); run from a Pepper home, it runs the tools of the toolchain `tools/toolchain` picks. |
 | `runtime/` | The standard library, written in Pepper. Top-level `*.pep` files form the prelude; each folder (`runtime/io/`, `runtime/process/`, ...) is an importable module. A module's tests are in its `test/` folder, a subfolder of the module, so each test file sees the module's internal declarations (a test helper may not repeat one of their names), the prelude's in `runtime/test/`; `pep-test` runs them (see section 9). |
-| `tests/` | `.pep` corpus: `hello.pep` (the README's example) plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
+| `tests/` | `.pep` corpus: `hello.pep` plus one `tests/<Feature.Case>/test.pep` per folder, which `compiler/corpus_test.pep` builds and runs. |
 | `docs/` | The user-facing book: mdBook sources (`src/`), tested examples (`examples/`), generated library reference (`src/reference/`). |
 | `scripts/` | The version every tool reports (`set-version.sh`), the release build (`release-build.sh`, `release-smoke-test.sh`), CI's toolchain install (`ci-install-toolchain.sh`), LLVM provisioning and packaging (`setup-llvm.*`, `ci-provision-llvm.sh`, `package-llvm.*`), the wasi-sdk and wasmtime for CI's WebAssembly tests (`ci-provision-wasi.sh`), CI's cross-link jobs (`ci-export-sysroot.sh`, `ci-provision-cross.sh`, `ci-cross-link.sh`), the private packages' deploy keys (`ci-package-auth.sh`), the iOS simulator and Android emulator runs (`mobile-test.sh`), the Pepper tests (`pepper-tests.sh`), the sema model's generators (`gen-sema-model.py`, `gen-sema-record.py`), and `install-vscode-extension.ps1`. |
 | `.github/workflows/` | `ci.yml`, `platform-test.yml`, `vsix.yml`, `release.yml`, `docs.yml`, `llvm-package.yml` (see [section 11](#11-ci)). |
@@ -3312,7 +3312,7 @@ export PATH="$PWD/target/pepper-tests/bin:$PATH"
 
 The compiler's tests import the compiler's modules, so they test a change
 to it with the installed `pep-build`; to run the whole suite with the
-changed compiler, build it (README, "Build and test") and pass its folder
+changed compiler, build it (`docs/src/contributing/building.md`) and pass its folder
 to the script. `pep-build --emit-ast`, `--emit-linked`, `--emit-checked`,
 `--emit-model[-step N]` and `--emit-llvm` print a stage's result for a
 program by hand.

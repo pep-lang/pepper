@@ -38,8 +38,11 @@ opening a PR, check each of these against the diff:
   INTERNALS.md names moves, is added, or changes): update INTERNALS.md.
 - **CLI, setup, or tooling**: document every option, command and
   environment variable in the tool's page, `docs/src/tools/<tool>.md`
-  (`scripts/setup-llvm.sh`'s is `docs/src/contributing/setup.md`); update README.md
-  and, when it affects writing the docs, `docs/src/contributing/docs.md`.
+  (`scripts/setup-llvm.sh`'s is `docs/src/contributing/setup.md`); update
+  `docs/src/contributing/building.md` when it changes building Pepper from
+  source, README.md when it changes something README.md shows (it stays
+  short and links to the book), and, when it affects writing the docs,
+  `docs/src/contributing/docs.md`.
 
 CI enforces what it can: `pep-doc check` fails on an undocumented public
 runtime declaration, on a tool option missing from its page (it reads the

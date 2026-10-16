@@ -567,7 +567,9 @@ working_lldb() {
 }
 
 check_devtools() {
-    local prefix="$1" candidates=("$prefix/bin/lldb")
+    # Two statements: bash 3.2 (macOS) expands the array before 'prefix' is set.
+    local prefix="$1"
+    local candidates=("$prefix/bin/lldb")
     command -v lldb >/dev/null 2>&1 && candidates+=("$(command -v lldb)")
 
     for lldb in "${candidates[@]}"; do

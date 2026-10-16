@@ -38,7 +38,7 @@ detail.
 
 ## How Pepper is built
 
-The compiler is written in Rust. It parses your program, checks it, and
+The compiler is written in Pepper, and builds itself. It parses your program, checks it, and
 generates native code through [LLVM](https://llvm.org), then links an
 executable with the system's C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper's errors as you type.

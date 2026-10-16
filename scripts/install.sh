@@ -129,10 +129,10 @@ detect_target() {
     arch=arm64
   fi
   if [ "$os" = linux ] && [ "$arch" = arm64 ]; then
-    die "there is no prebuilt Pepper for Linux on arm64 yet; build it from source: https://github.com/$REPO#setting-up-a-development-environment"
+    die "there is no prebuilt Pepper for Linux on arm64 yet; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
   fi
   if [ "$os" = linux ] && ldd --version 2>&1 | grep -qi musl; then
-    die "the prebuilt Pepper needs glibc 2.28 or newer, and this system uses musl; build it from source: https://github.com/$REPO#setting-up-a-development-environment"
+    die "the prebuilt Pepper needs glibc 2.28 or newer, and this system uses musl; build it from source: https://justinboswell.github.io/pepper/dev/contributing/building.html"
   fi
   echo "$os-$arch"
 }

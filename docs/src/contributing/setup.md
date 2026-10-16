@@ -11,10 +11,8 @@ pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 
 They record the LLVM they settled on in `.pep/llvm-prefix` (gitignored),
 which `scripts/pepper-tests.sh`, the release scripts and the workflows read.
-Run them again on each new machine rather than copying that file. The
-README's
-[Setting up a development environment](https://github.com/justinboswell/pepper#setting-up-a-development-environment)
-says what each platform needs first.
+Run them again on each new machine rather than copying that file. [Building Pepper from source](building.md) says what each platform needs
+first.
 
 ```text
 scripts/setup-llvm.sh [options]
