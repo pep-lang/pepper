@@ -5,7 +5,7 @@ holds the toolchain: the compiler, `pep-build` (`tools/compiler`, also called
 pepc), which generates code through LLVM (the `pepper-llvm` package's
 bindings to LLVM's C API); the standard library (`runtime/`); and the tools,
 each a Pepper program under `tools/`: `pepper`, the entry point; `pep-fmt`;
-`pep-test`; `pep-package`; `pep-install`; `pep-profile`; `pep-lsp`, the
+`pep-test`; `pep-package`; `pep-install`; `pep-profile`; `pep-run`; `pep-lsp`, the
 language server; and `pep-doc`, the book builder.
 
 See the [Pepper book](docs/src/introduction.md) (`docs/`, rendered with mdBook; build it with `pep-doc serve`) for the language itself, and [`INTERNALS.md`](INTERNALS.md) for how the compiler works.
@@ -244,7 +244,7 @@ llvm="$(head -1 .pep/llvm-prefix)"
 mkdir -p target/bin
 pepper build -O tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
 # Windows: cp "$llvm/bin/LLVM-C.dll" target/bin/
-for tool in pepper pep-fmt pep-test pep-package pep-profile pep-install pep-doc pep-lsp; do
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
   target/bin/pep-build -O "tools/$tool/main.pep" -o "target/bin/$tool"
 done
 ```
@@ -284,7 +284,7 @@ its dependencies, which `pepper package` adds and fetches (see the book's
 Every option and environment variable the compiler reads is described in
 the book's [The compiler: pep-build](docs/src/tools/pep-build.md); the
 other tools' options are in [The pepper command](docs/src/tools/pepper.md),
-[pep-fmt](docs/src/tools/pep-fmt.md), [pep-profile](docs/src/tools/pep-profile.md),
+[pep-fmt](docs/src/tools/pep-fmt.md), [pep-profile](docs/src/tools/pep-profile.md), [pep-run](docs/src/tools/pep-run.md),
 [pep-install](docs/src/tools/pep-install.md), [pep-test](docs/src/tools/pep-test.md), [pep-lsp](docs/src/tools/pep-lsp.md) and [pep-doc](docs/src/tools/pep-doc.md).
 From the repository root:
 

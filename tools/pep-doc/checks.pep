@@ -9,7 +9,7 @@
 # | Tool | Options from | Page |
 # | --- | --- | --- |
 # | `pep-build` | `pep-build --help`, `TRACE_CHANNELS`, the environment variables the compiler reads | `docs/src/tools/pep-build.md` |
-# | `pepper`, `pep-fmt`, `pep-profile`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
+# | `pepper`, `pep-fmt`, `pep-profile`, `pep-run`, `pep-test` | the tool's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-package`, `pep-install` | the tool's `--help` and each command's `--help` | `docs/src/tools/<tool>.md` |
 # | `pep-doc` | its own help (`HELP` in main.pep) | `docs/src/tools/pep-doc.md` |
 # | `pep-lsp` | `HELP` in `tools/pep-lsp/arguments.pep`, the server's initialization options and the VS Code settings | `docs/src/tools/pep-lsp.md` |
@@ -35,7 +35,7 @@ import "strings";
 # The Pepper tools whose `--help` lists options, built from
 # `tools/<tool>/main.pep`.
 export pepper_tools(): String[] {
-    return ["pepper", "pep-fmt", "pep-profile", "pep-package", "pep-install", "pep-test"];
+    return ["pepper", "pep-fmt", "pep-profile", "pep-package", "pep-install", "pep-run", "pep-test"];
 }
 
 # Whether `tool` has commands, each with options of its own.

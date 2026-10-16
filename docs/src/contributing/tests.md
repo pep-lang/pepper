@@ -66,7 +66,8 @@ and runs `pepper test`:
 - in `tools/`, the tools' tests, each under its tool's `pep.toml`.
 
 The tools' run, the longest, starts as soon as the tools its tests run
-(`pepper`, `pep-test`, `pep-fmt`, `pep-profile` and `pep-package`) are
+(`pepper`, `pep-test`, `pep-fmt`, `pep-profile`, `pep-package` and
+`pep-run`) are
 built, and runs beside the runtime's runs; its output is printed after
 theirs.
 
@@ -121,6 +122,7 @@ output and exit status as a user would see them.
 | `tools/pepper/pepper_test.pep` | `pepper`, copied beside stand-in tools built from `tools/pepper/testdata/`; and every tool's `--version` against the version in each `tools/*/main.pep`. |
 | `tools/pep-test/pep_test_test.pep` | `pep-test` on test files it writes, from `tools/pep-test/testdata/` (named `.pep.txt` so that the suite's own run skips them). |
 | `tools/pep-package/package_test.pep` | `pep-package` and `pep-build` on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under `.pep/fetch.lock`; skipped without git. |
+| `tools/pep-run/pep_run_test.pep` | `pep-run` building and running the programs in `tools/pep-run/testdata/` with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses. |
 | `tools/pep-profile/profile_test.pep` | `pep-profile` on the recordings in `tools/pep-profile/testdata/`, and on a real program when samply or a working perf is installed (skipped otherwise). |
 
 They find `pep-build` and the tools beside the test program or on the

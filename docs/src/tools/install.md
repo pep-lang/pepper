@@ -48,7 +48,7 @@ Open a new terminal afterwards so the `PATH` change takes effect, then
     0.4.0/
       bin/
         pep-build       the compiler, with LLVM inside it (on Windows, LLVM-C.dll beside it)
-        pep-fmt  pep-test  pep-package  pep-profile  pep-lsp  pep-doc  pepper  pep-install
+        pep-fmt  pep-test  pep-package  pep-profile  pep-run  pep-lsp  pep-doc  pepper  pep-install
       runtime/          the runtime, which pep-build finds from its own folder
       LICENSE.md
   default-toolchain     the default toolchain's version

@@ -113,6 +113,19 @@ not run a file without an extension, and run it as `.\hello.exe`. Without `-o`
 the executable is written to the current directory, named after the source
 file with no extension (`hello` for `hello.pep`).
 
+### Running a program
+
+To build and run in one step, as `python hello.py` does, use `pepper run`.
+It keeps the executable out of your folder, and runs it again at once when
+nothing changed:
+
+```sh
+pepper run hello.pep
+```
+
+Arguments after the file go to the program's `main`; see
+[Running a program: pep-run](../tools/pep-run.md).
+
 ### Where the compiler finds the standard library
 
 Every program is compiled together with Pepper's standard library, the

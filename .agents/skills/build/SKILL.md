@@ -5,7 +5,7 @@ description: Build the Pepper compiler (pepc, tools/compiler) and the Pepper too
 
 # Building Pepper
 
-Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper program in `tools/compiler` (pepc); every other tool is a Pepper program under `tools/` (`pepper`, `pep-fmt`, `pep-test`, `pep-package`, `pep-install`, `pep-profile`, `pep-doc`, `pep-lsp`). Building any of them takes a `pep-build`: the first one comes from a published toolchain (stage 0).
+Pepper is written in Pepper. The compiler, `pep-build`, is the Pepper program in `tools/compiler` (pepc); every other tool is a Pepper program under `tools/` (`pepper`, `pep-fmt`, `pep-test`, `pep-package`, `pep-install`, `pep-profile`, `pep-run`, `pep-doc`, `pep-lsp`). Building any of them takes a `pep-build`: the first one comes from a published toolchain (stage 0).
 
 ## First time on a machine
 

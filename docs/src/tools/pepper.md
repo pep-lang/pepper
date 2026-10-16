@@ -7,6 +7,7 @@ are: `pepper <command> [arguments]` runs a separate program named
 ```bash
 pepper build main.pep -o main     # runs pep-build main.pep -o main
 pepper build                      # builds the project pep.toml describes
+pepper run hello.pep a b          # builds hello.pep and runs it with a b
 pepper fmt -w src                 # runs pep-fmt -w src
 pepper -C my_app build            # runs pep-build in my_app
 pepper +0.2 build                 # runs the installed 0.2.x toolchain's pep-build
@@ -49,6 +50,7 @@ unknown command exits with 1. Otherwise the exit status is the command's.
 | Command | Program | What it does |
 | --- | --- | --- |
 | `pepper build` | `pep-build` | Compiles a program, or with no file the project ([The compiler: pep-build](pep-build.md), [Projects: pep.toml](projects.md)) |
+| `pepper run` | `pep-run` | Builds a program and runs it, like `python script.py` ([Running a program: pep-run](pep-run.md)) |
 | `pepper install` | `pep-install` | Installs toolchains side by side and picks the default ([Toolchains: pep-install](pep-install.md)) |
 | `pepper package` | `pep-package` | Adds, removes, updates and fetches a project's dependencies ([The package manager: pep-package](pep-package.md)) |
 | `pepper fmt` | `pep-fmt` | Formats source ([Formatting with pep-fmt](pep-fmt.md)) |

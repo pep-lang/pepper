@@ -1,0 +1,11 @@
+[package]
+name = "pep_run"
+description = "Builds a program and runs it, run as `pepper run`"
+license = "MIT"
+repository = "https://github.com/justinboswell/pepper"
+
+[build]
+entry = "main.pep"
+output = "pep-run"
+# `toolchain` is a folder beside this one.
+include = [".."]

@@ -199,7 +199,7 @@ every_tool_reports_the_release_version() {
     if (cargo.is_file()) {
         expect_contains(read_file(cargo), $"\n[workspace.package]\nversion = \"{release}\"\n");
     }
-    for (var name in ["pepper", "pep-fmt", "pep-package", "pep-profile", "pep-test"]) {
+    for (var name in ["pepper", "pep-fmt", "pep-package", "pep-profile", "pep-run", "pep-test"]) {
         var reported = run(process.Command(tool(name).to_string()).argument("--version"));
         expect_equal(reported.stdout, $"{name} {release}\n");
     }
