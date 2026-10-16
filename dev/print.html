@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-f25ec418.js";
+            window.path_to_searchindex_js = "searchindex-7c0d37fc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-4da10d20.js"></script>
+        <script src="toc-58d14832.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -215,7 +215,7 @@ object is freed and when its destructor runs. The chapter on
 <a href="#memory-and-reference-counting">memory and reference counting</a> covers the model in
 detail.</p>
 <h2 id="how-pepper-is-built"><a class="header" href="#how-pepper-is-built">How Pepper is built</a></h2>
-<p>The compiler is written in Rust. It parses your program, checks it, and
+<p>The compiler is written in Pepper, and builds itself. It parses your program, checks it, and
 generates native code through <a href="https://llvm.org">LLVM</a>, then links an
 executable with the system’s C toolchain. The same compiler powers a language
 server, so editors such as VS Code show Pepper’s errors as you type.</p>
@@ -350,54 +350,8 @@ afterwards. <a href="#installing-pepper">Installing Pepper</a> covers the option
 it installs, and uninstalling.</p>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
 <p>To work on Pepper itself, or on a platform with no prebuilt binaries, build
-the toolchain from source. Pepper is written in Pepper: the compiler,
-<code>pep-build</code>, is the Pepper program in <code>tools/compiler</code>, and it generates code
-through LLVM. Building it takes a Pepper compiler, so the first one comes from
-a published toolchain. The repository’s
-<a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">README</a>
-has the full details for each platform; this is the short version.</p>
-<ol>
-<li>
-<p><strong>Install Pepper</strong> as above, the build of main: <code>sh scripts/install.sh --version 0.4.0-dev</code> from a clone of the repository (the version its
-<code>VERSION</code> file holds; <code>install.ps1 -Version 0.4.0-dev</code> on Windows).</p>
-</li>
-<li>
-<p><strong>Install the platform prerequisites</strong>, which provide the C toolchain that
-links your programs:</p>
-<ul>
-<li><strong>Windows:</strong> Visual Studio 2022 or newer with the C++ workload (or the
-standalone Build Tools), and PowerShell.</li>
-<li><strong>macOS:</strong> the Xcode Command Line Tools: <code>xcode-select --install</code>.</li>
-<li><strong>Linux</strong> (Debian and Ubuntu package names):
-<code>sudo apt install build-essential clang curl xz-utils</code>.</li>
-</ul>
-</li>
-<li>
-<p><strong>Set up LLVM 20</strong>, which the compiler links. From the repository’s root:</p>
-<pre><code class="language-sh">./scripts/setup-llvm.sh --devtools            # Linux and macOS
-pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
-</code></pre>
-<p>This installs a development build of LLVM 20 (from apt, Homebrew, or the
-official release archive on Windows) and records where in
-<code>.pep/llvm-prefix</code>. <code>--devtools</code> also sets up the <code>lldb</code> debugger; you
-can leave it out. Run <code>./scripts/setup-llvm.sh --check</code> at any time to
-see what is configured.</p>
-</li>
-</ol>
-<p>Now build the compiler with the installed one, then the <code>pepper</code> command with
-the compiler you built:</p>
-<pre><code class="language-sh">export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
-</code></pre>
-<p>On macOS and Windows the compiler’s build also needs LLVM’s library folder:
-add <code>-L "$(head -1 .pep/llvm-prefix)/lib"</code>. On Windows, name the outputs
-<code>.exe</code> and copy <code>LLVM-C.dll</code> from the LLVM’s <code>bin</code> folder beside
-<code>pep-build.exe</code>. The compiler depends on the <code>pepper-llvm</code> package, which the
-first build fetches with git. <code>pepper</code> is the entry point to every Pepper
-tool, so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
-<a href="#the-pepper-command">The pepper command</a>). To check that everything works,
-run the tests with <code>scripts/pepper-tests.sh target/bin</code>.</p>
+the toolchain from source: see
+<a href="#building-pepper-from-source">Building Pepper from source</a>.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -542,8 +496,7 @@ restarts whenever that file changes.</li>
 </ul>
 <p>To install the extension from the branch you have checked out instead of the
 release, see
-<a href="https://github.com/justinboswell/pepper#vs-code-extension-from-any-branch">VS Code extension from any branch</a>
-in the README.</p>
+<a href="#the-vs-code-extension-from-a-branch">The VS Code extension from a branch</a>.</p>
 <h2 id="what-to-read-next"><a class="header" href="#what-to-read-next">What to read next</a></h2>
 <ul>
 <li><a href="#a-tour-of-pepper">A tour of Pepper</a> builds a small program step by step and shows
@@ -20584,8 +20537,9 @@ whoever put it there. A project’s <code>pep.toml</code> cannot add folders, si
 where toolchains are differs from one machine to the next.</p>
 <h2 id="editors"><a class="header" href="#editors">Editors</a></h2>
 <p>The VS Code extension runs the language server of the toolchain the
-workspace uses, as <code>pepper install which</code> reports it; see
-<a href="#the-language-server-pep-lsp">pep-lsp</a>.</p>
+workspace uses, as <code>pepper install which</code> reports it, and offers to
+install Pepper, the toolchain the workspace needs, or a newer default when
+they are missing or old; see <a href="#the-language-server-pep-lsp">pep-lsp</a>.</p>
 <h2 id="downloads"><a class="header" href="#downloads">Downloads</a></h2>
 <p><code>add</code> and <code>update</code> find this machine’s archive (<code>linux-x64</code>, <code>macos-arm64</code>,
 <code>macos-x64</code> or <code>windows-x64</code>) among the GitHub releases, as the
@@ -21987,7 +21941,21 @@ folder uses, as <code>pepper install which</code> reports it there, so the edito
 checks code with the same compiler and standard library as <code>pepper build</code>.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run <strong>Pepper: Restart
-Language Server</strong> after switching toolchains. For another editor, run the
+Language Server</strong> after switching toolchains.</p>
+<p>The extension also offers to install what is missing, running it as a task
+whose terminal shows the progress and any error, then offers to reload the
+window to pick the toolchain up:</p>
+<ul>
+<li>with no Pepper home, <strong>Install Pepper</strong> runs the
+<a href="#installing-pepper">install script</a>;</li>
+<li>when the toolchain the workspace uses is not installed, <strong>Install</strong> runs
+the <code>pepper install add &lt;version&gt;</code> (or <code>pepper install update</code>) that
+<code>pepper install which</code> suggests;</li>
+<li>when the default toolchain is older than the extension, <strong>Update</strong> runs
+<code>pepper install update</code>. A toolchain a project pins, or
+<code>PEPPER_TOOLCHAIN</code> names, is left as it is.</li>
+</ul>
+<p><strong>Don’t Ask Again</strong> stops an offer for good. For another editor, run the
 toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</code> files.</p>
 <p>The server is written in Pepper, in <code>tools/pep-lsp</code>, on the
 <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
@@ -51786,6 +51754,198 @@ taking a numbered name when that cannot be removed.</p>
 <li>if the folder cannot be made</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="building-pepper-from-source"><a class="header" href="#building-pepper-from-source">Building Pepper from source</a></h1>
+<p>Pepper is written in Pepper. The compiler, <code>pep-build</code>, is the Pepper
+program in <code>tools/compiler</code> (also called pepc), and every other tool is a
+Pepper program under <code>tools/</code>. Building them takes a Pepper compiler, so
+the first one comes from a published toolchain, the build of main (stage
+0), the same way CI and the release build get theirs. The Rust compiler
+that once bootstrapped Pepper plays no part.</p>
+<p>You need this to work on Pepper itself, or on a platform with no prebuilt
+binaries. To use Pepper, <a href="#installing-pepper">install it</a> instead.</p>
+<h2 id="setting-up"><a class="header" href="#setting-up">Setting up</a></h2>
+<p>Four steps, on every platform:</p>
+<ol>
+<li>
+<p><strong>The build of main.</strong> Every merge into main that changes the compiler,
+the runtime or the tools publishes it as a prerelease named
+<code>x.y.z-dev</code>, which <code>pepper install list --available</code> lists. Install it
+and make it the default, with the
+<a href="#installing-pepper">install script</a> on a new machine or with
+<code>pepper install</code>:</p>
+<pre><code class="language-bash">sh scripts/install.sh --version 0.4.0-dev    # the -dev version listed
+pepper install add 0.4.0-dev &amp;&amp; pepper install use 0.4.0-dev
+</code></pre>
+<p>A prerelease is picked only by its exact name, never by <code>update</code> or
+<code>latest</code>. <code>pepper install add --force &lt;version&gt;</code> refreshes it.</p>
+</li>
+<li>
+<p><strong>Platform prerequisites</strong>, for linking:</p>
+<ul>
+<li><strong>Windows</strong>: Visual Studio 2022 or newer with the C++ workload (or the
+standalone Build Tools), which <code>clang</code> links through; PowerShell (<code>pwsh</code>
+7.x is what the setup script is tested with; Windows PowerShell 5.1 also
+works); and <a href="https://www.7-zip.org/">7-Zip</a>, only for <code>-DevTools</code>, which
+extracts lldb from the llvm.org installer rather than running it.</li>
+<li><strong>macOS</strong>: the Xcode Command Line Tools (<code>xcode-select --install</code>), for
+the SDK, system headers and <code>ld</code>. The <code>clang</code> that drives the link comes
+from the LLVM prefix when it has one, which it does on macOS.</li>
+<li><strong>Linux</strong> (Debian/Ubuntu names): <code>sudo apt install build-essential clang curl xz-utils</code>. <code>clang</code> is the link driver, and on Linux nothing else
+provides one: <code>llvm-20-dev</code> installs no <code>bin/clang</code> into its prefix.</li>
+</ul>
+</li>
+<li>
+<p><strong>LLVM 20.</strong> The compiler links LLVM through the <code>pepper-llvm</code> package,
+which binds LLVM 20, so building it needs an LLVM 20 development install.
+One command provisions it (every option is in
+<a href="#setting-up-llvm-setup-llvmsh">Setting up LLVM</a>):</p>
+<pre><code class="language-bash">./scripts/setup-llvm.sh --devtools            # macOS / Linux
+pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
+</code></pre>
+</li>
+<li>
+<p><strong>The private packages.</strong> <code>tools/compiler</code> depends on
+<code>justinboswell/pepper-llvm</code> and <code>tools/pep-lsp</code> on
+<code>justinboswell/pepper-lsp</code>. The first build of each fetches its package
+with git into the tool’s <code>.pep/deps</code>, so your git needs read access to
+those repositories.</p>
+</li>
+</ol>
+<h3 id="where-llvm-comes-from"><a class="header" href="#where-llvm-comes-from">Where LLVM comes from</a></h3>
+<p>On macOS and Linux your package manager has an LLVM 20 and the script uses
+it:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>platform</th><th>where LLVM comes from</th><th>cost</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td><code>apt install llvm-20-dev</code> (plus <code>libpolly-20-dev</code>)</td><td>4–8s, 400–750 MB</td></tr>
+<tr><td>macOS</td><td><code>brew install llvm@20</code></td><td>13–17s</td></tr>
+<tr><td>Windows</td><td>the official release archive</td><td>896 MB download</td></tr>
+</tbody>
+</table>
+</div>
+<p>Windows needs the archive because nothing else on the platform works: the
+llvm.org installer and the winget, scoop and chocolatey packages ship neither
+<code>llvm-config</code> nor the component libraries. The script falls back to the
+archive on Linux and macOS too, but only when the package manager has no
+LLVM 20.</p>
+<p>That fallback is sound on Linux but usually unusable on <strong>macOS</strong>: the
+release tarballs are LTO builds, so their static libraries are LLVM bitcode,
+and Apple’s linker rejects bitcode produced by a newer LLVM than its own
+(<code>could not parse bitcode object file … Unknown attribute kind</code>).
+Homebrew’s <code>llvm@20</code> is not LTO-built and works, so on macOS install it with
+<code>brew</code> and re-run the script. It warns about this when it takes the archive
+path there.</p>
+<p>The script records the prefix it settled on in <code>.pep/llvm-prefix</code>
+(gitignored), which the test, release and CI scripts read (a git worktree
+reads its main checkout’s). Re-run it on a new machine rather than copying
+that file. With a valid install present it only rewrites the file, and
+<code>./scripts/setup-llvm.sh --check</code> reports what it would use, changing
+nothing.</p>
+<p>Only the Windows archive path is large: budget roughly <strong>5 GB</strong> of disk for
+the tree plus its cached archive, and a few minutes for the first run.
+Everything lands outside the repository, under <code>%LOCALAPPDATA%\pepper</code> or
+<code>~/.local/share/pepper</code>, except a package-manager prefix, which stays
+wherever apt or brew put it.</p>
+<h3 id="the-debugger-1"><a class="header" href="#the-debugger-1">The debugger</a></h3>
+<p><code>--devtools</code> sets up the <code>lldb</code> debugger, and is worth it: a compiler that
+generates and links native code fails in native ways, an access violation
+or SIGSEGV from inside LLVM or the code it generated, and <code>lldb</code> turns that
+into a symbolized stack. On Windows it installs <code>lldb</code>, <code>lldb-dap</code> and
+<code>lldb-server</code> into the LLVM prefix (an extra 335–434 MB), extracting them
+from the llvm.org installer with 7-Zip and placing the embeddable Python
+that <code>liblldb.dll</code> needs beside them. On macOS and Linux it checks for a
+usable <code>lldb</code> and says how to install one if there is none.
+<code>PEPPER_SETUP_DEVTOOLS=1</code> turns it on for every run.</p>
+<p>Build the compiler with <code>-g</code> for its own frames, then:</p>
+<pre><code class="language-bash">lldb --batch -o run -k "thread backtrace" -- target/bin/pep-build tests/hello.pep
+</code></pre>
+<p>On Windows the setup script leaves the <code>PATH</code> alone, so run
+<code>"$env:LOCALAPPDATA\pepper\llvm\20.1.8\bin\lldb.exe"</code> by its full path.
+<a href="#debugging-1">Debugging</a> covers debugging Pepper programs.</p>
+<h2 id="building-1"><a class="header" href="#building-1">Building</a></h2>
+<p>Build the compiler from <code>tools/compiler</code> with the installed toolchain,
+against this checkout’s runtime, then every tool with the compiler you
+built. Each tool is a project: its <code>tools/&lt;tool&gt;/pep.toml</code> adds <code>tools/</code> to
+the import search path, for the modules the tools share, and names the
+packages it depends on. On macOS and Windows the compiler’s link needs
+LLVM’s library folder (<code>-L</code>), and on Windows its <code>LLVM-C.dll</code> beside it:</p>
+<pre><code class="language-bash">export PEPPER_RUNTIME="$PWD/runtime"
+llvm="$(head -1 .pep/llvm-prefix)"
+mkdir -p target/bin
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build    # + -L "$llvm/lib" on macOS and Windows
+# Windows: cp "$llvm/bin/LLVM-C.dll" target/bin/
+for tool in pepper pep-fmt pep-test pep-package pep-profile pep-run pep-install pep-doc pep-lsp; do
+  target/bin/pep-build -O "tools/$tool/main.pep" -o "target/bin/$tool"
+done
+</code></pre>
+<p>(<code>.exe</code> names on Windows.) The release build (<code>scripts/release-build.sh</code>)
+does the same, then builds the compiler once more with itself, and ships
+that one. A cold build of the compiler takes several minutes; the
+<a href="#the-build-cache">build cache</a> makes a rebuild after
+an edit take seconds.</p>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<p>The tests are Pepper <code>[Test]</code> functions, run by <code>scripts/pepper-tests.sh</code>
+as CI runs them; there is no <code>cargo test</code>.</p>
+<pre><code class="language-bash">scripts/pepper-tests.sh                      # with the installed build of main
+scripts/pepper-tests.sh target/bin           # with the compiler you built
+PEPPER_OPT_LEVEL=2 scripts/pepper-tests.sh   # every build the tests make at -O2
+WASI_SDK_PATH=/opt/wasi-sdk WASMTIME=/opt/wasmtime/wasmtime scripts/pepper-tests.sh
+</code></pre>
+<p>The last also builds the docs examples and the corpus for <code>wasm32-wasip1</code>
+and runs them under <a href="https://wasmtime.dev">wasmtime</a>, except those that
+need threads, tasks, sockets or processes; without a
+<a href="https://github.com/WebAssembly/wasi-sdk">wasi-sdk</a> those tests say they
+skipped and pass. <a href="#testing-the-runtime-and-the-compiler">Testing the runtime and the compiler</a> says
+what runs and where new tests go. Before a pull request, also run what CI
+checks:</p>
+<pre><code class="language-bash">target/pepper-tests/bin/pep-doc check        # the reference and the tools' pages are current
+target/pepper-tests/bin/pep-fmt --check runtime tools
+</code></pre>
+<p><code>AGENTS.md</code>, at the repository’s root, holds the rules every change
+follows, for people and agents alike: the reference-counting model, how
+errors are reported, naming, formatting, and which docs a change must
+update. <code>INTERNALS.md</code> is the map of the compiler: where each stage lives
+and the patterns it follows. <code>.agents/skills/</code> holds step-by-step
+workflows (build, test, finish a PR, test another platform), and its
+<code>build</code> and <code>test</code> skills carry the failure signatures this project has
+hit, such as LLVM discovery and link failures and the private packages’
+fetch. Start there before diagnosing a failure from scratch.</p>
+<h2 id="the-vs-code-extension-from-a-branch"><a class="header" href="#the-vs-code-extension-from-a-branch">The VS Code extension from a branch</a></h2>
+<p>The released extension comes from the <code>vsix-v*</code> GitHub release. To run the
+extension and language server from the branch checked out, before it
+merges:</p>
+<pre><code class="language-powershell">scripts/install-vscode-extension.ps1          # build pep-lsp + vsix, install into VS Code
+scripts/install-vscode-extension.ps1 -Watch   # follow the branch: pull and reinstall on change
+</code></pre>
+<p>The extension restarts its language server by itself when the installed
+server changes; a change to the extension’s own code needs <strong>Developer:
+Reload Window</strong>. When editing the server, setting <code>pepper.lspPath</code> to a
+<code>pep-lsp</code> you build skips the install (see
+<a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>). Packaging
+(<code>vsce package</code>, run by the script and the <code>VSIX</code> workflow) bundles
+<code>tools/vscode-pepper/src</code> and its dependencies into one file with esbuild
+(<code>npm run bundle</code>).</p>
+<h2 id="platforms"><a class="header" href="#platforms">Platforms</a></h2>
+<ul>
+<li><strong>Windows x64</strong>, <strong>Linux x64</strong> and <strong>macOS arm64</strong> build and pass the
+suite; CI runs it on all three.</li>
+<li><strong>Cross-compiling</strong> (<code>--target</code>): CI links from each of Linux x64, macOS
+arm64 and Windows x64 for the other two with <code>lld</code> and their system roots
+and runs the programs on their own OS. Other pairs emit their objects;
+their links are untested.</li>
+<li><strong>WebAssembly</strong> (<code>--target wasm32-wasip1</code>) and <strong>iOS and Android</strong>: see
+<a href="#webassembly">Platform selection</a> and
+<a href="#ios-and-android">iOS and Android</a>.</li>
+<li><strong>macOS x86_64</strong> is untested. LLVM 20 publishes no <code>macOS-X64</code> archive,
+so it needs Homebrew’s <code>llvm@20</code>.</li>
+</ul>
+<p>To exercise another platform from the machine you are on, run the
+<code>platform-test</code> workflow (<code>gh workflow run platform-test.yml -f platforms=linux</code>); the <code>platform-test</code> skill in <code>.agents/skills/</code> describes
+it.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="setting-up-llvm-setup-llvmsh"><a class="header" href="#setting-up-llvm-setup-llvmsh">Setting up LLVM: setup-llvm.sh</a></h1>
 <p>The compiler, <code>pep-build</code> (<code>tools/compiler</code>), links LLVM 20 through the
 <code>pepper-llvm</code> package, so building it from source needs an LLVM 20
@@ -51795,10 +51955,8 @@ pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
 </code></pre>
 <p>They record the LLVM they settled on in <code>.pep/llvm-prefix</code> (gitignored),
 which <code>scripts/pepper-tests.sh</code>, the release scripts and the workflows read.
-Run them again on each new machine rather than copying that file. The
-README’s
-<a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">Setting up a development environment</a>
-says what each platform needs first.</p>
+Run them again on each new machine rather than copying that file. <a href="#building-pepper-from-source">Building Pepper from source</a> says what each platform needs
+first.</p>
 <pre><code class="language-text">scripts/setup-llvm.sh [options]
 pwsh -File scripts/setup-llvm.ps1 [-DevTools] [-Force]
 </code></pre>
@@ -51968,14 +52126,14 @@ scripts/pepper-tests.sh target/bin               # with a pep-build you built
 <p>The tests build with the installed toolchain’s <code>pep-build</code>, the one
 <code>pepper install which</code> names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
-prerelease named by the version the <code>VERSION</code> file holds (<code>0.4.0-dev</code>), replacing
-the one before; CI and the workers install it with the install scripts
+prerelease named <code>x.y.z-dev</code> (<code>pepper install list --available</code> shows it),
+replacing the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
 refresh it). The compiler’s own tests (<code>tools/compiler/*_test.pep</code>) build
 the compiler’s sources into their test programs, so they test a change to
 it. To run the whole suite with the changed compiler too, build it from
-<code>tools/compiler</code> (see the README’s
-<a href="https://github.com/justinboswell/pepper#build-and-test">Build and test</a>)
+<code>tools/compiler</code> (see
+<a href="#building-1">Building Pepper from source</a>)
 and pass its folder as the first argument.</p>
 <p>The script builds the Pepper tools (<code>pepper</code>, <code>pep-test</code>, <code>pep-doc</code> and the
 others) from the checkout with that <code>pep-build</code>, against the checkout’s

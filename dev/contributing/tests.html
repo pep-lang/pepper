@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
+            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4da10d20.js"></script>
+        <script src="../toc-58d14832.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -223,14 +223,14 @@ scripts/pepper-tests.sh target/bin               # with a pep-build you built
 <p>The tests build with the installed toolchain’s <code>pep-build</code>, the one
 <code>pepper install which</code> names. Every merge into main that changes the
 compiler, the runtime or the tools publishes the build of main as a
-prerelease named by the version the <code>VERSION</code> file holds (<code>0.4.0-dev</code>), replacing
-the one before; CI and the workers install it with the install scripts
+prerelease named <code>x.y.z-dev</code> (<code>pepper install list --available</code> shows it),
+replacing the one before; CI and the workers install it with the install scripts
 rather than building the compiler, and so can you (run the install again to
 refresh it). The compiler’s own tests (<code>tools/compiler/*_test.pep</code>) build
 the compiler’s sources into their test programs, so they test a change to
 it. To run the whole suite with the changed compiler too, build it from
-<code>tools/compiler</code> (see the README’s
-<a href="https://github.com/justinboswell/pepper#build-and-test">Build and test</a>)
+<code>tools/compiler</code> (see
+<a href="building.html#building">Building Pepper from source</a>)
 and pass its folder as the first argument.</p>
 <p>The script builds the Pepper tools (<code>pepper</code>, <code>pep-test</code>, <code>pep-doc</code> and the
 others) from the checkout with that <code>pep-build</code>, against the checkout’s

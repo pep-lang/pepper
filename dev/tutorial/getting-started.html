@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
+            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4da10d20.js"></script>
+        <script src="../toc-58d14832.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,54 +201,8 @@ afterwards. <a href="../tools/install.html">Installing Pepper</a> covers the opt
 it installs, and uninstalling.</p>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from source</a></h2>
 <p>To work on Pepper itself, or on a platform with no prebuilt binaries, build
-the toolchain from source. Pepper is written in Pepper: the compiler,
-<code>pep-build</code>, is the Pepper program in <code>tools/compiler</code>, and it generates code
-through LLVM. Building it takes a Pepper compiler, so the first one comes from
-a published toolchain. The repository’s
-<a href="https://github.com/justinboswell/pepper#setting-up-a-development-environment">README</a>
-has the full details for each platform; this is the short version.</p>
-<ol>
-<li>
-<p><strong>Install Pepper</strong> as above, the build of main: <code>sh scripts/install.sh --version 0.4.0-dev</code> from a clone of the repository (the version its
-<code>VERSION</code> file holds; <code>install.ps1 -Version 0.4.0-dev</code> on Windows).</p>
-</li>
-<li>
-<p><strong>Install the platform prerequisites</strong>, which provide the C toolchain that
-links your programs:</p>
-<ul>
-<li><strong>Windows:</strong> Visual Studio 2022 or newer with the C++ workload (or the
-standalone Build Tools), and PowerShell.</li>
-<li><strong>macOS:</strong> the Xcode Command Line Tools: <code>xcode-select --install</code>.</li>
-<li><strong>Linux</strong> (Debian and Ubuntu package names):
-<code>sudo apt install build-essential clang curl xz-utils</code>.</li>
-</ul>
-</li>
-<li>
-<p><strong>Set up LLVM 20</strong>, which the compiler links. From the repository’s root:</p>
-<pre><code class="language-sh">./scripts/setup-llvm.sh --devtools            # Linux and macOS
-pwsh -File scripts/setup-llvm.ps1 -DevTools   # Windows
-</code></pre>
-<p>This installs a development build of LLVM 20 (from apt, Homebrew, or the
-official release archive on Windows) and records where in
-<code>.pep/llvm-prefix</code>. <code>--devtools</code> also sets up the <code>lldb</code> debugger; you
-can leave it out. Run <code>./scripts/setup-llvm.sh --check</code> at any time to
-see what is configured.</p>
-</li>
-</ol>
-<p>Now build the compiler with the installed one, then the <code>pepper</code> command with
-the compiler you built:</p>
-<pre><code class="language-sh">export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
-</code></pre>
-<p>On macOS and Windows the compiler’s build also needs LLVM’s library folder:
-add <code>-L "$(head -1 .pep/llvm-prefix)/lib"</code>. On Windows, name the outputs
-<code>.exe</code> and copy <code>LLVM-C.dll</code> from the LLVM’s <code>bin</code> folder beside
-<code>pep-build.exe</code>. The compiler depends on the <code>pepper-llvm</code> package, which the
-first build fetches with git. <code>pepper</code> is the entry point to every Pepper
-tool, so <code>pepper build</code> runs <code>pep-build</code> and <code>pepper fmt</code> runs <code>pep-fmt</code> (see
-<a href="../tools/pepper.html">The pepper command</a>). To check that everything works,
-run the tests with <code>scripts/pepper-tests.sh target/bin</code>.</p>
+the toolchain from source: see
+<a href="../contributing/building.html">Building Pepper from source</a>.</p>
 <h2 id="your-first-program"><a class="header" href="#your-first-program">Your first program</a></h2>
 <p>Pepper source files end in <code>.pep</code>. Create a file named <code>hello.pep</code>:</p>
 <pre><code class="language-pepper"># Every program starts at main. Its return value is the process exit code.
@@ -393,8 +347,7 @@ restarts whenever that file changes.</li>
 </ul>
 <p>To install the extension from the branch you have checked out instead of the
 release, see
-<a href="https://github.com/justinboswell/pepper#vs-code-extension-from-any-branch">VS Code extension from any branch</a>
-in the README.</p>
+<a href="../contributing/building.html#the-vs-code-extension-from-a-branch">The VS Code extension from a branch</a>.</p>
 <h2 id="what-to-read-next"><a class="header" href="#what-to-read-next">What to read next</a></h2>
 <ul>
 <li><a href="tour.html">A tour of Pepper</a> builds a small program step by step and shows

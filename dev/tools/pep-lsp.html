@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f25ec418.js";
+            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-4da10d20.js"></script>
+        <script src="../toc-58d14832.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -197,7 +197,21 @@ folder uses, as <code>pepper install which</code> reports it there, so the edito
 checks code with the same compiler and standard library as <code>pepper build</code>.
 If that fails (say the project pins a toolchain that is not installed), a
 warning says why and the bundled server runs. Run <strong>Pepper: Restart
-Language Server</strong> after switching toolchains. For another editor, run the
+Language Server</strong> after switching toolchains.</p>
+<p>The extension also offers to install what is missing, running it as a task
+whose terminal shows the progress and any error, then offers to reload the
+window to pick the toolchain up:</p>
+<ul>
+<li>with no Pepper home, <strong>Install Pepper</strong> runs the
+<a href="install.html">install script</a>;</li>
+<li>when the toolchain the workspace uses is not installed, <strong>Install</strong> runs
+the <code>pepper install add &lt;version&gt;</code> (or <code>pepper install update</code>) that
+<code>pepper install which</code> suggests;</li>
+<li>when the default toolchain is older than the extension, <strong>Update</strong> runs
+<code>pepper install update</code>. A toolchain a project pins, or
+<code>PEPPER_TOOLCHAIN</code> names, is left as it is.</li>
+</ul>
+<p><strong>Don’t Ask Again</strong> stops an offer for good. For another editor, run the
 toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</code> files.</p>
 <p>The server is written in Pepper, in <code>tools/pep-lsp</code>, on the
 <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
