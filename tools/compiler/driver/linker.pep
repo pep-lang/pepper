@@ -783,9 +783,13 @@ export link_objects(
             command.argument("-Xlinker").argument(flag);
         }
     }
-    for (var object in objects) {
-        command.argument(object.to_string());
+    # The objects go in a response file: a program's many parts overflow
+    # Windows' 32,767-character command line.
+    var listing = Path($"{output}.objects");
+    if (File.write_text(listing, response_file(objects)).is_err()) {
+        return Result<void, String>.err($"Link failed: cannot write {listing}");
     }
+    command.argument($"@{listing}");
     for (var dir in library_dirs) {
         command.argument($"-L{dir}");
     }
@@ -808,6 +812,7 @@ export link_objects(
     }
     command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
     var ran = command.run();
+    File.remove(listing);
     if (ran.is_err()) {
         return Result<void, String>.err($"Link failed: cannot run {driver.value()}: {ran.error().message}");
     }
@@ -832,6 +837,22 @@ export link_objects(
     return Result<void, String>.err(
         $"Link failed: {driver.value()} exited with {out.status}\n{detail}{cross_link_note(target, root)}"
     );
+}
+
+## The response file naming `objects`, a quoted path a line, as clang reads
+## it on every host (GNU rules, clang-cl aside): a backslash escapes the
+## next character, so each is doubled.
+##
+## @param objects the object files
+## @returns the file's text
+export response_file(objects: Path[]): String {
+    var out = StringBuilder();
+    for (var object in objects) {
+        out.append("\"");
+        out.append(object.to_string().replace("\\", "\\\\").replace("\"", "\\\""));
+        out.append("\"\n");
+    }
+    return out.to_string();
 }
 
 ## Gathers a macOS executable's DWARF into `<output>.dSYM` beside it, as

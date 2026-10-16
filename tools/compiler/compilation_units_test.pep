@@ -316,3 +316,16 @@ keys_a_unit_on_the_functions_it_can_name() {
     expect_true(incremental.compilation_unit_key(units, 1, owns) != key);
     expect_true(folder.path.is_dir());
 }
+
+# The link reads the objects from a response file, which keeps a path's
+# spaces and backslashes (#887): on Windows a backslash is a separator, and
+# a path with one overflowed the command line.
+[Test]
+links_objects_under_a_path_with_spaces_and_backslashes() {
+    expect_true(driver.response_file([Path("a b\\c.o")]) == "\"a b\\\\c.o\"\n");
+    var folder = TempFolder("spaced_link");
+    var root = folder.path.join(Path("a b\\c"));
+    Directory.create_all(root);
+    File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
+    _build_with(root, root, root.join(Path("cache d")));
+}
