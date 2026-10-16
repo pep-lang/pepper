@@ -377,10 +377,12 @@ export trait PassMemo {}
 ## looked through once per unit. Each holds the types that may name a
 ## trait, in the order they were looked through.
 export struct TraitTypeMemo {
-    ## By struct name, with how many methods and constructors the struct
-    ## had: a specialization or extension may add more.
+    ## The types each settled struct's declarations looked through, by
+    ## struct name, with how many fields, methods and constructors the
+    ## struct had: a specialization or extension may add more. Rebuilding
+    ## `checked_types` replays these, so it walks only changed structs.
     var structs: HashMap<String, (ulong, TypeName[])> = HashMap<String, (ulong, TypeName[])>();
-    ## By function name.
+    ## The same for each checked function without a body, by name.
     var functions: HashMap<String, TypeName[]> = HashMap<String, TypeName[]>();
     ## Each checked struct's `StructTable` entry, by name, with how many
     ## fields and methods it had, and its type's spelling.

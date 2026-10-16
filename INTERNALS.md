@@ -2663,7 +2663,9 @@ through `tools/compiler`; these notes add what the modules do beyond that.
   share one `ModuleTables` per round meanwhile; `sync_closures` keeps
   closure types in step only in the code creating a closure; every
   table of a round shares one search for the trait types the module uses,
-  `used_trait_types`, a walk over every function; a
+  `used_trait_types`, a walk over every function, which replays what it
+  noted of each settled checked declaration (`TraitTypeMemo`) rather
+  than walk it again, even when a checked struct gains a method; a
   repeat round walks a callable again only when its last walk changed it
   or something it looked up changed since, `_Worklist`: each walk notes
   the field tables, methods, overload sets, functions and globals it

@@ -106,20 +106,7 @@ export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTyp
             found.add_struct(st);
             continue;
         }
-        var members = st.method_members.count + st.constructors.count;
-        var known = memo.value().structs.try_get(st.name);
-        if (known.is_value()) {
-            var (counted, types) = known.value();
-            if (counted == members) {
-                found.replay(types);
-                continue;
-            }
-        }
-        found.noting = true;
-        found.add_struct(st);
-        memo.value().structs[st.name] = (members, found.noted);
-        found.noting = false;
-        found.noted = Array<TypeName>();
+        _add_settled(found, memo.value(), st);
     }
     for (var function in module.functions) {
         if (function.is_generic_func) {
@@ -129,21 +116,47 @@ export used_trait_types(module: Module, memo: TraitTypeMemo? = Optional<TraitTyp
             found.add_function(function);
             continue;
         }
-        var known = memo.value().functions.try_get(function.name);
-        if (known.is_value()) {
-            found.replay(known.value());
-            continue;
-        }
-        found.noting = true;
-        found.add_function(function);
-        memo.value().functions[function.name] = found.noted;
-        found.noting = false;
-        found.noted = Array<TypeName>();
+        _add_checked_function(found, memo.value(), function);
     }
     for (var global in module.globals) {
         found.add(global.ty);
     }
     return found.types;
+}
+
+# Adds what settled struct `st` uses to `found`: what `memo` noted of it,
+# replayed, when it has as many members as then, else walked and noted.
+# A replay looks through the same types in the same order as the walk.
+_add_settled(found: _TraitTypes, memo: TraitTypeMemo, st: StructDef) {
+    var members = st.field_members.count + st.method_members.count + st.constructors.count;
+    var known = memo.structs.try_get(st.name);
+    if (known.is_value()) {
+        var (counted, types) = known.value();
+        if (counted == members) {
+            found.replay(types);
+            return;
+        }
+    }
+    found.noting = true;
+    found.add_struct(st);
+    memo.structs[st.name] = (members, found.noted);
+    found.noting = false;
+    found.noted = Array<TypeName>();
+}
+
+# Adds what checked function `function`, which has no body, uses to
+# `found`, as `_add_settled` does a struct.
+_add_checked_function(found: _TraitTypes, memo: TraitTypeMemo, function: FunctionDef) {
+    var known = memo.functions.try_get(function.name);
+    if (known.is_value()) {
+        found.replay(known.value());
+        return;
+    }
+    found.noting = true;
+    found.add_function(function);
+    memo.functions[function.name] = found.noted;
+    found.noting = false;
+    found.noted = Array<TypeName>();
 }
 
 # `used_trait_types` while the checked bodies are stashed: what the settled
@@ -169,7 +182,7 @@ _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName
                 continue;
             }
             if (_is_settled(module, st)) {
-                checked.add_struct(st);
+                _add_settled(checked, memo, st);
             } else {
                 unsettled.insert(st.name);
             }
@@ -178,7 +191,7 @@ _with_checked(module: Module, memo: TraitTypeMemo, found: _TraitTypes): TypeName
             if (!function.is_generic_func
                 and !function.body.is_value()
                 and module.checked.functions.contains(function.name)) {
-                checked.add_function(function);
+                _add_checked_function(checked, memo, function);
             }
         }
         memo.checked_types = Optional<(TypeName[], HashSet<String>, HashSet<String>, HashSet<String>)>.Value(
