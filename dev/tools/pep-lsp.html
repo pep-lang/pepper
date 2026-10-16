@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -203,7 +203,7 @@ toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</
 <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
 for writing a language server for any language in Pepper. To build it from
 a checkout of the repository, with this checkout’s standard library:</p>
-<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
 </code></pre>
 <h2 id="when-the-server-crashes"><a class="header" href="#when-the-server-crashes">When the server crashes</a></h2>
 <p><code>pep-lsp</code> runs the server in a child process (<code>pep-lsp --serve</code>) and

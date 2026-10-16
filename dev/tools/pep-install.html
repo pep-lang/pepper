@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -193,6 +193,8 @@ pepper install update             # installs the newest release and makes it the
 pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
 pepper install remove 0.2.1
 pepper install which              # the toolchain this folder uses, why, and its pep-build
+pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
+pepper install uninstall          # removes the home and its PATH changes
 </code></pre>
 <pre><code class="language-text">pep-install &lt;command&gt; [arguments]
 </code></pre>
@@ -218,6 +220,12 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 <tr><td><code>update --force</code>, <code>-f</code></td><td>Installs the newest release even when it is installed, replacing the home’s copy</td></tr>
 <tr><td><code>remove &lt;version&gt;</code></td><td>Removes the installed toolchain <code>&lt;version&gt;</code> names; it must name just one, and not the default</td></tr>
 <tr><td><code>which</code></td><td>Prints the toolchain the current folder uses and why, then the path of its <code>pep-build</code>; fails when that toolchain is not installed</td></tr>
+<tr><td><code>setup [&lt;version&gt;]</code></td><td>Sets this machine up for Pepper: installs the newest release <code>&lt;version&gt;</code> names (default <code>latest</code>), makes it the default, puts its <code>pepper</code> and <code>pep-install</code> in the home’s <code>bin</code>, adds that to the PATH, offers to install what linking needs, and builds and runs a program to check (see <a href="#setting-a-machine-up">Setting a machine up</a>)</td></tr>
+<tr><td><code>setup --archive &lt;file&gt;</code></td><td>Installs the downloaded release archive <code>&lt;file&gt;</code> instead, checked against <code>&lt;file&gt;.sha256</code> beside it</td></tr>
+<tr><td><code>setup --yes</code>, <code>-y</code></td><td>Installs missing prerequisites without asking</td></tr>
+<tr><td><code>setup --no-modify-path</code></td><td>Leaves the PATH and the shell startup files alone</td></tr>
+<tr><td><code>setup --no-prerequisites</code></td><td>Neither checks for nor installs clang and the other prerequisites</td></tr>
+<tr><td><code>uninstall</code></td><td>Removes the Pepper home and the PATH changes <code>setup</code> made for it</td></tr>
 <tr><td><code>--path &lt;dir&gt;</code></td><td>Also finds toolchains in <code>&lt;dir&gt;</code>, before those <code>PEPPER_TOOLCHAIN_PATH</code> lists; repeatable, before or after the command (see <a href="#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the commands; after a command, that command’s options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
@@ -258,6 +266,38 @@ started, say) cannot be moved, and the install fails, leaving it in place.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
+<h2 id="setting-a-machine-up"><a class="header" href="#setting-a-machine-up">Setting a machine up</a></h2>
+<p><code>setup</code> is what the <a href="install.html">install scripts</a> run, from the installer
+archive each release carries (<code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
+<code>.zip</code> on Windows, holding only <code>pep-install</code>). It does what <code>add</code> and
+<code>use</code> do, then:</p>
+<ul>
+<li>puts the toolchain’s <code>pepper</code> and <code>pep-install</code> in the home’s <code>bin</code>, as
+<code>update</code> does;</li>
+<li>unless that folder is on the PATH already or <code>--no-modify-path</code> is
+given, adds it: on Windows to the user’s PATH, elsewhere with a line in
+<code>~/.profile</code>, and in <code>~/.bashrc</code>, <code>~/.bash_profile</code> and <code>~/.zshrc</code> when
+they exist (<code>~/.zshrc</code> also when the shell is zsh), and in fish’s
+<code>conf.d/pepper.fish</code> when fish is installed. Each line follows a
+<code># Added by the Pepper installer</code> comment;</li>
+<li>unless <code>--no-prerequisites</code> is given, checks for what linking a program
+needs and offers to install what is missing, asking on the terminal
+first unless <code>--yes</code> is given: Xcode’s command line tools on macOS, the
+Visual Studio Build Tools’ C++ workload on Windows (with winget), and
+clang when the check program’s build finds none (apt, dnf, yum, pacman
+or zypper on Linux, through sudo when not root; winget or Scoop on
+Windows). It notes when OpenSSL 3, which the <code>tls</code> module loads, is
+missing, and on macOS offers <code>brew install openssl@3</code>;</li>
+<li>builds and runs a small program with the home’s <code>pepper</code>, from an empty
+folder, and fails when it cannot.</li>
+</ul>
+<p>A toolchain from before side-by-side toolchains, which has no <code>pepper</code> to
+put in <code>bin</code>, cannot be set up. An archive named for no release (a <code>dev</code>
+build, <code>pepper-dev-&lt;target&gt;</code>) is installed under the version its
+<code>pep-build</code> reports.</p>
+<p><code>uninstall</code> removes the home, refusing a folder that holds neither
+<code>toolchains</code> nor <code>bin/pep-build</code>, and the PATH lines <code>setup</code> added for that
+home’s <code>bin</code>.</p>
 <h2 id="more-toolchain-folders"><a class="header" href="#more-toolchain-folders">More toolchain folders</a></h2>
 <p>Toolchains are also found in the folders <code>PEPPER_TOOLCHAIN_PATH</code> lists,
 separated as <code>PATH</code> separates them (<code>;</code> on Windows, <code>:</code> elsewhere), and for

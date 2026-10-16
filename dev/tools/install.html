@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -361,12 +361,14 @@ its branch.</li>
 </ul>
 <p>For each platform, <code>scripts/release-build.sh</code> builds the
 tools, lays them out as above, archives them as
-<code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>, and
-<code>scripts/release-smoke-test.sh</code> proves the archive works: unpacked outside the
+<code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>,
+packs <code>pep-install</code> alone as the installer archive,
+<code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code>) with its own <code>.sha256</code>,
+and <code>scripts/release-smoke-test.sh</code> proves the archives work: unpacked outside the
 repository with no LLVM variables set, <code>pepper build</code> must build and run a
 program, and the binaries must load nothing beyond the system’s C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
-<code>manylinux_2_28</code> container). The workflow then installs each archive with
+<code>manylinux_2_28</code> container), and the installer’s <code>pep-install</code> must run. The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
 <code>SHA256SUMS</code> and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.</p>

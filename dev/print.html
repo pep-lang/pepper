@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-e4845a93.js"></script>
@@ -386,8 +386,8 @@ see what is configured.</p>
 <p>Now build the compiler with the installed one, then the <code>pepper</code> command with
 the compiler you built:</p>
 <pre><code class="language-sh">export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O -I tools tools/pepper/main.pep -o target/bin/pepper
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build
+target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
 </code></pre>
 <p>On macOS and Windows the compiler’s build also needs LLVM’s library folder:
 add <code>-L "$(head -1 .pep/llvm-prefix)/lib"</code>. On Windows, name the outputs
@@ -527,7 +527,7 @@ the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
 the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
-built yourself (<code>pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
+built yourself (<code>pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
 <a href="#the-language-server-pep-lsp">The language server: pep-lsp</a>). The server
 restarts whenever that file changes.</li>
 </ul>
@@ -18517,8 +18517,8 @@ builds for (with <code>--target</code>, another one’s: GNU’s for Linux and A
 the BSD format Apple’s linkers read for macOS and iOS, the COFF archive for
 Windows), with the index of the symbols its objects define, so no archiver
 needs to be installed and a static library for another platform needs no
-system root. A shared library links like an executable, with clang. At
-<code>-O2</code> and <code>-O3</code> the library is optimized as one module first, as an
+system root. A shared library links like an executable, with clang. With
+<code>--lto=full</code> the library is optimized as one module first, as an
 executable is (see <code>--lto</code> in <a href="#the-compiler-pep-build">pep-build</a>).</p>
 <ul>
 <li>A library needs no <code>main</code>. One that has a <code>main</code> keeps it, and C code that
@@ -20274,12 +20274,14 @@ its branch.</li>
 </ul>
 <p>For each platform, <code>scripts/release-build.sh</code> builds the
 tools, lays them out as above, archives them as
-<code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>, and
-<code>scripts/release-smoke-test.sh</code> proves the archive works: unpacked outside the
+<code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code> on Windows) with a <code>.sha256</code>,
+packs <code>pep-install</code> alone as the installer archive,
+<code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code> (<code>.zip</code>) with its own <code>.sha256</code>,
+and <code>scripts/release-smoke-test.sh</code> proves the archives work: unpacked outside the
 repository with no LLVM variables set, <code>pepper build</code> must build and run a
 program, and the binaries must load nothing beyond the system’s C and C++
 runtimes (on Linux, nothing newer than glibc 2.28: the Linux leg builds in a
-<code>manylinux_2_28</code> container). The workflow then installs each archive with
+<code>manylinux_2_28</code> container), and the installer’s <code>pep-install</code> must run. The workflow then installs each archive with
 the install script. Last, it uploads the archives, their checksums, a
 <code>SHA256SUMS</code> and both scripts to the release. A pull request that
 changes these scripts runs every leg too, without publishing.</p>
@@ -20352,7 +20354,7 @@ built with <code>pep-build</code>.</p>
 <code>tools/compiler</code>; see
 <a href="#building-from-source">Building from source</a>)
 and put it next to it:</p>
-<pre><code class="language-bash">target/bin/pep-build -I tools tools/pepper/main.pep -o target/bin/pepper
+<pre><code class="language-bash">target/bin/pep-build tools/pepper/main.pep -o target/bin/pepper
 </code></pre>
 <p>On Windows, name the output <code>target\bin\pepper.exe</code>.</p>
 <h2 id="how-it-finds-a-command"><a class="header" href="#how-it-finds-a-command">How it finds a command</a></h2>
@@ -20439,6 +20441,8 @@ pepper install update             # installs the newest release and makes it the
 pepper install add --force 0.3.0  # installs 0.3.0 again, replacing it
 pepper install remove 0.2.1
 pepper install which              # the toolchain this folder uses, why, and its pep-build
+pepper install setup              # sets this machine up: installs, sets the default and the PATH, checks
+pepper install uninstall          # removes the home and its PATH changes
 </code></pre>
 <pre><code class="language-text">pep-install &lt;command&gt; [arguments]
 </code></pre>
@@ -20464,6 +20468,12 @@ one the project’s <code>pep.toml</code> pins with <code>toolchain = "0.3"</cod
 <tr><td><code>update --force</code>, <code>-f</code></td><td>Installs the newest release even when it is installed, replacing the home’s copy</td></tr>
 <tr><td><code>remove &lt;version&gt;</code></td><td>Removes the installed toolchain <code>&lt;version&gt;</code> names; it must name just one, and not the default</td></tr>
 <tr><td><code>which</code></td><td>Prints the toolchain the current folder uses and why, then the path of its <code>pep-build</code>; fails when that toolchain is not installed</td></tr>
+<tr><td><code>setup [&lt;version&gt;]</code></td><td>Sets this machine up for Pepper: installs the newest release <code>&lt;version&gt;</code> names (default <code>latest</code>), makes it the default, puts its <code>pepper</code> and <code>pep-install</code> in the home’s <code>bin</code>, adds that to the PATH, offers to install what linking needs, and builds and runs a program to check (see <a href="#setting-a-machine-up">Setting a machine up</a>)</td></tr>
+<tr><td><code>setup --archive &lt;file&gt;</code></td><td>Installs the downloaded release archive <code>&lt;file&gt;</code> instead, checked against <code>&lt;file&gt;.sha256</code> beside it</td></tr>
+<tr><td><code>setup --yes</code>, <code>-y</code></td><td>Installs missing prerequisites without asking</td></tr>
+<tr><td><code>setup --no-modify-path</code></td><td>Leaves the PATH and the shell startup files alone</td></tr>
+<tr><td><code>setup --no-prerequisites</code></td><td>Neither checks for nor installs clang and the other prerequisites</td></tr>
+<tr><td><code>uninstall</code></td><td>Removes the Pepper home and the PATH changes <code>setup</code> made for it</td></tr>
 <tr><td><code>--path &lt;dir&gt;</code></td><td>Also finds toolchains in <code>&lt;dir&gt;</code>, before those <code>PEPPER_TOOLCHAIN_PATH</code> lists; repeatable, before or after the command (see <a href="#more-toolchain-folders">More toolchain folders</a>)</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Prints the commands; after a command, that command’s options</td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Prints the version</td></tr>
@@ -20504,6 +20514,38 @@ started, say) cannot be moved, and the install fails, leaving it in place.</p>
 <p>The home is the folder above the running <code>pep-install</code> when that is a home
 (it has a <code>toolchains</code> folder), else <code>PEPPER_HOME</code>, else
 <code>%LOCALAPPDATA%\pepper</code> on Windows and <code>~/.pepper</code> elsewhere.</p>
+<h2 id="setting-a-machine-up"><a class="header" href="#setting-a-machine-up">Setting a machine up</a></h2>
+<p><code>setup</code> is what the <a href="#installing-pepper">install scripts</a> run, from the installer
+archive each release carries (<code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
+<code>.zip</code> on Windows, holding only <code>pep-install</code>). It does what <code>add</code> and
+<code>use</code> do, then:</p>
+<ul>
+<li>puts the toolchain’s <code>pepper</code> and <code>pep-install</code> in the home’s <code>bin</code>, as
+<code>update</code> does;</li>
+<li>unless that folder is on the PATH already or <code>--no-modify-path</code> is
+given, adds it: on Windows to the user’s PATH, elsewhere with a line in
+<code>~/.profile</code>, and in <code>~/.bashrc</code>, <code>~/.bash_profile</code> and <code>~/.zshrc</code> when
+they exist (<code>~/.zshrc</code> also when the shell is zsh), and in fish’s
+<code>conf.d/pepper.fish</code> when fish is installed. Each line follows a
+<code># Added by the Pepper installer</code> comment;</li>
+<li>unless <code>--no-prerequisites</code> is given, checks for what linking a program
+needs and offers to install what is missing, asking on the terminal
+first unless <code>--yes</code> is given: Xcode’s command line tools on macOS, the
+Visual Studio Build Tools’ C++ workload on Windows (with winget), and
+clang when the check program’s build finds none (apt, dnf, yum, pacman
+or zypper on Linux, through sudo when not root; winget or Scoop on
+Windows). It notes when OpenSSL 3, which the <code>tls</code> module loads, is
+missing, and on macOS offers <code>brew install openssl@3</code>;</li>
+<li>builds and runs a small program with the home’s <code>pepper</code>, from an empty
+folder, and fails when it cannot.</li>
+</ul>
+<p>A toolchain from before side-by-side toolchains, which has no <code>pepper</code> to
+put in <code>bin</code>, cannot be set up. An archive named for no release (a <code>dev</code>
+build, <code>pepper-dev-&lt;target&gt;</code>) is installed under the version its
+<code>pep-build</code> reports.</p>
+<p><code>uninstall</code> removes the home, refusing a folder that holds neither
+<code>toolchains</code> nor <code>bin/pep-build</code>, and the PATH lines <code>setup</code> added for that
+home’s <code>bin</code>.</p>
 <h2 id="more-toolchain-folders"><a class="header" href="#more-toolchain-folders">More toolchain folders</a></h2>
 <p>Toolchains are also found in the folders <code>PEPPER_TOOLCHAIN_PATH</code> lists,
 separated as <code>PATH</code> separates them (<code>;</code> on Windows, <code>:</code> elsewhere), and for
@@ -20582,7 +20624,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--emit-model-step &lt;N&gt;</code></td><td>With <code>--emit-model</code>, print the model after the first N sema steps</td><td>0</td></tr>
 <tr><td><code>--emit-steps</code></td><td>Print the names of the sema steps, one per line, instead of compiling</td><td>off</td></tr>
 <tr><td><code>-O</code>, <code>-O0</code> to <code>-O3</code></td><td>Optimization level</td><td><code>-O0</code>, or <code>PEPPER_OPT_LEVEL</code></td></tr>
-<tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>full</code> at <code>-O2</code>/<code>-O3</code>, else <code>off</code></td></tr>
+<tr><td><code>--lto=full</code>, <code>--lto=off</code></td><td>Link-time optimization</td><td><code>off</code></td></tr>
 <tr><td><code>-march=</code>, <code>-mcpu=</code>, <code>-mtune=</code>, <code>-m&lt;feature&gt;</code>, <code>-mno-&lt;feature&gt;</code> (<code>-m &lt;option&gt;</code>)</td><td>The CPU to generate code for</td><td>clang’s default for the target</td></tr>
 <tr><td><code>-g</code>, <code>--emit-debug</code></td><td>Emit debug info</td><td>off</td></tr>
 <tr><td><code>--debug-static=source</code>, <code>--debug-static=expanded</code></td><td>With <code>-g</code>, step through <code>static</code> blocks as written or expanded</td><td><code>source</code></td></tr>
@@ -20645,7 +20687,7 @@ given, then a project’s <code>[build]</code> <code>include</code> folders, the
 folder. A project’s dependencies are found through its <code>pep.toml</code> instead.
 See
 <a href="#dependencies-and-search-paths">Dependencies and search paths</a>.</p>
-<pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+<pre><code class="language-bash">pepper build tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
 <h3 id="--import-name"><a class="header" href="#--import-name"><code>--import &lt;name&gt;</code></a></h3>
 <p>Loads a module (<code>&lt;name&gt;/module.pep</code>) or a file (<code>&lt;name&gt;.pep</code>), found on the
@@ -20851,8 +20893,9 @@ prints the message alone, unless the program runs with <code>PEPPER_BACKTRACE=1<
 <p>Link-time optimization. With <code>--lto=full</code>, once every file is compiled the
 whole program is optimized again as one module, so a call into another file
 (the runtime included) can be inlined. <code>--lto=off</code> optimizes each file
-alone, which links sooner. The default is <code>full</code> at <code>-O2</code> and <code>-O3</code> and
-<code>off</code> below; <code>--lto=full</code> at <code>-O0</code> is an error that asks for <code>-O</code>.</p>
+alone, which links sooner. The default is <code>off</code>: <code>full</code> optimizes the whole
+program again on every build, an edit’s too, so it suits a release build.
+<code>--lto=full</code> at <code>-O0</code> is an error that asks for <code>-O</code>.</p>
 <p>With it, each file is optimized by LLVM’s pre-link pipeline and kept as
 bitcode (in the build cache, as an object is), then the compiler links
 them into one module, makes every symbol internal but <code>main</code> and the C
@@ -21441,7 +21484,7 @@ own parser (<code>tools/compiler/parse</code>), so it accepts exactly the syntax
 compiler does.</p>
 <h2 id="running-it"><a class="header" href="#running-it">Running it</a></h2>
 <p>Build it with the compiler, with the <code>tools</code> folder on the import path:</p>
-<pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+<pre><code class="language-bash">pepper build tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
 <p>Give it files or directories, like <code>gofmt</code>:</p>
 <pre><code class="language-bash">pep-fmt main.pep            # print the formatted file to standard output
@@ -21613,7 +21656,7 @@ rights.</p>
 <p><code>pep-profile</code> is written in Pepper (<code>tools/pep-profile</code>). Build it with the
 compiler, with <code>tools/</code> on the import path, and put it next to <code>pepper</code> so
 that <code>pepper profile</code> finds it:</p>
-<pre><code class="language-bash">target/bin/pep-build -I tools tools/pep-profile/main.pep -o target/bin/pep-profile
+<pre><code class="language-bash">target/bin/pep-build tools/pep-profile/main.pep -o target/bin/pep-profile
 </code></pre>
 <h2 id="usage-and-options-1"><a class="header" href="#usage-and-options-1">Usage and options</a></h2>
 <pre><code class="language-text">pep-profile [options] &lt;program.pep | executable&gt; [-- arguments...]
@@ -21861,7 +21904,7 @@ toolchain’s <code>pep-lsp</code> (or <code>pepper lsp</code>) for <code>.pep</
 <a href="https://github.com/justinboswell/pepper-lsp"><code>lsp</code> package</a>, a framework
 for writing a language server for any language in Pepper. To build it from
 a checkout of the repository, with this checkout’s standard library:</p>
-<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
+<pre><code class="language-bash">PEPPER_RUNTIME=$PWD/runtime pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp
 </code></pre>
 <h2 id="when-the-server-crashes"><a class="header" href="#when-the-server-crashes">When the server crashes</a></h2>
 <p><code>pep-lsp</code> runs the server in a child process (<code>pep-lsp --serve</code>) and
@@ -21966,7 +22009,7 @@ on the <code>PATH</code> (a binary from
 checkout that holds the folder it is run in. <code>scripts/pepper-tests.sh</code>
 builds it beside <code>pep-build</code>, with the other Pepper tools, and <code>pepper doc</code>
 runs it. To build it alone, from the repository root:</p>
-<pre><code class="language-bash">pepper build -O -I tools tools/pep-doc/main.pep -o target/bin/pep-doc
+<pre><code class="language-bash">pepper build -O tools/pep-doc/main.pep -o target/bin/pep-doc
 target/bin/pep-doc reference
 </code></pre>
 <pre><code class="language-text">pep-doc [&lt;command&gt;] [options]
@@ -51855,7 +51898,7 @@ and runs <code>pepper test</code>:</p>
 <code>digest</code> tests with <code>-D USE_LIBCRYPTO</code>, which link the system’s zlib and
 libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a folder
 holding <code>zlib.lib</code>, and is skipped without it);</li>
-<li>in <code>tools/</code>, with <code>-I .</code>, the tools’ tests.</li>
+<li>in <code>tools/</code>, the tools’ tests, each under its tool’s <code>pep.toml</code>.</li>
 </ul>
 <p>The tools’ run, the longest, starts as soon as the tools its tests run
 (<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code> and <code>pep-package</code>) are
@@ -51917,7 +51960,7 @@ ones it builds from the checkout, so they test this checkout’s tools. To
 run one by hand, put that folder first on the PATH (after a run of the
 script, or with the tools built there as the script builds them):</p>
 <pre><code class="language-bash">export PATH="$PWD/target/pepper-tests/bin:$PATH"
-cd tools &amp;&amp; pepper test -I . pep-fmt/cli_test.pep
+cd tools &amp;&amp; pepper test pep-fmt/cli_test.pep
 </code></pre>
 <p>The <code>tool_testing</code> module (<code>tools/tool_testing/</code>) holds what they share:
 <code>tool(name)</code> finds a tool, <code>run</code> and <code>run_with_input</code> run a

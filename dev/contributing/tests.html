@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -242,7 +242,7 @@ and runs <code>pepper test</code>:</p>
 <code>digest</code> tests with <code>-D USE_LIBCRYPTO</code>, which link the system’s zlib and
 libcrypto (on Windows the zlib run needs <code>PEPPER_TEST_ZLIB_DIR</code>, a folder
 holding <code>zlib.lib</code>, and is skipped without it);</li>
-<li>in <code>tools/</code>, with <code>-I .</code>, the tools’ tests.</li>
+<li>in <code>tools/</code>, the tools’ tests, each under its tool’s <code>pep.toml</code>.</li>
 </ul>
 <p>The tools’ run, the longest, starts as soon as the tools its tests run
 (<code>pepper</code>, <code>pep-test</code>, <code>pep-fmt</code>, <code>pep-profile</code> and <code>pep-package</code>) are
@@ -304,7 +304,7 @@ ones it builds from the checkout, so they test this checkout’s tools. To
 run one by hand, put that folder first on the PATH (after a run of the
 script, or with the tools built there as the script builds them):</p>
 <pre><code class="language-bash">export PATH="$PWD/target/pepper-tests/bin:$PATH"
-cd tools &amp;&amp; pepper test -I . pep-fmt/cli_test.pep
+cd tools &amp;&amp; pepper test pep-fmt/cli_test.pep
 </code></pre>
 <p>The <code>tool_testing</code> module (<code>tools/tool_testing/</code>) holds what they share:
 <code>tool(name)</code> finds a tool, <code>run</code> and <code>run_with_input</code> run a

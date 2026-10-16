@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -1040,8 +1040,8 @@ builds for (with <code>--target</code>, another one’s: GNU’s for Linux and A
 the BSD format Apple’s linkers read for macOS and iOS, the COFF archive for
 Windows), with the index of the symbols its objects define, so no archiver
 needs to be installed and a static library for another platform needs no
-system root. A shared library links like an executable, with clang. At
-<code>-O2</code> and <code>-O3</code> the library is optimized as one module first, as an
+system root. A shared library links like an executable, with clang. With
+<code>--lto=full</code> the library is optimized as one module first, as an
 executable is (see <code>--lto</code> in <a href="../tools/pep-build.html">pep-build</a>).</p>
 <ul>
 <li>A library needs no <code>main</code>. One that has a <code>main</code> keeps it, and C code that

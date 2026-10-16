@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -238,8 +238,8 @@ see what is configured.</p>
 <p>Now build the compiler with the installed one, then the <code>pepper</code> command with
 the compiler you built:</p>
 <pre><code class="language-sh">export PEPPER_RUNTIME="$PWD/runtime"
-pepper build -O -I tools tools/compiler/main.pep -o target/bin/pep-build
-target/bin/pep-build -O -I tools tools/pepper/main.pep -o target/bin/pepper
+pepper build -O tools/compiler/main.pep -o target/bin/pep-build
+target/bin/pep-build -O tools/pepper/main.pep -o target/bin/pepper
 </code></pre>
 <p>On macOS and Windows the compiler’s build also needs LLVM’s library folder:
 add <code>-L "$(head -1 .pep/llvm-prefix)/lib"</code>. On Windows, name the outputs
@@ -379,7 +379,7 @@ the code yet: in a generic function or method nothing calls, on a
 <code>match</code> arm’s case and the names it binds (<code>Circle(r) =&gt; ...</code>), and on
 the values an enum case declares.</li>
 <li>The <code>pepper.lspPath</code> setting points the extension at a language server you
-built yourself (<code>pep-build -O -I tools tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
+built yourself (<code>pep-build -O tools/pep-lsp/main.pep -o target/pep-lsp/pep-lsp</code> in a checkout of the repository; see
 <a href="../tools/pep-lsp.html">The language server: pep-lsp</a>). The server
 restarts whenever that file changes.</li>
 </ul>

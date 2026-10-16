@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -218,7 +218,7 @@ rights.</p>
 <p><code>pep-profile</code> is written in Pepper (<code>tools/pep-profile</code>). Build it with the
 compiler, with <code>tools/</code> on the import path, and put it next to <code>pepper</code> so
 that <code>pepper profile</code> finds it:</p>
-<pre><code class="language-bash">target/bin/pep-build -I tools tools/pep-profile/main.pep -o target/bin/pep-profile
+<pre><code class="language-bash">target/bin/pep-build tools/pep-profile/main.pep -o target/bin/pep-profile
 </code></pre>
 <h2 id="usage-and-options"><a class="header" href="#usage-and-options">Usage and options</a></h2>
 <pre><code class="language-text">pep-profile [options] &lt;program.pep | executable&gt; [-- arguments...]

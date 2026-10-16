@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8a6760e1.js";
+            window.path_to_searchindex_js = "../searchindex-1eb4f171.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-e4845a93.js"></script>
@@ -191,7 +191,7 @@ own parser (<code>tools/compiler/parse</code>), so it accepts exactly the syntax
 compiler does.</p>
 <h2 id="running-it"><a class="header" href="#running-it">Running it</a></h2>
 <p>Build it with the compiler, with the <code>tools</code> folder on the import path:</p>
-<pre><code class="language-bash">pepper build -I tools tools/pep-fmt/main.pep -o pep-fmt
+<pre><code class="language-bash">pepper build tools/pep-fmt/main.pep -o pep-fmt
 </code></pre>
 <p>Give it files or directories, like <code>gofmt</code>:</p>
 <pre><code class="language-bash">pep-fmt main.pep            # print the formatted file to standard output
