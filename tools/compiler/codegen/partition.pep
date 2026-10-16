@@ -36,6 +36,8 @@ import "checks";
 import [forget_global_debug_info] from "debug";
 import "globals";
 
+extern void LLVMSetComdat(void* global, void* comdat);
+
 ## A program's symbols assigned to parts.
 export struct Partition {
     ## The part of each symbol defined in exactly one part, by its linker
@@ -280,6 +282,10 @@ export keep_parts(ir: llvm.Module, partition: Partition, parts: HashSet<uint>, t
             } else {
                 global.set_initializer(llvm.Value());
                 global.set_linkage(llvm.Linkage.External);
+                # A declaration in a comdat does not verify, and linking it
+                # first (`--lto=full`) claims the comdat, so the defining
+                # part's copy is dropped.
+                LLVMSetComdat(global.ref, __null);
                 # The part that defines it describes it.
                 forget_global_debug_info(global);
             }

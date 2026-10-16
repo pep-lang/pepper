@@ -403,6 +403,35 @@ builds_an_entry_inside_a_modules_folder_with_the_cache() {
     }
 }
 
+# A program of several compilation units with location strings (an index's
+# bounds check) builds with link-time optimization and runs: a part that
+# only declares a location string once kept it in a comdat, and the linked
+# program did not verify.
+[Test]
+lto_links_compilation_units_with_location_strings() {
+    var folder = _program(
+        "options_lto_units",
+        "import \"items\";\n\nmain(): int {\n    var made = items(3);\n    return first(made) + made[2].value - 2;\n}\n"
+    );
+    File.write_text(
+        folder.path.join(Path("items.pep")),
+        "export struct Item {\n    var value: int;\n\n    construct(value: int) {\n        this.value = value;\n    }\n}\n\nexport items(n: int): Item[] {\n    var made = Array<Item>();\n    for (var i in 0..n) {\n        made.append(Item(i));\n    }\n    return made;\n}\n\nexport first(items: Item[]): int {\n    return items[0].value;\n}\n"
+    );
+    var program = "main" + toolchain.executable_suffix();
+    var command = process.Command(_compiler().to_string());
+    command.arguments(["-O2", "--lto=full", "main.pep", "-o", program, "--build", "build", "--cache", "cache"]);
+    command.working_directory(folder.path).environment("PEPC_COMPILATION_UNIT_JOBS", "2");
+    command.stdout(process.Stream.Pipe).stderr(process.Stream.Pipe);
+    var built = command.run();
+    expect_true(built.is_ok());
+    if (!built.value().status.success()) {
+        print(built.value().stderr);
+    }
+    expect_true(built.value().status.success());
+    var ran = process.Command(folder.path.join(Path(program)).to_string()).run();
+    expect_true(ran.is_ok() and ran.value().status.success());
+}
+
 # Every object (`.o`, `.obj`, `.bc`) under `folder`.
 _objects(folder: Path, out: Path[]) {
     var opened = Directory.open(folder);

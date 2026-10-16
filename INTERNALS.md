@@ -1616,7 +1616,10 @@ is generated with `Build.separate_locations`: the `file:line:col` strings
 of checks and `__caller_location()` are weak globals named by their
 function and their place in it (`__pep_location.<function hash>.<n>`), in
 a part of their own (`codegen.prepare`'s `locations_part`), so a line shift
-recompiles that small part, not the code below the edit. And a file that
+recompiles that small part, not the code below the edit (a part that uses
+one declares it outside its comdat, `keep_parts`: a declaration in a
+comdat does not verify, and under `--lto=full` would claim the comdat
+from the defining part). And a file that
 `_split` gave a part alone spreads its symbols over a power of two of
 parts (`_spread`, about `_SPREAD_SIZE` each, at most `_MAX_SPREAD`) by its
 symbol's hash, so an edit to one function recompiles one of them.
@@ -1692,7 +1695,11 @@ object, its members named `p<n>.o` since cached objects are all `0.o`.
 **Link-time optimization** (`--lto=full|off`, off by default, since it
 reruns over the whole program on every build; `driver/lto.pep`). Each part runs LLVM's `lto-pre-link<On>`
 and is written, and cached, as bitcode (`0.bc`; the key gains `-lto`);
-then the parts are linked into one module (`LLVMLinkModules2`), every
+then the parts are linked into one module (`link_parts`, `LLVMLinkModules2`),
+each part's link-once definitions made weak first, since the linker drops
+a link-once one that nothing linked before it uses even when a later part
+calls it (a compilation unit below defines it, the one above only
+declares it); every
 definition but `main` and the default-visible C exports is made internal
 and leaves its comdat, and `lto<On>` runs over the whole program. Writing
 the objects is then split across the CPUs (`lto.split`): the optimized

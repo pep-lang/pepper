@@ -50,24 +50,12 @@ export optimize_whole(
     in_process: bool,
     clock: Clock
 ): Result<Path[], String> {
-    if (bitcode.is_empty) {
-        return Result<Path[], String>.err("nothing to link");
-    }
     var context = llvm.Context();
-    var program = llvm.Module.read_bitcode(context, bitcode[0].to_string());
-    if (program.is_err()) {
-        return Result<Path[], String>.err(program.error().message);
+    var linked = link_parts(context, bitcode);
+    if (linked.is_err()) {
+        return Result<Path[], String>.err(linked.error());
     }
-    var ir = program.value();
-    for (var i in 1..bitcode.count) {
-        var part = llvm.Module.read_bitcode(context, bitcode[i].to_string());
-        if (part.is_err()) {
-            return Result<Path[], String>.err(part.error().message);
-        }
-        if (ir.link(part.value()).is_err()) {
-            return Result<Path[], String>.err($"cannot link {bitcode[i]} into the program");
-        }
-    }
+    var ir = linked.value();
     clock.lap("link-time optimization: link");
     internalize(ir);
     var optimized = ir.run_passes($"lto<O{opt_level}>", machine);
@@ -175,6 +163,52 @@ export split(ir: llvm.Module, count: uint): codegen.Partition {
         done += _size(value);
     }
     return codegen.Partition(part_of, sizes);
+}
+
+## Reads the parts' bitcode files `bitcode` and links them into one
+## module. Each part's link-once definitions are made weak first: the
+## linker takes a link-once definition only if what it has linked so far
+## uses it, so one that only a later part calls (a part that declares it,
+## since a compilation unit below defines it) would be lost. A weak one is
+## always taken, one copy per name, and `internalize` and the link-time
+## pipeline then drop what nothing uses.
+##
+## @param context the context the module is made in
+## @param bitcode the parts' bitcode files
+## @returns the linked module, or why a part could not be read or linked
+export link_parts(context: llvm.Context, bitcode: Path[]): Result<llvm.Module, String> {
+    if (bitcode.is_empty) {
+        return Result<llvm.Module, String>.err("nothing to link");
+    }
+    var program = llvm.Module.read_bitcode(context, bitcode[0].to_string());
+    if (program.is_err()) {
+        return Result<llvm.Module, String>.err(program.error().message);
+    }
+    var ir = program.value();
+    for (var i in 1..bitcode.count) {
+        var part = llvm.Module.read_bitcode(context, bitcode[i].to_string());
+        if (part.is_err()) {
+            return Result<llvm.Module, String>.err(part.error().message);
+        }
+        _keep_link_once(part.value());
+        if (ir.link(part.value()).is_err()) {
+            return Result<llvm.Module, String>.err($"cannot link {bitcode[i]} into the program");
+        }
+    }
+    return Result<llvm.Module, String>.ok(ir);
+}
+
+_keep_link_once(part: llvm.Module) {
+    var values = part.functions();
+    values.append_all(part.globals());
+    for (var value in values) {
+        var linkage = value.linkage();
+        if (linkage == llvm.Linkage.LinkOnceOdr) {
+            value.set_linkage(llvm.Linkage.WeakOdr);
+        } else if (linkage == llvm.Linkage.LinkOnceAny) {
+            value.set_linkage(llvm.Linkage.WeakAny);
+        }
+    }
 }
 
 # How much code `value` is: its blocks, plus one for the definition.

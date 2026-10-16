@@ -289,6 +289,41 @@ links_an_optimized_program_as_one_module() {
     expect_true(_holds(root.join(Path("cache")), "0.bc"));
 }
 
+# A link-once function that only a later part calls survives the link of
+# the parts: a compilation unit below defines it, and the one above only
+# declares it (`pep-lsp` lost `Array<Expression>.__release` this way).
+[Test]
+links_a_link_once_function_only_a_later_part_calls() {
+    var folder = TempFolder("lto_link_once");
+    var context = llvm.Context();
+    var i32 = context.int32_type();
+    var signature = llvm.Type.function(i32, Array<llvm.Type>());
+    var builder = llvm.Builder(context);
+    var below = llvm.Module(context, "below");
+    var answer = below.add_function("answer", signature);
+    answer.set_linkage(llvm.Linkage.LinkOnceOdr);
+    builder.position_at_end(context.append_block(answer, "entry"));
+    builder.return_value(i32.const_int(42));
+    var above = llvm.Module(context, "above");
+    var declared = above.add_function("answer", signature);
+    var main = above.add_function("main", signature);
+    builder.position_at_end(context.append_block(main, "entry"));
+    builder.return_value(builder.call(signature, declared, Array<llvm.Value>()));
+    # The first part is the one the others link into, which keeps all of
+    # its own definitions: the runtime's.
+    var parts = [
+        folder.path.join(Path("runtime.bc")), folder.path.join(Path("below.bc")), folder.path.join(Path("above.bc"))
+    ];
+    expect_true(llvm.Module(context, "runtime").write_bitcode(parts[0].to_string()).is_ok());
+    expect_true(below.write_bitcode(parts[1].to_string()).is_ok());
+    expect_true(above.write_bitcode(parts[2].to_string()).is_ok());
+    var linking = llvm.Context();
+    var linked = driver.link_parts(linking, parts);
+    expect_true(linked.is_ok());
+    var function = linked.value().function("answer");
+    expect_true(function.is_value() and !function.value().is_declaration());
+}
+
 # Whether `dir`, or a folder in it, holds a file named `name`.
 _holds(dir: Path, name: String): bool {
     var opened = Directory.open(dir);
