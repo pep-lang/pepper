@@ -34,6 +34,11 @@ main(): int {
   `!!int`, ...) are read, and any other tag is an error; aliases may not
   stand for more than `max_alias_nodes` nodes, which stops the "billion
   laughs" attack.
+- **Merge keys**: `yaml.parse(text, merge_keys = true)` applies YAML
+  1.1's `<<` (`<<: *defaults`), which CI and compose files use to reuse a
+  mapping; the mapping's own keys win, and merged nodes count toward
+  `max_alias_nodes`. By default `<<` is an ordinary key, as YAML 1.2
+  says.
 - **Several documents** in one stream (`---`) are read by
   `yaml.parse_all` and written by `yaml.write_all`.
 - **`yaml.parse_document`** keeps comments, key order, flow or block
