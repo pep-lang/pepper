@@ -2267,11 +2267,11 @@ struct _Builder {
                 var built = block(body)?;
                 return Built<Statement>.Ok(Statement.While(While(c, block = built)));
             }
-            For(binding, pattern, iterable, body, _) => {
-                return for_loop(binding, pattern, iterable, body);
+            For(binding, pattern, iterable, body, span) => {
+                return for_loop(binding, pattern, iterable, body, span);
             }
-            With(binding, scope, body, else_block, _) => {
-                return with_block(binding, scope, body, else_block);
+            With(binding, scope, body, else_block, span) => {
+                return with_block(binding, scope, body, else_block, span);
             }
             Match(m) => {
                 return match_statement(m);
@@ -2413,15 +2413,20 @@ struct _Builder {
     ## Lowers `for (var x in source) body` to a block of the hidden iterator
     ## and a `while (iterator.next())` whose body declares `x`.
     for_loop(
-        binding: ast.VariableDecl, pattern: ast.DestructureBinding[], iterable: ast.Expression, body: ast.Block
+        binding: ast.VariableDecl,
+        pattern: ast.DestructureBinding[],
+        iterable: ast.Expression,
+        body: ast.Block,
+        span: ast.Span
     ): Built<Statement> {
         var iterator = $"__for_iterator_{for_loops}";
         for_loops += 1;
-        # The hidden code is located at the iterable.
+        # The hidden code is located at the iterable, its calls at `for`.
         var at = loc(iterable.span());
+        var keyword = loc(ast.Span(span.start, span.start + 3));
         var source = expression(iterable)?;
         var hidden_iterator = _hidden(iterator, Expression.ForIterator(source), at);
-        var current = _method_call(_symbol(iterator, at), "current", Array<Expression>(), at);
+        var current = _method_call(_symbol(iterator, at), "current", Array<Expression>(), keyword);
         var items = Array<Statement>();
         if (pattern.count == 0) {
             var element = variable_def(binding, Kind.Variable)?;
@@ -2436,7 +2441,7 @@ struct _Builder {
         }
         var inner = block(body)?;
         items.append(Statement.Block(inner));
-        var condition = _method_call(_symbol(iterator, at), "next", Array<Expression>(), at);
+        var condition = _method_call(_symbol(iterator, at), "next", Array<Expression>(), keyword);
         var loop = Statement.While(While(condition, block = _block_of(items)));
         return Built<Statement>.Ok(Statement.Block(_block_of([_declare(hidden_iterator), loop])));
     }
@@ -2444,7 +2449,7 @@ struct _Builder {
     ## Lowers `with (var x = scope) body else other` to a block of the hidden
     ## scope, the entered value, and an `if` on `WithEntered(x)`.
     with_block(
-        binding: ast.VariableDecl?, scope: ast.Expression, body: ast.Block, else_block: ast.Block?
+        binding: ast.VariableDecl?, scope: ast.Expression, body: ast.Block, else_block: ast.Block?, span: ast.Span
     ): Built<Statement> {
         var n = with_blocks;
         with_blocks += 1;
@@ -2452,7 +2457,10 @@ struct _Builder {
         var at = loc(scope.span());
         var scope_value = expression(scope)?;
         var hidden_scope = _hidden(scope_name, scope_value, at);
-        var enter = _method_call(_symbol(scope_name, at), "enter", Array<Expression>(), at);
+        # `enter()` is located at `with`.
+        var enter = _method_call(
+            _symbol(scope_name, at), "enter", Array<Expression>(), loc(ast.Span(span.start, span.start + 4))
+        );
         var value = _hidden($"__with_value_{n}", enter, at);
         if (binding.is_value()) {
             value = variable_def(binding.value(), Kind.Variable)?;

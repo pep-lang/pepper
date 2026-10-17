@@ -11,7 +11,7 @@ import [Directory, File, Path] from io;
 import compiler.link;
 import compiler.sema;
 import [TempFolder] from testing;
-import [check_programs as check_expected, headline] from "expected_outcomes";
+import [check_programs as check_expected, headline, headlines] from "expected_outcomes";
 
 # The programs are split in parts, each a test of its own, to keep each
 # within the time a test may take. The programs that use much of the
@@ -501,6 +501,36 @@ rewrites_function_values() {
         "# expect: accepted\nextern void qsort(void* base, ulong count, ulong size, extern (void*, void*) => int compare);\ncompare(a: __ptr<void>, b: __ptr<void>): int { return 0; }\nmain(): int {\n    qsort(_pep_malloc(4), 0, 4, compare);\n    qsort(_pep_malloc(4), 0, 4, (a, b) => 0);\n    return 0;\n}\n"
     ];
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
+# Deprecated methods the compiler calls for the source: a `for` loop's
+# `next()` and `current()`, a `with` block's `enter()`, and operator
+# overloads, reported at `for`, `with` and the operator.
+[Test]
+reports_deprecated_methods_the_compiler_calls() {
+    var folder = TempFolder("passes_deprecated_calls");
+    var programs = [
+        "# expect: main.pep:36:5: warning: 'next' is deprecated: use 'advance' instead [deprecated]\n# expect: main.pep:17:5: note: 'next' declared here\n# expect: main.pep:36:5: warning: 'current' is deprecated: old [deprecated]\n# expect: main.pep:20:5: note: 'current' declared here\n# expect: main.pep:39:5: warning: 'enter' is deprecated: old [deprecated]\n# expect: main.pep:24:5: note: 'enter' declared here\n# expect: main.pep:43:15: warning: '+' is deprecated: old [deprecated]\n# expect: main.pep:30:5: note: '+' declared here\n# expect: main.pep:44:11: warning: '==' is deprecated: old [deprecated]\n# expect: main.pep:32:5: note: '==' declared here\n# expect: main.pep:44:21: warning: '==' is deprecated: old [deprecated]\n# expect: main.pep:32:5: note: '==' declared here\nstruct Steps {\n    var n: int;\n    iterate(): Steps { return this; }\n    [Deprecated(\"use 'advance' instead\", \"advance\")]\n    next(): bool { n += 1; return n < 3; }\n    advance(): bool { n += 1; return n < 3; }\n    [Deprecated(\"old\")]\n    current(): int { return n; }\n}\nstruct Session {\n    [Deprecated(\"old\")]\n    enter(): Session { return this; }\n    exit() {}\n}\nstruct V {\n    var x: int;\n    [Deprecated(\"old\")]\n    +(other: V): V { return this; }\n    [Deprecated(\"old\")]\n    ==(other: V): bool { return true; }\n}\nmain(): int {\n    var total = 0;\n    for (var i in Steps()) {\n        total += i;\n    }\n    with (var s = Session()) {\n        total += 1;\n    }\n    var a = V();\n    var b = a + a;\n    if (a != b or a == b) {\n        total += 1;\n    }\n    return total;\n}\n"
+    ];
+    expect_equal(check_expected(folder, programs, (path: Path): String => warnings_of(path)), 0 as ulong);
+}
+
+# The warnings the passes give the program rooted at `root`, with the
+# runtime, as `headlines` lists them.
+warnings_of(root: Path): String {
+    var program = link.load_program(root, link.Setup());
+    if (program.is_err()) {
+        return headline(program.error(), root);
+    }
+    var built = sema.merge(program.value());
+    if (built.is_err()) {
+        return headline(built.error(), root);
+    }
+    var state = sema.run_passes(built.value(), program.value().target, program.value().sources());
+    if (state.is_err()) {
+        return headline(render_all([state.error()], program.value().sources()), root);
+    }
+    return headlines(render_all(state.value().notes, program.value().sources()), root);
 }
 
 # `check_programs` with the passes, with the runtime or without.

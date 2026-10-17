@@ -6,14 +6,17 @@
 ## when linking. Each warning goes to `state.notes`.
 ##
 ## A use is reported only where the source spells the member's name at the
-## use's location, which leaves out the calls sema synthesizes (a `for`
-## loop's `next()`, a `with` block's `enter()`, an operator overload). Uses
-## inside a deprecated function, method, or struct are not reported, and
-## each location is reported once, however many specializations share it.
+## use's location. The calls sema writes are located at the token that
+## stands for them, and are reported there: a `for` loop's `next()` and
+## `current()` at `for`, a `with` block's `enter()` at `with`, and an
+## operator overload at its operator (`a == b` too, for a deprecated `==`
+## behind `a != b`). Uses inside a deprecated function, method, or struct
+## are not reported, and each location is reported once, however many
+## specializations share it.
 
 import compiler.ast;
 import [Diagnostic] from compiler.diagnostic;
-import [declared_deprecation, Deprecation, deprecation_warning] from compiler.link;
+import [declared_deprecation, Deprecation, deprecation_warning, is_identifier] from compiler.link;
 import [location_of] from "common";
 import [method_of] from "enums";
 import [Loc] from "loc";
@@ -193,9 +196,9 @@ struct _DeprecatedUses {
         return text.substr_bytes(at.span.start, at.span.end - at.span.start);
     }
 
-    ## Whether `at` is reported for the first time, noting it.
-    first_at(at: Loc): bool {
-        return seen.insert($"{at.file}:{at.span.start}");
+    ## Whether `name` at `at` is reported for the first time, noting it.
+    first_at(at: Loc, name: String = ""): bool {
+        return seen.insert($"{at.file}:{at.span.start}:{name}");
     }
 
     ## A call to overloaded constructor `function` (`Point$2`) at `used`,
@@ -233,11 +236,38 @@ struct _DeprecatedUses {
         if (used.same(entry.at)) {
             return;
         }
-        var text = spelled(used);
-        if (text != name or !first_at(used)) {
+        var text = token(spelled(used), name);
+        if (text.is_empty or !first_at(used, name)) {
             return;
         }
-        warnings.append(deprecation_warning(name, entry.deprecation, location_of(used), text, location_of(entry.at)));
+        var at = Loc.at(used.file, ast.Span(used.span.start, used.span.start + text.size));
+        # Only a spelled name gets the rename fix, never `for` or `+`.
+        var spelled_name = is_identifier(text) ? text : "";
+        warnings.append(
+            deprecation_warning(name, entry.deprecation, location_of(at), spelled_name, location_of(entry.at))
+        );
+    }
+
+    ## The token of `text` (the source at a use) that stands for member
+    ## `name`, or empty when the source does not spell this use.
+    token(text: String, name: String): String {
+        if (text == name) {
+            return text;
+        }
+        if (text == "for" and (name == "next" or name == "current")) {
+            return text;
+        }
+        if (text == "with" and name == "enter") {
+            return text;
+        }
+        if (name.is_empty or is_identifier(name)) {
+            return "";
+        }
+        # An operator, located from its token to the end of its operand.
+        if (text.starts_with(name)) {
+            return name;
+        }
+        return name == "==" and text.starts_with("!=") ? "!=" : "";
     }
 
     ## The deprecation of member `name` of the type of `owner`, if it has

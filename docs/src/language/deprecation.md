@@ -71,6 +71,11 @@ Every use of the declaration warns, at the name you wrote:
   `S.name()`, and a bare field or method name inside the struct's own methods
 - an entry in an import list, `import [name] from m`, and a qualified use
   `m.name`, where the warning points at `name`
+- a call the compiler writes for you, at the token that stands for it: a
+  `for` loop's `next()` and `current()` at `for`, a `with` block's `enter()`
+  at `with`, and an operator overload at its operator (`a + b` at `+`; a
+  deprecated `==` also warns at a `!=` that uses it). These warnings offer
+  no rename fix.
 
 These do not warn:
 
@@ -98,8 +103,5 @@ expected at most 2, have 3`, `duplicate 'Deprecated' attribute`, and
 
 ## Limitations
 
-- The compiler does not report uses it writes for you: the `next()` and
-  `current()` calls of a `for` loop, the `enter()` call of a `with` block,
-  and a call to an operator overload such as `a + b`.
 - The language server shows the warnings for the file you are editing. It
   does not show them for other files the program imports.
