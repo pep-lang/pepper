@@ -15,6 +15,7 @@
 - [Regular expressions](language/regex.md)
 - [JSON](language/json.md)
 - [TOML](language/toml.md)
+- [YAML](language/yaml.md)
 - [Compression and archives](language/compression.md)
 - [Statements and semicolons](language/statements.md)
 - [Control flow](language/control-flow.md)
