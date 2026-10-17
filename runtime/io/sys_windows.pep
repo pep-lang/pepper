@@ -73,12 +73,6 @@ extern uint FormatMessageW(uint flags, void* source, uint id, uint language, ush
 [Target(OS(Windows))]
 extern int MultiByteToWideChar(uint codepage, uint flags, char* src, int src_len, ushort* dst, int dst_len);
 [Target(OS(Windows))]
-extern uint TlsAlloc();
-[Target(OS(Windows))]
-extern void* TlsGetValue(uint index);
-[Target(OS(Windows))]
-extern int TlsSetValue(uint index, void* value);
-[Target(OS(Windows))]
 extern int WideCharToMultiByte(
     uint codepage, uint flags, ushort* src, int src_len, char* dst, int dst_len, void* default_char, int* used_default
 );
@@ -838,25 +832,4 @@ _io_sys_readlink(path: Path): IoResult<Path> {
 [Target(OS(Windows))]
 _io_win_u16(buf: __ptr<void>, offset: ulong): ulong {
     return ((buf + offset) as __ptr<u16>)[0] as ulong;
-}
-
-# ── Thread-local keys ────────────────────────────────────────────────────────
-
-# Thread local storage, not fiber local storage: every task on a thread
-# shares the value.
-[Target(OS(Windows))]
-_io_sys_key_create(): ulong {
-    var index = TlsAlloc();
-    assert(index != 4294967295, "io: no thread-local keys left");  # TLS_OUT_OF_INDEXES
-    return index as ulong;
-}
-
-[Target(OS(Windows))]
-_io_sys_key_get(key: ulong): __ptr<void> {
-    return TlsGetValue(key as uint);
-}
-
-[Target(OS(Windows))]
-_io_sys_key_set(key: ulong, value: __ptr<void>) {
-    TlsSetValue(key as uint, value);
 }

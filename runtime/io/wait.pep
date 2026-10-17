@@ -29,7 +29,7 @@
 #
 # `async` imports `io` (its sockets and errors), so `io` cannot import
 # `async`. Instead `async.run` registers its worker as this thread's
-# `_IoWaiter`, and the sockets find it through a thread-local key. These
+# `_IoWaiter`, and the sockets find it through a thread-local. These
 # names are exported from the module for `async` only; they are not part of
 # the public API.
 
@@ -108,33 +108,27 @@ export const _IO_TRANSFER_CANCELLED: long = -9223372036854775806;
 export const _IO_TRANSFER_TIMED_OUT: long = -9223372036854775805;
 export const _IO_TRANSFER_CLOSED: long = -9223372036854775804;
 
-# One more than the key whose value is a malloc'd slot holding this
-# thread's waiter (or null), once the first `_io_set_waiter` has made it; 0
-# before. The key is made on first use so that a program that never runs
-# tasks makes none.
-const _io_waiter_key = async.Atomic<ulong>(0);
+# This thread's waiter: a malloc'd slot holding one reference to it, or
+# null. A thread (not fiber) local: `async.run` sets and clears it on the
+# worker's own thread, and a task never moves to another thread. The slot is
+# `__ptr<void>` because a thread-local's type must be thread-safe and
+# `_IoWaiter` is not.
+[ThreadLocal]
+var _io_waiter: __ptr<void>;
 
 # This thread's waiter slot, or null.
 _io_waiter_slot(): __ptr<_IoWaiter> {
-    var key = _io_waiter_key.load();
-    if (key == 0) {
-        return __null;
-    }
-    return _io_sys_key_get(key - 1);
+    return _io_waiter;
 }
 
 # Makes `waiter` this thread's waiter until `_io_clear_waiter`.
 export _io_set_waiter(waiter: _IoWaiter) {
-    if (_io_waiter_key.load() == 0) {
-        # Two threads may race to make the key; the loser's goes unused.
-        _io_waiter_key.compare_exchange(0, _io_sys_key_create() + 1);
-    }
     __ptr<_IoWaiter> slot = _pep_malloc(16);
     __ptr<ulong> words = slot;
     words[0] = 0;
     words[1] = 0;
     slot[0] = waiter;
-    _io_sys_key_set(_io_waiter_key.load() - 1, slot);
+    _io_waiter = slot;
 }
 
 # Removes this thread's waiter.
@@ -143,7 +137,7 @@ export _io_clear_waiter() {
     if (slot == __null) {
         return;
     }
-    _io_sys_key_set(_io_waiter_key.load() - 1, __null);
+    _io_waiter = __null;
     slot[0] = __default<_IoWaiter>();
     _pep_free(slot);
 }

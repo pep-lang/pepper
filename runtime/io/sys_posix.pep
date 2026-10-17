@@ -18,13 +18,6 @@ import "types";
 # ── C functions ──────────────────────────────────────────────────────────────
 
 [Target(!OS(Windows))]
-extern int pthread_key_create(void* key, void* destructor);
-[Target(!OS(Windows))]
-extern void* pthread_getspecific(ulong key);
-[Target(!OS(Windows))]
-extern int pthread_setspecific(ulong key, void* value);
-
-[Target(!OS(Windows))]
 extern int open(char* path, int flags, ...);
 [Target(!OS(Windows))]
 extern long read(int fd, void* buf, ulong n);
@@ -1101,30 +1094,4 @@ _io_sys_readlink(path: Path): IoResult<Path> {
         size = size * 2;
     }
     return IoResult<Path>.err(IoError(_io_posix_code_range(), "link target too long"));
-}
-
-# ── Thread-local keys ────────────────────────────────────────────────────────
-
-# A new thread-local key (pthread_key_t is 4 bytes on Linux and WASI, 8 on
-# macOS; the slot is zeroed first so either reads back whole).
-[Target(!OS(Windows))]
-_io_sys_key_create(): ulong {
-    __ptr<ulong> key = _pep_malloc(8);
-    key[0] = 0;
-    if (pthread_key_create(key, __null) != 0) {
-        panic("io: the operating system has no thread-local keys left");
-    }
-    ulong created = key[0];
-    _pep_free(key);
-    return created;
-}
-
-[Target(!OS(Windows))]
-_io_sys_key_get(key: ulong): __ptr<void> {
-    return pthread_getspecific(key);
-}
-
-[Target(!OS(Windows))]
-_io_sys_key_set(key: ulong, value: __ptr<void>) {
-    pthread_setspecific(key, value);
 }
