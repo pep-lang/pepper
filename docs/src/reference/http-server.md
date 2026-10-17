@@ -37,6 +37,10 @@ Request`, one with header fields over 64 KiB `431 Request Header Fields
 Too Large`, and one with a body over `MAX_REQUEST_BODY` `413 Content Too
 Large`; the connection then closes.
 
+A client on plain TCP that starts with the HTTP/2 connection preface
+(HTTP/2 with prior knowledge) is served HTTP/2: each stream is a request,
+answered by the same handler in a task of its own.
+
 **Example**
 ```pepper
 import async;

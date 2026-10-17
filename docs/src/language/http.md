@@ -90,6 +90,12 @@ as a browser resolves a link (RFC 3986 section 5.2).
   returns it).
 - A request it cannot parse gets `400 Bad Request`, header fields over
   64 KiB get `431`, and a body over `MAX_REQUEST_BODY` (16 MiB) gets `413`.
+- A plain-TCP client that opens with the HTTP/2 preface (prior knowledge,
+  or h2c) is served HTTP/2: each stream is a request, answered in a task of
+  its own by the same handler, so requests on one connection run at the
+  same time. The handler sees the same `Request` (with `Host` taken from
+  `:authority`), and its `Response` is sent with HPACK-compressed fields and
+  flow-controlled DATA frames.
 
 ## Streaming bodies
 
@@ -140,7 +146,9 @@ uses it again, saving the TCP and TLS handshakes:
 
 - A server handler gets the request body read into memory in full, up to
   `MAX_REQUEST_BODY` (16 MiB).
-- HTTP/2 is not supported yet.
+- HTTP/2: the server answers HTTP/2 with prior knowledge (h2c) only. The
+  client, and HTTP/2 over TLS (chosen through ALPN), are not supported
+  yet.
 
 The reference pages for [messages](../reference/http-message.md), the
 [client](../reference/http-client.md), the

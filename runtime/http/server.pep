@@ -4,6 +4,7 @@
 import async;
 import io;
 import tls;
+import "h2";
 import "message";
 import "wire";
 
@@ -25,6 +26,10 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## Request`, one with header fields over 64 KiB `431 Request Header Fields
 ## Too Large`, and one with a body over `MAX_REQUEST_BODY` `413 Content Too
 ## Large`; the connection then closes.
+##
+## A client on plain TCP that starts with the HTTP/2 connection preface
+## (HTTP/2 with prior knowledge) is served HTTP/2: each stream is a request,
+## answered by the same handler in a task of its own.
 ##
 ## @example
 ##     import async;
@@ -155,6 +160,13 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
         return false;  # the client closed between requests
     }
     var line = first.value().value();
+    if (line == "PRI * HTTP/2.0") {
+        # HTTP/2 with prior knowledge (h2c): the rest of the preface.
+        if (_http_finish_preface(reader)) {
+            _h2_serve(reader, handler);
+        }
+        return false;
+    }
     # METHOD SP target SP HTTP/1.x
     var space = line.find(" ");
     var last = _http_last_space(line);
@@ -206,6 +218,18 @@ _http_serve_one(reader: _HttpReader, handler: shared (Request) => Response): boo
     var response = handler(request);
     var sent = _http_send_response(reader._connection, response, method == "HEAD", keep, version == "HTTP/1.1");
     return keep && sent;
+}
+
+# Reads the rest of the HTTP/2 client preface after its first line: an
+# empty line, `SM`, and another empty line. Whether it was all there.
+_http_finish_preface(reader: _HttpReader): bool {
+    for (var expected in ["", "SM", ""]) {
+        var line = reader._line(4);
+        if (line.is_err() || line.value().is_empty() || line.value().value() != expected) {
+            return false;
+        }
+    }
+    return true;
 }
 
 # The position of the last space in `line`, or -1.
