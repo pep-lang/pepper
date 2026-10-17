@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-16181ab2.js";
+            window.path_to_searchindex_js = "searchindex-12f04cdb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-fc646ff9.js"></script>
@@ -17755,10 +17755,10 @@ an error, as are <code>[Test]</code> on a method and <code>[ShouldPanic]</code> 
     2 | checks(x: int) {}
       |        ^
 </code></pre>
-<p>Since <code>[Test]</code> bodies are left out of a normal build, the language server
-does not check them unless it analyzes with the build option <code>TEST</code>: add
-<code>"TEST"</code> to the <code>pepper.buildOptions</code> setting (see
-<a href="#the-language-server-pep-lsp">pep-lsp</a>).</p>
+<p>The language server checks a file that declares a <code>[Test]</code> function as a
+test build does: with the build option <code>TEST</code> and <code>testing</code> loaded, so
+errors, hover and go-to-definition work inside test bodies with no setting
+(see <a href="#the-language-server-pep-lsp">pep-lsp</a>).</p>
 <p>Tests that compare a program’s printed output with an expected file are
 not supported yet.</p>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -22172,7 +22172,7 @@ starting.</p>
 <tbody>
 <tr><td><code>inlayHints.implicitConversions</code></td><td>boolean</td><td><code>true</code></td><td>Show the constructor call an <a href="#implicit-conversions"><code>[Implicit]</code> conversion</a> inserts, such as <code>Path(</code> … <code>)</code> around a <code>String</code> passed where a <code>Path</code> is expected</td></tr>
 <tr><td><code>inlayHints.parameterNames</code></td><td>boolean</td><td><code>true</code></td><td>Show the parameter name before a literal argument passed by position (<code>resize(width: 800, height: 600)</code>)</td></tr>
-<tr><td><code>buildOptions</code></td><td>array of strings</td><td><code>[]</code></td><td>The <a href="#build-options">build options</a> to analyze with, as the compiler’s <code>-D</code> takes them: <code>NAME</code> or <code>NAME=VALUE</code>. One that does not parse is left out</td></tr>
+<tr><td><code>buildOptions</code></td><td>array of strings</td><td><code>[]</code></td><td>The <a href="#build-options">build options</a> to analyze with, as the compiler’s <code>-D</code> takes them: <code>NAME</code> or <code>NAME=VALUE</code>. One that does not parse is left out. A document that declares a <code>[Test]</code> function is also analyzed with <code>TEST</code>, and <code>testing</code> loaded, as <a href="#testing-with-pep-test"><code>pep-test</code></a> builds it</td></tr>
 </tbody>
 </table>
 </div>

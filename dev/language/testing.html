@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-16181ab2.js";
+            window.path_to_searchindex_js = "../searchindex-12f04cdb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -344,10 +344,10 @@ an error, as are <code>[Test]</code> on a method and <code>[ShouldPanic]</code> 
     2 | checks(x: int) {}
       |        ^
 </code></pre>
-<p>Since <code>[Test]</code> bodies are left out of a normal build, the language server
-does not check them unless it analyzes with the build option <code>TEST</code>: add
-<code>"TEST"</code> to the <code>pepper.buildOptions</code> setting (see
-<a href="../tools/pep-lsp.html">pep-lsp</a>).</p>
+<p>The language server checks a file that declares a <code>[Test]</code> function as a
+test build does: with the build option <code>TEST</code> and <code>testing</code> loaded, so
+errors, hover and go-to-definition work inside test bodies with no setting
+(see <a href="../tools/pep-lsp.html">pep-lsp</a>).</p>
 <p>Tests that compare a program’s printed output with an expected file are
 not supported yet.</p>
 
