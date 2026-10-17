@@ -9,6 +9,10 @@ code with the compiler's own front end, and finds the standard library the
 way the compiler does (see
 [Where the compiler finds the standard library](../tutorial/getting-started.md#where-the-compiler-finds-the-standard-library)).
 
+Warnings in the files a document imports show on those files too, such as
+a use of a deprecated function in a library the document calls. A file open
+in the editor shows its own analysis instead.
+
 The [VS Code extension](../tutorial/getting-started.md#editor-support) bundles
 it. When [`pepper install`](pep-install.md) manages your Pepper home, the
 extension instead runs the `pep-lsp` of the toolchain the first workspace

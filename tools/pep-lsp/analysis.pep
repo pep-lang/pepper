@@ -70,6 +70,10 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
     var pending = HashMap<String, String>();
     var order = Array<String>();
     var build_options = HashMap<String, String>();
+    # The documents open in the editor, each showing its own analysis.
+    var open = HashSet<String>();
+    # By document, the other files its last analysis showed warnings in.
+    var shown = HashMap<String, HashSet<String>>();
     while (true) {
         # Wait for work, then for the edits to settle.
         var job = order.count == 0 ? jobs.receive() : jobs.receive_for(SETTLE_MILLISECONDS);
@@ -80,9 +84,11 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
                         order.append(uri);
                     }
                     pending[uri] = text;
+                    open.insert(uri);
                 }
                 Close(uri) => {
                     pending.remove(uri);
+                    open.remove(uri);
                 }
                 Configure(options) => {
                     build_options.clear();
@@ -113,7 +119,7 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true, filling = filling);
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
-        var newer = _take_jobs(jobs, pending, order, build_options);
+        var newer = _take_jobs(jobs, pending, order, build_options, open);
         if (newer.is_value()) {
             return;
         }
@@ -127,6 +133,7 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
             $"analyzed {_file_name(uri)}{as_os} ({analysis.files} files): {analysis.outcome} in {took} ms"
         );
         client.publish_diagnostics(analysis.uri, analysis.diagnostics);
+        _publish_others(client, analysis, open, shown);
         results.send(copy(analysis));
         client.wake();
     }
@@ -135,7 +142,11 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
 # Takes the jobs waiting in `jobs` without waiting: Value(true) when one
 # was `Stop`.
 _take_jobs(
-    jobs: Channel<Job>, pending: HashMap<String, String>, order: String[], build_options: HashMap<String, String>
+    jobs: Channel<Job>,
+    pending: HashMap<String, String>,
+    order: String[],
+    build_options: HashMap<String, String>,
+    open: HashSet<String>
 ): bool? {
     while (true) {
         var job = jobs.try_receive();
@@ -148,9 +159,11 @@ _take_jobs(
                     order.append(uri);
                 }
                 pending[uri] = text;
+                open.insert(uri);
             }
             Close(uri) => {
                 pending.remove(uri);
+                open.remove(uri);
             }
             Configure(options) => {
                 build_options.clear();
@@ -164,6 +177,32 @@ _take_jobs(
         }
     }
     return Optional<bool>.Empty;
+}
+
+# Publishes the warnings `analysis` found in its program's other files,
+# except in documents `open`, which show their own analysis, and clears
+# those of the files its document's last analysis showed, in `shown`, and
+# this one no longer does.
+_publish_others(
+    client: lsp.Client, analysis: Analysis, open: HashSet<String>, shown: HashMap<String, HashSet<String>>
+) {
+    var now = HashSet<String>();
+    for (var (uri, diagnostics) in analysis.others) {
+        if (open.contains(uri)) {
+            continue;
+        }
+        client.publish_diagnostics(uri, diagnostics);
+        now.insert(uri);
+    }
+    var before = shown.try_get(analysis.uri);
+    if (before.is_value()) {
+        for (var uri in before.value()) {
+            if (!now.contains(uri) and !open.contains(uri)) {
+                client.publish_diagnostics(uri, Array<lsp.Diagnostic>());
+            }
+        }
+    }
+    shown[analysis.uri] = now;
 }
 
 # The last segment of a URI, for the log.
@@ -188,6 +227,8 @@ export struct Analysis {
     var diagnostics: Array<lsp.Diagnostic>;
     ## The quick fixes those diagnostics suggest.
     var actions: Array<lsp.CodeAction>;
+    ## The warnings in the program's other files, by URI.
+    var others: HashMap<String, Array<lsp.Diagnostic>>;
     ## The OS it was analyzed for: the build target's, or the one whose
     ## code the document mostly is (`analysis_os`).
     var os: String;
@@ -205,6 +246,7 @@ export struct Analysis {
         this.state = Optional<sema.PassState>.Empty;
         this.diagnostics = Array<lsp.Diagnostic>();
         this.actions = Array<lsp.CodeAction>();
+        this.others = HashMap<String, Array<lsp.Diagnostic>>();
         this.os = "";
         this.files = 0;
         this.outcome = "did not load";
@@ -331,6 +373,7 @@ export analyze(
     for (var warning in warnings) {
         reporter.add_if_in_document(warning);
     }
+    out.others = _other_files(program, warnings);
     if (result.is_err()) {
         out.outcome = "found an error";
         match (result.error()) {
@@ -364,6 +407,33 @@ export analyze(
     out.state = Optional<sema.PassState>.Value(result.value().state);
     out.outcome = "passed";
     out.diagnostics = reporter.out;
+    return out;
+}
+
+# The warnings of `warnings` in `program`'s files other than the document,
+# by URI, each on its own file.
+_other_files(program: link.Program, warnings: Diagnostic[]): HashMap<String, Array<lsp.Diagnostic>> {
+    var reporters = HashMap<ulong, _Reporter>();
+    for (var warning in warnings) {
+        if (warning.location.is_empty()) {
+            continue;
+        }
+        var file = warning.location.value().file;
+        if (file == 0 or file >= program.files.count) {
+            continue;
+        }
+        if (!reporters.contains(file)) {
+            var source = program.files[file];
+            var document = lsp.TextDocument(lsp.path_to_uri(source.name), source.source);
+            reporters[file] = _Reporter(document, program, file);
+        }
+        var reporter = reporters[file];
+        reporter.out.append(reporter.convert(warning));
+    }
+    var out = HashMap<String, Array<lsp.Diagnostic>>();
+    for (var (_, reporter) in reporters) {
+        out[reporter.document.uri] = reporter.out;
+    }
     return out;
 }
 
@@ -886,13 +956,17 @@ _project_folder(file: Path): Path {
 struct _Reporter {
     var document: lsp.TextDocument;
     var program: link.Program;
+    # The program file the document is: the root, 0, unless reporting on
+    # another file.
+    var file: ulong;
     var out: Array<lsp.Diagnostic>;
     # The fixes of the diagnostics added.
     var actions: Array<lsp.CodeAction>;
 
-    construct(document: lsp.TextDocument, program: link.Program) {
+    construct(document: lsp.TextDocument, program: link.Program, file: ulong = 0) {
         this.document = document;
         this.program = program;
+        this.file = file;
         this.out = Array<lsp.Diagnostic>();
         this.actions = Array<lsp.CodeAction>();
     }
@@ -900,7 +974,7 @@ struct _Reporter {
     # Adds `diagnostic` when it points into the document.
     add_if_in_document(diagnostic: Diagnostic) {
         if (diagnostic.location is Value(location)) {
-            if (location.file == 0) {
+            if (location.file == file) {
                 add(diagnostic);
             }
         }
@@ -922,7 +996,7 @@ struct _Reporter {
         var range = lsp.Range();
         var message = demangle(diagnostic.message);
         if (diagnostic.location is Value(location)) {
-            if (location.file == 0) {
+            if (location.file == file) {
                 range = document.range_of(location.span.start, location.span.end);
             } else if (location.file < program.files.count) {
                 message = $"{program.files[location.file].name}: {message}";
@@ -958,7 +1032,7 @@ struct _Reporter {
             return Optional<lsp.Location>.Empty;
         }
         var location = note.location.value();
-        if (location.file == 0) {
+        if (location.file == file) {
             return Optional<lsp.Location>.Value(
                 lsp.Location(document.uri, document.range_of(location.span.start, location.span.end))
             );

@@ -100,8 +100,3 @@ The other errors are `'Deprecated' expects the replacement as a string`, `the
 replacement 'a b' is not a name`, `too many arguments to 'Deprecated':
 expected at most 2, have 3`, `duplicate 'Deprecated' attribute`, and
 `'Deprecated' cannot be applied to` an extension or a destructor.
-
-## Limitations
-
-- The language server shows the warnings for the file you are editing. It
-  does not show them for other files the program imports.

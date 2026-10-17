@@ -495,6 +495,26 @@ deprecated_declarations_offer_quick_fixes() {
 }
 
 [Test]
+warnings_in_imported_files_show_on_those_files() {
+    var lib = "[Deprecated(\"old\")]\nold(): int { return 1; }\nexport uses(): int { return old(); }\n";
+    temp_file_in("other_files", "lib.pep", lib);
+    var text = "import \"lib\";\nmain(): int { return uses(); }\n";
+    var analysis = analyze(temp_file_in("other_files", "main.pep", text), text);
+    expect_equal(outcome_of(analysis), "passed");
+    expect_equal(analysis.diagnostics.count, 0 as ulong);
+    var found = Array<lsp.Diagnostic>();
+    for (var (uri, diagnostics) in analysis.others) {
+        if (uri.ends_with("/lib.pep")) {
+            found = diagnostics;
+        }
+    }
+    expect_equal(found.count, 1 as ulong);
+    expect_equal(found[0].message, "'old' is deprecated: old");
+    expect_equal(found[0].range.start.line, 2);
+    expect_equal(found[0].range.start.character, 28);
+}
+
+[Test]
 sending_a_variable_offers_move_and_copy() {
     var text = "import async;\n\nconst lines = async.Channel<String>();\n\nmain(): int {\n"
         + "    var line = \"hello\";\n    lines.send(line);\n    return 0;\n}\n";
