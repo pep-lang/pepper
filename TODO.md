@@ -5,7 +5,7 @@ Refreshed 2026-10-17 (US Pacific times) from GitHub: open and closed issues and 
 ## 1. Rules in force
 
 - The self-hosting pause is over: #225 closed 2026-10-11 and the Rust compiler is gone (#803). Any ticket can run; bugs still go ahead of everything. Details: [backlog.md](todo/backlog.md#the-225-self-hosting-pause-ended).
-- Merge queue lives in the Tickets thread (cmsg_012Zh7b8ZDj18Ad9iEy5pFgNREA47wPgk1ipqFeaYrnYz1); never resolve it; one merge at a time, bugs first; owners merge only after GO naming the main SHA. Details: [backlog.md](todo/backlog.md#merge-queue-rules).
+- Merges: no merge queue (dropped 2026-10-10: no slots, no GO). Work threads validate locally and push draft PRs; the Tickets thread (cmsg_012Zh7b8ZDj18Ad9iEy5pFgNHKh2Ckw3CD3AmjkNwVz2SW, never resolved) merges latest main in and squash-merges with the full SHA. Bug fixes first; merges are not serialized or reordered. Details: [backlog.md](todo/backlog.md#merge-rules).
 - Pre-merge checks: `scripts/pepper-tests.sh` (for a `tools/compiler` change, build the compiler from the tree with `scripts/ci-build-compiler.sh` and pass `target/compiler`); `target/pepper-tests/bin/pep-doc check`; after runtime changes `target/pepper-tests/bin/pep-fmt --check runtime tools`. Details: [backlog.md](todo/backlog.md#pre-merge-checks).
 - CI runs on pushes to main and by hand, not on pull requests (#849); validate a PR locally or on the Mac Worker before its merge.
 - Perf and profiling runs go on the Windows Worker (SDG-JBOSWELL), -O builds; state baseline SHA, build level, warm/cold.

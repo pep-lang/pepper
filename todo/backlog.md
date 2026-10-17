@@ -55,12 +55,13 @@ Read a ticket AND all its comments before starting it. Follow its approach. Chec
 - Priority: LOW (Justin 10-04). Follow-up to #600 and #633. The self-hosted compiler must mirror the change.
 - Approach (ticket): `_pep_malloc` always zeroes; when codegen can prove a constructor writes every field before any read, call a non-zeroing entry point (for example `_pep_malloc_uninit`), handling `__refcount` and any padding that hashing or equality reads.
 
-## Merge queue rules
+## Merge rules
 
-- The queue lives in the Tickets thread (cmsg_012Zh7b8ZDj18Ad9iEy5pFgNREA47wPgk1ipqFeaYrnYz1). Never resolve that thread. One merge at a time; bugs go first, and a bug waits only for the merge already holding the slot.
-- On an owner's request: check main (`git fetch origin main; git log -1 --format=%H origin/main`), then send GO naming the current main SHA. The owner merges main down if it moved, runs the pre-merge checks in its own container, squash-merges if green, and reports before and after with full SHAs. GitHub CI runs on pushes to main and by hand, not on pull requests (#849), so validate locally or on the Mac/Windows Worker before the merge.
-- After each merge the Tickets thread verifies it on GitHub (`git log`, `git diff --stat <prev> origin/main`), checks whether an extension reinstall is needed, updates issue-order.md, and replies with the full SHA and diff size.
-- Always merge main down before merging a PR, even when the diff looks unrelated. Never bundle kills with pushes. One topic per PR; a follow-up or a bug fix gets its own PR; never add follow-up work to a PR that is ready or being merged.
+- There is no merge queue (dropped 2026-10-10): no slots, no GO messages, merges are not serialized or reordered. Bug fixes still go first.
+- Work threads (including the Windows and Mac Workers) run the pre-merge checks locally and push draft PRs; they do not merge. GitHub CI runs on pushes to main and by hand, not on pull requests (#849).
+- The Tickets thread (cmsg_012Zh7b8ZDj18Ad9iEy5pFgNHKh2Ckw3CD3AmjkNwVz2SW; never resolve it) merges each draft handed to it: marks it ready, merges latest main in when it is behind, squash-merges with the full 40-character SHA, and reports it. It also keeps issue-order.md up to date.
+- Check a PR's merge base, not GitHub's base field, before merging: a PR based before recent merges needs main merged in and its checks rerun.
+- One topic per PR; a follow-up or a bug fix gets its own PR; never add follow-up work to a PR that is ready or being merged.
 - Perf claims always state the baseline SHA and build level (`-O2` pepc self-build on N CPUs); perf and profiling runs go to the Windows Worker via the coordinator; numbers are reported in chat the moment they arrive.
 - Threads: width 2 at a time; list the title as the ticket summary (not a bare number); prefer reusing an idle finished thread; keep the Windows Worker and Mac Worker threads alive (never resolve or stop them); call update_status before every command or wait; never block in one long wait, poll in short steps.
 
