@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-83a42eab.js";
+            window.path_to_searchindex_js = "../searchindex-16181ab2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b2626e7d.js"></script>
+        <script src="../toc-fc646ff9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,7 @@
                     <main>
                         <!-- Generated from runtime/digest/module.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-digest-module"><a class="header" href="#the-digest-module">The digest module</a></h1>
-<p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.</p>
+<p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3, and HMAC.</p>
 <p>Bring it in with <code>import digest</code>. Each hash has an incremental hasher
 (<code>update</code> any number of times, then <code>finish</code>) and a one-shot function,
 and both take bytes (<code>u8[]</code>) or a <code>String</code> (its UTF-8 bytes). A digest
@@ -192,7 +192,10 @@ is a <code>u8[]</code>; <code>to_hex</code> writes it as text.</p>
 <li><a href="digest-sha256.html">SHA-256</a>: <code>Sha256</code>, <code>sha256</code></li>
 <li><a href="digest-sha1.html">SHA-1</a>: <code>Sha1</code>, <code>sha1</code>, for formats that need it,
 such as git object ids</li>
-<li><a href="digest-blake3.html">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code></li>
+<li><a href="digest-blake3.html">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code>, with keyed hashing,
+key derivation and output of any length</li>
+<li><a href="digest-hmac.html">HMAC</a>: <code>Hmac</code>, <code>hmac_sha256</code>, <code>hmac_sha1</code>, and
+<code>equal_constant_time</code> to check a MAC</li>
 <li><a href="digest-hex.html">Hexadecimal</a>: <code>to_hex</code></li>
 </ul>
 <p>The implementations are portable Pepper with no link dependency, unless

@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-83a42eab.js";
+            window.path_to_searchindex_js = "../searchindex-16181ab2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b2626e7d.js"></script>
+        <script src="../toc-fc646ff9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,9 @@
                         <h1 id="cryptographic-hashes"><a class="header" href="#cryptographic-hashes">Cryptographic hashes</a></h1>
 <p>The <code>digest</code> module computes SHA-256, SHA-1 and BLAKE3 digests: fixed-size
 fingerprints of data, used to check that a download arrived intact, to name
-content by its hash, or to key a cache. Bring it in with <code>import digest</code>;
+content by its hash, or to key a cache. It also computes
+<a href="#message-authentication">message authentication codes</a> with HMAC or
+BLAKE3’s keyed mode, and derives keys. Bring it in with <code>import digest</code>;
 the full API is in the <a href="../reference/digest-module.html">reference</a>.</p>
 <pre><code class="language-pepper"># Cryptographic hashes: one-shot, incremental, and as hexadecimal text.
 import digest;
@@ -254,6 +256,62 @@ object ids.</li>
 <p>None of these is the hash for a hash table: <code>HashMap</code> and <code>HashSet</code> use
 <a href="hashing.html"><code>hash&lt;T&gt;</code></a>, which is much faster but neither cryptographic nor
 stable between versions.</p>
+<h2 id="message-authentication"><a class="header" href="#message-authentication">Message authentication</a></h2>
+<p>A message authentication code (MAC) is a digest that only someone with a
+secret key can compute, so a receiver that shares the key can check that a
+message is authentic and unchanged. Webhook signatures, JWTs (HS256) and
+S3-style request signing all use HMAC.</p>
+<pre><code class="language-pepper"># Message authentication: HMAC, BLAKE3's keyed mode and key derivation.
+import digest;
+
+main(): int {
+    # A webhook signs its body with HMAC-SHA-256 under a shared secret;
+    # the receiver computes the MAC again and compares in constant time.
+    var body = "{\"event\":\"push\"}";
+    var received = digest.hmac_sha256("webhook secret", body);
+    var signature = "493db758cb288b3801a0084bcdd27bd565ca0fb9b0a149404d2b4442c9d79bcd";
+    assert(digest.to_hex(received) == signature, "HMAC-SHA-256");
+    var expected = digest.Hmac&lt;digest.Sha256&gt;("webhook secret");
+    expected.update(body);
+    assert(digest.equal_constant_time(expected.finish(), received), "authentic");
+
+    # Derive a 32-byte key for one purpose from a shared secret, then use
+    # it for BLAKE3's keyed mode.
+    var derive = digest.Blake3.derive_key("example.com 2026-10-16 webhook MACs v1");
+    derive.update("a shared secret");
+    var mac = digest.Blake3.keyed(derive.finish());
+    mac.update(body);
+    assert(mac.finish().count == 32, "a 32-byte MAC");
+
+    # BLAKE3 gives output of any length; the first 32 bytes are the digest.
+    var hasher = digest.Blake3();
+    hasher.update(body);
+    var long_output = hasher.finish(64);
+    assert(long_output.count == 64, "64 bytes");
+    assert(digest.to_hex(long_output).starts_with(digest.to_hex(digest.blake3(body))), "a prefix");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>HMAC</strong> (RFC 2104) works over SHA-256 or SHA-1:
+<code>digest.hmac_sha256(key, message)</code> and <code>digest.hmac_sha1(key, message)</code>
+are one-shot, both arguments <code>u8[]</code> or both <code>String</code>, and
+<code>digest.Hmac&lt;digest.Sha256&gt;(key)</code> is the incremental hasher, with the
+same <code>update</code>, <code>finish</code>, <code>finish_hex</code> and <code>reset</code> as the hashes. <code>finish</code>
+and <code>reset</code> keep the key. A key longer than 64 bytes is hashed first.</li>
+<li><strong>Check a MAC</strong> with <code>digest.equal_constant_time(a, b)</code>, not <code>==</code>: <code>==</code>
+stops at the first byte that differs, and timing it lets an attacker
+find a valid MAC a byte at a time.</li>
+<li><strong>BLAKE3’s keyed mode</strong>, <code>digest.Blake3.keyed(key)</code>, is a MAC with a
+32-byte key; it panics on a key of any other length.</li>
+<li><strong>Key derivation</strong>: <code>digest.Blake3.derive_key(context)</code> returns a hasher
+whose digest is a key, derived from the input (a shared secret, say) for
+the purpose <code>context</code> names. Make <code>context</code> a hard-coded string unique to
+the application and purpose; different contexts give unrelated keys.</li>
+<li><strong>Extended output</strong>: every <code>Blake3</code> hasher’s <code>finish(length)</code> returns
+<code>length</code> bytes, in any of the three modes. The first 32 are the digest
+<code>finish()</code> returns.</li>
+</ul>
 <h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system’s crypto library</a></h2>
 <p>By default the hashes are written in Pepper, so a program that uses them
 links no extra library. Building with <code>-D USE_LIBCRYPTO</code> (see
@@ -282,10 +340,11 @@ Pepper, since libcrypto has no BLAKE3.</p>
 <li>Without <code>USE_LIBCRYPTO</code>, SHA-256 and SHA-1 run at a few hundred
 megabytes per second. BLAKE3 is always the portable code, below the
 official BLAKE3, which uses SIMD and threads.</li>
-<li>BLAKE3’s keyed hashing, key derivation and extended output are not
-supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
-<li>The code is not hardened against timing side channels, which matters only
-when hashing secrets. There is no HMAC yet.</li>
+<li>The hashes have no secret-dependent branches or table lookups, but they
+have not been audited for timing side channels, which matter only when
+hashing secrets. Copies of an HMAC key stay in memory until the hasher
+is freed; nothing wipes them.</li>
+<li>HMAC works over SHA-256 and SHA-1; there is no SHA-512 to put under it.</li>
 </ul>
 
                     </main>

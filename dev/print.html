@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-83a42eab.js";
+            window.path_to_searchindex_js = "searchindex-16181ab2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b2626e7d.js"></script>
+        <script src="toc-fc646ff9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -17049,7 +17049,9 @@ main(): int {
 <h1 id="cryptographic-hashes"><a class="header" href="#cryptographic-hashes">Cryptographic hashes</a></h1>
 <p>The <code>digest</code> module computes SHA-256, SHA-1 and BLAKE3 digests: fixed-size
 fingerprints of data, used to check that a download arrived intact, to name
-content by its hash, or to key a cache. Bring it in with <code>import digest</code>;
+content by its hash, or to key a cache. It also computes
+<a href="#message-authentication">message authentication codes</a> with HMAC or
+BLAKE3’s keyed mode, and derives keys. Bring it in with <code>import digest</code>;
 the full API is in the <a href="#the-digest-module">reference</a>.</p>
 <pre><code class="language-pepper"># Cryptographic hashes: one-shot, incremental, and as hexadecimal text.
 import digest;
@@ -17119,6 +17121,62 @@ object ids.</li>
 <p>None of these is the hash for a hash table: <code>HashMap</code> and <code>HashSet</code> use
 <a href="#hashing-and-equality"><code>hash&lt;T&gt;</code></a>, which is much faster but neither cryptographic nor
 stable between versions.</p>
+<h2 id="message-authentication"><a class="header" href="#message-authentication">Message authentication</a></h2>
+<p>A message authentication code (MAC) is a digest that only someone with a
+secret key can compute, so a receiver that shares the key can check that a
+message is authentic and unchanged. Webhook signatures, JWTs (HS256) and
+S3-style request signing all use HMAC.</p>
+<pre><code class="language-pepper"># Message authentication: HMAC, BLAKE3's keyed mode and key derivation.
+import digest;
+
+main(): int {
+    # A webhook signs its body with HMAC-SHA-256 under a shared secret;
+    # the receiver computes the MAC again and compares in constant time.
+    var body = "{\"event\":\"push\"}";
+    var received = digest.hmac_sha256("webhook secret", body);
+    var signature = "493db758cb288b3801a0084bcdd27bd565ca0fb9b0a149404d2b4442c9d79bcd";
+    assert(digest.to_hex(received) == signature, "HMAC-SHA-256");
+    var expected = digest.Hmac&lt;digest.Sha256&gt;("webhook secret");
+    expected.update(body);
+    assert(digest.equal_constant_time(expected.finish(), received), "authentic");
+
+    # Derive a 32-byte key for one purpose from a shared secret, then use
+    # it for BLAKE3's keyed mode.
+    var derive = digest.Blake3.derive_key("example.com 2026-10-16 webhook MACs v1");
+    derive.update("a shared secret");
+    var mac = digest.Blake3.keyed(derive.finish());
+    mac.update(body);
+    assert(mac.finish().count == 32, "a 32-byte MAC");
+
+    # BLAKE3 gives output of any length; the first 32 bytes are the digest.
+    var hasher = digest.Blake3();
+    hasher.update(body);
+    var long_output = hasher.finish(64);
+    assert(long_output.count == 64, "64 bytes");
+    assert(digest.to_hex(long_output).starts_with(digest.to_hex(digest.blake3(body))), "a prefix");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>HMAC</strong> (RFC 2104) works over SHA-256 or SHA-1:
+<code>digest.hmac_sha256(key, message)</code> and <code>digest.hmac_sha1(key, message)</code>
+are one-shot, both arguments <code>u8[]</code> or both <code>String</code>, and
+<code>digest.Hmac&lt;digest.Sha256&gt;(key)</code> is the incremental hasher, with the
+same <code>update</code>, <code>finish</code>, <code>finish_hex</code> and <code>reset</code> as the hashes. <code>finish</code>
+and <code>reset</code> keep the key. A key longer than 64 bytes is hashed first.</li>
+<li><strong>Check a MAC</strong> with <code>digest.equal_constant_time(a, b)</code>, not <code>==</code>: <code>==</code>
+stops at the first byte that differs, and timing it lets an attacker
+find a valid MAC a byte at a time.</li>
+<li><strong>BLAKE3’s keyed mode</strong>, <code>digest.Blake3.keyed(key)</code>, is a MAC with a
+32-byte key; it panics on a key of any other length.</li>
+<li><strong>Key derivation</strong>: <code>digest.Blake3.derive_key(context)</code> returns a hasher
+whose digest is a key, derived from the input (a shared secret, say) for
+the purpose <code>context</code> names. Make <code>context</code> a hard-coded string unique to
+the application and purpose; different contexts give unrelated keys.</li>
+<li><strong>Extended output</strong>: every <code>Blake3</code> hasher’s <code>finish(length)</code> returns
+<code>length</code> bytes, in any of the three modes. The first 32 are the digest
+<code>finish()</code> returns.</li>
+</ul>
 <h2 id="using-the-systems-crypto-library"><a class="header" href="#using-the-systems-crypto-library">Using the system’s crypto library</a></h2>
 <p>By default the hashes are written in Pepper, so a program that uses them
 links no extra library. Building with <code>-D USE_LIBCRYPTO</code> (see
@@ -17147,10 +17205,11 @@ Pepper, since libcrypto has no BLAKE3.</p>
 <li>Without <code>USE_LIBCRYPTO</code>, SHA-256 and SHA-1 run at a few hundred
 megabytes per second. BLAKE3 is always the portable code, below the
 official BLAKE3, which uses SIMD and threads.</li>
-<li>BLAKE3’s keyed hashing, key derivation and extended output are not
-supported yet; <code>Blake3</code> computes the default 32-byte hash.</li>
-<li>The code is not hardened against timing side channels, which matters only
-when hashing secrets. There is no HMAC yet.</li>
+<li>The hashes have no secret-dependent branches or table lookups, but they
+have not been audited for timing side channels, which matter only when
+hashing secrets. Copies of an HMAC key stay in memory until the hasher
+is freed; nothing wipes them.</li>
+<li>HMAC works over SHA-256 and SHA-1; there is no SHA-512 to put under it.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="optimizer-hints"><a class="header" href="#optimizer-hints">Optimizer hints</a></h1>
@@ -49420,7 +49479,7 @@ assert(archive.safe_components("C:/Windows").is_empty(), "a drive");
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/module.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-digest-module"><a class="header" href="#the-digest-module">The digest module</a></h1>
-<p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.</p>
+<p>Cryptographic hashes: SHA-256, SHA-1 and BLAKE3, and HMAC.</p>
 <p>Bring it in with <code>import digest</code>. Each hash has an incremental hasher
 (<code>update</code> any number of times, then <code>finish</code>) and a one-shot function,
 and both take bytes (<code>u8[]</code>) or a <code>String</code> (its UTF-8 bytes). A digest
@@ -49429,7 +49488,10 @@ is a <code>u8[]</code>; <code>to_hex</code> writes it as text.</p>
 <li><a href="#sha-256">SHA-256</a>: <code>Sha256</code>, <code>sha256</code></li>
 <li><a href="#sha-1">SHA-1</a>: <code>Sha1</code>, <code>sha1</code>, for formats that need it,
 such as git object ids</li>
-<li><a href="#blake3">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code></li>
+<li><a href="#blake3">BLAKE3</a>: <code>Blake3</code>, <code>blake3</code>, with keyed hashing,
+key derivation and output of any length</li>
+<li><a href="#hmac">HMAC</a>: <code>Hmac</code>, <code>hmac_sha256</code>, <code>hmac_sha1</code>, and
+<code>equal_constant_time</code> to check a MAC</li>
 <li><a href="#hexadecimal">Hexadecimal</a>: <code>to_hex</code></li>
 </ul>
 <p>The implementations are portable Pepper with no link dependency, unless
@@ -49656,7 +49718,8 @@ assert(digest.to_hex(digest.sha1("abc")) == "a9993e364706816aba3e25717850c26c9cd
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/blake3.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="blake3"><a class="header" href="#blake3">BLAKE3</a></h1>
 <p>BLAKE3: 32-byte digests, faster than SHA-256 in hardware without SHA
-instructions, and the hash the compiler’s build cache keys objects with.</p>
+instructions, and the hash the compiler’s build cache keys objects with.
+Also a keyed hash (a MAC), key derivation, and output of any length.</p>
 <p>Source: <code>runtime/digest/blake3.pep</code></p>
 <h2 id="blake3-1"><a class="header" href="#blake3-1">Blake3</a></h2>
 <pre><code class="language-pepper">struct Blake3
@@ -49664,10 +49727,13 @@ instructions, and the hash the compiler’s build cache keys objects with.</p>
 <p>An incremental BLAKE3 hasher: feed it bytes with <code>update</code>, any number of
 times and in pieces of any size, then read the 32-byte digest with
 <code>finish</code>.</p>
-<p>This is a portable implementation of the default hash mode, one block
-at a time; it does not use SIMD or threads, so it runs well below the
-speed of the official C and Rust implementations. The digests are the
-same. <code>finish</code> resets the hasher, so it can hash a new input.</p>
+<p><code>Blake3()</code> is the default hash mode; <code>Blake3.keyed</code> and
+<code>Blake3.derive_key</code> make hashers for the other two modes, and
+<code>finish(length)</code> reads output of any length in each.</p>
+<p>This is a portable implementation, one block at a time; it does not use
+SIMD or threads, so it runs well below the speed of the official C and
+Rust implementations. The digests are the same. <code>finish</code> resets the
+hasher, so it can hash a new input.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;
 
@@ -49681,6 +49747,58 @@ assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="static-methods-36"><a class="header" href="#static-methods-36">Static methods</a></h3>
+<h4 id="keyed"><a class="header" href="#keyed">keyed</a></h4>
+<pre><code class="language-pepper">static keyed(key: u8[]): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3’s keyed mode, a MAC: only someone with
+<code>key</code> can compute or check the digest of an input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the 32-byte secret key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, keyed with <code>key</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>key</code> is not 32 bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.blake3("a key made some other way");
+var mac = digest.Blake3.keyed(key);
+mac.update("message");
+assert(mac.finish().count == 32, "a 32-byte MAC");
+</code></pre>
+<h4 id="derive_key"><a class="header" href="#derive_key">derive_key</a></h4>
+<pre><code class="language-pepper">static derive_key(context: String): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3’s key derivation mode: the digest of its
+input (the key material, such as a shared secret or a password hash)
+is a key for the purpose that <code>context</code> names.</p>
+<p><code>context</code> should be a hard-coded string, unique to the application
+and the purpose, such as
+<code>"example.com 2026-10-16 session tokens v1"</code>; different contexts give
+unrelated keys from the same material. Read the key with <code>finish</code>,
+or <code>finish(length)</code> for one of another length.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>context</code> — the application and purpose the key is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, for keys in <code>context</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var hasher = digest.Blake3.derive_key("example.com 2026-10-16 session tokens v1");
+hasher.update("the shared secret");
+var key = hasher.finish();
+</code></pre>
 <h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
@@ -49724,6 +49842,29 @@ created or last reset, then resets it.</p>
 <ul>
 <li>the digest</li>
 </ul>
+<h4 id="finish-1-1"><a class="header" href="#finish-1-1">finish</a></h4>
+<pre><code class="language-pepper">finish(length: ulong): u8[]
+</code></pre>
+<p>Returns <code>length</code> bytes of output for the input given since the
+hasher was created or last reset, then resets it: BLAKE3’s extended
+output. The first 32 bytes are the digest <code>finish()</code> returns, and a
+shorter output is a prefix of a longer one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>length</code> — how many bytes to return</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the output</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var long_output = digest.Blake3();
+long_output.update("abc");
+var bytes = long_output.finish(100);
+assert(digest.to_hex(bytes).starts_with(digest.to_hex(digest.blake3("abc"))), "a prefix");
+</code></pre>
 <h4 id="finish_hex-2"><a class="header" href="#finish_hex-2">finish_hex</a></h4>
 <pre><code class="language-pepper">finish_hex(): String
 </code></pre>
@@ -49763,6 +49904,184 @@ assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of noth
 <ul>
 <li>the 32-byte digest</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/hmac.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="hmac"><a class="header" href="#hmac">HMAC</a></h1>
+<p>HMAC (RFC 2104): a message authentication code from a hash and a secret
+key, as webhook signatures, JWTs (HS256) and S3-style request signing
+use, and a constant-time comparison to check one.</p>
+<p>Source: <code>runtime/digest/hmac.pep</code></p>
+<h2 id="hmac-1"><a class="header" href="#hmac-1">Hmac</a></h2>
+<pre><code class="language-pepper">struct Hmac&lt;T&gt;
+</code></pre>
+<p>An incremental HMAC hasher over the hash <code>T</code>: feed it the message with
+<code>update</code>, any number of times and in pieces of any size, then read the
+MAC with <code>finish</code>.</p>
+<p>Only someone with the key can compute the MAC of a message, so a
+receiver that shares the key can check that the message is authentic.
+Compare a MAC you receive with <code>equal_constant_time</code>, not <code>==</code>.
+<code>finish</code> resets the hasher to the same key, so it can sign a new
+message.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the hash: <code>Sha256</code> or <code>Sha1</code>, or another hasher with a 64-byte block, a constructor taking no arguments, and <code>update</code> and <code>finish</code> methods</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var mac = digest.Hmac&lt;digest.Sha256&gt;("key");
+mac.update("The quick brown fox ");
+mac.update("jumps over the lazy dog");
+var expected = "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8";
+assert(mac.finish_hex() == expected, "HMAC-SHA-256");
+</code></pre>
+<h3 id="constructors-8"><a class="header" href="#constructors-8">Constructors</a></h3>
+<h4 id="hmac-2"><a class="header" href="#hmac-2">Hmac()</a></h4>
+<pre><code class="language-pepper">construct(key: u8[])
+</code></pre>
+<p>Creates a hasher for MACs under <code>key</code>, with no input.</p>
+<p>A key longer than 64 bytes is hashed with <code>T</code> first, as RFC 2104
+says; one as long as <code>T</code>’s digest is the usual choice.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+</ul>
+<h4 id="hmac-3"><a class="header" href="#hmac-3">Hmac()</a></h4>
+<pre><code class="language-pepper">construct(key: String)
+</code></pre>
+<p>Creates a hasher for MACs under the UTF-8 bytes of <code>key</code>, with no
+input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+</ul>
+<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
+<h4 id="reset-5"><a class="header" href="#reset-5">reset</a></h4>
+<pre><code class="language-pepper">reset()
+</code></pre>
+<p>Discards the input given so far, returning the hasher to its initial
+state under the same key.</p>
+<h4 id="update-5"><a class="header" href="#update-5">update</a></h4>
+<pre><code class="language-pepper">update(bytes: u8[])
+</code></pre>
+<p>Adds <code>bytes</code> as the next part of the message.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>bytes</code> — the bytes to add</li>
+</ul>
+<h4 id="update-1-4"><a class="header" href="#update-1-4">update</a></h4>
+<pre><code class="language-pepper">update(text: String)
+</code></pre>
+<p>Adds the UTF-8 bytes of <code>text</code> (without a terminating NUL) as the
+next part of the message.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>text</code> — the text to add</li>
+</ul>
+<h4 id="finish-5"><a class="header" href="#finish-5">finish</a></h4>
+<pre><code class="language-pepper">finish(): u8[]
+</code></pre>
+<p>Returns the MAC of the message given since the hasher was created or
+last reset, then resets it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the MAC, as long as <code>T</code>’s digest</li>
+</ul>
+<h4 id="finish_hex-3"><a class="header" href="#finish_hex-3">finish_hex</a></h4>
+<pre><code class="language-pepper">finish_hex(): String
+</code></pre>
+<p>Returns the MAC as <code>finish</code> does, written as lowercase hexadecimal
+digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the MAC in hexadecimal</li>
+</ul>
+<h2 id="hmac_sha256"><a class="header" href="#hmac_sha256">hmac_sha256</a></h2>
+<pre><code class="language-pepper">hmac_sha256(key: u8[], message: u8[]): u8[]
+</code></pre>
+<p>Returns the HMAC-SHA-256 of <code>message</code> under <code>key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+<li><code>message</code> — the message to sign</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte MAC</li>
+</ul>
+<h2 id="hmac_sha256-1"><a class="header" href="#hmac_sha256-1">hmac_sha256</a></h2>
+<pre><code class="language-pepper">hmac_sha256(key: String, message: String): u8[]
+</code></pre>
+<p>Returns the HMAC-SHA-256 of the UTF-8 bytes of <code>message</code> under the UTF-8
+bytes of <code>key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+<li><code>message</code> — the message to sign</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 32-byte MAC</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var mac = digest.hmac_sha256("key", "The quick brown fox jumps over the lazy dog");
+var expected = "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8";
+assert(digest.to_hex(mac) == expected, "HMAC-SHA-256");
+</code></pre>
+<h2 id="hmac_sha1"><a class="header" href="#hmac_sha1">hmac_sha1</a></h2>
+<pre><code class="language-pepper">hmac_sha1(key: u8[], message: u8[]): u8[]
+</code></pre>
+<p>Returns the HMAC-SHA-1 of <code>message</code> under <code>key</code>, for formats that
+require it. HMAC-SHA-1 is still secure as a MAC, though SHA-1 alone is
+not.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+<li><code>message</code> — the message to sign</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 20-byte MAC</li>
+</ul>
+<h2 id="hmac_sha1-1"><a class="header" href="#hmac_sha1-1">hmac_sha1</a></h2>
+<pre><code class="language-pepper">hmac_sha1(key: String, message: String): u8[]
+</code></pre>
+<p>Returns the HMAC-SHA-1 of the UTF-8 bytes of <code>message</code> under the UTF-8
+bytes of <code>key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the secret key</li>
+<li><code>message</code> — the message to sign</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the 20-byte MAC</li>
+</ul>
+<h2 id="equal_constant_time"><a class="header" href="#equal_constant_time">equal_constant_time</a></h2>
+<pre><code class="language-pepper">equal_constant_time(a: u8[], b: u8[]): bool
+</code></pre>
+<p>Returns whether <code>a</code> and <code>b</code> hold the same bytes, taking the same time
+wherever they first differ.</p>
+<p>Check a MAC with this rather than <code>==</code>, which stops at the first
+difference: timing it would let an attacker find a valid MAC a byte at a
+time. The lengths are not secret, so arrays of different lengths return
+<code>false</code> at once.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first bytes, such as the MAC computed</li>
+<li><code>b</code> — the second bytes, such as the MAC received</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>true</code> if <code>a</code> and <code>b</code> have the same length and bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var mac = digest.hmac_sha256("key", "message");
+assert(digest.equal_constant_time(mac, digest.hmac_sha256("key", "message")), "a valid MAC");
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/digest/hex.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="hexadecimal"><a class="header" href="#hexadecimal">Hexadecimal</a></h1>
 <p>Hexadecimal text for digests.</p>
@@ -49874,7 +50193,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
+<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
 </code></pre>
@@ -50544,7 +50863,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
+<h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -50962,7 +51281,7 @@ main(): int {
 <pre><code class="language-pepper">const max_redirects: int
 </code></pre>
 <p>The most redirects one request follows; 0 follows none.</p>
-<h3 id="constructors-8"><a class="header" href="#constructors-8">Constructors</a></h3>
+<h3 id="constructors-9"><a class="header" href="#constructors-9">Constructors</a></h3>
 <h4 id="client-2"><a class="header" href="#client-2">Client()</a></h4>
 <pre><code class="language-pepper">construct(max_redirects: int = 10)
 </code></pre>
@@ -50983,7 +51302,7 @@ instance one that trusts a private certificate authority.</p>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 <li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
 </ul>
-<h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
+<h3 id="methods-68"><a class="header" href="#methods-68">Methods</a></h3>
 <h4 id="get-10"><a class="header" href="#get-10">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -51284,7 +51603,7 @@ main(): int {
 <li><code>secure</code> — whether to serve HTTPS with <code>acceptor</code></li>
 <li><code>acceptor</code> — the certificate for HTTPS; ignored for HTTP</li>
 </ul>
-<h3 id="static-methods-36"><a class="header" href="#static-methods-36">Static methods</a></h3>
+<h3 id="static-methods-37"><a class="header" href="#static-methods-37">Static methods</a></h3>
 <h4 id="bind-4"><a class="header" href="#bind-4">bind</a></h4>
 <pre><code class="language-pepper">static bind(address: io.SocketAddress): io.IoResult&lt;Server&gt;
 </code></pre>
@@ -51311,7 +51630,7 @@ certificate.</p>
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-68"><a class="header" href="#methods-68">Methods</a></h3>
+<h3 id="methods-69"><a class="header" href="#methods-69">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -51414,7 +51733,7 @@ stream.write_all("ping");
 <ul>
 <li><code>context</code> — the platform’s client context, or null for none</li>
 </ul>
-<h3 id="static-methods-37"><a class="header" href="#static-methods-37">Static methods</a></h3>
+<h3 id="static-methods-38"><a class="header" href="#static-methods-38">Static methods</a></h3>
 <h4 id="create-3"><a class="header" href="#create-3">create</a></h4>
 <pre><code class="language-pepper">static create(): io.IoResult&lt;TlsConnector&gt;
 </code></pre>
@@ -51423,7 +51742,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-69"><a class="header" href="#methods-69">Methods</a></h3>
+<h3 id="methods-70"><a class="header" href="#methods-70">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -51802,7 +52121,7 @@ elsewhere), so none holds <code>pep-test</code>’s pipes to its output open.</l
 <ul>
 <li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it, or the folder of the files of a test program built from several</li>
 </ul>
-<h3 id="methods-70"><a class="header" href="#methods-70">Methods</a></h3>
+<h3 id="methods-71"><a class="header" href="#methods-71">Methods</a></h3>
 <h4 id="from_file"><a class="header" href="#from_file">from_file</a></h4>
 <pre><code class="language-pepper">from_file(file: String)
 </code></pre>

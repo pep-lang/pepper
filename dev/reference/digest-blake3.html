@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-83a42eab.js";
+            window.path_to_searchindex_js = "../searchindex-16181ab2.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-b2626e7d.js"></script>
+        <script src="../toc-fc646ff9.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,7 +184,8 @@
                         <!-- Generated from runtime/digest/blake3.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="blake3"><a class="header" href="#blake3">BLAKE3</a></h1>
 <p>BLAKE3: 32-byte digests, faster than SHA-256 in hardware without SHA
-instructions, and the hash the compiler’s build cache keys objects with.</p>
+instructions, and the hash the compiler’s build cache keys objects with.
+Also a keyed hash (a MAC), key derivation, and output of any length.</p>
 <p>Source: <code>runtime/digest/blake3.pep</code></p>
 <h2 id="blake3-1"><a class="header" href="#blake3-1">Blake3</a></h2>
 <pre><code class="language-pepper">struct Blake3
@@ -192,10 +193,13 @@ instructions, and the hash the compiler’s build cache keys objects with.</p>
 <p>An incremental BLAKE3 hasher: feed it bytes with <code>update</code>, any number of
 times and in pieces of any size, then read the 32-byte digest with
 <code>finish</code>.</p>
-<p>This is a portable implementation of the default hash mode, one block
-at a time; it does not use SIMD or threads, so it runs well below the
-speed of the official C and Rust implementations. The digests are the
-same. <code>finish</code> resets the hasher, so it can hash a new input.</p>
+<p><code>Blake3()</code> is the default hash mode; <code>Blake3.keyed</code> and
+<code>Blake3.derive_key</code> make hashers for the other two modes, and
+<code>finish(length)</code> reads output of any length in each.</p>
+<p>This is a portable implementation, one block at a time; it does not use
+SIMD or threads, so it runs well below the speed of the official C and
+Rust implementations. The digests are the same. <code>finish</code> resets the
+hasher, so it can hash a new input.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import digest;
 
@@ -209,6 +213,58 @@ assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="keyed"><a class="header" href="#keyed">keyed</a></h4>
+<pre><code class="language-pepper">static keyed(key: u8[]): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3’s keyed mode, a MAC: only someone with
+<code>key</code> can compute or check the digest of an input.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the 32-byte secret key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, keyed with <code>key</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>key</code> is not 32 bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var key = digest.blake3("a key made some other way");
+var mac = digest.Blake3.keyed(key);
+mac.update("message");
+assert(mac.finish().count == 32, "a 32-byte MAC");
+</code></pre>
+<h4 id="derive_key"><a class="header" href="#derive_key">derive_key</a></h4>
+<pre><code class="language-pepper">static derive_key(context: String): Blake3
+</code></pre>
+<p>Returns a hasher for BLAKE3’s key derivation mode: the digest of its
+input (the key material, such as a shared secret or a password hash)
+is a key for the purpose that <code>context</code> names.</p>
+<p><code>context</code> should be a hard-coded string, unique to the application
+and the purpose, such as
+<code>"example.com 2026-10-16 session tokens v1"</code>; different contexts give
+unrelated keys from the same material. Read the key with <code>finish</code>,
+or <code>finish(length)</code> for one of another length.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>context</code> — the application and purpose the key is for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a hasher with no input, for keys in <code>context</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var hasher = digest.Blake3.derive_key("example.com 2026-10-16 session tokens v1");
+hasher.update("the shared secret");
+var key = hasher.finish();
+</code></pre>
 <h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
 <h4 id="reset"><a class="header" href="#reset">reset</a></h4>
 <pre><code class="language-pepper">reset()
@@ -252,6 +308,29 @@ created or last reset, then resets it.</p>
 <ul>
 <li>the digest</li>
 </ul>
+<h4 id="finish-1"><a class="header" href="#finish-1">finish</a></h4>
+<pre><code class="language-pepper">finish(length: ulong): u8[]
+</code></pre>
+<p>Returns <code>length</code> bytes of output for the input given since the
+hasher was created or last reset, then resets it: BLAKE3’s extended
+output. The first 32 bytes are the digest <code>finish()</code> returns, and a
+shorter output is a prefix of a longer one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>length</code> — how many bytes to return</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the output</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import digest;
+
+var long_output = digest.Blake3();
+long_output.update("abc");
+var bytes = long_output.finish(100);
+assert(digest.to_hex(bytes).starts_with(digest.to_hex(digest.blake3("abc"))), "a prefix");
+</code></pre>
 <h4 id="finish_hex"><a class="header" href="#finish_hex">finish_hex</a></h4>
 <pre><code class="language-pepper">finish_hex(): String
 </code></pre>
@@ -300,7 +379,7 @@ assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of noth
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/digest-hex.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/digest-hmac.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -314,7 +393,7 @@ assert(digest.to_hex(digest.blake3(Array&lt;u8&gt;())) == empty, "BLAKE3 of noth
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/digest-hex.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/digest-hmac.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
