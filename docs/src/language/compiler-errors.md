@@ -347,6 +347,19 @@ aliases of one name in a file, or exported by two
 [prelude modules](modules.md#the-runtime-prelude-and---import), report
 `redefinition of 'Point'`.
 
+**Two functions that differ only in their return type**, in one file or
+beside a [runtime function](overloading.md#the-runtimes-sets) of the
+name, which a call could not tell apart:
+
+```text
+main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
+    1 | to_string(value: int): int { return value; }
+      | ^~~~~~~~~
+runtime/string.pep:1621:8: note: previous declaration is here
+ 1621 | export to_string(value: int): String {
+      |        ^~~~~~~~~
+```
+
 **Looping over something that cannot be iterated** (see
 [Iteration](iteration.md)):
 

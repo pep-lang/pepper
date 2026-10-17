@@ -59,8 +59,9 @@ _return_key(function: FunctionDef): String {
 }
 
 ## The error for `later`, which takes the parameters `earlier` does.
+## A return type `later` leaves to inference counts as the same.
 _clash(name: String, later: FunctionDef, earlier: FunctionDef): Diagnostic {
-    if (_return_key(earlier) == _return_key(later)) {
+    if (later.ty.is_auto() or _return_key(earlier) == _return_key(later)) {
         return error_at(
             $"redefinition of '{name}'", later.loc
         ).with_note("previous definition is here", Optional<Location>.Value(location_of(earlier.loc)));
@@ -251,10 +252,8 @@ _name_unions(module: Module, state: PassState): bool {
     }
     for (var (union, groups) in unions) {
         var names = Array<String>();
-        # The prelude's members, which a member of any other module may not
-        # repeat. One with a prelude member's parameters but another return
-        # type hides it in its file, as it hides an imported member
-        # (`Overloads._set`).
+        # The prelude's members, whose parameters a member of any other
+        # module may not repeat, whatever its return type.
         var prelude = Array<ulong>();
         var others = Array<Array<ulong>>();
         for (var parts in groups) {
@@ -297,18 +296,11 @@ _name_unions(module: Module, state: PassState): bool {
             for (var m in members) {
                 var function = module.functions[m];
                 var repeated = _repeated_prelude_member(module.functions, function, prelude);
-                if (repeated.is_value()) {
-                    state.report(
-                        error_at(
-                            $"redefinition of '{demangle_name(function.name)}'",
-                            function.loc
-                        ).with_note(
-                            "previous definition is here",
-                            Optional<Location>.Value(location_of(module.functions[repeated.value()].loc))
-                        )
-                    );
-                    return false;
+                if (!repeated.is_value()) {
+                    continue;
                 }
+                state.report(_clash(demangle_name(function.name), function, module.functions[repeated.value()]));
+                return false;
             }
         }
         module.overload_sets[union] = names;
@@ -316,15 +308,11 @@ _name_unions(module: Module, state: PassState): bool {
     return true;
 }
 
-## The member of `prelude` that `function` repeats: the same parameters,
-## and the same return type or one `function` leaves to inference.
+## The member of `prelude` that takes the parameters `function` does.
 _repeated_prelude_member(functions: FunctionDef[], function: FunctionDef, prelude: ulong[]): ulong? {
     var key = _parameter_key(function);
     for (var p in prelude) {
-        if (_parameter_key(functions[p]) != key) {
-            continue;
-        }
-        if (function.ty.is_auto() or _return_key(functions[p]) == _return_key(function)) {
+        if (_parameter_key(functions[p]) == key) {
             return Optional<ulong>.Value(p);
         }
     }

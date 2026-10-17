@@ -126,9 +126,9 @@ call:
 {{#include ../../examples/overloading-runtime/main.pep}}
 ```
 
-A member with a runtime member's parameters and return type (or a return
-type left to inference) is an error, since a file that wants the runtime's
-member already has it:
+A member may not take a runtime member's parameters, since a call could
+not tell the two apart. With the same return type (or one left to
+inference) it is a redefinition:
 
 ```text
 main.pep:1:1: error: redefinition of 'print'
@@ -139,11 +139,20 @@ runtime/string.pep:1850:8: note: previous definition is here
       |        ^~~~~
 ```
 
-One that differs only in its return type hides the runtime's member in its
-file, as a file's own member hides an imported one, so a program's own
-`arguments(): int` still compiles beside the runtime's deprecated
-`arguments(): Array<String>`. A struct or variable named like a runtime
-function hides all of its members.
+and with another return type it is the same error as for two members of
+one file:
+
+```text
+main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
+    1 | to_string(value: int): int { return value; }
+      | ^~~~~~~~~
+runtime/string.pep:1621:8: note: previous declaration is here
+ 1621 | export to_string(value: int): String {
+      |        ^~~~~~~~~
+```
+
+Give the function another name or other parameters instead. A struct or
+variable named like a runtime function hides all of its members.
 
 ### Members may differ in visibility
 

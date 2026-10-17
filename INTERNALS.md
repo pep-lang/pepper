@@ -312,7 +312,8 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `name_overloads` records each as a set of every member, reporting two
   members of one module with the same parameters as a redefinition (two
   modules' such members only make a call ambiguous, except a member with a
-  prelude member's parameters and return type, a redefinition too). Sema hides a mixed
+  prelude member's parameters, an error whatever its return type,
+  `_repeated_prelude_member`). Sema hides a mixed
   set's private members (`Module.private_functions`) from calls in other
   files, and an imported member with the same parameters as one of the
   calling file's own (`Overloads._set`, by the call's location).
