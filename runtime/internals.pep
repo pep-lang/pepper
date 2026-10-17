@@ -974,16 +974,30 @@ export _pep_free(p: __ptr<void>) {
 
 [Unsafe("overflow")]
 export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
+    return _pep_resize(p, prev_size, new_size, true);
+}
+
+# `_pep_realloc` without zeroing the bytes past `prev_size`, for a buffer
+# whose unused capacity is never read and holds no references (#925).
+[Unsafe("overflow")]
+export _pep_realloc_uninit(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<void> {
+    return _pep_resize(p, prev_size, new_size, false);
+}
+
+# Moves or extends `p` to `new_size` bytes, keeping its first `prev_size`;
+# `zero` clears the bytes past them.
+[Unsafe("overflow")]
+_pep_resize(p: __ptr<void>, prev_size: ulong, new_size: ulong, zero: bool): __ptr<void> {
     if (_pep_small_owns(p) || (p == __null && new_size <= _pep_small_limit && new_size != 0)) {
         if (p != __null && new_size <= _pep_small_capacity(p)) {
             # It still fits its class.
-            if (new_size > prev_size) {
+            if (zero && new_size > prev_size) {
                 memset(p + prev_size, 0, new_size - prev_size);
             }
             return p;
         }
         # Move it: to another class, or to calloc past the limit.
-        var moved = _pep_malloc(new_size);
+        var moved = zero ? _pep_malloc(new_size) : _pep_malloc_uninit(new_size);
         if (p != __null) {
             memcpy(moved, p, prev_size < new_size ? prev_size : new_size);
             _pep_free(p);
@@ -991,7 +1005,7 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
         return moved;
     }
     # C realloc preserves contents up to min(prev,new); net-zero on the
-    # counter. The extension region is uninitialized — zero it so fresh
+    # counter. The extension region is uninitialized: zero it when asked.
     # Never ask for 0 bytes (an Array of a zero-size type): realloc(p, 0)
     # may free `p` and return null, which the counter would not see.
     var np = realloc(p, new_size > 0 ? new_size : 1);
@@ -1000,7 +1014,7 @@ export _pep_realloc(p: __ptr<void>, prev_size: ulong, new_size: ulong): __ptr<vo
         if (p == __null) {
             __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
         }
-        if (new_size > prev_size) {
+        if (zero && new_size > prev_size) {
             memset(np + prev_size, 0, new_size - prev_size);
         }
     }

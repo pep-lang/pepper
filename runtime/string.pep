@@ -111,7 +111,7 @@ export struct String {
             if (_length == 0) {
                 _length = _pep_utf8_length(data, _size);
             }
-            _data = _pep_malloc(_size + 1);
+            _data = _pep_malloc_uninit(_size + 1);
             memcpy(_data, data, _size);
             _data[_size] = 0;
         }
@@ -250,9 +250,19 @@ export struct String {
     ##
     ## @param new_size the new byte length
     grow(new_size: ulong) {
+        _grow(new_size, true);
+    }
+
+    # `grow`, leaving the new bytes uninitialized when `zero` is false, for
+    # a caller that writes every one of them (#925).
+    _grow(new_size: ulong, zero: bool) {
         if (new_size > _size) {
             _version = _version + 1;
-            _data = _pep_realloc(_data, _size + 1, new_size + 1);
+            if (zero) {
+                _data = _pep_realloc(_data, _size + 1, new_size + 1);
+            } else {
+                _data = _pep_realloc_uninit(_data, _size + 1, new_size + 1);
+            }
             _size = new_size;
             _data[_size] = 0;
         }
@@ -281,7 +291,7 @@ export struct String {
         ulong old_size = _size;
         ulong add_size = rhs._size;
         ulong add_length = rhs._length;
-        grow(_size + add_size);
+        _grow(_size + add_size, false);
         memcpy(_data + old_size, rhs._data, add_size);
         _length += add_length;
         _data[_size] = 0;
@@ -1494,7 +1504,11 @@ _string_replace(data: __ptr<char>, size: ulong, from: String, to: String, locati
 
 # A copy of a span with the 26 letters from `first` shifted by `shift`.
 _string_map_case(data: __ptr<char>, size: ulong, length: ulong, first: int, shift: int): String {
-    __ptr<char> copy = _pep_malloc(size + 1);
+    # A zero size would tell the constructor to measure the C string.
+    if (size == 0) {
+        return String();
+    }
+    __ptr<char> copy = _pep_malloc_uninit(size + 1);
     ulong index = 0;
     while (index < size) {
         int value = (data[index] as byte) as int;
@@ -1537,7 +1551,7 @@ _string_repeat(data: __ptr<char>, size: ulong, length: ulong, count: ulong): Str
         return String();
     }
     var result = String();
-    result.grow(size * count);
+    result._grow(size * count, false);
     ulong index = 0;
     while (index < count) {
         memcpy(result._data + index * size, data, size);
@@ -2237,7 +2251,7 @@ export struct StringBuilder {
     ## @param capacity the number of bytes to allocate up front
     construct(capacity: ulong = 0) {
         if (capacity > 0) {
-            _data = _pep_malloc(capacity) as __ptr<char>;
+            _data = _pep_malloc_uninit(capacity) as __ptr<char>;
             _capacity = capacity;
         }
     }
@@ -2270,7 +2284,7 @@ export struct StringBuilder {
             if (capacity < needed) {
                 capacity = needed;
             }
-            _data = _pep_realloc(_data, _capacity, capacity) as __ptr<char>;
+            _data = _pep_realloc_uninit(_data, _capacity, capacity) as __ptr<char>;
             _capacity = capacity;
         }
         if (size > 0) {

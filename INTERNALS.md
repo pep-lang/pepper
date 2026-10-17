@@ -1747,7 +1747,7 @@ on every function and `uwtable` on every definition (plus
 `"frame-pointer"="non-leaf"` on Apple targets, whose `backtrace` walks
 frame pointers); `noreturn` and `cold`
 on `NO_RETURN` (`_pep_panic`, `_pep_exit`, `abort`, `_Exit`); `noalias` on
-the result of `ALLOCATORS` (`_pep_malloc`, `_pep_malloc_uninit`, `_pep_realloc`); and `!tbaa` on
+the result of `ALLOCATORS` (`_pep_malloc`, `_pep_malloc_uninit`, `_pep_realloc`, `_pep_realloc_uninit`); and `!tbaa` on
 object memory. The TBAA tree has two types under one root, `reference
 counts` and `fields`: a load or store whose address is a field address of
 a struct object (`getelementptr %S, ptr, 0, <i>`: `i < 2` is the head) or
@@ -2213,7 +2213,7 @@ thread that `async.Thread.spawn` started calls `_pep_small_thread_exit`
 when its body ends, which puts its spans in their pools, ownerless, and
 folds its live count into
 `_SMALL_RETIRED`; other threads keep their caches. Recycled blocks are zeroed when handed
-out, except by `_pep_malloc_uninit`. The allocator runs before any other global exists, so it uses raw
+out, except by `_pep_malloc_uninit` and `_pep_realloc_uninit`, which String, StringBuilder and the growth of a plain-value Array use for bytes they write before reading (#925). The allocator runs before any other global exists, so it uses raw
 memory only, and its functions are `[Unsafe("overflow")]`.
 
 `_pep_live_allocs()` counts live

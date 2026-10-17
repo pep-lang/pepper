@@ -233,7 +233,12 @@ export struct Array<T> {
     reserve(capacity: ulong) {
         if (capacity > _capacity) {
             assert(_pins == 0, "Array: the buffer is in use by an I/O operation");
-            _data = _pep_realloc(_data, sizeof<T>() * _capacity, sizeof<T>() * capacity);
+            ulong prev_size = sizeof<T>() * _capacity;
+            ulong new_size = sizeof<T>() * capacity;
+            # Slots past `count` are read only when they hold references, which must start null.
+            _data = __is_pod<T>() ?
+                _pep_realloc_uninit(_data, prev_size, new_size) :
+                _pep_realloc(_data, prev_size, new_size);
             _capacity = capacity;
         }
     }
