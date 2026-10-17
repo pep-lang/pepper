@@ -396,28 +396,7 @@ struct _BoundsChecker {
             }
             Declaration(declaration) => {
                 if (declaration is Variable(variable)) {
-                    var ty = variable.ty;
-                    if (variable.default.is_value()) {
-                        var value_expression = variable.default.value();
-                        expression(value_expression, walk);
-                        var value = type_of(value_expression, walk);
-                        if (ty.is_auto()) {
-                            ty = value.is_value() ? value.value() : TypeName.auto();
-                        } else if (value.is_value()) {
-                            var own_loc = _expression_loc(value_expression);
-                            var at = own_loc.is_none() ? variable.loc : own_loc;
-                            var bad = flows(value.value(), ty, walk);
-                            if (bad.is_value()) {
-                                _report(
-                                    error_at(
-                                        $"cannot initialize variable '{variable.name}' of type '{ty.display()}' with a value of type '{value.value().display()}'",
-                                        at
-                                    ),
-                                    bad.value()
-                                );
-                            }
-                        }
-                    }
+                    var ty = _initialized(variable, walk);
                     walk.scopes.last()[variable.name] = ty;
                 }
             }
@@ -752,58 +731,95 @@ struct _BoundsChecker {
                 _binary(node.op, node.lhs, node.rhs, node.loc, walk);
             }
             Unary(node) => {
-                if (node.op == UnaryOp.Neg or node.op == UnaryOp.BitNot) {
-                    var t = type_of(node.operand, walk);
-                    if (t.is_value()) {
-                        var c = constrained(t.value(), walk);
-                        if (c.is_value()) {
-                            var name = node.op == UnaryOp.Neg ? "-" : "~";
-                            bool declared = false;
-                            for (var (_, m) in c.value().named(name)) {
-                                if (m.parameters.count == 0 and !m.is_static) {
-                                    declared = true;
-                                }
-                            }
-                            if (!declared) {
-                                var param = t.value().name;
-                                var operator = Loc.at(
-                                    node.loc.file, ast.Span(node.loc.span.start, node.loc.span.start + 1)
-                                );
-                                _report(
-                                    error_at($"invalid argument type '{param}' to unary expression", operator),
-                                    c.value().missing(param, $"operator '{name}'")
-                                );
-                            }
-                        }
-                    }
-                }
+                _unary(node, walk);
             }
             Index(node) => {
-                var t = type_of(node.lhs, walk);
-                if (t.is_value()) {
-                    var c = constrained(t.value(), walk);
-                    if (c.is_value()) {
-                        bool indexer = false;
-                        for (var (_, m) in c.value().members) {
-                            if (m.is_indexer) {
-                                indexer = true;
-                            }
-                        }
-                        if (!indexer) {
-                            var param = t.value().name;
-                            _report(
-                                error_at($"type '{param}' cannot be indexed", node.loc),
-                                c.value().missing(param, "indexer")
-                            );
-                        }
-                    }
-                }
+                _index(node, walk);
             }
             else => {}
         }
         for (var child in expression_children(e)) {
             expression(child, walk);
         }
+    }
+
+    # Checks the initial value of `variable` and gives the variable's type:
+    # the value's for `var`.
+    _initialized(variable: VariableDef, walk: _BoundsWalk): TypeName {
+        var ty = variable.ty;
+        if (!variable.default.is_value()) {
+            return ty;
+        }
+        var value_expression = variable.default.value();
+        expression(value_expression, walk);
+        var value = type_of(value_expression, walk);
+        if (ty.is_auto()) {
+            return value.is_value() ? value.value() : TypeName.auto();
+        }
+        if (!value.is_value()) {
+            return ty;
+        }
+        var own_loc = _expression_loc(value_expression);
+        var at = own_loc.is_none() ? variable.loc : own_loc;
+        var bad = flows(value.value(), ty, walk);
+        if (bad.is_value()) {
+            _report(
+                error_at(
+                    $"cannot initialize variable '{variable.name}' of type '{ty.display()}' with a value of type '{value.value().display()}'",
+                    at
+                ),
+                bad.value()
+            );
+        }
+        return ty;
+    }
+
+    # `-x` or `~x` on a constrained type parameter needs the operator in
+    # its constraints.
+    _unary(node: UnaryExpression, walk: _BoundsWalk) {
+        if (node.op != UnaryOp.Neg and node.op != UnaryOp.BitNot) {
+            return;
+        }
+        var t = type_of(node.operand, walk);
+        if (!t.is_value()) {
+            return;
+        }
+        var c = constrained(t.value(), walk);
+        if (!c.is_value()) {
+            return;
+        }
+        var name = node.op == UnaryOp.Neg ? "-" : "~";
+        for (var (_, m) in c.value().named(name)) {
+            if (m.parameters.count == 0 and !m.is_static) {
+                return;
+            }
+        }
+        var param = t.value().name;
+        var operator = Loc.at(node.loc.file, ast.Span(node.loc.span.start, node.loc.span.start + 1));
+        _report(
+            error_at($"invalid argument type '{param}' to unary expression", operator),
+            c.value().missing(param, $"operator '{name}'")
+        );
+    }
+
+    # `x[i]` on a constrained type parameter needs an indexer in its
+    # constraints.
+    _index(node: IndexExpression, walk: _BoundsWalk) {
+        var t = type_of(node.lhs, walk);
+        if (!t.is_value()) {
+            return;
+        }
+        var c = constrained(t.value(), walk);
+        if (!c.is_value()) {
+            return;
+        }
+        for (var (_, m) in c.value().members) {
+            if (m.is_indexer) {
+                return;
+            }
+        }
+        var param = t.value().name;
+        _report(error_at($"type '{param}' cannot be indexed", node.loc), c.value().missing(param, "indexer"));
     }
 
     _binary(op: BinaryOp, lhs: Expression, rhs: Expression, loc: Loc, walk: _BoundsWalk) {
@@ -934,26 +950,27 @@ struct _BoundsChecker {
             if (!actual.is_value()) {
                 continue;
             }
-            if (_incompatible(actual.value(), expected.value(), walk)) {
-                var at = _expression_loc(arg);
-                if (at.is_none()) {
-                    at = loc;
-                    for (var (call_loc, j, written) in literal_args) {
-                        if (call_loc == loc and j == i - 1) {
-                            at = written;
-                            break;
-                        }
+            if (!_incompatible(actual.value(), expected.value(), walk)) {
+                continue;
+            }
+            var at = _expression_loc(arg);
+            if (at.is_none()) {
+                at = loc;
+                for (var (call_loc, j, written) in literal_args) {
+                    if (call_loc == loc and j == i - 1) {
+                        at = written;
+                        break;
                     }
                 }
-                _report(
-                    error_at(
-                        $"cannot pass a value of type '{constraint_spelled(actual.value())}' as argument {i} of '{base}', which has type '{constraint_spelled(expected.value())}'",
-                        at
-                    ),
-                    ($"'{base}' declared here", Optional<Loc>.Value(member.loc))
-                );
-                return;
             }
+            _report(
+                error_at(
+                    $"cannot pass a value of type '{constraint_spelled(actual.value())}' as argument {i} of '{base}', which has type '{constraint_spelled(expected.value())}'",
+                    at
+                ),
+                ($"'{base}' declared here", Optional<Loc>.Value(member.loc))
+            );
+            return;
         }
     }
 

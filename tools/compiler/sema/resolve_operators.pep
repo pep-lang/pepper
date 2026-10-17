@@ -468,15 +468,16 @@ extend _IndexLowering with Rewriter;
 ## index expands at statement level.
 _index_assignment(resolver: _OperatorResolver, e: Expression): Expression? {
     if (e is Binary(node)) {
-        if (node.op == BinaryOp.Assign) {
-            if (node.lhs is Index(index)) {
-                if (resolver.sets_index(index.lhs)) {
-                    return Optional<Expression>.Value(
-                        Expression.MethodCall(
-                            MethodCallExpression(index.lhs, "__index_set", [index.rhs, node.rhs], node.loc)
-                        )
-                    );
-                }
+        if (node.op != BinaryOp.Assign) {
+            return Optional<Expression>.Empty;
+        }
+        if (node.lhs is Index(index)) {
+            if (resolver.sets_index(index.lhs)) {
+                return Optional<Expression>.Value(
+                    Expression.MethodCall(
+                        MethodCallExpression(index.lhs, "__index_set", [index.rhs, node.rhs], node.loc)
+                    )
+                );
             }
         }
     }

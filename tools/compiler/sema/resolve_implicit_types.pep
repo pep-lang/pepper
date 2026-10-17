@@ -670,16 +670,17 @@ export struct ImplicitTables {
     static checked(module: Module, state: PassState, callees: Callees): ImplicitTables {
         var out = ImplicitTables(callees, Properties(module), state);
         for (var st in module.structs) {
-            if (module.checked.structs.contains(st.name) and !state.extended_checked.contains(st.name)) {
-                out._add_struct(module, st, state);
-                out._struct_defs.append(st);
-                out._covered[st.name] = (st, st.field_members.count, st.method_members.count);
-                var name = _before_angle(st.ty.to_string());
-                if (!out._by_base.contains(name)) {
-                    out._by_base[name] = Array<StructDef>();
-                }
-                out._by_base[name].append(st);
+            if (!module.checked.structs.contains(st.name) or state.extended_checked.contains(st.name)) {
+                continue;
             }
+            out._add_struct(module, st, state);
+            out._struct_defs.append(st);
+            out._covered[st.name] = (st, st.field_members.count, st.method_members.count);
+            var name = _before_angle(st.ty.to_string());
+            if (!out._by_base.contains(name)) {
+                out._by_base[name] = Array<StructDef>();
+            }
+            out._by_base[name].append(st);
         }
         out._index();
         for (var f in module.functions) {
@@ -908,14 +909,9 @@ export struct ImplicitTables {
         if (base.is_value()) {
             var b = base.value();
             var found = b.struct_types.try_get(name);
-            if (found.is_value()) {
-                var st = b._covered.try_get(name);
-                if (st.is_value()) {
-                    var (def, _, _) = st.value();
-                    if (b.covers(def)) {
-                        return found;
-                    }
-                }
+            var st = b._covered.try_get(name);
+            if (found.is_value() and st.is_value() and b.covers(st.value().0)) {
+                return found;
             }
         }
         return struct_types.try_get(name);

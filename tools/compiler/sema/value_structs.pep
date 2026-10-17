@@ -563,15 +563,17 @@ struct _Uses {
         if (ty.is_value()) {
             return ty;
         }
+        if (!current.is_value()) {
+            return Optional<TypeName>.Empty;
+        }
         if (e is SymbolRef(node)) {
-            if (current.is_value()) {
-                var info = table.lookup(current.value());
-                if (info.is_value()) {
-                    for (var (f, field_type) in info.value().fields) {
-                        if (f == node.id) {
-                            return Optional<TypeName>.Value(field_type);
-                        }
-                    }
+            var info = table.lookup(current.value());
+            if (!info.is_value()) {
+                return Optional<TypeName>.Empty;
+            }
+            for (var (f, field_type) in info.value().fields) {
+                if (f == node.id) {
+                    return Optional<TypeName>.Value(field_type);
                 }
             }
         }

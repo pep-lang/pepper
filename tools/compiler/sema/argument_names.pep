@@ -96,14 +96,15 @@ export record_argument_names(module: Module, state: PassState) {
         }
     }
     for (var st in module.structs) {
-        if (st.generic_params.count == 0 or st.name.contains("<")) {
-            var current = Optional<TypeName>.Value(st.ty);
-            for (var c in st.constructors) {
-                recorder.visit(c, current);
-            }
-            for (var m in st.method_members) {
-                recorder.visit(m, current);
-            }
+        if (st.generic_params.count != 0 and !st.name.contains("<")) {
+            continue;
+        }
+        var current = Optional<TypeName>.Value(st.ty);
+        for (var c in st.constructors) {
+            recorder.visit(c, current);
+        }
+        for (var m in st.method_members) {
+            recorder.visit(m, current);
         }
     }
     var found = recorder.found;

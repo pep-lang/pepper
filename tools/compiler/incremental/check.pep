@@ -1068,15 +1068,16 @@ _differ(unit: CompilationUnit, checked_unit: sema.CheckedUnit, again: sema.Check
                 var (other_loc, other_text) = other.value();
                 same = other_loc == loc and other_text == text;
             }
-            if (!same and told < 8) {
-                var shown_other = "none";
-                if (other.is_value()) {
-                    var (other_loc, other_text) = other.value();
-                    shown_other = $"{other_loc.file}:{other_loc.span.start} {other_text}";
-                }
-                differ.append($"summary {key}: {loc.file}:{loc.span.start} {text} / {shown_other}");
-                told += 1;
+            if (same or told >= 8) {
+                continue;
             }
+            var shown_other = "none";
+            if (other.is_value()) {
+                var (other_loc, other_text) = other.value();
+                shown_other = $"{other_loc.file}:{other_loc.span.start} {other_text}";
+            }
+            differ.append($"summary {key}: {loc.file}:{loc.span.start} {text} / {shown_other}");
+            told += 1;
         }
         for (var (key, _) in fresh) {
             if (!kept.contains(key) and told < 8) {

@@ -232,24 +232,25 @@ export drop_unused_methods(module: Module, state: PassState) {
         }
         st.method_members = kept;
         var sets = module.method_overload_sets.try_get(st.name);
-        if (sets.is_value()) {
-            var emptied = Array<String>();
-            for (var (set, members) in sets.value()) {
-                var left = Array<String>();
-                for (var member in members) {
-                    if (!bodies.contains(member)) {
-                        left.append(member);
-                    }
-                }
-                members.clear();
-                members.append_all(left);
-                if (members.count == 0) {
-                    emptied.append(set);
+        if (!sets.is_value()) {
+            continue;
+        }
+        var emptied = Array<String>();
+        for (var (set, members) in sets.value()) {
+            var left = Array<String>();
+            for (var member in members) {
+                if (!bodies.contains(member)) {
+                    left.append(member);
                 }
             }
-            for (var set in emptied) {
-                sets.value().remove(set);
+            members.clear();
+            members.append_all(left);
+            if (members.count == 0) {
+                emptied.append(set);
             }
+        }
+        for (var set in emptied) {
+            sets.value().remove(set);
         }
     }
     state.deferred.clear();

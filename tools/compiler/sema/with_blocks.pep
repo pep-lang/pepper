@@ -224,14 +224,16 @@ struct _AssignmentFinder {
     }
 
     rewrite(e: Expression): Expression {
-        if (!found.is_value()) {
-            if (e is Binary(node)) {
-                if (_is_assignment(node.op)) {
-                    if (node.lhs is SymbolRef(target)) {
-                        if (target.id == name) {
-                            found = Optional<Loc>.Value(target.loc);
-                        }
-                    }
+        if (found.is_value()) {
+            return e;
+        }
+        if (e is Binary(node)) {
+            if (!_is_assignment(node.op)) {
+                return e;
+            }
+            if (node.lhs is SymbolRef(target)) {
+                if (target.id == name) {
+                    found = Optional<Loc>.Value(target.loc);
                 }
             }
         }

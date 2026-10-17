@@ -550,137 +550,177 @@ struct _CaseResolver {
             }
             else => {}
         }
-        # `Doc(...)`: a reference enum's values are made by its cases only.
         if (e is FunctionCall(call)) {
-            if (!call.loc.is_none() and !receivers.contains(call.loc)) {
-                var ty = parse_type_string(call.function);
-                var found = reference_cases(state, ty);
-                if (found.is_value()) {
-                    var (cases, _) = found.value();
-                    var first = cases.count > 0 ? cases[0].name : "Case";
-                    state.report(
-                        error_at(
-                            $"cannot construct enum '{_shown_type(ty)}' directly: its values are made by its cases",
-                            call.loc
-                        ).with_note($"use a case, such as '{_shown_type(ty)}.{first}'", Optional<Location>.Empty)
-                    );
-                    return e;
-                }
-            }
+            return _construction(e, call);
         }
-        # `Doc.Line`: a reference enum's case that carries no values is a
-        # call of its static method, `Doc.Line()`.
         if (e is MemberRef(member)) {
-            var ty = _named_type(member.lhs);
-            if (ty.is_value()) {
-                var found = reference_cases(state, ty.value());
-                if (found.is_value()) {
-                    var (cases, declared) = found.value();
-                    var shown = _shown_type(ty.value());
-                    var c = Optional<EnumCaseDef>.Empty;
-                    for (var candidate in cases) {
-                        if (candidate.name == member.name) {
-                            c = Optional<EnumCaseDef>.Value(candidate);
-                            break;
-                        }
-                    }
-                    if (!c.is_value()) {
-                        state.report(
-                            error_at(
-                                $"no case named '{member.name}' in '{shown}'", member.loc
-                            ).with_note($"'{shown}' declared here", Optional<Location>.Value(location_of(declared)))
-                        );
-                        return e;
-                    }
-                    var case = c.value();
-                    if (case.payload.count == 0) {
-                        return Expression.MethodCall(
-                            MethodCallExpression(member.lhs.copy(), member.name, Array<Expression>(), member.loc)
-                        );
-                    }
-                    var names = Array<String>();
-                    for (var (n, _) in case.payload) {
-                        names.append(n);
-                    }
-                    var s = case.payload.count == 1 ? "" : "s";
-                    state.report(
-                        error_at(
-                            $"case '{case.name}' of '{shown}' takes {case.payload.count} value{s}: '{shown}.{case.name}({", ".join(names)})'",
-                            member.loc
-                        ).with_note($"'{case.name}' declared here", Optional<Location>.Value(location_of(case.loc)))
-                    );
-                    return e;
-                }
-            }
+            return _member(e, member);
         }
-        # `Color.from_value(1)`: a static method called on the enum.
         if (e is MethodCall(call)) {
             if (call.this_value is SymbolRef(symbol)) {
-                var found = enums.try_get(symbol.id);
-                if (found.is_value()) {
-                    var def = found.value();
-                    var is_static = method_is_static(state, def.name, call.method);
-                    if (!is_static.is_value()) {
-                        state.report(
-                            error_at(
-                                $"no member named '{call.method}' in '{def.name}'", call.loc
-                            ).with_note($"'{def.name}' declared here", Optional<Location>.Value(location_of(def.loc)))
-                        );
-                    } else if (is_static.value()) {
-                        return Expression.FunctionCall(
-                            FunctionCallExpression(enum_method_name(def.name, call.method), call.args, call.loc)
-                        );
-                    } else {
-                        var first = def.cases.count > 0 ? def.cases[0].name : "Case";
-                        state.report(
-                            error_at(
-                                $"'{call.method}' is not static: call it on a value of '{def.name}', such as '{def.name}.{first}.{call.method}()'",
-                                call.loc
-                            )
-                        );
-                    }
-                    return e;
-                }
+                return _static_call(e, call, symbol.id);
             }
+            return e;
         }
         if (e is Cast(cast)) {
             if (cast.kind is Static) {
-                var found = enums.try_get(cast.ty.to_string());
-                if (found.is_value()) {
-                    var def = found.value();
-                    var first = def.cases.count > 0 ? def.cases[0].name : "Case";
-                    state.report(
-                        error_at(
-                            $"cannot convert a value to enum '{def.name}' with 'as'", cast.loc
-                        ).with_note($"name a case instead, such as '{def.name}.{first}'", Optional<Location>.Empty)
-                    );
-                    return e;
-                }
+                return _cast(e, cast);
             }
         }
-        if (e is MemberRef(member)) {
-            if (member.lhs is SymbolRef(symbol)) {
-                var found = enums.try_get(symbol.id);
-                if (found.is_value()) {
-                    var def = found.value();
-                    for (var c in def.cases) {
-                        if (c.name == member.name) {
-                            return _case_expression(def, c, member.loc);
-                        }
-                    }
-                    var read = method_read(state, def.name, member.name, member.loc);
-                    if (read.is_value()) {
-                        state.report(read.value());
-                    } else {
-                        state.report(
-                            error_at(
-                                $"no case named '{member.name}' in '{def.name}'", member.loc
-                            ).with_note($"'{def.name}' declared here", Optional<Location>.Value(location_of(def.loc)))
-                        );
-                    }
-                }
+        return e;
+    }
+
+    # `Doc(...)`: a reference enum's values are made by its cases only.
+    _construction(e: Expression, call: FunctionCallExpression): Expression {
+        if (call.loc.is_none() or receivers.contains(call.loc)) {
+            return e;
+        }
+        var ty = parse_type_string(call.function);
+        var found = reference_cases(state, ty);
+        if (!found.is_value()) {
+            return e;
+        }
+        var (cases, _) = found.value();
+        var first = cases.count > 0 ? cases[0].name : "Case";
+        state.report(
+            error_at(
+                $"cannot construct enum '{_shown_type(ty)}' directly: its values are made by its cases", call.loc
+            ).with_note($"use a case, such as '{_shown_type(ty)}.{first}'", Optional<Location>.Empty)
+        );
+        return e;
+    }
+
+    _member(e: Expression, member: MemberRefExpression): Expression {
+        var rewritten = _reference_case(e, member);
+        if (rewritten.is_value()) {
+            return rewritten.value();
+        }
+        if (member.lhs is SymbolRef(symbol)) {
+            return _value_case(e, member, symbol.id);
+        }
+        return e;
+    }
+
+    # `Doc.Line`: a reference enum's case that carries no values is a
+    # call of its static method, `Doc.Line()`. Empty when `member` names
+    # no reference enum.
+    _reference_case(e: Expression, member: MemberRefExpression): Expression? {
+        var ty = _named_type(member.lhs);
+        if (!ty.is_value()) {
+            return Optional<Expression>.Empty;
+        }
+        var found = reference_cases(state, ty.value());
+        if (!found.is_value()) {
+            return Optional<Expression>.Empty;
+        }
+        var (cases, declared) = found.value();
+        var shown = _shown_type(ty.value());
+        var c = Optional<EnumCaseDef>.Empty;
+        for (var candidate in cases) {
+            if (candidate.name == member.name) {
+                c = Optional<EnumCaseDef>.Value(candidate);
+                break;
             }
         }
+        if (!c.is_value()) {
+            state.report(
+                error_at(
+                    $"no case named '{member.name}' in '{shown}'", member.loc
+                ).with_note($"'{shown}' declared here", Optional<Location>.Value(location_of(declared)))
+            );
+            return Optional<Expression>.Value(e);
+        }
+        var case = c.value();
+        if (case.payload.count == 0) {
+            return Optional<Expression>.Value(
+                Expression.MethodCall(
+                    MethodCallExpression(member.lhs.copy(), member.name, Array<Expression>(), member.loc)
+                )
+            );
+        }
+        var names = Array<String>();
+        for (var (n, _) in case.payload) {
+            names.append(n);
+        }
+        var s = case.payload.count == 1 ? "" : "s";
+        state.report(
+            error_at(
+                $"case '{case.name}' of '{shown}' takes {case.payload.count} value{s}: '{shown}.{case.name}({", ".join(names)})'",
+                member.loc
+            ).with_note($"'{case.name}' declared here", Optional<Location>.Value(location_of(case.loc)))
+        );
+        return Optional<Expression>.Value(e);
+    }
+
+    # `Color.Red`: a case of the enum `id` names.
+    _value_case(e: Expression, member: MemberRefExpression, id: String): Expression {
+        var found = enums.try_get(id);
+        if (!found.is_value()) {
+            return e;
+        }
+        var def = found.value();
+        for (var c in def.cases) {
+            if (c.name == member.name) {
+                return _case_expression(def, c, member.loc);
+            }
+        }
+        var read = method_read(state, def.name, member.name, member.loc);
+        if (read.is_value()) {
+            state.report(read.value());
+            return e;
+        }
+        state.report(
+            error_at(
+                $"no case named '{member.name}' in '{def.name}'", member.loc
+            ).with_note($"'{def.name}' declared here", Optional<Location>.Value(location_of(def.loc)))
+        );
+        return e;
+    }
+
+    # `Color.from_value(1)`: a static method called on the enum `id` names.
+    _static_call(e: Expression, call: MethodCallExpression, id: String): Expression {
+        var found = enums.try_get(id);
+        if (!found.is_value()) {
+            return e;
+        }
+        var def = found.value();
+        var is_static = method_is_static(state, def.name, call.method);
+        if (!is_static.is_value()) {
+            state.report(
+                error_at(
+                    $"no member named '{call.method}' in '{def.name}'", call.loc
+                ).with_note($"'{def.name}' declared here", Optional<Location>.Value(location_of(def.loc)))
+            );
+            return e;
+        }
+        if (is_static.value()) {
+            return Expression.FunctionCall(
+                FunctionCallExpression(enum_method_name(def.name, call.method), call.args, call.loc)
+            );
+        }
+        var first = def.cases.count > 0 ? def.cases[0].name : "Case";
+        state.report(
+            error_at(
+                $"'{call.method}' is not static: call it on a value of '{def.name}', such as '{def.name}.{first}.{call.method}()'",
+                call.loc
+            )
+        );
+        return e;
+    }
+
+    # `1 as Color`: an integer does not convert to an enum.
+    _cast(e: Expression, cast: CastExpression): Expression {
+        var found = enums.try_get(cast.ty.to_string());
+        if (!found.is_value()) {
+            return e;
+        }
+        var def = found.value();
+        var first = def.cases.count > 0 ? def.cases[0].name : "Case";
+        state.report(
+            error_at(
+                $"cannot convert a value to enum '{def.name}' with 'as'", cast.loc
+            ).with_note($"name a case instead, such as '{def.name}.{first}'", Optional<Location>.Empty)
+        );
         return e;
     }
 }

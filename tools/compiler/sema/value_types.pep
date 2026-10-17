@@ -316,16 +316,18 @@ struct _StaticCalls {
     rewrite(e: Expression): Expression {
         if (e is MethodCall(call)) {
             if (call.this_value is SymbolRef(symbol)) {
-                if (!state.enum_representations.contains(symbol.id)) {
-                    var key = value_type_key(state, symbol.id);
-                    if (key.is_value()) {
-                        var is_static = method_is_static(state, key.value(), call.method);
-                        if (is_static.is_value() and is_static.value()) {
-                            return Expression.FunctionCall(
-                                FunctionCallExpression(enum_method_name(key.value(), call.method), call.args, call.loc)
-                            );
-                        }
-                    }
+                if (state.enum_representations.contains(symbol.id)) {
+                    return e;
+                }
+                var key = value_type_key(state, symbol.id);
+                if (!key.is_value()) {
+                    return e;
+                }
+                var is_static = method_is_static(state, key.value(), call.method);
+                if (is_static.is_value() and is_static.value()) {
+                    return Expression.FunctionCall(
+                        FunctionCallExpression(enum_method_name(key.value(), call.method), call.args, call.loc)
+                    );
                 }
             }
         }

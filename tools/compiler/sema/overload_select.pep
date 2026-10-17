@@ -1077,33 +1077,34 @@ export struct Overloads {
                     }
                     failed = true;
                 }
-                if (failed) {
-                    var from = "";
-                    match (arg.kind) {
-                        Overloaded(_) => {
-                            from = "overloaded function";
-                        }
-                        UntypedClosure(n) => {
-                            from = $"a closure of {n} parameter{n == 1 ? "" : "s"}";
-                        }
-                        Null => {
-                            from = "__null";
-                        }
-                        Default => {
-                            from = "a default argument";
-                        }
-                        else => {
-                            from = arg.ty.is_value() ? $"'{arg.ty.value().display()}'" : "";
-                        }
-                    }
-                    notes.append(
-                        (
-                            $"candidate function not viable: no known conversion from {from} to '{param.display()}' for {_ordinal_text(i + 1)} argument",
-                            member.loc
-                        )
-                    );
-                    break;
+                if (!failed) {
+                    continue;
                 }
+                var from = "";
+                match (arg.kind) {
+                    Overloaded(_) => {
+                        from = "overloaded function";
+                    }
+                    UntypedClosure(n) => {
+                        from = $"a closure of {n} parameter{n == 1 ? "" : "s"}";
+                    }
+                    Null => {
+                        from = "__null";
+                    }
+                    Default => {
+                        from = "a default argument";
+                    }
+                    else => {
+                        from = arg.ty.is_value() ? $"'{arg.ty.value().display()}'" : "";
+                    }
+                }
+                notes.append(
+                    (
+                        $"candidate function not viable: no known conversion from {from} to '{param.display()}' for {_ordinal_text(i + 1)} argument",
+                        member.loc
+                    )
+                );
+                break;
             }
             if (failed) {
                 continue;

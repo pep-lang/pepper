@@ -331,30 +331,31 @@ _specialization_loop(module: Module, state: PassState, steps: _Steps) {
         if (steps.taken()) {
             return;
         }
-        if (module.structs.count == structs
-            and module.functions.count == functions
-            and !methods_added
-            and !used_added
-            and !copies_added
-            and !expanded
-            and !methods_expanded) {
-            # Done only when gathering asks for nothing new.
-            var struct_specs = module.struct_specs.count;
-            var func_specs = module.func_specs.count;
-            gather_generics(module);
-            if (steps.stepped("gather_generics(module)")) {
-                return;
+        if (module.structs.count != structs
+            or module.functions.count != functions
+            or methods_added
+            or used_added
+            or copies_added
+            or expanded
+            or methods_expanded) {
+            continue;
+        }
+        # Done only when gathering asks for nothing new.
+        var struct_specs = module.struct_specs.count;
+        var func_specs = module.func_specs.count;
+        gather_generics(module);
+        if (steps.stepped("gather_generics(module)")) {
+            return;
+        }
+        if (module.struct_specs.count == struct_specs and module.func_specs.count == func_specs) {
+            # Before what no use named goes, any use of a method's name
+            # keeps it, whatever the type it is called on: the types
+            # spelled in the code may name a struct otherwise.
+            if (specialize_used_methods(module, state, true)) {
+                continue;
             }
-            if (module.struct_specs.count == struct_specs and module.func_specs.count == func_specs) {
-                # Before what no use named goes, any use of a method's name
-                # keeps it, whatever the type it is called on: the types
-                # spelled in the code may name a struct otherwise.
-                if (specialize_used_methods(module, state, true)) {
-                    continue;
-                }
-                drop_unused_methods(module, state);
-                return;
-            }
+            drop_unused_methods(module, state);
+            return;
         }
     }
 }

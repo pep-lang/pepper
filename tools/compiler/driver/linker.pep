@@ -120,11 +120,12 @@ llvm_install_dirs(): Path[] {
             var entries = listed.value().entries();
             if (entries.is_ok()) {
                 for (var entry in entries.value()) {
-                    if (entry.name.starts_with("llvm-")) {
-                        var major = ulong.parse(entry.name.substr_bytes(5, entry.name.size - 5));
-                        if (major.is_value()) {
-                            others.append((major.value(), entry.path.join(Path("bin"))));
-                        }
+                    if (!entry.name.starts_with("llvm-")) {
+                        continue;
+                    }
+                    var major = ulong.parse(entry.name.substr_bytes(5, entry.name.size - 5));
+                    if (major.is_value()) {
+                        others.append((major.value(), entry.path.join(Path("bin"))));
                     }
                 }
             }

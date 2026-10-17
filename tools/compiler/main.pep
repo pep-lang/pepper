@@ -417,224 +417,222 @@ main(args: String[]): int {
         out = project.value().output.value();
     }
     var build_folder = build_dir.is_value() ? Path(build_dir.value()) : work.join(Path(".pep")).join(Path("build"));
-    if (!emit_ast) {
-        if (!(linked or checked or model or steps)) {
-            # Debug builds keep every check.
-            if (without_checks.is_value() and opt_level.value() == 0) {
-                var kept = codegen.RuntimeChecks.without(without_checks.value()).value();
-                if (!(kept.overflow and kept.divide and kept.shift and kept.bounds and kept.null)) {
-                    File.stderr().write_all("warning: '--no-runtime-checks' has no effect at -O0\n");
-                }
-            }
-            if (msvc) {
-                _report("the MSVC linker path is not ported");
-                return 1;
-            }
-        }
-        if (!(linked or checked or model or steps or ir)) {
-            # A project builds with what pep.lock lists: fetch what is missing.
-            var fetched = driver.fetch_dependencies(entry);
-            if (fetched.is_err()) {
-                File.stderr().write_all(fetched.error() + "\n");
-                return 1;
-            }
-        }
-        # A build links the bodies of only the files it checks
-        # (`driver.build`).
-        setup.defer_bodies = !(ir or model or steps or linked or checked or emit_static.is_value());
-        # A rebuild's first compilation unit worker loads the program while this
-        # process does (`driver.start_compilation_unit_worker`).
-        var early_worker = Optional<process.Child>.Empty;
-        if (setup.defer_bodies and !compilation_unit_worker.is_value() and !no_cache and !debug) {
-            var worker_args = Array<String>();
-            for (var k in 1..args.count) {
-                worker_args.append(args[k]);
-            }
-            early_worker = driver.start_compilation_unit_worker(worker_args, build_folder);
-        }
-        var program = link.load_program(entry, setup);
-        if (program.is_err()) {
-            _report(program.error());
+    if (emit_ast) {
+        var source = File.read_to_string(path.value());
+        if (source.is_err()) {
+            File.stderr().write_all($"error: cannot read '{path.value()}'\n");
             return 1;
         }
-        if (emit_static.is_value()) {
-            # The copies go into `-o`, else `<stem>.static`.
-            var stem = entry.file_stem();
-            var out_dir = Path(
-                output.is_value() ? output.value() : $"{stem.is_value() ? stem.value() : "main"}.static"
-            );
-            var written = driver.emit_static(program.value(), entry, out_dir, emit_static.value() == "keep");
-            if (written.is_err()) {
-                _report(written.error());
-                return 1;
+        var module = parse.parse(source.value());
+        if (module.is_err()) {
+            var error = module.error();
+            File.stderr().write_all($"{path.value()}:{error.span.start}: error: {error.message}\n");
+            return 1;
+        }
+        if (ast_json) {
+            print(module.value().to_json().to_string());
+        } else {
+            # The text ends with a newline, which `print` adds.
+            var text = ast.module_text(module.value());
+            print(text.ends_with("\n") ? text.substr_bytes(0, text.size - 1) : text);
+        }
+        return 0;
+    }
+    if (!(linked or checked or model or steps)) {
+        # Debug builds keep every check.
+        if (without_checks.is_value() and opt_level.value() == 0) {
+            var kept = codegen.RuntimeChecks.without(without_checks.value()).value();
+            if (!(kept.overflow and kept.divide and kept.shift and kept.bounds and kept.null)) {
+                File.stderr().write_all("warning: '--no-runtime-checks' has no effect at -O0\n");
             }
-        } else if (ir) {
-            # The whole program's IR, optimized at the `-O` level, in
-            # `<build>/<name>.ll`.
-            var built = sema.merge(program.value());
-            if (built.is_err()) {
-                File.stderr().write_all($"{built.error()}\n");
-                return 1;
-            }
+        }
+        if (msvc) {
+            _report("the MSVC linker path is not ported");
+            return 1;
+        }
+    }
+    if (!(linked or checked or model or steps or ir)) {
+        # A project builds with what pep.lock lists: fetch what is missing.
+        var fetched = driver.fetch_dependencies(entry);
+        if (fetched.is_err()) {
+            File.stderr().write_all(fetched.error() + "\n");
+            return 1;
+        }
+    }
+    # A build links the bodies of only the files it checks
+    # (`driver.build`).
+    setup.defer_bodies = !(ir or model or steps or linked or checked or emit_static.is_value());
+    # A rebuild's first compilation unit worker loads the program while this
+    # process does (`driver.start_compilation_unit_worker`).
+    var early_worker = Optional<process.Child>.Empty;
+    if (setup.defer_bodies and !compilation_unit_worker.is_value() and !no_cache and !debug) {
+        var worker_args = Array<String>();
+        for (var k in 1..args.count) {
+            worker_args.append(args[k]);
+        }
+        early_worker = driver.start_compilation_unit_worker(worker_args, build_folder);
+    }
+    var program = link.load_program(entry, setup);
+    if (program.is_err()) {
+        _report(program.error());
+        return 1;
+    }
+    if (emit_static.is_value()) {
+        # The copies go into `-o`, else `<stem>.static`.
+        var stem = entry.file_stem();
+        var out_dir = Path(output.is_value() ? output.value() : $"{stem.is_value() ? stem.value() : "main"}.static");
+        var written = driver.emit_static(program.value(), entry, out_dir, emit_static.value() == "keep");
+        if (written.is_err()) {
+            _report(written.error());
+            return 1;
+        }
+    } else if (ir) {
+        # The whole program's IR, optimized at the `-O` level, in
+        # `<build>/<name>.ll`.
+        var built = sema.merge(program.value());
+        if (built.is_err()) {
+            File.stderr().write_all($"{built.error()}\n");
+            return 1;
+        }
+        var state = sema.PassState(program.value().target);
+        state.sources = program.value().sources();
+        state.lazy_methods = true;
+        if (traces.contains("passes")) {
+            state.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
+        }
+        var ran = sema.run_steps_with(built.value(), state, 0xffffffffffffffff);
+        if (ran.is_err()) {
+            File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
+            return 1;
+        }
+        if (state.pass_times.is_value()) {
+            File.stderr().write_all(state.pass_times.value().report());
+        }
+        var namespaces = Array<String>();
+        for (var f in program.value().files) {
+            namespaces.append(f.namespace);
+        }
+        var module_name = out.file_stem();
+        var name = module_name.is_value() ? module_name.value() : "main";
+        var generated = codegen.generate_ir(
+            built.value(),
+            state,
+            namespaces,
+            name,
+            Optional<codegen.Cpu>.Value(cpu.value()),
+            debug,
+            opt_level.value(),
+            frame_pointers,
+            runtime_checks,
+            debug ? driver.gdb_printers(program.value()) : ""
+        );
+        if (generated.is_err()) {
+            File.stderr().write_all(render_all([generated.error()], program.value().sources()) + "\n");
+            return 1;
+        }
+        Directory.create_all(build_folder);
+        var ll = build_folder.join(Path($"{name}.ll"));
+        var written = File.write_text(ll, generated.value());
+        if (written.is_err()) {
+            _report($"cannot write {ll}: {written.error().message}");
+            return 1;
+        }
+    } else if (model or steps) {
+        var built = sema.merge(program.value());
+        if (built.is_err()) {
+            File.stderr().write_all($"{built.error()}\n");
+            return 1;
+        }
+        # `--emit-steps` runs every step, or the first `--emit-model-step`.
+        if (steps or step.is_value()) {
             var state = sema.PassState(program.value().target);
             state.sources = program.value().sources();
-            state.lazy_methods = true;
-            if (traces.contains("passes")) {
-                state.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
-            }
-            var ran = sema.run_steps_with(built.value(), state, 0xffffffffffffffff);
+            var limit = step.is_value() ? step.value() : 0xffffffffffffffff;
+            var ran = sema.run_steps_with(built.value(), state, limit);
             if (ran.is_err()) {
                 File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
                 return 1;
             }
-            if (state.pass_times.is_value()) {
-                File.stderr().write_all(state.pass_times.value().report());
-            }
-            var namespaces = Array<String>();
-            for (var f in program.value().files) {
-                namespaces.append(f.namespace);
-            }
-            var module_name = out.file_stem();
-            var name = module_name.is_value() ? module_name.value() : "main";
-            var generated = codegen.generate_ir(
-                built.value(),
-                state,
-                namespaces,
-                name,
-                Optional<codegen.Cpu>.Value(cpu.value()),
-                debug,
-                opt_level.value(),
-                frame_pointers,
-                runtime_checks,
-                debug ? driver.gdb_printers(program.value()) : ""
-            );
-            if (generated.is_err()) {
-                File.stderr().write_all(render_all([generated.error()], program.value().sources()) + "\n");
-                return 1;
-            }
-            Directory.create_all(build_folder);
-            var ll = build_folder.join(Path($"{name}.ll"));
-            var written = File.write_text(ll, generated.value());
-            if (written.is_err()) {
-                _report($"cannot write {ll}: {written.error().message}");
-                return 1;
-            }
-        } else if (model or steps) {
-            var built = sema.merge(program.value());
-            if (built.is_err()) {
-                File.stderr().write_all($"{built.error()}\n");
-                return 1;
-            }
-            # `--emit-steps` runs every step, or the first `--emit-model-step`.
-            if (steps or step.is_value()) {
-                var state = sema.PassState(program.value().target);
-                state.sources = program.value().sources();
-                var limit = step.is_value() ? step.value() : 0xffffffffffffffff;
-                var ran = sema.run_steps_with(built.value(), state, limit);
-                if (ran.is_err()) {
-                    File.stderr().write_all(render_all([ran.error()], program.value().sources()) + "\n");
-                    return 1;
-                }
-                if (steps) {
-                    print("\n".join(state.step_names));
-                    return 0;
-                }
-            }
-            print(sema.model_json(built.value()));
-        } else if (linked) {
-            print(program.value().to_json().to_string());
-        } else if (checked) {
-            print(program.value().check_report());
-        } else {
-            var options = driver.BuildOptions(out, build_folder);
-            options.opt_level = opt_level.value();
-            options.frame_pointers = frame_pointers;
-            options.cpu = Optional<codegen.Cpu>.Value(cpu.value());
-            options.lto = whole;
-            options.library = kind;
-            options.debug = debug;
-            options.entry = Optional<Path>.Value(entry);
-            options.debug_static_expanded = debug_static.is_value() and debug_static.value() == "expanded";
-            options.runtime_checks = runtime_checks;
-            if (traces.contains("passes")) {
-                options.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
-            }
-            for (var library in project.value().libraries) {
-                if (!libraries.contains(library)) {
-                    libraries.append(library);
-                }
-            }
-            options.libraries = libraries;
-            options.library_dirs = library_dirs;
-            options.sysroot = driver.effective_sysroot(
-                setup.target, sysroot.is_value() ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
-            );
-            # A cached unit's sema is skipped, so its expansions would not be
-            # written for `--debug-static=expanded`.
-            if (!no_cache and !options.debug_static_expanded) {
-                options.cache = Optional<incremental.Cache>.Value(
-                    cache_dir.is_value() ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work)
-                );
-            }
-            # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but
-            # empty or `0`, unless `--no-verify-cache`.
-            var named_verify = os.environment("PEPPER_CACHE_VERIFY");
-            bool verifying = verify_cache
-                or (!no_verify_cache
-                    and named_verify.is_value()
-                    and !named_verify.value().is_empty
-                    and named_verify.value() != "0");
-            options.verify_cutoff = verifying;
-            options.trace_time = traces.contains("time");
-            options.trace_cache = traces.contains("cache");
-            if (compilation_unit_worker.is_value()) {
-                return driver.compilation_unit_worker(program.value(), options, Path(compilation_unit_worker.value()));
-            }
-            for (var k in 1..args.count) {
-                options.worker_args.append(args[k]);
-            }
-            options.early_worker = early_worker;
-            var made = driver.build(program.value(), options);
-            if (made.is_err()) {
-                # Empty: printed already (a syntax error read late).
-                if (!made.error().is_empty) {
-                    _report(made.error());
-                }
-                return 1;
-            }
-            if (verifying and options.cache.is_value()) {
-                # The program again, as the build loaded it.
-                var reloaded = link.load_program(entry, setup);
-                if (reloaded.is_err()) {
-                    _report(reloaded.error());
-                    return 1;
-                }
-                var verified = driver.verify_cache(reloaded.value(), options);
-                if (verified.is_err()) {
-                    _report(verified.error());
-                    return 1;
-                }
+            if (steps) {
+                print("\n".join(state.step_names));
+                return 0;
             }
         }
-        return 0;
-    }
-    var source = File.read_to_string(path.value());
-    if (source.is_err()) {
-        File.stderr().write_all($"error: cannot read '{path.value()}'\n");
-        return 1;
-    }
-    var module = parse.parse(source.value());
-    if (module.is_err()) {
-        var error = module.error();
-        File.stderr().write_all($"{path.value()}:{error.span.start}: error: {error.message}\n");
-        return 1;
-    }
-    if (ast_json) {
-        print(module.value().to_json().to_string());
+        print(sema.model_json(built.value()));
+    } else if (linked) {
+        print(program.value().to_json().to_string());
+    } else if (checked) {
+        print(program.value().check_report());
     } else {
-        # The text ends with a newline, which `print` adds.
-        var text = ast.module_text(module.value());
-        print(text.ends_with("\n") ? text.substr_bytes(0, text.size - 1) : text);
+        var options = driver.BuildOptions(out, build_folder);
+        options.opt_level = opt_level.value();
+        options.frame_pointers = frame_pointers;
+        options.cpu = Optional<codegen.Cpu>.Value(cpu.value());
+        options.lto = whole;
+        options.library = kind;
+        options.debug = debug;
+        options.entry = Optional<Path>.Value(entry);
+        options.debug_static_expanded = debug_static.is_value() and debug_static.value() == "expanded";
+        options.runtime_checks = runtime_checks;
+        if (traces.contains("passes")) {
+            options.pass_times = Optional<sema.PassTimes>.Value(sema.PassTimes());
+        }
+        for (var library in project.value().libraries) {
+            if (!libraries.contains(library)) {
+                libraries.append(library);
+            }
+        }
+        options.libraries = libraries;
+        options.library_dirs = library_dirs;
+        options.sysroot = driver.effective_sysroot(
+            setup.target, sysroot.is_value() ? Optional<Path>.Value(Path(sysroot.value())) : Optional<Path>.Empty
+        );
+        # A cached unit's sema is skipped, so its expansions would not be
+        # written for `--debug-static=expanded`.
+        if (!no_cache and !options.debug_static_expanded) {
+            options.cache = Optional<incremental.Cache>.Value(
+                cache_dir.is_value() ? incremental.Cache(Path(cache_dir.value())) : incremental.default_cache(work)
+            );
+        }
+        # `--verify-cache`, or `PEPPER_CACHE_VERIFY` set to anything but
+        # empty or `0`, unless `--no-verify-cache`.
+        var named_verify = os.environment("PEPPER_CACHE_VERIFY");
+        bool verifying = verify_cache
+            or (!no_verify_cache
+                and named_verify.is_value()
+                and !named_verify.value().is_empty
+                and named_verify.value() != "0");
+        options.verify_cutoff = verifying;
+        options.trace_time = traces.contains("time");
+        options.trace_cache = traces.contains("cache");
+        if (compilation_unit_worker.is_value()) {
+            return driver.compilation_unit_worker(program.value(), options, Path(compilation_unit_worker.value()));
+        }
+        for (var k in 1..args.count) {
+            options.worker_args.append(args[k]);
+        }
+        options.early_worker = early_worker;
+        var made = driver.build(program.value(), options);
+        if (made.is_err()) {
+            # Empty: printed already (a syntax error read late).
+            if (!made.error().is_empty) {
+                _report(made.error());
+            }
+            return 1;
+        }
+        if (verifying and options.cache.is_value()) {
+            # The program again, as the build loaded it.
+            var reloaded = link.load_program(entry, setup);
+            if (reloaded.is_err()) {
+                _report(reloaded.error());
+                return 1;
+            }
+            var verified = driver.verify_cache(reloaded.value(), options);
+            if (verified.is_err()) {
+                _report(verified.error());
+                return 1;
+            }
+        }
     }
     return 0;
 }

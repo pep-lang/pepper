@@ -207,18 +207,19 @@ struct _ClosureLifter {
         var declared = vars[id].level;
         bool any = false;
         for (var frame in frames) {
-            if (frame.level > declared) {
-                any = true;
-                bool known = false;
-                for (var (c, _) in frame.captures) {
-                    if (c == id) {
-                        known = true;
-                        break;
-                    }
+            if (frame.level <= declared) {
+                continue;
+            }
+            any = true;
+            bool known = false;
+            for (var (c, _) in frame.captures) {
+                if (c == id) {
+                    known = true;
+                    break;
                 }
-                if (!known) {
-                    frame.captures.append((id, loc));
-                }
+            }
+            if (!known) {
+                frame.captures.append((id, loc));
             }
         }
         if (any and !captured.contains(id)) {
@@ -880,19 +881,20 @@ export lift_closures(module: Module, state: PassState) {
         }
         ctx.this_ty = Optional<TypeName>.Value(ext.target);
         for (var s in module.structs) {
-            if (s.ty.name == ext.target.name) {
-                for (var m in s.method_members) {
-                    ctx.methods.insert(m.name);
-                }
-                for (var m in s.generic_methods) {
-                    ctx.methods.insert(m.name);
-                }
-                for (var f in s.field_members) {
-                    ctx.fields.insert(f.name);
-                }
-                ctx.statics = _static_methods(s, module);
-                break;
+            if (s.ty.name != ext.target.name) {
+                continue;
             }
+            for (var m in s.method_members) {
+                ctx.methods.insert(m.name);
+            }
+            for (var m in s.generic_methods) {
+                ctx.methods.insert(m.name);
+            }
+            for (var f in s.field_members) {
+                ctx.fields.insert(f.name);
+            }
+            ctx.statics = _static_methods(s, module);
+            break;
         }
         _add_extension_methods(module, ext.target.name, ctx.methods);
         extension_contexts.append(ctx);

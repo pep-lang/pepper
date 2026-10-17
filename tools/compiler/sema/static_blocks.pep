@@ -2988,16 +2988,17 @@ _model_constant(module: Module, e: Expression): _CtValue? {
         Cast(node) => {
             if (node.expr is IntLiteral(v)) {
                 for (var def in module.enums) {
-                    if (def.name == node.ty.name) {
-                        ulong i = 0;
-                        while (i < def.cases.count) {
-                            if (def.cases[i].value == v) {
-                                return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
-                            }
-                            i += 1;
-                        }
-                        return Optional<_CtValue>.Empty;
+                    if (def.name != node.ty.name) {
+                        continue;
                     }
+                    ulong i = 0;
+                    while (i < def.cases.count) {
+                        if (def.cases[i].value == v) {
+                            return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
+                        }
+                        i += 1;
+                    }
+                    return Optional<_CtValue>.Empty;
                 }
                 return Optional<_CtValue>.Value(_CtValue.Int(v));
             }
@@ -3005,16 +3006,17 @@ _model_constant(module: Module, e: Expression): _CtValue? {
         MemberRef(node) => {
             if (node.lhs is SymbolRef(symbol)) {
                 for (var def in module.enums) {
-                    if (def.name == symbol.id) {
-                        ulong i = 0;
-                        while (i < def.cases.count) {
-                            if (def.cases[i].name == node.name) {
-                                return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
-                            }
-                            i += 1;
-                        }
-                        return Optional<_CtValue>.Empty;
+                    if (def.name != symbol.id) {
+                        continue;
                     }
+                    ulong i = 0;
+                    while (i < def.cases.count) {
+                        if (def.cases[i].name == node.name) {
+                            return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
+                        }
+                        i += 1;
+                    }
+                    return Optional<_CtValue>.Empty;
                 }
             }
         }
@@ -3036,26 +3038,27 @@ _zero(module: Module, ty: TypeName): _CtValue? {
         return Optional<_CtValue>.Value(_CtValue.Float(0.0));
     }
     for (var def in module.enums) {
-        if (def.name == name) {
-            long default = 0;
-            bool has_zero = false;
-            for (var c in def.cases) {
-                if (c.value == 0) {
-                    has_zero = true;
-                }
-            }
-            if (!has_zero and def.cases.count > 0) {
-                default = def.cases[0].value;
-            }
-            ulong i = 0;
-            while (i < def.cases.count) {
-                if (def.cases[i].value == default) {
-                    return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
-                }
-                i += 1;
-            }
-            return Optional<_CtValue>.Empty;
+        if (def.name != name) {
+            continue;
         }
+        long default = 0;
+        bool has_zero = false;
+        for (var c in def.cases) {
+            if (c.value == 0) {
+                has_zero = true;
+            }
+        }
+        if (!has_zero and def.cases.count > 0) {
+            default = def.cases[0].value;
+        }
+        ulong i = 0;
+        while (i < def.cases.count) {
+            if (def.cases[i].value == default) {
+                return Optional<_CtValue>.Value(_CtValue.Case(_case_of(def, i)));
+            }
+            i += 1;
+        }
+        return Optional<_CtValue>.Empty;
     }
     bool is_enum = false;
     for (var def in module.enums) {

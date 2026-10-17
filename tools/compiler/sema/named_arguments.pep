@@ -733,16 +733,17 @@ export bind_call(
     var first = viable[0];
     var chosen = results[first].value();
     for (var v in viable) {
-        if (!results[v].value().same_slots(chosen)) {
-            var error = error_at(
-                $"named arguments bind differently in the overloads of '{callees[first].display}'", _first_named(args)
-            );
-            for (var w in viable) {
-                error = error.with_note("candidate function", Optional<Location>.Value(location_of(callees[w].loc)));
-            }
-            state.report(error);
-            return call;
+        if (results[v].value().same_slots(chosen)) {
+            continue;
         }
+        var error = error_at(
+            $"named arguments bind differently in the overloads of '{callees[first].display}'", _first_named(args)
+        );
+        for (var w in viable) {
+            error = error.with_note("candidate function", Optional<Location>.Value(location_of(callees[w].loc)));
+        }
+        state.report(error);
+        return call;
     }
     for (var (loc, old, current) in chosen.deprecated) {
         var fix = Fix($"rename '{old}' to '{current}'", location_of(loc), current);
@@ -945,15 +946,16 @@ export struct Callees {
         }
         ulong at = 0;
         for (var st in module.structs) {
-            if (module.checked.structs.contains(st.name)) {
-                members[st.name] = _members(st);
-                _index(_by_name, st.name, at, st);
-                var spelled = st.ty.to_string();
-                if (spelled != st.name) {
-                    _index(_by_spelling, spelled, at, st);
-                }
-                at += 1;
+            if (!module.checked.structs.contains(st.name)) {
+                continue;
             }
+            members[st.name] = _members(st);
+            _index(_by_name, st.name, at, st);
+            var spelled = st.ty.to_string();
+            if (spelled != st.name) {
+                _index(_by_spelling, spelled, at, st);
+            }
+            at += 1;
         }
     }
 

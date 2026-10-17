@@ -3873,18 +3873,19 @@ struct Parser {
                 item = _mark();
             }
             _enum_member(out);
-            if (_failed) {
-                if (!_recovering) {
-                    return;
-                }
-                if (_dedented(item.position, open)) {
-                    _restore(item);
-                    _clear_error();
-                    _unclosed(open, item.position);
-                    return;
-                }
-                _skip_failed(item, open);
+            if (!_failed) {
+                continue;
             }
+            if (!_recovering) {
+                return;
+            }
+            if (_dedented(item.position, open)) {
+                _restore(item);
+                _clear_error();
+                _unclosed(open, item.position);
+                return;
+            }
+            _skip_failed(item, open);
         }
         if (_recovering and _at_end()) {
             _unclosed(open, _position);

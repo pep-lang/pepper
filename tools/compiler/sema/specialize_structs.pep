@@ -466,18 +466,19 @@ _erase_void(st: StructDef) {
                 }
                 i += 1;
             }
-            if (erased.count > 0) {
-                var kept = Array<(String, Loc)>();
-                ulong j = 0;
-                while (j < c.payload.count) {
-                    if (!erased.contains(j)) {
-                        kept.append(c.payload[j]);
-                    }
-                    j += 1;
-                }
-                c.payload = kept;
-                void_values.append((c.name, erased));
+            if (erased.count == 0) {
+                continue;
             }
+            var kept = Array<(String, Loc)>();
+            ulong j = 0;
+            while (j < c.payload.count) {
+                if (!erased.contains(j)) {
+                    kept.append(c.payload[j]);
+                }
+                j += 1;
+            }
+            c.payload = kept;
+            void_values.append((c.name, erased));
         }
     }
     for (var m in st.method_members) {

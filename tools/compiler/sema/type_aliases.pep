@@ -473,19 +473,20 @@ struct _Resolver {
         for (var def in module.type_aliases) {
             var path = [def.name];
             var done = HashSet<String>();
-            if (find_cycle(def.name, path, done)) {
-                var error = error_at($"type alias '{def.name}' refers to itself", def.loc);
-                ulong i = 1;
-                while (i < path.count) {
-                    error = error.with_note(
-                        $"through type alias '{path[i]}', declared here",
-                        Optional<Location>.Value(location_of(aliases[path[i]].loc))
-                    );
-                    i += 1;
-                }
-                state.report(error);
-                return true;
+            if (!find_cycle(def.name, path, done)) {
+                continue;
             }
+            var error = error_at($"type alias '{def.name}' refers to itself", def.loc);
+            ulong i = 1;
+            while (i < path.count) {
+                error = error.with_note(
+                    $"through type alias '{path[i]}', declared here",
+                    Optional<Location>.Value(location_of(aliases[path[i]].loc))
+                );
+                i += 1;
+            }
+            state.report(error);
+            return true;
         }
         return false;
     }
