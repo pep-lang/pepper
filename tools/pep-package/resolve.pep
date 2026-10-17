@@ -136,14 +136,15 @@ export struct Resolver {
                 chosen.remove(source);
                 changed = true;
             }
-            if (!changed) {
-                var graph = Graph();
-                for (var (_, locked) in chosen) {
-                    graph.packages.append(locked);
-                }
-                graph.notes = notes;
-                return Result<Graph>.Ok(graph);
+            if (changed) {
+                continue;
             }
+            var graph = Graph();
+            for (var (_, locked) in chosen) {
+                graph.packages.append(locked);
+            }
+            graph.notes = notes;
+            return Result<Graph>.Ok(graph);
         }
         return Result<Graph>.Err(
             "the dependency graph did not settle; check for packages that require each other in a cycle"
@@ -331,14 +332,15 @@ export struct Resolver {
                 "refs/heads/" + first.value :
                 first.kind == "tag" ? "refs/tags/" + first.value : "HEAD";
             for (var ref in refs.value()) {
-                if (ref.name == wanted_ref) {
-                    var version = "";
-                    if (first.kind == "tag") {
-                        var parsed = parse_version(first.value);
-                        version = parsed.is_value() ? parsed.value().to_string() : "";
-                    }
-                    return Result<Locked>.Ok(Locked("", source, version, ref.commit));
+                if (ref.name != wanted_ref) {
+                    continue;
                 }
+                var version = "";
+                if (first.kind == "tag") {
+                    var parsed = parse_version(first.value);
+                    version = parsed.is_value() ? parsed.value().to_string() : "";
+                }
+                return Result<Locked>.Ok(Locked("", source, version, ref.commit));
             }
             return Result<Locked>.Err($"{source} has no {first.describe()}");
         }
