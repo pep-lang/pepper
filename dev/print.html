@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7573c2b6.js";
+            window.path_to_searchindex_js = "searchindex-459d4a26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b2626e7d.js"></script>
@@ -3069,6 +3069,11 @@ booleans, so <code>NO</code> (Norway) stays <code>NO</code>.</li>
 <code>!!int</code>, …) are read, and any other tag is an error; aliases may not
 stand for more than <code>max_alias_nodes</code> nodes, which stops the “billion
 laughs” attack.</li>
+<li><strong>Merge keys</strong>: <code>yaml.parse(text, merge_keys = true)</code> applies YAML
+1.1’s <code>&lt;&lt;</code> (<code>&lt;&lt;: *defaults</code>), which CI and compose files use to reuse a
+mapping; the mapping’s own keys win, and merged nodes count toward
+<code>max_alias_nodes</code>. By default <code>&lt;&lt;</code> is an ordinary key, as YAML 1.2
+says.</li>
 <li><strong>Several documents</strong> in one stream (<code>---</code>) are read by
 <code>yaml.parse_all</code> and written by <code>yaml.write_all</code>.</li>
 <li><strong><code>yaml.parse_document</code></strong> keeps comments, key order, flow or block
