@@ -612,11 +612,12 @@ _pep_small_refill(cache: __ptr<ulong>, lists: __ptr<ulong>, class_index: ulong):
     return true;
 }
 
-# A zeroed block of at least `size` bytes, 1 to the limit, or null when no
-# span is left (the caller then uses calloc). The fast path pops the current
-# span's free list or bumps into its untouched tail; the rest is out of line.
+# A block of at least `size` bytes, 1 to the limit, or null when no span is
+# left (the caller then uses calloc). Its first `size` bytes are zero when
+# `zero` is true. The fast path pops the current span's free list or bumps
+# into its untouched tail; the rest is out of line.
 [Unsafe("overflow")]
-_pep_small_alloc(size: ulong): __ptr<void> {
+_pep_small_alloc(size: ulong, zero: bool): __ptr<void> {
     var cache = _pep_small_cache;
     if (cache != __null) {
         __ptr<u8> table = _pep_small_state + _SMALL_CLASS_TABLE;
@@ -630,7 +631,9 @@ _pep_small_alloc(size: ulong): __ptr<void> {
                 __ptr<ulong> block = unsafe_cast<__ptr<ulong>>(head);
                 header[_SMALL_HEADER_FREE] = block[0];
                 _pep_small_count(cache + _SMALL_CACHE_LIVE, 1);
-                memset(block, 0, size);
+                if (zero) {
+                    memset(block, 0, size);
+                }
                 return block;
             }
             var fresh = header[_SMALL_HEADER_BUMP];
@@ -642,7 +645,7 @@ _pep_small_alloc(size: ulong): __ptr<void> {
             }
         }
     }
-    return _pep_small_alloc_slow(size);
+    return _pep_small_alloc_slow(size, zero);
 }
 
 # `_pep_small_alloc` when the current span has nothing at hand: makes the
@@ -650,26 +653,26 @@ _pep_small_alloc(size: ulong): __ptr<void> {
 # tries again.
 [Cold]
 [Unsafe("overflow")]
-_pep_small_alloc_slow(size: ulong): __ptr<void> {
+_pep_small_alloc_slow(size: ulong, zero: bool): __ptr<void> {
     var cache = _pep_small_cache;
     if (cache == __null) {
         cache = _pep_small_new_cache();
         if (cache == __null) {
             return __null;
         }
-        return _pep_small_alloc(size);
+        return _pep_small_alloc(size, zero);
     }
     __ptr<u8> table = _pep_small_state + _SMALL_CLASS_TABLE;
     var class_index = table[(size + 15) >> 4] as ulong;
     __ptr<ulong> lists = cache + _SMALL_CACHE_LISTS + class_index * 4;
     var span = lists[_SMALL_CURRENT];
     if (span != 0 && _pep_small_take_remote(unsafe_cast<__ptr<ulong>>(span))) {
-        return _pep_small_alloc(size);
+        return _pep_small_alloc(size, zero);
     }
     if (!_pep_small_refill(cache, lists, class_index)) {
         return __null;
     }
-    return _pep_small_alloc(size);
+    return _pep_small_alloc(size, zero);
 }
 
 # Whether `p` is a small block.
@@ -929,7 +932,7 @@ export const _PEP_CHECK_SYNC_ON = _pep_check_sync_enabled();
 export _pep_malloc(size: ulong): __ptr<void> {
     # A small block, unless the limit is 0. A 0-byte request goes to calloc.
     if (size <= _pep_small_limit && size != 0) {
-        var block = _pep_small_alloc(size);
+        var block = _pep_small_alloc(size, true);
         if (block != __null) {
             return block;
         }
@@ -938,6 +941,23 @@ export _pep_malloc(size: ulong): __ptr<void> {
     # buffers (index_refcount_ops), so uninitialized bytes are wild pointers.
     # calloc skips the clearing for fresh pages the OS already zeroed.
     var p = calloc(1, size);
+    __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
+    return p;
+}
+
+# `_pep_malloc` without the zeroing: the block's bytes are whatever they
+# were. Codegen calls it for an allocation of a constant size and zeroes the
+# block itself with an inline `memset`, which LLVM shortens or deletes where
+# the stores after it overwrite it (#635).
+[Unsafe("overflow")]
+export _pep_malloc_uninit(size: ulong): __ptr<void> {
+    if (size <= _pep_small_limit && size != 0) {
+        var block = _pep_small_alloc(size, false);
+        if (block != __null) {
+            return block;
+        }
+    }
+    var p = malloc(size);
     __atomic_fetch_add<long>(_pep_live_allocs_shard(), 1);
     return p;
 }

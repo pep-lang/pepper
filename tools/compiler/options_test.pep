@@ -181,6 +181,28 @@ emit_llvm_writes_the_ir_optimized_at_the_level() {
 }
 
 [Test]
+constructors_zero_their_object_inline() {
+    # A constructor's allocation has a constant size, so it skips the
+    # runtime's zeroing and zeroes the object inline, where LLVM can see it
+    # (#635).
+    var folder = _program(
+        "options_zeroing",
+        "struct Point {\n    var x: long;\n    var y: long;\n\n    construct(x: long, y: long) {\n        this.x = x;\n        this.y = y;\n    }\n}\n\nmain(): int {\n    var p = Point(3, 4);\n    return (p.x + p.y - 7) as int;\n}\n"
+    );
+    var build = folder.path.join(Path("build"));
+    _succeeds(folder.path, ["--emit-llvm", "-O0", "main.pep", "--build", build.to_string(), "--no-cache"]);
+    var ir = File.read_to_string(build.join(Path("main.ll")));
+    expect_true(ir.is_ok());
+    var start = ir.value().find("define ptr @Point(");
+    expect_true(start >= 0);
+    var body = ir.value().substr_bytes(start as ulong, ir.value().size - start as ulong);
+    body = body.substr_bytes(0, body.find("\n}\n") as ulong);
+    expect_true(body.contains("call ptr @_pep_malloc_uninit(i64 "));
+    expect_true(body.contains("call void @llvm.memset"));
+    expect_false(body.contains("@_pep_malloc("));
+}
+
+[Test]
 trace_passes_prints_each_sema_pass_slowest_first() {
     var folder = _program("options_passes", _PROGRAM);
     var ran = _succeeds(

@@ -907,7 +907,7 @@ for each struct:
   types included, uses a plain load/add/store.
 - `finish` builds each constructor. A hidden `size` local is patched with the
   real ABI size in codegen by `Generator.patched_ctors`. The constructor calls `this =
-  _pep_malloc(size)`, initializes each field (explicit default or zero),
+  _pep_malloc(size)` (`patched_ctor` makes the size a literal), initializes each field (explicit default or zero),
   assigns `this.field` constructor parameters (renamed `__init_<field>`),
   runs the user body, and ends with `return this`. The destructor does not
   free the object; `__release` does. The pass appends `__release`, `__acquire`, and `__dtor`
@@ -1270,7 +1270,13 @@ How the language lowers:
   pointer-sized, because a struct occupies a pointer-sized slot. The
   object's ABI size is used only inside the constructor and by
   `Expression.Allocate` (the synthesized copies' allocation: zeroed, both
-  head counts 1, an owned rvalue like a constructor result).
+  head counts 1, an owned rvalue like a constructor result). They, and a
+  trait value's box (`box_value`), pass it
+  as a constant, and `call_function_result` lowers a `_pep_malloc` of a
+  constant size to `_pep_malloc_uninit` plus an inline `llvm.memset`
+  (`build_zeroed_allocation`, #635): the object is as zero as before, but
+  LLVM deletes the bytes the constructor's field stores overwrite and folds
+  the loads of their old values, so no runtime `memset` runs.
 - **Stores are type-checked** (`codegen/address.pep`). LLVM accepts a store of any
   type through an opaque pointer, so a value wider than its slot silently
   overwrites the next field or the next heap object. `Address.store`, and
@@ -1731,7 +1737,7 @@ on every function and `uwtable` on every definition (plus
 `"frame-pointer"="non-leaf"` on Apple targets, whose `backtrace` walks
 frame pointers); `noreturn` and `cold`
 on `NO_RETURN` (`_pep_panic`, `_pep_exit`, `abort`, `_Exit`); `noalias` on
-the result of `ALLOCATORS` (`_pep_malloc`, `_pep_realloc`); and `!tbaa` on
+the result of `ALLOCATORS` (`_pep_malloc`, `_pep_malloc_uninit`, `_pep_realloc`); and `!tbaa` on
 object memory. The TBAA tree has two types under one root, `reference
 counts` and `fields`: a load or store whose address is a field address of
 a struct object (`getelementptr %S, ptr, 0, <i>`: `i < 2` is the head) or
@@ -2197,7 +2203,7 @@ thread that `async.Thread.spawn` started calls `_pep_small_thread_exit`
 when its body ends, which puts its spans in their pools, ownerless, and
 folds its live count into
 `_SMALL_RETIRED`; other threads keep their caches. Recycled blocks are zeroed when handed
-out. The allocator runs before any other global exists, so it uses raw
+out, except by `_pep_malloc_uninit`. The allocator runs before any other global exists, so it uses raw
 memory only, and its functions are `[Unsafe("overflow")]`.
 
 `_pep_live_allocs()` counts live

@@ -968,6 +968,12 @@ extend Generator {
         var param_names = known.is_value() ? known.value() : Array<String>();
         var fn_type = fn_value.global_type();
         var coerced = coerce_args(fn_type, args, arg_names, param_names);
+        if (name == "_pep_malloc") {
+            var zeroed = build_zeroed_allocation(coerced);
+            if (zeroed.is_value()) {
+                return Result<llvm.Value?>.ok(zeroed);
+            }
+        }
         if (extern_names.contains(name)) {
             var intrinsic = build_memory_intrinsic(fn_value, coerced)?;
             if (intrinsic.is_value()) {
@@ -1083,6 +1089,30 @@ extend Generator {
             return Result<llvm.Value>.ok(builder.sign_extend(value, wide, "c_result"));
         }
         return Result<llvm.Value>.ok(builder.zero_extend(value, wide, "c_result"));
+    }
+
+    ## `_pep_malloc(size)` of a constant size, a constructor's (#635): a
+    ## call to `_pep_malloc_uninit`, which skips the runtime's `memset`, then
+    ## an inline `memset` of the block. The block is as zero as before, but
+    ## LLVM sees the zeroing, so it deletes the bytes the constructor's own
+    ## field stores overwrite and folds the loads of their old values. None
+    ## for a size known only at run time, whose zeroing stays the runtime's
+    ## (calloc skips it for fresh pages), or when the runtime has no
+    ## `_pep_malloc_uninit`.
+    build_zeroed_allocation(args: llvm.Value[]): llvm.Value? {
+        if (args.count != 1 or !args[0].is_constant_int()) {
+            return Optional<llvm.Value>.Empty;
+        }
+        var uninit = functions.try_get("_pep_malloc_uninit");
+        if (!uninit.is_value()) {
+            return Optional<llvm.Value>.Empty;
+        }
+        var fn_type = uninit.value().global_type();
+        var object = builder.call(fn_type, uninit.value(), args, "object");
+        # Every block is at least 8-byte aligned: a small block is 16-byte
+        # aligned, and malloc's at least 8 on every target.
+        builder.memory_set(object, context.int8_type().zero(), args[0], 8);
+        return Optional<llvm.Value>.Value(object);
     }
 
     ## Lowers a call to the C library's `memcpy`, `memmove` or `memset` to

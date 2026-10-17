@@ -445,15 +445,30 @@ extend Generator {
             for (var index in 0..items.count) {
                 if (items[index] is Declaration(declaration)) {
                     if (declaration is Variable(var_def)) {
-                        if (var_def.name == "__alloc_size") {
-                            var_def.default = Optional<Expression>.Value(Expression.IntLiteral(struct_size));
-                            break;
-                        }
+                        _patch_allocation(var_def, struct_size);
                     }
                 }
             }
         }
         return ctor;
+    }
+
+    # Gives a constructor's `__alloc_size`, and the `this =
+    # _pep_malloc(size)` allocation, the struct's size as a literal, so
+    # `call_function_result` sees a constant size (#635).
+    _patch_allocation(var_def: VariableDef, struct_size: long) {
+        if (var_def.name == "__alloc_size") {
+            var_def.default = Optional<Expression>.Value(Expression.IntLiteral(struct_size));
+            return;
+        }
+        if (var_def.name != "this" or !var_def.default.is_value()) {
+            return;
+        }
+        if (var_def.default.value() is FunctionCall(call)) {
+            if (call.function == "_pep_malloc") {
+                call.args = [Expression.IntLiteral(struct_size)];
+            }
+        }
     }
 
     ## Declares the constructors, so call sites can bind them.

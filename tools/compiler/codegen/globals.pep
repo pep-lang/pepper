@@ -781,7 +781,7 @@ export annotate_facts(ir: llvm.Module, context: llvm.Context) {
             function.add_function_attribute(cold);
         }
         # Functions that return memory nothing else points to.
-        if ((name == "_pep_malloc" or name == "_pep_realloc")
+        if ((name == "_pep_malloc" or name == "_pep_malloc_uninit" or name == "_pep_realloc")
             and function.global_type().return_type().kind() == llvm.TypeKind.Pointer) {
             function.add_return_attribute(noalias);
         }
