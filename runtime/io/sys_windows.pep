@@ -340,10 +340,8 @@ _io_sys_read(h: FileHandle, dst: __ptr<u8>, n: ulong): IoResult<ulong> {
             # INVALID_FUNCTION is what ReadFile says about a directory handle
             # (opened with BACKUP_SEMANTICS); report it as POSIX's EISDIR does.
             var m = _io_sys_fstat(h);
-            if (m.is_ok()) {
-                if (m.value().is_directory) {
-                    code = 336;  # DIRECTORY_NOT_SUPPORTED: is_is_a_directory
-                }
+            if (m.is_ok() && m.value().is_directory) {
+                code = 336;  # DIRECTORY_NOT_SUPPORTED: is_is_a_directory
             }
         }
         return IoResult<ulong>.err(IoError(code, _io_sys_error_message(code)));
@@ -497,10 +495,8 @@ _io_sys_directory_first(iterator: DirectoryIterator): IoResult<bool> {
         # says PATH_NOT_FOUND, but confirm it is a directory regardless.
         if (e.code == 2) {
             var m = _io_sys_stat(path, true);
-            if (m.is_ok()) {
-                if (m.value().is_directory) {
-                    return IoResult<bool>.ok(false);
-                }
+            if (m.is_ok() && m.value().is_directory) {
+                return IoResult<bool>.ok(false);
             }
         }
         return IoResult<bool>.err(e);

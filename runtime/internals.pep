@@ -738,25 +738,26 @@ _pep_small_free_slow(p: __ptr<void>) {
     while (true) {
         var head = __atomic_load<ulong>(remote);
         block[0] = head & ~_SMALL_NOTIFY;
-        if (__atomic_cmpxchg<ulong>(remote, head, address)) {
-            if ((head & _SMALL_NOTIFY) != 0) {
-                # The span was full: tell its owner, if it has one.
-                __ptr<ulong> owner = unsafe_cast<__ptr<ulong>>(__atomic_load<ulong>(header + _SMALL_HEADER_OWNER));
-                ulong idle = 0;
-                ulong queued = 1;
-                if (owner != __null && __atomic_cmpxchg<ulong>(header + _SMALL_HEADER_QUEUED, idle, queued)) {
-                    __ptr<ulong> stack = owner + _SMALL_CACHE_FREED_INTO;
-                    while (true) {
-                        var top = __atomic_load<ulong>(stack);
-                        header[_SMALL_HEADER_FREED_INTO] = top;
-                        if (__atomic_cmpxchg<ulong>(stack, top, span)) {
-                            break;
-                        }
+        if (!__atomic_cmpxchg<ulong>(remote, head, address)) {
+            continue;
+        }
+        if ((head & _SMALL_NOTIFY) != 0) {
+            # The span was full: tell its owner, if it has one.
+            __ptr<ulong> owner = unsafe_cast<__ptr<ulong>>(__atomic_load<ulong>(header + _SMALL_HEADER_OWNER));
+            ulong idle = 0;
+            ulong queued = 1;
+            if (owner != __null && __atomic_cmpxchg<ulong>(header + _SMALL_HEADER_QUEUED, idle, queued)) {
+                __ptr<ulong> stack = owner + _SMALL_CACHE_FREED_INTO;
+                while (true) {
+                    var top = __atomic_load<ulong>(stack);
+                    header[_SMALL_HEADER_FREED_INTO] = top;
+                    if (__atomic_cmpxchg<ulong>(stack, top, span)) {
+                        break;
                     }
                 }
             }
-            break;
         }
+        break;
     }
     if (cache == __null) {
         # A thread whose cache is gone (its exit has begun) or never made.

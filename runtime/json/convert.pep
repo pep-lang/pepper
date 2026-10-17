@@ -334,34 +334,34 @@ _to_json<T>(value: T): JsonValue {
         } else if (reflect.is_struct<T>()) {
             out = _json_object_or_null(value);
             for (var field in reflect.properties<T>()) {
-                if (!field.has_attribute<serialize.Ignore>()) {
-                    # A shallow check, to name the property; the types
-                    # inside an array or a struct are checked when they
-                    # are converted.
-                    var convertible = !field.type_name.starts_with("Result<")
-                        && (reflect.is_struct<field.Type>()
-                            || reflect.is_enum<field.Type>()
-                            || reflect.is_same<field.Type, bool>()
-                            || reflect.is_same<field.Type, i8>()
-                            || reflect.is_same<field.Type, i16>()
-                            || reflect.is_same<field.Type, i32>()
-                            || reflect.is_same<field.Type, i64>()
-                            || reflect.is_same<field.Type, u8>()
-                            || reflect.is_same<field.Type, u16>()
-                            || reflect.is_same<field.Type, u32>()
-                            || reflect.is_same<field.Type, u64>()
-                            || reflect.is_same<field.Type, float>()
-                            || reflect.is_same<field.Type, double>());
-                    reflect.assert(
-                        convertible,
-                        $"'encode' cannot convert property '{field.name}' of type '{field.type_name}' to JSON"
-                    );
-                    var key = field.name;
-                    if (field.has_attribute<serialize.Name>()) {
-                        key = field.attribute<serialize.Name>().value;
-                    }
-                    _json_put(out, key, _to_json(field.get(value)));
+                if (field.has_attribute<serialize.Ignore>()) {
+                    continue;
                 }
+                # A shallow check, to name the property; the types
+                # inside an array or a struct are checked when they
+                # are converted.
+                var convertible = !field.type_name.starts_with("Result<")
+                    && (reflect.is_struct<field.Type>()
+                        || reflect.is_enum<field.Type>()
+                        || reflect.is_same<field.Type, bool>()
+                        || reflect.is_same<field.Type, i8>()
+                        || reflect.is_same<field.Type, i16>()
+                        || reflect.is_same<field.Type, i32>()
+                        || reflect.is_same<field.Type, i64>()
+                        || reflect.is_same<field.Type, u8>()
+                        || reflect.is_same<field.Type, u16>()
+                        || reflect.is_same<field.Type, u32>()
+                        || reflect.is_same<field.Type, u64>()
+                        || reflect.is_same<field.Type, float>()
+                        || reflect.is_same<field.Type, double>());
+                reflect.assert(
+                    convertible, $"'encode' cannot convert property '{field.name}' of type '{field.type_name}' to JSON"
+                );
+                var key = field.name;
+                if (field.has_attribute<serialize.Name>()) {
+                    key = field.attribute<serialize.Name>().value;
+                }
+                _json_put(out, key, _to_json(field.get(value)));
             }
         } else {
             reflect.error($"'encode' cannot convert type '{reflect.name<T>()}' to JSON");
@@ -746,46 +746,47 @@ _from_json<T>(value: JsonValue, witness: T, path: String, unknown_keys: UnknownK
         } else if (reflect.is_struct<T>()) {
             out = _json_new(out, value.is_null());
             for (var field in reflect.properties<T>()) {
-                if (!field.has_attribute<serialize.Ignore>()) {
-                    # A shallow check, to name the property; the types
-                    # inside an array or a struct are checked when they
-                    # are converted.
-                    var convertible = !field.type_name.starts_with("Result<")
-                        && (reflect.is_struct<field.Type>()
-                            || reflect.is_enum<field.Type>()
-                            || reflect.is_same<field.Type, bool>()
-                            || reflect.is_same<field.Type, i8>()
-                            || reflect.is_same<field.Type, i16>()
-                            || reflect.is_same<field.Type, i32>()
-                            || reflect.is_same<field.Type, i64>()
-                            || reflect.is_same<field.Type, u8>()
-                            || reflect.is_same<field.Type, u16>()
-                            || reflect.is_same<field.Type, u32>()
-                            || reflect.is_same<field.Type, u64>()
-                            || reflect.is_same<field.Type, float>()
-                            || reflect.is_same<field.Type, double>());
-                    reflect.assert(
-                        convertible,
-                        $"'decode' cannot convert property '{field.name}' of type '{field.type_name}' from JSON"
-                    );
-                    var key = field.name;
-                    if (field.has_attribute<serialize.Name>()) {
-                        key = field.attribute<serialize.Name>().value;
-                    }
-                    known.append(key);
-                    if (error.is_empty() && !value.is_null()) {
-                        if (value.contains(key)) {
-                            var member = _from_json(
-                                _json_member(value, key), field.get(out), _json_path_key(path, key), unknown_keys
-                            );
-                            if (member.is_err()) {
-                                error = Optional<JsonError>.Value(member.error());
-                            } else {
-                                field.set(out, member.value());
-                            }
-                        } else if (field.has_attribute<serialize.Required>()) {
-                            error = Optional<JsonError>.Value(_json_error(path, $"missing required key '{key}'"));
+                if (field.has_attribute<serialize.Ignore>()) {
+                    continue;
+                }
+                # A shallow check, to name the property; the types
+                # inside an array or a struct are checked when they
+                # are converted.
+                var convertible = !field.type_name.starts_with("Result<")
+                    && (reflect.is_struct<field.Type>()
+                        || reflect.is_enum<field.Type>()
+                        || reflect.is_same<field.Type, bool>()
+                        || reflect.is_same<field.Type, i8>()
+                        || reflect.is_same<field.Type, i16>()
+                        || reflect.is_same<field.Type, i32>()
+                        || reflect.is_same<field.Type, i64>()
+                        || reflect.is_same<field.Type, u8>()
+                        || reflect.is_same<field.Type, u16>()
+                        || reflect.is_same<field.Type, u32>()
+                        || reflect.is_same<field.Type, u64>()
+                        || reflect.is_same<field.Type, float>()
+                        || reflect.is_same<field.Type, double>());
+                reflect.assert(
+                    convertible,
+                    $"'decode' cannot convert property '{field.name}' of type '{field.type_name}' from JSON"
+                );
+                var key = field.name;
+                if (field.has_attribute<serialize.Name>()) {
+                    key = field.attribute<serialize.Name>().value;
+                }
+                known.append(key);
+                if (error.is_empty() && !value.is_null()) {
+                    if (value.contains(key)) {
+                        var member = _from_json(
+                            _json_member(value, key), field.get(out), _json_path_key(path, key), unknown_keys
+                        );
+                        if (member.is_err()) {
+                            error = Optional<JsonError>.Value(member.error());
+                        } else {
+                            field.set(out, member.value());
                         }
+                    } else if (field.has_attribute<serialize.Required>()) {
+                        error = Optional<JsonError>.Value(_json_error(path, $"missing required key '{key}'"));
                     }
                 }
             }

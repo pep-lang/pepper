@@ -710,20 +710,14 @@ struct _TomlParser {
                     if (!_skip_array_space()) {
                         return none;
                     }
-                    if (_peek() == ']') {
-                        _position = _position + 1;
-                        value = frame.value;
-                    } else {
+                    if (_peek() != ']') {
                         frames.append(frame);
                         here = $"{frame.path}[0]";
                         continue;
                     }
                 } else {
                     _skip_space();
-                    if (_peek() == '}') {
-                        _position = _position + 1;
-                        value = frame.value;
-                    } else {
+                    if (_peek() != '}') {
                         if (!_inline_key(frame)) {
                             return none;
                         }
@@ -732,6 +726,8 @@ struct _TomlParser {
                         continue;
                     }
                 }
+                _position = _position + 1;
+                value = frame.value;
             } else {
                 if (!_scalar()) {
                     return none;

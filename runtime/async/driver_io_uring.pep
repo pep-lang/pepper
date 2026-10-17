@@ -359,42 +359,48 @@ extend _IoUringDriver with _Driver {
                         this._receiving.remove(socket / 2);
                     }
                 }
-            } else if (data == _async_doorbell_key()) {
+                continue;
+            }
+            if (data == _async_doorbell_key()) {
                 _async_epoll_drain(this._bell);
                 this._arm_bell();
-            } else if (this._requests.contains(data)) {
-                var request = this._requests.get(data);
-                var handle = request / 4;
-                var covered = (request % 4) as int;
-                # A failed request wakes every waiter, which retries the call
-                # and sees any error.
-                var ready = covered;
-                if (result > 0) {
-                    ready = _async_ready_mask(result, _IO_URING_READABLE_EVENTS, _IO_URING_WRITABLE_EVENTS);
+                continue;
+            }
+            if (!this._requests.contains(data)) {
+                continue;
+            }
+            var request = this._requests.get(data);
+            var handle = request / 4;
+            var covered = (request % 4) as int;
+            # A failed request wakes every waiter, which retries the call
+            # and sees any error.
+            var ready = covered;
+            if (result > 0) {
+                ready = _async_ready_mask(result, _IO_URING_READABLE_EVENTS, _IO_URING_WRITABLE_EVENTS);
+            }
+            if (ready != 0) {
+                ready_sockets.append((handle, ready));
+            }
+            if ((flags & _IO_URING_CQE_MORE) != 0) {
+                continue;
+            }
+            # The kernel ended the request: arm a new one for the tasks this
+            # completion does not wake.
+            this._requests.remove(data);
+            this._armed.remove(handle);
+            var still = 0;
+            if (waits.contains(handle)) {
+                var parked = waits.get(handle);
+                if (parked._readers.count > 0) {
+                    still = still | io._IO_READABLE;
                 }
-                if (ready != 0) {
-                    ready_sockets.append((handle, ready));
+                if (parked._writers.count > 0) {
+                    still = still | io._IO_WRITABLE;
                 }
-                if ((flags & _IO_URING_CQE_MORE) == 0) {
-                    # The kernel ended the request: arm a new one for the
-                    # tasks this completion does not wake.
-                    this._requests.remove(data);
-                    this._armed.remove(handle);
-                    var still = 0;
-                    if (waits.contains(handle)) {
-                        var parked = waits.get(handle);
-                        if (parked._readers.count > 0) {
-                            still = still | io._IO_READABLE;
-                        }
-                        if (parked._writers.count > 0) {
-                            still = still | io._IO_WRITABLE;
-                        }
-                    }
-                    still = still & ~ready;
-                    if (still != 0) {
-                        this._arm(handle, still);
-                    }
-                }
+            }
+            still = still & ~ready;
+            if (still != 0) {
+                this._arm(handle, still);
             }
         }
         _async_io_uring_store(this._rings, this._cq_head, head);

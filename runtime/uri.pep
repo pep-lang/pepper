@@ -243,33 +243,33 @@ export struct Uri {
     ##     assert(base.resolve(Uri.parse("?y=2").value()).to_string() == "https://example.com/docs/guide/intro?y=2", "a new query");
     resolve(reference: Uri): Uri {
         var target = Uri();
+        target.fragment = reference.fragment;
         if (reference.scheme.size > 0) {
             target.scheme = reference.scheme;
             target._take_authority(reference);
             target.path = _uri_remove_dots(reference.path);
             target.query = reference.query;
-        } else {
-            if (reference.host.is_value()) {
-                target._take_authority(reference);
-                target.path = _uri_remove_dots(reference.path);
-                target.query = reference.query;
-            } else {
-                if (reference.path.size == 0) {
-                    target.path = path;
-                    target.query = reference.query.is_value() ? reference.query : query;
-                } else {
-                    if (reference.path.starts_with("/")) {
-                        target.path = _uri_remove_dots(reference.path);
-                    } else {
-                        target.path = _uri_remove_dots(_merge(reference.path));
-                    }
-                    target.query = reference.query;
-                }
-                target._take_authority(this);
-            }
-            target.scheme = scheme;
+            return target;
         }
-        target.fragment = reference.fragment;
+        target.scheme = scheme;
+        if (reference.host.is_value()) {
+            target._take_authority(reference);
+            target.path = _uri_remove_dots(reference.path);
+            target.query = reference.query;
+            return target;
+        }
+        target._take_authority(this);
+        if (reference.path.size == 0) {
+            target.path = path;
+            target.query = reference.query.is_value() ? reference.query : query;
+            return target;
+        }
+        if (reference.path.starts_with("/")) {
+            target.path = _uri_remove_dots(reference.path);
+        } else {
+            target.path = _uri_remove_dots(_merge(reference.path));
+        }
+        target.query = reference.query;
         return target;
     }
 

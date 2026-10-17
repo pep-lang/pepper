@@ -254,13 +254,7 @@ struct _JsonParser {
                 if (!_skip_space()) {
                     return none;
                 }
-                if (_peek() == (b == '[' ? ']' : '}')) {
-                    if (keeping) {
-                        _file(_notes.value().end, here, false);
-                    }
-                    _position = _position + 1;
-                    value = opened;
-                } else {
+                if (_peek() != (b == '[' ? ']' : '}')) {
                     containers.append(opened);
                     if (tracking) {
                         paths.append(here);
@@ -276,6 +270,11 @@ struct _JsonParser {
                     }
                     continue;
                 }
+                if (keeping) {
+                    _file(_notes.value().end, here, false);
+                }
+                _position = _position + 1;
+                value = opened;
             } else {
                 if (!_scalar()) {
                     return none;
@@ -332,14 +331,7 @@ struct _JsonParser {
                     if (keeping) {
                         _file(_notes.value().after, stored, true);
                     }
-                    if (_peek() == closing) {
-                        if (!_comments) {
-                            _fail_at(
-                                "trailing comma is not allowed; parse with 'comments = true' to accept JSONC", comma
-                            );
-                            return none;
-                        }
-                    } else {
+                    if (_peek() != closing) {
                         if (!is_array) {
                             if (!_key()) {
                                 return none;
@@ -347,6 +339,10 @@ struct _JsonParser {
                             keys[keys.count - 1] = _string_value;
                         }
                         break;
+                    }
+                    if (!_comments) {
+                        _fail_at("trailing comma is not allowed; parse with 'comments = true' to accept JSONC", comma);
+                        return none;
                     }
                 } else if (next != closing) {
                     _fail(is_array ? "expected ',' or ']'" : "expected ',' or '}'");
