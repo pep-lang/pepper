@@ -45,9 +45,9 @@ Changes nothing, and fails (exit status 1) when:
 - a tool's option, command, option value, trace channel, environment
   variable or setting is missing from the tool's page in this book, naming
   the tool and the page;
-- a Pepper tool's `version()` (in `tools/<tool>/main.pep`) is not the
-  version in the repository's `VERSION` file, which
-  `scripts/set-version.sh` sets them all to.
+- a Pepper tool's `version()` (in `tools/<tool>/main.pep`, or pep-lsp's in
+  `tools/pep-lsp/arguments.pep`) is not the version in the repository's
+  `VERSION` file, which `scripts/set-version.sh` sets them all to.
 
 The tools' options come from their `--help`: `pep-build`'s and the Pepper
 tools' (`pepper`, `pep-fmt`, `pep-profile`, `pep-package`, `pep-install`,

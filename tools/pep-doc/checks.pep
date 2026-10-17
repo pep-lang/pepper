@@ -660,11 +660,15 @@ _install_scripts(root: Path, problems: String[]): Result<void> {
     return Result<void>.ok();
 }
 
-# The version `version()` returns in the `main.pep` source of a tool: the
-# string literal of the `return` after `version(): String {`. None when
-# the source has no such function.
+# The version `version()` returns in the source of a tool (its `main.pep`,
+# or pep-lsp's `arguments.pep`): the string literal of the `return` after
+# `version(): String {`, or `export version(): String {`. None when the
+# source has no such function.
 export tool_version(source: String): String? {
     var start = source.find("\nversion(): String {");
+    if (start < 0) {
+        start = source.find("\nexport version(): String {");
+    }
     if (start < 0) {
         return Optional<String>.Empty;
     }
@@ -681,8 +685,8 @@ export tool_version(source: String): String? {
     return Optional<String>.Value(slice(source, from, end));
 }
 
-# Each Pepper tool (`tools/<tool>/main.pep`) whose `version()` is not the
-# version in `VERSION`, one line each.
+# Each Pepper tool (`tools/<tool>/main.pep`, or pep-lsp's `arguments.pep`)
+# whose `version()` is not the version in `VERSION`, one line each.
 export stale_versions(root: Path): Result<String[]> {
     var held = _repository_file(root, "VERSION")?.trim();
     if (held.is_empty) {
@@ -702,19 +706,21 @@ export stale_versions(root: Path): Result<String[]> {
     var problems = Array<String>();
     ulong checked = 0;
     for (var entry in sorted) {
-        var path = $"tools/{entry.name}/main.pep";
-        if (!entry.is_directory or !root.join(path).is_file()) {
-            continue;
-        }
-        var version = tool_version(_repository_file(root, path)?);
-        if (version.is_empty()) {
-            continue;
-        }
-        checked += 1;
-        if (version.value() != held) {
-            problems.append(
-                $"{path}: version() returns '{version.value()}', but VERSION holds '{held}'; run scripts/set-version.sh"
-            );
+        for (var file in ["main.pep", "arguments.pep"]) {
+            var path = $"tools/{entry.name}/{file}";
+            if (!entry.is_directory or !root.join(path).is_file()) {
+                continue;
+            }
+            var version = tool_version(_repository_file(root, path)?);
+            if (version.is_empty()) {
+                continue;
+            }
+            checked += 1;
+            if (version.value() != held) {
+                problems.append(
+                    $"{path}: version() returns '{version.value()}', but VERSION holds '{held}'; run scripts/set-version.sh"
+                );
+            }
         }
     }
     if (checked == 0) {

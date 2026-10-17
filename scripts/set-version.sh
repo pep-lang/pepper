@@ -5,6 +5,7 @@
 #   VERSION           the version, one line: what the scripts and workflows
 #                     read, and what `pep-doc check` holds the tools to
 #   tools/*/main.pep  each Pepper tool's `version()`
+#   tools/pep-lsp/arguments.pep  pep-lsp's `export version()`
 #
 #   scripts/set-version.sh <version>
 #
@@ -59,15 +60,18 @@ replace() {
 
 printf '%s\n' "$version" > VERSION
 
-# The Pepper tools: each `version()` returns the release it belongs to.
-for main in tools/*/main.pep; do
-  if grep -q '^version(): String {' "$main"; then
-    replace "$main" "return \"$current\";" "return \"$version\";"
+# The Pepper tools: each `version()` returns the release it belongs to. A
+# tool's is in its main.pep, except pep-lsp's, which is `export`ed from
+# its arguments.pep.
+versions=(tools/*/main.pep tools/pep-lsp/arguments.pep)
+for source in "${versions[@]}"; do
+  if grep -Eq '^(export )?version\(\): String \{' "$source"; then
+    replace "$source" "return \"$current\";" "return \"$version\";"
   fi
 done
 
 # Nothing may still claim the old version.
-stale="$(grep -lF "return \"$current\";" tools/*/main.pep || true)"
+stale="$(grep -lF "return \"$current\";" "${versions[@]}" || true)"
 if [ -n "$stale" ]; then
   echo "error: still at $current: $stale" >&2
   exit 1

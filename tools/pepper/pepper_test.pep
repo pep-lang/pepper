@@ -179,22 +179,26 @@ dash_c_runs_the_tool_in_that_folder() {
 }
 
 # Every tool's `version()` names one release, which `scripts/set-version.sh`
-# stamps into each `tools/*/main.pep` (and, while it is there, Cargo.toml),
-# and the tools built from them report it with `--version`.
+# stamps into each `tools/*/main.pep` (pep-lsp's, into its `arguments.pep`;
+# and, while it is there, Cargo.toml), and the tools built from them report
+# it with `--version`.
 [Test]
 every_tool_reports_the_release_version() {
-    var pattern = regex.Regex("\nversion\\(\\): String \\{\\s*return \"([^\"]+)\";");
-    var release = pattern.find(read_file(Path("pepper").join("main.pep"))).value().group(1).value();
+    var pattern = regex.Regex("\n(export )?version\\(\\): String \\{\\s*return \"([^\"]+)\";");
+    var release = pattern.find(read_file(Path("pepper").join("main.pep"))).value().group(2).value();
     var listing = Directory.open(Path(".")).value().entries().value();
     ulong stamped = 0;
     for (var entry in listing) {
         var found = pattern.find(read_file(entry.path.join("main.pep")));
+        if (entry.name == "pep-lsp") {
+            found = pattern.find(read_file(entry.path.join("arguments.pep")));
+        }
         if (found.is_value()) {
-            expect_equal($"{entry.name} {found.value().group(1).value()}", $"{entry.name} {release}");
+            expect_equal($"{entry.name} {found.value().group(2).value()}", $"{entry.name} {release}");
             stamped += 1;
         }
     }
-    expect_true(stamped >= 8, "the tools' main.pep files are found from tools/");
+    expect_true(stamped >= 10, "the tools' version() functions are found from tools/");
     var cargo = Path("..").join("Cargo.toml");
     if (cargo.is_file()) {
         expect_contains(read_file(cargo), $"\n[workspace.package]\nversion = \"{release}\"\n");
@@ -203,6 +207,8 @@ every_tool_reports_the_release_version() {
         var reported = run(process.Command(tool(name).to_string()).argument("--version"));
         expect_equal(reported.stdout, $"{name} {release}\n");
     }
+    # pep-lsp is not built by scripts/pepper-tests.sh (it needs the pepper-lsp
+    # package fetched), so only its source is checked, above.
     # pep-build is the toolchain's, which can be another build.
     expect_starts_with(run(process.Command(tool("pep-build").to_string()).argument("--version")).stdout, "pep-build ");
 }
