@@ -1,8 +1,10 @@
 # HTTP
 
-The `http` module has an HTTP/1.1 client and server, over plain TCP or
-[TLS](networking.md#tls). Both run in [tasks](tasks.md): a request that
-waits parks only its task.
+The `http` module has an HTTP/1.1 and HTTP/2 client and server, over plain
+TCP or [TLS](networking.md#tls). Both run in [tasks](tasks.md): a request
+that waits parks only its task. Over TLS the two sides pick HTTP/2 through
+ALPN when both have it (see [HTTP/2](#http2)); the `Request` and `Response`
+types, and the code that uses them, are the same for either version.
 
 HTTP needs tasks and sockets, so it is not available on WebAssembly
 (`--target wasm32-wasip1`, see [WebAssembly](platform-selection.md#webassembly)).
@@ -72,6 +74,9 @@ as a browser resolves a link (RFC 3986 section 5.2).
   as it is.
 - Every request from a `Client` uses a new connection; a `Session` keeps
   them open (see [Reusing connections](#reusing-connections)).
+- For `https://` the client offers HTTP/2 and HTTP/1.1 through ALPN, on its
+  own connector or the one it was given, and speaks whichever the server
+  picks.
 
 ## Server
 
@@ -90,12 +95,9 @@ as a browser resolves a link (RFC 3986 section 5.2).
   returns it).
 - A request it cannot parse gets `400 Bad Request`, header fields over
   64 KiB get `431`, and a body over `MAX_REQUEST_BODY` (16 MiB) gets `413`.
-- A plain-TCP client that opens with the HTTP/2 preface (prior knowledge,
-  or h2c) is served HTTP/2: each stream is a request, answered in a task of
-  its own by the same handler, so requests on one connection run at the
-  same time. The handler sees the same `Request` (with `Host` taken from
-  `:authority`), and its `Response` is sent with HPACK-compressed fields and
-  flow-controlled DATA frames.
+- `Server.bind_tls` offers HTTP/2 and HTTP/1.1 through ALPN, and a
+  plain-TCP client that opens with the HTTP/2 preface (prior knowledge, or
+  h2c) is served HTTP/2 too. See [HTTP/2](#http2).
 
 ## Streaming bodies
 
@@ -139,16 +141,47 @@ uses it again, saving the TCP and TLS handshakes:
   used. `idle_count` says how many wait, and `close()` closes them.
 - A request that finds its reused connection closed by the server goes
   again on a new one, unless its body came from `set_reader`.
+- An HTTP/2 connection is not idle and taken in turn: every request to its
+  origin shares it at once, each on a stream of its own. `idle_count`
+  counts it while no request is using it.
 - A `Session` is not `[Shared]`: use one per thread or task. A `Client` is
-  shared, and connections, which belong to one thread, cannot be.
+  shared, and connections, which belong to one thread, cannot be. Tasks
+  started with `spawn_local` may share a session, and over HTTP/2 their
+  requests go out on one connection at the same time.
+
+## HTTP/2
+
+HTTP/2 (RFC 9113) carries many requests on one connection at once, as
+streams, with header fields compressed (HPACK, RFC 7541) and each body
+flow-controlled so that one large transfer does not hold up the rest.
+
+- **Choosing it:** over TLS, the client offers `h2` and `http/1.1` through
+  ALPN and `Server.bind_tls` accepts both, preferring `h2`, so two Pepper
+  programs speak HTTP/2 with no setting to change. A server or client that
+  offers only HTTP/1.1 gets HTTP/1.1. On plain TCP the client speaks
+  HTTP/1.1; the server also takes HTTP/2 from a client that starts with its
+  preface (prior knowledge).
+- **Client:** a `Session` keeps one HTTP/2 connection per origin, and
+  requests from several tasks share it at once. A request outside a session
+  opens a connection that closes after its body. A connection the server
+  ends with GOAWAY is replaced by a new one for the next request.
+- **Server:** each stream is a request, answered by the same handler in a
+  task of its own, so the requests of one connection run at the same time.
+  The handler sees the `Host` field from `:authority`. A server lets a
+  client open 100 streams at once.
+- **Messages:** field names go lowercase on the wire, as HTTP/2 requires,
+  and fields that only mean something to HTTP/1.1 (`Connection`,
+  `Transfer-Encoding`, `Upgrade`, `Keep-Alive`) are left out. HTTP/2 has no
+  reason phrase, so a response's `reason` is the standard one for its
+  status. Bodies stream through `io.Reader` exactly as for HTTP/1.1; closing
+  a response's reader early resets only its stream.
 
 ## Current status
 
 - A server handler gets the request body read into memory in full, up to
   `MAX_REQUEST_BODY` (16 MiB).
-- HTTP/2: the server answers HTTP/2 with prior knowledge (h2c) only. The
-  client, and HTTP/2 over TLS (chosen through ALPN), are not supported
-  yet.
+- HTTP/2 server push, stream priorities and the `Upgrade: h2c` handshake
+  are not supported; a client speaks HTTP/2 only over TLS.
 
 The reference pages for [messages](../reference/http-message.md), the
 [client](../reference/http-client.md), the

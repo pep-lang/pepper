@@ -1166,11 +1166,15 @@ struct _H2BodyReader {
     var _connection: _H2Connection;
     var _stream: _H2Stream;
     var _done: bool;
+    # Whether the connection is this response's alone (a `Client` request
+    # outside a `Session`), and closes with its body.
+    var _owner: bool;
 
     construct(connection: _H2Connection, stream: _H2Stream) {
         _connection = connection;
         _stream = stream;
         _done = false;
+        _owner = false;
     }
 
     read(buffer: u8[], max: ulong): io.IoResult<ulong> {
@@ -1178,17 +1182,24 @@ struct _H2BodyReader {
             return io.IoResult<ulong>.ok(0);
         }
         var read = _connection._receive(_stream, buffer, max);
-        if (read.is_ok() && read.value() == 0 && max > 0) {
+        if (read.is_err() || (read.value() == 0 && max > 0)) {
             _done = true;
+            if (_owner) {
+                _connection.close();
+            }
         }
         return read;
     }
 
     # Stops reading: resets the stream if the body has not ended.
     close() {
-        if (!_done) {
-            _done = true;
-            _connection._cancel(_stream);
+        if (_done) {
+            return;
+        }
+        _done = true;
+        _connection._cancel(_stream);
+        if (_owner) {
+            _connection.close();
         }
     }
 }

@@ -2,13 +2,15 @@
 
 # The http module
 
-HTTP/1.1 clients and servers, over TCP or TLS.
+HTTP/1.1 and HTTP/2 clients and servers, over TCP or TLS.
 
 Bring it in with `import http`. A `Client` sends a `Request` to an
 `http://` or `https://` URL and returns the `Response`; a `Server`
 accepts connections on every worker of `async.run` and answers each
 request with a handler function. Bodies are read into memory, or
-streamed through an `io.Reader` (`Client.open`, `set_reader`).
+streamed through an `io.Reader` (`Client.open`, `set_reader`). Over TLS
+the client and server choose HTTP/2 through ALPN when both have it, with
+the same `Request` and `Response` types.
 
 - [Messages](http-message.md): `Headers`, `Request`, and `Response`
 - [Client](http-client.md): `Client`, `Session` and `BodyReader`

@@ -21,7 +21,7 @@ The largest response body a `Client` reads: 64 MiB.
 [Shared] struct Client
 ```
 
-Sends HTTP/1.1 requests and reads their responses.
+Sends HTTP/1.1 and HTTP/2 requests and reads their responses.
 
 Each request opens a new connection (plain TCP for `http://`, TLS for
 `https://`), sends the request with `Connection: close`, and reads the
@@ -29,6 +29,11 @@ response: `send` reads the whole body into memory, and `open` returns
 once the header fields arrive, with the body to read as a stream. To
 send requests on connections kept open between them, use a `Session`
 (`client.session()`).
+
+For `https://` the client offers HTTP/2 and HTTP/1.1 through ALPN and
+speaks the one the server chooses; the request and response are the same
+either way. Over HTTP/2 the response's `reason` is the standard phrase
+for its status. Plain `http://` uses HTTP/1.1.
 
 Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
 up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
@@ -87,7 +92,8 @@ construct(connector: tls.TlsConnector, max_redirects: int = 10)
 ```
 
 Creates a client whose `https://` connections use `connector`, for
-instance one that trusts a private certificate authority.
+instance one that trusts a private certificate authority. The client
+sets the connector's ALPN protocols to `h2` and `http/1.1`.
 
 **Parameters**
 - `connector` — the TLS connector to open `https://` connections with
@@ -208,6 +214,10 @@ Up to `max_idle_per_host` connections wait for each scheme, host and
 port; one idle for longer than `idle_timeout` is closed instead of used.
 A request that finds its reused connection closed by the server is sent
 again on a new one, unless its body came from `Request.set_reader`.
+
+Over HTTP/2 the session keeps one connection per origin, which every
+request to that origin shares at once on a stream of its own, so tasks
+started with `spawn_local` can send through one session concurrently.
 
 A session is not `[Shared]`: use it from one thread or task. Its
 connections close when the last reference to it (and to the

@@ -8,6 +8,7 @@ import async;
 import http;
 import io;
 import os;
+import tls;
 import "../client";
 import "../h2";
 import "../hpack";
@@ -39,6 +40,11 @@ private answer(request: http.Request): http.Response {
     }
     if (path == "/stream") {
         return http.Response(200).set_reader(io.ByteReader(pattern(1000000)));
+    }
+    if (path == "/redirect") {
+        var moved = http.Response(302).set_text("moved");
+        moved.headers["Location"] = "/hello?moved";
+        return moved;
     }
     if (path == "/slow") {
         async.sleep(os.Duration.from_milliseconds(50));
@@ -252,6 +258,99 @@ connection_rules_over_raw_frames() {
             var reset = raw_frames(port, malformed);
             expect_true(reset.contains("3:0:1"));
             expect_equal(reset[reset.count - 1], "6:1:0");
+        }
+    );
+}
+
+# Starts an HTTPS server in the running `async.run` and returns its base
+# URL; `bind_tls` offers HTTP/2 through ALPN.
+private start_tls(): String {
+    var acceptor = tls.TlsAcceptor.create(io.Path("tls/test/certificate.pem"), io.Path("tls/test/key.pem")).value();
+    var server = http.Server.bind_tls(io.SocketAddress(io.IpAddress.loopback_v4(), 0), acceptor).value();
+    var port = server.local_address().value().port();
+    async.spawn<void>(() => {
+        server.serve(answer);
+    });
+    return "https://localhost:" + to_string(port);
+}
+
+# A client that trusts the test certificate.
+private trusting_client(): http.Client {
+    var connector = tls.TlsConnector.create().value();
+    connector.add_root_certificate(io.Path("tls/test/certificate.pem"));
+    return http.Client(connector);
+}
+
+# Whether `response` came over HTTP/2.
+private over_h2(response: http.Response): bool {
+    return (response._source as? _H2BodyReader).is_value();
+}
+
+[Test]
+clients_choose_http2_through_alpn() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var base = start_tls();
+            var client = trusting_client();
+
+            var hello = client.open(http.Request("GET", base + "/hello?over=h2")).value();
+            expect_true(over_h2(hello));
+            expect_equal(hello.status, 200);
+            expect_equal(hello.reason, "OK");
+            var reader = hello._source as? _H2BodyReader;
+            expect_true(reader.value()._owner);  # outside a session, its own connection
+
+            expect_equal(client.get(base + "/hello?over=h2").value().text(), "hello over=h2");
+            var redirected = client.get(base + "/redirect").value();
+            expect_equal(redirected.text(), "hello moved");
+            expect_equal(redirected.url, base + "/hello?moved");
+            var large = client.send(http.Request("PUT", base + "/echo").set_body(pattern(2000000))).value();
+            expect_true(large.body() == pattern(2000000));
+
+            # Plain http:// stays HTTP/1.1.
+            var plain = client.open(http.Request("GET", "http://127.0.0.1:" + to_string(start()) + "/hello")).value();
+            expect_false(over_h2(plain));
+        }
+    );
+}
+
+[Test]
+sessions_share_one_http2_connection() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var base = start_tls();
+            var session = trusting_client().session();
+            expect_equal(session.get(base + "/hello?first").value().text(), "hello first");
+            expect_equal(session.idle_count, 1);
+
+            var tasks = Array<async.Task<bool>>();
+            var n = 0;
+            while (n < 10) {
+                var index = n;
+                tasks.append(async.Task<bool>.spawn_local(() => {
+                    if (index % 2 == 0) {
+                        return session.get(base + "/slow").value().text() == "slow";
+                    }
+                    var echo = session.post(base + "/echo", "text/plain", "task " + to_string(index)).value();
+                    return echo.text() == "task " + to_string(index);
+                }));
+                n += 1;
+            }
+            for (var task in tasks) {
+                expect_true(task.join().value());
+            }
+            expect_equal(session._pool._h2.count, 1);
+            expect_equal(session._pool._take_h2(_http_origin_key(_http_parse_url(base).value())).value()._next_id, 23);
+
+            session.close();
+            expect_equal(session.idle_count, 0);
+            expect_equal(session.get(base + "/hello?again").value().text(), "hello again");  # a new connection
         }
     );
 }

@@ -1,5 +1,6 @@
-## The HTTP server: `Server` accepts HTTP/1.1 connections on every worker of
-## `async.run` and answers each request with a handler function.
+## The HTTP server: `Server` accepts HTTP/1.1 and HTTP/2 connections on
+## every worker of `async.run` and answers each request with a handler
+## function.
 
 import async;
 import io;
@@ -12,7 +13,7 @@ import "wire";
 ## `413 Content Too Large`.
 export const MAX_REQUEST_BODY: ulong = 16777216;
 
-## An HTTP/1.1 server.
+## An HTTP/1.1 and HTTP/2 server.
 ##
 ## `Server.bind` listens on an address (`Server.bind_tls` serves HTTPS);
 ## `serve` then accepts connections on every worker of the running
@@ -27,9 +28,10 @@ export const MAX_REQUEST_BODY: ulong = 16777216;
 ## Too Large`, and one with a body over `MAX_REQUEST_BODY` `413 Content Too
 ## Large`; the connection then closes.
 ##
-## A client on plain TCP that starts with the HTTP/2 connection preface
-## (HTTP/2 with prior knowledge) is served HTTP/2: each stream is a request,
-## answered by the same handler in a task of its own.
+## HTTP/2 is served to a client that chooses it through ALPN (see
+## `bind_tls`) or that starts a plain TCP connection with the HTTP/2
+## preface (prior knowledge): each stream is a request, answered by the same
+## handler in a task of its own.
 ##
 ## @example
 ##     import async;
@@ -80,7 +82,8 @@ export struct Server {
     }
 
     ## Listens for HTTPS connections on `address`, presenting `acceptor`'s
-    ## certificate.
+    ## certificate. It sets the acceptor's ALPN protocols to `h2` and
+    ## `http/1.1`, so clients that offer HTTP/2 get it.
     ##
     ## @param address the local address (port 0 for any free port)
     ## @param acceptor the certificate and key to serve with
@@ -90,6 +93,7 @@ export struct Server {
         if (listener.is_err()) {
             return io.IoResult<Server>.err(listener.error());
         }
+        acceptor.set_protocols(["h2", "http/1.1"]);
         return io.IoResult<Server>.ok(Server(listener.value(), true, acceptor));
     }
 
@@ -141,6 +145,18 @@ _http_serve_connection(server: Server, tcp: io.TcpStream, handler: shared (Reque
         connection._use_tls(stream.value());
     }
     var reader = _HttpReader(connection);
+    var chosen = connection._tls.is_value() ? connection._tls.value().protocol() : Optional<String>.Empty;
+    if (chosen.is_value() && chosen.value() == "h2") {
+        # HTTP/2 through ALPN: the client's preface comes first.
+        var first = reader._line(_HTTP_MAX_LINE);
+        if (first.is_ok() && first.value().is_value() && first.value().value() == "PRI * HTTP/2.0") {
+            if (_http_finish_preface(reader)) {
+                _h2_serve(reader, handler);
+            }
+        }
+        connection._close();
+        return;
+    }
     while (true) {
         if (!_http_serve_one(reader, handler)) {
             break;

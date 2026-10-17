@@ -4,13 +4,14 @@
 import io;
 import os;
 import tls;
+import "h2";
 import "message";
 import "wire";
 
 ## The largest response body a `Client` reads: 64 MiB.
 export const MAX_RESPONSE_BODY: ulong = 67108864;
 
-## Sends HTTP/1.1 requests and reads their responses.
+## Sends HTTP/1.1 and HTTP/2 requests and reads their responses.
 ##
 ## Each request opens a new connection (plain TCP for `http://`, TLS for
 ## `https://`), sends the request with `Connection: close`, and reads the
@@ -18,6 +19,11 @@ export const MAX_RESPONSE_BODY: ulong = 67108864;
 ## once the header fields arrive, with the body to read as a stream. To
 ## send requests on connections kept open between them, use a `Session`
 ## (`client.session()`).
+##
+## For `https://` the client offers HTTP/2 and HTTP/1.1 through ALPN and
+## speaks the one the server chooses; the request and response are the same
+## either way. Over HTTP/2 the response's `reason` is the standard phrase
+## for its status. Plain `http://` uses HTTP/1.1.
 ##
 ## Redirects (301, 302, 303, 307 and 308 with a `Location`) are followed,
 ## up to `max_redirects` of them, as RFC 9110 describes: 303, and 301 or
@@ -63,13 +69,15 @@ export struct Client {
         _secure = connector.is_ok();
         if (_secure) {
             _connector = connector.value();
+            _connector.set_protocols(_http_protocols());
         } else {
             _connector = tls.TlsConnector(__null);
         }
     }
 
     ## Creates a client whose `https://` connections use `connector`, for
-    ## instance one that trusts a private certificate authority.
+    ## instance one that trusts a private certificate authority. The client
+    ## sets the connector's ALPN protocols to `h2` and `http/1.1`.
     ##
     ## @param connector the TLS connector to open `https://` connections with
     ## @param max_redirects the most redirects one request follows; 0
@@ -78,6 +86,7 @@ export struct Client {
         this.max_redirects = max_redirects;
         _secure = true;
         _connector = connector;
+        _connector.set_protocols(_http_protocols());
     }
 
     ## Sends a `GET` request for `url`.
@@ -187,6 +196,10 @@ export struct Client {
 ## port; one idle for longer than `idle_timeout` is closed instead of used.
 ## A request that finds its reused connection closed by the server is sent
 ## again on a new one, unless its body came from `Request.set_reader`.
+##
+## Over HTTP/2 the session keeps one connection per origin, which every
+## request to that origin shares at once on a stream of its own, so tasks
+## started with `spawn_local` can send through one session concurrently.
 ##
 ## A session is not `[Shared]`: use it from one thread or task. Its
 ## connections close when the last reference to it (and to the
@@ -300,11 +313,14 @@ export struct Session {
 # went idle, oldest first.
 struct _HttpPool {
     var _idle: HashMap<String, _HttpIdle[]>;
+    # One HTTP/2 connection per origin, which every request to it shares.
+    var _h2: HashMap<String, _H2Connection>;
     var _idle_timeout: os.Duration;
     var _max_idle: ulong;
 
     construct() {
         _idle = HashMap<String, _HttpIdle[]>();
+        _h2 = HashMap<String, _H2Connection>();
         _idle_timeout = os.Duration.from_seconds(90);
         _max_idle = 4;
     }
@@ -314,7 +330,27 @@ struct _HttpPool {
         for (var (key, list) in _idle) {
             total = total + list.count;
         }
+        for (var (key, connection) in _h2) {
+            if (connection.active_count == 0) {
+                total = total + 1;
+            }
+        }
         return total;
+    }
+
+    # The HTTP/2 connection for `key` that can still open streams, closing
+    # one that cannot.
+    _take_h2(key: String): _H2Connection? {
+        var connection = _h2.get(key);
+        if (connection === __null) {
+            return Optional<_H2Connection>.Empty;
+        }
+        if (connection.is_usable) {
+            return Optional<_H2Connection>.Value(connection);
+        }
+        _h2.remove(key);
+        connection.close();
+        return Optional<_H2Connection>.Empty;
     }
 
     # The most recently idle connection for `key` that has not timed out,
@@ -356,6 +392,10 @@ struct _HttpPool {
             }
         }
         _idle = HashMap<String, _HttpIdle[]>();
+        for (var (key, connection) in _h2) {
+            connection.close();
+        }
+        _h2 = HashMap<String, _H2Connection>();
     }
 }
 
@@ -437,6 +477,19 @@ _http_open_once(client: Client, pool: _HttpPool?, request: Request): io.IoResult
     var url = parsed.value();
     var key = _http_origin_key(url);
     if (pool.is_value()) {
+        var shared = pool.value()._take_h2(key);
+        if (shared.is_value()) {
+            var sent = _h2_exchange(shared.value(), request, url, url._secure);
+            if (sent.is_ok()) {
+                sent.value().url = request.url;
+                return sent;
+            }
+            if (request._streamed || shared.value().is_usable) {
+                return sent;
+            }
+            # The connection went away under the request: a new one follows.
+            pool.value()._take_h2(key);
+        }
         var idle = pool.value()._take(key);
         if (idle.is_value()) {
             var reused = _http_exchange(idle.value(), request, url, true);
@@ -456,6 +509,9 @@ _http_open_once(client: Client, pool: _HttpPool?, request: Request): io.IoResult
         return io.IoResult<Response>.err(connected.error());
     }
     var connection = connected.value();
+    if (_http_chose_h2(connection)) {
+        return _http_open_h2(connection, pool, key, request, url);
+    }
     var result = _http_exchange(connection, request, url, pool.is_value());
     if (result.is_err()) {
         connection._close();
@@ -463,6 +519,48 @@ _http_open_once(client: Client, pool: _HttpPool?, request: Request): io.IoResult
     }
     if (pool.is_value()) {
         _http_pool_body(result.value(), pool.value(), key);
+    }
+    result.value().url = request.url;
+    return result;
+}
+
+# The protocols a client offers through ALPN, HTTP/2 first.
+_http_protocols(): String[] {
+    return ["h2", "http/1.1"];
+}
+
+# Whether the TLS handshake on `connection` chose HTTP/2.
+_http_chose_h2(connection: _HttpConnection): bool {
+    if (connection._tls.is_empty()) {
+        return false;
+    }
+    var chosen = connection._tls.value().protocol();
+    return chosen.is_value() && chosen.value() == "h2";
+}
+
+# Sends `request` over HTTP/2 on a new `connection`, which joins `pool`
+# when there is one and otherwise closes after the response's body.
+_http_open_h2(
+    connection: _HttpConnection, pool: _HttpPool?, key: String, request: Request, url: _HttpUrl
+): io.IoResult<Response> {
+    var started = _H2Connection.client(connection);
+    if (started.is_err()) {
+        connection._close();
+        return io.IoResult<Response>.err(started.error());
+    }
+    var h2 = started.value();
+    if (pool.is_value()) {
+        pool.value()._h2[key] = h2;
+    }
+    var result = _h2_exchange(h2, request, url, url._secure);
+    if (result.is_err()) {
+        if (pool.is_empty()) {
+            h2.close();
+        }
+        return result;
+    }
+    if (pool.is_empty()) {
+        (result.value()._source as? _H2BodyReader).value()._owner = true;
     }
     result.value().url = request.url;
     return result;
@@ -541,6 +639,11 @@ _http_close_body(response: Response) {
     var body = response._source as? BodyReader;
     if (body.is_value()) {
         body.value().close();
+        return;
+    }
+    var stream = response._source as? _H2BodyReader;
+    if (stream.is_value()) {
+        stream.value().close();
     }
 }
 
