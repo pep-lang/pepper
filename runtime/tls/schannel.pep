@@ -37,8 +37,9 @@
 # at 0, then (8-byte words) whether it is a server's at 16, the store of
 # added roots (client) or of the chain (server) at 24, the certificate it
 # presents at 32 and its key's name (UTF-16) at 40 (null for a client with
-# no identity), and a server's store of roots for client certificates at 48
-# (null when clients are not asked for one).
+# no identity), a server's store of roots for client certificates at 48
+# (null when clients are not asked for one), and the ALPN protocols as a
+# SEC_APPLICATION_PROTOCOLS at 56 (null when none are set).
 #
 # A session is a malloc'd block (`_TLS_SESSION_SIZE`): the security context
 # handle at 0, then the socket at 16, its context at 24, the received but not
@@ -204,7 +205,7 @@ extern uint GetCurrentProcessId();
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-const _TLS_CONTEXT_SIZE: ulong = 56;
+const _TLS_CONTEXT_SIZE: ulong = 64;
 const _TLS_SESSION_SIZE: ulong = 104;
 # The receive and plaintext buffers: room for any TLS record and most
 # handshake flights.
@@ -225,6 +226,7 @@ const _TLS_BUFFER_TOKEN: uint = 2;
 const _TLS_BUFFER_EXTRA: uint = 5;
 const _TLS_BUFFER_TRAILER: uint = 6;
 const _TLS_BUFFER_HEADER: uint = 7;
+const _TLS_BUFFER_APPLICATION_PROTOCOLS: uint = 18;
 
 # ISC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY |
 # USE_SUPPLIED_CREDS | ALLOCATE_MEMORY | EXTENDED_ERROR | STREAM |
@@ -803,7 +805,56 @@ _tls_sys_context_free(context: __ptr<void>) {
     if (client_roots != __null) {
         CertCloseStore(client_roots, 0);
     }
+    var protocols = _tls_pointer(block, 56);
+    if (protocols != __null) {
+        _pep_free(protocols);
+    }
     _pep_free(block);
+}
+
+# Sets the protocols a context offers (a client) or accepts (a server)
+# through ALPN: `list` is in the wire format, each name after its length. It
+# is kept as a SEC_APPLICATION_PROTOCOLS: the size of what follows (u32),
+# SecApplicationProtocolNegotiationExt_ALPN (u32 2), the list's size (u16)
+# and the list.
+[Target(OS(Windows))]
+_tls_sys_set_protocols(context: __ptr<void>, list: u8[], server: bool): io.IoResult<void> {
+    __ptr<u8> block = context;
+    var old = _tls_pointer(block, 56);
+    if (old != __null) {
+        _pep_free(old);
+    }
+    __ptr<u8> protocols = _pep_malloc(10 + list.count);
+    _tls_set_u32(protocols, 0, (6 + list.count) as uint);
+    _tls_set_u32(protocols, 4, 2);
+    protocols[8] = (list.count & 0xff) as u8;
+    protocols[9] = (list.count >> 8) as u8;
+    _tls_copy(protocols + 10, list._data, list.count);
+    _tls_set_pointer(block, 56, protocols);
+    return io.IoResult<void>.ok();
+}
+
+# Sets SecBuffer `index` of the array at `buffers` to the context's ALPN
+# protocols.
+[Target(OS(Windows))]
+_tls_set_protocols_buffer(buffers: __ptr<u8>, index: ulong, protocols: __ptr<u8>) {
+    var size = _tls_u32(protocols, 0) as ulong + 4;
+    _tls_set_buffer(buffers, index, _TLS_BUFFER_APPLICATION_PROTOCOLS, protocols, size);
+}
+
+# The protocol the handshake chose through ALPN, or "" for none.
+[Target(OS(Windows))]
+_tls_sys_protocol(session: __ptr<void>): String {
+    # SecPkgContext_ApplicationProtocol: the status (u32, 1 for success),
+    # the extension (u32), the name's size (u8) and up to 255 bytes of it.
+    __ptr<u8> answer = _pep_malloc(264);
+    var status = QueryContextAttributesW(session, 35, answer);  # SECPKG_ATTR_APPLICATION_PROTOCOL
+    var name = "";
+    if (status == _TLS_SEC_E_OK && _tls_u32(answer, 0) == 1 && answer[8] > 0) {
+        name = String(unsafe_cast<__ptr<char>>(answer + 9), answer[8] as ulong);
+    }
+    _pep_free(answer);
+    return name;
 }
 
 # ── Sessions ─────────────────────────────────────────────────────────────────
@@ -898,23 +949,36 @@ _tls_send_token(session: __ptr<u8>, output: __ptr<u8>): io.IoResult<void> {
 _tls_step(session: __ptr<u8>): io.IoResult<int> {
     var context = _tls_pointer(session, 24);
     var server = _tls_session_server(session);
-    var input = _tls_buffers(2);
+    var protocols = _tls_pointer(context, 56);
+    var started = _tls_session_started(session);
+    var input = _tls_buffers(protocols != __null && server && !started ? 3 : 2);
     var output = _tls_buffers(1);
     _tls_set_buffer(input + 16, 0, _TLS_BUFFER_TOKEN, _tls_pointer(session, 32), _tls_word(session, 40));
     _tls_set_buffer(input + 16, 1, _TLS_BUFFER_EMPTY, __null, 0);
+    # A server lists its protocols only with the ClientHello: on a later
+    # step SChannel finds no client list to match and fails the handshake
+    # (SEC_E_APPLICATION_PROTOCOL_MISMATCH).
+    if (protocols != __null && server && !started) {
+        _tls_set_protocols_buffer(input + 16, 2, protocols);
+    }
     _tls_set_buffer(output + 16, 0, _TLS_BUFFER_TOKEN, __null, 0);
     __ptr<uint> attributes = _pep_malloc(4);
     __ptr<u8> expiry = _pep_malloc(8);
-    var started = _tls_session_started(session);
     __ptr<u8> existing = __null;
     if (started) {
         existing = session;
     }
-    # A client's first call has no input: it produces the ClientHello.
+    # A client's first call has no input: it produces the ClientHello,
+    # with the ALPN protocols when there are any.
     var consumed = started || server;
     __ptr<u8> offered = __null;
+    __ptr<u8> hello = __null;
     if (consumed) {
         offered = input;
+    } else if (protocols != __null) {
+        hello = _tls_buffers(1);
+        _tls_set_protocols_buffer(hello + 16, 0, protocols);
+        offered = hello;
     }
     int status = 0;
     if (server) {
@@ -955,6 +1019,9 @@ _tls_step(session: __ptr<u8>): io.IoResult<int> {
         } else {
             _tls_set_word(session, 40, 0);
         }
+    }
+    if (hello != __null) {
+        _pep_free(hello);
     }
     _pep_free(output);
     _pep_free(input);

@@ -96,6 +96,27 @@ export struct TlsConnector {
         return _tls_sys_set_identity(_context, certificate_chain, private_key);
     }
 
+    ## Offers `protocols` to every server through ALPN (RFC 7301), most
+    ## preferred first, such as `["h2", "http/1.1"]`. After `connect`,
+    ## `TlsStream.protocol` names the one the server chose, if it chose one.
+    ## Call it before the first `connect`; a later call replaces the list.
+    ##
+    ## @param protocols the protocol names, each 1 to 255 bytes
+    ## @returns an Ok result; an error when the list is empty or a name is
+    ##   empty or longer than 255 bytes
+    ## @example
+    ##     var connector = tls.TlsConnector.create().value();
+    ##     connector.set_protocols(["h2", "http/1.1"]).value();
+    ##     var stream = connector.connect_host("example.com", 443).value();
+    ##     var http2 = stream.protocol() == Optional<String>.Value("h2");
+    set_protocols(protocols: String[]): io.IoResult<void> {
+        var list = _tls_protocol_list(protocols);
+        if (list.is_err()) {
+            return io.IoResult<void>.err(list.error());
+        }
+        return _tls_sys_set_protocols(_context, list.value(), false);
+    }
+
     ## Runs the TLS handshake as the client over `stream` and checks the
     ## server's certificate.
     ##
@@ -213,6 +234,24 @@ export struct TlsAcceptor {
         return _tls_sys_require_client_certificate(_context, roots);
     }
 
+    ## Accepts `protocols` through ALPN (RFC 7301), most preferred first:
+    ## the handshake chooses the first of them that the client offers, and
+    ## `TlsStream.protocol` names it. A client that offers no protocols
+    ## connects with none chosen; one that offers only protocols not in the
+    ## list fails the handshake with the `no_application_protocol` alert
+    ## (RFC 7301). Call it before the first `accept`.
+    ##
+    ## @param protocols the protocol names, each 1 to 255 bytes
+    ## @returns an Ok result; an error when the list is empty or a name is
+    ##   empty or longer than 255 bytes
+    set_protocols(protocols: String[]): io.IoResult<void> {
+        var list = _tls_protocol_list(protocols);
+        if (list.is_err()) {
+            return io.IoResult<void>.err(list.error());
+        }
+        return _tls_sys_set_protocols(_context, list.value(), true);
+    }
+
     ## Runs the TLS handshake as the server over `stream`.
     ##
     ## @param stream a connection a `TcpListener` accepted; the `TlsStream`
@@ -286,6 +325,23 @@ export struct TlsStream {
     ## @returns false after `close()`
     is_open(): bool {
         return _session != __null;
+    }
+
+    ## Returns the protocol the handshake chose through ALPN, from the
+    ## lists `TlsConnector.set_protocols` and `TlsAcceptor.set_protocols`
+    ## set.
+    ##
+    ## @returns the protocol name, such as `h2`; none when no protocol was
+    ##   chosen or the stream is closed
+    protocol(): String? {
+        if (_session == __null) {
+            return Optional<String>.Empty;
+        }
+        var name = _tls_sys_protocol(_session);
+        if (name.size == 0) {
+            return Optional<String>.Empty;
+        }
+        return Optional<String>.Value(name);
     }
 
     _check_open(): io.IoResult<void> {
@@ -449,3 +505,19 @@ export struct TlsStream {
 extend TlsStream with io.Reader;
 
 extend TlsStream with io.Writer;
+
+# `protocols` in ALPN's wire format: each name after its length in a byte.
+_tls_protocol_list(protocols: String[]): io.IoResult<u8[]> {
+    if (protocols.count == 0) {
+        return io.IoResult<u8[]>.err(_tls_error("the list of ALPN protocols is empty"));
+    }
+    var list = Array<u8>();
+    for (var name in protocols) {
+        if (name.size == 0 || name.size > 255) {
+            return io.IoResult<u8[]>.err(_tls_error($"an ALPN protocol name must be 1 to 255 bytes: '{name}'"));
+        }
+        list.append(name.size as u8);
+        list.append_all(name.bytes());
+    }
+    return io.IoResult<u8[]>.ok(list);
+}

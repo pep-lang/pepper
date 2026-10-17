@@ -92,6 +92,12 @@ struct _OpenSsl {
     const _bio_set_data: extern (__ptr<void>, __ptr<void>) => void;
     const _bio_get_data: extern (__ptr<void>) => __ptr<void>;
     const _bio_set_init: extern (__ptr<void>, int) => void;
+    const _context_set_alpn_protos: extern (__ptr<void>, __ptr<void>, uint) => int;
+    const _context_set_alpn_select: extern (__ptr<void>, __ptr<void>, __ptr<void>) => void;
+    const _select_next_proto: extern (__ptr<void>, __ptr<void>, __ptr<void>, uint, __ptr<void>, uint) => int;
+    const _ssl_alpn_selected: extern (__ptr<void>, __ptr<void>, __ptr<void>) => void;
+    const _context_set_data: extern (__ptr<void>, int, __ptr<void>) => int;
+    const _context_get_data: extern (__ptr<void>, int) => __ptr<void>;
     # The BIO_meth_set_* setters take the callbacks as untyped addresses
     # (`__function_pointer`): a C function pointer type as a parameter of
     # another is reported as an unknown type.
@@ -168,6 +174,22 @@ struct _OpenSsl {
             _bio_set_data = _tls_symbol(handle, "BIO_set_data") as extern (__ptr<void>, __ptr<void>) => void;
             _bio_get_data = _tls_symbol(handle, "BIO_get_data") as extern (__ptr<void>) => __ptr<void>;
             _bio_set_init = _tls_symbol(handle, "BIO_set_init") as extern (__ptr<void>, int) => void;
+            _context_set_alpn_protos = _tls_symbol(
+                handle, "SSL_CTX_set_alpn_protos"
+            ) as extern (__ptr<void>, __ptr<void>, uint) => int;
+            _context_set_alpn_select = _tls_symbol(
+                handle, "SSL_CTX_set_alpn_select_cb"
+            ) as extern (__ptr<void>, __ptr<void>, __ptr<void>) => void;
+            _select_next_proto = _tls_symbol(
+                handle, "SSL_select_next_proto"
+            ) as extern (__ptr<void>, __ptr<void>, __ptr<void>, uint, __ptr<void>, uint) => int;
+            _ssl_alpn_selected = _tls_symbol(
+                handle, "SSL_get0_alpn_selected"
+            ) as extern (__ptr<void>, __ptr<void>, __ptr<void>) => void;
+            _context_set_data = _tls_symbol(
+                handle, "SSL_CTX_set_ex_data"
+            ) as extern (__ptr<void>, int, __ptr<void>) => int;
+            _context_get_data = _tls_symbol(handle, "SSL_CTX_get_ex_data") as extern (__ptr<void>, int) => __ptr<void>;
 
             var method_new = _bio_method_new;
             var new_index = _bio_new_index;
@@ -455,9 +477,94 @@ _tls_sys_add_root(context: __ptr<void>, path: io.Path): io.IoResult<void> {
     return io.IoResult<void>.ok();
 }
 
+# Sets the protocols a context offers (a client) or accepts (a server)
+# through ALPN: `list` is in the wire format, each name after its length.
+[Target(OS(Linux) || OS(Mac))]
+_tls_sys_set_protocols(context: __ptr<void>, list: u8[], server: bool): io.IoResult<void> {
+    var ssl = _tls_openssl.get();
+    if (!server) {
+        var set_protos = ssl._context_set_alpn_protos;
+        if (set_protos(context, list._data, list.count as uint) != 0) {  # 0 is success here
+            return io.IoResult<void>.err(_tls_openssl_error("cannot set the ALPN protocols"));
+        }
+        return io.IoResult<void>.ok();
+    }
+    # The callback reads the list through its argument: a u32 length, then
+    # the list. The context's app data (ex_data 0) holds it too, so that
+    # freeing the context frees it.
+    _tls_free_protocols(ssl, context);
+    __ptr<u8> copy = _pep_malloc(4 + list.count);
+    unsafe_cast<__ptr<uint>>(copy)[0] = list.count as uint;
+    ulong index = 0;
+    while (index < list.count) {
+        copy[4 + index] = list[index];
+        index += 1;
+    }
+    var set_data = ssl._context_set_data;
+    set_data(context, 0, copy);
+    var set_select = ssl._context_set_alpn_select;
+    set_select(context, __function_pointer(_tls_alpn_select), copy);
+    return io.IoResult<void>.ok();
+}
+
+# Frees a server context's copy of its ALPN protocols, if it has one.
+[Target(OS(Linux) || OS(Mac))]
+_tls_free_protocols(ssl: _OpenSsl, context: __ptr<void>) {
+    var get_data = ssl._context_get_data;
+    var copy = get_data(context, 0);
+    if (copy != __null) {
+        _pep_free(copy);
+        var set_data = ssl._context_set_data;
+        set_data(context, 0, __null);
+    }
+}
+
+# SSL_CTX_set_alpn_select_cb's callback: picks the first of the server's
+# protocols (`argument`) that the client offers, or none.
+[Target(OS(Linux) || OS(Mac))]
+_tls_alpn_select(
+    connection: __ptr<void>,
+    out: __ptr<void>,
+    out_size: __ptr<void>,
+    offered: __ptr<void>,
+    offered_size: uint,
+    argument: __ptr<void>
+): int {
+    __ptr<u8> list = argument;
+    var select = _tls_openssl.get()._select_next_proto;
+    var size = unsafe_cast<__ptr<uint>>(list)[0];
+    # OPENSSL_NPN_NEGOTIATED: SSL_TLSEXT_ERR_OK. With nothing in common,
+    # SSL_TLSEXT_ERR_ALERT_FATAL sends no_application_protocol (RFC 7301
+    # section 3.2), as SChannel does.
+    if (select(out, out_size, list + 4, size, offered, offered_size) == 1) {
+        return 0;
+    }
+    return 2;
+}
+
+# The protocol the handshake chose through ALPN, or "" for none.
+[Target(OS(Linux) || OS(Mac))]
+_tls_sys_protocol(session: __ptr<void>): String {
+    var selected = _tls_openssl.get()._ssl_alpn_selected;
+    __ptr<__ptr<char>> data = _pep_malloc(8);
+    __ptr<uint> size = _pep_malloc(4);
+    data[0] = __null;
+    size[0] = 0;
+    selected(_tls_session_ssl(session), data, size);
+    var name = "";
+    if (size[0] > 0) {
+        name = String(data[0], size[0] as ulong);
+    }
+    _pep_free(size);
+    _pep_free(data);
+    return name;
+}
+
 [Target(OS(Linux) || OS(Mac))]
 _tls_sys_context_free(context: __ptr<void>) {
-    var context_free = _tls_openssl.get()._context_free;
+    var ssl = _tls_openssl.get();
+    _tls_free_protocols(ssl, context);
+    var context_free = ssl._context_free;
     context_free(context);
 }
 

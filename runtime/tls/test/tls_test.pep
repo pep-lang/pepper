@@ -239,3 +239,73 @@ tls_reports_bad_identity_files() {
     var acceptor = tls.TlsAcceptor.create(certificate(), key()).value();
     expect_true(acceptor.require_client_certificate(io.Path("tls/test/missing.pem")).is_err());
 }
+
+# The protocol `stream` chose, or "none".
+protocol_of(stream: tls.TlsStream): String {
+    var chosen = stream.protocol();
+    if (chosen.is_empty()) {
+        return "none";
+    }
+    return chosen.value();
+}
+
+# Accepts one connection and, after its ping, answers with the protocol the
+# handshake chose.
+serve_protocol(listener: io.TcpListener, acceptor: tls.TlsAcceptor): String {
+    var (tcp, peer) = listener.accept().value();
+    var accepted = acceptor.accept(tcp);
+    if (accepted.is_err()) {
+        return "failed";
+    }
+    var stream = accepted.value();
+    var buffer = Array<u8>();
+    stream.read_exact(buffer, 4);
+    return protocol_of(stream);
+}
+
+# Connects offering `offered` (none when empty), pings, and returns the
+# protocol the client sees and the one the server saw ("failed" for a
+# handshake that failed).
+negotiate(listener: io.TcpListener, acceptor: tls.TlsAcceptor, offered: String[]): String {
+    var port = listener.local_address().value().port();
+    var server = async.Task<String>.spawn_local(() => {
+        return serve_protocol(listener, acceptor);
+    });
+    var connector = tls.TlsConnector.create().value();
+    connector.add_root_certificate(certificate());
+    if (offered.count > 0) {
+        expect_true(connector.set_protocols(offered).is_ok());
+    }
+    var connected = connector.connect_host("localhost", port);
+    if (connected.is_err()) {
+        return "failed|" + server.join().value();
+    }
+    var stream = connected.value();
+    stream.write_all("ping");
+    var seen = server.join().value();
+    return protocol_of(stream) + "|" + seen;
+}
+
+[Test]
+tls_negotiates_protocols_with_alpn() {
+    keep_for_the_program(() => {
+        tls.TlsConnector.create();
+    });
+    async.run(
+        () => {
+            var listener = io.TcpListener.bind(io.SocketAddress(io.IpAddress.loopback_v4(), 0)).value();
+            var acceptor = tls.TlsAcceptor.create(certificate(), key()).value();
+            expect_true(acceptor.set_protocols(["h2", "http/1.1"]).is_ok());
+
+            expect_equal(negotiate(listener, acceptor, ["http/1.1", "h2"]), "h2|h2");  # the server's order wins
+            expect_equal(negotiate(listener, acceptor, ["http/1.1"]), "http/1.1|http/1.1");
+            expect_equal(negotiate(listener, acceptor, ["spdy/3"]), "failed|failed");  # nothing in common
+            expect_equal(negotiate(listener, acceptor, Array<String>()), "none|none");
+
+            var connector = tls.TlsConnector.create().value();
+            expect_true(connector.set_protocols(Array<String>()).is_err());
+            expect_true(connector.set_protocols([""]).is_err());
+            expect_true(acceptor.set_protocols(["x".repeat(256)]).is_err());
+        }
+    );
+}

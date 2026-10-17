@@ -46,6 +46,16 @@ _tls_sys_require_client_certificate(context: __ptr<void>, roots: io.Path): io.Io
 }
 
 [Target(OS(Wasi))]
+_tls_sys_set_protocols(context: __ptr<void>, list: u8[], server: bool): io.IoResult<void> {
+    return io.IoResult<void>.err(_tls_wasi_unsupported());
+}
+
+[Target(OS(Wasi))]
+_tls_sys_protocol(session: __ptr<void>): String {
+    return "";
+}
+
+[Target(OS(Wasi))]
 _tls_sys_context_free(context: __ptr<void>) {}
 
 [Target(OS(Wasi))]

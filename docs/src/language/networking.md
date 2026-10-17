@@ -198,6 +198,13 @@ produce a `TlsStream`, which reads and writes like a `TcpStream`:
   certificate, or an untrusted one, fails the server's `accept`. With TLS
   1.3 the client's `connect` can succeed first, and its next read then
   fails or returns 0.
+- ALPN: `connector.set_protocols(["h2", "http/1.1"])` offers protocols to
+  servers, most preferred first, and `acceptor.set_protocols(...)` lists the
+  ones a server accepts, also most preferred first. The handshake picks the
+  first of the server's that the client offers, and `stream.protocol()`
+  names it on both sides. A client that offers no protocols connects with
+  none chosen; one whose protocols the server accepts none of fails the
+  handshake (the `no_application_protocol` alert of RFC 7301).
 - `read`, `read_exact`, `write` and `write_all` work on the
   decrypted bytes. `shutdown()` sends the TLS close_notify, and `read`
   returns 0 once the peer has sent one or closed the connection.

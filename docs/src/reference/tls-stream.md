@@ -110,6 +110,31 @@ connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value()
 var stream = connector.connect_host("internal.example.com", 443).value();
 ```
 
+#### set_protocols
+
+```pepper
+set_protocols(protocols: String[]): io.IoResult<void>
+```
+
+Offers `protocols` to every server through ALPN (RFC 7301), most
+preferred first, such as `["h2", "http/1.1"]`. After `connect`,
+`TlsStream.protocol` names the one the server chose, if it chose one.
+Call it before the first `connect`; a later call replaces the list.
+
+**Parameters**
+- `protocols` — the protocol names, each 1 to 255 bytes
+
+**Returns**
+- an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes
+
+**Example**
+```pepper
+var connector = tls.TlsConnector.create().value();
+connector.set_protocols(["h2", "http/1.1"]).value();
+var stream = connector.connect_host("example.com", 443).value();
+var http2 = stream.protocol() == Optional<String>.Value("h2");
+```
+
 #### connect
 
 ```pepper
@@ -235,6 +260,25 @@ var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).v
 acceptor.require_client_certificate(io.Path("clients-ca.pem")).value();
 ```
 
+#### set_protocols
+
+```pepper
+set_protocols(protocols: String[]): io.IoResult<void>
+```
+
+Accepts `protocols` through ALPN (RFC 7301), most preferred first:
+the handshake chooses the first of them that the client offers, and
+`TlsStream.protocol` names it. A client that offers no protocols
+connects with none chosen; one that offers only protocols not in the
+list fails the handshake with the `no_application_protocol` alert
+(RFC 7301). Call it before the first `accept`.
+
+**Parameters**
+- `protocols` — the protocol names, each 1 to 255 bytes
+
+**Returns**
+- an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes
+
 #### accept
 
 ```pepper
@@ -311,6 +355,19 @@ Returns whether the stream is open.
 
 **Returns**
 - false after `close()`
+
+#### protocol
+
+```pepper
+protocol(): String?
+```
+
+Returns the protocol the handshake chose through ALPN, from the
+lists `TlsConnector.set_protocols` and `TlsAcceptor.set_protocols`
+set.
+
+**Returns**
+- the protocol name, such as `h2`; none when no protocol was chosen or the stream is closed
 
 #### read
 
