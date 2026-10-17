@@ -129,6 +129,7 @@ export pages(): Array<(String, String)> {
         ("digest/sha256.pep", "SHA-256"),
         ("digest/sha1.pep", "SHA-1"),
         ("digest/blake3.pep", "BLAKE3"),
+        ("digest/hmac.pep", "HMAC"),
         ("digest/hex.pep", "Hexadecimal"),
         ("cli/module.pep", "The cli module"),
         ("cli/parser.pep", "Parser"),

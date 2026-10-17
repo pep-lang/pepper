@@ -1,4 +1,4 @@
-## Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.
+## Cryptographic hashes: SHA-256, SHA-1 and BLAKE3, and HMAC.
 ##
 ## Bring it in with `import digest`. Each hash has an incremental hasher
 ## (`update` any number of times, then `finish`) and a one-shot function,
@@ -8,7 +8,10 @@
 ## - [SHA-256](digest-sha256.md): `Sha256`, `sha256`
 ## - [SHA-1](digest-sha1.md): `Sha1`, `sha1`, for formats that need it,
 ##   such as git object ids
-## - [BLAKE3](digest-blake3.md): `Blake3`, `blake3`
+## - [BLAKE3](digest-blake3.md): `Blake3`, `blake3`, with keyed hashing,
+##   key derivation and output of any length
+## - [HMAC](digest-hmac.md): `Hmac`, `hmac_sha256`, `hmac_sha1`, and
+##   `equal_constant_time` to check a MAC
 ## - [Hexadecimal](digest-hex.md): `to_hex`
 ##
 ## The implementations are portable Pepper with no link dependency, unless
@@ -34,6 +37,7 @@
 
 import "blake3";
 import "hex";
+import "hmac";
 import "sha1";
 import "sha256";
 
@@ -44,3 +48,7 @@ export sha1;
 export Blake3;
 export blake3;
 export to_hex;
+export Hmac;
+export hmac_sha256;
+export hmac_sha1;
+export equal_constant_time;

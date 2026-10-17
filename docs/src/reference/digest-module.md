@@ -2,7 +2,7 @@
 
 # The digest module
 
-Cryptographic hashes: SHA-256, SHA-1 and BLAKE3.
+Cryptographic hashes: SHA-256, SHA-1 and BLAKE3, and HMAC.
 
 Bring it in with `import digest`. Each hash has an incremental hasher
 (`update` any number of times, then `finish`) and a one-shot function,
@@ -12,7 +12,10 @@ is a `u8[]`; `to_hex` writes it as text.
 - [SHA-256](digest-sha256.md): `Sha256`, `sha256`
 - [SHA-1](digest-sha1.md): `Sha1`, `sha1`, for formats that need it,
   such as git object ids
-- [BLAKE3](digest-blake3.md): `Blake3`, `blake3`
+- [BLAKE3](digest-blake3.md): `Blake3`, `blake3`, with keyed hashing,
+  key derivation and output of any length
+- [HMAC](digest-hmac.md): `Hmac`, `hmac_sha256`, `hmac_sha1`, and
+  `equal_constant_time` to check a MAC
 - [Hexadecimal](digest-hex.md): `to_hex`
 
 The implementations are portable Pepper with no link dependency, unless

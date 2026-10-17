@@ -183,6 +183,7 @@
     - [SHA-256](reference/digest-sha256.md)
     - [SHA-1](reference/digest-sha1.md)
     - [BLAKE3](reference/digest-blake3.md)
+    - [HMAC](reference/digest-hmac.md)
     - [Hexadecimal](reference/digest-hex.md)
   - [The cli module](reference/cli-module.md)
     - [Parser](reference/cli-parser.md)

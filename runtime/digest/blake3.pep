@@ -1,5 +1,6 @@
 ## BLAKE3: 32-byte digests, faster than SHA-256 in hardware without SHA
 ## instructions, and the hash the compiler's build cache keys objects with.
+## Also a keyed hash (a MAC), key derivation, and output of any length.
 
 import "hex";
 import "words";
@@ -9,6 +10,9 @@ const _CHUNK_START: uint = 1;
 const _CHUNK_END: uint = 2;
 const _PARENT: uint = 4;
 const _ROOT: uint = 8;
+const _KEYED_HASH: uint = 16;
+const _DERIVE_KEY_CONTEXT: uint = 32;
+const _DERIVE_KEY_MATERIAL: uint = 64;
 # The bytes in a chunk, the leaves of BLAKE3's tree.
 const _CHUNK_SIZE: ulong = 1024;
 
@@ -16,10 +20,14 @@ const _CHUNK_SIZE: ulong = 1024;
 ## times and in pieces of any size, then read the 32-byte digest with
 ## `finish`.
 ##
-## This is a portable implementation of the default hash mode, one block
-## at a time; it does not use SIMD or threads, so it runs well below the
-## speed of the official C and Rust implementations. The digests are the
-## same. `finish` resets the hasher, so it can hash a new input.
+## `Blake3()` is the default hash mode; `Blake3.keyed` and
+## `Blake3.derive_key` make hashers for the other two modes, and
+## `finish(length)` reads output of any length in each.
+##
+## This is a portable implementation, one block at a time; it does not use
+## SIMD or threads, so it runs well below the speed of the official C and
+## Rust implementations. The digests are the same. `finish` resets the
+## hasher, so it can hash a new input.
 ##
 ## @example
 ##     import digest;
@@ -29,8 +37,10 @@ const _CHUNK_SIZE: ulong = 1024;
 ##     hasher.update("world");
 ##     assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 export struct Blake3 {
-    # The key words: BLAKE3's IV in the default hash mode.
+    # The key words: BLAKE3's IV in the default hash mode, and the mode's
+    # domain flag (0 in the default mode), added to every compression.
     var _key: uint[];
+    var _mode: uint;
     # The chaining value of the chunk being hashed, and its index.
     var _chunk_value: uint[];
     var _chunk_counter: ulong;
@@ -59,6 +69,53 @@ export struct Blake3 {
         _state = _digest_words(16);
         _schedule = _digest_blake3_schedule();
         reset();
+    }
+
+    ## Returns a hasher for BLAKE3's keyed mode, a MAC: only someone with
+    ## `key` can compute or check the digest of an input.
+    ##
+    ## @param key the 32-byte secret key
+    ## @returns a hasher with no input, keyed with `key`
+    ## @panics if `key` is not 32 bytes
+    ## @example
+    ##     import digest;
+    ##
+    ##     var key = digest.blake3("a key made some other way");
+    ##     var mac = digest.Blake3.keyed(key);
+    ##     mac.update("message");
+    ##     assert(mac.finish().count == 32, "a 32-byte MAC");
+    static keyed(key: u8[]): Blake3 {
+        assert(key.count == 32, "a BLAKE3 key is 32 bytes");
+        var hasher = Blake3();
+        hasher._use_key(key, _KEYED_HASH);
+        return hasher;
+    }
+
+    ## Returns a hasher for BLAKE3's key derivation mode: the digest of its
+    ## input (the key material, such as a shared secret or a password hash)
+    ## is a key for the purpose that `context` names.
+    ##
+    ## `context` should be a hard-coded string, unique to the application
+    ## and the purpose, such as
+    ## `"example.com 2026-10-16 session tokens v1"`; different contexts give
+    ## unrelated keys from the same material. Read the key with `finish`,
+    ## or `finish(length)` for one of another length.
+    ##
+    ## @param context the application and purpose the key is for
+    ## @returns a hasher with no input, for keys in `context`
+    ## @example
+    ##     import digest;
+    ##
+    ##     var hasher = digest.Blake3.derive_key("example.com 2026-10-16 session tokens v1");
+    ##     hasher.update("the shared secret");
+    ##     var key = hasher.finish();
+    static derive_key(context: String): Blake3 {
+        var context_hasher = Blake3();
+        context_hasher._mode = _DERIVE_KEY_CONTEXT;
+        context_hasher.update(context);
+        var hasher = Blake3();
+        hasher._use_key(context_hasher.finish(), _DERIVE_KEY_MATERIAL);
+        return hasher;
     }
 
     ## Discards the input given so far, returning the hasher to its initial
@@ -102,6 +159,24 @@ export struct Blake3 {
     ##
     ## @returns the digest
     finish(): u8[] {
+        return finish(32);
+    }
+
+    ## Returns `length` bytes of output for the input given since the
+    ## hasher was created or last reset, then resets it: BLAKE3's extended
+    ## output. The first 32 bytes are the digest `finish()` returns, and a
+    ## shorter output is a prefix of a longer one.
+    ##
+    ## @param length how many bytes to return
+    ## @returns the output
+    ## @example
+    ##     import digest;
+    ##
+    ##     var long_output = digest.Blake3();
+    ##     long_output.update("abc");
+    ##     var bytes = long_output.finish(100);
+    ##     assert(digest.to_hex(bytes).starts_with(digest.to_hex(digest.blake3("abc"))), "a prefix");
+    finish(length: ulong): u8[] {
         # The last chunk is the root when it is the only one; otherwise
         # fold it into the stacked subtrees from the right, and the last
         # parent is the root.
@@ -125,14 +200,20 @@ export struct Blake3 {
             input_value = _key._data;
             counter = 0;
             block_size = 64;
-            flags = _PARENT;
+            flags = _PARENT | _mode;
         }
-        _compress(input_value, counter, block_size, flags | _ROOT);
-        var out = Array<u8>(32);
-        ulong index = 0;
-        while (index < 8) {
-            _digest_append_le(out, _state[index]);
-            index += 1;
+        # The root's output is 64 bytes per compression, the counter
+        # numbering its blocks.
+        var out = Array<u8>(length);
+        ulong output_block = 0;
+        while (out.count < length) {
+            _compress(input_value, output_block, block_size, flags | _ROOT);
+            ulong index = 0;
+            while (index < 64 && out.count < length) {
+                out.append((_state[index / 4] >> (((index % 4) * 8) as uint)) as u8);
+                index += 1;
+            }
+            output_block += 1;
         }
         reset();
         return out;
@@ -172,9 +253,20 @@ export struct Blake3 {
         }
     }
 
+    # Switches to the mode `flag`, keyed with the 32 bytes of `key`.
+    _use_key(key: u8[], flag: uint) {
+        ulong index = 0;
+        while (index < 8) {
+            _key[index] = _digest_load_le(key._data, index * 4);
+            index += 1;
+        }
+        _mode = flag;
+        reset();
+    }
+
     # The flags of the chunk's next block.
     _chunk_flags(): uint {
-        return _blocks_compressed == 0 ? _CHUNK_START : 0;
+        return _mode | (_blocks_compressed == 0 ? _CHUNK_START : 0);
     }
 
     # Starts chunk `counter` with an empty block.
@@ -208,7 +300,7 @@ export struct Blake3 {
                 words[index] = left[index];
                 index += 1;
             }
-            _compress(_key._data, 0, 64, _PARENT);
+            _compress(_key._data, 0, 64, _PARENT | _mode);
             total = total >> 1;
         }
         _keep_chaining_value(_stack._data + _stack_size * 8);

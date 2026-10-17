@@ -2,7 +2,9 @@
 
 The `digest` module computes SHA-256, SHA-1 and BLAKE3 digests: fixed-size
 fingerprints of data, used to check that a download arrived intact, to name
-content by its hash, or to key a cache. Bring it in with `import digest`;
+content by its hash, or to key a cache. It also computes
+[message authentication codes](#message-authentication) with HMAC or
+BLAKE3's keyed mode, and derives keys. Bring it in with `import digest`;
 the full API is in the [reference](../reference/digest-module.md).
 
 ```pepper
@@ -46,6 +48,36 @@ None of these is the hash for a hash table: `HashMap` and `HashSet` use
 [`hash<T>`](hashing.md), which is much faster but neither cryptographic nor
 stable between versions.
 
+## Message authentication
+
+A message authentication code (MAC) is a digest that only someone with a
+secret key can compute, so a receiver that shares the key can check that a
+message is authentic and unchanged. Webhook signatures, JWTs (HS256) and
+S3-style request signing all use HMAC.
+
+```pepper
+{{#include ../../examples/digest-mac.pep}}
+```
+
+- **HMAC** (RFC 2104) works over SHA-256 or SHA-1:
+  `digest.hmac_sha256(key, message)` and `digest.hmac_sha1(key, message)`
+  are one-shot, both arguments `u8[]` or both `String`, and
+  `digest.Hmac<digest.Sha256>(key)` is the incremental hasher, with the
+  same `update`, `finish`, `finish_hex` and `reset` as the hashes. `finish`
+  and `reset` keep the key. A key longer than 64 bytes is hashed first.
+- **Check a MAC** with `digest.equal_constant_time(a, b)`, not `==`: `==`
+  stops at the first byte that differs, and timing it lets an attacker
+  find a valid MAC a byte at a time.
+- **BLAKE3's keyed mode**, `digest.Blake3.keyed(key)`, is a MAC with a
+  32-byte key; it panics on a key of any other length.
+- **Key derivation**: `digest.Blake3.derive_key(context)` returns a hasher
+  whose digest is a key, derived from the input (a shared secret, say) for
+  the purpose `context` names. Make `context` a hard-coded string unique to
+  the application and purpose; different contexts give unrelated keys.
+- **Extended output**: every `Blake3` hasher's `finish(length)` returns
+  `length` bytes, in any of the three modes. The first 32 are the digest
+  `finish()` returns.
+
 ## Using the system's crypto library
 
 By default the hashes are written in Pepper, so a program that uses them
@@ -73,7 +105,8 @@ Pepper, since libcrypto has no BLAKE3.
 - Without `USE_LIBCRYPTO`, SHA-256 and SHA-1 run at a few hundred
   megabytes per second. BLAKE3 is always the portable code, below the
   official BLAKE3, which uses SIMD and threads.
-- BLAKE3's keyed hashing, key derivation and extended output are not
-  supported yet; `Blake3` computes the default 32-byte hash.
-- The code is not hardened against timing side channels, which matters only
-  when hashing secrets. There is no HMAC yet.
+- The hashes have no secret-dependent branches or table lookups, but they
+  have not been audited for timing side channels, which matter only when
+  hashing secrets. Copies of an HMAC key stay in memory until the hasher
+  is freed; nothing wipes them.
+- HMAC works over SHA-256 and SHA-1; there is no SHA-512 to put under it.
