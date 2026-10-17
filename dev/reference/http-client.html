@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a44e5b09.js";
+            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -193,13 +193,17 @@ returns the <code>Response</code>.</p>
 <h2 id="client-1"><a class="header" href="#client-1">Client</a></h2>
 <pre><code class="language-pepper">[Shared] struct Client
 </code></pre>
-<p>Sends HTTP/1.1 requests and reads their responses.</p>
+<p>Sends HTTP/1.1 and HTTP/2 requests and reads their responses.</p>
 <p>Each request opens a new connection (plain TCP for <code>http://</code>, TLS for
 <code>https://</code>), sends the request with <code>Connection: close</code>, and reads the
 response: <code>send</code> reads the whole body into memory, and <code>open</code> returns
 once the header fields arrive, with the body to read as a stream. To
 send requests on connections kept open between them, use a <code>Session</code>
 (<code>client.session()</code>).</p>
+<p>For <code>https://</code> the client offers HTTP/2 and HTTP/1.1 through ALPN and
+speaks the one the server chooses; the request and response are the same
+either way. Over HTTP/2 the response’s <code>reason</code> is the standard phrase
+for its status. Plain <code>http://</code> uses HTTP/1.1.</p>
 <p>Redirects (301, 302, 303, 307 and 308 with a <code>Location</code>) are followed,
 up to <code>max_redirects</code> of them, as RFC 9110 describes: 303, and 301 or
 302 after a <code>POST</code>, become a <code>GET</code> without the body; 307 and 308 repeat
@@ -241,7 +245,8 @@ OpenSSL 3), <code>http://</code> URLs still work and <code>https://</code> ones 
 <pre><code class="language-pepper">construct(connector: tls.TlsConnector, max_redirects: int = 10)
 </code></pre>
 <p>Creates a client whose <code>https://</code> connections use <code>connector</code>, for
-instance one that trusts a private certificate authority.</p>
+instance one that trusts a private certificate authority. The client
+sets the connector’s ALPN protocols to <code>h2</code> and <code>http/1.1</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
@@ -342,6 +347,9 @@ Up to <code>max_idle_per_host</code> connections wait for each scheme, host and
 port; one idle for longer than <code>idle_timeout</code> is closed instead of used.
 A request that finds its reused connection closed by the server is sent
 again on a new one, unless its body came from <code>Request.set_reader</code>.</p>
+<p>Over HTTP/2 the session keeps one connection per origin, which every
+request to that origin shares at once on a stream of its own, so tasks
+started with <code>spawn_local</code> can send through one session concurrently.</p>
 <p>A session is not <code>[Shared]</code>: use it from one thread or task. Its
 connections close when the last reference to it (and to the
 <code>BodyReader</code>s it returned) goes, or at <code>close()</code>.</p>

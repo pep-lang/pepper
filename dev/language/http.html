@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a44e5b09.js";
+            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -182,9 +182,11 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="http"><a class="header" href="#http">HTTP</a></h1>
-<p>The <code>http</code> module has an HTTP/1.1 client and server, over plain TCP or
-<a href="networking.html#tls">TLS</a>. Both run in <a href="tasks.html">tasks</a>: a request that
-waits parks only its task.</p>
+<p>The <code>http</code> module has an HTTP/1.1 and HTTP/2 client and server, over plain
+TCP or <a href="networking.html#tls">TLS</a>. Both run in <a href="tasks.html">tasks</a>: a request
+that waits parks only its task. Over TLS the two sides pick HTTP/2 through
+ALPN when both have it (see <a href="#http2">HTTP/2</a>); the <code>Request</code> and <code>Response</code>
+types, and the code that uses them, are the same for either version.</p>
 <p>HTTP needs tasks and sockets, so it is not available on WebAssembly
 (<code>--target wasm32-wasip1</code>, see <a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
 <pre><code class="language-pepper">import async;
@@ -310,6 +312,9 @@ returned. Leaving the origin drops <code>Authorization</code>,
 as it is.</li>
 <li>Every request from a <code>Client</code> uses a new connection; a <code>Session</code> keeps
 them open (see <a href="#reusing-connections">Reusing connections</a>).</li>
+<li>For <code>https://</code> the client offers HTTP/2 and HTTP/1.1 through ALPN, on its
+own connector or the one it was given, and speaks whichever the server
+picks.</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -327,6 +332,9 @@ standard reason phrase when <code>reason</code> is empty (<code>reason_phrase(st
 returns it).</li>
 <li>A request it cannot parse gets <code>400 Bad Request</code>, header fields over
 64 KiB get <code>431</code>, and a body over <code>MAX_REQUEST_BODY</code> (16 MiB) gets <code>413</code>.</li>
+<li><code>Server.bind_tls</code> offers HTTP/2 and HTTP/1.1 through ALPN, and a
+plain-TCP client that opens with the HTTP/2 preface (prior knowledge, or
+h2c) is served HTTP/2 too. See <a href="#http2">HTTP/2</a>.</li>
 </ul>
 <h2 id="streaming-bodies"><a class="header" href="#streaming-bodies">Streaming bodies</a></h2>
 <p>A body need not fit in memory. Both directions stream through <code>io.Reader</code>,
@@ -434,14 +442,46 @@ one idle longer than <code>idle_timeout</code> (90 seconds) is closed instead of
 used. <code>idle_count</code> says how many wait, and <code>close()</code> closes them.</li>
 <li>A request that finds its reused connection closed by the server goes
 again on a new one, unless its body came from <code>set_reader</code>.</li>
+<li>An HTTP/2 connection is not idle and taken in turn: every request to its
+origin shares it at once, each on a stream of its own. <code>idle_count</code>
+counts it while no request is using it.</li>
 <li>A <code>Session</code> is not <code>[Shared]</code>: use one per thread or task. A <code>Client</code> is
-shared, and connections, which belong to one thread, cannot be.</li>
+shared, and connections, which belong to one thread, cannot be. Tasks
+started with <code>spawn_local</code> may share a session, and over HTTP/2 their
+requests go out on one connection at the same time.</li>
+</ul>
+<h2 id="http2"><a class="header" href="#http2">HTTP/2</a></h2>
+<p>HTTP/2 (RFC 9113) carries many requests on one connection at once, as
+streams, with header fields compressed (HPACK, RFC 7541) and each body
+flow-controlled so that one large transfer does not hold up the rest.</p>
+<ul>
+<li><strong>Choosing it:</strong> over TLS, the client offers <code>h2</code> and <code>http/1.1</code> through
+ALPN and <code>Server.bind_tls</code> accepts both, preferring <code>h2</code>, so two Pepper
+programs speak HTTP/2 with no setting to change. A server or client that
+offers only HTTP/1.1 gets HTTP/1.1. On plain TCP the client speaks
+HTTP/1.1; the server also takes HTTP/2 from a client that starts with its
+preface (prior knowledge).</li>
+<li><strong>Client:</strong> a <code>Session</code> keeps one HTTP/2 connection per origin, and
+requests from several tasks share it at once. A request outside a session
+opens a connection that closes after its body. A connection the server
+ends with GOAWAY is replaced by a new one for the next request.</li>
+<li><strong>Server:</strong> each stream is a request, answered by the same handler in a
+task of its own, so the requests of one connection run at the same time.
+The handler sees the <code>Host</code> field from <code>:authority</code>. A server lets a
+client open 100 streams at once.</li>
+<li><strong>Messages:</strong> field names go lowercase on the wire, as HTTP/2 requires,
+and fields that only mean something to HTTP/1.1 (<code>Connection</code>,
+<code>Transfer-Encoding</code>, <code>Upgrade</code>, <code>Keep-Alive</code>) are left out. HTTP/2 has no
+reason phrase, so a response’s <code>reason</code> is the standard one for its
+status. Bodies stream through <code>io.Reader</code> exactly as for HTTP/1.1; closing
+a response’s reader early resets only its stream.</li>
 </ul>
 <h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2 is not supported yet.</li>
+<li>HTTP/2 server push, stream priorities and the <code>Upgrade: h2c</code> handshake
+are not supported; a client speaks HTTP/2 only over TLS.</li>
 </ul>
 <p>The reference pages for <a href="../reference/http-message.html">messages</a>, the
 <a href="../reference/http-client.html">client</a>, the

@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a44e5b09.js";
+            window.path_to_searchindex_js = "searchindex-d0b3e50c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-fc646ff9.js"></script>
@@ -239,7 +239,7 @@ closures, modules (with <code>export * from</code> re-exports), <code>Result</co
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), sortable arrays, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, atomics, threads, channels and mutexes, tasks (green threads
 that take turns on a few worker threads, parking on sockets and timeouts), file-system access (see <a href="#files-and-directories">files</a>), text encodings (UTF-16, ASCII; see <a href="#text-encodings">text</a>),
-TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 client and server (streamed bodies, redirects, connection reuse), URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), <a href="#toml">TOML</a> (parsing, writing, editing a document in place, and converting structs), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
+TCP, UDP and Unix domain sockets, TLS, an HTTP/1.1 and HTTP/2 client and server (streamed bodies, redirects, connection reuse, ALPN), URI parsing, regular expressions, JSON (parsing and writing <code>JsonValue</code>s, JSONC documents that keep their comments, and converting structs with <code>json.encode</code> and <code>json.decode</code>), <a href="#toml">TOML</a> (parsing, writing, editing a document in place, and converting structs), gzip and zlib compression, tar archives, cryptographic hashes (SHA-256, SHA-1 and BLAKE3 in the <code>digest</code> module), <a href="#simd-vectors">SIMD vectors</a> (<code>simd.Vector&lt;T, N&gt;</code>), command-line arguments (<code>main(args: String[])</code>, parsed into options with the <code>cli</code> module), starting child processes, the <code>os</code> module (environment variables, monotonic and wall clocks with <code>Duration</code>, and machine and user information), the <code>time</code> module (dates, times of day, time zones from the system’s database, and RFC 3339, HTTP and <code>strftime</code> text), and the <code>debug</code> module (stack backtraces, which a panic also prints, and the debugger). <a href="#unit-tests">Unit tests</a> are <code>[Test]</code> functions that
 <code>pepper test</code> runs in parallel, each in a process of its own. That is enough to write real
 programs, but expect gaps. <a href="#formatting-with-pep-fmt">pep-fmt</a>, the code formatter,
 <a href="#profiling-with-pep-profile">pep-profile</a>, which profiles a program and draws a
@@ -15967,9 +15967,11 @@ program take over the port.</p>
 <a href="#connectors-and-streams">TLS</a> document every method.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="http"><a class="header" href="#http">HTTP</a></h1>
-<p>The <code>http</code> module has an HTTP/1.1 client and server, over plain TCP or
-<a href="#tls">TLS</a>. Both run in <a href="#tasks">tasks</a>: a request that
-waits parks only its task.</p>
+<p>The <code>http</code> module has an HTTP/1.1 and HTTP/2 client and server, over plain
+TCP or <a href="#tls">TLS</a>. Both run in <a href="#tasks">tasks</a>: a request
+that waits parks only its task. Over TLS the two sides pick HTTP/2 through
+ALPN when both have it (see <a href="#http2">HTTP/2</a>); the <code>Request</code> and <code>Response</code>
+types, and the code that uses them, are the same for either version.</p>
 <p>HTTP needs tasks and sockets, so it is not available on WebAssembly
 (<code>--target wasm32-wasip1</code>, see <a href="#webassembly">WebAssembly</a>).</p>
 <pre><code class="language-pepper">import async;
@@ -16095,6 +16097,9 @@ returned. Leaving the origin drops <code>Authorization</code>,
 as it is.</li>
 <li>Every request from a <code>Client</code> uses a new connection; a <code>Session</code> keeps
 them open (see <a href="#reusing-connections">Reusing connections</a>).</li>
+<li>For <code>https://</code> the client offers HTTP/2 and HTTP/1.1 through ALPN, on its
+own connector or the one it was given, and speaks whichever the server
+picks.</li>
 </ul>
 <h2 id="server"><a class="header" href="#server">Server</a></h2>
 <ul>
@@ -16112,6 +16117,9 @@ standard reason phrase when <code>reason</code> is empty (<code>reason_phrase(st
 returns it).</li>
 <li>A request it cannot parse gets <code>400 Bad Request</code>, header fields over
 64 KiB get <code>431</code>, and a body over <code>MAX_REQUEST_BODY</code> (16 MiB) gets <code>413</code>.</li>
+<li><code>Server.bind_tls</code> offers HTTP/2 and HTTP/1.1 through ALPN, and a
+plain-TCP client that opens with the HTTP/2 preface (prior knowledge, or
+h2c) is served HTTP/2 too. See <a href="#http2">HTTP/2</a>.</li>
 </ul>
 <h2 id="streaming-bodies"><a class="header" href="#streaming-bodies">Streaming bodies</a></h2>
 <p>A body need not fit in memory. Both directions stream through <code>io.Reader</code>,
@@ -16219,14 +16227,46 @@ one idle longer than <code>idle_timeout</code> (90 seconds) is closed instead of
 used. <code>idle_count</code> says how many wait, and <code>close()</code> closes them.</li>
 <li>A request that finds its reused connection closed by the server goes
 again on a new one, unless its body came from <code>set_reader</code>.</li>
+<li>An HTTP/2 connection is not idle and taken in turn: every request to its
+origin shares it at once, each on a stream of its own. <code>idle_count</code>
+counts it while no request is using it.</li>
 <li>A <code>Session</code> is not <code>[Shared]</code>: use one per thread or task. A <code>Client</code> is
-shared, and connections, which belong to one thread, cannot be.</li>
+shared, and connections, which belong to one thread, cannot be. Tasks
+started with <code>spawn_local</code> may share a session, and over HTTP/2 their
+requests go out on one connection at the same time.</li>
+</ul>
+<h2 id="http2"><a class="header" href="#http2">HTTP/2</a></h2>
+<p>HTTP/2 (RFC 9113) carries many requests on one connection at once, as
+streams, with header fields compressed (HPACK, RFC 7541) and each body
+flow-controlled so that one large transfer does not hold up the rest.</p>
+<ul>
+<li><strong>Choosing it:</strong> over TLS, the client offers <code>h2</code> and <code>http/1.1</code> through
+ALPN and <code>Server.bind_tls</code> accepts both, preferring <code>h2</code>, so two Pepper
+programs speak HTTP/2 with no setting to change. A server or client that
+offers only HTTP/1.1 gets HTTP/1.1. On plain TCP the client speaks
+HTTP/1.1; the server also takes HTTP/2 from a client that starts with its
+preface (prior knowledge).</li>
+<li><strong>Client:</strong> a <code>Session</code> keeps one HTTP/2 connection per origin, and
+requests from several tasks share it at once. A request outside a session
+opens a connection that closes after its body. A connection the server
+ends with GOAWAY is replaced by a new one for the next request.</li>
+<li><strong>Server:</strong> each stream is a request, answered by the same handler in a
+task of its own, so the requests of one connection run at the same time.
+The handler sees the <code>Host</code> field from <code>:authority</code>. A server lets a
+client open 100 streams at once.</li>
+<li><strong>Messages:</strong> field names go lowercase on the wire, as HTTP/2 requires,
+and fields that only mean something to HTTP/1.1 (<code>Connection</code>,
+<code>Transfer-Encoding</code>, <code>Upgrade</code>, <code>Keep-Alive</code>) are left out. HTTP/2 has no
+reason phrase, so a response’s <code>reason</code> is the standard one for its
+status. Bodies stream through <code>io.Reader</code> exactly as for HTTP/1.1; closing
+a response’s reader early resets only its stream.</li>
 </ul>
 <h2 id="current-status-2"><a class="header" href="#current-status-2">Current status</a></h2>
 <ul>
 <li>A server handler gets the request body read into memory in full, up to
 <code>MAX_REQUEST_BODY</code> (16 MiB).</li>
-<li>HTTP/2 is not supported yet.</li>
+<li>HTTP/2 server push, stream priorities and the <code>Upgrade: h2c</code> handshake
+are not supported; a client speaks HTTP/2 only over TLS.</li>
 </ul>
 <p>The reference pages for <a href="#requests-and-responses">messages</a>, the
 <a href="#client-1">client</a>, the
@@ -50853,12 +50893,14 @@ shells, and <code>Parser.completions</code> writes the script.</p>
 <p>PowerShell (<code>powershell</code> on a command line): dot-source the script from your profile.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/module.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-http-module"><a class="header" href="#the-http-module">The http module</a></h1>
-<p>HTTP/1.1 clients and servers, over TCP or TLS.</p>
+<p>HTTP/1.1 and HTTP/2 clients and servers, over TCP or TLS.</p>
 <p>Bring it in with <code>import http</code>. A <code>Client</code> sends a <code>Request</code> to an
 <code>http://</code> or <code>https://</code> URL and returns the <code>Response</code>; a <code>Server</code>
 accepts connections on every worker of <code>async.run</code> and answers each
 request with a handler function. Bodies are read into memory, or
-streamed through an <code>io.Reader</code> (<code>Client.open</code>, <code>set_reader</code>).</p>
+streamed through an <code>io.Reader</code> (<code>Client.open</code>, <code>set_reader</code>). Over TLS
+the client and server choose HTTP/2 through ALPN when both have it, with
+the same <code>Request</code> and <code>Response</code> types.</p>
 <ul>
 <li><a href="#requests-and-responses">Messages</a>: <code>Headers</code>, <code>Request</code>, and <code>Response</code></li>
 <li><a href="#client-1">Client</a>: <code>Client</code>, <code>Session</code> and <code>BodyReader</code></li>
@@ -51298,13 +51340,17 @@ returns the <code>Response</code>.</p>
 <h2 id="client-1-1"><a class="header" href="#client-1-1">Client</a></h2>
 <pre><code class="language-pepper">[Shared] struct Client
 </code></pre>
-<p>Sends HTTP/1.1 requests and reads their responses.</p>
+<p>Sends HTTP/1.1 and HTTP/2 requests and reads their responses.</p>
 <p>Each request opens a new connection (plain TCP for <code>http://</code>, TLS for
 <code>https://</code>), sends the request with <code>Connection: close</code>, and reads the
 response: <code>send</code> reads the whole body into memory, and <code>open</code> returns
 once the header fields arrive, with the body to read as a stream. To
 send requests on connections kept open between them, use a <code>Session</code>
 (<code>client.session()</code>).</p>
+<p>For <code>https://</code> the client offers HTTP/2 and HTTP/1.1 through ALPN and
+speaks the one the server chooses; the request and response are the same
+either way. Over HTTP/2 the response’s <code>reason</code> is the standard phrase
+for its status. Plain <code>http://</code> uses HTTP/1.1.</p>
 <p>Redirects (301, 302, 303, 307 and 308 with a <code>Location</code>) are followed,
 up to <code>max_redirects</code> of them, as RFC 9110 describes: 303, and 301 or
 302 after a <code>POST</code>, become a <code>GET</code> without the body; 307 and 308 repeat
@@ -51346,7 +51392,8 @@ OpenSSL 3), <code>http://</code> URLs still work and <code>https://</code> ones 
 <pre><code class="language-pepper">construct(connector: tls.TlsConnector, max_redirects: int = 10)
 </code></pre>
 <p>Creates a client whose <code>https://</code> connections use <code>connector</code>, for
-instance one that trusts a private certificate authority.</p>
+instance one that trusts a private certificate authority. The client
+sets the connector’s ALPN protocols to <code>h2</code> and <code>http/1.1</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
@@ -51447,6 +51494,9 @@ Up to <code>max_idle_per_host</code> connections wait for each scheme, host and
 port; one idle for longer than <code>idle_timeout</code> is closed instead of used.
 A request that finds its reused connection closed by the server is sent
 again on a new one, unless its body came from <code>Request.set_reader</code>.</p>
+<p>Over HTTP/2 the session keeps one connection per origin, which every
+request to that origin shares at once on a stream of its own, so tasks
+started with <code>spawn_local</code> can send through one session concurrently.</p>
 <p>A session is not <code>[Shared]</code>: use it from one thread or task. Its
 connections close when the last reference to it (and to the
 <code>BodyReader</code>s it returned) goes, or at <code>close()</code>.</p>
@@ -51603,8 +51653,9 @@ returns 0, as at the end of the body. Closing a reader already done
 does nothing.</p>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/http/server.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="server-1"><a class="header" href="#server-1">Server</a></h1>
-<p>The HTTP server: <code>Server</code> accepts HTTP/1.1 connections on every worker of
-<code>async.run</code> and answers each request with a handler function.</p>
+<p>The HTTP server: <code>Server</code> accepts HTTP/1.1 and HTTP/2 connections on
+every worker of <code>async.run</code> and answers each request with a handler
+function.</p>
 <p>Source: <code>runtime/http/server.pep</code></p>
 <h2 id="max_request_body"><a class="header" href="#max_request_body">MAX_REQUEST_BODY</a></h2>
 <pre><code class="language-pepper">const MAX_REQUEST_BODY: ulong = 16777216
@@ -51614,7 +51665,7 @@ does nothing.</p>
 <h2 id="server-1-1"><a class="header" href="#server-1-1">Server</a></h2>
 <pre><code class="language-pepper">[Shared] struct Server
 </code></pre>
-<p>An HTTP/1.1 server.</p>
+<p>An HTTP/1.1 and HTTP/2 server.</p>
 <p><code>Server.bind</code> listens on an address (<code>Server.bind_tls</code> serves HTTPS);
 <code>serve</code> then accepts connections on every worker of the running
 <code>async.run</code> and serves each connection in a task of its own, calling the
@@ -51623,6 +51674,10 @@ unless the client asks to close (or speaks HTTP/1.0).</p>
 <p>The handler gets the <code>Request</code> with its body read in full and returns the
 <code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
 when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes.</p>
+<p>HTTP/2 is served to a client that chooses it through ALPN (see
+<code>bind_tls</code>) or that starts a plain TCP connection with the HTTP/2
+preface (prior knowledge): each stream is a request, answered by the same
+handler in a task of its own.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import async;
 import http;
@@ -51670,7 +51725,8 @@ main(): int {
 <pre><code class="language-pepper">static bind_tls(address: io.SocketAddress, acceptor: tls.TlsAcceptor): io.IoResult&lt;Server&gt;
 </code></pre>
 <p>Listens for HTTPS connections on <code>address</code>, presenting <code>acceptor</code>’s
-certificate.</p>
+certificate. It sets the acceptor’s ALPN protocols to <code>h2</code> and
+<code>http/1.1</code>, so clients that offer HTTP/2 get it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>address</code> — the local address (port 0 for any free port)</li>

@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a44e5b09.js";
+            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -183,8 +183,9 @@
                     <main>
                         <!-- Generated from runtime/http/server.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="server"><a class="header" href="#server">Server</a></h1>
-<p>The HTTP server: <code>Server</code> accepts HTTP/1.1 connections on every worker of
-<code>async.run</code> and answers each request with a handler function.</p>
+<p>The HTTP server: <code>Server</code> accepts HTTP/1.1 and HTTP/2 connections on
+every worker of <code>async.run</code> and answers each request with a handler
+function.</p>
 <p>Source: <code>runtime/http/server.pep</code></p>
 <h2 id="max_request_body"><a class="header" href="#max_request_body">MAX_REQUEST_BODY</a></h2>
 <pre><code class="language-pepper">const MAX_REQUEST_BODY: ulong = 16777216
@@ -194,7 +195,7 @@
 <h2 id="server-1"><a class="header" href="#server-1">Server</a></h2>
 <pre><code class="language-pepper">[Shared] struct Server
 </code></pre>
-<p>An HTTP/1.1 server.</p>
+<p>An HTTP/1.1 and HTTP/2 server.</p>
 <p><code>Server.bind</code> listens on an address (<code>Server.bind_tls</code> serves HTTPS);
 <code>serve</code> then accepts connections on every worker of the running
 <code>async.run</code> and serves each connection in a task of its own, calling the
@@ -203,6 +204,10 @@ unless the client asks to close (or speaks HTTP/1.0).</p>
 <p>The handler gets the <code>Request</code> with its body read in full and returns the
 <code>Response</code>; the server adds <code>Content-Length</code> (and <code>Connection: close</code>
 when it will close). A request the server cannot parse gets <code>400 Bad Request</code>, one with header fields over 64 KiB <code>431 Request Header Fields Too Large</code>, and one with a body over <code>MAX_REQUEST_BODY</code> <code>413 Content Too Large</code>; the connection then closes.</p>
+<p>HTTP/2 is served to a client that chooses it through ALPN (see
+<code>bind_tls</code>) or that starts a plain TCP connection with the HTTP/2
+preface (prior knowledge): each stream is a request, answered by the same
+handler in a task of its own.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">import async;
 import http;
@@ -250,7 +255,8 @@ main(): int {
 <pre><code class="language-pepper">static bind_tls(address: io.SocketAddress, acceptor: tls.TlsAcceptor): io.IoResult&lt;Server&gt;
 </code></pre>
 <p>Listens for HTTPS connections on <code>address</code>, presenting <code>acceptor</code>’s
-certificate.</p>
+certificate. It sets the acceptor’s ALPN protocols to <code>h2</code> and
+<code>http/1.1</code>, so clients that offer HTTP/2 get it.</p>
 <p><strong>Parameters</strong></p>
 <ul>
 <li><code>address</code> — the local address (port 0 for any free port)</li>

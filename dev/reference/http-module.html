@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a44e5b09.js";
+            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -183,12 +183,14 @@
                     <main>
                         <!-- Generated from runtime/http/module.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="the-http-module"><a class="header" href="#the-http-module">The http module</a></h1>
-<p>HTTP/1.1 clients and servers, over TCP or TLS.</p>
+<p>HTTP/1.1 and HTTP/2 clients and servers, over TCP or TLS.</p>
 <p>Bring it in with <code>import http</code>. A <code>Client</code> sends a <code>Request</code> to an
 <code>http://</code> or <code>https://</code> URL and returns the <code>Response</code>; a <code>Server</code>
 accepts connections on every worker of <code>async.run</code> and answers each
 request with a handler function. Bodies are read into memory, or
-streamed through an <code>io.Reader</code> (<code>Client.open</code>, <code>set_reader</code>).</p>
+streamed through an <code>io.Reader</code> (<code>Client.open</code>, <code>set_reader</code>). Over TLS
+the client and server choose HTTP/2 through ALPN when both have it, with
+the same <code>Request</code> and <code>Response</code> types.</p>
 <ul>
 <li><a href="http-message.html">Messages</a>: <code>Headers</code>, <code>Request</code>, and <code>Response</code></li>
 <li><a href="http-client.html">Client</a>: <code>Client</code>, <code>Session</code> and <code>BodyReader</code></li>
