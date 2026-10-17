@@ -642,10 +642,10 @@ export struct Overloads {
         if (!members.is_value()) {
             return Optional<(String, TypeName)>.Empty;
         }
-        var want = _canonical(expected);
+        var want = _signature_key(expected);
         var found = Array<Member>();
         for (var m in members.value()) {
-            if (!m.generic.is_value() and _canonical(m.signature()) == want) {
+            if (!m.generic.is_value() and _signature_key(m.signature()) == want) {
                 found.append(m);
             }
         }
@@ -1409,7 +1409,7 @@ struct _ValueBinder {
     }
 
     visit(owner: String?, e: Expression, expected: TypeName?, current: TypeName?) {
-        if (!expected.is_value() or !expected.value().is_function_type() or expected.value().contains_auto()) {
+        if (!expected.is_value() or !expected.value().is_callable() or expected.value().contains_auto()) {
             return;
         }
         match (e) {
@@ -1589,4 +1589,14 @@ export bind_function_values(
     rewrite_module(module, rewriter);
     module.call_targets.append_all(rewriter.targets);
     return true;
+}
+
+## A function type's return and parameter types, whatever its kind: a
+## named function goes into a plain, `shared` or C function slot alike.
+_signature_key(ty: TypeName): String {
+    var parts = [_canonical(ty.function_return().value_or(TypeName())).to_string()];
+    for (var p in ty.function_params()) {
+        parts.append(_canonical(p).to_string());
+    }
+    return "\n".join(parts);
 }

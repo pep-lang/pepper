@@ -10,7 +10,7 @@ best:
 
 The functions of one name in one file are an **overload set**, and each is a
 member of it; the files of one [module](modules.md#modules) may share a
-set, and so do the sets a file imports and its own functions of that name. [Methods](#methods-and-operators) of one name in a struct are a
+set, and so do the sets a file imports, the runtime's, and its own functions of that name. [Methods](#methods-and-operators) of one name in a struct are a
 set too, and so are its static methods, its operators, its
 [constructors](#constructors), and the methods its
 [extensions](#extensions-and-traits) add.
@@ -108,10 +108,42 @@ A qualifier (`a.parse(1)`) picks one module's set. A file's own member
 hides an imported member with the same parameters, so a file can replace
 one member of an imported set. Only functions merge: a struct or variable
 of the name hides imported functions of it (or, named in an import list,
-is `'parse' is imported but also declared in this file`), and the
-[prelude](modules.md)'s functions, such as the runtime's `print`, are
-hidden by a file's own or imported functions of the name rather than
-joined.
+is `'parse' is imported but also declared in this file`).
+
+### The runtime's sets
+
+The [prelude](modules.md)'s functions, such as the runtime's `print` and
+`to_string`, are a set too, which a file's own and imported functions of
+the name join. Here `point.pep` adds a `print` member and the file adds a
+`to_string` member, and the runtime's members still take every other
+call:
+
+```pepper
+{{#include ../../examples/overloading-runtime/point.pep}}
+```
+
+```pepper
+{{#include ../../examples/overloading-runtime/main.pep}}
+```
+
+A member with a runtime member's parameters and return type (or a return
+type left to inference) is an error, since a file that wants the runtime's
+member already has it:
+
+```text
+main.pep:1:1: error: redefinition of 'print'
+    1 | print(text: String) {}
+      | ^~~~~
+runtime/string.pep:1850:8: note: previous definition is here
+ 1850 | export print(text: String) {
+      |        ^~~~~
+```
+
+One that differs only in its return type hides the runtime's member in its
+file, as a file's own member hides an imported one, so a program's own
+`arguments(): int` still compiles beside the runtime's deprecated
+`arguments(): Array<String>`. A struct or variable named like a runtime
+function hides all of its members.
 
 ### Members may differ in visibility
 
@@ -367,9 +399,3 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) => int = f;'
 
 An expected type that matches no member is `address of overloaded function
 'f' does not match required type '(bool) => int'`.
-
-## What is not supported yet
-
-- **Joining the runtime's sets**: a file's own or imported functions of a
-  name that the runtime declares (`print`, `to_string`) hide the runtime's
-  functions of that name instead of joining them.

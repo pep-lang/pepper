@@ -71,6 +71,7 @@ links_programs(part: ulong) {
         "modules-same-name",
         "overloading-imports",
         "overloading-modules",
+        "overloading-runtime",
         "overloading-visibility",
         "visibility-namespaces"
     ]) {

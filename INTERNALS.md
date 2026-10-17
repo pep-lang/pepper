@@ -298,12 +298,17 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   per-file visibility. Where an import or re-export would bind
   one name to functions of two files (of one module or of several), or a
   file's own functions of a name meet an import of it, it binds a union
-  instead (`_Unions.merge`, a name like `f@geo/a#set1`; the prelude never
-  joins); `link` returns them grouped by module
+  instead (`_Unions.merge`, a name like `f@geo/a#set1`). The prelude's
+  functions are one module (`_PRELUDE_HOME`) that a prelude file's own
+  bindings never join, but whatever functions a non-prelude file's name
+  denotes join the prelude's of that name once binding settles
+  (`_Linker.join_prelude`), so `print(p: Point)` beside the runtime's
+  `print` makes one set; `link` returns them grouped by module
   (`Linked.overload_unions`, carried to `Module.overload_unions`), and
   `name_overloads` records each as a set of every member, reporting two
   members of one module with the same parameters as a redefinition (two
-  modules' such members only make a call ambiguous). Sema hides a mixed
+  modules' such members only make a call ambiguous, except a member with a
+  prelude member's parameters and return type, a redefinition too). Sema hides a mixed
   set's private members (`Module.private_functions`) from calls in other
   files, and an imported member with the same parameters as one of the
   calling file's own (`Overloads._set`, by the call's location).

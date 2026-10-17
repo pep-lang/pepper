@@ -121,7 +121,7 @@ struct _OverloadChecks {
                 var name = untyped.try_get(node.loc);
                 if (name.is_value()) {
                     message = $"cannot infer the type of '{name.value()}' from overloaded method '{spelled}'";
-                } else if (expected.is_value() and expected.value().is_function_type()) {
+                } else if (expected.is_value() and expected.value().is_callable()) {
                     message = $"address of overloaded method '{spelled}' does not match required type '{expected.value().display()}'";
                 }
                 report(
@@ -137,7 +137,7 @@ struct _OverloadChecks {
                 var name = untyped.try_get(node.loc);
                 if (name.is_value()) {
                     message = $"cannot infer the type of '{name.value()}' from overloaded function '{shown}'";
-                } else if (expected.is_value() and expected.value().is_function_type()) {
+                } else if (expected.is_value() and expected.value().is_callable()) {
                     message = $"address of overloaded function '{shown}' does not match required type '{expected.value().display()}'";
                 }
                 var notes = overloads.candidate_notes(node.id, node.loc);

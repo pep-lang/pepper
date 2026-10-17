@@ -503,6 +503,21 @@ rewrites_function_values() {
     expect_equal(check_programs(folder, programs, true), 0 as ulong);
 }
 
+# A file's own functions named like the runtime's (`print`, `to_string`)
+# join the runtime's sets, and may not repeat a runtime member (#922).
+[Test]
+joins_the_runtime_overload_sets() {
+    var folder = TempFolder("passes_runtime_overloads");
+    var programs = [
+        "# expect: accepted\nstruct Point {\n    var x: int;\n    construct(x: int) { this.x = x; }\n}\nprint(p: Point) { print($\"Point({p.x})\"); }\nto_string(p: Point): String { return \"point\"; }\nmain(): int {\n    print(Point(1));\n    print(\"text\");\n    var s = to_string(Point(2)) + to_string(3);\n    return s.size == 6 ? 0 : 1;\n}\n",
+        "# expect: main.pep:2:1: error: redefinition of 'print'\nprint(text: String) {}\nmain(): int { return 0; }\n",
+        "# expect: main.pep:2:1: error: redefinition of 'to_string'\nto_string(value: int): String { return \"\"; }\nmain(): int { return 0; }\n",
+        # Another return type hides the runtime's member in the file.
+        "# expect: accepted\nto_string(value: int): int { return value; }\nmain(): int { return to_string(0); }\n"
+    ];
+    expect_equal(check_programs(folder, programs, true), 0 as ulong);
+}
+
 # Deprecated methods the compiler calls for the source: a `for` loop's
 # `next()` and `current()`, a `with` block's `enter()`, and operator
 # overloads, reported at `for`, `with` and the operator.

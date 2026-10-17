@@ -1373,20 +1373,23 @@ struct _Linker {
         ulong i = 0;
         while (i < files.count) {
             var f = files[i];
-            if (!f.prelude and !f.prelude_part) {
-                var module = f.module_root.is_value() ? f.module_root.value().to_string() : f.name;
-                for (var d in named_decls(f.module)) {
-                    match (d) {
-                        Function(func) => {
-                            if (!func.external and !is_override(func, i)) {
-                                var name = own[i].try_get(func.name);
-                                if (name.is_value()) {
-                                    unions.functions[name.value()] = module;
-                                }
+            # The prelude's functions are one module, which a file's own or
+            # imported functions of a name join (`join_prelude`).
+            var module = f.module_root.is_value() ? f.module_root.value().to_string() : f.name;
+            if (f.prelude or f.prelude_part) {
+                module = _PRELUDE_HOME;
+            }
+            for (var d in named_decls(f.module)) {
+                match (d) {
+                    Function(func) => {
+                        if (!func.external and !is_override(func, i)) {
+                            var name = own[i].try_get(func.name);
+                            if (name.is_value()) {
+                                unions.functions[name.value()] = module;
                             }
                         }
-                        else => {}
                     }
+                    else => {}
                 }
             }
             i += 1;
@@ -1620,6 +1623,49 @@ struct _Linker {
             }
         }
         return b;
+    }
+
+    # File `i`'s functions of a name, its own or imported, join the
+    # prelude's functions of that name (`print`, `to_string`) as one set,
+    # the way two imports' sets merge. A name bound to anything but
+    # functions keeps hiding the prelude's.
+    join_prelude(i: ulong, b: _Bindings) {
+        if (files[i].prelude or files[i].prelude_part) {
+            return;
+        }
+        var names = Array<String>();
+        for (var (name, _) in own[i]) {
+            names.append(name);
+        }
+        for (var (name, _) in b.unqualified) {
+            names.append(name);
+        }
+        for (var (name, _) in b.module) {
+            names.append(name);
+        }
+        for (var name in names) {
+            var exported = prelude.try_get(name);
+            if (!exported.is_value()) {
+                continue;
+            }
+            # What the name denotes in the file, in `_Rewriter._unqualified`'s order.
+            var current = own[i].try_get(name);
+            var mate = b.module.try_get(name);
+            if (mate.is_value()) {
+                current = mate;
+            }
+            var bound = b.unqualified.try_get(name);
+            if (bound.is_value()) {
+                current = bound.value();
+            }
+            if (!current.is_value()) {
+                continue;
+            }
+            var union = unions.merge(current.value(), exported.value());
+            if (union.is_value() and union.value() != current.value()) {
+                b.unqualified[name] = union;
+            }
+        }
     }
 
     # File `i`'s exports: its `export` declarations (`direct`) plus its
@@ -2240,6 +2286,11 @@ struct _Linker {
                 resolve_reexports(i, direct[i], b, errors);
             }
             bindings.append(b);
+            i += 1;
+        }
+        i = 0;
+        while (i < n) {
+            join_prelude(i, bindings[i]);
             i += 1;
         }
         compute_members(bindings);

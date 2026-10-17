@@ -251,6 +251,12 @@ _name_unions(module: Module, state: PassState): bool {
     }
     for (var (union, groups) in unions) {
         var names = Array<String>();
+        # The prelude's members, which a member of any other module may not
+        # repeat. One with a prelude member's parameters but another return
+        # type hides it in its file, as it hides an imported member
+        # (`Overloads._set`).
+        var prelude = Array<ulong>();
+        var others = Array<Array<ulong>>();
         for (var parts in groups) {
             var members = Array<ulong>();
             for (var part in parts) {
@@ -281,10 +287,48 @@ _name_unions(module: Module, state: PassState): bool {
             for (var m in members) {
                 names.append(module.functions[m].name);
             }
+            if (members.count > 0 and module.extension_scopes.prelude.contains(module.functions[members[0]].loc.file)) {
+                prelude = members;
+            } else {
+                others.append(members);
+            }
+        }
+        for (var members in others) {
+            for (var m in members) {
+                var function = module.functions[m];
+                var repeated = _repeated_prelude_member(module.functions, function, prelude);
+                if (repeated.is_value()) {
+                    state.report(
+                        error_at(
+                            $"redefinition of '{demangle_name(function.name)}'",
+                            function.loc
+                        ).with_note(
+                            "previous definition is here",
+                            Optional<Location>.Value(location_of(module.functions[repeated.value()].loc))
+                        )
+                    );
+                    return false;
+                }
+            }
         }
         module.overload_sets[union] = names;
     }
     return true;
+}
+
+## The member of `prelude` that `function` repeats: the same parameters,
+## and the same return type or one `function` leaves to inference.
+_repeated_prelude_member(functions: FunctionDef[], function: FunctionDef, prelude: ulong[]): ulong? {
+    var key = _parameter_key(function);
+    for (var p in prelude) {
+        if (_parameter_key(functions[p]) != key) {
+            continue;
+        }
+        if (function.ty.is_auto() or _return_key(functions[p]) == _return_key(function)) {
+            return Optional<ulong>.Value(p);
+        }
+    }
+    return Optional<ulong>.Empty;
 }
 
 ## Only prelude files may export the same name, and the first definition
