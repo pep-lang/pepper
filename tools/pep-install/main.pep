@@ -32,7 +32,7 @@ import "setup";
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.9.3";
+    return "0.9.4";
 }
 
 main(args: String[]): int {
