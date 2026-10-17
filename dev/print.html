@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d0b3e50c.js";
+            window.path_to_searchindex_js = "searchindex-eb124899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-fc646ff9.js"></script>
@@ -16879,7 +16879,7 @@ receives them, program name first.</p>
 </thead>
 <tbody>
 <tr><td><code>flag(name, short_name, help, global)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
-<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required, global)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required, global, implicit_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
 <tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required, global)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 <tr><td><code>positional&lt;T&gt;(name, help, required, default_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
 <tr><td><code>positionals&lt;T&gt;(name, help, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
@@ -16890,7 +16890,9 @@ receives them, program name first.</p>
 out for a <code>String</code>: <code>option("output")</code> is <code>option&lt;String&gt;("output")</code>.</p>
 <ul>
 <li>An option’s <code>name</code> is its long name without <code>--</code>; <code>short_name</code> is one
-character without <code>-</code>, or empty for none. Pass the rest by
+character without <code>-</code>, or empty for none. One of the two may be empty:
+<code>option("", "o")</code> is an option spelled only <code>-o</code>, as a C compiler’s
+<code>-I</code>, <code>-D</code> and <code>-o</code> are. Pass the rest by
 <a href="#named-arguments">name</a>: <code>option("output", "o", "the executable to write", default_value = "a.out")</code>.</li>
 <li><code>value()</code> returns the value given, else the default; it panics when the
 argument was left out and has no default, so use <code>value_or</code> or check
@@ -16918,6 +16920,10 @@ then <code>-o a.out</code>. <code>-vvv</code> counts three <code>occurrences</co
 options, so <code>rm -- -file</code> removes a file named <code>-file</code>, and <code>-</code> alone is
 a positional argument (by custom, standard input).</li>
 <li>An option that takes one value keeps the last one given.</li>
+<li>An option declared with an <code>implicit_value</code> takes a value only when it
+is attached (<code>--emit-ast=json</code>, <code>-O3</code>); given alone, it has the implicit
+value, and the argument after it is not its value. The help shows it as
+<code>--emit-ast[=&lt;FORMAT&gt;]</code> or <code>-O[&lt;LEVEL&gt;]</code>.</li>
 </ul>
 <h2 id="typed-values"><a class="header" href="#typed-values">Typed values</a></h2>
 <p>A declaration with a type argument reads its values as that type, and a
@@ -16965,6 +16971,12 @@ Run 'greet --help' for more information.
 <li><code>unexpected argument 'x'</code> when there is no positional argument left for it</li>
 <li><code>unknown command 'x'</code> and <code>missing command: expected 'add' or 'update'</code></li>
 </ul>
+<p>A mistake <code>parse</code> cannot see, such as two options that cannot be used
+together, is reported the same way with <code>usage_error</code>, which returns 2:</p>
+<pre><code class="language-pepper">if (test.is_set and library.is_set) {
+    return parser.usage_error("'--test' cannot be used with '--lib'");
+}
+</code></pre>
 <p><code>try_parse</code> does the same parse and writes nothing. It returns a
 <code>Result&lt;String?&gt;</code>: an error holding the message, some text when <code>--help</code> or
 <code>--version</code> asked for it (print it and exit with 0), or none when the
@@ -20837,6 +20849,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody>
@@ -20844,9 +20857,12 @@ short, and <code>pepper help build</code> runs it.</p>
 </div>
 <p>An option that takes a value accepts it as the next argument or attached:
 <code>-I lib</code>, <code>-Ilib</code>, <code>--target aarch64-apple-darwin</code> and
-<code>--target=aarch64-apple-darwin</code> are all the same. Options may come before or
-after the entry file. An unknown option is an error, and the compiler exits
-with status 2 after a short usage message.</p>
+<code>--target=aarch64-apple-darwin</code> are all the same. <code>-O</code>, <code>--emit-ast</code> and
+<code>--emit-static</code> take a value only attached (<code>-O3</code>, <code>--emit-ast=json</code>), so
+the argument after them is never read as their value. Short options that
+take no value combine (<code>-gv</code> is <code>-g -v</code>). Options may come before or after
+the entry file, and every argument after <code>--</code> is a file. An unknown option is
+an error, and the compiler exits with status 2 after a short usage message.</p>
 <h2 id="inputs-and-imports"><a class="header" href="#inputs-and-imports">Inputs and imports</a></h2>
 <h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
 <pre><code class="language-bash">pepper build main.pep
@@ -21292,6 +21308,18 @@ skipped.</li>
 <p>Errors and warnings are printed like clang’s, colored when standard error is
 a terminal; set <code>NO_COLOR</code> to turn color off. See
 <a href="#compiler-errors">Compiler errors</a>.</p>
+<h2 id="internal-options"><a class="header" href="#internal-options">Internal options</a></h2>
+<p>A build starts copies of the compiler to work side by side, and gives them
+these options; they are listed so a failed child’s command line can be
+rerun by hand (the build prints it).</p>
+<ul>
+<li><code>--compile-part &lt;dir&gt; --part &lt;N&gt;=&lt;object&gt;...</code> compiles parts of the
+program a build split into <code>&lt;dir&gt;</code>: each <code>--part</code> names a part by its
+number and the object to write it to. Nothing else is read.</li>
+<li><code>--compilation-unit-worker &lt;dir&gt;</code>, after the build’s own arguments, checks
+the compilation units the build passes through <code>&lt;dir&gt;</code> and compiles their
+objects.</li>
+</ul>
 <h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
 <ul>
 <li><code>-h</code>, <code>--help</code> prints every option with a line of description.</li>
@@ -50240,12 +50268,14 @@ ArgumentList.</p>
 reads its value once <code>parse</code> has run. <code>parse</code> also writes the help
 (<code>--help</code>), the version (<code>--version</code>) and clang-style errors, all from
 the declarations.</p>
-<p>Options have a long name (<code>--output</code>) and an optional one-letter short
-name (<code>-o</code>). A value follows as <code>--output a.out</code>, <code>--output=a.out</code>,
+<p>Options have a long name (<code>--output</code>), a one-letter short name
+(<code>-o</code>), or both. A value follows as <code>--output a.out</code>, <code>--output=a.out</code>,
 <code>-o a.out</code> or <code>-oa.out</code>; short flags combine (<code>-vq</code> is <code>-v -q</code>), and
 <code>--</code> ends the options, so every argument after it is positional. A value
-is taken as it is, even when it starts with <code>-</code>. When an option that
-takes one value is given twice, the last value wins.</p>
+is taken as it is, even when it starts with <code>-</code>. An option declared
+with an <code>implicit_value</code> takes a value only when it is attached
+(<code>--emit-ast=json</code>, <code>-O3</code>), and the implicit one when it is not. When
+an option that takes one value is given twice, the last value wins.</p>
 <p>Subcommands (<code>git add</code>, <code>pep-package update</code>) are parsers of their own,
 made with <code>command</code>. Options before the command’s name belong to this
 parser, and everything after it to the command’s.</p>
@@ -50290,7 +50320,7 @@ were parsed.</p>
 <p>Declares an option that takes no value, such as <code>--verbose</code>.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>name</code> — the long name, without <code>--</code>, or empty for an option with only a short name (<code>-I</code>)</li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option does, for the help</li>
 <li><code>global</code> — whether the flag may also be given after the name of a command, at any depth (<code>pkg add -v x</code> as well as <code>pkg -v add x</code>)</li>
@@ -50304,20 +50334,21 @@ were parsed.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared, here, as a global option of a parser this one is a command of, or (for a global flag) in one of its commands</li>
 </ul>
 <h4 id="option"><a class="header" href="#option">option</a></h4>
-<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;String&gt;
+<pre><code class="language-pepper">option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false, implicit_value: String = "" ): Argument&lt;String&gt;
 </code></pre>
 <p>Declares an option that takes one String value, such as
 <code>--output a.out</code>. <code>option&lt;T&gt;</code> declares one whose value is a number,
 a path or an enum case.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>name</code> — the long name, without <code>--</code>, or empty for an option with only a short name (<code>-I</code>)</li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option sets, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>OUTPUT</code>)</li>
 <li><code>default_value</code> — the value when the option is not given; empty for none</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
 <li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+<li><code>implicit_value</code> — the value when the option is given without one; when not empty, a value must be attached (<code>--name=value</code>, <code>-xvalue</code>) and the next argument is never taken as one</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -50328,7 +50359,7 @@ a path or an enum case.</p>
 <li>if <code>name</code> or <code>short_name</code> is invalid or already declared</li>
 </ul>
 <h4 id="option-1"><a class="header" href="#option-1">option</a></h4>
-<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument&lt;T&gt;
+<pre><code class="language-pepper">option&lt;T&gt;( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false, implicit_value: String = "" ): Argument&lt;T&gt;
 </code></pre>
 <p>Declares an option that takes one value of type <code>T</code>, such as
 <code>--jobs 4</code> for <code>option&lt;int&gt;</code>. A value that does not read as a <code>T</code>
@@ -50342,13 +50373,14 @@ case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists the
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>name</code> — the long name, without <code>--</code>, or empty for an option with only a short name (<code>-I</code>)</li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option sets, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>JOBS</code>)</li>
 <li><code>default_value</code> — the value when the option is not given, written as on the command line (<code>"4"</code>); empty for none</li>
 <li><code>required</code> — whether leaving the option out is an error</li>
 <li><code>global</code> — whether the option may also be given after the name of a command, at any depth</li>
+<li><code>implicit_value</code> — the value when the option is given without one, written as on the command line (<code>-O</code> alone as <code>-O2</code>); when not empty, a value must be attached (<code>--name=value</code>, <code>-xvalue</code>) and the next argument is never taken as one</li>
 </ul>
 <p><strong>Returns</strong></p>
 <ul>
@@ -50356,7 +50388,7 @@ case (<code>DebugInfo</code> is <code>debug-info</code>), and the help lists the
 </ul>
 <p><strong>Panics</strong></p>
 <ul>
-<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, or if <code>default_value</code> does not read as a <code>T</code></li>
+<li>if <code>name</code> or <code>short_name</code> is invalid or already declared, or if <code>default_value</code> or <code>implicit_value</code> does not read as a <code>T</code></li>
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var jobs = parser.option&lt;int&gt;("jobs", "j", "how many at once", default_value = "4");
@@ -50369,7 +50401,7 @@ String value, such as <code>-I src -I lib</code>. <code>multiple&lt;T&gt;</code>
 whose values are numbers, paths or enum cases.</p>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>name</code> — the long name, without <code>--</code>, or empty for an option with only a short name (<code>-I</code>)</li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option adds, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
@@ -50396,7 +50428,7 @@ value of type <code>T</code>, such as <code>-I src -I lib</code> for <code>multi
 </ul>
 <p><strong>Parameters</strong></p>
 <ul>
-<li><code>name</code> — the long name, without <code>--</code></li>
+<li><code>name</code> — the long name, without <code>--</code>, or empty for an option with only a short name (<code>-I</code>)</li>
 <li><code>short_name</code> — the one-letter short name, without <code>-</code>, or empty for none</li>
 <li><code>help</code> — what the option adds, for the help</li>
 <li><code>value_name</code> — what the help calls the value; empty for the long name in capitals (<code>IMPORT_PATH</code>)</li>
@@ -50656,6 +50688,25 @@ Run 'pepper --help' for more information.
 <ul>
 <li>true when the arguments were parsed, false after an error</li>
 </ul>
+<h4 id="usage_error"><a class="header" href="#usage_error">usage_error</a></h4>
+<pre><code class="language-pepper">usage_error(message: String): int
+</code></pre>
+<p>Writes a usage error found after <code>parse</code>, such as two options that
+cannot be used together, as <code>parse</code> writes one: the error, this
+parser’s usage and a hint, to standard error.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>message</code> — what is wrong, clang-style (<code>'--test' cannot be used with '--lib'</code>)</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>2, the status a program exits with after a usage error</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">if (test.is_set and library.is_set) {
+    return parser.usage_error("'--test' cannot be used with '--lib'");
+}
+</code></pre>
 <h2 id="closest"><a class="header" href="#closest">closest</a></h2>
 <pre><code class="language-pepper">closest(name: String, candidates: Array&lt;String&gt;): String?
 </code></pre>

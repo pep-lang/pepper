@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
+            window.path_to_searchindex_js = "../searchindex-eb124899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -234,6 +234,7 @@ short, and <code>pepper help build</code> runs it.</p>
 <tr><td><code>--no-verify-cache</code></td><td>Do not check cache hits</td><td></td></tr>
 <tr><td><code>-T &lt;channel&gt;</code>, <code>--Tall</code></td><td>Print timings and cache decisions</td><td>off</td></tr>
 <tr><td><code>-v</code>, <code>--verbose</code></td><td>Accepted; prints nothing more yet</td><td>off</td></tr>
+<tr><td><code>--compile-part &lt;dir&gt;</code>, <code>--part &lt;N&gt;=&lt;object&gt;</code>, <code>--compilation-unit-worker &lt;dir&gt;</code></td><td>Internal: what a build runs in the children it starts</td><td></td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td>Print the options</td><td></td></tr>
 <tr><td><code>-V</code>, <code>--version</code></td><td>Print the version</td><td></td></tr>
 </tbody>
@@ -241,9 +242,12 @@ short, and <code>pepper help build</code> runs it.</p>
 </div>
 <p>An option that takes a value accepts it as the next argument or attached:
 <code>-I lib</code>, <code>-Ilib</code>, <code>--target aarch64-apple-darwin</code> and
-<code>--target=aarch64-apple-darwin</code> are all the same. Options may come before or
-after the entry file. An unknown option is an error, and the compiler exits
-with status 2 after a short usage message.</p>
+<code>--target=aarch64-apple-darwin</code> are all the same. <code>-O</code>, <code>--emit-ast</code> and
+<code>--emit-static</code> take a value only attached (<code>-O3</code>, <code>--emit-ast=json</code>), so
+the argument after them is never read as their value. Short options that
+take no value combine (<code>-gv</code> is <code>-g -v</code>). Options may come before or after
+the entry file, and every argument after <code>--</code> is a file. An unknown option is
+an error, and the compiler exits with status 2 after a short usage message.</p>
 <h2 id="inputs-and-imports"><a class="header" href="#inputs-and-imports">Inputs and imports</a></h2>
 <h3 id="the-entry-file"><a class="header" href="#the-entry-file">The entry file</a></h3>
 <pre><code class="language-bash">pepper build main.pep
@@ -689,6 +693,18 @@ skipped.</li>
 <p>Errors and warnings are printed like clang’s, colored when standard error is
 a terminal; set <code>NO_COLOR</code> to turn color off. See
 <a href="../language/compiler-errors.html">Compiler errors</a>.</p>
+<h2 id="internal-options"><a class="header" href="#internal-options">Internal options</a></h2>
+<p>A build starts copies of the compiler to work side by side, and gives them
+these options; they are listed so a failed child’s command line can be
+rerun by hand (the build prints it).</p>
+<ul>
+<li><code>--compile-part &lt;dir&gt; --part &lt;N&gt;=&lt;object&gt;...</code> compiles parts of the
+program a build split into <code>&lt;dir&gt;</code>: each <code>--part</code> names a part by its
+number and the object to write it to. Nothing else is read.</li>
+<li><code>--compilation-unit-worker &lt;dir&gt;</code>, after the build’s own arguments, checks
+the compilation units the build passes through <code>&lt;dir&gt;</code> and compiles their
+objects.</li>
+</ul>
 <h2 id="help-and-version"><a class="header" href="#help-and-version">Help and version</a></h2>
 <ul>
 <li><code>-h</code>, <code>--help</code> prints every option with a line of description.</li>

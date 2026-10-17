@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d0b3e50c.js";
+            window.path_to_searchindex_js = "../searchindex-eb124899.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -240,7 +240,7 @@ receives them, program name first.</p>
 </thead>
 <tbody>
 <tr><td><code>flag(name, short_name, help, global)</code></td><td><code>Flag</code></td><td><code>is_set</code> and <code>occurrences</code> (properties)</td></tr>
-<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required, global)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
+<tr><td><code>option&lt;T&gt;(name, short_name, help, value_name, default_value, required, global, implicit_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
 <tr><td><code>multiple&lt;T&gt;(name, short_name, help, value_name, required, global)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
 <tr><td><code>positional&lt;T&gt;(name, help, required, default_value)</code></td><td><code>Argument&lt;T&gt;</code></td><td><code>value()</code>, <code>value_or(fallback)</code>, <code>is_set</code></td></tr>
 <tr><td><code>positionals&lt;T&gt;(name, help, required)</code></td><td><code>ArgumentList&lt;T&gt;</code></td><td><code>values()</code>, <code>is_set</code></td></tr>
@@ -251,7 +251,9 @@ receives them, program name first.</p>
 out for a <code>String</code>: <code>option("output")</code> is <code>option&lt;String&gt;("output")</code>.</p>
 <ul>
 <li>An option’s <code>name</code> is its long name without <code>--</code>; <code>short_name</code> is one
-character without <code>-</code>, or empty for none. Pass the rest by
+character without <code>-</code>, or empty for none. One of the two may be empty:
+<code>option("", "o")</code> is an option spelled only <code>-o</code>, as a C compiler’s
+<code>-I</code>, <code>-D</code> and <code>-o</code> are. Pass the rest by
 <a href="functions.html#named-arguments">name</a>: <code>option("output", "o", "the executable to write", default_value = "a.out")</code>.</li>
 <li><code>value()</code> returns the value given, else the default; it panics when the
 argument was left out and has no default, so use <code>value_or</code> or check
@@ -279,6 +281,10 @@ then <code>-o a.out</code>. <code>-vvv</code> counts three <code>occurrences</co
 options, so <code>rm -- -file</code> removes a file named <code>-file</code>, and <code>-</code> alone is
 a positional argument (by custom, standard input).</li>
 <li>An option that takes one value keeps the last one given.</li>
+<li>An option declared with an <code>implicit_value</code> takes a value only when it
+is attached (<code>--emit-ast=json</code>, <code>-O3</code>); given alone, it has the implicit
+value, and the argument after it is not its value. The help shows it as
+<code>--emit-ast[=&lt;FORMAT&gt;]</code> or <code>-O[&lt;LEVEL&gt;]</code>.</li>
 </ul>
 <h2 id="typed-values"><a class="header" href="#typed-values">Typed values</a></h2>
 <p>A declaration with a type argument reads its values as that type, and a
@@ -326,6 +332,12 @@ Run 'greet --help' for more information.
 <li><code>unexpected argument 'x'</code> when there is no positional argument left for it</li>
 <li><code>unknown command 'x'</code> and <code>missing command: expected 'add' or 'update'</code></li>
 </ul>
+<p>A mistake <code>parse</code> cannot see, such as two options that cannot be used
+together, is reported the same way with <code>usage_error</code>, which returns 2:</p>
+<pre><code class="language-pepper">if (test.is_set and library.is_set) {
+    return parser.usage_error("'--test' cannot be used with '--lib'");
+}
+</code></pre>
 <p><code>try_parse</code> does the same parse and writes nothing. It returns a
 <code>Result&lt;String?&gt;</code>: an error holding the message, some text when <code>--help</code> or
 <code>--version</code> asked for it (print it and exit with 0), or none when the
