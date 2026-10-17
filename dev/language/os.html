@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
+            window.path_to_searchindex_js = "../searchindex-6958e744.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-58d14832.js"></script>
@@ -182,7 +182,7 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="the-operating-system"><a class="header" href="#the-operating-system">The operating system</a></h1>
-<p>The <code>os</code> module reads what the operating system provides beyond the
+<p>The <code>os</code> module reports what the operating system provides beyond the
 running process: environment variables, clocks, and facts about the
 machine and the user. Bring it in with <code>import os</code>. The full API is in the
 <a href="../reference/os-module.html">reference</a>.</p>
@@ -215,11 +215,39 @@ main(): int {
 as UTF-16, so text outside the ANSI code page survives.</li>
 <li>On POSIX a value is whatever bytes the parent passed; one that is not
 valid UTF-8 is returned as it is.</li>
-<li><code>os</code> only reads the environment. Changing the running process’s own
-environment is not thread-safe on POSIX (<code>setenv</code> races with every other
-thread’s <code>getenv</code>), so there is no <code>set_environment</code>. Give a child a
-different environment with <code>process.Command</code>’s <code>environment</code>,
-<code>remove_environment</code> and <code>clear_environment</code> instead (see
+</ul>
+<h2 id="changing-the-environment"><a class="header" href="#changing-the-environment">Changing the environment</a></h2>
+<p><code>os.set_environment(name, value)</code> sets a variable for the running process,
+and <code>os.remove_environment(name)</code> removes one. Later reads see the change,
+and so do the children the process starts afterwards.</p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    var name = "PEPPER_EXAMPLE_GREETING";
+    os.set_environment(name, "hello");
+    assert(os.environment(name).value() == "hello", "set");
+
+    os.set_environment(name, "");
+    assert(os.environment(name).value() == "", "set to nothing");
+
+    os.remove_environment(name);
+    assert(os.environment(name).is_empty(), "removed");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Every read and change the runtime makes goes through one lock, so Pepper
+code never races with itself over the environment, from any thread.</li>
+<li>C code that calls <code>getenv</code> itself is outside that lock. On POSIX,
+<code>setenv</code> races with such a call on another thread (Rust 2024 marks its
+<code>set_var</code> <code>unsafe</code> for this reason), so set variables before starting
+threads that run C code reading them.</li>
+<li>A name that is empty or contains <code>=</code> or a NUL byte, or a value that
+contains a NUL byte, panics.</li>
+<li>On Windows names ignore case, and the C runtime’s own <code>getenv</code> copy does
+not see the change. On WASI the change stays inside the program.</li>
+<li>To give only a child a different environment, use <code>process.Command</code>’s
+<code>environment</code>, <code>remove_environment</code> and <code>clear_environment</code> (see
 <a href="processes.html#environment-and-working-directory">Processes</a>).</li>
 </ul>
 <h2 id="time"><a class="header" href="#time">Time</a></h2>

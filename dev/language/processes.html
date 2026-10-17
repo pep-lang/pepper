@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
+            window.path_to_searchindex_js = "../searchindex-6958e744.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-58d14832.js"></script>
@@ -304,8 +304,9 @@ rather than block its worker, so other tasks keep running.</p>
 variable for the child, <code>remove_environment(name)</code> leaves one out, and
 <code>clear_environment()</code> starts from an empty environment. On Windows, names
 ignore case. <code>working_directory(path)</code> starts the child in another
-directory. The running process reads its own environment with
-<code>os.environment(name)</code> (see <a href="os.html">The operating system</a>).</p>
+directory. The running process reads and changes its own environment with
+<code>os.environment(name)</code> and <code>os.set_environment(name, value)</code> (see
+<a href="os.html">The operating system</a>).</p>
 <pre><code class="language-pepper">import io;
 import os;
 import process;

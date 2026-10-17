@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-7c0d37fc.js";
+            window.path_to_searchindex_js = "../searchindex-6958e744.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-58d14832.js"></script>
@@ -183,10 +183,13 @@
                     <main>
                         <!-- Generated from runtime/os/environment.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="environment"><a class="header" href="#environment">Environment</a></h1>
-<p>The running process’s environment variables.</p>
-<p><code>os</code> only reads them. Changing the process’s own environment is not
-thread-safe on POSIX (<code>setenv</code> races with every <code>getenv</code>), so a child
-process gets a different environment through <code>process.Command</code>’s
+<p>The running process’s environment variables: reading them, and setting
+and removing them for the process itself.</p>
+<p>Every read and change the runtime makes goes through one lock, so Pepper
+code never races with itself over the environment, on any thread. C code
+that calls <code>getenv</code> itself is outside that lock: on POSIX <code>setenv</code> races
+with such a call on another thread, as in every language. To give only a
+child process a different environment, use <code>process.Command</code>’s
 <code>environment</code>, <code>remove_environment</code> and <code>clear_environment</code> instead.</p>
 <p>Source: <code>runtime/os/environment.pep</code></p>
 <h2 id="environment-1"><a class="header" href="#environment-1">environment</a></h2>
@@ -214,6 +217,57 @@ main(): int {
     if (home) {
         print(home.value());
     }
+    return 0;
+}
+</code></pre>
+<h2 id="set_environment"><a class="header" href="#set_environment">set_environment</a></h2>
+<pre><code class="language-pepper">set_environment(name: String, value: String)
+</code></pre>
+<p>Sets the environment variable <code>name</code> to <code>value</code> for the running process,
+replacing any value it had.</p>
+<p>The process’s own later reads see the change, and so do the children it
+starts afterwards. Safe from any thread for Pepper code; C code that calls
+<code>getenv</code> on another thread at the same time can race with it on POSIX
+(see this page’s introduction). On Windows names are not case-sensitive.
+WASI keeps the change inside the program.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable’s name</li>
+<li><code>value</code> — its new value; may be empty</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or contains <code>=</code> or a NUL byte, or <code>value</code> contains a NUL byte</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    os.set_environment("GREETING", "hello");
+    print(os.environment("GREETING").value());   # hello
+    return 0;
+}
+</code></pre>
+<h2 id="remove_environment"><a class="header" href="#remove_environment">remove_environment</a></h2>
+<pre><code class="language-pepper">remove_environment(name: String)
+</code></pre>
+<p>Removes the environment variable <code>name</code> from the running process.</p>
+<p>Removing a variable that is not set does nothing. The same thread-safety
+note as <code>set_environment</code>’s applies.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>name</code> — the variable’s name</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>name</code> is empty or contains <code>=</code> or a NUL byte</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import os;
+
+main(): int {
+    os.remove_environment("GREETING");
+    print(os.environment("GREETING").is_empty());   # true
     return 0;
 }
 </code></pre>
