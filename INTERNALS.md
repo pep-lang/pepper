@@ -125,8 +125,9 @@ instances, so its compilation units are checked whole.
 
 ### 2.1 CLI options (`main.pep`)
 
-`main.pep` reads the command line by hand (`pep-build --help` prints
-`HELP`); `docs/src/tools/pep-build.md` documents every option, and
+`main.pep` declares the command line with the runtime's `cli` module,
+which writes `pep-build --help` and the usage errors (exit status 2) from
+the declarations; `docs/src/tools/pep-build.md` documents every option, and
 `pep-doc check` checks it against `pep-build --help`, the trace channels
 (`TRACE_CHANNELS`) and the environment variables the compiler reads. The
 entry file is the first file named (the rest are ignored, except under
@@ -160,8 +161,11 @@ Besides the build options (`-I`, `--import`, `-l`, `-L`, `-D`, `-o`,
 - `--emit-ast[=json]`, `--emit-linked`, `--emit-checked`, `--emit-model`
   (with `--emit-model-step N`) and `--emit-llvm` stop after a stage and print
   its result, to diff a program by hand and for the compiler's tests.
-- `--compile-part <dir> <part> <object>...` is internal: the children
-  `driver/parts.pep` starts to compile parts side by side.
+- `--compile-part <dir> --part <N>=<object>...` is internal: the children
+  `driver/parts.pep` starts to compile parts side by side
+  (`driver.compile_part`), run before anything else is read.
+  `--compilation-unit-worker <dir>` is the other internal option, for the
+  children that check and compile compilation units.
 
 The output defaults to `<cwd>/<entry stem>` with no extension.
 
@@ -1603,7 +1607,7 @@ definitions, `codegen.file_sizes`) is split by file into parts of about
 that size, which depends on the unit alone, so its objects are the same in
 every program. `compile_parts` (`parts.pep`) compiles the parts the cache
 does not have: one in this process, more in `pepc --compile-part <dir>
-<part> <object>...` children, one per logical CPU at most, given parts of
+--part <N>=<object>...` children, one per logical CPU at most, given parts of
 about the same size. Each reads the bitcode `compile_parts` wrote to
 `<build>/<name>.<pid>` (a folder per build, so builds at once do not meet)
 once, keeps all its parts (`codegen.keep_parts`), then compiles each but
@@ -3282,7 +3286,7 @@ that should be cut off.
   self-build with it set reports none.
 - `PEPC_COMPILATION_UNIT_JOBS`: how many compilation units to check at once; 1
   checks them in the build's process. `PEPC_LAYER_JOBS`, its old name, still
-  works; so does `--layer-worker` for `--compilation-unit-worker`.
+  works; so does `--layer-worker` for `pep-lsp --compilation-unit-worker`.
 - `PEPC_NO_COMPILATION_UNITS`: checks the whole program at once, to compare with a
   build in compilation units.
 - `PEPC_COMPILER_IDENTITY`: names the compiler in every key instead of its

@@ -21,12 +21,14 @@ reads its value once `parse` has run. `parse` also writes the help
 (`--help`), the version (`--version`) and clang-style errors, all from
 the declarations.
 
-Options have a long name (`--output`) and an optional one-letter short
-name (`-o`). A value follows as `--output a.out`, `--output=a.out`,
+Options have a long name (`--output`), a one-letter short name
+(`-o`), or both. A value follows as `--output a.out`, `--output=a.out`,
 `-o a.out` or `-oa.out`; short flags combine (`-vq` is `-v -q`), and
 `--` ends the options, so every argument after it is positional. A value
-is taken as it is, even when it starts with `-`. When an option that
-takes one value is given twice, the last value wins.
+is taken as it is, even when it starts with `-`. An option declared
+with an `implicit_value` takes a value only when it is attached
+(`--emit-ast=json`, `-O3`), and the implicit one when it is not. When
+an option that takes one value is given twice, the last value wins.
 
 Subcommands (`git add`, `pep-package update`) are parsers of their own,
 made with `command`. Options before the command's name belong to this
@@ -88,7 +90,7 @@ flag(name: String, short_name: String = "", help: String = "", global: bool = fa
 Declares an option that takes no value, such as `--verbose`.
 
 **Parameters**
-- `name` — the long name, without `--`
+- `name` — the long name, without `--`, or empty for an option with only a short name (`-I`)
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option does, for the help
 - `global` — whether the flag may also be given after the name of a command, at any depth (`pkg add -v x` as well as `pkg -v add x`)
@@ -102,7 +104,7 @@ Declares an option that takes no value, such as `--verbose`.
 #### option
 
 ```pepper
-option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument<String>
+option( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false, implicit_value: String = "" ): Argument<String>
 ```
 
 Declares an option that takes one String value, such as
@@ -110,13 +112,14 @@ Declares an option that takes one String value, such as
 a path or an enum case.
 
 **Parameters**
-- `name` — the long name, without `--`
+- `name` — the long name, without `--`, or empty for an option with only a short name (`-I`)
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option sets, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`OUTPUT`)
 - `default_value` — the value when the option is not given; empty for none
 - `required` — whether leaving the option out is an error
 - `global` — whether the option may also be given after the name of a command, at any depth
+- `implicit_value` — the value when the option is given without one; when not empty, a value must be attached (`--name=value`, `-xvalue`) and the next argument is never taken as one
 
 **Returns**
 - the handle that reads the value
@@ -127,7 +130,7 @@ a path or an enum case.
 #### option
 
 ```pepper
-option<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false ): Argument<T>
+option<T>( name: String, short_name: String = "", help: String = "", value_name: String = "", default_value: String = "", required: bool = false, global: bool = false, implicit_value: String = "" ): Argument<T>
 ```
 
 Declares an option that takes one value of type `T`, such as
@@ -143,19 +146,20 @@ case (`DebugInfo` is `debug-info`), and the help lists them.
 - `T` — the type of the value
 
 **Parameters**
-- `name` — the long name, without `--`
+- `name` — the long name, without `--`, or empty for an option with only a short name (`-I`)
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option sets, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`JOBS`)
 - `default_value` — the value when the option is not given, written as on the command line (`"4"`); empty for none
 - `required` — whether leaving the option out is an error
 - `global` — whether the option may also be given after the name of a command, at any depth
+- `implicit_value` — the value when the option is given without one, written as on the command line (`-O` alone as `-O2`); when not empty, a value must be attached (`--name=value`, `-xvalue`) and the next argument is never taken as one
 
 **Returns**
 - the handle that reads the value
 
 **Panics**
-- if `name` or `short_name` is invalid or already declared, or if `default_value` does not read as a `T`
+- if `name` or `short_name` is invalid or already declared, or if `default_value` or `implicit_value` does not read as a `T`
 
 **Example**
 ```pepper
@@ -173,7 +177,7 @@ String value, such as `-I src -I lib`. `multiple<T>` declares one
 whose values are numbers, paths or enum cases.
 
 **Parameters**
-- `name` — the long name, without `--`
+- `name` — the long name, without `--`, or empty for an option with only a short name (`-I`)
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option adds, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`IMPORT_PATH`)
@@ -200,7 +204,7 @@ value of type `T`, such as `-I src -I lib` for `multiple<io.Path>`.
 - `T` — the type of each value
 
 **Parameters**
-- `name` — the long name, without `--`
+- `name` — the long name, without `--`, or empty for an option with only a short name (`-I`)
 - `short_name` — the one-letter short name, without `-`, or empty for none
 - `help` — what the option adds, for the help
 - `value_name` — what the help calls the value; empty for the long name in capitals (`IMPORT_PATH`)
@@ -486,6 +490,29 @@ and returns false; exit with status 2, as the example does.
 
 **Returns**
 - true when the arguments were parsed, false after an error
+
+#### usage_error
+
+```pepper
+usage_error(message: String): int
+```
+
+Writes a usage error found after `parse`, such as two options that
+cannot be used together, as `parse` writes one: the error, this
+parser's usage and a hint, to standard error.
+
+**Parameters**
+- `message` — what is wrong, clang-style (`'--test' cannot be used with '--lib'`)
+
+**Returns**
+- 2, the status a program exits with after a usage error
+
+**Example**
+```pepper
+if (test.is_set and library.is_set) {
+    return parser.usage_error("'--test' cannot be used with '--lib'");
+}
+```
 
 ## closest
 

@@ -38,7 +38,7 @@ receives them, program name first.
 | Declaration | Handle | Reads |
 |-------------|--------|-------|
 | `flag(name, short_name, help, global)` | `Flag` | `is_set` and `occurrences` (properties) |
-| `option<T>(name, short_name, help, value_name, default_value, required, global)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
+| `option<T>(name, short_name, help, value_name, default_value, required, global, implicit_value)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
 | `multiple<T>(name, short_name, help, value_name, required, global)` | `ArgumentList<T>` | `values()`, `is_set` |
 | `positional<T>(name, help, required, default_value)` | `Argument<T>` | `value()`, `value_or(fallback)`, `is_set` |
 | `positionals<T>(name, help, required)` | `ArgumentList<T>` | `values()`, `is_set` |
@@ -47,7 +47,9 @@ receives them, program name first.
 out for a `String`: `option("output")` is `option<String>("output")`.
 
 - An option's `name` is its long name without `--`; `short_name` is one
-  character without `-`, or empty for none. Pass the rest by
+  character without `-`, or empty for none. One of the two may be empty:
+  `option("", "o")` is an option spelled only `-o`, as a C compiler's
+  `-I`, `-D` and `-o` are. Pass the rest by
   [name](functions.md#named-arguments): `option("output", "o",
   "the executable to write", default_value = "a.out")`.
 - `value()` returns the value given, else the default; it panics when the
@@ -76,6 +78,10 @@ out for a `String`: `option("output")` is `option<String>("output")`.
   options, so `rm -- -file` removes a file named `-file`, and `-` alone is
   a positional argument (by custom, standard input).
 - An option that takes one value keeps the last one given.
+- An option declared with an `implicit_value` takes a value only when it
+  is attached (`--emit-ast=json`, `-O3`); given alone, it has the implicit
+  value, and the argument after it is not its value. The help shows it as
+  `--emit-ast[=<FORMAT>]` or `-O[<LEVEL>]`.
 
 ## Typed values
 
@@ -123,6 +129,15 @@ The messages:
 - `missing required option '--target'`, `missing required argument '<source>'`
 - `unexpected argument 'x'` when there is no positional argument left for it
 - `unknown command 'x'` and `missing command: expected 'add' or 'update'`
+
+A mistake `parse` cannot see, such as two options that cannot be used
+together, is reported the same way with `usage_error`, which returns 2:
+
+```pepper
+if (test.is_set and library.is_set) {
+    return parser.usage_error("'--test' cannot be used with '--lib'");
+}
+```
 
 `try_parse` does the same parse and writes nothing. It returns a
 `Result<String?>`: an error holding the message, some text when `--help` or

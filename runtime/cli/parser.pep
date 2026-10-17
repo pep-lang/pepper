@@ -25,6 +25,9 @@ struct _CliArgument {
     # Whether the option also applies after a command's name.
     var global: bool = false;
     var default_value: String = "";
+    # The value of an option given without one, when its value must be
+    # attached (`--emit-ast=json`, `-O2`); empty when the value may follow.
+    var implicit_value: String = "";
     var values: Array<String> = __null;
     var occurrences: int = 0;
     # For a typed value (`option<int>`): whether a text reads as one, what
@@ -51,12 +54,25 @@ struct _CliArgument {
         return check === __null or check(text);
     }
 
-    # How the help and errors name it: `--output`, or `<source>`.
+    # How the help and errors name it: `--output`, `-o` for an option with
+    # only a short name, or `<source>`.
     display(): String {
         if (positional) {
             return "<" + name + ">";
         }
+        if (name.is_empty) {
+            return "-" + short_name;
+        }
         return "--" + name;
+    }
+
+    # How the help shows its value: ` <OUT>`, or `[=<FORMAT>]` (`[<LEVEL>]`
+    # after a short name) when it must be attached.
+    value_label(): String {
+        if (implicit_value.is_empty) {
+            return " <" + value_name + ">";
+        }
+        return name.is_empty ? "[<" + value_name + ">]" : "[=<" + value_name + ">]";
     }
 
     # The usage line's spelling of it.
@@ -65,7 +81,7 @@ struct _CliArgument {
             var shown = required ? "<" + name + ">" : "[" + name + "]";
             return kind == LIST_KIND ? shown + "..." : shown;
         }
-        return "--" + name + " <" + value_name + ">";
+        return display() + value_label();
     }
 
     # The left column of its line in the help.
@@ -74,8 +90,11 @@ struct _CliArgument {
             return kind == LIST_KIND ? "<" + name + ">..." : "<" + name + ">";
         }
         var text = short_name.is_empty ? "    --" + name : "-" + short_name + ", --" + name;
+        if (name.is_empty) {
+            text = "-" + short_name;
+        }
         if (kind != FLAG_KIND) {
-            text = text + " <" + value_name + ">";
+            text = text + value_label();
         }
         return text;
     }
@@ -115,12 +134,14 @@ _cli_join_words(a: String, b: String): String {
 ## (`--help`), the version (`--version`) and clang-style errors, all from
 ## the declarations.
 ##
-## Options have a long name (`--output`) and an optional one-letter short
-## name (`-o`). A value follows as `--output a.out`, `--output=a.out`,
+## Options have a long name (`--output`), a one-letter short name
+## (`-o`), or both. A value follows as `--output a.out`, `--output=a.out`,
 ## `-o a.out` or `-oa.out`; short flags combine (`-vq` is `-v -q`), and
 ## `--` ends the options, so every argument after it is positional. A value
-## is taken as it is, even when it starts with `-`. When an option that
-## takes one value is given twice, the last value wins.
+## is taken as it is, even when it starts with `-`. An option declared
+## with an `implicit_value` takes a value only when it is attached
+## (`--emit-ast=json`, `-O3`), and the implicit one when it is not. When
+## an option that takes one value is given twice, the last value wins.
 ##
 ## Subcommands (`git add`, `pep-package update`) are parsers of their own,
 ## made with `command`. Options before the command's name belong to this
@@ -177,7 +198,8 @@ export struct Parser {
 
     ## Declares an option that takes no value, such as `--verbose`.
     ##
-    ## @param name the long name, without `--`
+    ## @param name the long name, without `--`, or empty for an option with
+    ##   only a short name (`-I`)
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option does, for the help
     ## @param global whether the flag may also be given after the name of a
@@ -198,7 +220,8 @@ export struct Parser {
     ## `--output a.out`. `option<T>` declares one whose value is a number,
     ## a path or an enum case.
     ##
-    ## @param name the long name, without `--`
+    ## @param name the long name, without `--`, or empty for an option with
+    ##   only a short name (`-I`)
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option sets, for the help
     ## @param value_name what the help calls the value; empty for the long
@@ -207,6 +230,9 @@ export struct Parser {
     ## @param required whether leaving the option out is an error
     ## @param global whether the option may also be given after the name of
     ##   a command, at any depth
+    ## @param implicit_value the value when the option is given without one;
+    ##   when not empty, a value must be attached (`--name=value`, `-xvalue`)
+    ##   and the next argument is never taken as one
     ## @returns the handle that reads the value
     ## @panics if `name` or `short_name` is invalid or already declared
     option(
@@ -216,9 +242,10 @@ export struct Parser {
         value_name: String = "",
         default_value: String = "",
         required: bool = false,
-        global: bool = false
+        global: bool = false,
+        implicit_value: String = ""
     ): Argument<String> {
-        return option<String>(name, short_name, help, value_name, default_value, required, global);
+        return option<String>(name, short_name, help, value_name, default_value, required, global, implicit_value);
     }
 
     ## Declares an option that takes one value of type `T`, such as
@@ -231,7 +258,8 @@ export struct Parser {
     ## case (`DebugInfo` is `debug-info`), and the help lists them.
     ##
     ## @typeParam T the type of the value
-    ## @param name the long name, without `--`
+    ## @param name the long name, without `--`, or empty for an option with
+    ##   only a short name (`-I`)
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option sets, for the help
     ## @param value_name what the help calls the value; empty for the long
@@ -241,9 +269,13 @@ export struct Parser {
     ## @param required whether leaving the option out is an error
     ## @param global whether the option may also be given after the name of
     ##   a command, at any depth
+    ## @param implicit_value the value when the option is given without one,
+    ##   written as on the command line (`-O` alone as `-O2`); when not
+    ##   empty, a value must be attached (`--name=value`, `-xvalue`) and the
+    ##   next argument is never taken as one
     ## @returns the handle that reads the value
     ## @panics if `name` or `short_name` is invalid or already declared, or
-    ##   if `default_value` does not read as a `T`
+    ##   if `default_value` or `implicit_value` does not read as a `T`
     ## @example
     ##     var jobs = parser.option<int>("jobs", "j", "how many at once", default_value = "4");
     option<T>(
@@ -253,11 +285,13 @@ export struct Parser {
         value_name: String = "",
         default_value: String = "",
         required: bool = false,
-        global: bool = false
+        global: bool = false,
+        implicit_value: String = ""
     ): Argument<T> {
         var declared = _declare_option(name, short_name, help, SINGLE_KIND);
-        declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
+        declared.value_name = _value_name(name, short_name, value_name);
         declared.default_value = default_value;
+        declared.implicit_value = implicit_value;
         declared.required = required;
         if (global) {
             _make_global(declared);
@@ -270,7 +304,8 @@ export struct Parser {
     ## String value, such as `-I src -I lib`. `multiple<T>` declares one
     ## whose values are numbers, paths or enum cases.
     ##
-    ## @param name the long name, without `--`
+    ## @param name the long name, without `--`, or empty for an option with
+    ##   only a short name (`-I`)
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option adds, for the help
     ## @param value_name what the help calls the value; empty for the long
@@ -296,7 +331,8 @@ export struct Parser {
     ## `T` is one of the types `option<T>` takes.
     ##
     ## @typeParam T the type of each value
-    ## @param name the long name, without `--`
+    ## @param name the long name, without `--`, or empty for an option with
+    ##   only a short name (`-I`)
     ## @param short_name the one-letter short name, without `-`, or empty for none
     ## @param help what the option adds, for the help
     ## @param value_name what the help calls the value; empty for the long
@@ -315,7 +351,7 @@ export struct Parser {
         global: bool = false
     ): ArgumentList<T> {
         var declared = _declare_option(name, short_name, help, LIST_KIND);
-        declared.value_name = value_name.is_empty ? name.upper().replace("-", "_") : value_name;
+        declared.value_name = _value_name(name, short_name, value_name);
         declared.required = required;
         if (global) {
             _make_global(declared);
@@ -741,17 +777,7 @@ export struct Parser {
     parse(args: String[]): bool {
         var result = try_parse(args);
         if (result.is_err()) {
-            File.stderr().write_all(
-                _name
-                    + ": error: "
-                    + result.error().message
-                    + "\n"
-                    + _failed_usage
-                    + "\n"
-                    + "Run '"
-                    + _failed_path
-                    + " --help' for more information.\n"
-            );
+            _write_error(result.error().message, _failed_usage, _failed_path);
             return false;
         }
         var output = result.value();
@@ -760,6 +786,30 @@ export struct Parser {
             process.exit(0);
         }
         return true;
+    }
+
+    ## Writes a usage error found after `parse`, such as two options that
+    ## cannot be used together, as `parse` writes one: the error, this
+    ## parser's usage and a hint, to standard error.
+    ##
+    ## @param message what is wrong, clang-style (`'--test' cannot be used
+    ##   with '--lib'`)
+    ## @returns 2, the status a program exits with after a usage error
+    ## @example
+    ##     if (test.is_set and library.is_set) {
+    ##         return parser.usage_error("'--test' cannot be used with '--lib'");
+    ##     }
+    usage_error(message: String): int {
+        _write_error(message, usage(), _path);
+        return 2;
+    }
+
+    # Writes the error `message`, the usage of the parser it came from and
+    # the hint to run its `--help`.
+    _write_error(message: String, usage: String, path: String) {
+        File.stderr().write_all(
+            _name + ": error: " + message + "\n" + usage + "\n" + "Run '" + path + " --help' for more information.\n"
+        );
     }
 
     # Stores what the last parse found in the options structs given to
@@ -778,14 +828,15 @@ export struct Parser {
     # Declares an option after checking its names.
     _declare_option(name: String, short_name: String, help: String, kind: int): _CliArgument {
         assert(
-            !name.is_empty and !name.starts_with("-") and !name.contains("="), "cli: invalid option name '" + name + "'"
+            (!name.is_empty or !short_name.is_empty) and !name.starts_with("-") and !name.contains("="),
+            "cli: invalid option name '" + name + "'"
         );
         assert(name != "help" and (name != "version" or _version.is_empty), "cli: option '--" + name + "' is built in");
         assert(
             short_name.is_empty or (short_name.size == 1 and short_name != "-" and short_name != "="),
             "cli: invalid short name '" + short_name + "' for '--" + name + "': it must be one character"
         );
-        assert(_find_option(name) === __null, "cli: option '--" + name + "' declared twice");
+        assert(name.is_empty or _find_option(name) === __null, "cli: option '--" + name + "' declared twice");
         assert(
             short_name.is_empty or _find_short(short_name) === __null,
             "cli: short name '-" + short_name + "' declared twice"
@@ -819,6 +870,10 @@ export struct Parser {
     # The option named `name` here, or a global one of a parser this one
     # is a command of; null for none.
     _find_option(name: String): _CliArgument {
+        # An option with only a short name has no long one to match.
+        if (name.is_empty) {
+            return __null;
+        }
         for (var option in _options) {
             if (option.name == name) {
                 return option;
@@ -865,7 +920,9 @@ export struct Parser {
     # global option `global`.
     _check_names_free(global: _CliArgument) {
         for (var option in _options) {
-            assert(option.name != global.name, "cli: option '--" + global.name + "' declared twice");
+            assert(
+                global.name.is_empty or option.name != global.name, "cli: option '--" + global.name + "' declared twice"
+            );
             assert(
                 global.short_name.is_empty or option.short_name != global.short_name,
                 "cli: short name '-" + global.short_name + "' declared twice"
@@ -945,11 +1002,12 @@ export struct Parser {
                     }
                     option.occurrences += 1;
                 } else {
-                    if (!attached and index >= args.count) {
+                    if (!attached and option.implicit_value.is_empty and index >= args.count) {
                         return _fail(root, "missing value for '--" + name + "'");
                     }
-                    var value = attached ? attached.value() : args[index];
-                    if (!attached) {
+                    var value = attached ? attached.value() : option.implicit_value;
+                    if (!attached and option.implicit_value.is_empty) {
+                        value = args[index];
                         index += 1;
                     }
                     if (!_store(option, value)) {
@@ -980,6 +1038,8 @@ export struct Parser {
                     var value = argument.substr_bytes(at, argument.size - at);
                     if (value.starts_with("=")) {
                         value = value.substr_bytes(1, value.size - 1);
+                    } else if (value.is_empty and !option.implicit_value.is_empty) {
+                        value = option.implicit_value;
                     } else if (value.is_empty) {
                         if (index >= args.count) {
                             return _fail(root, "missing value for '-" + letter + "'");
@@ -1039,7 +1099,7 @@ export struct Parser {
     _check_required(root: Parser): Result<String?> {
         for (var option in _options) {
             if (option.required and !option.global and option.values.is_empty) {
-                return _fail(root, "missing required option '--" + option.name + "'");
+                return _fail(root, "missing required option '" + option.display() + "'");
             }
         }
         return Result<String?>.ok(Optional<String>.Empty);
@@ -1050,12 +1110,12 @@ export struct Parser {
     _check_required_globals(root: Parser): Result<String?> {
         for (var option in _options) {
             if (option.required and option.global and option.values.is_empty) {
-                return _fail(root, "missing required option '--" + option.name + "'");
+                return _fail(root, "missing required option '" + option.display() + "'");
             }
         }
         for (var option in _inherited_options()) {
             if (option.required and option.values.is_empty) {
-                return _fail(root, "missing required option '--" + option.name + "'");
+                return _fail(root, "missing required option '" + option.display() + "'");
             }
         }
         return Result<String?>.ok(Optional<String>.Empty);
@@ -1109,11 +1169,10 @@ export struct Parser {
     _unknown_option(name: String): String {
         var message = "unknown option '--" + name + "'";
         var names = Array<String>();
-        for (var option in _options) {
-            names.append(option.name);
-        }
-        for (var option in _inherited_options()) {
-            names.append(option.name);
+        for (var option in _cli_options_of(this)) {
+            if (!option.name.is_empty) {
+                names.append(option.name);
+            }
         }
         names.append("help");
         var best = closest(name, names);
@@ -1289,6 +1348,24 @@ _cli_type<T>(declared: _CliArgument) {
         declared.default_value.is_empty or declared.reads(declared.default_value),
         "cli: the default '" + declared.default_value + "' of '" + declared.display() + "' is not " + declared.expected
     );
+    assert(
+        declared.implicit_value.is_empty or declared.reads(declared.implicit_value),
+        "cli: the implicit value '"
+            + declared.implicit_value
+            + "' of '"
+            + declared.display()
+            + "' is not "
+            + declared.expected
+    );
+}
+
+# What the help calls an option's value: `value_name`, else its long name
+# in capitals (`IMPORT_PATH`), else its short one (`O`).
+_value_name(name: String, short_name: String, value_name: String): String {
+    if (!value_name.is_empty) {
+        return value_name;
+    }
+    return (name.is_empty ? short_name : name).upper().replace("-", "_");
 }
 
 # `text` as a `T`, or Empty when it is not one.

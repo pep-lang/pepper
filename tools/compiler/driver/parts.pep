@@ -144,8 +144,8 @@ export compile_parts(
         command.argument("--compile-part").argument(dir.to_string());
         var line = $"{executable.value()} --compile-part {dir}";
         for (var job in share) {
-            command.argument($"{job.part}").argument(job.object.to_string());
-            line = $"{line} {job.part} {job.object}";
+            command.argument("--part").argument($"{job.part}={job.object}");
+            line = $"{line} --part {job.part}={job.object}";
         }
         var spawned = command.spawn();
         if (spawned.is_err()) {
@@ -382,7 +382,7 @@ _keep_jobs(ir: llvm.Module, partition: codegen.Partition, jobs: PartJob[], parti
 ## the last), optimizes it at the plan's level (unless the program is
 ## optimized already) and writes its object (or its bitcode, for link-time
 ## optimization).
-## `pepc --compile-part` runs it.
+## `pepc --compile-part <dir> --part <N>=<object>...` runs it.
 ##
 ## @param dir the folder holding the bitcode and the plan
 ## @param jobs the parts to compile

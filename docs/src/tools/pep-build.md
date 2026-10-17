@@ -55,14 +55,18 @@ short, and `pepper help build` runs it.
 | `--no-verify-cache` | Do not check cache hits | |
 | `-T <channel>`, `--Tall` | Print timings and cache decisions | off |
 | `-v`, `--verbose` | Accepted; prints nothing more yet | off |
+| `--compile-part <dir>`, `--part <N>=<object>`, `--compilation-unit-worker <dir>` | Internal: what a build runs in the children it starts | |
 | `-h`, `--help` | Print the options | |
 | `-V`, `--version` | Print the version | |
 
 An option that takes a value accepts it as the next argument or attached:
 `-I lib`, `-Ilib`, `--target aarch64-apple-darwin` and
-`--target=aarch64-apple-darwin` are all the same. Options may come before or
-after the entry file. An unknown option is an error, and the compiler exits
-with status 2 after a short usage message.
+`--target=aarch64-apple-darwin` are all the same. `-O`, `--emit-ast` and
+`--emit-static` take a value only attached (`-O3`, `--emit-ast=json`), so
+the argument after them is never read as their value. Short options that
+take no value combine (`-gv` is `-g -v`). Options may come before or after
+the entry file, and every argument after `--` is a file. An unknown option is
+an error, and the compiler exits with status 2 after a short usage message.
 
 ## Inputs and imports
 
@@ -613,6 +617,19 @@ Accepted for compatibility with other compilers; it prints nothing more yet.
 Errors and warnings are printed like clang's, colored when standard error is
 a terminal; set `NO_COLOR` to turn color off. See
 [Compiler errors](../language/compiler-errors.md).
+
+## Internal options
+
+A build starts copies of the compiler to work side by side, and gives them
+these options; they are listed so a failed child's command line can be
+rerun by hand (the build prints it).
+
+- `--compile-part <dir> --part <N>=<object>...` compiles parts of the
+  program a build split into `<dir>`: each `--part` names a part by its
+  number and the object to write it to. Nothing else is read.
+- `--compilation-unit-worker <dir>`, after the build's own arguments, checks
+  the compilation units the build passes through `<dir>` and compiles their
+  objects.
 
 ## Help and version
 

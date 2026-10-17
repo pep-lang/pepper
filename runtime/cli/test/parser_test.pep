@@ -228,3 +228,36 @@ closest_picks_the_nearest_candidate_within_two_edits() {
     expect_false(cli.closest("package", names).is_value());
     expect_false(cli.closest("x", Array<String>()).is_value());
 }
+
+[Test]
+declares_short_only_options_and_attached_only_values() {
+    var parser = cli.Parser("cc");
+    var output = parser.option("", "o", "the output", value_name = "OUT");
+    var level = parser.option<uint>("", "O", "the level", implicit_value = "2");
+    var format = parser.option("emit-ast", help = "the format", value_name = "FORMAT", implicit_value = "text");
+    var includes = parser.multiple("", "I", "a directory");
+    var files = parser.positionals("files");
+
+    # Without its value attached, an option with an implicit value takes
+    # that, and the next argument stays positional.
+    expect_false(parser.try_parse(["cc", "-O", "--emit-ast", "main.pep"]).is_err());
+    expect_equal(level.value(), 2);
+    expect_equal(format.value(), "text");
+    expect_equal(files.values().count, 1);
+    expect_false(parser.try_parse(["cc", "-O3", "--emit-ast=json", "-o", "out", "-Ia", "-I", "b", "x"]).is_err());
+    expect_equal(level.value(), 3);
+    expect_equal(format.value(), "json");
+    expect_equal(output.value(), "out");
+    expect_equal(includes.values().count, 2);
+    expect_false(parser.try_parse(["cc", "-O=1", "x"]).is_err());
+    expect_equal(level.value(), 1);
+
+    # A short-only option has no long spelling.
+    expect_equal(error_of(parser, ["cc", "--=x"]), "unknown option '--'");
+    expect_equal(error_of(parser, ["cc", "-Ox"]), "invalid value 'x' for '-O': expected a non-negative integer");
+    var help = parser.help();
+    expect_true(help.contains("  -o <OUT>  "));
+    expect_true(help.contains("  -O[<O>]  "));
+    expect_true(help.contains("      --emit-ast[=<FORMAT>]  "));
+    expect_true(help.contains("  -I <I>  "));
+}

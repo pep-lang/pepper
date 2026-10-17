@@ -75,7 +75,7 @@ help_lists_every_option_of_the_rust_compiler() {
         "-o <OUT>",
         "--lib <KIND>",
         "--build <DIR>",
-        "-O <LEVEL>",
+        "-O[<LEVEL>]",
         "--lto <MODE>",
         "--target <TRIPLE>",
         "--sysroot <DIR>",
@@ -102,6 +102,9 @@ help_lists_every_option_of_the_rust_compiler() {
         "--verify-cache",
         "--no-verify-cache",
         "--MSVC",
+        "--compile-part <DIR>",
+        "--part <N=OBJECT>",
+        "--compilation-unit-worker <DIR>",
         "-h, --help",
         "-V, --version"
     ]) {
@@ -123,7 +126,19 @@ help_lists_every_option_of_the_rust_compiler() {
     # An option it does not know is still a usage error.
     var unknown = _pep_build(folder.path, ["--no-such-option", "main.pep"]);
     expect_equal(_code(unknown), 2);
-    expect_true(unknown.stderr.contains("unexpected argument '--no-such-option'"));
+    expect_true(unknown.stderr.contains("pep-build: error: unknown option '--no-such-option'"));
+    # `-O` takes its level only attached, so the file after it is the entry.
+    var program = _program("options_level", _PROGRAM);
+    _succeeds(program.path, ["-O", "main.pep", "-o", "main", "--build", "build", "--no-cache"]);
+    var level = _pep_build(program.path, ["-O7", "main.pep"]);
+    expect_equal(_code(level), 2);
+    expect_true(level.stderr.contains("invalid value '7' for '-O': expected 0, 1, 2 or 3"));
+    # `--part` belongs to `--compile-part`, which needs one.
+    for (var arguments in [["--part", "0=a.o"], ["--compile-part", "parts"]]) {
+        var ran = _pep_build(folder.path, arguments);
+        expect_equal(_code(ran), 2);
+        expect_true(ran.stderr.contains("needs"));
+    }
 }
 
 [Test]
@@ -158,7 +173,7 @@ emit_ast_prints_the_tree_as_text_or_json() {
     expect_true(json.starts_with("{\"imports\":"));
     var wrong = _pep_build(folder.path, ["--emit-ast=yaml", "main.pep"]);
     expect_equal(_code(wrong), 2);
-    expect_true(wrong.stderr.contains("[possible values: text, json]"));
+    expect_true(wrong.stderr.contains("invalid value 'yaml' for '--emit-ast': expected 'text' or 'json'"));
 }
 
 [Test]
@@ -290,9 +305,9 @@ lib_and_lto_are_checked_and_name_their_output() {
         code,
         says
     ) in [
-        (["--lib", "dynamic", "main.pep"], 2, "invalid value 'dynamic' for '--lib <KIND>'"),
-        (["--lib=static", "--test", "main.pep"], 2, "'--test' cannot be used with '--lib <KIND>'"),
-        (["--lto=thin", "main.pep"], 2, "invalid value 'thin' for '--lto <MODE>'"),
+        (["--lib", "dynamic", "main.pep"], 2, "invalid value 'dynamic' for '--lib': expected 'static' or 'shared'"),
+        (["--lib=static", "--test", "main.pep"], 2, "'--test' cannot be used with '--lib'"),
+        (["--lto=thin", "main.pep"], 2, "invalid value 'thin' for '--lto': expected 'full' or 'off'"),
         (["--lto=full", "-O0", "main.pep"], 1, "'--lto=full' needs optimization: add '-O'")
     ]) {
         var ran = _pep_build(folder.path, arguments);
@@ -339,7 +354,7 @@ entry_names_the_function_the_program_starts_in() {
             1,
             "no function named 'nope' in 'main.pep' to start the program in"
         ),
-        (["--entry", "start", "--test", "main.pep"], 2, "'--entry <NAME>' cannot be used with '--test'")
+        (["--entry", "start", "--test", "main.pep"], 2, "'--entry' cannot be used with '--test'")
     ]) {
         var ran = _pep_build(folder.path, arguments);
         expect_equal(_code(ran), code);

@@ -43,10 +43,7 @@ _cli_nodes(parser: Parser, path: String, nodes: Array<_CliNode>) {
 _cli_option_words(parser: Parser): Array<String> {
     var words = Array<String>();
     for (var option in _cli_options_of(parser)) {
-        words.append("--" + option.name);
-        if (!option.short_name.is_empty) {
-            words.append("-" + option.short_name);
-        }
+        words.append_all(_cli_spellings(option));
     }
     words.append("--help");
     if (parser._find_short("h") === __null) {
@@ -70,7 +67,10 @@ _cli_options_of(parser: Parser): Array<_CliArgument> {
 
 # The spellings of `option` that the shell sees before its value.
 _cli_spellings(option: _CliArgument): Array<String> {
-    var spellings = ["--" + option.name];
+    var spellings = Array<String>();
+    if (!option.name.is_empty) {
+        spellings.append("--" + option.name);
+    }
     if (!option.short_name.is_empty) {
         spellings.append("-" + option.short_name);
     }
@@ -298,7 +298,10 @@ _cli_fish(nodes: Array<_CliNode>): String {
         var parser = node.parser;
         var start = "complete -c " + program + " -n " + _cli_quote_fish(function + "_is " + _cli_quote_fish(node.path));
         for (var option in _cli_options_of(parser)) {
-            text.append(start).append(" -l ").append(option.name);
+            text.append(start);
+            if (!option.name.is_empty) {
+                text.append(" -l ").append(option.name);
+            }
             if (!option.short_name.is_empty) {
                 text.append(" -s ").append(option.short_name);
             }
