@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-12f04cdb.js";
+            window.path_to_searchindex_js = "searchindex-c47acce7.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-fc646ff9.js"></script>
@@ -5129,7 +5129,7 @@ main(): int {
 </code></pre>
 <p>The functions of one name in one file are an <strong>overload set</strong>, and each is a
 member of it; the files of one <a href="#modules">module</a> may share a
-set, and so do the sets a file imports and its own functions of that name. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
+set, and so do the sets a file imports, the runtime’s, and its own functions of that name. <a href="#methods-and-operators">Methods</a> of one name in a struct are a
 set too, and so are its static methods, its operators, its
 <a href="#constructors">constructors</a>, and the methods its
 <a href="#extensions-and-traits">extensions</a> add.</p>
@@ -5234,10 +5234,59 @@ b.pep:1:8: note: candidate function
 hides an imported member with the same parameters, so a file can replace
 one member of an imported set. Only functions merge: a struct or variable
 of the name hides imported functions of it (or, named in an import list,
-is <code>'parse' is imported but also declared in this file</code>), and the
-<a href="#modules-and-imports">prelude</a>’s functions, such as the runtime’s <code>print</code>, are
-hidden by a file’s own or imported functions of the name rather than
-joined.</p>
+is <code>'parse' is imported but also declared in this file</code>).</p>
+<h3 id="the-runtimes-sets"><a class="header" href="#the-runtimes-sets">The runtime’s sets</a></h3>
+<p>The <a href="#modules-and-imports">prelude</a>’s functions, such as the runtime’s <code>print</code> and
+<code>to_string</code>, are a set too, which a file’s own and imported functions of
+the name join. Here <code>point.pep</code> adds a <code>print</code> member and the file adds a
+<code>to_string</code> member, and the runtime’s members still take every other
+call:</p>
+<pre><code class="language-pepper">export struct Point {
+    var x: int;
+    var y: int;
+
+    construct(x: int, y: int) {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+# Joins the runtime's `print(String)` wherever it is imported.
+export print(p: Point) {
+    print($"({p.x}, {p.y})");
+}
+</code></pre>
+<pre><code class="language-pepper">import "point";
+
+# The file's own `to_string` joins the runtime's.
+to_string(p: Point): String {
+    return $"Point({p.x}, {p.y})";
+}
+
+main(): int {
+    var p = Point(1, 2);
+    print(p);       # point's member
+    print("text");  # the runtime's member
+    assert(to_string(p) == "Point(1, 2)", "this file's member");
+    assert(to_string(42) == "42", "the runtime's member");
+    return 0;
+}
+</code></pre>
+<p>A member with a runtime member’s parameters and return type (or a return
+type left to inference) is an error, since a file that wants the runtime’s
+member already has it:</p>
+<pre><code class="language-text">main.pep:1:1: error: redefinition of 'print'
+    1 | print(text: String) {}
+      | ^~~~~
+runtime/string.pep:1850:8: note: previous definition is here
+ 1850 | export print(text: String) {
+      |        ^~~~~
+</code></pre>
+<p>One that differs only in its return type hides the runtime’s member in its
+file, as a file’s own member hides an imported one, so a program’s own
+<code>arguments(): int</code> still compiles beside the runtime’s deprecated
+<code>arguments(): Array&lt;String&gt;</code>. A struct or variable named like a runtime
+function hides all of its members.</p>
 <h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
 <p>Exported members are what other files see; a private member is a candidate
 only for calls in its own file, or in its module’s files. Here <code>shapes.pep</code> exports <code>area(int)</code> and
@@ -5637,12 +5686,6 @@ main.pep:4:13: note: declare the type, for example 'var g: (int) =&gt; int = f;'
       |             ^
 </code></pre>
 <p>An expected type that matches no member is <code>address of overloaded function 'f' does not match required type '(bool) =&gt; int'</code>.</p>
-<h2 id="what-is-not-supported-yet"><a class="header" href="#what-is-not-supported-yet">What is not supported yet</a></h2>
-<ul>
-<li><strong>Joining the runtime’s sets</strong>: a file’s own or imported functions of a
-name that the runtime declares (<code>print</code>, <code>to_string</code>) hide the runtime’s
-functions of that name instead of joining them.</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="structs-3"><a class="header" href="#structs-3">Structs</a></h1>
 <p>A struct groups related values into one named type, and gives that type
