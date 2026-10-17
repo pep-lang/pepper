@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eb124899.js";
+            window.path_to_searchindex_js = "../searchindex-b93fd6fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -356,9 +356,9 @@ main(): int {
     return 0;
 }
 </code></pre>
-<p>A member with a runtime member’s parameters and return type (or a return
-type left to inference) is an error, since a file that wants the runtime’s
-member already has it:</p>
+<p>A member may not take a runtime member’s parameters, since a call could
+not tell the two apart. With the same return type (or one left to
+inference) it is a redefinition:</p>
 <pre><code class="language-text">main.pep:1:1: error: redefinition of 'print'
     1 | print(text: String) {}
       | ^~~~~
@@ -366,11 +366,17 @@ runtime/string.pep:1850:8: note: previous definition is here
  1850 | export print(text: String) {
       |        ^~~~~
 </code></pre>
-<p>One that differs only in its return type hides the runtime’s member in its
-file, as a file’s own member hides an imported one, so a program’s own
-<code>arguments(): int</code> still compiles beside the runtime’s deprecated
-<code>arguments(): Array&lt;String&gt;</code>. A struct or variable named like a runtime
-function hides all of its members.</p>
+<p>and with another return type it is the same error as for two members of
+one file:</p>
+<pre><code class="language-text">main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
+    1 | to_string(value: int): int { return value; }
+      | ^~~~~~~~~
+runtime/string.pep:1621:8: note: previous declaration is here
+ 1621 | export to_string(value: int): String {
+      |        ^~~~~~~~~
+</code></pre>
+<p>Give the function another name or other parameters instead. A struct or
+variable named like a runtime function hides all of its members.</p>
 <h3 id="members-may-differ-in-visibility"><a class="header" href="#members-may-differ-in-visibility">Members may differ in visibility</a></h3>
 <p>Exported members are what other files see; a private member is a candidate
 only for calls in its own file, or in its module’s files. Here <code>shapes.pep</code> exports <code>area(int)</code> and

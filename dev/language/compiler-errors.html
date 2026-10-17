@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-eb124899.js";
+            window.path_to_searchindex_js = "../searchindex-b93fd6fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -466,6 +466,16 @@ main.pep:2:9: note: previous definition is here
 aliases of one name in a file, or exported by two
 <a href="modules.html#the-runtime-prelude-and---import">prelude modules</a>, report
 <code>redefinition of 'Point'</code>.</p>
+<p><strong>Two functions that differ only in their return type</strong>, in one file or
+beside a <a href="overloading.html#the-runtimes-sets">runtime function</a> of the
+name, which a call could not tell apart:</p>
+<pre><code class="language-text">main.pep:1:1: error: functions that differ only in their return type cannot be overloaded
+    1 | to_string(value: int): int { return value; }
+      | ^~~~~~~~~
+runtime/string.pep:1621:8: note: previous declaration is here
+ 1621 | export to_string(value: int): String {
+      |        ^~~~~~~~~
+</code></pre>
 <p><strong>Looping over something that cannot be iterated</strong> (see
 <a href="iteration.html">Iteration</a>):</p>
 <pre><code class="language-text">main.pep:3:19: error: type 'int' is not iterable: implement Iterable&lt;T&gt; (iterate()) or Iterator&lt;T&gt; (next() and current())
