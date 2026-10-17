@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b93fd6fb.js";
+            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-fc646ff9.js"></script>
+        <script src="../toc-430e4676.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -347,6 +347,55 @@ read and change the directory relative paths are resolved against, as
 </ul>
 <p><code>arguments()</code> and <code>exit()</code> without <code>import process</code> still work, but are
 deprecated and warn.</p>
+<h2 id="signals"><a class="header" href="#signals">Signals</a></h2>
+<p><code>process.signals([...])</code> returns an <code>async.Channel&lt;Signal&gt;</code> that receives
+each signal it names instead of the signal’s default action, which ends the
+program. A server or tool waits on it to shut down cleanly: stop accepting
+work, flush, remove temporary files.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>Signal</code></th><th>POSIX</th><th>Windows</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Interrupt</code></td><td><code>SIGINT</code> (Ctrl-C)</td><td><code>CTRL_C_EVENT</code>, <code>CTRL_BREAK_EVENT</code></td></tr>
+<tr><td><code>Terminate</code></td><td><code>SIGTERM</code></td><td><code>CTRL_CLOSE_EVENT</code>, <code>CTRL_LOGOFF_EVENT</code>, <code>CTRL_SHUTDOWN_EVENT</code></td></tr>
+<tr><td><code>Hangup</code></td><td><code>SIGHUP</code></td><td>never sent</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-pepper">import process;
+import [Signal] from process;
+
+main(): int {
+    var stop = process.signals([Signal.Interrupt, Signal.Terminate]);
+    # Serve until Ctrl-C or a request to terminate arrives: here, for at most
+    # a tenth of a second.
+    var signal = stop.receive_for(100);
+    if (signal.is_ok()) {
+        print("shutting down cleanly");
+    }
+    # Closing the channel gives the signals back their default action.
+    stop.close();
+    return 0;
+}
+</code></pre>
+<p>No program code runs inside the operating system’s signal handler: on POSIX
+the handler only writes the signal’s number to a pipe, and a runtime thread
+sends it on the channel. So the channel is the whole interface, and works as
+any channel does: <code>receive()</code> waits, a task can <code>select</code> on it alongside its
+other channels, and <code>try_receive()</code> polls between steps of a long job.</p>
+<ul>
+<li>Every open channel that names a signal receives it.</li>
+<li>Closing a channel stops it receiving; once no open channel names a signal,
+its default action returns.</li>
+<li>On Windows the system ends the program a few seconds after <code>Terminate</code>
+(the console closing, a log-off or a shutdown) whatever it does, so keep
+that cleanup short.</li>
+<li>WebAssembly has no signals: the channel never receives.</li>
+<li>Writing to a socket whose peer has gone returns an <code>IoError</code> rather than
+raising <code>SIGPIPE</code>; the runtime asks for that on every socket.</li>
+</ul>
 <h2 id="finding-a-program"><a class="header" href="#finding-a-program">Finding a program</a></h2>
 <p><code>process.find_executable(name)</code> looks a program up on the <code>PATH</code> as a shell
 does, returning the path of the first match that may be run, or none, so a
