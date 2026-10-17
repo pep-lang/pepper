@@ -2,11 +2,14 @@
 
 # Environment
 
-The running process's environment variables.
+The running process's environment variables: reading them, and setting
+and removing them for the process itself.
 
-`os` only reads them. Changing the process's own environment is not
-thread-safe on POSIX (`setenv` races with every `getenv`), so a child
-process gets a different environment through `process.Command`'s
+Every read and change the runtime makes goes through one lock, so Pepper
+code never races with itself over the environment, on any thread. C code
+that calls `getenv` itself is outside that lock: on POSIX `setenv` races
+with such a call on another thread, as in every language. To give only a
+child process a different environment, use `process.Command`'s
 `environment`, `remove_environment` and `clear_environment` instead.
 
 Source: `runtime/os/environment.pep`
@@ -40,6 +43,67 @@ main(): int {
     if (home) {
         print(home.value());
     }
+    return 0;
+}
+```
+
+## set_environment
+
+```pepper
+set_environment(name: String, value: String)
+```
+
+Sets the environment variable `name` to `value` for the running process,
+replacing any value it had.
+
+The process's own later reads see the change, and so do the children it
+starts afterwards. Safe from any thread for Pepper code; C code that calls
+`getenv` on another thread at the same time can race with it on POSIX
+(see this page's introduction). On Windows names are not case-sensitive.
+WASI keeps the change inside the program.
+
+**Parameters**
+- `name` — the variable's name
+- `value` — its new value; may be empty
+
+**Panics**
+- if `name` is empty or contains `=` or a NUL byte, or `value` contains a NUL byte
+
+**Example**
+```pepper
+import os;
+
+main(): int {
+    os.set_environment("GREETING", "hello");
+    print(os.environment("GREETING").value());   # hello
+    return 0;
+}
+```
+
+## remove_environment
+
+```pepper
+remove_environment(name: String)
+```
+
+Removes the environment variable `name` from the running process.
+
+Removing a variable that is not set does nothing. The same thread-safety
+note as `set_environment`'s applies.
+
+**Parameters**
+- `name` — the variable's name
+
+**Panics**
+- if `name` is empty or contains `=` or a NUL byte
+
+**Example**
+```pepper
+import os;
+
+main(): int {
+    os.remove_environment("GREETING");
+    print(os.environment("GREETING").is_empty());   # true
     return 0;
 }
 ```

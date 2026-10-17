@@ -5,8 +5,9 @@
 ## `os.environment("HOME")`) or import names directly with
 ## `import [Instant, Duration] from os`.
 ##
-## - [Environment](os-environment.md): `environment(name)` and
-##   `environment_variables()`, read-only
+## - [Environment](os-environment.md): `environment(name)`,
+##   `environment_variables()`, `set_environment(name, value)` and
+##   `remove_environment(name)`
 ## - [Time](os-time.md): `Duration`, `Instant` (a monotonic clock, for
 ##   measuring) and `SystemTime` (the wall clock)
 ## - [Machine](os-machine.md): `system_os()`, `system_name()`, `system_version()`,
@@ -38,6 +39,8 @@ import "user";
 
 export environment;
 export environment_variables;
+export set_environment;
+export remove_environment;
 export Duration;
 export Instant;
 export SystemTime;
@@ -58,5 +61,3 @@ export temp_directory;
 
 # For the process module only: the environment a child inherits.
 export _os_environment_entries;
-[Target(!OS(Windows))]
-export _os_environ;

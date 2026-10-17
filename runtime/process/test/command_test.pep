@@ -27,26 +27,15 @@ exec_returns_why_the_program_cannot_start() {
 
 # A child started in another folder through fork and exec, the path for a
 # glibc without posix_spawn_file_actions_addchdir_np (before 2.29), which
-# `PEPPER_PROCESS_FORK_SPAWN` forces: this test runs itself again with it
-# set, and the copy checks the child's folder, its piped output and the
-# errors it reports. Only Linux has the path.
+# `PEPPER_PROCESS_FORK_SPAWN` forces: the test sets it and checks the
+# child's folder and the errors it reports. Only Linux has the path; a
+# process test on another thread meanwhile takes it too, which is as valid.
 [Test]
 starts_a_child_in_a_folder_by_fork_and_exec() {
     if (os.system_name() != "linux") {
         return;
     }
-    var forced = os.environment("PEPPER_PROCESS_FORK_SPAWN");
-    if (!forced.is_value()) {
-        var copy = process
-            .Command(process.executable_path().value().to_string())
-            .argument("--run")
-            .argument("process/test/command_test.pep::starts_a_child_in_a_folder_by_fork_and_exec")
-            .environment("PEPPER_PROCESS_FORK_SPAWN", "1")
-            .run();
-        expect_true(copy.is_ok());
-        expect_true(copy.value().status.success());
-        return;
-    }
+    os.set_environment("PEPPER_PROCESS_FORK_SPAWN", "1");
     var root = process.Command("pwd").working_directory(io.Path("/")).run();
     expect_true(root.is_ok());
     expect_equal(root.value().stdout, "/\n");
@@ -56,4 +45,5 @@ starts_a_child_in_a_folder_by_fork_and_exec() {
     var nowhere = process.Command("pwd").working_directory(io.Path("/no-such-folder-for-pepper")).run();
     expect_true(nowhere.is_err());
     expect_true(nowhere.error().is_not_found());
+    os.remove_environment("PEPPER_PROCESS_FORK_SPAWN");
 }

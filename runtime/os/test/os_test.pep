@@ -1,10 +1,11 @@
-# os: Duration arithmetic and text, the monotonic and wall clocks, and what
-# the module reports about the machine and the user. The checks that need a
-# variable the parent sets or the host's own name are in
-# tools/compiler/programs_test.pep.
+# os: Duration arithmetic and text, the monotonic and wall clocks, what the
+# module reports about the machine and the user, and setting and removing
+# environment variables. The checks that need a variable the parent sets or
+# the host's own name are in tools/compiler/programs_test.pep.
 
 import io;
 import os;
+import process;
 
 [Test]
 duration_arithmetic_comparison_and_text() {
@@ -85,4 +86,42 @@ machine_and_user() {
     expect_false(os.user_name().is_empty());
     expect_false(os.home_directory().is_empty());
     expect_equal(os.temp_directory().to_string(), io.Directory.temp().to_string());
+}
+
+[Test]
+set_and_remove_environment_variables() {
+    var name = "PEPPER_OS_TEST_SET_ENVIRONMENT";
+    os.set_environment(name, "héllo=wörld");
+    expect_equal(os.environment(name).value(), "héllo=wörld");
+    expect_equal(os.environment_variables().get(name), "héllo=wörld");
+    os.set_environment(name, "");
+    expect_equal(os.environment(name).value(), "");
+    os.set_environment(name, "inherited");
+    var child = os.system_name() == "windows" ?
+        process.Command("cmd").arguments(["/c", $"echo %{name}%"]).run() :
+        process.Command("sh").arguments(["-c", $"echo ${name}"]).run();
+    expect_true(child.is_ok());
+    expect_equal(child.value().stdout.trim(), "inherited");
+    os.remove_environment(name);
+    expect_false(os.environment(name).is_value());
+    expect_false(os.environment_variables().contains(name));
+    os.remove_environment(name);
+}
+
+[Test]
+[ShouldPanic("cannot change environment variable 'A=B': its name contains '=' or a NUL byte")]
+set_environment_rejects_a_name_with_equals() {
+    os.set_environment("A=B", "x");
+}
+
+[Test]
+[ShouldPanic("cannot change an environment variable with an empty name")]
+remove_environment_rejects_an_empty_name() {
+    os.remove_environment("");
+}
+
+[Test]
+[ShouldPanic("cannot set environment variable 'PEPPER_OS_TEST_NUL': its value contains a NUL byte")]
+set_environment_rejects_a_value_with_nul() {
+    os.set_environment("PEPPER_OS_TEST_NUL", "a\0b");
 }

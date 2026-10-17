@@ -1,10 +1,14 @@
-## The running process's environment variables.
+## The running process's environment variables: reading them, and setting
+## and removing them for the process itself.
 ##
-## `os` only reads them. Changing the process's own environment is not
-## thread-safe on POSIX (`setenv` races with every `getenv`), so a child
-## process gets a different environment through `process.Command`'s
+## Every read and change the runtime makes goes through one lock, so Pepper
+## code never races with itself over the environment, on any thread. C code
+## that calls `getenv` itself is outside that lock: on POSIX `setenv` races
+## with such a call on another thread, as in every language. To give only a
+## child process a different environment, use `process.Command`'s
 ## `environment`, `remove_environment` and `clear_environment` instead.
 
+import async;
 import "sys_posix";
 import "sys_wasi";
 import "sys_windows";
@@ -33,8 +37,84 @@ export environment(name: String): String? {
     if (name.is_empty) {
         return Optional<String>.Empty;
     }
-    return _os_sys_environment(name);
+    var value = Optional<String>.Empty;
+    with (var held = _os_environment_lock.lock()) {
+        value = _os_sys_environment(name);
+    }
+    return value;
 }
+
+## Sets the environment variable `name` to `value` for the running process,
+## replacing any value it had.
+##
+## The process's own later reads see the change, and so do the children it
+## starts afterwards. Safe from any thread for Pepper code; C code that calls
+## `getenv` on another thread at the same time can race with it on POSIX
+## (see this page's introduction). On Windows names are not case-sensitive.
+## WASI keeps the change inside the program.
+##
+## @param name the variable's name
+## @param value its new value; may be empty
+## @panics if `name` is empty or contains `=` or a NUL byte, or `value`
+##     contains a NUL byte
+## @example
+##     import os;
+##
+##     main(): int {
+##         os.set_environment("GREETING", "hello");
+##         print(os.environment("GREETING").value());   # hello
+##         return 0;
+##     }
+export set_environment(name: String, value: String) {
+    _os_check_environment_name(name);
+    if (value.contains("\0")) {
+        panic($"cannot set environment variable '{name}': its value contains a NUL byte");
+    }
+    with (var held = _os_environment_lock.lock()) {
+        _os_sys_set_environment(name, value);
+    }
+}
+
+## Removes the environment variable `name` from the running process.
+##
+## Removing a variable that is not set does nothing. The same thread-safety
+## note as `set_environment`'s applies.
+##
+## @param name the variable's name
+## @panics if `name` is empty or contains `=` or a NUL byte
+## @example
+##     import os;
+##
+##     main(): int {
+##         os.remove_environment("GREETING");
+##         print(os.environment("GREETING").is_empty());   # true
+##         return 0;
+##     }
+export remove_environment(name: String) {
+    _os_check_environment_name(name);
+    with (var held = _os_environment_lock.lock()) {
+        _os_sys_remove_environment(name);
+    }
+}
+
+# Panics on a name no platform can set: as Rust's `set_var` does.
+_os_check_environment_name(name: String) {
+    if (name.is_empty) {
+        panic("cannot change an environment variable with an empty name");
+    }
+    if (name.contains("=") || name.contains("\0")) {
+        panic($"cannot change environment variable '{name}': its name contains '=' or a NUL byte");
+    }
+}
+
+# The value `_os_environment_lock` guards: nothing; the lock is what matters.
+[Shared]
+struct _EnvironmentLock {
+    construct() {}
+}
+
+# Held by every read and change of the process's environment.
+const _os_environment_lock = async.Mutex<_EnvironmentLock>(_EnvironmentLock());
 
 ## Returns every environment variable of the running process, by name.
 ##
@@ -79,5 +159,9 @@ export environment_variables(): HashMap<String, String> {
 
 # The environment as `NAME=VALUE` entries, for the process module too.
 export _os_environment_entries(): Array<String> {
-    return _os_sys_environment_entries();
+    var entries = Array<String>();
+    with (var held = _os_environment_lock.lock()) {
+        entries = _os_sys_environment_entries();
+    }
+    return entries;
 }

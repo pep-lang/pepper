@@ -11,6 +11,8 @@ extern uint GetEnvironmentVariableW(ushort* name, ushort* buffer, uint size);
 [Target(OS(Windows))]
 extern ushort* GetEnvironmentStringsW();
 [Target(OS(Windows))]
+extern int SetEnvironmentVariableW(ushort* name, ushort* value);
+[Target(OS(Windows))]
 extern int FreeEnvironmentStringsW(ushort* block);
 [Target(OS(Windows))]
 extern uint GetLastError();
@@ -68,6 +70,27 @@ _os_sys_environment(name: String): String? {
     }
     _pep_free(wide_name);
     return found;
+}
+
+# The CRT's own copy of the environment (its `getenv`) does not see these
+# changes; the runtime never reads it.
+[Target(OS(Windows))]
+_os_sys_set_environment(name: String, value: String) {
+    var wide_name = io._io_win_wide(name);
+    var wide_value = io._io_win_wide(value);
+    var ok = SetEnvironmentVariableW(wide_name, wide_value);
+    _pep_free(wide_value);
+    _pep_free(wide_name);
+    if (ok == 0) {
+        panic($"cannot set environment variable '{name}': {io.IoError.last().message}");
+    }
+}
+
+[Target(OS(Windows))]
+_os_sys_remove_environment(name: String) {
+    var wide_name = io._io_win_wide(name);
+    SetEnvironmentVariableW(wide_name, __null);
+    _pep_free(wide_name);
 }
 
 [Target(OS(Windows))]

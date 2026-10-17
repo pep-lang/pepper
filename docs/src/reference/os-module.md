@@ -9,8 +9,9 @@ environment variables, clocks and time, and the machine and user.
 `os.environment("HOME")`) or import names directly with
 `import [Instant, Duration] from os`.
 
-- [Environment](os-environment.md): `environment(name)` and
-  `environment_variables()`, read-only
+- [Environment](os-environment.md): `environment(name)`,
+  `environment_variables()`, `set_environment(name, value)` and
+  `remove_environment(name)`
 - [Time](os-time.md): `Duration`, `Instant` (a monotonic clock, for
   measuring) and `SystemTime` (the wall clock)
 - [Machine](os-machine.md): `system_os()`, `system_name()`, `system_version()`,

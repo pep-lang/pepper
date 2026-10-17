@@ -9,6 +9,10 @@ import "user";
 [Target(OS(Wasi))]
 extern char* getenv(char* name);
 [Target(OS(Wasi))]
+extern int setenv(char* name, char* value, int overwrite);
+[Target(OS(Wasi))]
+extern int unsetenv(char* name);
+[Target(OS(Wasi))]
 extern void* __wasilibc_get_environ();
 [Target(OS(Wasi))]
 extern ushort __wasi_clock_time_get(uint id, u64 precision, void* time);
@@ -22,6 +26,20 @@ _os_sys_environment(name: String): String? {
         return Optional<String>.Empty;
     }
     return Optional<String>.Value(String(value));
+}
+
+# wasi-libc keeps the environment in the program's memory: a change stays
+# inside the program.
+[Target(OS(Wasi))]
+_os_sys_set_environment(name: String, value: String) {
+    if (setenv(name.c_str(), value.c_str(), 1) != 0) {
+        panic($"cannot set environment variable '{name}': out of memory");
+    }
+}
+
+[Target(OS(Wasi))]
+_os_sys_remove_environment(name: String) {
+    unsetenv(name.c_str());
 }
 
 # The `environ` array: NAME=VALUE strings, null-terminated. wasi-libc

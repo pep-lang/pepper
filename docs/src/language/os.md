@@ -1,6 +1,6 @@
 # The operating system
 
-The `os` module reads what the operating system provides beyond the
+The `os` module reports what the operating system provides beyond the
 running process: environment variables, clocks, and facts about the
 machine and the user. Bring it in with `import os`. The full API is in the
 [reference](../reference/os-module.md).
@@ -20,11 +20,29 @@ from name to value.
   as UTF-16, so text outside the ANSI code page survives.
 - On POSIX a value is whatever bytes the parent passed; one that is not
   valid UTF-8 is returned as it is.
-- `os` only reads the environment. Changing the running process's own
-  environment is not thread-safe on POSIX (`setenv` races with every other
-  thread's `getenv`), so there is no `set_environment`. Give a child a
-  different environment with `process.Command`'s `environment`,
-  `remove_environment` and `clear_environment` instead (see
+
+## Changing the environment
+
+`os.set_environment(name, value)` sets a variable for the running process,
+and `os.remove_environment(name)` removes one. Later reads see the change,
+and so do the children the process starts afterwards.
+
+```pepper
+{{#include ../../examples/os-set-environment.pep}}
+```
+
+- Every read and change the runtime makes goes through one lock, so Pepper
+  code never races with itself over the environment, from any thread.
+- C code that calls `getenv` itself is outside that lock. On POSIX,
+  `setenv` races with such a call on another thread (Rust 2024 marks its
+  `set_var` `unsafe` for this reason), so set variables before starting
+  threads that run C code reading them.
+- A name that is empty or contains `=` or a NUL byte, or a value that
+  contains a NUL byte, panics.
+- On Windows names ignore case, and the C runtime's own `getenv` copy does
+  not see the change. On WASI the change stays inside the program.
+- To give only a child a different environment, use `process.Command`'s
+  `environment`, `remove_environment` and `clear_environment` (see
   [Processes](processes.md#environment-and-working-directory)).
 
 ## Time

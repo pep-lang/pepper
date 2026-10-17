@@ -9,6 +9,10 @@ import "user";
 
 [Target(OS(Linux) || OS(Mac))]
 extern char* getenv(char* name);
+[Target(OS(Linux) || OS(Mac))]
+extern int setenv(char* name, char* value, int overwrite);
+[Target(OS(Linux) || OS(Mac))]
+extern int unsetenv(char* name);
 [Target(OS(Linux))]
 extern void* dlsym(void* handle, char* name);
 [Target(OS(Mac))]
@@ -32,12 +36,24 @@ extern int getpwuid_r(uint uid, void* entry, char* buffer, ulong size, void* res
 
 [Target(OS(Linux) || OS(Mac))]
 _os_sys_environment(name: String): String? {
-    # Safe from any thread: nothing in the runtime calls setenv.
+    # Under `_os_environment_lock`, as setenv and unsetenv are.
     __ptr<char> value = getenv(name.c_str());
     if (value == __null) {
         return Optional<String>.Empty;
     }
     return Optional<String>.Value(String(value));
+}
+
+[Target(OS(Linux) || OS(Mac))]
+_os_sys_set_environment(name: String, value: String) {
+    if (setenv(name.c_str(), value.c_str(), 1) != 0) {
+        panic($"cannot set environment variable '{name}': out of memory");
+    }
+}
+
+[Target(OS(Linux) || OS(Mac))]
+_os_sys_remove_environment(name: String) {
+    unsetenv(name.c_str());
 }
 
 # The `environ` array: NAME=VALUE strings, null-terminated.

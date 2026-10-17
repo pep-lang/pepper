@@ -272,13 +272,10 @@ _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stre
         argument_values.append(argument);
     }
     var argv = _process_c_strings(argument_values);
-    var environment_values = Array<String>();
-    __ptr<__ptr<char>> envp = os._os_environ();
-    var built_environment = command._changes_environment();
-    if (built_environment) {
-        environment_values = command._environment_entries();
-        envp = _process_c_strings(environment_values);
-    }
+    # A copy, taken under os's lock: another thread may change the
+    # environment while the child starts.
+    var environment_values = command._environment_entries();
+    __ptr<__ptr<char>> envp = _process_c_strings(environment_values);
 
     __ptr<int> pid = _pep_malloc(4);
     pid[0] = 0;
@@ -288,9 +285,7 @@ _process_sys_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Stre
     var process_id = pid[0];
     _pep_free(pid);
     _pep_free(argv);
-    if (built_environment) {
-        _pep_free(envp);
-    }
+    _pep_free(envp);
     posix_spawn_file_actions_destroy(actions);
     posix_spawnattr_destroy(attributes);
     _pep_free(actions);
@@ -371,18 +366,13 @@ _process_sys_exec(command: Command): io.IoError {
         argument_values.append(argument);
     }
     var argv = _process_c_strings(argument_values);
-    var environment_values = Array<String>();
-    __ptr<__ptr<char>> envp = os._os_environ();
-    var built_environment = command._changes_environment();
-    if (built_environment) {
-        environment_values = command._environment_entries();
-        envp = _process_c_strings(environment_values);
-    }
+    # A copy, taken under os's lock: another thread may change the
+    # environment while the child starts.
+    var environment_values = command._environment_entries();
+    __ptr<__ptr<char>> envp = _process_c_strings(environment_values);
     var code = _process_exec_program(command.program, argv, envp);
     _pep_free(argv);
-    if (built_environment) {
-        _pep_free(envp);
-    }
+    _pep_free(envp);
     if (previous.is_value()) {
         io.Directory.set_current(previous.value());
     }
@@ -524,13 +514,10 @@ _process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Str
         argument_values.append(argument);
     }
     var argv = _process_c_strings(argument_values);
-    var environment_values = Array<String>();
-    __ptr<__ptr<char>> envp = os._os_environ();
-    var built_environment = command._changes_environment();
-    if (built_environment) {
-        environment_values = command._environment_entries();
-        envp = _process_c_strings(environment_values);
-    }
+    # A copy, taken under os's lock: another thread may change the
+    # environment while the child starts.
+    var environment_values = command._environment_entries();
+    __ptr<__ptr<char>> envp = _process_c_strings(environment_values);
     var directory = command._working_directory.value().to_string();
     var program = command.program;
     var device = "/dev/null";
@@ -579,9 +566,7 @@ _process_fork_spawn(command: Command, stdin: Stream, stdout: Stream, stderr: Str
     _pep_free(failed);
     _pep_free(kinds);
     _pep_free(argv);
-    if (built_environment) {
-        _pep_free(envp);
-    }
+    _pep_free(envp);
     if (code != 0) {
         _process_close_ends(ends, 0);
         _pep_free(ends);
