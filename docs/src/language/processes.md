@@ -110,6 +110,39 @@ directory. The running process reads and changes its own environment with
 `arguments()` and `exit()` without `import process` still work, but are
 deprecated and warn.
 
+## Signals
+
+`process.signals([...])` returns an `async.Channel<Signal>` that receives
+each signal it names instead of the signal's default action, which ends the
+program. A server or tool waits on it to shut down cleanly: stop accepting
+work, flush, remove temporary files.
+
+| `Signal` | POSIX | Windows |
+|---|---|---|
+| `Interrupt` | `SIGINT` (Ctrl-C) | `CTRL_C_EVENT`, `CTRL_BREAK_EVENT` |
+| `Terminate` | `SIGTERM` | `CTRL_CLOSE_EVENT`, `CTRL_LOGOFF_EVENT`, `CTRL_SHUTDOWN_EVENT` |
+| `Hangup` | `SIGHUP` | never sent |
+
+```pepper
+{{#include ../../examples/processes-signals.pep}}
+```
+
+No program code runs inside the operating system's signal handler: on POSIX
+the handler only writes the signal's number to a pipe, and a runtime thread
+sends it on the channel. So the channel is the whole interface, and works as
+any channel does: `receive()` waits, a task can `select` on it alongside its
+other channels, and `try_receive()` polls between steps of a long job.
+
+- Every open channel that names a signal receives it.
+- Closing a channel stops it receiving; once no open channel names a signal,
+  its default action returns.
+- On Windows the system ends the program a few seconds after `Terminate`
+  (the console closing, a log-off or a shutdown) whatever it does, so keep
+  that cleanup short.
+- WebAssembly has no signals: the channel never receives.
+- Writing to a socket whose peer has gone returns an `IoError` rather than
+  raising `SIGPIPE`; the runtime asks for that on every socket.
+
 ## Finding a program
 
 `process.find_executable(name)` looks a program up on the `PATH` as a shell

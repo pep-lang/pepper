@@ -42,7 +42,7 @@ extern int execvpe(char* file, void* argv, void* envp);
 extern int pipe2(int* descriptors, int flags);
 [Target(OS(Mac))]
 extern int pipe(int* descriptors);
-[Target(OS(Mac))]
+[Target(OS(Linux) || OS(Mac))]
 extern int fcntl(int descriptor, int command, ...);
 [Target(OS(Linux) || OS(Mac))]
 extern int close(int descriptor);
@@ -58,9 +58,9 @@ extern int dup2(int from, int to);
 extern int chdir(char* path);
 [Target(OS(Linux))]
 extern int open(char* path, int flags, ...);
-[Target(OS(Linux))]
+[Target(OS(Linux) || OS(Mac))]
 extern long read(int descriptor, void* buffer, ulong count);
-[Target(OS(Linux))]
+[Target(OS(Linux) || OS(Mac))]
 extern long write(int descriptor, void* buffer, ulong count);
 [Target(OS(Linux))]
 extern void _exit(int status);

@@ -20,6 +20,9 @@ in the prelude, and the module passes them on as well.
 - [Finding programs](process-find.md): `find_executable()` looks a
   program up on the `PATH`, `find_companion()` looks beside the running
   program first, and `is_executable()` checks a file
+- [Signals](process-signals.md): `signals()` returns a channel that
+  receives Ctrl-C, a request to terminate or a hangup, for a clean
+  shutdown
 
 **Example**
 ```pepper

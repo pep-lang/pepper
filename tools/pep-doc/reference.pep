@@ -84,6 +84,7 @@ export pages(): Array<(String, String)> {
         ("process/child.pep", "Child"),
         ("process/current.pep", "The running process"),
         ("process/find.pep", "Finding programs"),
+        ("process/signals.pep", "Signals"),
         ("os/module.pep", "The os module"),
         ("os/environment.pep", "Environment"),
         ("os/time.pep", "Time"),

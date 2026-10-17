@@ -138,6 +138,7 @@
     - [Child](reference/process-child.md)
     - [The running process](reference/process-current.md)
     - [Finding programs](reference/process-find.md)
+    - [Signals](reference/process-signals.md)
   - [The os module](reference/os-module.md)
     - [Environment](reference/os-environment.md)
     - [Time](reference/os-time.md)
