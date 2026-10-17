@@ -37,10 +37,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-349f7cf8.js";
+            window.path_to_searchindex_js = "searchindex-7573c2b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-58d14832.js"></script>
+        <script src="toc-b2626e7d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -3035,6 +3035,50 @@ attributes <a href="#json">JSON</a> uses: <code>[Name("key")]</code>, <code>[Ign
 <code>[Required]</code>. <code>unknown_keys = toml.UnknownKeys.Reject</code> makes an unknown key
 an error. See the <a href="#the-toml-module">reference</a> for every
 function.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="yaml"><a class="header" href="#yaml">YAML</a></h1>
+<p>YAML 1.2 is read and written by the
+<a href="https://github.com/justinboswell/pepper-yaml">yaml package</a>, which has
+the same shape as the <a href="#json"><code>json</code></a> and <a href="#toml"><code>toml</code></a> modules: a
+<code>YamlValue</code> to look values up in and change, clang-style errors at the
+line and column, documents that keep their comments when edited, and
+struct conversion with the <a href="#the-serialize-module"><code>serialize</code></a>
+attributes. It is a package rather than part of the runtime because few
+programs need YAML; add it with
+<code>pepper package add justinboswell/pepper-yaml --name yaml</code>.</p>
+<pre><code class="language-pepper">import yaml;
+
+main(): int {
+    var parsed = yaml.parse("server:\n  port: 8080\n  debug: no\n", path = "config.yaml");
+    if (parsed.is_err()) {
+        print(parsed.error().to_string());
+        return 1;
+    }
+    var root = parsed.value();
+    print(root["server"]["port"].as_int().value());       # 8080
+    print(root["server"]["debug"].as_string().value());   # no
+    root["server"]["port"] = yaml.YamlValue.Integer(9090);
+    print(root.to_string());
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>The core schema</strong>: <code>yes</code>, <code>no</code>, <code>on</code> and <code>off</code> are strings, not
+booleans, so <code>NO</code> (Norway) stays <code>NO</code>.</li>
+<li><strong>Safe for untrusted text</strong>: only the core schema’s tags (<code>!!str</code>,
+<code>!!int</code>, …) are read, and any other tag is an error; aliases may not
+stand for more than <code>max_alias_nodes</code> nodes, which stops the “billion
+laughs” attack.</li>
+<li><strong>Several documents</strong> in one stream (<code>---</code>) are read by
+<code>yaml.parse_all</code> and written by <code>yaml.write_all</code>.</li>
+<li><strong><code>yaml.parse_document</code></strong> keeps comments, key order, flow or block
+style and scalar styles through edits, as <code>json.parse_document</code> keeps a
+JSONC file’s comments.</li>
+<li><strong><code>yaml.encode</code></strong> and <strong><code>yaml.decode&lt;T&gt;</code></strong> convert structs exactly as
+<code>json.encode</code> and <code>json.decode</code> do.</li>
+</ul>
+<p>The package’s README lists what it reads and its limits: a mapping’s keys
+are strings, and there is no streaming reader yet.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="compression-and-archives"><a class="header" href="#compression-and-archives">Compression and archives</a></h1>
 <p>The <code>compress</code> module compresses and decompresses DEFLATE data, plain or
