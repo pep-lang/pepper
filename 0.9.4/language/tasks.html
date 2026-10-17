@@ -1,0 +1,920 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Tasks - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-b93fd6fb.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-fc646ff9.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/tasks.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="tasks"><a class="header" href="#tasks">Tasks</a></h1>
+<p>A task is a function that runs alongside others. Each task has its own small
+stack, and the tasks on a thread take turns: one runs until it waits (for a
+timer, for another task, or by yielding), and then another runs. A runtime
+has a few such threads, its <em>workers</em>, so tasks also run in parallel. This is
+the model of Go’s goroutines and of libuv or tokio event loops, without
+<code>async</code>/<code>await</code>: a function that waits looks like any other function, and
+any function can wait, however deep in the call stack. A socket call that
+has to wait parks only its task, so one worker can serve thousands of
+connections.</p>
+<p>WASI cannot switch stacks, so on WebAssembly (<code>--target wasm32-wasip1</code>)
+starting tasks (<code>async.run</code>, <code>async.run_with</code>) panics (see <a href="platform-selection.html#webassembly">WebAssembly</a>).</p>
+<p>Tasks live in the <code>async</code> module:</p>
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    var log = Array&lt;String&gt;();
+    async.run(() =&gt; {
+        # A task starts when the running task next waits.
+        var worker = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            log.append("worker starts");
+            async.yield_now();
+            log.append("worker ends");
+            return 42;
+        });
+        log.append("first task");
+        var answer = worker.join().value();   # waits; the worker runs
+        assert(answer == 42, "join returns the body's value");
+        log.append("joined");
+    });
+    assert(log[0] == "first task" &amp;&amp; log[1] == "worker starts", "tasks take turns");
+    assert(log[2] == "worker ends" &amp;&amp; log[3] == "joined", "join waited");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>async.run(body)</code> runs <code>body</code> as the first task and returns once it has
+returned and every task it started has finished. <code>run_with(options, body)</code>
+does the same with settings; <code>RuntimeOptions().stack_size(bytes)</code> sets how
+much stack each task reserves (256 KiB by default).</li>
+<li><code>Task&lt;T&gt;.spawn_local(body)</code> starts a task on the running task’s worker and
+returns its <code>Task&lt;T&gt;</code>. The new task runs the next time the running task
+waits. <code>T</code> is the body’s result type; use <code>Task&lt;void&gt;</code> for a body that
+returns nothing.</li>
+<li><code>task.join()</code> waits for the task and returns a <code>Result&lt;T, TaskError&gt;</code>:
+the body’s value, or an error if the task was cancelled.</li>
+<li><code>async.yield_now()</code> lets every other ready task run first.</li>
+<li><code>task.is_finished()</code> says whether the body has returned.</li>
+</ul>
+<p>A task from <code>spawn_local</code> stays on the thread of the task that started it,
+so it may use any value that task uses, as the closures above share <code>log</code>.
+Nothing needs to be thread-safe.</p>
+<h2 id="several-workers"><a class="header" href="#several-workers">Several workers</a></h2>
+<p><code>run</code> turns the calling thread into the first worker and starts one more
+thread per logical CPU after it (<code>RuntimeOptions().workers(count)</code> sets how
+many workers in all). <code>async.spawn&lt;T&gt;(body)</code> starts a task that whichever
+worker is free first runs, in parallel with the others:</p>
+<pre><code class="language-pepper">import async;
+
+sum(from: long, to: long): long {
+    var total: long = 0;
+    var i = from;
+    while (i &lt; to) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
+        # Two halves of the work, on two workers at the same time.
+        var low = async.spawn&lt;long&gt;(() =&gt; { return sum(0, 500000); });
+        var high = async.spawn&lt;long&gt;(() =&gt; { return sum(500000, 1000000); });
+        var total = low.join().value() + high.join().value();
+        assert(total == 499999500000, "both halves were added");
+    });
+    return 0;
+}
+</code></pre>
+<p>Because such a task may run on another thread, its body must be a <code>shared</code>
+function: it may capture only thread-safe values, as a
+<a href="threads.html">thread</a>’s body. Its result crosses threads too, so <code>spawn</code>
+constrains it <a href="generics.html#the-shared-constraint"><code>T: Shared</code></a>: a
+<a href="threads.html#what-threads-can-share">thread-safe type</a> such as a number, a
+<code>[Shared]</code> struct, or a <code>shared</code> function type. <code>async.spawn&lt;String&gt;</code> is a
+compile error at <code>String</code>. <code>join</code>, <code>cancel</code> and
+<code>is_finished</code> work as for <code>spawn_local</code>, from the task that started it.</p>
+<p>A task, once started, stays on its worker until it finishes, so the tasks it
+starts with <code>spawn_local</code> share values with it safely. An idle worker takes
+the next task that no worker has started yet. A task that computes without
+waiting still holds up the other tasks on its own worker (not the other
+workers), so a long computation should call <code>yield_now()</code> now and then.</p>
+<p><code>async.spawn_on_each_worker(body)</code> starts one task per worker, each on its
+own worker, and returns them in worker order. It is how a server runs an
+accept loop on every worker (see <a href="#sockets">Sockets</a>).</p>
+<h2 id="blocking-calls"><a class="header" href="#blocking-calls">Blocking calls</a></h2>
+<p>Some work would hold a worker up: a call that blocks in the operating system
+(reading a file, a C library that waits) or a long computation.
+<code>async.run_blocking&lt;T&gt;(body)</code> runs <code>body</code> on a separate thread and parks
+the calling task until it returns, so the worker keeps running its other
+tasks meanwhile:</p>
+<pre><code class="language-pepper">import async;
+
+const ticks = async.Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # Keeps running on the one worker while the blocking call waits.
+        var ticker = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (ticks.load() &lt; 3) {
+                async.sleep(5);
+                ticks.fetch_add(1);
+            }
+        });
+        var answer = async.run_blocking&lt;int&gt;(() =&gt; {
+            async.Thread.sleep(50);   # blocks a pool thread, not the worker
+            return 42;
+        });
+        assert(answer == 42, "the blocking call's result");
+        assert(ticks.load() &gt; 0, "the worker ran the ticker meanwhile");
+        ticker.join();
+    });
+    return 0;
+}
+</code></pre>
+<p>The runtime keeps a pool of threads for these calls. It starts one when a
+call finds none idle, up to <code>RuntimeOptions().blocking_threads(count)</code> (64
+by default); past that, calls wait for a free one. As for <code>spawn</code>, <code>body</code>
+must be a <code>shared</code> function and <code>T</code> must be thread-safe. <code>body</code> always runs
+to the end: cancelling the task, or a <code>timeout</code> around the call, takes
+effect once the call has returned. Outside a task, <code>run_blocking</code> just
+calls <code>body</code>.</p>
+<h2 id="waiting"><a class="header" href="#waiting">Waiting</a></h2>
+<p><code>async.sleep</code> puts a task to sleep and runs the others meanwhile, so many
+tasks can wait at the same time on one thread. It takes an <code>os.Duration</code>
+(see <a href="os.html">The operating system</a>), or a number of milliseconds; a duration
+that is not a whole number of milliseconds rounds up:</p>
+<pre><code class="language-pepper">import async;
+import os;
+
+main(): int {
+    var order = Array&lt;int&gt;();
+    async.run(() =&gt; {
+        var tasks = Array&lt;async.Task&lt;void&gt;&gt;();
+        var i = 0;
+        while (i &lt; 3) {
+            var n = i;
+            # The later a task starts, the shorter it sleeps.
+            tasks.append(async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                async.sleep(os.Duration.from_milliseconds(((3 - n) * 20) as ulong));
+                order.append(n);
+            }));
+            i = i + 1;
+        }
+        for (var task in tasks) {
+            task.join();
+        }
+    });
+    # All three slept at the same time, on one thread.
+    assert(order[0] == 2 &amp;&amp; order[1] == 1 &amp;&amp; order[2] == 0, "shortest sleep first");
+    return 0;
+}
+</code></pre>
+<p>Outside a task, <code>sleep</code> blocks the thread, and <code>yield_now</code> does nothing.</p>
+<p>Tasks are never interrupted. A task that computes for a long time without
+waiting keeps every other task waiting, so a long loop should call
+<code>yield_now()</code> now and then.</p>
+<p><code>Thread.sleep</code> in a task is <code>async.sleep</code>.</p>
+<h2 id="mutexes-channels-and-conditions"><a class="header" href="#mutexes-channels-and-conditions">Mutexes, channels and conditions</a></h2>
+<p>The <a href="threads.html">synchronization types</a> work in tasks too. When a task
+has to wait for a <code>Mutex</code>, for a value from a <code>Channel</code> or for room in a
+bounded one, in <code>Condition.wait</code>, for an <code>RwLock</code>, or in <code>Semaphore.acquire</code>,
+<code>Barrier.wait</code> or <code>Latch.wait</code>, it parks and its worker runs other
+tasks, just as it does for a socket. The task that holds the lock or will
+send the value can be on the same worker, on another worker, or a plain
+thread:</p>
+<pre><code class="language-pepper">import async;
+
+struct Log {
+    var lines: Array&lt;String&gt;;
+    construct() {
+        this.lines = Array&lt;String&gt;();
+    }
+}
+
+const log = async.Mutex&lt;Log&gt;(Log());
+const jobs = async.Channel&lt;int&gt;(2);
+
+main(): int {
+    # One worker: every task below shares one thread.
+    async.run_with(async.RuntimeOptions().workers(1), () =&gt; {
+        # The consumer parks in the channel until a value arrives.
+        var consumer = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            var total = 0;
+            for (var job in jobs) {
+                total = total + job;
+            }
+            return total;
+        });
+        # A task may hold the lock while it waits; the other task parks
+        # until it is free.
+        var writer = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            with (var l = log.lock()) {
+                l.lines.append("first");
+                async.sleep(10);
+                l.lines.append("second");
+            }
+        });
+        async.yield_now();
+        with (var l = log.lock()) {
+            l.lines.append("third");
+        }
+        writer.join();
+
+        # The producer parks while the bounded channel is full.
+        var i = 1;
+        while (i &lt;= 5) {
+            jobs.send(i);
+            i = i + 1;
+        }
+        jobs.close();
+        assert(consumer.join().value() == 15, "every job arrived");
+    });
+    with (var l = log.lock()) {
+        assert(l.lines[2] == "third", "the lock waited for the writer");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each task counts as its own holder of a <code>Mutex</code>, so two tasks on one
+worker exclude each other, and a task may hold a lock across its own
+waits (a <code>sleep</code>, a socket call, another lock).</li>
+<li>A cancel, or a <code>timeout</code> around the call, ends a channel wait: <code>send</code>
+returns false and <code>receive</code> returns an error (and a <code>for</code> loop over the
+channel ends). A task waiting for a <code>Mutex</code> still gets the lock, and
+<code>Condition.wait</code> still waits for a notification, since the caller’s loop
+would only wait again; <code>wait_for</code> returns when its own time runs out.</li>
+<li>A <a href="threads.html#waiting-on-several-channels-with-select"><code>Select</code></a> parks
+its task on every channel at once, and a cancel or <code>timeout</code> ends its
+wait with an error. <code>Condition.wait_while</code> parks like <code>wait</code>.</li>
+<li>Outside a task they block the thread, as before.</li>
+</ul>
+<h2 id="task-local-values"><a class="header" href="#task-local-values">Task-local values</a></h2>
+<p>A <code>TaskLocal&lt;T&gt;</code> is a variable with a separate value in every task, as a
+<a href="threads.html#per-thread-values-with-threadlocal"><code>ThreadLocal&lt;T&gt;</code></a> has one
+per thread. Tasks that take turns on one worker share its thread, so only a
+<code>TaskLocal</code> can tell them apart:</p>
+<pre><code class="language-pepper">import async;
+
+# The id of the request the running task is handling.
+const request_id = async.TaskLocal&lt;long&gt;();
+
+# Deep in the call chain, without the id passed down as a parameter.
+current_request(): long {
+    return request_id.get();
+}
+
+main(): int {
+    # One worker: the three tasks take turns on one thread, so a
+    # ThreadLocal could not tell them apart.
+    async.run_with(
+        async.RuntimeOptions().workers(1),
+        () =&gt; {
+            var tasks = Array&lt;async.Task&lt;bool&gt;&gt;();
+            for (var id in [1, 2, 3]) {
+                tasks.append(
+                    async.Task&lt;bool&gt;.spawn_local(
+                        () =&gt; {
+                            request_id.set(id);
+                            async.yield_now();  # the other tasks set their ids meanwhile
+                            return current_request() == id;
+                        }
+                    )
+                );
+            }
+            for (var task in tasks) {
+                assert(task.join().value(), "each task sees its own id");
+            }
+            # This task never set one.
+            assert(!request_id.is_set(), "a task starts with no value");
+        }
+    );
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>set(value)</code> stores the calling task’s value and <code>get()</code> returns it (the
+default of <code>T</code>, zero or null, until the task sets one). <code>is_set()</code> and
+<code>clear()</code> work as on a <code>ThreadLocal</code>.</li>
+<li>A task starts with no value, even one started by a task that has one,
+and its values are released when it finishes.</li>
+<li>Code outside any task (before <code>async.run</code>, or on a plain <code>Thread</code>) has
+one value per thread, like a <code>ThreadLocal</code>.</li>
+<li>For a <code>T</code> that is not thread-safe, such as a <code>String</code>, reach the value
+with <code>with (var value = local.enter()) { ... }</code>, as for a <code>ThreadLocal</code>;
+<code>get()</code> is then a compile error.</li>
+</ul>
+<h2 id="sockets"><a class="header" href="#sockets">Sockets</a></h2>
+<p>A socket call in a task that would have to wait (for a connection, for data,
+or for room to send) parks the task and lets the others run until the
+socket is ready. The socket API is the same one a plain program uses; only
+the waiting differs:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+# Echoes everything a client sends until it closes the connection.
+serve(stream: io.TcpStream) {
+    var buffer = Array&lt;u8&gt;();
+    while (true) {
+        var r = stream.read(buffer, 4096);   # parks this task until data arrives
+        if (r.is_err() || r.value() == 0) {
+            return;
+        }
+        stream.write_all(buffer);
+        buffer.clear();
+    }
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var address = listener.local_address().value();
+        var clients = 10;
+
+        # The server: one task per connection, all on this thread.
+        async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                async.Task&lt;void&gt;.spawn_local(() =&gt; { serve(stream); });
+            }
+        });
+
+        # The clients, as tasks on the same thread.
+        var replies = Array&lt;async.Task&lt;ulong&gt;&gt;();
+        var i = 0;
+        while (i &lt; clients) {
+            var k = i;
+            replies.append(async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+                var stream = io.TcpStream.connect(address).value();
+                var message = $"hello from {k}";
+                stream.write_all(message);
+                var buffer = Array&lt;u8&gt;();
+                stream.read_exact(buffer, message.size);
+                return buffer.count;
+            }));
+            i = i + 1;
+        }
+        for (var reply in replies) {
+            assert(reply.join().value() &gt; 0, "the server echoed the message");
+        }
+    });
+    return 0;
+}
+</code></pre>
+<p>Outside a task, the same calls block the thread as before. A socket belongs
+to the worker whose task made it: tasks started with <code>spawn_local</code> can share
+it, and each spawned task makes its own.</p>
+<h3 id="waiting-on-several-sockets"><a class="header" href="#waiting-on-several-sockets">Waiting on several sockets</a></h3>
+<p>To wait on whichever of several sockets is ready first, give each socket a
+task that reads it and sends what it read to a channel, and wait on the
+channels with a <a href="threads.html#waiting-on-several-channels-with-select"><code>Select</code></a>.
+Closing a channel when its socket closes lets the select stop waiting on it.
+Tasks are cheap, so this costs little, and the reading code stays the
+ordinary blocking-style loop:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+# What the select returns: bytes that arrived on one of the connections.
+enum Event {
+    Data(from: int, count: ulong),
+}
+
+# Reads `stream` until the peer closes it, sending the size of each read to
+# `into`, then closes `into` so the select stops waiting on it.
+forward(stream: io.TcpStream, into: async.Channel&lt;ulong&gt;) {
+    var buffer = Array&lt;u8&gt;();
+    while (true) {
+        var r = stream.read(buffer, 4096);   # parks this task, not the others
+        if (r.is_err() || r.value() == 0) {
+            into.close();
+            return;
+        }
+        into.send(r.value());
+        buffer.clear();
+    }
+}
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var address = listener.local_address().value();
+        var first = io.TcpStream.connect(address).value();
+        var (from_first, first_peer) = listener.accept().value();
+        var second = io.TcpStream.connect(address).value();
+        var (from_second, second_peer) = listener.accept().value();
+
+        # One task per socket turns what it reads into channel messages.
+        var first_bytes = async.Channel&lt;ulong&gt;();
+        var second_bytes = async.Channel&lt;ulong&gt;();
+        async.Task&lt;void&gt;.spawn_local(() =&gt; { forward(from_first, first_bytes); });
+        async.Task&lt;void&gt;.spawn_local(() =&gt; { forward(from_second, second_bytes); });
+
+        first.write_all("hello");
+        first.shutdown_write();
+        second.write_all("hi there");
+        second.shutdown_write();
+
+        # The select then waits on both sockets at once, through their channels.
+        var select = async.Select&lt;Event&gt;();
+        select.receive(first_bytes, (count: ulong): Event =&gt; Event.Data(0, count));
+        select.receive(second_bytes, (count: ulong): Event =&gt; Event.Data(1, count));
+        ulong first_total = 0;
+        ulong second_total = 0;
+        var running = true;
+        while (running) {
+            match (select.wait()) {
+                Ok(event) =&gt; {
+                    match (event) {
+                        Data(from, count) =&gt; {
+                            if (from == 0) {
+                                first_total = first_total + count;
+                            } else {
+                                second_total = second_total + count;
+                            }
+                        }
+                    }
+                }
+                Err(error) =&gt; {
+                    running = false;   # both connections closed
+                }
+            }
+        }
+        assert(first_total == 5 &amp;&amp; second_total == 8, "every byte arrived once");
+    });
+    return 0;
+}
+</code></pre>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<p><code>File.read</code>, <code>write</code> and <code>write_all</code> in a task park the task until the
+system call is done, and the worker runs other tasks meanwhile. With the
+<code>IoUring</code> backend the kernel does the read or write itself; with the others
+a thread from <code>run_blocking</code>’s pool makes the blocking call. Opening,
+seeking, <code>metadata</code> and the other <code>File</code> calls still block the thread, as
+they are quick on local disks. A cancel or a <code>timeout</code> does not cut a read
+or write short: it takes effect once the call returns.</p>
+<p>The array a read fills or a write sends from is in use until the call
+returns, so growing it from another task meanwhile panics (“Array: the
+buffer is in use by an I/O operation”). A <code>String</code> passed to <code>write_all</code> is
+copied first.</p>
+<h3 id="accepting-on-every-worker"><a class="header" href="#accepting-on-every-worker">Accepting on every worker</a></h3>
+<p>An <code>io.SharedTcpListener</code> is a listening socket that any thread can accept
+on. Give each worker an accept loop with <code>spawn_on_each_worker</code>; each
+connection goes to one of the waiting workers, and the stream it returns
+belongs to that worker:</p>
+<pre><code class="language-pepper">import async;
+
+import io;
+
+const served = async.Atomic&lt;int&gt;(0);
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(4), () =&gt; {
+        var listener = io.SharedTcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+
+        # One accept loop per worker; each connection goes to one of them.
+        async.spawn_on_each_worker(() =&gt; {
+            while (true) {
+                var accepted = listener.accept();
+                if (accepted.is_err()) {
+                    return;   # cancelled when the first task returns
+                }
+                var (stream, peer) = accepted.value();
+                served.fetch_add(1);
+                async.Task&lt;void&gt;.spawn_local(() =&gt; {
+                    stream.write_all("hello").value();
+                });
+            }
+        });
+
+        var i = 0;
+        while (i &lt; 8) {
+            var client = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (client.read(reply, 64).value() &gt; 0) {
+            }
+            assert(reply.count == 5, "greeted");
+            i = i + 1;
+        }
+    });
+    assert(served.load() == 8, "every connection was accepted once");
+    return 0;
+}
+</code></pre>
+<p>The listener has no <code>close()</code>, since other workers may be waiting on it.
+It closes when the last reference goes: here, once <code>run</code> has cancelled the
+loops.</p>
+<h3 id="moving-a-stream-to-another-worker"><a class="header" href="#moving-a-stream-to-another-worker">Moving a stream to another worker</a></h3>
+<p><code>stream.into_transfer()</code> moves a connection out of a <code>TcpStream</code> into an
+<code>io.SocketTransfer</code>, a thread-safe token that a <code>shared</code> function can
+capture or a <code>Channel</code> can carry, and <code>io.TcpStream.adopt(transfer)</code> takes
+it out again on the receiving worker. The old stream is closed afterwards,
+only the first <code>adopt</code> gets the connection, and a token no one adopts
+closes the connection when it goes:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run_with(async.RuntimeOptions().workers(2), () =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+        var port = listener.local_address().value().port();
+        var client = async.Task&lt;ulong&gt;.spawn_local(() =&gt; {
+            var stream = io.TcpStream.connect_host("127.0.0.1", port).value();
+            var reply = Array&lt;u8&gt;();
+            while (stream.read(reply, 64).value() &gt; 0) {
+            }
+            return reply.count;
+        });
+
+        var (stream, peer) = listener.accept().value();
+        # A stream is not thread-safe; its transfer token is.
+        var transfer = stream.into_transfer();
+        var handler = async.spawn&lt;void&gt;(() =&gt; {
+            var mine = io.TcpStream.adopt(transfer).value();
+            mine.write_all("from any worker").value();
+        });
+        handler.join();
+        assert(client.join().value() == 15, "the moved stream answered");
+    });
+    return 0;
+}
+</code></pre>
+<p>When no task is ready to run, a worker blocks until a socket is ready, the
+next timer is due, or another worker wakes it; while tasks are running, it also checks the sockets
+every few dozen tasks, so a busy task cannot starve the network.</p>
+<h3 id="backends"><a class="header" href="#backends">Backends</a></h3>
+<p>How the runtime waits for sockets is its I/O <em>backend</em>, an <code>async.Backend</code>:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Backend</th><th>Where</th><th>How</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Epoll</code></td><td>Linux</td><td>epoll, edge-triggered</td></tr>
+<tr><td><code>IoUring</code></td><td>Linux 5.11 and later</td><td>io_uring: the kernel does stream sockets’ receives and sends and files’ reads and writes itself, submitted in batches, with deferred completion work; never picked automatically, since container seccomp profiles and hardened kernels often refuse it</td></tr>
+<tr><td><code>Kqueue</code></td><td>macOS</td><td>kqueue, edge-triggered</td></tr>
+<tr><td><code>Iocp</code></td><td>Windows</td><td>an I/O completion port, fed by AFD poll requests (as tokio and libuv do)</td></tr>
+<tr><td><code>Poll</code></td><td>everywhere</td><td><code>poll()</code> (<code>WSAPoll</code> on Windows), which looks at every waiting socket on each wait: fine for a few connections, slow for thousands</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>Backend.Automatic</code>, the default, picks epoll, kqueue or IOCP, whichever
+the system has. <code>RuntimeOptions().backend(kind)</code> asks for one (and
+<code>run_with</code> panics if the system does not have it), and the
+<code>PEPPER_IO_BACKEND</code> environment variable (<code>epoll</code>, <code>io_uring</code>, <code>kqueue</code>,
+<code>iocp</code> or <code>poll</code>) overrides the automatic choice without changing the
+program, for testing and benchmarks. <code>async.current_backend()</code> says which one is running.</p>
+<p>io_uring pays off as the amount of multiplexed I/O grows: many operations
+in flight, submitted and completed in batches through the ring rather than
+one system call each. With the <code>IoUring</code> backend, a stream socket’s <code>read</code>
+and <code>write</code> in a task go to the kernel as a receive or send request, which
+it runs once the socket is ready; the worker submits every request queued
+since its last look, and collects every completion, in one system call. In
+our echo benchmark that makes about an eighth of epoll’s system calls,
+runs as fast as epoll from 64 to 1,024 connections (half again as fast as
+io_uring used only for readiness), and stays about 10% behind at 4,096.</p>
+<p>A cancel or a <code>timeout</code> asks the kernel to stop a request and waits for it
+to finish, since the kernel is writing into or reading from the array
+until then. A receive that got data before the cancel took effect returns
+that data instead of failing, so no bytes are lost. As with files, growing
+the array from another task meanwhile panics. Accepting, connecting, UDP
+sockets, and a second task reading (or writing) a socket that one already
+reads (or writes) still wait for readiness.</p>
+<h2 id="timeouts"><a class="header" href="#timeouts">Timeouts</a></h2>
+<p><code>async.timeout(milliseconds)</code> limits how long the waits inside a <code>with</code>
+block may take:</p>
+<pre><code class="language-pepper">import async;
+import io;
+
+main(): int {
+    async.run(() =&gt; {
+        var listener = io.TcpListener.bind(io.SocketAddress.parse("127.0.0.1:0").value()).value();
+
+        # Nobody connects, so the accept gives up after 50 milliseconds.
+        with (var deadline = async.timeout(50)) {
+            var accepted = listener.accept();
+            assert(accepted.is_err() &amp;&amp; accepted.error().is_timed_out(), "accept timed out");
+            assert(deadline.is_expired(), "the limit has passed");
+        }
+
+        # A join gives up too; the task itself carries on until cancelled.
+        var slow = async.Task&lt;int&gt;.spawn_local(() =&gt; {
+            async.sleep(1000000);
+            return 42;
+        });
+        with (async.timeout(20)) {
+            var result = slow.join();
+            assert(result.error().is_timed_out(), "join timed out");
+        }
+        slow.cancel();
+    });
+    return 0;
+}
+</code></pre>
+<p>Once the limit passes, a socket call that has to wait fails with an
+<code>IoError</code> for which <code>is_timed_out()</code> holds, <code>join</code> fails with a <code>TaskError</code>
+for which <code>is_timed_out()</code> holds (the task it waited for carries on), and
+<code>sleep</code> returns early. Code that does not wait is never interrupted. The
+limit ends with the block. Timeouts nest, and an inner one cannot extend an
+outer one. <code>deadline.is_expired()</code> says whether the limit has passed.
+<code>timeout</code> panics outside a task.</p>
+<h2 id="cancelling"><a class="header" href="#cancelling">Cancelling</a></h2>
+<p><code>task.cancel()</code> asks a task to stop. Nothing stops it by force: from then on
+<code>async.is_cancelled()</code> is true inside it, <code>sleep</code> returns at once, and
+<code>join</code> on it fails with a <code>TaskError</code> whose <code>is_cancelled()</code> is true. A
+task waiting in <code>join</code> returns the same error when it is cancelled itself,
+and a socket call waiting in a cancelled task fails with an <code>IoError</code> whose
+<code>is_cancelled()</code> is true.
+When the first task of a <code>run</code> returns, every task still running is
+cancelled, on every worker, and <code>run</code> waits for each to finish:</p>
+<pre><code class="language-pepper">import async;
+
+main(): int {
+    var polls = Array&lt;int&gt;();
+    async.run(() =&gt; {
+        var poller = async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            while (!async.is_cancelled()) {
+                polls.append(1);
+                async.sleep(5);
+            }
+        });
+        async.sleep(30);
+        poller.cancel();
+        var result = poller.join();
+        assert(result.is_err() &amp;&amp; result.error().is_cancelled(), "a cancelled task's join fails");
+
+        # A task still running when the first task returns is cancelled too,
+        # and run waits for it to finish.
+        async.Task&lt;void&gt;.spawn_local(() =&gt; {
+            async.sleep(1000000);   # returns at once when cancelled
+        });
+    });
+    assert(polls.count &gt; 0, "the poller ran until cancelled");
+    return 0;
+}
+</code></pre>
+<p>If every task is waiting for another task and none can continue, <code>run</code>
+panics instead of waiting forever.</p>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>Each task runs on a fiber: a stack of its own and a saved set of
+registers. Switching tasks saves the running task’s registers on its stack
+and restores the other’s, a few instructions of assembly on Linux and macOS
+(the <code>__switch_context</code> intrinsic) and the Fibers API on Windows. A task’s
+stack is reserved address space with a guard page below it; only the pages
+the task touches use memory, and a task that overflows its stack crashes the
+program as a thread would. Stacks are reused for later tasks.</p>
+<p>Each worker has its own ready queue, timers and backend. Workers talk
+through a queue of messages each (a spawned task finished, was cancelled, or
+was woken by a <code>Mutex</code>, <code>Condition</code> or <code>Channel</code>) and a <em>doorbell</em> that ends
+a worker’s wait in its backend from another thread: an eventfd with epoll
+and io_uring, a user event with kqueue, a posted completion with IOCP, and a
+pipe (on Windows, a loopback UDP socket that a second socket sends to) with
+<code>poll()</code>. <code>run_blocking</code>’s pool threads are plain threads that report back
+through the same messages.</p>
+<h2 id="current-status"><a class="header" href="#current-status">Current status</a></h2>
+<ul>
+<li><code>File</code> calls other than <code>read</code>, <code>write</code> and <code>write_all</code> (opening,
+seeking, <code>sync</code>, directories) block the thread in a task.</li>
+<li>On Windows, a <code>ThreadLocal</code> has a separate value in each task (it is
+built on fiber local storage); elsewhere the tasks of a thread share it.</li>
+</ul>
+<p>The <a href="../reference/async-task.html">reference page</a> documents every function.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/threads.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/files.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/threads.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/files.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

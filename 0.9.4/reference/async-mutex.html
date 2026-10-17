@@ -1,0 +1,609 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Mutex and Condition - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-b93fd6fb.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-fc646ff9.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/reference/async-mutex.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <!-- Generated from runtime/async/mutex.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="mutex-and-condition"><a class="header" href="#mutex-and-condition">Mutex and Condition</a></h1>
+<p>Mutual exclusion: <code>Mutex&lt;T&gt;</code> owns a value that one thread at a time can
+use, <code>MutexGuard&lt;T&gt;</code> is the lock a <code>with</code> block holds, and <code>Condition&lt;T&gt;</code>
+lets a thread holding a Mutex sleep until another thread changes its value.</p>
+<p>Source: <code>runtime/async/mutex.pep</code></p>
+<h2 id="mutex"><a class="header" href="#mutex">Mutex</a></h2>
+<pre><code class="language-pepper">[Shared] struct Mutex&lt;T&gt;
+</code></pre>
+<p>A value that one thread at a time can use, like Rust’s <code>Mutex&lt;T&gt;</code> or a C++
+<code>std::mutex</code> paired with the data it protects.</p>
+<p>The Mutex owns its value, and the way to reach it is a <code>with</code> block:
+<code>with (var value = mutex.lock()) { ... }</code> waits until no other thread holds
+the lock, binds the value, and unlocks when the block ends by any path
+(falling off the end, <code>return</code>, <code>break</code>, <code>continue</code>). Everything a thread
+did while holding the lock is visible to the next thread that takes it.</p>
+<p><code>T</code> is a struct type, such as <code>Array&lt;String&gt;</code> or a struct of your own. Inside
+the <code>with</code> block the compiler keeps the locked value and the rest of the
+program apart: a value that is not thread-safe (a <code>String</code>, an <code>Array</code>)
+cannot move from one to the other, and no part of the locked value can be
+returned from the block or stored outside it. Pass <code>copy(x)</code> to move a
+value either way; new values (a constructor call, a string literal, a call
+the compiler infers returns a fresh value) and thread-safe values such as
+numbers pass freely. <code>Mutex&lt;int&gt;</code> is a compile error: use <code>Atomic&lt;int&gt;</code>.</p>
+<p>A Mutex is <code>[Shared]</code>: keep it in a module-scope variable or pass it to
+threads. It is not re-entrant: locking it again on the thread that holds
+it panics instead of deadlocking. A panic while it is held ends the
+program, so a Mutex is never left “poisoned”.</p>
+<p>In a task (see <code>run</code>), waiting for the lock parks the task, not its worker
+thread, so the other tasks there keep running, including one that holds
+the lock. Each task counts as its own holder, and a task may hold the
+lock across a wait of its own (a <code>sleep</code>, a socket call). A cancel does
+not end the wait for the lock.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the protected value’s type, a struct type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Account {
+    const checking: Atomic&lt;long&gt;;
+    const savings: Atomic&lt;long&gt;;
+    construct(long checking = 0, long savings = 0) {
+        this.checking = Atomic&lt;long&gt;(checking);
+        this.savings = Atomic&lt;long&gt;(savings);
+    }
+}
+
+const account = async.Mutex&lt;Account&gt;(Account(100, 0));
+
+save(long amount) {
+    with (var a = account.lock()) {
+        # No other thread sees the money in neither account.
+        a.checking.fetch_sub(amount);
+        a.savings.fetch_add(amount);
+    }
+}
+</code></pre>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
+<pre><code class="language-pepper">construct([Move] value: T)
+</code></pre>
+<p>Creates an unlocked Mutex that owns <code>value</code>.</p>
+<p><code>value</code> must be a new value, such as a constructor call, <code>copy(x)</code> or
+<code>move(x)</code>: nothing outside the Mutex may reference it. The caller hands
+its reference over, so nothing is copied.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value to protect; a new value, which the compiler checks</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
+</code></pre>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="lock"><a class="header" href="#lock">lock</a></h4>
+<pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
+</code></pre>
+<p>Waits until the calling thread holds the lock, and returns the guard
+that a <code>with</code> block enters to reach the value.</p>
+<p>Use it as the scope of a <code>with</code> header: <code>with (var v = mutex.lock())</code>.
+The lock is released when the guard is destroyed, which for a guard
+created in the header is the end of the block. A guard kept anywhere
+else holds the lock until its last reference is released.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, and destroying it unlocks</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread already holds the lock</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var account = accounts.lock()) {
+    account.balance.fetch_add(10);
+}
+</code></pre>
+<h4 id="try_lock"><a class="header" href="#try_lock">try_lock</a></h4>
+<pre><code class="language-pepper">try_lock(): MutexGuard&lt;T&gt;
+</code></pre>
+<p>Takes the lock only if no thread holds it right now, without waiting.</p>
+<p>In <code>with (var v = mutex.try_lock()) { ... } else { ... }</code>, the body runs
+when the lock was taken and the <code>else</code> block runs when it was not. The
+calling thread already holding the lock counts as busy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the guard; its <code>enter()</code> returns the value, or null when the lock was busy</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var account = accounts.try_lock()) {
+    account.balance.fetch_add(10);
+} else {
+    print("busy; try later\n");
+}
+</code></pre>
+<h4 id="replace"><a class="header" href="#replace">replace</a></h4>
+<pre><code class="language-pepper">replace([Move] value: T): T
+</code></pre>
+<p>Replaces the whole value and returns the one the Mutex held, which the
+caller then owns outright: nothing else references it any more.</p>
+<p>Waits for the lock like <code>lock()</code>. <code>value</code> must be a new value, as for
+the constructor, and is handed over without a copy.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the new value; a new value, which the compiler checks</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value the Mutex held</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread already holds the lock</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var done = pending.replace(Array&lt;Job&gt;());   # take every job at once
+</code></pre>
+<h4 id="is_held"><a class="header" href="#is_held">is_held</a></h4>
+<pre><code class="language-pepper">is_held(): bool
+</code></pre>
+<p>Reports whether the caller holds the lock: the calling task, in a task,
+or else the calling thread.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true between a <code>lock()</code> (or a successful <code>try_lock()</code>) by the caller and the guard’s destruction</li>
+</ul>
+<h4 id="condition"><a class="header" href="#condition">condition</a></h4>
+<pre><code class="language-pepper">condition(): Condition&lt;T&gt;
+</code></pre>
+<p>Returns a new condition variable that waits on this Mutex.</p>
+<p>Create it once and share it, as the Mutex is shared: every thread that
+waits or notifies must use the same Condition.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Condition bound to this Mutex</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">const queue = async.Mutex&lt;Jobs&gt;(Jobs());
+const not_empty = queue.condition();
+</code></pre>
+<h2 id="mutexguard"><a class="header" href="#mutexguard">MutexGuard</a></h2>
+<pre><code class="language-pepper">[Isolated] struct MutexGuard&lt;T&gt;
+</code></pre>
+<p>The lock on a <code>Mutex&lt;T&gt;</code> that a <code>with</code> block holds: <code>enter()</code> returns the
+Mutex’s value, and destroying the guard unlocks.</p>
+<p>Get one from <code>Mutex.lock()</code> or <code>Mutex.try_lock()</code> in a <code>with</code> header. The
+block releases the guard on every path out, so the lock cannot be left
+held by mistake. A guard belongs to the thread that locked it; do not pass
+it to another thread.</p>
+<p>A guard is <code>[Isolated]</code>: it can only be the scope of a <code>with</code> header, so
+the lock cannot be kept past the block, and the compiler checks the block
+with the confinement rule (see <code>Mutex</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the protected value’s type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var totals = stats.lock()) {
+    totals.requests.fetch_add(1);
+}   # unlocked here
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="locked"><a class="header" href="#locked">locked</a></h4>
+<pre><code class="language-pepper">bool locked
+</code></pre>
+<p>Whether the guard holds the lock: false once <code>exit()</code> has run, and for
+a <code>try_lock()</code> that found the lock busy.</p>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="mutexguard-1"><a class="header" href="#mutexguard-1">MutexGuard()</a></h4>
+<pre><code class="language-pepper">construct(source: Mutex&lt;T&gt;, wait: bool = true)
+</code></pre>
+<p>Locks <code>source</code> and creates the guard that holds it; the same as
+<code>source.lock()</code> (or <code>source.try_lock()</code> when <code>wait</code> is false).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the Mutex to lock</li>
+<li><code>wait</code> — true to wait for the lock; false to take it only if it is free right now</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>wait</code> is true and the calling thread already holds the lock</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="enter"><a class="header" href="#enter">enter</a></h4>
+<pre><code class="language-pepper">enter(): T
+</code></pre>
+<p>Returns the Mutex’s value, for the <code>with</code> header to bind.</p>
+<p>For a struct <code>T</code> the caller gets its own reference.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the protected value, or the default of <code>T</code> (null for a struct) when the guard does not hold the lock</li>
+</ul>
+<h4 id="exit"><a class="header" href="#exit">exit</a></h4>
+<pre><code class="language-pepper">exit()
+</code></pre>
+<p>Unlocks the Mutex if the guard holds it. The destructor calls it;
+calling it again does nothing.</p>
+<h2 id="condition-1"><a class="header" href="#condition-1">Condition</a></h2>
+<pre><code class="language-pepper">[Shared] struct Condition&lt;T&gt;
+</code></pre>
+<p>Lets threads that hold a Mutex sleep until another thread changes the
+Mutex’s value, like C++ <code>std::condition_variable</code>. Get one from
+<code>Mutex.condition()</code>.</p>
+<p><code>wait()</code> must run while the calling thread holds the Mutex, normally inside
+<code>with (var v = mutex.lock())</code>. It unlocks, sleeps until notified, and locks
+again before returning. A waiter can also wake without a notification (a
+spurious wakeup), so always wait in a loop that re-checks the value.</p>
+<p>A thread that changes the value calls <code>notify_one()</code> or <code>notify_all()</code>,
+usually while it still holds the lock.</p>
+<p>A Condition is <code>[Shared]</code>, like its Mutex.</p>
+<p>In a task (see <code>run</code>), <code>wait()</code> parks the task, not its worker thread. A
+cancel does not end it, since the caller’s loop would only wait again;
+<code>wait_for()</code> still returns when its time runs out.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the Mutex’s value type</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import async;
+
+[Shared]
+struct Jobs {
+    const waiting: Atomic&lt;long&gt;;
+    construct() { waiting = Atomic&lt;long&gt;(0); }
+}
+
+const jobs = async.Mutex&lt;Jobs&gt;(Jobs());
+const has_work = jobs.condition();
+
+take_job() {
+    with (var j = jobs.lock()) {
+        while (j.waiting.load() == 0) {
+            has_work.wait();
+        }
+        j.waiting.fetch_sub(1);
+    }
+}
+
+add_job() {
+    with (var j = jobs.lock()) {
+        j.waiting.fetch_add(1);
+        has_work.notify_one();
+    }
+}
+</code></pre>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="condition-2"><a class="header" href="#condition-2">Condition()</a></h4>
+<pre><code class="language-pepper">construct(mutex: Mutex&lt;T&gt;)
+</code></pre>
+<p>Creates a condition variable that waits on <code>mutex</code>. <code>mutex.condition()</code>
+does the same.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>mutex</code> — the Mutex that waiters hold</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="wait"><a class="header" href="#wait">wait</a></h4>
+<pre><code class="language-pepper">wait()
+</code></pre>
+<p>Unlocks the Mutex, sleeps until another thread calls <code>notify_one()</code> or
+<code>notify_all()</code>, and locks the Mutex again before returning.</p>
+<p>The thread may also wake without being notified, so call it in a loop
+that re-checks what it waits for.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread does not hold the Mutex</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var q = queue.lock()) {
+    while (q.waiting.load() == 0) {
+        not_empty.wait();
+    }
+}
+</code></pre>
+<h4 id="wait_for"><a class="header" href="#wait_for">wait_for</a></h4>
+<pre><code class="language-pepper">wait_for(milliseconds: ulong): bool
+</code></pre>
+<p>Like <code>wait()</code>, but gives up after about <code>milliseconds</code> milliseconds.
+The Mutex is locked again before it returns either way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to sleep</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if the thread was woken (by a notification or spuriously), false if the time ran out</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the calling thread does not hold the Mutex</li>
+</ul>
+<h4 id="wait_while"><a class="header" href="#wait_while">wait_while</a></h4>
+<pre><code class="language-pepper">wait_while([Locked] predicate: (T) =&gt; bool)
+</code></pre>
+<p>Waits while <code>predicate</code> holds for the Mutex’s value: calls it with the
+value, and while it returns true, waits as <code>wait()</code> does and asks
+again. Returns once it returns false, with the Mutex still locked.</p>
+<p>Wakeups without a notification are handled here: the predicate is
+asked again after every wake.</p>
+<p><code>predicate</code> is written at the call, as a closure: the compiler checks
+its body as it checks a <code>with</code> block’s, with its parameter as the
+locked value, so it cannot keep any part of the value or bring in a
+value from outside.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">with (var queue = jobs.lock()) {
+    not_empty.wait_while((queue: Array&lt;Job&gt;): bool =&gt; queue.count == 0);
+    var job = queue.remove_at(0);
+}
+</code></pre>
+<h4 id="wait_while_for"><a class="header" href="#wait_while_for">wait_while_for</a></h4>
+<pre><code class="language-pepper">wait_while_for(milliseconds: ulong, [Locked] predicate: (T) =&gt; bool): bool
+</code></pre>
+<p>Like <code>wait_while()</code>, but gives up after about <code>milliseconds</code>
+milliseconds. The Mutex is locked when it returns either way.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>milliseconds</code> — the longest time to wait</li>
+<li><code>predicate</code> — called with the locked value; true to keep waiting</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true once <code>predicate</code> returned false, false if the time ran out first</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the caller does not hold the Mutex</li>
+</ul>
+<h4 id="notify_one"><a class="header" href="#notify_one">notify_one</a></h4>
+<pre><code class="language-pepper">notify_one()
+</code></pre>
+<p>Wakes one thread or task waiting on this condition, if any. The caller does
+not need to hold the Mutex, but usually does, having just changed the
+value.</p>
+<h4 id="notify_all"><a class="header" href="#notify_all">notify_all</a></h4>
+<pre><code class="language-pepper">notify_all()
+</code></pre>
+<p>Wakes every thread and task waiting on this condition. Each locks the Mutex in
+turn before its <code>wait()</code> returns.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/async-thread_local.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/async-coordination.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/async-thread_local.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/async-coordination.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
