@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6958e744.js";
+            window.path_to_searchindex_js = "searchindex-349f7cf8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-58d14832.js"></script>
@@ -22021,7 +22021,11 @@ which is quicker than one compilation unit after another, and meanwhile a
 copy of itself (<code>pep-lsp --fill-cache</code>) fills the cache: it checks the
 compilation units the file depends on in parallel, in more copies
 (<code>pep-lsp --compilation-unit-worker</code>), one per processor at most, as
-<code>pepper build</code> does. The next check waits for it, then loads them. When the
+<code>pepper build</code> does. Until it is done, an edit is checked again on the
+record of the whole program the first check left: only the bodies and
+declarations the edit changed or added are checked. An edit that does more,
+or that has an error or a warning, waits for the copy, then loads the
+compilation units it checked. When the
 cache has some compilation units but not others, the server checks the
 missing ones that way itself.</p>
 <h2 id="command-line-options-1"><a class="header" href="#command-line-options-1">Command-line options</a></h2>
