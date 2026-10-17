@@ -1,0 +1,1065 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Enums and match - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-6958e744.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-58d14832.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/enums.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="enums-and-match"><a class="header" href="#enums-and-match">Enums and <code>match</code></a></h1>
+<p>An <strong>enum</strong> is a type with a fixed set of named <strong>cases</strong>. A value of the
+enum holds exactly one of them. Use an enum where you would otherwise pass an
+integer code or a string, so the compiler checks that only the listed cases
+flow through, and that a <code>match</code> handles each one.</p>
+<p>There are two kinds:</p>
+<ul>
+<li>In an enum whose cases carry nothing (<code>Red</code>, <code>Green</code>), each case is an
+integer. Such an enum is a value type, like <code>int</code>.</li>
+<li>When a case carries values (<code>Circle(radius: int)</code>), the enum is a
+reference type, like a struct. See
+<a href="#cases-that-carry-values">Cases that carry values</a>.</li>
+</ul>
+<pre><code class="language-pepper"># An enum names a fixed set of cases; a slot of the enum type holds one.
+enum Suit {
+    Clubs,
+    Diamonds,
+    Hearts,
+    Spades,
+}
+
+# A representation sets the stored integer type; a case may give its value.
+enum Status: u8 {
+    Ok,
+    NotFound = 44,
+    Failed,
+}
+
+struct Card {
+    Suit suit;
+    int rank = 1;
+}
+
+main(): int {
+    var card = Card();
+    assert(card.suit == Suit.Clubs, "a slot starts at the case whose value is 0");
+    card.suit = Suit.Hearts;
+    assert(card.suit != Suit.Spades, "cases compare with == and !=");
+
+    # 'as' turns a case into its integer; the reverse is not allowed.
+    assert((Suit.Hearts as int) == 2, "cases number from 0");
+    assert((Status.Failed as int) == 45, "numbering continues after an explicit value");
+    assert(sizeof&lt;Status&gt;() == 1, "Status is stored as a u8");
+    return 0;
+}
+</code></pre>
+<h2 id="declaring-an-enum"><a class="header" href="#declaring-an-enum">Declaring an enum</a></h2>
+<p><code>enum Name { ... }</code> lists the cases, separated by commas; a comma after the
+last case is optional. Case names are <code>PascalCase</code>, like types (see
+<a href="naming.html">naming conventions</a>). A case may share a type’s name
+(<code>String(value: String)</code>); a string literal in the enum’s methods is still
+a <code>String</code>, and <code>String(...)</code> there calls the case.</p>
+<p>Each case is an integer. The first case is 0 and each case after it is one
+more than the one before. A case can give its own value with <code>= value</code>, and
+numbering continues from there:</p>
+<pre><code class="language-pepper">enum Status: u8 {
+    Ok,             # 0
+    NotFound = 44,  # 44
+    Failed,         # 45
+}
+</code></pre>
+<p>A value must be an integer constant: a literal such as <code>-1</code> or <code>0x20</code>, or a
+character such as <code>'y'</code>. Two cases cannot have the same value.</p>
+<p>The type after the colon is the <strong>representation</strong>, the integer type the
+enum is stored as. It can be any integer type (<code>u8</code>, <code>short</code>, <code>int</code>, <code>long</code>,
+and so on). Without one, the enum is stored as an <code>int</code>. Every case value
+must fit in the representation.</p>
+<p>A case can carry a <a href="platform-selection.html"><code>[Target]</code></a> attribute, so a
+platform can have cases that others lack. A dropped case does not renumber
+the others.</p>
+<h2 id="using-enum-values"><a class="header" href="#using-enum-values">Using enum values</a></h2>
+<p>This section is about enums whose cases carry nothing.</p>
+<p><code>Name.Case</code> is a value of the enum type. Such an enum is a value type, like <code>int</code>:
+it is copied, not reference counted, and it can be stored in locals, fields,
+arrays and module-scope constants, and passed to and returned from functions.</p>
+<ul>
+<li><code>==</code> and <code>!=</code> compare two values of the same enum. Other operators apply
+only when the enum declares them (see
+<a href="#operators-and-indexers">Operators and indexers</a>).</li>
+<li>An enum does not mix with integers or with other enums: <code>int x = Color.Red</code>
+and <code>Color c = 0</code> are errors, and so is comparing a <code>Color</code> with a <code>Size</code>.</li>
+<li><code>value as int</code> (or any integer type) gives a case’s integer value. The
+reverse, <code>1 as Color</code>, is an error, since the integer may not name a case;
+name the case, or use <a href="#built-in-methods"><code>from_value</code></a>.</li>
+<li>A slot of an enum type that is not given a value (a field, or a local
+declared without one) holds the case whose value is 0, or the first case
+when no case is 0.</li>
+<li><code>sizeof&lt;Name&gt;()</code> is the size of the representation.</li>
+<li>An enum works wherever an integer does: as a <code>HashMap</code> key or <code>HashSet</code>
+element, in an <code>Atomic&lt;Name&gt;</code>, and in an <code>extern</code> function’s signature,
+where C sees the representation (an <code>int</code> unless the enum names another).</li>
+</ul>
+<h2 id="cases-that-carry-values"><a class="header" href="#cases-that-carry-values">Cases that carry values</a></h2>
+<p>A case can carry values, declared like parameters: <code>Circle(radius: int)</code>.
+An enum with such a case is a <strong>reference type</strong>: each value is an object,
+reference counted like a <a href="structs.html">struct</a>.</p>
+<pre><code class="language-pepper"># Cases that carry values: each case is a constructor, and a `match`
+# pattern binds the values of the case it matches.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Square(side: int),
+    Point,
+
+    area(): int {
+        match (this) {
+            Circle(r) =&gt; { return 3 * r * r; }
+            Rect(w, h) =&gt; { return w * h; }
+            Square(s) =&gt; { return s * s; }
+            Point =&gt; { return 0; }
+        }
+        return 0;
+    }
+}
+
+# A generic enum can name itself: a list is empty, or a value and the rest.
+enum List&lt;T&gt; {
+    Empty,
+    Cons(head: T, tail: List&lt;T&gt;),
+}
+
+length(list: List&lt;String&gt;): int {
+    match (list) {
+        Empty =&gt; { return 0; }
+        # `_` skips a value.
+        Cons(_, tail) =&gt; { return 1 + length(tail); }
+    }
+    return 0;
+}
+
+main(): int {
+    var shapes = Array&lt;Shape&gt;();
+    shapes.append(Shape.Circle(2));
+    shapes.append(Shape.Rect(3, 4));
+    shapes.append(Shape.Point);
+    var total = 0;
+    for (var s in shapes) {
+        total += s.area();
+    }
+    assert(total == 24, "12 + 12 + 0");
+
+    # Several patterns in one arm bind the same names.
+    var side = 0;
+    match (Shape.Square(5)) {
+        Rect(w, _), Square(w) =&gt; { side = w; }
+        else =&gt; {}
+    }
+    assert(side == 5, "a square's side");
+
+    var names = List&lt;String&gt;.Cons("a", List&lt;String&gt;.Cons("b", List&lt;String&gt;.Empty));
+    assert(length(names) == 2, "two names");
+    assert(names.name() == "Cons", "name() spells the case");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>Name.Case(values...)</code> makes a new value, like a constructor call, and
+<code>Name.Case</code> alone is a case that carries nothing. An enum’s values are
+made only by its cases: <code>Shape(...)</code> is an error.</li>
+<li>A case that carries values must be given them: <code>Shape.Circle</code> without
+<code>(radius)</code> is an error.</li>
+<li>The values are fixed once made. There is no way to change them, so a value
+can be shared freely. To change one, make a new value.</li>
+<li>Each case that carries nothing is a single object that every use shares.
+It is never freed and costs no allocation, however often it is used.</li>
+<li>A slot of the enum type that is not given a value holds null, as a struct
+slot does. <code>===</code> and <code>!==</code> compare identity, and so does <code>==</code>, unless the
+enum is <code>[Equatable]</code>.</li>
+<li>Mark the enum <a href="hashing.html#deriving-both-with-equatable"><code>[Equatable]</code></a> to
+derive <code>==</code> and <code>hash</code> from its cases: two values are equal when they hold
+the same case with equal values, so they work as <code>HashMap</code> and <code>HashSet</code>
+keys.</li>
+<li>An enum can have type parameters (<code>enum List&lt;T&gt;</code>), and its cases can hold
+the enum itself, directly or through other types, so lists and trees are
+enums.</li>
+<li>The enum can be <code>[Shared]</code> when every value its cases carry is
+thread-safe (see <a href="threads.html#what-threads-can-share">What threads can share</a>).
+An enum whose cases carry nothing is stored as an integer and is always
+thread-safe. It can conform to a trait with
+<code>extend Name with Trait</code>, like a struct, and its methods can come from an
+<code>extend</code> block too.</li>
+<li>Cases cannot have explicit values (<code>= 3</code>), and the enum has no
+representation type (<code>: u8</code>), since its values are not integers.</li>
+</ul>
+<h3 id="value-enums"><a class="header" href="#value-enums">Value enums</a></h3>
+<p>An enum whose cases carry values can be marked <code>[Value]</code>, like a
+<a href="value-structs.html">value struct</a>. Each value is then stored inline in
+whatever holds it, and copied when assigned, passed or returned, instead of
+being an object. Making one allocates nothing, which suits small enums that
+are made often, such as <a href="optionals.html"><code>Optional</code></a> and
+<a href="results.html"><code>Result</code></a>, which are both value enums.</p>
+<pre><code class="language-pepper">[Value]
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+</code></pre>
+<ul>
+<li>Its cases share one storage: a value is as large as its largest case, plus
+the tag that says which case it holds (<code>sizeof&lt;Shape&gt;()</code> is 12: the tag,
+then room for <code>Rect</code>’s two <code>int</code>s, which <code>Circle</code>’s <code>radius</code> reuses).</li>
+<li>A value enum is never null. A slot that is not given a value holds the
+first case, with every value it carries zero, <code>false</code>, or null: an unset
+<code>Shape</code> is <code>Circle(0)</code>.</li>
+<li><code>==</code> compares the cases and their values; <code>===</code>, <code>!==</code> and <code>__null</code> are
+errors.</li>
+<li>Its cases cannot hold the enum itself, since the value would be infinitely
+large. Use a reference enum for lists and trees.</li>
+<li>Everything else a <a href="value-structs.html#what-a-value-struct-cannot-do">value struct cannot do</a>
+applies too, and so does <a href="value-structs.html#value-structs-as-trait-values">boxing</a>
+when it flows into a trait value.</li>
+</ul>
+<h2 id="methods"><a class="header" href="#methods">Methods</a></h2>
+<p>An enum can declare methods after its cases. Inside a method, <code>this</code> is the
+value the method was called on, and a bare call of another method of the
+enum (<code>next()</code>) calls it on <code>this</code>. A <code>static</code> method is called on the enum
+itself (<code>Light.first()</code>). A method can be generic (<code>choose&lt;T&gt;</code>), with its
+type arguments inferred or written out (<code>light.choose&lt;String&gt;(...)</code>).</p>
+<pre><code class="language-pepper"># An enum can declare methods after its cases; `this` is the value.
+enum Light: u8 {
+    Red,
+    Amber,
+    Green,
+
+    may_go(): bool {
+        return this == Light.Green;
+    }
+
+    next(): Light {
+        match (this) {
+            Red =&gt; { return Light.Green; }
+            Amber =&gt; { return Light.Red; }
+            Green =&gt; { return Light.Amber; }
+        }
+        return this;
+    }
+
+    # A bare call of another method acts on `this`.
+    after_two(): Light {
+        return next().next();
+    }
+
+    # A method can be generic, like any function.
+    choose&lt;T&gt;(stop: T, go: T): T {
+        return may_go() ? go : stop;
+    }
+
+    static first(): Light {
+        return Light.Red;
+    }
+}
+
+main(): int {
+    var light = Light.first();
+    assert(!light.may_go(), "red means stop");
+    assert(light.next().may_go(), "green follows red");
+    assert(light.after_two() == Light.Amber, "then amber");
+    assert(light.choose("wait", "walk") == "wait" &amp;&amp; Light.Green.choose(0, 1) == 1, "a generic method");
+
+    # Every enum has name() and from_value().
+    assert(light.name() == "Red", "name() spells the case");
+    var found = Light.from_value(2);
+    assert(found.is_ok() and found.value() == Light.Green, "2 is Green");
+    assert(!Light.from_value(7).is_ok(), "no case has the value 7");
+
+    # Enums key hash maps and fill atomics, like integers.
+    var waits = HashMap&lt;Light, int&gt;();
+    waits[Light.Red] = 30;
+    assert(waits[Light.Red] == 30, "an enum is a hash key");
+    return 0;
+}
+</code></pre>
+<p>For an enum whose cases carry nothing, <code>this</code> is passed by value, like an
+<code>int</code>: a method cannot change the value it was called on. Return a new case
+instead, as <code>next()</code> does. Such an enum can also declare a trait with
+<code>extend Light with Describe { ... }</code>, which makes it meet the constraint
+<code>T: Describe</code> (see
+<a href="traits-and-extensions.html#numbers-bool-and-enums">numbers, <code>bool</code> and enums</a>);
+it is still never a trait value. For an enum whose cases carry values, <code>this</code> is
+the object, as in a struct’s method; its values still cannot change.</p>
+<h3 id="operators-and-indexers"><a class="header" href="#operators-and-indexers">Operators and indexers</a></h3>
+<p>An enum can declare <a href="structs.html#operators">operators</a> and an
+<a href="structs.html#indexers">indexer</a> the way a struct does: a method named after
+the operator (<code>&lt;(other: Level): bool</code>) or <code>[]</code>. For an enum whose cases
+carry nothing, <code>a &lt; b</code> calls <code>Level.&lt;</code> with <code>a</code> as <code>this</code>.</p>
+<pre><code class="language-pepper"># An enum can declare operators and an indexer, as a struct does.
+enum Level: u8 {
+    Low,
+    Mid,
+    High,
+
+    # `a &lt; b` calls `Level.&lt;`: the cases rank in order.
+    &lt;(other: Level): bool {
+        return (this as int) &lt; (other as int);
+    }
+
+    # `level + 1` moves up a level, stopping at the top.
+    +(steps: int): Level {
+        var next = Level.from_value((this as int + steps) as u8);
+        return next.is_ok() ? next.value() : Level.High;
+    }
+
+    # `-level` mirrors it.
+    -(): Level {
+        return match (this) {
+            Low =&gt; Level.High,
+            Mid =&gt; Level.Mid,
+            High =&gt; Level.Low,
+        };
+    }
+
+    # `level[i]` reads, like any indexer.
+    [](bit: int): bool {
+        return ((this as int) &gt;&gt; bit) &amp; 1 == 1;
+    }
+}
+
+main(): int {
+    var level = Level.Low;
+    assert(level &lt; Level.Mid &amp;&amp; !(Level.High &lt; level), "cases rank in order");
+    assert(level + 1 == Level.Mid &amp;&amp; level + 5 == Level.High, "a step up");
+    assert(-level == Level.High, "mirrored");
+    assert(Level.Mid[0] &amp;&amp; !Level.Mid[1] &amp;&amp; Level.High[1], "bits");
+    return 0;
+}
+</code></pre>
+<p>Its values never change and it already compares with <code>==</code> and <code>!=</code>, so
+such an enum cannot declare <code>==</code>, <code>!=</code>, a compound assignment (<code>+=</code>), an
+indexer that assigns (<code>[](index, value)</code>) or the truth test <code>!!</code>, and its
+operators are not <code>static</code>.</p>
+<h3 id="properties"><a class="header" href="#properties">Properties</a></h3>
+<p>An enum can also declare computed <a href="properties.html">properties</a> after its
+cases, <code>var name: T { get { ... } }</code>, which are read like fields
+(<code>size.ounces</code>). Inside the enum, a bare property name reads it on <code>this</code>.</p>
+<pre><code class="language-pepper"># An enum can declare computed properties after its cases, read like
+# fields: `size.ounces`, not `size.ounces()`.
+enum Size {
+    Small,
+    Medium,
+    Large,
+
+    var ounces: int {
+        get {
+            return match (this) {
+                Small =&gt; 8,
+                Medium =&gt; 12,
+                Large =&gt; 16,
+            };
+        }
+    }
+
+    # Inside the enum, a bare property name reads it on `this`.
+    var cups: int {
+        get { return ounces / 8; }
+    }
+}
+
+# The same works for an enum whose cases carry values.
+enum Shape {
+    Circle(radius: int),
+    Square(side: int),
+
+    var area: int {
+        get {
+            return match (this) {
+                Circle(r) =&gt; 3 * r * r,
+                Square(s) =&gt; s * s,
+            };
+        }
+    }
+}
+
+main(): int {
+    var size = Size.Medium;
+    assert(size.ounces == 12 &amp;&amp; Size.Large.cups == 2, "value enum properties");
+    assert(Shape.Square(4).area == 16 &amp;&amp; Shape.Circle(2).area == 12, "properties that read the payload");
+    return 0;
+}
+</code></pre>
+<p>An enum value has nowhere to keep anything and never changes, so an enum’s
+property has a <code>get</code> with a body that does not use <code>field</code>, and no <code>set</code>:</p>
+<pre><code class="language-text">main.pep:6:9: error: property 'n' of enum 'E' must be computed: give 'get' a body that does not use 'field'
+main.pep:6:38: error: property 'n' of enum 'E' cannot have a 'set' accessor: enum values are immutable
+</code></pre>
+<h3 id="built-in-methods"><a class="header" href="#built-in-methods">Built-in methods</a></h3>
+<p>Every enum has these methods without declaring them, and cannot declare
+methods of the same names:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>What it does</th></tr>
+</thead>
+<tbody>
+<tr><td><code>value.name()</code></td><td>Returns the case’s name as written (<code>"Red"</code>), a <code>String</code>. Every enum has it.</td></tr>
+<tr><td><code>Name.from_value(n)</code></td><td>Returns a <code>Result&lt;Name&gt;</code>: Ok with the case whose value is <code>n</code>, or an Err when no case has it. <code>n</code> has the enum’s representation type. Only enums whose cases carry nothing have it.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>from_value</code> is the checked way back from an integer (from a file, a C
+library or the network) to a case, since <code>as</code> only goes the other way.</p>
+<h2 id="match"><a class="header" href="#match"><code>match</code></a></h2>
+<p><code>match (value) { ... }</code> runs the arm for the case that <code>value</code> holds:</p>
+<pre><code class="language-pepper"># 'match' runs the arm of the case a value holds, and must handle every case.
+enum Light {
+    Red,
+    Amber,
+    Green,
+}
+
+next(light: Light): Light {
+    match (light) {
+        Red =&gt; { return Light.Green; }
+        Amber =&gt; { return Light.Red; }
+        Green =&gt; { return Light.Amber; }
+    }
+    return light;
+}
+
+may_go(light: Light): bool {
+    match (light) {
+        Green =&gt; { return true; }
+        else =&gt; { return false; }
+    }
+    return false;
+}
+
+wait_seconds(light: Light): int {
+    match (light) {
+        Red, Amber =&gt; { return 30; }
+        Light.Green =&gt; { return 0; }
+    }
+    return 0;
+}
+
+main(): int {
+    var light = Light.Red;
+    var changes = 0;
+    while (!may_go(light)) {
+        light = next(light);
+        changes += 1;
+    }
+    assert(changes == 1, "red turns green");
+    assert(wait_seconds(Light.Amber) == 30, "one arm handles two cases");
+    assert(wait_seconds(light) == 0, "a pattern may name the enum");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each arm is one or more patterns, separated by commas, then <code>=&gt;</code> and a
+block. A pattern is a case name (<code>Red</code>) or the case qualified by its enum
+(<code>Light.Red</code>).</li>
+<li>A pattern for a case that carries values can <strong>bind</strong> them:
+<code>Rect(w, h)</code> declares <code>w</code> and <code>h</code> in its arm, holding the case’s values in
+order. The bindings are <code>const</code>. <code>_</code> skips a value. A pattern lists all of
+its case’s values or, written without parentheses (<code>Rect</code>), none.
+Each value can also be a pattern of its own (see
+<a href="#nested-patterns">Nested patterns</a>).</li>
+<li>Patterns that share an arm must bind the same names, with the same types
+(<code>Rect(w, _), Square(w)</code>).</li>
+<li>An <code>else =&gt; { ... }</code> arm, last, handles every case the other arms do not.</li>
+<li>The arms must handle <strong>every case</strong>. A missing case is an error that names
+it, located at <code>match</code>; the language server offers a quick fix that adds an
+empty arm for each missing case. An <code>else</code> that can never run, because the
+other arms handle every case, is a warning.</li>
+<li>Handling a case twice is an error.</li>
+<li>In a <code>match</code> statement, <code>break</code>, <code>continue</code> and <code>return</code> inside an arm act
+on the enclosing loop or function, as they would inside an <code>if</code>.</li>
+</ul>
+<p>The value is evaluated once, before any arm runs. A <code>match</code> on a null value
+of an enum whose cases carry values panics with <code>match on a null 'Name'</code>; a
+<a href="#value-enums">value enum</a> is never null.</p>
+<h2 id="match-expressions-is-and-literal-patterns"><a class="header" href="#match-expressions-is-and-literal-patterns"><code>match</code> expressions, <code>is</code>, and literal patterns</a></h2>
+<pre><code class="language-pepper"># `match` produces a value, `is` tests one case, and a `match` on an
+# integer, character, `bool` or `String` compares with literals.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+enum List {
+    Empty,
+    Cons(head: int, tail: List),
+}
+
+area(s: Shape): int {
+    return match (s) {
+        Circle(r) =&gt; 3 * r * r,
+        Rect(w, h) =&gt; w * h,
+        Point =&gt; 0,
+    };
+}
+
+keyword(word: String): int {
+    return match (word) {
+        "import" =&gt; 1,
+        "export", "extern" =&gt; 2,
+        else =&gt; 0,
+    };
+}
+
+# The arms' values are numbers of different types (`0` is an `int`,
+# `length` a `ulong`), so the `match` has their common type, `ulong`, and
+# converts to the `int` this function returns.
+length_of(word: String): int {
+    return match (word) {
+        "" =&gt; 0,
+        else =&gt; word.length,
+    };
+}
+
+main(): int {
+    var total = area(Shape.Rect(2, 3)) + keyword("extern");
+
+    # `is` binds only in the block of the `if` or `while` it is the
+    # condition of.
+    var s = Shape.Circle(1);
+    if (s is Circle(r)) {
+        total += r;
+    }
+
+    var list = List.Cons(1, List.Cons(2, List.Empty));
+    while (list is Cons(head, tail)) {
+        total += head;
+        list = tail;
+    }
+
+    var point = Shape.Point is Point;
+    if (point &amp;&amp; !(s is Rect)) {
+        total += 100;
+    }
+
+    # A `match` on an integer needs an `else`: literals cannot list every
+    # value.
+    var size = match (total) {
+        0 =&gt; "none",
+        1, 2, 3 =&gt; "few",
+        else =&gt; "many",
+    };
+    assert(size == "many", "total is past three");
+    assert(length_of("four") == 4 &amp;&amp; length_of("") == 0, "lengths convert");
+    assert(total == 6 + 2 + 1 + 3 + 100, "every step adds up");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>A <code>match</code> that produces a value</strong> can go wherever a value can: after
+<code>var x =</code>, <code>return</code>, in an argument. Each arm is <code>patterns =&gt; value</code>, and
+arms are separated by commas (one after the last is allowed). It follows
+the rules above: a pattern binds names for its arm’s value, and the arms
+must handle every case unless there is an <code>else</code>. The value has the first
+arm’s type, and every other arm’s value must convert to it. When the arms
+are numbers of different types, the value has their common type, as C’s
+<code>? :</code> does (<code>int</code> and <code>long</code> give <code>long</code>), and converts from it wherever
+it goes (<code>0</code> or a <code>ulong</code> <code>length</code>, returned as an <code>int</code>). A closure in
+an arm’s value cannot use a name the arm binds; use a <code>match</code> statement
+there.</li>
+<li><strong><code>value is Pattern</code></strong> is a <code>bool</code>: whether <code>value</code> holds that case
+(<code>d is Line</code>, <code>!(d is Text)</code>). It takes any one pattern. When it is the
+whole condition of an <code>if</code> or <code>while</code>, its bindings are declared in that
+block only: <code>if (d is Text(t)) { ... }</code> reads <code>t</code> inside the braces, and
+<code>while (list is Cons(head, tail)) { ... }</code> examines <code>list</code> again on every
+iteration. Anywhere else, <code>is</code> cannot bind names. <code>is</code> is a keyword only
+between a value and a pattern, so it stays usable as a name
+(<code>token.is(text)</code>).</li>
+<li><strong>A trait value</strong> is matched by type rather than by case: <code>Circle(c)</code>
+tests for the struct <code>Circle</code> and binds the value as one. See
+<a href="traits-and-extensions.html#converting-a-trait-value-back">Converting a trait value back</a>.</li>
+<li><strong>Literal patterns</strong>: a <code>match</code> on an integer, a character, a <code>bool</code> or a
+<code>String</code> compares with literals (<code>1</code>, <code>-1</code>, <code>'a'</code>, <code>true</code>, <code>"import"</code>),
+using <code>==</code>. Literals cannot list every value, so such a <code>match</code> needs an
+<code>else</code> arm, except on a <code>bool</code> that handles both <code>true</code> and <code>false</code>.
+Matching the same literal twice is an error. A match on an enum takes its
+case names, not literals, and a match on <code>int</code> takes literals, not names
+(except <a href="#ranges-and-constants">constants</a>).</li>
+</ul>
+<h2 id="nested-patterns"><a class="header" href="#nested-patterns">Nested patterns</a></h2>
+<p>The values in a case’s parentheses are patterns, as a tuple pattern’s
+elements are, so patterns nest to any depth:</p>
+<pre><code class="language-pepper"># Patterns nest: the values a case carries can be matched by patterns of
+# their own, as tuple elements can.
+enum Doc {
+    Text(text: String),
+    Line,
+    Pair(left: Doc, right: Doc),
+}
+
+describe(found: Optional&lt;Doc&gt;): String {
+    return match (found) {
+        Empty =&gt; "nothing",
+        # A literal compares the value: only an empty `Text`.
+        Value(Text("")) =&gt; "empty text",
+        # A case of the value's enum, binding its own values.
+        Value(Text(t)) =&gt; t,
+        Value(Line) =&gt; "a line",
+        # Deeper still, with `_` for a value that does not matter.
+        Value(Pair(Line, _)) =&gt; "a pair that starts with a line",
+        Value(Pair) =&gt; "a pair",
+    };
+}
+
+main(): int {
+    assert(describe(Optional&lt;Doc&gt;.Empty) == "nothing", "no document");
+    assert(describe(Optional&lt;Doc&gt;.Value(Doc.Text(""))) == "empty text", "a literal value");
+    assert(describe(Optional&lt;Doc&gt;.Value(Doc.Text("hi"))) == "hi", "a bound value");
+    assert(
+        describe(Optional&lt;Doc&gt;.Value(Doc.Pair(Doc.Line, Doc.Text("x")))) == "a pair that starts with a line",
+        "two levels deep"
+    );
+
+    # A bare name binds the value, unless the value's enum has a case of
+    # that name: here `Empty` is `Optional&lt;int&gt;`'s case.
+    var nested = Optional&lt;Optional&lt;int&gt;&gt;.Value(Optional&lt;int&gt;.Empty);
+    var depth = match (nested) {
+        Empty =&gt; 0,
+        Value(Empty) =&gt; 1,
+        Value(Value(n)) =&gt; 2 + n,
+    };
+    assert(depth == 1, "the inner Optional is empty");
+
+    # Ranges and guards work inside too, and so does `is`.
+    var count = Optional&lt;int&gt;.Value(7);
+    var size = match (count) {
+        Value(0) =&gt; "none",
+        Value(1..10) =&gt; "a few",
+        Value(n) if n &lt; 0 =&gt; "negative",
+        Value(_) =&gt; "many",
+        Empty =&gt; "unknown",
+    };
+    assert(size == "a few", "a range inside a case");
+    var pair = Doc.Pair(Doc.Text("left"), Doc.Line);
+    if (pair is Pair(Text(word), Line)) {
+        assert(word == "left", "is binds nested names");
+    }
+    return 0;
+}
+</code></pre>
+<ul>
+<li>Each value takes <code>_</code>, a name, a case of its enum (with patterns of its
+own values: <code>Value(Pair(Line, _))</code>), a literal, a
+<a href="#ranges-and-constants">range or constant</a>, or a
+<a href="tuples.html#matching-tuples">tuple pattern</a>.</li>
+<li>A bare name binds the value, unless the value’s enum has a case of that
+name, which it then matches (<code>Value(Empty)</code>), or it names a module-scope
+constant. A name repeated in one pattern (<code>Pair(x, x)</code>) must be a case.</li>
+<li>A nested pattern handles part of its case: the arms must still handle
+every value. A case that only nested patterns handle is reported with the
+value they miss (<code>match on 'Optional&lt;Doc&gt;' does not handle 'Value(Line)'</code>), and a pattern whose values the earlier arms already
+match is an error.</li>
+<li>Patterns that share an arm bind the same names, each at the same place:
+<code>Pair(Text(t), Line), Pair(Text(t), Pair)</code> binds <code>t</code> from either, but
+<code>Pair(Text(t), _), Pair(_, Text(t))</code> is an error.</li>
+<li>A nested test reads a value only once the case around it matched, so the
+tests stop at the first part that does not match.</li>
+</ul>
+<h2 id="ranges-and-constants"><a class="header" href="#ranges-and-constants">Ranges and constants</a></h2>
+<p>A <code>match</code> on an integer or a character can compare with a <strong>range</strong> of
+values, and a <code>match</code> on an integer, a character or a <code>bool</code> with a
+module-scope <strong>constant</strong>:</p>
+<pre><code class="language-pepper"># Range and constant patterns: a `match` on an integer or a character
+# compares with ranges (`1..9`, `'a'..&gt;'z'`) and module-scope constants.
+const LIMIT = 100;
+
+size(n: int): String {
+    return match (n) {
+        0 =&gt; "none",
+        # `1..10` stops before 10; `10..&gt;99` includes 99.
+        1..10 =&gt; "a few",
+        10..&gt;99 =&gt; "many",
+        LIMIT =&gt; "the limit",
+        else =&gt; "out of range",
+    };
+}
+
+kind(c: char): String {
+    return match (c) {
+        'a'..&gt;'z', 'A'..&gt;'Z' =&gt; "letter",
+        '0'..&gt;'9' =&gt; "digit",
+        else =&gt; "other",
+    };
+}
+
+# Ranges that cover every value of the type need no `else`.
+half(b: u8): int {
+    return match (b) {
+        0..128 =&gt; 0,
+        128..&gt;255 =&gt; 1,
+    };
+}
+
+main(): int {
+    assert(size(0) == "none" &amp;&amp; size(9) == "a few" &amp;&amp; size(10) == "many", "ranges");
+    assert(size(100) == "the limit" &amp;&amp; size(-1) == "out of range", "a constant, then else");
+    assert(kind('q') == "letter" &amp;&amp; kind('7') == "digit" &amp;&amp; kind('!') == "other", "character ranges");
+    u8 high = 200;
+    assert(half(3) == 0 &amp;&amp; half(high) == 1, "every u8 is handled");
+
+    # In a tuple pattern, a range or a constant compares its element.
+    var pair = (LIMIT, true);
+    var which = match (pair) {
+        (0..LIMIT, _) =&gt; 1,
+        (LIMIT, true) =&gt; 2,
+        (_, _) =&gt; 3,
+    };
+    assert(which == 2, "the constant matches the first element");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><code>start..end</code> matches from <code>start</code> up to but not including <code>end</code>, and
+<code>start..&gt;end</code> includes <code>end</code>, as <a href="iteration.html">ranges</a> do elsewhere.
+Each bound is a literal (<code>-1</code>, <code>'z'</code>) or a constant (<code>MIN..MAX</code>).
+Ranges match integers and characters only, not <code>bool</code> or <code>String</code>.</li>
+<li>A name that is a module-scope constant (<code>const LIMIT = 100;</code>, declared in
+the file or imported, or <code>limits.MAX</code> through a module) compares the value
+with it, like a literal. A local variable is not a pattern; compare with
+it in a <a href="#guards">guard</a> instead (<code>n if n == limit</code>).</li>
+<li>Inside a <a href="tuples.html#matching-tuples">tuple pattern</a>, a range or a
+constant compares its element (<code>(0..LIMIT, _)</code>), and any other bare name
+binds it, as before.</li>
+<li>When every bound is a literal, the compiler knows which values a pattern
+matches: a pattern whose values the earlier arms already match is an
+error (<code>2..&gt;5</code> after <code>1..9</code>), and a <code>match</code> whose ranges and literals
+cover every value of its type (<code>0..128</code> and <code>128..&gt;255</code> for a <code>u8</code>) needs
+no <code>else</code>. A pattern with a constant bound covers nothing for this check.</li>
+<li>A <code>match</code> on an enum takes its cases, not ranges or constants, even a
+constant holding one of its cases.</li>
+</ul>
+<h2 id="guards"><a class="header" href="#guards">Guards</a></h2>
+<p>An arm can add a <strong>guard</strong> after its patterns, <code>if condition</code>: the arm runs
+only when one of its patterns matches and the condition holds. Otherwise
+the next arm is tried, as if this one had not matched.</p>
+<pre><code class="language-pepper"># A guard (`if condition`) after an arm's patterns: the arm runs only when a
+# pattern matches and the guard holds; otherwise the next arm is tried.
+enum Shape {
+    Circle(radius: int),
+    Rect(width: int, height: int),
+    Point,
+}
+
+describe(s: Shape): String {
+    return match (s) {
+        # The guard reads the names its patterns bind.
+        Circle(r) if r &gt; 10 =&gt; "a large circle",
+        Circle =&gt; "a circle",
+        Rect(w, h) if w == h =&gt; "a square",
+        Rect =&gt; "a rectangle",
+        Point =&gt; "a point",
+    };
+}
+
+# A guarded arm handles nothing for the check that every value is handled,
+# since its guard may fail: the `bool` match below still needs `false`.
+toll(heavy: bool, axles: int): int {
+    match (heavy) {
+        true if axles &gt; 4 =&gt; {
+            return 30;
+        }
+        true =&gt; {
+            return 20;
+        }
+        false =&gt; {
+            return 10;
+        }
+    }
+}
+
+main(): int {
+    assert(describe(Shape.Circle(20)) == "a large circle", "the guard holds");
+    assert(describe(Shape.Circle(2)) == "a circle", "the guard fails, the next arm runs");
+    assert(describe(Shape.Rect(3, 3)) == "a square", "equal sides");
+    assert(describe(Shape.Rect(3, 4)) == "a rectangle", "unequal sides");
+    assert(toll(true, 6) + toll(true, 2) + toll(false, 2) == 60, "each arm runs once");
+
+    # Guards work on tuples too.
+    var pair = (5, true);
+    var kind = match (pair) {
+        (n, true) if n &gt; 3 =&gt; 1,
+        (_, true) =&gt; 2,
+        (_, false) =&gt; 3,
+    };
+    assert(kind == 1, "the first arm's guard holds");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>The guard reads the names the arm’s patterns bind (<code>Circle(r) if r &gt; 10</code>).
+With several patterns (<code>Word(s), Quoted(s) if s.length == 0</code>), it applies
+to the arm, whichever pattern matched.</li>
+<li>Guards work in <code>match</code> statements and <code>match</code> expressions, over enums,
+literals and tuples. <code>is</code> takes no guard: write <code>x is P &amp;&amp; condition</code>, or
+test the condition inside the <code>if</code>.</li>
+<li>A guarded arm handles nothing when the compiler checks that every case is
+handled, since its guard may fail: a <code>match</code> whose only arm for <code>Circle</code>
+has a guard does not handle <code>Circle</code>, and a later unguarded arm (or
+<code>else</code>) must. An <code>else</code> after guarded arms is not unreachable.</li>
+<li>A guarded arm for a case an earlier unguarded arm already handles is an
+error, like any case handled twice. Two guarded arms may name the same
+case.</li>
+<li>A closure in a guard cannot use a name the arm binds.</li>
+</ul>
+<h2 id="current-limits"><a class="header" href="#current-limits">Current limits</a></h2>
+<ul>
+<li>An enum whose cases carry nothing cannot be generic, by design: its value
+is a plain integer, so a type parameter would have nothing to describe.
+An enum whose cases carry values can be (<code>enum List&lt;T&gt;</code>).</li>
+<li>An enum whose cases carry values compares by identity with <code>==</code>, as a
+struct does, unless it is a <a href="#value-enums"><code>[Value]</code> enum</a>, is
+<a href="hashing.html#deriving-both-with-equatable"><code>[Equatable]</code></a>, or declares
+<code>==</code> (with a matching <code>hash&lt;T&gt;</code> to be a key).</li>
+<li>A constant is a pattern only when it is declared at module scope.</li>
+<li>A <code>match</code> cannot examine floating-point values.</li>
+<li>The methods of an enum whose cases carry nothing have no value form:
+<code>c.name</code> without the call is an error (“‘name’ is a method of ‘Color’:
+call it as ‘name()’”), where a struct’s <code>p.norm</code> is a
+<a href="function-types.html">bound method</a>. Wrap the call in a closure instead,
+<code>() =&gt; c.name()</code>.</li>
+<li>An enum whose cases carry nothing is extended only with a trait
+(<code>extend Color with Describe { ... }</code>); declare its other methods inside
+it. It is never a trait value, since a trait value is a reference to an
+object, which such an enum’s value is not.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/maps.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/memory.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/maps.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/memory.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>

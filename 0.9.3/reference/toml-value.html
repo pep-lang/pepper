@@ -1,0 +1,750 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>TomlValue - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-6958e744.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-58d14832.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/reference/toml-value.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <!-- Generated from runtime/toml/value.pep by `pep-doc reference`. Do not edit. -->
+<h1 id="tomlvalue"><a class="header" href="#tomlvalue">TomlValue</a></h1>
+<p><code>TomlValue</code>: a TOML value of any kind, and <code>TomlDateTime</code>, TOML’s dates
+and times.</p>
+<p>Source: <code>runtime/toml/value.pep</code></p>
+<h2 id="tomldatetime"><a class="header" href="#tomldatetime">TomlDateTime</a></h2>
+<pre><code class="language-pepper">struct TomlDateTime
+</code></pre>
+<p>A TOML date, time, or date and time: an offset date-time
+(<code>1979-05-27T07:32:00Z</code>), a local date-time (<code>1979-05-27T07:32:00</code>), a
+local date (<code>1979-05-27</code>) or a local time (<code>07:32:00.5</code>).</p>
+<p><code>has_date</code>, <code>has_time</code> and <code>has_offset</code> say which of the four it is;
+the fields of a part it does not have are 0. <code>to_string()</code> writes it in
+the RFC 3339 form TOML uses, with as many fraction digits as it was
+read with.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import toml;
+
+var when = toml.TomlDateTime.offset(1979, 5, 27, 7, 32, 0, -420);
+assert(when.to_string() == "1979-05-27T07:32:00-07:00", "an offset");
+assert(toml.TomlDateTime.date(2024, 2, 29).to_string() == "2024-02-29", "a date");
+</code></pre>
+<h3 id="fields"><a class="header" href="#fields">Fields</a></h3>
+<h4 id="year"><a class="header" href="#year">year</a></h4>
+<pre><code class="language-pepper">var year: int
+</code></pre>
+<p>The year, 0 to 9999; 0 without a date.</p>
+<h4 id="month"><a class="header" href="#month">month</a></h4>
+<pre><code class="language-pepper">var month: int
+</code></pre>
+<p>The month, 1 to 12; 0 without a date.</p>
+<h4 id="day"><a class="header" href="#day">day</a></h4>
+<pre><code class="language-pepper">var day: int
+</code></pre>
+<p>The day of the month, from 1; 0 without a date.</p>
+<h4 id="hour"><a class="header" href="#hour">hour</a></h4>
+<pre><code class="language-pepper">var hour: int
+</code></pre>
+<p>The hour, 0 to 23.</p>
+<h4 id="minute"><a class="header" href="#minute">minute</a></h4>
+<pre><code class="language-pepper">var minute: int
+</code></pre>
+<p>The minute, 0 to 59.</p>
+<h4 id="second"><a class="header" href="#second">second</a></h4>
+<pre><code class="language-pepper">var second: int
+</code></pre>
+<p>The second, 0 to 59.</p>
+<h4 id="nanosecond"><a class="header" href="#nanosecond">nanosecond</a></h4>
+<pre><code class="language-pepper">var nanosecond: int
+</code></pre>
+<p>The fraction of the second, in nanoseconds.</p>
+<h4 id="fraction_digits"><a class="header" href="#fraction_digits">fraction_digits</a></h4>
+<pre><code class="language-pepper">var fraction_digits: int
+</code></pre>
+<p>How many digits of the fraction <code>to_string()</code> writes, 0 to 9; 0
+writes none.</p>
+<h4 id="offset_minutes"><a class="header" href="#offset_minutes">offset_minutes</a></h4>
+<pre><code class="language-pepper">var offset_minutes: int
+</code></pre>
+<p>The offset from UTC in minutes (<code>-07:00</code> is -420); 0 for <code>Z</code>.</p>
+<h4 id="has_date"><a class="header" href="#has_date">has_date</a></h4>
+<pre><code class="language-pepper">var has_date: bool
+</code></pre>
+<p>Whether it has a date.</p>
+<h4 id="has_time"><a class="header" href="#has_time">has_time</a></h4>
+<pre><code class="language-pepper">var has_time: bool
+</code></pre>
+<p>Whether it has a time of day.</p>
+<h4 id="has_offset"><a class="header" href="#has_offset">has_offset</a></h4>
+<pre><code class="language-pepper">var has_offset: bool
+</code></pre>
+<p>Whether it has an offset from UTC, which only a date and time has.</p>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="tomldatetime-1"><a class="header" href="#tomldatetime-1">TomlDateTime()</a></h4>
+<pre><code class="language-pepper">construct()
+</code></pre>
+<p>Creates a local date-time at midnight on 0000-00-00, to fill in.</p>
+<h3 id="static-methods"><a class="header" href="#static-methods">Static methods</a></h3>
+<h4 id="date"><a class="header" href="#date">date</a></h4>
+<pre><code class="language-pepper">static date(year: int, month: int, day: int): TomlDateTime
+</code></pre>
+<p>Returns a local date, such as <code>1979-05-27</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year</li>
+<li><code>month</code> — the month, from 1</li>
+<li><code>day</code> — the day of the month, from 1</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date</li>
+</ul>
+<h4 id="time"><a class="header" href="#time">time</a></h4>
+<pre><code class="language-pepper">static time(hour: int, minute: int, second: int, nanosecond: int = 0): TomlDateTime
+</code></pre>
+<p>Returns a local time of day, such as <code>07:32:00</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>hour</code> — the hour</li>
+<li><code>minute</code> — the minute</li>
+<li><code>second</code> — the second</li>
+<li><code>nanosecond</code> — the fraction of the second, in nanoseconds; written with as few digits as it needs</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the time</li>
+</ul>
+<h4 id="local"><a class="header" href="#local">local</a></h4>
+<pre><code class="language-pepper">static local( year: int, month: int, day: int, hour: int, minute: int, second: int, nanosecond: int = 0 ): TomlDateTime
+</code></pre>
+<p>Returns a local date-time, with no offset: <code>1979-05-27T07:32:00</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year</li>
+<li><code>month</code> — the month, from 1</li>
+<li><code>day</code> — the day of the month, from 1</li>
+<li><code>hour</code> — the hour</li>
+<li><code>minute</code> — the minute</li>
+<li><code>second</code> — the second</li>
+<li><code>nanosecond</code> — the fraction of the second, in nanoseconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date-time</li>
+</ul>
+<h4 id="offset"><a class="header" href="#offset">offset</a></h4>
+<pre><code class="language-pepper">static offset( year: int, month: int, day: int, hour: int, minute: int, second: int, offset_minutes: int, nanosecond: int = 0 ): TomlDateTime
+</code></pre>
+<p>Returns a date-time at an offset from UTC: <code>1979-05-27T07:32:00Z</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>year</code> — the year</li>
+<li><code>month</code> — the month, from 1</li>
+<li><code>day</code> — the day of the month, from 1</li>
+<li><code>hour</code> — the hour</li>
+<li><code>minute</code> — the minute</li>
+<li><code>second</code> — the second</li>
+<li><code>offset_minutes</code> — the offset from UTC in minutes; 0 is written <code>Z</code></li>
+<li><code>nanosecond</code> — the fraction of the second, in nanoseconds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the date-time</li>
+</ul>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<h4 id="to_string"><a class="header" href="#to_string">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the value as TOML writes it: <code>1979-05-27T07:32:00.5-07:00</code>,
+<code>1979-05-27</code>, <code>07:32:00</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text</li>
+</ul>
+<h2 id="tomlvalue-1"><a class="header" href="#tomlvalue-1">TomlValue</a></h2>
+<pre><code class="language-pepper">enum TomlValue
+</code></pre>
+<p>A TOML value: a string, an integer, a float, a boolean, a date-time, an
+array or a table. <code>toml.parse</code> makes a table from a document, and
+<code>to_document</code> writes one back.</p>
+<p>Look members up with <code>value["key"]</code> and elements with <code>value[index]</code>,
+which panic when there is none; <code>try_get</code> and <code>lookup</code> give none
+instead, and <code>lookup</code> follows a dotted key (<code>"package.name"</code>). Then read
+the value with an <code>as_</code> method, which gives none when the value is of
+another kind, or <code>match</code> on its case.</p>
+<p>A <code>Table</code> keeps its keys in the order they were written. An <code>Array</code> or
+<code>Table</code> case holds its array or map by reference, so changing them
+through <code>value[key] = ...</code> or <code>append</code> changes every holder of the
+value.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import toml;
+
+var package = toml.TomlValue.table();
+package["name"] = toml.TomlValue.String("demo");
+package["authors"] = toml.TomlValue.array([toml.TomlValue.String("Ada")]);
+assert(package.to_string() == "{ name = \"demo\", authors = [\"Ada\"] }", "inline");
+assert(package["name"].as_string().value() == "demo", "a lookup");
+</code></pre>
+<h3 id="cases"><a class="header" href="#cases">Cases</a></h3>
+<h4 id="string"><a class="header" href="#string">String</a></h4>
+<pre><code class="language-pepper">String(value: String)
+</code></pre>
+<p>A string.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the text</li>
+</ul>
+<h4 id="integer"><a class="header" href="#integer">Integer</a></h4>
+<pre><code class="language-pepper">Integer(value: long)
+</code></pre>
+<p>A 64-bit integer.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the integer</li>
+</ul>
+<h4 id="float"><a class="header" href="#float">Float</a></h4>
+<pre><code class="language-pepper">Float(value: double)
+</code></pre>
+<p>A 64-bit float, including <code>inf</code> and <code>nan</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the number</li>
+</ul>
+<h4 id="boolean"><a class="header" href="#boolean">Boolean</a></h4>
+<pre><code class="language-pepper">Boolean(value: bool)
+</code></pre>
+<p><code>true</code> or <code>false</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the boolean</li>
+</ul>
+<h4 id="datetime"><a class="header" href="#datetime">DateTime</a></h4>
+<pre><code class="language-pepper">DateTime(value: TomlDateTime)
+</code></pre>
+<p>A date, a time, or both.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the date-time</li>
+</ul>
+<h4 id="array"><a class="header" href="#array">Array</a></h4>
+<pre><code class="language-pepper">Array(items: Array&lt;TomlValue&gt;)
+</code></pre>
+<p>An array, holding its elements in order.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements</li>
+</ul>
+<h4 id="table"><a class="header" href="#table">Table</a></h4>
+<pre><code class="language-pepper">Table(members: OrderedMap&lt;String, TomlValue&gt;)
+</code></pre>
+<p>A table, holding its members in the order they were written.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>members</code> — the members, by key</li>
+</ul>
+<h3 id="static-methods-1"><a class="header" href="#static-methods-1">Static methods</a></h3>
+<h4 id="table-1"><a class="header" href="#table-1">table</a></h4>
+<pre><code class="language-pepper">static table(): TomlValue
+</code></pre>
+<p>Returns a new, empty table.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>Table</code> with no members</li>
+</ul>
+<h4 id="array-1"><a class="header" href="#array-1">array</a></h4>
+<pre><code class="language-pepper">static array(items: Array&lt;TomlValue&gt; = Array&lt;TomlValue&gt;()): TomlValue
+</code></pre>
+<p>Returns an array holding <code>items</code>, which it keeps by reference rather
+than copying.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>items</code> — the elements; an empty array when not given</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an <code>Array</code> of <code>items</code></li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="operator-"><a class="header" href="#operator-">operator []</a></h4>
+<pre><code class="language-pepper">[](key: String): TomlValue
+</code></pre>
+<p>Reads <code>value[key]</code>: the member named <code>key</code> of a table.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the member’s key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the member</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not a table or has no member named <code>key</code> (“no key ‘k’ in the TOML table”); use <code>try_get</code> to check</li>
+</ul>
+<h4 id="operator--1"><a class="header" href="#operator--1">operator []</a></h4>
+<pre><code class="language-pepper">[](key: String, member: TomlValue): TomlValue
+</code></pre>
+<p>Writes <code>value[key] = member</code>: sets the member named <code>key</code> of a
+table. A new key goes at the end; an existing key keeps its place.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the member’s key</li>
+<li><code>member</code> — the value to store</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>member</code>, the value of the assignment expression</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not a table (“TomlValue[key] = value needs a table”)</li>
+</ul>
+<h4 id="operator--2"><a class="header" href="#operator--2">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): TomlValue
+</code></pre>
+<p>Reads <code>value[index]</code>: an element of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the element’s position, from 0</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an array (“TomlValue[index] needs an array”)</li>
+<li>if <code>index</code> is not less than the array’s count (as <code>Array</code>’s indexer does)</li>
+</ul>
+<h4 id="operator--3"><a class="header" href="#operator--3">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong, element: TomlValue): TomlValue
+</code></pre>
+<p>Writes <code>value[index] = element</code>: replaces an element of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the element’s position, from 0</li>
+<li><code>element</code> — the value to store</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>element</code>, the value of the assignment expression</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an array (“TomlValue[index] = value needs an array”)</li>
+<li>if <code>index</code> is not less than the array’s count</li>
+</ul>
+<h4 id="try_get"><a class="header" href="#try_get">try_get</a></h4>
+<pre><code class="language-pepper">try_get(key: String): TomlValue?
+</code></pre>
+<p>Returns the member named <code>key</code>, when this is a table that has one.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the member’s key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the member, or none</li>
+</ul>
+<h4 id="lookup"><a class="header" href="#lookup">lookup</a></h4>
+<pre><code class="language-pepper">lookup(key: String): TomlValue?
+</code></pre>
+<p>Returns the value at a dotted key below this table, read as TOML
+reads a key: <code>package.name</code>, <code>dependencies."my.crate".version</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the dotted key</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when a part is missing, is not a table, or <code>key</code> is not a valid TOML key</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import toml;
+
+var root = toml.parse("[package]\nname = \"demo\"").value();
+assert(root.lookup("package.name").value().as_string().value() == "demo", "found");
+assert(root.lookup("package.version").is_empty(), "missing");
+</code></pre>
+<h4 id="get_path"><a class="header" href="#get_path">get_path</a></h4>
+<pre><code class="language-pepper">get_path(keys: Array&lt;String&gt;): TomlValue?
+</code></pre>
+<p>Returns the value at the path of keys <code>keys</code> below this table.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>keys</code> — the keys, outermost first; empty gives this value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value, or none when a part is missing or is not a table</li>
+</ul>
+<h4 id="append"><a class="header" href="#append">append</a></h4>
+<pre><code class="language-pepper">append(element: TomlValue)
+</code></pre>
+<p>Appends <code>element</code> to the end of an array.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>element</code> — the value to append</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not an array (“TomlValue.append needs an array”)</li>
+</ul>
+<h4 id="contains"><a class="header" href="#contains">contains</a></h4>
+<pre><code class="language-pepper">contains(key: String): bool
+</code></pre>
+<p>Returns whether this is a table with a member named <code>key</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the member exists</li>
+</ul>
+<h4 id="remove"><a class="header" href="#remove">remove</a></h4>
+<pre><code class="language-pepper">remove(key: String): bool
+</code></pre>
+<p>Removes the member named <code>key</code> from a table.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>key</code> — the key to remove</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when this is a table and the member was there</li>
+</ul>
+<h4 id="type_name"><a class="header" href="#type_name">type_name</a></h4>
+<pre><code class="language-pepper">type_name(): String
+</code></pre>
+<p>Returns what kind of value this is, as errors name it: <code>string</code>,
+<code>integer</code>, <code>float</code>, <code>boolean</code>, <code>date-time</code>, <code>array</code> or <code>table</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the kind’s name</li>
+</ul>
+<h4 id="as_string"><a class="header" href="#as_string">as_string</a></h4>
+<pre><code class="language-pepper">as_string(): String?
+</code></pre>
+<p>Returns the string, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the text of a <code>String</code>, or none</li>
+</ul>
+<h4 id="as_int"><a class="header" href="#as_int">as_int</a></h4>
+<pre><code class="language-pepper">as_int(): long?
+</code></pre>
+<p>Returns the integer, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value of an <code>Integer</code>, or none</li>
+</ul>
+<h4 id="as_float"><a class="header" href="#as_float">as_float</a></h4>
+<pre><code class="language-pepper">as_float(): double?
+</code></pre>
+<p>Returns the number as a <code>double</code>, when this is a <code>Float</code> or an
+<code>Integer</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number, or none</li>
+</ul>
+<h4 id="as_bool"><a class="header" href="#as_bool">as_bool</a></h4>
+<pre><code class="language-pepper">as_bool(): bool?
+</code></pre>
+<p>Returns the boolean, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value of a <code>Boolean</code>, or none</li>
+</ul>
+<h4 id="as_date_time"><a class="header" href="#as_date_time">as_date_time</a></h4>
+<pre><code class="language-pepper">as_date_time(): TomlDateTime?
+</code></pre>
+<p>Returns the date-time, when this is one.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value of a <code>DateTime</code>, or none</li>
+</ul>
+<h4 id="as_array"><a class="header" href="#as_array">as_array</a></h4>
+<pre><code class="language-pepper">as_array(): Array&lt;TomlValue&gt;?
+</code></pre>
+<p>Returns the elements, when this is an array. The array is the one
+this value holds, not a copy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the elements of an <code>Array</code>, or none</li>
+</ul>
+<h4 id="as_table"><a class="header" href="#as_table">as_table</a></h4>
+<pre><code class="language-pepper">as_table(): OrderedMap&lt;String, TomlValue&gt;?
+</code></pre>
+<p>Returns the members, when this is a table. The map is the one this
+value holds, not a copy.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the members of a <code>Table</code>, or none</li>
+</ul>
+<h4 id="to_string-1"><a class="header" href="#to_string-1">to_string</a></h4>
+<pre><code class="language-pepper">to_string(): String
+</code></pre>
+<p>Returns the value as TOML writes it after a key’s <code>=</code>, on one line:
+<code>"text"</code>, <code>42</code>, <code>1.5</code>, <code>[1, 2]</code>, <code>{ name = "demo" }</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the TOML text</li>
+</ul>
+<h4 id="to_document"><a class="header" href="#to_document">to_document</a></h4>
+<pre><code class="language-pepper">to_document(): String
+</code></pre>
+<p>Returns a table as a TOML document: its plain members as <code>key = value</code> lines, then each table member under a <code>[header]</code> and each
+array of tables as <code>[[header]]</code> sections, nested tables after their
+parent’s members.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the document text, ending with a line break unless it is empty</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if this is not a table (“TomlValue.to_document needs a table”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">import toml;
+
+var root = toml.TomlValue.table();
+root["title"] = toml.TomlValue.String("demo");
+var server = toml.TomlValue.table();
+server["port"] = toml.TomlValue.Integer(8080);
+root["server"] = server;
+assert(root.to_document() == "title = \"demo\"\n\n[server]\nport = 8080\n", "a document");
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../reference/toml-module.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../reference/toml-parse.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../reference/toml-module.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../reference/toml-parse.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
