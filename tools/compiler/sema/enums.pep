@@ -89,6 +89,7 @@ export resolve_enum_cases(module: Module, state: PassState) {
         }
         var methods = Array<FunctionDef>();
         methods.append_all(st.method_members);
+        methods.append_all(st.generic_methods);
         methods.append_all(st.constructors);
         for (var method in methods) {
             _resolve_defaults(method, resolver);

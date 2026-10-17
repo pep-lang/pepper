@@ -622,6 +622,9 @@ export resolve_type_aliases(module: Module, state: PassState) {
         for (var method in st.method_members) {
             resolver.subst_function(method, struct_values);
         }
+        for (var method in st.generic_methods) {
+            resolver.subst_function(method, struct_values);
+        }
         for (var constructor in st.constructors) {
             resolver.subst_function(constructor, struct_values);
         }
