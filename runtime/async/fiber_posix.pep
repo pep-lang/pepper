@@ -100,20 +100,3 @@ _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     __ptr<__ptr<void>> resume = to;
     __switch_context(from, resume[0]);
 }
-
-# A thread-local key shared by every fiber on a thread: a pthread key, since
-# a switch leaves the thread's own storage alone.
-[Target(OS(Linux) || OS(Mac))]
-_async_fiber_key_create(): ulong {
-    return _async_sys_key_create(__null);
-}
-
-[Target(OS(Linux) || OS(Mac))]
-_async_fiber_key_get(key: ulong): __ptr<void> {
-    return _async_sys_key_get(key);
-}
-
-[Target(OS(Linux) || OS(Mac))]
-_async_fiber_key_set(key: ulong, value: __ptr<void>) {
-    _async_sys_key_set(key, value);
-}

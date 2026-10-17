@@ -59,30 +59,3 @@ _async_fiber_destroy(context: __ptr<void>) {
 _async_fiber_switch(from: __ptr<void>, to: __ptr<void>) {
     SwitchToFiber(to);
 }
-
-# A thread-local key shared by every fiber on a thread. The `_async_sys_key_*`
-# keys are fiber local storage (FlsAlloc), which gives each fiber its own
-# value, so the worker is published through thread local storage instead.
-[Target(OS(Windows))]
-extern uint TlsAlloc();
-[Target(OS(Windows))]
-extern void* TlsGetValue(uint index);
-[Target(OS(Windows))]
-extern int TlsSetValue(uint index, void* value);
-
-[Target(OS(Windows))]
-_async_fiber_key_create(): ulong {
-    var index = TlsAlloc();
-    assert(index != 4294967295, "async: no thread-local keys left");  # TLS_OUT_OF_INDEXES
-    return index as ulong;
-}
-
-[Target(OS(Windows))]
-_async_fiber_key_get(key: ulong): __ptr<void> {
-    return TlsGetValue(key as uint);
-}
-
-[Target(OS(Windows))]
-_async_fiber_key_set(key: ulong, value: __ptr<void>) {
-    TlsSetValue(key as uint, value);
-}

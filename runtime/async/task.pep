@@ -19,7 +19,7 @@
 #
 # One `_Worker` per thread inside `run`: its ready queue, its timer heap,
 # the task it is running, and a pool of idle fibers. The worker lives in
-# `run`'s frame; `_async_worker_key` (a thread-local key whose value is a
+# `run`'s frame; `_async_worker_slot` (a `[ThreadLocal]` pointer to a
 # malloc'd slot holding one reference to it) lets code in tasks find it.
 #
 # Every fiber runs `_async_fiber_main`, a loop that runs whichever task the
@@ -950,16 +950,18 @@ _async_file_descriptor(handle: io.FileHandle): long {
     return -1;
 }
 
-# The thread-local key whose value is the current thread's worker: a
-# malloc'd slot holding one reference to it, or null outside `run`.
-const _async_worker_key = _async_fiber_key_create();
+# The current thread's worker: a malloc'd slot holding one reference to it,
+# or null outside `run`. A thread (not fiber) local: a task never moves to
+# another thread, and every fiber on a thread shares its worker.
+[ThreadLocal]
+var _async_worker_slot: __ptr<void>;
 
 _async_on_worker(): bool {
-    return _async_fiber_key_get(_async_worker_key) != __null;
+    return _async_worker_slot != __null;
 }
 
 _async_worker(): _Worker {
-    __ptr<_Worker> slot = _async_fiber_key_get(_async_worker_key);
+    __ptr<_Worker> slot = _async_worker_slot;
     assert(slot != __null, "async: not inside async.run");
     return slot[0];
 }
@@ -1329,7 +1331,7 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
     var worker = _Worker(runtime, index, stack_size, backend);
     __ptr<_Worker> slot = _pep_malloc(8);
     slot[0] = worker;
-    _async_fiber_key_set(_async_worker_key, slot);
+    _async_worker_slot = slot;
     io._io_set_waiter(worker);
     runtime._join(index, worker._inbox);
     var first = Optional<_TaskCore>.Empty;
@@ -1345,7 +1347,7 @@ _async_worker_main(runtime: _Runtime, index: ulong, stack_size: ulong, backend: 
     }
     worker._pool.clear();
     io._io_clear_waiter();
-    _async_fiber_key_set(_async_worker_key, __null);
+    _async_worker_slot = __null;
     slot[0] = __default<_Worker>();
     _pep_free(slot);
     worker._close();

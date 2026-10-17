@@ -14,7 +14,7 @@
 # error at the code that asked for the copy.
 #
 # One `_Copies` is the context of the outermost `copy` call on a thread: the
-# thread-local key `_copy_key()` points at its `_self` slot while it runs, so
+# `[ThreadLocal]` `_copy_running` points at its `_self` slot while it runs, so
 # a `copy(x)` nested inside it (in a `Copyable<T>.copy()` implementation) and
 # each synthesized `__copy()` find it with one thread-local read.
 #
@@ -25,87 +25,14 @@
 import "array";
 import "hash";
 
-extern void* malloc(ulong size);
-[Target(!OS(Windows))]
-extern int pthread_key_create(void* key, void* destructor);
-[Target(!OS(Windows))]
-extern void* pthread_getspecific(ulong key);
-[Target(!OS(Windows))]
-extern int pthread_setspecific(ulong key, void* value);
-[Target(OS(Windows))]
-extern uint TlsAlloc();
-[Target(OS(Windows))]
-extern void* TlsGetValue(uint index);
-[Target(OS(Windows))]
-extern int TlsSetValue(uint index, void* value);
-
-# The thread-local key plus one, 0 until the first `copy` creates it. Made on
-# first use, not at start: every program (and every JIT engine in a test
-# run) loads this file, and the operating system has few keys.
-const _copy_key_cell: __ptr<ulong> = _copy_new_key_cell();
-
-# Plain `malloc`, not `_pep_malloc`: module constants may initialize before
-# the allocation counter, and the cell lives as long as the program.
-_copy_new_key_cell(): __ptr<ulong> {
-    __ptr<ulong> cell = malloc(sizeof<ulong>());
-    cell[0] = 0;
-    return cell;
-}
-
-[Target(!OS(Windows))]
-_copy_key_create(): ulong {
-    __ptr<ulong> key = _pep_malloc(8);
-    key[0] = 0;
-    if (pthread_key_create(key, __null) != 0) {
-        panic("copy: the operating system has no thread-local keys left");
-    }
-    ulong created = key[0];
-    _pep_free(key);
-    return created;
-}
-
-[Target(OS(Windows))]
-_copy_key_create(): ulong {
-    var index = TlsAlloc();
-    # TLS_OUT_OF_INDEXES
-    assert(index != 4294967295, "copy: the operating system has no thread-local keys left");
-    return index as ulong;
-}
-
-[Target(!OS(Windows))]
-_copy_key_get(key: ulong): __ptr<void> {
-    return pthread_getspecific(key);
-}
-
-[Target(OS(Windows))]
-_copy_key_get(key: ulong): __ptr<void> {
-    return TlsGetValue(key as uint);
-}
-
-[Target(!OS(Windows))]
-_copy_key_set(key: ulong, value: __ptr<void>) {
-    pthread_setspecific(key, value);
-}
-
-[Target(OS(Windows))]
-_copy_key_set(key: ulong, value: __ptr<void>) {
-    TlsSetValue(key as uint, value);
-}
-
-# The thread-local key that points at the running copy's context. Two
-# threads may race to make it; the loser's key is left unused.
-_copy_key(): ulong {
-    var key = __atomic_load<ulong>(_copy_key_cell);
-    if (key != 0) {
-        return key - 1;
-    }
-    __atomic_cmpxchg<ulong>(_copy_key_cell, 0, _copy_key_create() + 1);
-    return __atomic_load<ulong>(_copy_key_cell) - 1;
-}
+# The running copy's context on this thread: its `_self` slot, or null when
+# no copy is running.
+[ThreadLocal]
+var _copy_running: __ptr<void>;
 
 # The context of the copy running on this thread, or null when none is.
 export _pep_copies(): _Copies {
-    __ptr<void> raw = _copy_key_get(_copy_key());
+    __ptr<void> raw = _copy_running;
     if (raw == __null) {
         return __default<_Copies>();
     }
@@ -117,10 +44,9 @@ export _pep_copies(): _Copies {
 # Makes `copies` the context of this thread's copy and returns the one it
 # replaces (null outside any copy), for `_copy_leave`.
 _copy_enter(copies: _Copies): __ptr<void> {
-    var key = _copy_key();
-    var previous = _copy_key_get(key);
+    var previous = _copy_running;
     copies._self[0] = copies._address<_Copies>(copies);
-    _copy_key_set(key, copies._self);
+    _copy_running = copies._self;
     return previous;
 }
 
@@ -128,7 +54,7 @@ _copy_enter(copies: _Copies): __ptr<void> {
 # `_copy_enter` replaced.
 _copy_leave(copies: _Copies, previous: __ptr<void>) {
     copies._finish();
-    _copy_key_set(_copy_key(), previous);
+    _copy_running = previous;
     copies._self[0] = 0;
 }
 
