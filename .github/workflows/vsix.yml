@@ -122,6 +122,8 @@ jobs:
           name: pep-lsp-${{ matrix.target }}
           path: ${{ env.PEPPER_LSP_BIN }}
           if-no-files-found: error
+          # Only the package job of this run downloads it.
+          retention-days: 1
 
   package:
     runs-on: pepper-linux
@@ -192,6 +194,7 @@ jobs:
           name: pepper-language-vsix
           path: tools/vscode-pepper/pepper-language.vsix
           if-no-files-found: error
+          retention-days: 3
 
       # Publish the vsix as a release asset, tagged by the extension version
       # in package.json: repeat pushes replace the asset on the existing
