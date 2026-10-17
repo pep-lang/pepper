@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-c47acce7.js";
+            window.path_to_searchindex_js = "../searchindex-a44e5b09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-fc646ff9.js"></script>
@@ -576,6 +576,13 @@ the PEM file <code>roots</code>; <code>connector.set_identity(certificate_chain,
 certificate, or an untrusted one, fails the server’s <code>accept</code>. With TLS
 1.3 the client’s <code>connect</code> can succeed first, and its next read then
 fails or returns 0.</li>
+<li>ALPN: <code>connector.set_protocols(["h2", "http/1.1"])</code> offers protocols to
+servers, most preferred first, and <code>acceptor.set_protocols(...)</code> lists the
+ones a server accepts, also most preferred first. The handshake picks the
+first of the server’s that the client offers, and <code>stream.protocol()</code>
+names it on both sides. A client that offers no protocols connects with
+none chosen; one whose protocols the server accepts none of fails the
+handshake (the <code>no_application_protocol</code> alert of RFC 7301).</li>
 <li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>

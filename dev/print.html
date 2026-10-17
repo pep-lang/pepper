@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c47acce7.js";
+            window.path_to_searchindex_js = "searchindex-a44e5b09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-fc646ff9.js"></script>
@@ -15863,6 +15863,13 @@ the PEM file <code>roots</code>; <code>connector.set_identity(certificate_chain,
 certificate, or an untrusted one, fails the server’s <code>accept</code>. With TLS
 1.3 the client’s <code>connect</code> can succeed first, and its next read then
 fails or returns 0.</li>
+<li>ALPN: <code>connector.set_protocols(["h2", "http/1.1"])</code> offers protocols to
+servers, most preferred first, and <code>acceptor.set_protocols(...)</code> lists the
+ones a server accepts, also most preferred first. The handshake picks the
+first of the server’s that the client offers, and <code>stream.protocol()</code>
+names it on both sides. A client that offers no protocols connects with
+none chosen; one whose protocols the server accepts none of fails the
+handshake (the <code>no_application_protocol</code> alert of RFC 7301).</li>
 <li><code>read</code>, <code>read_exact</code>, <code>write</code> and <code>write_all</code> work on the
 decrypted bytes. <code>shutdown()</code> sends the TLS close_notify, and <code>read</code>
 returns 0 once the peer has sent one or closed the connection.</li>
@@ -51821,6 +51828,27 @@ certificate (mutual TLS, as a <code>TlsAcceptor</code> does after
 connector.set_identity(io.Path("client.pem"), io.Path("client-key.pem")).value();
 var stream = connector.connect_host("internal.example.com", 443).value();
 </code></pre>
+<h4 id="set_protocols"><a class="header" href="#set_protocols">set_protocols</a></h4>
+<pre><code class="language-pepper">set_protocols(protocols: String[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Offers <code>protocols</code> to every server through ALPN (RFC 7301), most
+preferred first, such as <code>["h2", "http/1.1"]</code>. After <code>connect</code>,
+<code>TlsStream.protocol</code> names the one the server chose, if it chose one.
+Call it before the first <code>connect</code>; a later call replaces the list.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocols</code> — the protocol names, each 1 to 255 bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var connector = tls.TlsConnector.create().value();
+connector.set_protocols(["h2", "http/1.1"]).value();
+var stream = connector.connect_host("example.com", 443).value();
+var http2 = stream.protocol() == Optional&lt;String&gt;.Value("h2");
+</code></pre>
 <h4 id="connect-3"><a class="header" href="#connect-3">connect</a></h4>
 <pre><code class="language-pepper">connect(stream: io.TcpStream, host: String): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -51923,6 +51951,23 @@ no certificate, or an untrusted one, fails. Call it before the first
 <pre><code class="language-pepper">var acceptor = tls.TlsAcceptor.create(io.Path("cert.pem"), io.Path("key.pem")).value();
 acceptor.require_client_certificate(io.Path("clients-ca.pem")).value();
 </code></pre>
+<h4 id="set_protocols-1"><a class="header" href="#set_protocols-1">set_protocols</a></h4>
+<pre><code class="language-pepper">set_protocols(protocols: String[]): io.IoResult&lt;void&gt;
+</code></pre>
+<p>Accepts <code>protocols</code> through ALPN (RFC 7301), most preferred first:
+the handshake chooses the first of them that the client offers, and
+<code>TlsStream.protocol</code> names it. A client that offers no protocols
+connects with none chosen; one that offers only protocols not in the
+list fails the handshake with the <code>no_application_protocol</code> alert
+(RFC 7301). Call it before the first <code>accept</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>protocols</code> — the protocol names, each 1 to 255 bytes</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an Ok result; an error when the list is empty or a name is empty or longer than 255 bytes</li>
+</ul>
 <h4 id="accept-3"><a class="header" href="#accept-3">accept</a></h4>
 <pre><code class="language-pepper">accept(stream: io.TcpStream): io.IoResult&lt;TlsStream&gt;
 </code></pre>
@@ -51981,6 +52026,16 @@ while (stream.read(reply, 4096).value() &gt; 0) {
 <p><strong>Returns</strong></p>
 <ul>
 <li>false after <code>close()</code></li>
+</ul>
+<h4 id="protocol"><a class="header" href="#protocol">protocol</a></h4>
+<pre><code class="language-pepper">protocol(): String?
+</code></pre>
+<p>Returns the protocol the handshake chose through ALPN, from the
+lists <code>TlsConnector.set_protocols</code> and <code>TlsAcceptor.set_protocols</code>
+set.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the protocol name, such as <code>h2</code>; none when no protocol was chosen or the stream is closed</li>
 </ul>
 <h4 id="read-9"><a class="header" href="#read-9">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
