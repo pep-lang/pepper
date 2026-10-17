@@ -321,8 +321,13 @@ export analyze(
     if (path.is_empty()) {
         return out;
     }
+    # A test file's `[Test]` bodies are checked, as `pep-test` builds them.
+    var options = copy(build_options);
+    if (_declares_tests(parsed)) {
+        options[link.TEST_BUILD_OPTION] = "1";
+    }
     var host = link.Target();
-    for (var (name, value) in build_options) {
+    for (var (name, value) in options) {
         host.build_options[name] = value;
     }
     out.os = analysis_os(text, parsed, host);
@@ -363,7 +368,7 @@ export analyze(
         path.value(),
         text,
         out.os,
-        build_options,
+        options,
         workers,
         filling,
         warnings
@@ -459,7 +464,24 @@ _load(root: Path, text: String, target: link.Target): Result<link.Program, Strin
     setup.target = target;
     setup.sources[link.path_key(root)] = text;
     setup.defer_bodies = true;
+    # As in a test build, which loads `testing` (its `TempFolder`) into every
+    # file.
+    if (target.build_options.contains(link.TEST_BUILD_OPTION)) {
+        setup.forced_imports.append("testing");
+    }
     return link.load_program(root, setup);
+}
+
+# Whether `module` declares a `[Test]` function: a file `pep-test` tests.
+_declares_tests(module: ast.Module): bool {
+    for (var declaration in module.declarations) {
+        if (declaration is Function(function)) {
+            if (ast.has_attribute(function.attributes, link.TEST_ATTRIBUTE)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 # `program`'s compilation units, keyed for the language server: its own compiler

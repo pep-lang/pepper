@@ -159,10 +159,10 @@ main.pep:2:8: error: test 'checks' must take no parameters
       |        ^
 ```
 
-Since `[Test]` bodies are left out of a normal build, the language server
-does not check them unless it analyzes with the build option `TEST`: add
-`"TEST"` to the `pepper.buildOptions` setting (see
-[pep-lsp](../tools/pep-lsp.md)).
+The language server checks a file that declares a `[Test]` function as a
+test build does: with the build option `TEST` and `testing` loaded, so
+errors, hover and go-to-definition work inside test bodies with no setting
+(see [pep-lsp](../tools/pep-lsp.md)).
 
 Tests that compare a program's printed output with an expected file are
 not supported yet.

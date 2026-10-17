@@ -130,6 +130,32 @@ shows_an_error_in_another_file_at_the_start() {
     expect_equal(analysis.diagnostics[0].range.start.line, 0);
 }
 
+[Test]
+checks_test_bodies_in_a_test_file() {
+    # No `TEST` build option is set: declaring a `[Test]` function is enough.
+    var text = "[Test]
+broken() {
+    nope();
+}
+";
+    var analysis = analyze(temp_file("broken_test.pep", text), text);
+    expect_equal(analysis.outcome, "found an error");
+    expect_true(analysis.diagnostics[0].message.contains("'nope'"));
+    expect_equal(analysis.diagnostics[0].range.start.line, 2);
+
+    # `testing` is loaded, as in a test build, and hover works in the body.
+    var fine = "twice(x: int): int { return x * 2; }
+
+[Test]
+doubles() {
+    var folder = TempFolder();
+    expect_equal(twice(2), 4);
+}
+";
+    var context = analyzed(temp_file("fine_test.pep", fine), fine);
+    expect_true(hover_text(context, at(fine, "twice(2)", 1)).contains("twice(x: int): int"));
+}
+
 # Analyzes `text` as the document `uri` and gives the context hover and
 # definition read, with the analysis's program and model.
 analyzed(uri: String, text: String): Context {

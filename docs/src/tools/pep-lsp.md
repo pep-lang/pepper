@@ -123,7 +123,7 @@ The server's settings arrive in the `initializationOptions` of the LSP
 | --- | --- | --- | --- |
 | `inlayHints.implicitConversions` | boolean | `true` | Show the constructor call an [`[Implicit]` conversion](../language/structs.md#implicit-conversions) inserts, such as `Path(` ... `)` around a `String` passed where a `Path` is expected |
 | `inlayHints.parameterNames` | boolean | `true` | Show the parameter name before a literal argument passed by position (`resize(width: 800, height: 600)`) |
-| `buildOptions` | array of strings | `[]` | The [build options](../language/build-options.md) to analyze with, as the compiler's `-D` takes them: `NAME` or `NAME=VALUE`. One that does not parse is left out |
+| `buildOptions` | array of strings | `[]` | The [build options](../language/build-options.md) to analyze with, as the compiler's `-D` takes them: `NAME` or `NAME=VALUE`. One that does not parse is left out. A document that declares a `[Test]` function is also analyzed with `TEST`, and `testing` loaded, as [`pep-test`](pep-test.md) builds it |
 
 ## VS Code settings
 

@@ -6,7 +6,9 @@ export [link, sort_errors, FileScope, Linked, ModuleError, ProgramFile] from "li
 export [
     declared_deprecation, deprecation_of, deprecation_warning, is_deprecation, Deprecation, DeprecationError
 ] from "deprecation";
-export [ENTRY_BUILD_OPTION, is_build_option_name, supported_triples, Target, TEST_BUILD_OPTION] from "platform";
+export [
+    ENTRY_BUILD_OPTION, is_build_option_name, supported_triples, Target, TEST_ATTRIBUTE, TEST_BUILD_OPTION
+] from "platform";
 export [absolute, path_key, Runtime] from "files";
 export [declares_override, translation_units, TranslationUnit, unit_inputs] from "translation_units";
 export [
