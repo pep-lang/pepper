@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-459d4a26.js";
+            window.path_to_searchindex_js = "searchindex-8c5a1eef.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b2626e7d.js"></script>
@@ -19804,6 +19804,11 @@ function instead (see <a href="#other-names-for-a-parameter">Other names for a p
 <code>S.name()</code>, and a bare field or method name inside the struct’s own methods</li>
 <li>an entry in an import list, <code>import [name] from m</code>, and a qualified use
 <code>m.name</code>, where the warning points at <code>name</code></li>
+<li>a call the compiler writes for you, at the token that stands for it: a
+<code>for</code> loop’s <code>next()</code> and <code>current()</code> at <code>for</code>, a <code>with</code> block’s <code>enter()</code>
+at <code>with</code>, and an operator overload at its operator (<code>a + b</code> at <code>+</code>; a
+deprecated <code>==</code> also warns at a <code>!=</code> that uses it). These warnings offer
+no rename fix.</li>
 </ul>
 <p>These do not warn:</p>
 <ul>
@@ -19824,9 +19829,6 @@ passes the name on without using it</li>
 <code>'Deprecated' cannot be applied to</code> an extension or a destructor.</p>
 <h2 id="limitations-2"><a class="header" href="#limitations-2">Limitations</a></h2>
 <ul>
-<li>The compiler does not report uses it writes for you: the <code>next()</code> and
-<code>current()</code> calls of a <code>for</code> loop, the <code>enter()</code> call of a <code>with</code> block,
-and a call to an operator overload such as <code>a + b</code>.</li>
 <li>The language server shows the warnings for the file you are editing. It
 does not show them for other files the program imports.</li>
 </ul>
