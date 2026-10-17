@@ -1192,7 +1192,15 @@ arguments, and `_TypeScopes.overload_call` checks that a call names a set
 `traits.used_trait_types` prints and parses only types that spell a
 trait's name as a whole word (`ArrayIterator` does not mention
 `Iterator`). `specialize_methods` builds its `StructTable` only once a call
-names a generic method.
+names a generic method. Between its runs it keeps, in
+`PassState.implicit` (`ImplicitMemo`), what each callable looked up and its
+fingerprint (`_Worklist`), so a run walks only the callables whose code or
+lookups changed since; the declarations as the last round that took them
+saw them, so the next run announces what changed since, this run's own
+changes included, without taking them again at the end; and which
+callables' last walk left a call settling by arity could pick, the only
+ones the settling run walks for that reason. A round that binds nothing
+hands the overloads `bind_function_values` built to the walk.
 
 `resolve_type_aliases` also expands aliases in constraints, in the arguments
 of each `TypeUse` (not its head, whose own constraints are checked), and in

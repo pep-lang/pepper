@@ -436,6 +436,9 @@ export struct ImplicitMemo {
     ## What the last run changed that its callers have not looked for yet
     ## (when it stopped at its limit of runs).
     var pending: HashSet<String> = HashSet<String>();
+    ## The callables whose last walk made a selection settling overloads
+    ## by arity could change, by place.
+    var unsettled: HashSet<String> = HashSet<String>();
 
     construct() {}
 }

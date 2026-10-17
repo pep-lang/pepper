@@ -343,6 +343,10 @@ export struct Overloads {
     ## No argument type is still to come: arity alone may pick the only
     ## non-generic member.
     var settle_by_arity: bool = false;
+    ## How many selections settling by arity could change were made (a call
+    ## still waiting, or a generic member chosen): code whose walk made none
+    ## comes out of a walk that settles unchanged.
+    var settleable: ulong = 0;
     ## What deciding generic constraints needs, when any is written.
     var conformance: Conformance? = Optional<Conformance>.Empty;
     var state: PassState;
@@ -890,7 +894,7 @@ export struct Overloads {
 
     _select_in(members: Array<Member>, name: String, explicit: TypeName[]?, args: ArgInfo[]): Outcome {
         var outcome = _select_ranked(members, name, explicit, args);
-        if (!settle_by_arity or explicit.is_value()) {
+        if (explicit.is_value()) {
             return outcome;
         }
         # No type is still to come: a call still waiting, or settling on a
@@ -912,6 +916,10 @@ export struct Overloads {
             else => {}
         }
         if (!settle) {
+            return outcome;
+        }
+        settleable += 1;
+        if (!settle_by_arity) {
             return outcome;
         }
         var fitting = Array<Member>();
@@ -1492,6 +1500,11 @@ export struct FunctionValueSearch {
             _overloads = Optional<Overloads>.Value(Overloads(module, state, trait_types));
         }
         return _overloads.value();
+    }
+
+    ## The overloads, if `overloads` built them.
+    built_overloads(): Overloads? {
+        return _overloads;
     }
 }
 

@@ -250,6 +250,14 @@ struct _Worklist {
     var changing: HashSet<String> = HashSet<String>();
     ## Every callable is walked: nothing is known of earlier walks.
     var all: bool = true;
+    ## The callables whose last walk made a selection settling overloads
+    ## by arity could change (`Overloads.settleable`), by place.
+    var unsettled: HashSet<String> = HashSet<String>();
+    ## This run settles overloads by arity: the unsettled callables are
+    ## walked too.
+    var settling: bool = false;
+    # `Overloads.settleable` when the callable being walked was started.
+    var _settle_mark: ulong = 0;
     ## Whether other passes may have changed code since the last run, so
     ## each callable's code is checked against its fingerprint.
     var checks_code: bool = true;
@@ -266,6 +274,7 @@ struct _Worklist {
             reads = memo.reads;
             prints = memo.prints;
             changed = memo.pending;
+            unsettled = memo.unsettled;
             all = false;
         }
     }
@@ -277,6 +286,9 @@ struct _Worklist {
         }
         var read = reads.try_get(place);
         if (!read.is_value()) {
+            return true;
+        }
+        if (settling and unsettled.contains(place)) {
             return true;
         }
         if (checks_code) {
@@ -306,11 +318,17 @@ struct _Worklist {
     start(tables: ImplicitTables, scopes: _TypeScopes) {
         tables.reads = HashSet<String>();
         scopes.edits = 0;
+        _settle_mark = scopes.overloads.settleable;
     }
 
     ## Finishes walking the callable `f` at `place`.
     finish(place: String, f: FunctionDef, tables: ImplicitTables, scopes: _TypeScopes) {
         edits += scopes.edits;
+        if (scopes.overloads.settleable != _settle_mark) {
+            unsettled.insert(place);
+        } else {
+            unsettled.remove(place);
+        }
         if (scopes.edits == 0) {
             reads[place] = tables.reads;
             prints[place] = _print(f);
@@ -325,6 +343,7 @@ struct _Worklist {
         changed = changing;
         changing = HashSet<String>();
         all = false;
+        settling = false;
         edits = 0;
     }
 }
@@ -2346,12 +2365,16 @@ _resolve_body(function: FunctionDef, scopes: _TypeScopes, current: TypeName?) {
     scopes.pop();
 }
 
-## One run of the pass over the callables `work` needs; returns whether a
-## function's return type was inferred or a call resolved.
-_resolve_once(module: Module, state: PassState, work: _Worklist, trait_types: TypeName[]): bool {
+## One run of the pass over the callables `work` needs, after `bindings`;
+## returns whether a function's return type was inferred or a call
+## resolved.
+_resolve_once(module: Module, state: PassState, work: _Worklist, bindings: _Bindings): bool {
     bool inferred = false;
+    var trait_types = bindings.trait_types;
     var tables = ImplicitTables(module, state, trait_types);
-    var overloads = Overloads(module, state, Optional<TypeName[]>.Value(trait_types));
+    var overloads = bindings.overloads.is_value() ?
+        bindings.overloads.value() :
+        Overloads(module, state, Optional<TypeName[]>.Value(trait_types));
     var resolved = Array<(Loc, String)>();
     # Structs first: methods see field types.
     ulong s = 0;
@@ -2546,6 +2569,8 @@ struct _Bindings {
     var bound: bool = false;
     var specialized: bool = false;
     var methods: bool = false;
+    ## The overloads a binding pass built, while the module is as they saw it.
+    var overloads: Overloads? = Optional<Overloads>.Empty;
 
     construct(trait_types: TypeName[]) {
         this.trait_types = trait_types;
@@ -2636,6 +2661,10 @@ _bind_values(module: Module, state: PassState): _Bindings {
     if (result.methods) {
         result.trait_types = used_trait_types(module, state.trait_types_memo());
     }
+    # Binding nothing leaves the module as the search found it.
+    if (values.is_value() and !result.bound and !result.specialized and !result.methods) {
+        result.overloads = values.value().built_overloads();
+    }
     return result;
 }
 
@@ -2653,15 +2682,12 @@ export resolve_implicit_types(module: Module, state: PassState) {
     var memo = state.implicit;
     var work = _Worklist(memo);
     # Settling overloads by arity selects calls whose lookups did not
-    # change: every callable is walked.
-    if (state.settle_overloads_by_arity) {
-        work.all = true;
-    }
+    # change: the callables whose last walk left one it could settle are
+    # walked.
+    work.settling = state.settle_overloads_by_arity;
     ulong round = 0;
-    # Whether the last run changed nothing since its closures were synced,
-    # and whether its declarations were taken then too.
+    # Whether the last run changed nothing since its closures were synced.
     bool quiet = false;
-    bool declared = false;
     while (round < 8) {
         bool synced = sync_closures(module, state);
         var bindings = _bind_values(module, state);
@@ -2676,10 +2702,9 @@ export resolve_implicit_types(module: Module, state: PassState) {
             }
             declarations.keep(memo);
         }
-        bool inferred = _resolve_once(module, state, work, bindings.trait_types);
+        bool inferred = _resolve_once(module, state, work, bindings);
         if (!inferred and !synced and !bound) {
             quiet = work.edits == 0 and work.changing.count == 0;
-            declared = work.checks_code;
             break;
         }
         work.next_run();
@@ -2688,12 +2713,13 @@ export resolve_implicit_types(module: Module, state: PassState) {
     if (!quiet) {
         sync_closures(module, state);
     }
-    # What this run changed is the next run's to look for.
-    if (!quiet or !declared) {
-        _Declarations(module, used_trait_types(module, state.trait_types_memo())).keep(memo);
-    }
+    # The declarations stay as the last run that took them saw them: the
+    # next run announces what this one changed since, along with what other
+    # passes change, and a walk of a callable already up to date changes
+    # nothing. Taking them again here cost a walk of every body.
     memo.reads = work.reads;
     memo.prints = work.prints;
     memo.pending = work.changing;
+    memo.unsettled = work.unsettled;
     memo.kept = true;
 }
