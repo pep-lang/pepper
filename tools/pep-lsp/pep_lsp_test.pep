@@ -3,6 +3,7 @@
 
 import [Channel, Thread] from async;
 import [Diagnostic] from compiler.diagnostic;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import json;
 import [JsonValue] from json;
@@ -1558,6 +1559,28 @@ a_program_checked_whole_passes_or_finds_its_error() {
             expect_true(false);
         }
     }
+}
+
+[Test]
+an_edit_is_checked_again_on_the_record_of_the_program_checked_whole() {
+    # What an analysis does while a `--fill-cache` child fills the cache
+    # (#823).
+    var folder = Directory.temp().join(Path("pep-lsp-test-recheck-whole-cache"));
+    Directory.remove_all(folder);
+    var cache = incremental.Cache(folder);
+    var warnings = Array<Diagnostic>();
+    var keep = Optional<(incremental.Cache, String)>.Value((cache, "inputs"));
+    var program = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return 2;\n}\n");
+    expect_true(check_whole(program, warnings, keep).is_ok());
+    var edited = loaded_program("recheck_whole", "main.pep", "main(): int {\n    var x = 3;\n    return x;\n}\n");
+    var again = recheck_whole(edited, cache, "inputs", warnings);
+    expect_true(again.is_value() and again.value().is_ok());
+    # Checked with other build options: no record to start from.
+    expect_true(recheck_whole(edited, cache, "other", warnings).is_empty());
+    # An error is left to the check after the cache fills.
+    var wrong = loaded_program("recheck_whole", "main.pep", "main(): int {\n    return \"two\";\n}\n");
+    expect_true(recheck_whole(wrong, cache, "inputs", warnings).is_empty());
+    Directory.remove_all(folder);
 }
 
 [Test]

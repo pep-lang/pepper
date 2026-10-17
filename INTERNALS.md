@@ -2383,8 +2383,13 @@ slower than 200 ms is logged (`_answered`, "hover took 312 ms"):
   empty cache one pass is sooner than ~30 compilation units in sequence, each
   paying the passes' walks over everything it reads; meanwhile a
   `pep-lsp --fill-cache <dir>` child (`fill_cache`) checks the compilation
-  units below the document's in workers, and the next analysis waits for it
-  (`analyze_documents`' `fillers`). Otherwise the compilation units below the
+  units below the document's in workers (`Filling`). `check_whole` keeps the
+  whole program's record in the cache, as the compilation unit
+  `pep-lsp-whole` keyed by `_whole_inputs` (the runtime unit's key, the
+  document, its OS and build options); while the child runs, an analysis
+  checks the edit again on that record (`recheck_whole`,
+  `incremental.recheck_compilation_unit`) and waits for the child only when
+  the record does not fit the edit (#823). Otherwise the compilation units below the
   document's that the cache lacks are
   checked first in `pep-lsp --compilation-unit-worker <dir>` children
   (`incremental.check_in_workers`, `serve_compilation_units`, `check_for_worker`),
@@ -2873,7 +2878,9 @@ last one holds the program's own files, the root file's: it is checked on
 every build and never stored. An entry file inside a module's folder (a
 package's example) loads the module's files, which can sort after it, so
 the root's compilation unit is moved last; when another compilation unit
-reads it, the program is checked whole instead (#839).
+reads it, the program is checked whole instead (#839). The language server
+passes `root_last = false`: it stops at the document's compilation unit,
+so a document other files of its module read keeps its place (#823).
 
 **Keys.** A compilation unit's key (`compilation_unit_key`) hashes:
 

@@ -71,12 +71,15 @@ export struct CompilationUnit {
 
 ## Returns `program`'s compilation units, in the order they are checked; none
 ## when the runtime cannot be checked alone (a runtime file imports one outside
-## it).
+## it), or, with `root_last`, when a compilation unit reads the root's.
 ##
 ## @param program the linked program
 ## @param base what every key starts from (`Keys`' base)
+## @param root_last whether the root's compilation unit must come last, as a
+##   build's, which defines the entry points; the language server checks the
+##   document's and none after it
 ## @returns the compilation units, each with its key
-export compilation_units(program: link.Program, base: String): CompilationUnit[] {
+export compilation_units(program: link.Program, base: String, root_last: bool = true): CompilationUnit[] {
     var in_runtime = program.in_runtime();
     var count = program.files.count;
     for (var i in 0..count) {
@@ -192,24 +195,8 @@ export compilation_units(program: link.Program, base: String): CompilationUnit[]
     # points: the root file's. Files of the root's module it never reads can
     # come after it in that order (#839); move it last when nothing reads it,
     # else check the program whole.
-    var root = cycle_of[0];
-    for (var g in 0..order.count) {
-        if (!order[g].contains(root)) {
-            continue;
-        }
-        var group = order.remove_at(g);
-        for (var u in 0..cycles.count) {
-            if (group.contains(u) or skip[u]) {
-                continue;
-            }
-            for (var read in group) {
-                if (reads[u].contains(read)) {
-                    return Array<CompilationUnit>();
-                }
-            }
-        }
-        order.append(group);
-        break;
+    if (root_last and !_move_root_last(order, cycle_of[0], reads, skip)) {
+        return Array<CompilationUnit>();
     }
     var out = Array<CompilationUnit>();
     var unit_of = Array<ulong>();
@@ -515,6 +502,30 @@ export merged_onto(
     sema.settle_merged(out);
     sema.sort_globals(program, out);
     return Result<sema.Module, String>.ok(out);
+}
+
+# Moves the group of `order` holding cycle `root` last. Whether it could: no
+# other cycle, but those `skip` names, reads that group.
+_move_root_last(order: Array<ulong[]>, root: ulong, reads: Array<HashSet<ulong>>, skip: bool[]): bool {
+    for (var g in 0..order.count) {
+        if (!order[g].contains(root)) {
+            continue;
+        }
+        var group = order.remove_at(g);
+        for (var u in 0..reads.count) {
+            if (group.contains(u) or skip[u]) {
+                continue;
+            }
+            for (var read in group) {
+                if (reads[u].contains(read)) {
+                    return false;
+                }
+            }
+        }
+        order.append(group);
+        return true;
+    }
+    return true;
 }
 
 ## The nodes of `reads` but those `skip` names, in groups: the strongly

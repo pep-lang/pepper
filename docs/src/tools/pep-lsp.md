@@ -77,7 +77,11 @@ which is quicker than one compilation unit after another, and meanwhile a
 copy of itself (`pep-lsp --fill-cache`) fills the cache: it checks the
 compilation units the file depends on in parallel, in more copies
 (`pep-lsp --compilation-unit-worker`), one per processor at most, as
-`pepper build` does. The next check waits for it, then loads them. When the
+`pepper build` does. Until it is done, an edit is checked again on the
+record of the whole program the first check left: only the bodies and
+declarations the edit changed or added are checked. An edit that does more,
+or that has an error or a warning, waits for the copy, then loads the
+compilation units it checked. When the
 cache has some compilation units but not others, the server checks the
 missing ones that way itself.
 

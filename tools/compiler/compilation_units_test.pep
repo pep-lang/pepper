@@ -329,3 +329,25 @@ links_objects_under_a_path_with_spaces_and_backslashes() {
     File.write_text(root.join(Path("main.pep")), "main(): int {\n    return 0;\n}\n");
     _build_with(root, root, root.join(Path("cache d")));
 }
+
+# A module file that another file of its module reads: a build checks its
+# program whole (no compilation units), since the root's compilation unit
+# must come last; the language server, which stops at the document's, gets
+# them in the order they read each other (#823).
+[Test]
+a_root_another_file_reads_has_units_only_when_it_need_not_be_last() {
+    var folder = TempFolder("units_root_read");
+    var module = folder.path.join(Path("pkg"));
+    Directory.create_all(module);
+    File.write_text(module.join(Path("module.pep")), "export * from \"a\";\nexport * from \"b\";\n");
+    File.write_text(module.join(Path("a.pep")), "export one(): int {\n    return 1;\n}\n");
+    File.write_text(module.join(Path("b.pep")), "export two(): int {\n    return one() + 1;\n}\n");
+    var setup = link.Setup();
+    setup.runtime = false;
+    var program = link.load_program(module.join(Path("a.pep")), setup);
+    expect_true(program.is_ok());
+    expect_true(incremental.compilation_units(program.value(), "base").is_empty);
+    var units = incremental.compilation_units(program.value(), "base", root_last = false);
+    expect_true(units.count > 1);
+    expect_true(units[0].files.contains(0));
+}

@@ -12,6 +12,7 @@
 import compiler.ast;
 import async;
 import [Channel] from async;
+import digest;
 import io;
 import [Directory, File, Path] from io;
 import os;
@@ -53,18 +54,18 @@ export enum Job {
 ## @param results where finished analyses go
 ## @param client where the diagnostics go
 export analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client) {
-    var fillers = Array<process.Child>();
-    _analyze_documents(jobs, results, client, fillers);
+    var filling = Filling();
+    _analyze_documents(jobs, results, client, filling);
     # A filler still running is stopped; its workers end with its pipes.
-    for (var filler in fillers) {
+    for (var filler in filling.fillers) {
         filler.kill();
         filler.wait();
     }
 }
 
-# `analyze_documents`, keeping in `fillers` the `--fill-cache` children
-# the analyses start.
-_analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client, fillers: process.Child[]) {
+# `analyze_documents`, keeping in `filling` the `--fill-cache` children the
+# analyses start.
+_analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.Client, filling: Filling) {
     # The newest text of each document waiting for analysis, by URI.
     var pending = HashMap<String, String>();
     var order = Array<String>();
@@ -107,15 +108,9 @@ _analyze_documents(jobs: Channel<Job>, results: Channel<Analysis>, client: lsp.C
         }
         pending.remove(uri);
         var start = os.Instant.now();
-        # The next analysis reads the compilation units a filler is still
-        # checking.
-        for (var filler in fillers) {
-            filler.wait();
-        }
-        fillers.clear();
         # Copies, so the analysis shares nothing with `pending` and can move
         # to the server's thread.
-        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true, fillers = fillers);
+        var analysis = analyze(copy(uri), copy(text.value()), build_options, workers = true, filling = filling);
         var took = (os.Instant.now() - start).nanoseconds() / 1000000;
         # Edited or closed meanwhile: what was found is about old text.
         var newer = _take_jobs(jobs, pending, order, build_options);
@@ -244,9 +239,12 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ##
 ## With `workers`, a cache without the runtime's compilation unit (the first
 ## analysis of a project, or with a new pep-lsp) is filled by a `pep-lsp
-## --fill-cache` child, added to `fillers`, while the program is checked whole
+## --fill-cache` child, added to `filling`, while the program is checked whole
 ## in this process, which gives the diagnostics sooner than compilation units
-## checked one after another with nothing to load.
+## checked one after another with nothing to load. Until that child is done,
+## the next analyses check their edits again on the record of the program
+## checked whole (`incremental.recheck_compilation_unit`), and wait for the
+## child only when that cannot be done.
 ##
 ## @param uri the document
 ## @param text its current text, which may differ from the file on disk
@@ -254,15 +252,15 @@ _parse_diagnostic(document: lsp.TextDocument, error: parse.ParseError): lsp.Diag
 ## @param workers whether compilation units the cache lacks may be checked in
 ##   `--compilation-unit-worker` children of this executable: only when it is
 ##   pep-lsp
-## @param fillers where a `--fill-cache` child started goes, for the
-##   caller to wait for before the next analysis
+## @param filling the `--fill-cache` children the analyses before started,
+##   where this one adds one it starts
 ## @returns the diagnostics and how the analysis went
 export analyze(
     uri: String,
     text: String,
     build_options: HashMap<String, String> = HashMap<String, String>(),
     workers: bool = false,
-    fillers: process.Child[] = Array<process.Child>()
+    filling: Filling = Filling()
 ): Analysis {
     var out = Analysis(uri, text);
     var document = lsp.TextDocument(uri, text);
@@ -314,53 +312,20 @@ export analyze(
             own = Optional<ulong>.Value(k);
         }
     }
-    var folder = _project_folder(Path(path.value()));
-    var cache = incremental.default_cache(folder);
-    var below = own.is_value() ? own.value() : units.count - 1;
-    var prechecked = HashMap<ulong, (u8[], String, String)>();
-    # A cache without the runtime's compilation unit lacks the rest too: the
-    # program is checked whole here while a `--fill-cache` child fills the
-    # cache. Otherwise the compilation units below the document's that the cache
-    # does not have are checked in parallel, in worker children, as `pepc`
-    # checks them.
-    bool cold = workers and below > 1 and _cold(units, cache, program);
-    if (cold) {
-        var dir = _workers_folder(folder);
-        if (!_prepare_workers(dir, path.value(), text, out.os, build_options).is_value()) {
-            var filler = _start_filler(dir);
-            if (filler.is_value()) {
-                fillers.append(filler.value());
-            }
-        }
-    } else if (workers and below > 1) {
-        var parallel = _check_in_workers(
-            program, units, below, cache, prechecked, folder, path.value(), text, out.os, build_options
-        );
-        if (parallel.is_err()) {
-            reporter.out.append(lsp.Diagnostic(lsp.Range(), parallel.error()));
-            out.diagnostics = reporter.out;
-            out.outcome = "found an error";
-            return out;
-        }
-    }
     var warnings = Array<Diagnostic>();
-    var replayed = Array<String>();
-    var result = cold ?
-        check_whole(program, warnings) :
-        incremental.check_compilation_units(
-            program,
-            units,
-            cache,
-            Optional<incremental.Reused>.Empty,
-            program.sources(),
-            warnings,
-            replayed,
-            incremental.Clock(false),
-            false,
-            false,
-            prechecked,
-            stop = own
-        );
+    var result = _check(
+        program,
+        units,
+        own,
+        _project_folder(Path(path.value())),
+        path.value(),
+        text,
+        out.os,
+        build_options,
+        workers,
+        filling,
+        warnings
+    );
     # Warnings of the program's files, and of its own compilation unit's
     # checking.
     for (var warning in warnings) {
@@ -431,7 +396,7 @@ _load(root: Path, text: String, target: link.Target): Result<link.Program, Strin
 # identity, no code generation.
 _compilation_units(program: link.Program): incremental.CompilationUnit[] {
     var keys = incremental.Keys(program, link.translation_units(program), "pep-lsp");
-    return incremental.compilation_units(program, keys.base());
+    return incremental.compilation_units(program, keys.base(), root_last = false);
 }
 
 # Whether the build cache lacks the runtime's compilation unit, the first: then
@@ -443,14 +408,144 @@ _cold(units: incremental.CompilationUnit[], cache: incremental.Cache, program: l
     return incremental.find_checked(cache, program, runtime).is_empty();
 }
 
+## The `--fill-cache` children that analyses on an empty cache started, for
+## the next analyses: while one runs, they check their edits again on the
+## record of the program checked whole; after, they load the compilation
+## units it checked.
+export struct Filling {
+    ## The children not yet waited for.
+    var fillers: Array<process.Child> = Array<process.Child>();
+
+    construct() {}
+
+    ## Whether a child is still filling the cache. Waits for those done.
+    ##
+    ## @returns whether one runs
+    running(): bool {
+        var still = Array<process.Child>();
+        for (var filler in fillers) {
+            var status = filler.try_wait();
+            if (status.is_ok() and status.value().is_empty()) {
+                still.append(filler);
+                continue;
+            }
+            filler.wait();
+        }
+        fillers = still;
+        return !fillers.is_empty;
+    }
+
+    ## Waits for every child: an analysis that loads compilation units reads
+    ## those they are checking.
+    wait() {
+        for (var filler in fillers) {
+            filler.wait();
+        }
+        fillers.clear();
+    }
+}
+
+# Checks `program`, whose compilation units are `units`, up to `own`, the
+# document's (the last when none), as `analyze` describes. The document is
+# `root`, whose text is `text`, in the project `folder`.
+_check(
+    program: link.Program,
+    units: incremental.CompilationUnit[],
+    own: ulong?,
+    folder: Path,
+    root: String,
+    text: String,
+    os_name: String,
+    build_options: HashMap<String, String>,
+    workers: bool,
+    filling: Filling,
+    warnings: Diagnostic[]
+): Result<incremental.Checked, incremental.CheckError> {
+    # A runtime that cannot be checked alone has no compilation units.
+    if (units.is_empty) {
+        return check_whole(program, warnings);
+    }
+    var cache = incremental.default_cache(folder);
+    var below = own.is_value() ? own.value() : units.count - 1;
+    var prechecked = HashMap<ulong, (u8[], String, String)>();
+    if (!workers or below <= 1) {
+        return _check_compilation_units(program, units, own, cache, prechecked, warnings);
+    }
+    var inputs = _whole_inputs(units, root, os_name, build_options);
+    if (filling.running()) {
+        var again = recheck_whole(program, cache, inputs, warnings);
+        if (again.is_value()) {
+            return again.value();
+        }
+        filling.wait();
+    }
+    # A cache without the runtime's compilation unit lacks the rest too: the
+    # program is checked whole here while a `--fill-cache` child fills the
+    # cache.
+    if (_cold(units, cache, program)) {
+        var dir = _workers_folder(folder);
+        if (_prepare_workers(dir, root, text, os_name, build_options).is_value()) {
+            return check_whole(program, warnings);
+        }
+        var filler = _start_filler(dir);
+        if (filler.is_empty()) {
+            return check_whole(program, warnings);
+        }
+        filling.fillers.append(filler.value());
+        return check_whole(program, warnings, Optional<(incremental.Cache, String)>.Value((cache, inputs)));
+    }
+    # The compilation units below the document's that the cache does not have
+    # are checked in parallel, in worker children, as `pepc` checks them.
+    var parallel = _check_in_workers(
+        program, units, below, cache, prechecked, folder, root, text, os_name, build_options
+    );
+    if (parallel.is_err()) {
+        return Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Failed(parallel.error()));
+    }
+    return _check_compilation_units(program, units, own, cache, prechecked, warnings);
+}
+
+# `incremental.check_compilation_units` up to `own`, with the records
+# compilation unit workers made, `prechecked`.
+_check_compilation_units(
+    program: link.Program,
+    units: incremental.CompilationUnit[],
+    own: ulong?,
+    cache: incremental.Cache,
+    prechecked: HashMap<ulong, (u8[], String, String)>,
+    warnings: Diagnostic[]
+): Result<incremental.Checked, incremental.CheckError> {
+    return incremental.check_compilation_units(
+        program,
+        units,
+        cache,
+        Optional<incremental.Reused>.Empty,
+        program.sources(),
+        warnings,
+        Array<String>(),
+        incremental.Clock(false),
+        false,
+        false,
+        prechecked,
+        stop = own
+    );
+}
+
 ## Checks `program` whole, as one compilation unit on nothing: on an empty
 ## cache, one pass over every file is sooner than the compilation units one
 ## after another, each on the records of those it reads.
 ##
 ## @param program the program, its bodies deferred or not
 ## @param warnings where its warnings go
+## @param keep the build cache to keep the program's record in, and what it
+##   is checked with (`_whole_inputs`), for the next analyses to check their
+##   edits again on; none to keep nothing
 ## @returns the module checked and its passes' state, or why not
-export check_whole(program: link.Program, warnings: Diagnostic[]): Result<incremental.Checked, incremental.CheckError> {
+export check_whole(
+    program: link.Program,
+    warnings: Diagnostic[],
+    keep: (incremental.Cache, String)? = Optional<(incremental.Cache, String)>.Empty
+): Result<incremental.Checked, incremental.CheckError> {
     var unread = program.link_bodies(incremental.every_file(program));
     if (unread.is_value()) {
         return Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Unread(unread.value()));
@@ -460,11 +555,13 @@ export check_whole(program: link.Program, warnings: Diagnostic[]): Result<increm
         return Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Linking(errors));
     }
     warnings.append_all(program.warnings());
-    var whole = incremental.CompilationUnit("program");
-    for (var i in 0..program.files.count) {
-        whole.files.append(i);
-    }
+    var inputs = keep.is_value() ? keep.value().1 : "";
+    var whole = _whole_unit(program, inputs);
     var empty = incremental.merged_module(program, HashMap<ulong, u8[]>(), Array<ulong>());
+    # What its record is a delta on: nothing.
+    var base = sema.DeltaBase();
+    sema.index_module(empty.value(), base);
+    var noted = warnings.count;
     var checked = incremental.check_compilation_unit(
         program, empty.value(), whole, Optional<incremental.Reused>.Empty, program.sources(), warnings
     );
@@ -473,8 +570,121 @@ export check_whole(program: link.Program, warnings: Diagnostic[]): Result<increm
             incremental.CheckError.Checking(checked.error())
         );
     }
-    var (module, state, _) = checked.value();
+    var (module, state, aliases) = checked.value();
+    if (keep.is_value()) {
+        # Its warnings, which keep a re-check from starting on it.
+        var notes = Array<Diagnostic>();
+        for (var i in noted..warnings.count) {
+            notes.append(warnings[i]);
+        }
+        var sources = program.sources();
+        incremental.store_checked(
+            keep.value().0,
+            program,
+            whole,
+            sema.finish_checked(module, state, aliases),
+            base,
+            incremental.render_warnings(notes, sources),
+            incremental.recheck_source(program, whole, inputs),
+            Array<String>()
+        );
+    }
     return Result<incremental.Checked, incremental.CheckError>.ok(incremental.Checked(module, state));
+}
+
+## Checks `program` again from the record `check_whole` kept in `cache` with
+## `inputs`: the record read back, the bodies and declarations the edits
+## since changed or added checked on top
+## (`incremental.recheck_compilation_unit`).
+##
+## @param program the program as edited, its bodies deferred
+## @param cache the build cache `check_whole` kept the record in
+## @param inputs what the program is checked with (`_whole_inputs`)
+## @param warnings where the warnings of the files edited go
+## @returns the module checked and its passes' state, or a linking error;
+##   nothing when there is no record, or it does not fit the edits (any
+##   but those to bodies and additions, or one that gives an error or a
+##   warning)
+export recheck_whole(
+    program: link.Program, cache: incremental.Cache, inputs: String, warnings: Diagnostic[]
+): Result<incremental.Checked, incremental.CheckError>? {
+    var none = Optional<Result<incremental.Checked, incremental.CheckError>>.Empty;
+    var whole = _whole_unit(program, inputs);
+    var found = incremental.find_recheck_base(cache, program, whole, inputs);
+    if (found.is_empty()) {
+        return none;
+    }
+    var base = found.value();
+    # The bodies of the files edited, and of the document, whose warnings
+    # show.
+    var bodies = Array<bool>();
+    for (var _ in 0..program.files.count) {
+        bodies.append(false);
+    }
+    bodies[0] = true;
+    for (var (file, _, _) in base.changed) {
+        bodies[file as ulong] = true;
+    }
+    for (var (file, _) in base.added) {
+        bodies[file as ulong] = true;
+    }
+    var unread = program.link_bodies(bodies);
+    if (unread.is_value()) {
+        return none;
+    }
+    var errors = program.check_diagnostics();
+    if (errors.count > 0) {
+        return Optional<Result<incremental.Checked, incremental.CheckError>>.Value(
+            Result<incremental.Checked, incremental.CheckError>.err(incremental.CheckError.Linking(errors))
+        );
+    }
+    var empty = incremental.merged_module(program, HashMap<ulong, u8[]>(), Array<ulong>());
+    var again = incremental.recheck_compilation_unit(
+        program, empty.value(), whole, base, Optional<incremental.Reused>.Empty, program.sources()
+    );
+    if (again.is_empty()) {
+        return none;
+    }
+    warnings.append_all(program.warnings());
+    var (module, state, _) = again.value();
+    return Optional<Result<incremental.Checked, incremental.CheckError>>.Value(
+        Result<incremental.Checked, incremental.CheckError>.ok(incremental.Checked(module, state))
+    );
+}
+
+# `program` as one compilation unit, keyed by `inputs`: what `check_whole`
+# checks and keeps.
+_whole_unit(program: link.Program, inputs: String): incremental.CompilationUnit {
+    var out = incremental.CompilationUnit("pep-lsp-whole");
+    out.key = inputs;
+    for (var i in 0..program.files.count) {
+        out.files.append(i);
+    }
+    return out;
+}
+
+# What a program checked whole is checked with, hashed: the runtime's
+# compilation unit's key (the compiler and the runtime), the document `root`,
+# the OS it is analyzed for and the build options.
+_whole_inputs(
+    units: incremental.CompilationUnit[], root: String, os_name: String, build_options: HashMap<String, String>
+): String {
+    var hasher = digest.Blake3();
+    hasher.update("pep-lsp whole 1\n");
+    hasher.update(incremental.compilation_unit_key(units, 0, Array<String>()) + "\n");
+    hasher.update(_job_text(root, os_name, build_options));
+    return hasher.finish_hex();
+}
+
+# The program `<dir>/program` names for workers (`_load_job`): `root`, the OS
+# it is analyzed for and the build options, a line each.
+_job_text(root: String, os_name: String, build_options: HashMap<String, String>): String {
+    var job = StringBuilder();
+    job.append($"{root}\n{os_name}\n");
+    for (var (name, value) in build_options) {
+        job.append($"{name}={value}\n");
+    }
+    return job.to_string();
 }
 
 # The folder an analysis's compilation unit workers share, in the build folder
@@ -495,12 +705,7 @@ _prepare_workers(
     if (created.is_err()) {
         return Optional<String>.Value($"cannot create {dir}: {created.error().message}");
     }
-    var job = StringBuilder();
-    job.append($"{root}\n{os_name}\n");
-    for (var (name, value) in build_options) {
-        job.append($"{name}={value}\n");
-    }
-    if (File.write_text(dir.join(Path("program")), job.to_string()).is_err()
+    if (File.write_text(dir.join(Path("program")), _job_text(root, os_name, build_options)).is_err()
         or File.write_text(dir.join(Path("root.text")), text).is_err()) {
         Directory.remove_all(dir);
         return Optional<String>.Value($"cannot write to {dir}");
