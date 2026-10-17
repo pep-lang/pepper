@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-65c73706.js";
+            window.path_to_searchindex_js = "../searchindex-83a42eab.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b2626e7d.js"></script>
@@ -292,7 +292,7 @@ output and exit status as a user would see them.</p>
 <tr><td><code>tools/pep-doc/examples_test.pep</code></td><td><code>pep-build</code> on every example of the book, then the example (see <a href="docs.html">Building this documentation</a>).</td></tr>
 <tr><td><code>tools/pep-fmt/repository_test.pep</code></td><td><code>format_source</code> in the test itself on every <code>.pep</code> file under <code>runtime/</code>, <code>tools/</code>, <code>tests/</code> and <code>docs/examples/</code>: each formats, formatting it again changes nothing, the syntax tree stays the same, and the files of <code>runtime/</code> and <code>tools/</code> are already formatted (<code>pep-fmt -w</code> fixes one that is not).</td></tr>
 <tr><td><code>tools/pep-fmt/cli_test.pep</code></td><td><code>pep-fmt</code> on standard input and on files and folders (<code>--check</code>, <code>-w</code>), its syntax errors and usage errors.</td></tr>
-<tr><td><code>tools/pepper/pepper_test.pep</code></td><td><code>pepper</code>, copied beside stand-in tools built from <code>tools/pepper/testdata/</code>; and every tool’s <code>--version</code> against the version in each <code>tools/*/main.pep</code>.</td></tr>
+<tr><td><code>tools/pepper/pepper_test.pep</code></td><td><code>pepper</code>, copied beside stand-in tools built from <code>tools/pepper/testdata/</code>; and every tool’s <code>--version</code> against the version in each <code>tools/*/main.pep</code> (and pep-lsp’s <code>tools/pep-lsp/arguments.pep</code>).</td></tr>
 <tr><td><code>tools/pep-test/pep_test_test.pep</code></td><td><code>pep-test</code> on test files it writes, from <code>tools/pep-test/testdata/</code> (named <code>.pep.txt</code> so that the suite’s own run skips them).</td></tr>
 <tr><td><code>tools/pep-package/package_test.pep</code></td><td><code>pep-package</code> and <code>pep-build</code> on projects whose dependencies are bare git repositories in a test folder, and archives on a loopback server, including builds of one project side by side, which fetch once under <code>.pep/fetch.lock</code>; skipped without git.</td></tr>
 <tr><td><code>tools/pep-run/pep_run_test.pep</code></td><td><code>pep-run</code> building and running the programs in <code>tools/pep-run/testdata/</code> with a Pepper home of its own: arguments, exit status, working folder, the up-to-date rerun, compile errors and the options it refuses.</td></tr>
