@@ -106,9 +106,11 @@ struct _IocpDriver {
     var _afd: __ptr<void>;
     # Room for `_IOCP_CAPACITY` OVERLAPPED_ENTRY records of 32 bytes.
     var _entries: __ptr<u8>;
-    # The request in flight for reading and for writing on each socket.
-    var _reading: HashMap<ulong, __ptr<u8>>;
-    var _writing: HashMap<ulong, __ptr<u8>>;
+    # The one request in flight on each socket. AFD keeps only the newest
+    # poll of a socket from one helper handle, so a second request (a task
+    # writing while another reads) would leave the first to wait forever:
+    # a new interest cancels the request and resubmits it for both.
+    var _polls: HashMap<ulong, __ptr<u8>>;
     # Every request block not yet dequeued.
     var _pending: HashSet<__ptr<u8>>;
 
@@ -116,8 +118,7 @@ struct _IocpDriver {
         this._port = port;
         this._afd = afd;
         this._entries = _pep_malloc((_IOCP_CAPACITY * 32) as ulong);
-        this._reading = HashMap<ulong, __ptr<u8>>();
-        this._writing = HashMap<ulong, __ptr<u8>>();
+        this._polls = HashMap<ulong, __ptr<u8>>();
         this._pending = HashSet<__ptr<u8>>();
     }
 
@@ -143,10 +144,8 @@ struct _IocpDriver {
         var asked = words[7] as int;
         var forgotten = words[8] != 0;
         if (!forgotten) {
-            if (asked == io._IO_READABLE) {
-                this._reading.remove(handle);
-            } else {
-                this._writing.remove(handle);
+            if (this._polls.contains(handle) && this._polls.get(handle) == block) {
+                this._polls.remove(handle);
             }
             var status = unsafe_cast<__ptr<int>>(block)[0];
             var events = unsafe_cast<__ptr<uint>>(block + 40)[0];
@@ -154,14 +153,26 @@ struct _IocpDriver {
             if (status == 0) {
                 if ((events & _AFD_POLL_ERRORS) != 0) {
                     ready = io._IO_READABLE | io._IO_WRITABLE;
-                } else if ((events & (_AFD_POLL_READABLE | _AFD_POLL_WRITABLE)) == 0) {
+                } else {
                     ready = 0;
+                    if ((events & _AFD_POLL_READABLE) != 0) {
+                        ready = ready | io._IO_READABLE;
+                    }
+                    if ((events & _AFD_POLL_WRITABLE) != 0) {
+                        ready = ready | io._IO_WRITABLE;
+                    }
+                    ready = ready & asked;
                 }
             }
             # A failed request (not STATUS_SUCCESS) wakes its waiters, which
             # retry the call and see any error.
             if (ready != 0) {
                 ready_sockets.append((handle, ready));
+            }
+            # The tasks waiting for what did not happen still need a request.
+            var rest = asked & ~ready;
+            if (rest != 0) {
+                this._want(handle as io.SocketHandle, rest);
             }
         }
         _pep_free(block);
@@ -175,24 +186,35 @@ extend _IocpDriver with _Driver {
 
     _want(handle: io.SocketHandle, interest: int): bool {
         var key = handle as ulong;
-        var requests = this._reading;
-        var events = _AFD_POLL_READABLE | _AFD_POLL_ERRORS;
-        if (interest == io._IO_WRITABLE) {
-            requests = this._writing;
-            events = _AFD_POLL_WRITABLE | _AFD_POLL_ERRORS;
+        var wanted = interest;
+        if (this._polls.contains(key)) {
+            var current = unsafe_cast<__ptr<ulong>>(this._polls.get(key));
+            var asked = current[7] as int;
+            if ((asked & interest) == interest) {
+                return true;
+            }
+            # Cancelled, it completes and wakes its waiters, who ask again.
+            wanted = asked | interest;
+            current[8] = 1;
+            _async_iocp_cancel(this._afd, unsafe_cast<__ptr<u8>>(current));
+            this._polls.remove(key);
         }
-        if (requests.contains(key)) {
-            return true;
+        uint events = _AFD_POLL_ERRORS;
+        if ((wanted & io._IO_READABLE) != 0) {
+            events = events | _AFD_POLL_READABLE;
+        }
+        if ((wanted & io._IO_WRITABLE) != 0) {
+            events = events | _AFD_POLL_WRITABLE;
         }
         __ptr<u8> block = _pep_malloc(_IOCP_REQUEST_SIZE as ulong);
         __ptr<ulong> words = block;
         words[6] = key;
-        words[7] = interest as ulong;
-        if (!_async_iocp_submit(this._afd, block, _async_iocp_base_socket(key), events as uint)) {
+        words[7] = wanted as ulong;
+        if (!_async_iocp_submit(this._afd, block, _async_iocp_base_socket(key), events)) {
             _pep_free(block);
             return false;
         }
-        requests.insert(key, block);
+        this._polls.insert(key, block);
         this._pending.insert(block);
         return true;
     }
@@ -211,13 +233,9 @@ extend _IocpDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
-        if (this._reading.contains(key)) {
-            unsafe_cast<__ptr<ulong>>(this._reading.get(key))[8] = 1;
-            this._reading.remove(key);
-        }
-        if (this._writing.contains(key)) {
-            unsafe_cast<__ptr<ulong>>(this._writing.get(key))[8] = 1;
-            this._writing.remove(key);
+        if (this._polls.contains(key)) {
+            unsafe_cast<__ptr<ulong>>(this._polls.get(key))[8] = 1;
+            this._polls.remove(key);
         }
     }
 
