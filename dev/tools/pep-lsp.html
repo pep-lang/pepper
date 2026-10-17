@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8c5a1eef.js";
+            window.path_to_searchindex_js = "../searchindex-65c73706.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-b2626e7d.js"></script>
@@ -190,6 +190,9 @@ completion, go to definition, document outlines and inlay hints. It checks
 code with the compiler’s own front end, and finds the standard library the
 way the compiler does (see
 <a href="../tutorial/getting-started.html#where-the-compiler-finds-the-standard-library">Where the compiler finds the standard library</a>).</p>
+<p>Warnings in the files a document imports show on those files too, such as
+a use of a deprecated function in a library the document calls. A file open
+in the editor shows its own analysis instead.</p>
 <p>The <a href="../tutorial/getting-started.html#editor-support">VS Code extension</a> bundles
 it. When <a href="pep-install.html"><code>pepper install</code></a> manages your Pepper home, the
 extension instead runs the <code>pep-lsp</code> of the toolchain the first workspace
