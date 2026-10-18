@@ -250,6 +250,11 @@ export struct PassState {
     var deferred: HashMap<String, HashMap<String, Block>> = HashMap<String, HashMap<String, Block>>();
     ## Every trait's method names, which a trait may dispatch to.
     var trait_method_names: HashSet<String>? = Optional<HashSet<String>>.Empty;
+    ## The closures whose return type was inferred from their body while
+    ## their slot's trait result was not yet known (`(x) => [x].iterate()`
+    ## for `(T) => Iterator<U>`): `sync_closures` gives each that trait
+    ## once its type arguments are bound.
+    var trait_return_closures: HashSet<String> = HashSet<String>();
 
     ## Creates the state for compiling for `target`.
     ##

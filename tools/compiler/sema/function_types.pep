@@ -58,6 +58,11 @@ export synthesize_function_types(module: Module, state: PassState) {
         _function_types(st.destructor, found);
     }
     for (var function in own.functions) {
+        # A generic base's types name its parameters (`(T) => Iterator<U>`):
+        # its specializations get the structs of theirs.
+        if (function.is_generic_func) {
+            continue;
+        }
         _function_types(function, found);
     }
     for (var ext in module.extensions) {

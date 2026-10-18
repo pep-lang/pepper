@@ -4,6 +4,7 @@
 
 import [checked_decls, unit_decls] from "checked";
 import [CALL_METHOD, is_closure_struct, THIS_FIELD] from "closures";
+import [is_trait] from "enums";
 import [BinaryOp, Block, Declaration, Expression, FunctionDef, Module, Statement, StructDef, TypeName] from "model";
 import [CheckedDecls] from "pending";
 import [PassState] from "state";
@@ -1220,11 +1221,34 @@ _apply_learned(st: StructDef, learned: _Learned, state: PassState): bool {
         }
     }
     var ret = expected.function_return();
-    if (ret.is_value() and method.ty.is_auto() and !ret.value().contains_auto()) {
-        method.ty = ret.value();
-        changed = true;
+    if (!ret.is_value()) {
+        return changed;
     }
-    return changed;
+    if (method.ty.is_auto() and !ret.value().contains_auto()) {
+        method.ty = ret.value();
+        return true;
+    }
+    if (!is_trait(state, ret.value())) {
+        return changed;
+    }
+    # The slot returns a trait whose arguments the body's struct binds
+    # (`Iterator<U>` from `ArrayIterator<int>`): the body's type is
+    # inferred first, and the closure returns the trait once it is known.
+    if (ret.value().contains_auto()) {
+        if (method.ty.is_auto()) {
+            state.trait_return_closures.insert(st.name);
+        }
+        return changed;
+    }
+    if (!state.trait_return_closures.contains(st.name)) {
+        return changed;
+    }
+    state.trait_return_closures.remove(st.name);
+    if (method.ty == ret.value()) {
+        return changed;
+    }
+    method.ty = ret.value();
+    return true;
 }
 
 _zeroes_field(lhs: Expression, name: String): bool {
@@ -1298,7 +1322,7 @@ export sync_closures(module: Module, state: PassState): bool {
     # to teach.
     var unknown = HashSet<String>();
     for (var st in own) {
-        if (is_closure_struct(st.name) and _has_unknown_types(st)) {
+        if (is_closure_struct(st.name) and (_has_unknown_types(st) or state.trait_return_closures.contains(st.name))) {
             unknown.insert(st.ty.to_string());
             unknown.insert(st.name);
         }

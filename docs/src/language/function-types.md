@@ -152,7 +152,11 @@ expression or a block:
   ```
 
 - **Return type.** It is inferred from the body, or from the slot. To write
-  it, put it after the parameters: `(x: int): long => x`.
+  it, put it after the parameters: `(x: int): long => x`. When the slot
+  returns a trait, a body that returns a struct declaring it is enough, also
+  when the struct is what binds the trait's type arguments: passing
+  `(n) => [n, n].iterate()` to `count<U>(make: (int) => Iterator<U>)` binds
+  `U`, and the closure returns the `Iterator<U>`.
 - **Body.** An expression body is the value the closure returns. A block body
   uses `return` like a function. A closure whose type returns `void` can have
   an expression body such as `() => counter.add(1)`; the value is discarded.
