@@ -65,6 +65,16 @@ the author.
   `tools/pep-fmt/repository_test.pep` fails on a file that is not
   (`pep-fmt -w <file>` fixes it).
 
+## The runtime builds with the previous published compiler
+
+CI and the release build compile the new compiler with stage 0, the newest
+published toolchain (`scripts/ci-install-toolchain.sh`), against this
+checkout's `runtime/`. So runtime code may only use what that compiler
+accepts: a compiler fix lands first, and runtime code that needs it waits
+for the next `-dev` publish, or is written around it. Check a runtime change
+by building any program with stage 0 and `PEPPER_RUNTIME=runtime`.
+#1002 broke main this way (`FlatMapIterator`'s `(T) => Iterator<U>` field).
+
 ## Response style
 
 - Keep responses as concise as possible.

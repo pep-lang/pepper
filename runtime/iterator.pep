@@ -216,7 +216,7 @@ export trait Iterator<T> {
     ##     var words = ["ab", "cd"];
     ##     var letters = words.iterate().flat_map((w) => w.iterate()).to_array();   # a, b, c, d
     flat_map<U>(transform: (T) => Iterator<U>): FlatMapIterator<T, U> {
-        return FlatMapIterator<T, U>(this, transform);
+        return FlatMapIterator<T, U>(MapIterator<T, Iterator<U>>(this, transform));
     }
 
     ## Returns an iterator over the leading elements for which `keep`
@@ -856,21 +856,19 @@ extend ChainIterator<T> with Iterator<T>;
 ## @see Iterator.flat_map
 [Value]
 export struct FlatMapIterator<T, U> {
-    ## The iterator whose elements are transformed.
-    Iterator<T> _source;
-    ## The function that turns each source element into an iterator.
-    (T) => Iterator<U> _transform;
+    # No member names `(T) => Iterator<U>`: the runtime must build with the
+    # previous published compiler (stage 0), and compilers without #1002's
+    # fix reject that type in a generic struct ("unknown type name 'U'").
+    ## The iterators to yield the elements of, one per source element.
+    MapIterator<T, Iterator<U>> _source;
     ## The iterator from the current source element, Empty before the first.
     Iterator<U>? _inner;
 
-    ## Makes an iterator over the elements of the iterators `transform`
-    ## returns for the elements of `source`.
+    ## Makes an iterator over the elements of the iterators `source` yields.
     ##
-    ## @param source the iterator to transform
-    ## @param transform the function that turns each element into an iterator
-    construct(source: Iterator<T>, transform: (T) => Iterator<U>) {
+    ## @param source the source iterator, mapped to an iterator per element
+    construct(source: MapIterator<T, Iterator<U>>) {
         _source = source;
-        _transform = transform;
     }
 
     ## Advances to the next element of the current inner iterator, moving to
@@ -887,7 +885,7 @@ export struct FlatMapIterator<T, U> {
             if (!_source.next()) {
                 return false;
             }
-            _inner = Optional<Iterator<U>>.Value(_transform(_source.current()));
+            _inner = Optional<Iterator<U>>.Value(_source.current());
         }
     }
 

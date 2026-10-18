@@ -1113,15 +1113,13 @@ the transform function returns for each source element, in order.
 #### FlatMapIterator()
 
 ```pepper
-construct(source: Iterator<T>, transform: (T) => Iterator<U>)
+construct(source: MapIterator<T, Iterator<U>>)
 ```
 
-Makes an iterator over the elements of the iterators `transform`
-returns for the elements of `source`.
+Makes an iterator over the elements of the iterators `source` yields.
 
 **Parameters**
-- `source` — the iterator to transform
-- `transform` — the function that turns each element into an iterator
+- `source` — the source iterator, mapped to an iterator per element
 
 ### Methods
 
