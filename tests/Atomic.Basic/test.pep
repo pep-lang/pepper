@@ -27,5 +27,17 @@ main(): int {
     # is_lock_free: every slot this fixture uses is a native atomic.
     if (!a.is_lock_free()) { return 11; }
     if (!c.is_lock_free()) { return 12; }
+
+    # bool: LLVM's atomics need a byte, so the slot is accessed as one (#962).
+    var f = async.Atomic<bool>(false);
+    if (f.load()) { return 13; }
+    f.store(true);
+    if (!f.load()) { return 14; }
+    if (!f.compare_exchange(true, false)) { return 15; }
+    if (f.compare_exchange(true, false)) { return 16; }
+    if (f.exchange(true)) { return 17; }
+    if (f.fetch_xor(true) != true) { return 18; }
+    if (f.fetch_or(true)) { return 19; }
+    if (!f.load()) { return 20; }
     return 0;
 }

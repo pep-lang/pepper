@@ -44,6 +44,13 @@ const _RMW_AND: int = 3;
 const _RMW_OR: int = 5;
 const _RMW_XOR: int = 6;
 
+## Whether `ty` is `bool`'s `i1`, which LLVM's atomic instructions reject
+## (they need a byte-sized type): an atomic on a `bool` slot accesses its
+## byte instead, widening the operands and narrowing the result (#962).
+_is_bit(ty: llvm.Type): bool {
+    return ty.kind() == llvm.TypeKind.Integer and ty.int_width() == 1;
+}
+
 ## The receiver of an `Index` or `ArrayIndex` expression, if `expr` is one.
 _index_lhs(expr: Expression): Expression? {
     match (expr) {
@@ -757,6 +764,11 @@ extend Generator {
         if (!_is_kind(ptr, llvm.TypeKind.Pointer)) {
             return fail<llvm.Value>($"__atomic_load expects a pointer, got {ptr.to_string()}");
         }
+        if (_is_bit(stored)) {
+            var byte = builder.load(context.int8_type(), ptr, "atomic_load");
+            byte.set_ordering(_ACQUIRE);
+            return Result<llvm.Value>.ok(builder.truncate(byte, stored, "atomic_bit"));
+        }
         var loaded = builder.load(stored, ptr, "atomic_load");
         loaded.set_ordering(_ACQUIRE);
         if (is_struct) {
@@ -812,7 +824,10 @@ extend Generator {
             var old = builder.int_to_pointer(old_bits, context.pointer_type(), "atomic_old");
             release_temp(ty_name, old)?;
         } else {
-            var store = builder.store(val, ptr);
+            var stored_val = _is_bit(lowered.value()) ?
+                builder.zero_extend(val, context.int8_type(), "atomic_byte") :
+                val;
+            var store = builder.store(stored_val, ptr);
             store.set_ordering(_RELEASE);
         }
         if (val_temp.is_value()) {
@@ -851,6 +866,9 @@ extend Generator {
             var int_ty = stored_kind == llvm.TypeKind.Float ? context.int32_type() : context.int64_type();
             expected = builder.bit_cast(expected, int_ty, "cas_e");
             desired = builder.bit_cast(desired, int_ty, "cas_d");
+        } else if (_is_bit(stored)) {
+            expected = builder.zero_extend(expected, context.int8_type(), "cas_e");
+            desired = builder.zero_extend(desired, context.int8_type(), "cas_d");
         } else if (stored_kind == llvm.TypeKind.Half or stored_kind == llvm.TypeKind.BFloat) {
             return fail<llvm.Value>("__atomic_cmpxchg: unsupported float width 16");
         } else if (stored_kind == llvm.TypeKind.X86Fp80) {
@@ -936,6 +954,11 @@ extend Generator {
             Xor => {
                 rmw_op = _RMW_XOR;
             }
+        }
+        if (_is_bit(lowered.value())) {
+            var byte = builder.zero_extend(val, context.int8_type(), "atomic_byte");
+            var old_byte = builder.atomic_rmw(rmw_op, ptr, byte, _ACQUIRE_RELEASE);
+            return Result<llvm.Value>.ok(builder.truncate(old_byte, lowered.value(), "atomic_bit"));
         }
         var old = builder.atomic_rmw(rmw_op, ptr, val, _ACQUIRE_RELEASE);
         if (val_temp.is_value()) {
