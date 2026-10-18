@@ -56,7 +56,6 @@ A slice is safe by construction:
 
 - Slices are read-only; there is no slice that writes through to its
   array, and no `a[1..4]` syntax: write `a.slice(1, 4)`.
-- `sort` takes a comparer (`a.sort((x, y) => x.compare(y))`); a `sort()`
-  with none, `sort_unstable`, `rotate`, `drain`, `chunks` and `windows` are
-  not there yet.
+- `sort_unstable`, `rotate`, `drain`, `chunks` and `windows` are not
+  there yet.
 - `String` has no slice type; `substr` copies.

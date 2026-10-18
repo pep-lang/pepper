@@ -535,6 +535,13 @@ export struct Array<T> {
     ##     numbers.append(1);
     ##     numbers.sort((a, b) => b - a);        # descending: [3, 1]
     sort(compare: (T, T) => int) {
+        _merge_sort(compare);
+    }
+
+    # The body of `sort(compare)`, which `sort()` on `Comparable` elements
+    # (runtime/compare.pep) calls too: a call to `sort` from there is
+    # ambiguous, as the extension's lookup finds this overload twice.
+    _merge_sort(compare: (T, T) => int) {
         if (_size < 2) {
             return;
         }

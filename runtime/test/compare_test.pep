@@ -1,6 +1,7 @@
 # Comparable: the operators, min, max and clamp it gives, the numbers',
 # char's and String's conformance, the total order of floats, a generic
-# `T: Comparable`, and Comparable and NaN `Map` keys.
+# `T: Comparable`, Comparable and NaN `Map` keys, and `Array.sort()` with
+# no comparer.
 
 struct Version {
     int major;
@@ -111,6 +112,33 @@ generic_comparable_parameter() {
     expect_equal(largest([3, 9, 2]), 9);
     expect_equal(largest(["b", "c", "a"]), "c");
     expect_equal(largest([Version(1, 1), Version(2, 0), Version(1, 9)]).major, 2);
+}
+
+[Test]
+sort_without_a_comparer() {
+    var numbers = [3, 1, 2];
+    numbers.sort();
+    expect_equal(numbers[0], 1);
+    expect_equal(numbers[2], 3);
+    var words = ["pear", "apple", "fig"];
+    words.sort();
+    expect_equal(words[0], "apple");
+    expect_equal(words[2], "pear");
+    var versions = [Version(2, 1), Version(1, 5), Version(2, 0)];
+    versions.sort();
+    expect_equal(versions[0].major, 1);
+    expect_equal(versions[1].minor, 0);
+    expect_equal(versions[2].minor, 1);
+}
+
+[Test]
+sort_puts_nan_last() {
+    var nan = _nan();
+    var values = [3.0, nan, 1.0, 2.0];
+    values.sort();
+    expect_equal(values[0], 1.0);
+    expect_equal(values[2], 3.0);
+    expect_true(values[3] != values[3]);
 }
 
 [Test]

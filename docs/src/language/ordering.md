@@ -25,6 +25,13 @@ compare the same way, `a.compare(b)` has the opposite sign of
 `b.compare(a)`, and if `a` sorts before `b` and `b` before `c`, `a` sorts
 before `c`. `Map`, `Set` and sorting depend on it.
 
+## Sorting
+
+An array of `Comparable` elements sorts in their own order with `sort()`,
+stably, as `sort((a, b) => a.compare(b))` would. Floats sort in the total
+order, NaN last. Any other order still takes a comparer:
+`items.sort((a, b) => b.compare(a))` sorts in reverse.
+
 ## Numbers, `char` and `String`
 
 Every number type and `char` is `Comparable` by value, and `String` by
@@ -39,10 +46,6 @@ cannot break a map.
 
 ## Not yet
 
-- `Array.sort()` takes a comparer: `items.sort((a, b) => a.compare(b))`
-  sorts in the elements' own order. A `sort()` with no comparer comes once
-  the published toolchain that builds Pepper has the compiler fix this
-  needs.
 - Tuples and `Optional` are not `Comparable`, and `Comparable` is not
   derived from a struct's fields: a struct writes its `compare`, as
   `Version` does above.

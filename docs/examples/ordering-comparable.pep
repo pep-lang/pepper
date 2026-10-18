@@ -42,9 +42,12 @@ main(): int {
     releases[Version(1, 5)] = "first";
     assert(releases.first().value().1 == "first", "sorted by compare");
 
-    # Sorting takes the order as a comparer.
+    # An array of a Comparable type sorts in its order; a comparer gives
+    # any other.
     var versions = [Version(2, 1), Version(1, 5)];
-    versions.sort((a, b) => a.compare(b));
+    versions.sort();
     assert(versions[0].major == 1, "sorted");
+    versions.sort((a, b) => b.compare(a));
+    assert(versions[0].major == 2, "sorted in reverse");
     return 0;
 }

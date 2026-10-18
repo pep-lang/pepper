@@ -25,12 +25,13 @@ generic function asks for an order with `T: Comparable`.
 `other`, zero when the two sort together, and a positive number when it
 sorts after. The order must be total and consistent: two calls with the
 same values give the same answer, and `a.compare(b)` has the opposite
-sign of `b.compare(a)`. `Map`, `Set` and sorting rely on that.
+sign of `b.compare(a)`. `Array.sort()`, `Map` and `Set` rely on that.
 
 `float` and `double` are `Comparable` with a total order: NaN sorts
 after every number and with every other NaN, and `-0.0` with `0.0`.
 Their `<` and `>` keep IEEE behavior (false whenever NaN takes part),
-while `compare`, `clamp` and `Map` keys follow the total order.
+while `compare`, `clamp`, `Array.sort()` and `Map` keys follow the total
+order.
 
 **Example**
 ```pepper
@@ -454,4 +455,33 @@ value, with NaN after every number and equal to every NaN, and
 var nan = 0.0 / 0.0;
 assert((1.0).compare(nan) < 0, "NaN sorts last");
 assert(nan.compare(nan) == 0, "NaNs sort together");
+```
+
+## extend Array<T>
+
+```pepper
+extend Array<T: Comparable>
+```
+
+Arrays of `Comparable` elements sort in the elements' own order.
+
+### Methods
+
+#### sort
+
+```pepper
+sort()
+```
+
+Sorts the elements in place into their own order, `compare`: by value
+for numbers (NaN last), by content for `String`. The sort is stable
+and otherwise behaves like `sort(compare)`.
+
+**Panics**
+- if comparing modifies the Array ("Array modified during sort")
+
+**Example**
+```pepper
+var numbers = [3, 1, 2];
+numbers.sort();   # [1, 2, 3]
 ```
