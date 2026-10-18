@@ -33,6 +33,7 @@ bld/
 [Oo]bj/
 [Oo]ut/
 [Ll]og/
+!/runtime/log/
 [Ll]ogs/
 
 # Visual Studio 2015/2017 cache/options directory

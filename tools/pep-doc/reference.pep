@@ -104,6 +104,8 @@ export pages(): Array<(String, String)> {
         ("debug/module.pep", "The debug module"),
         ("debug/backtrace.pep", "Backtraces"),
         ("debug/debugger.pep", "The debugger"),
+        ("log/module.pep", "The log module"),
+        ("log/log.pep", "Logging"),
         ("text/module.pep", "The text module"),
         ("text/utf8.pep", "UTF-8"),
         ("text/utf16.pep", "UTF-16"),
