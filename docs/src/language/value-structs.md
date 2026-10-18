@@ -111,5 +111,5 @@ any trait value.
 
 The runtime's iterators (`ArrayIterator`, `StringIterator`, the map and
 set iterators, `ChannelIterator`, and the `map`, `filter`, `enumerate`,
-`zip`, `take`, `skip` and `chain` adapters) are value structs, so a `for` loop over an `Array`, a
+`zip`, `take`, `skip`, `chain` and other adapters) are value structs, so a `for` loop over an `Array`, a
 `String` or any map or set allocates no iterator.

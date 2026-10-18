@@ -145,3 +145,97 @@ sum_min_and_max_of_numbers_and_strings() {
     expect_true(Array<int>().iterate().min().is_empty());
     expect_true(Array<int>().iterate().max().is_empty());
 }
+
+[Test]
+take_while_and_skip_while_split_at_the_first_failure() {
+    var nums = [1, 2, 7, 3];
+    var small = nums.iterate().take_while((n) => n < 5).to_array();
+    expect_equal(small.count, 2);
+    expect_equal(small[1], 2);
+    var rest = nums.iterate().skip_while((n) => n < 5).to_array();
+    expect_equal(rest.count, 2);
+    expect_equal(rest[0], 7);
+    expect_equal(rest[1], 3);
+    expect_equal(nums.iterate().skip_while((n) => true).count(), 0);
+}
+
+[Test]
+step_by_yields_the_first_then_every_step() {
+    var stepped = (0..10).step_by(3).to_array();
+    expect_equal(stepped.count, 4);
+    expect_equal(stepped[3], 9);
+    expect_equal((0..3).step_by(1).count(), 3);
+}
+
+[Test]
+[ShouldPanic("step_by step must be positive")]
+step_by_zero_panics() {
+    (0..3).step_by(0);
+}
+
+[Test]
+peek_looks_ahead_without_moving() {
+    var it = [1, 2].iterate().peekable();
+    expect_equal(it.peek().value(), 1);
+    expect_equal(it.peek().value(), 1);
+    expect_true(it.next());
+    expect_equal(it.current(), 1);
+    expect_equal(it.peek().value(), 2);
+    expect_true(it.next());
+    expect_equal(it.current(), 2);
+    expect_true(it.peek().is_empty());
+    expect_false(it.next());
+}
+
+[Test]
+chunks_and_windows_group_elements() {
+    var rows = (1..>5).chunks(2).to_array();
+    expect_equal(rows.count, 3);
+    expect_equal(rows[1][0], 3);
+    expect_equal(rows[2].count, 1);
+    var pairs = (1..>4).windows(2).to_array();
+    expect_equal(pairs.count, 3);
+    expect_equal(pairs[0][1], 2);
+    expect_equal(pairs[2][0], 3);
+    expect_equal(pairs[2][1], 4);
+    expect_equal((1..>2).windows(3).count(), 0);
+}
+
+[Test]
+reduce_position_and_last() {
+    var nums = [1, 2, 7, 3];
+    expect_equal(nums.iterate().reduce((a, b) => a + b).value(), 13);
+    expect_true(Array<int>().iterate().reduce((a, b) => a + b).is_empty());
+    expect_equal(nums.iterate().position((n) => n > 5).value(), 2);
+    expect_true(nums.iterate().position((n) => n > 50).is_empty());
+    expect_equal(nums.iterate().last().value(), 3);
+    expect_true(Array<int>().iterate().last().is_empty());
+}
+
+[Test]
+for_each_calls_the_action_in_order() {
+    var seen = "";
+    var letters = ["a", "b"];
+    letters.iterate().for_each((s) => seen.append(s));
+    expect_equal(seen, "ab");
+}
+
+[Test]
+min_by_and_max_by_use_the_comparer() {
+    var words = ["abc", "a", "zz"];
+    expect_equal(words.iterate().min_by((a, b) => a.size.compare(b.size)).value(), "a");
+    expect_equal(words.iterate().max_by((a, b) => a.size.compare(b.size)).value(), "abc");
+    expect_true(Array<String>().iterate().min_by((a, b) => 0).is_empty());
+}
+
+[Test]
+to_set_to_map_and_join_collect() {
+    var distinct = [1, 2, 1].iterate().to_set();
+    expect_equal(distinct.count, 2);
+    expect_true(distinct.contains(2));
+    var ages = [("Ada", 36), ("Bo", 12), ("Ada", 37)].iterate().to_map<String, int>();
+    expect_equal(ages.count, 2);
+    expect_equal(ages["Ada"], 37);
+    expect_equal([36, 12].iterate().map((n) => $"{n}").join(", "), "36, 12");
+    expect_equal(Array<String>().iterate().join(", "), "");
+}

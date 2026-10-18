@@ -104,8 +104,10 @@ a function's, or written after the method name:
   `b.map<long>(f)`. With a space, `a.b < c` is a comparison.
 - A generic method cannot be called through a [trait value](traits-and-extensions.md#traits-as-types),
   since each of its uses is compiled separately. Call it on the concrete type.
-- The iterator adapters `map`, `enumerate` and `zip`, and the consumers `fold`,
-  `sum`, `min` and `max`, are generic default methods of `Iterator<T>`; see
+- Many iterator adapters (`map`, `zip`, `chunks`, `peekable`, ...) and
+  consumers (`fold`, `sum`, `min`, `to_set`, ...) are generic default methods
+  of `Iterator<T>`, some with a type parameter that defaults to `T`, so each
+  is compiled only for the iterators that call it; see
   [Iteration](iteration.md#adapters).
 
 ## Default type arguments

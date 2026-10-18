@@ -144,6 +144,14 @@ Each works lazily, one element at a time as the loop asks for it:
 - `take(n)` yields at most the first `n` elements; `skip(n)` yields the
   elements after the first `n`.
 - `chain(other)` yields this iterator's elements, then `other`'s.
+- `take_while(keep)` yields the leading elements that pass; `skip_while(skip)`
+  yields the elements from the first one that fails.
+- `step_by(n)` yields the first element, then every `n`th one after it.
+- `chunks(n)` yields the elements in arrays of `n` (the last may be
+  shorter); `windows(n)` yields every run of `n` consecutive elements. Each
+  array is new, so keeping one is safe.
+- `peekable()` yields the same elements and adds `peek()`, which returns the
+  next element as an optional without moving to it.
 
 They return iterators, so they chain, and a `for` loop can use the result
 directly; destructure a tuple to name its parts.
@@ -152,18 +160,30 @@ The consumers run an iterator (as far as they need to) and return a value:
 
 - `to_array()` collects what is left into a new `Array`.
 - `count()` returns how many elements are left, as a `ulong`.
+- `last()` returns the last element as an [optional](optionals.md).
+- `for_each(action)` calls `action` with each element.
 - `fold(initial, combine)` folds each element into a value:
   `(1..>5).fold(1, (product, n) => product * n)` is 120.
 - `any(test)` and `all(test)` return whether some or every element passes;
   they stop at the first element that settles the answer. `all` is `true`
   for no elements.
+- `reduce(combine)` is `fold` starting from the first element, as an
+  optional that is Empty for none.
 - `find(test)` returns the first element that passes as an
-  [optional](optionals.md), Empty when none does.
+  optional, Empty when none does; `position(test)` returns its position.
 - `sum()` adds the elements with `+` and returns 0 (the type's default
   value) for none; `sum<long>()` adds them as `long`s. `min()` and `max()` return the smallest and largest by
   [`compare`](ordering.md), as an optional that is Empty for none; among
   equal elements they return the first. They need element types that have
-  `+` or are `Comparable`, such as the numbers and `String`.
+  `+` or are `Comparable`, such as the numbers and `String`. `min_by(compare)`
+  and `max_by(compare)` order by a function instead, as `Array.sort` does.
+- `to_set()` collects into a `HashSet`, `to_map<K, V>()` collects
+  `(key, value)` tuples into a `HashMap` (a later key replaces an earlier
+  one), and `join(separator)` joins `String` elements.
+
+The adapters do not allocate per element: an optimized build of a chain
+such as `(0..n).filter(f).map(g).take(k).sum()` runs as fast as the loop
+written out by hand.
 
 ```pepper
 {{#include ../../examples/iteration-adapters.pep}}
@@ -175,9 +195,10 @@ your own iterators once you write `extend YourType with Iterator<T>;`. The adapt
 the iterator it wraps (the runtime's iterators are
 [value structs](value-structs.md), boxed when they become an `Iterator<T>`),
 so a chain built from a temporary stays alive while the loop runs, and
-`it.map(f)`, `it.to_array()` and the other consumers leave `it` where it was. They are generic methods (see
-[Generics](generics.md#generic-methods)), so they are not callable through an
-`Iterator<T>` trait value.
+`it.map(f)`, `it.to_array()` and the other consumers leave `it` where it was. All of them but `filter` and `to_array` are
+generic methods (see [Generics](generics.md#generic-methods)), so they are
+not callable through an `Iterator<T>` trait value; being generic also means
+each one is compiled only for the iterators that call it.
 
 ## Reading files and directories
 
