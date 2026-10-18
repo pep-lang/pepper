@@ -208,6 +208,9 @@ _conform(st: StructDef, ext: ExtensionDef, trait_name: TypeName, def: TraitDef, 
                 for (var bound in p.bounds) {
                     replace_map(bound.ty, type_map);
                 }
+                if (p.default.is_value()) {
+                    replace_map(p.default.value(), type_map);
+                }
             }
             for (var param in method.parameters) {
                 replace_map(param.ty, type_map);

@@ -238,6 +238,10 @@ _specialize_struct(base: StructDef, spec_type: TypeName, state: PassState): Stru
             for (var bound in p.bounds) {
                 replace_map(bound.ty, type_map);
             }
+            # `min<TValue=T>` of `Box<int>`: `TValue=int`.
+            if (p.default.is_value()) {
+                replace_map(p.default.value(), type_map);
+            }
         }
         _substitute_function(m, type_map);
         rewrite_static_calls(m, type_map, fields, state);

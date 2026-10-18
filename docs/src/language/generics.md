@@ -104,8 +104,9 @@ a function's, or written after the method name:
   `b.map<long>(f)`. With a space, `a.b < c` is a comparison.
 - A generic method cannot be called through a [trait value](traits-and-extensions.md#traits-as-types),
   since each of its uses is compiled separately. Call it on the concrete type.
-- The iterator adapters `map`, `filter`, `enumerate` and `zip` are generic
-  default methods of `Iterator<T>`; see [Iteration](iteration.md#adapters).
+- The iterator adapters `map`, `enumerate` and `zip`, and the consumers `fold`,
+  `sum`, `min` and `max`, are generic default methods of `Iterator<T>`; see
+  [Iteration](iteration.md#adapters).
 
 ## Default type arguments
 
@@ -117,7 +118,9 @@ that argument out, the default fills it in:
 ```
 
 Arguments are matched to parameters in order, so put the parameters that have
-defaults last. The standard library declares `enum Result<TValue, TError=Error>`, so
+defaults last. A generic method's default may name a type parameter of the
+struct or trait around it: `Iterator<T>` declares `sum<TSum=T>()`, so
+`sum()` adds in the element type and `sum<long>()` in `long`. The standard library declares `enum Result<TValue, TError=Error>`, so
 `Result<int>` means `Result<int, Error>`. See
 [Error handling with Result](results.md).
 

@@ -69,8 +69,8 @@ includes `b`. Looping over one is how you count:
   there without overflowing.
 - **A range is a value**, a [`Range<T>`](../reference/range.md). It has
   `contains(x)` and the `is_empty` property, and it is an `Iterator<T>`, so it has the
-  [adapters](#adapters) (`map`, `filter`, `enumerate`, `zip`) and
-  `to_array()`. Looping over one allocates
+  [adapters and consumers](#adapters) (`map`, `filter`, `take`, `sum`,
+  ...). Looping over one allocates
   nothing; the optimizer turns it into a plain counting loop.
 
 ## The iterator protocol
@@ -141,10 +141,29 @@ Each works lazily, one element at a time as the loop asks for it:
   `ulong`; `enumerate<int>()` counts in `int` instead.
 - `zip(other)` yields `(x, y)` pairs, one element from each iterator in
   step, and stops when either runs out.
+- `take(n)` yields at most the first `n` elements; `skip(n)` yields the
+  elements after the first `n`.
+- `chain(other)` yields this iterator's elements, then `other`'s.
 
 They return iterators, so they chain, and a `for` loop can use the result
-directly; destructure a tuple to name its parts. `to_array()` runs an
-iterator to the end and collects what is left into a new `Array`:
+directly; destructure a tuple to name its parts.
+
+The consumers run an iterator (as far as they need to) and return a value:
+
+- `to_array()` collects what is left into a new `Array`.
+- `count()` returns how many elements are left, as a `ulong`.
+- `fold(initial, combine)` folds each element into a value:
+  `(1..>5).fold(1, (product, n) => product * n)` is 120.
+- `any(test)` and `all(test)` return whether some or every element passes;
+  they stop at the first element that settles the answer. `all` is `true`
+  for no elements.
+- `find(test)` returns the first element that passes as an
+  [optional](optionals.md), Empty when none does.
+- `sum()` adds the elements with `+` and returns 0 (the type's default
+  value) for none; `sum<long>()` adds them as `long`s. `min()` and `max()` return the smallest and largest by
+  [`compare`](ordering.md), as an optional that is Empty for none; among
+  equal elements they return the first. They need element types that have
+  `+` or are `Comparable`, such as the numbers and `String`.
 
 ```pepper
 {{#include ../../examples/iteration-adapters.pep}}
@@ -156,7 +175,7 @@ your own iterators once you write `extend YourType with Iterator<T>;`. The adapt
 the iterator it wraps (the runtime's iterators are
 [value structs](value-structs.md), boxed when they become an `Iterator<T>`),
 so a chain built from a temporary stays alive while the loop runs, and
-`it.map(f)` and `it.to_array()` leave `it` where it was. They are generic methods (see
+`it.map(f)`, `it.to_array()` and the other consumers leave `it` where it was. They are generic methods (see
 [Generics](generics.md#generic-methods)), so they are not callable through an
 `Iterator<T>` trait value.
 
@@ -213,8 +232,8 @@ Some things to keep in mind:
   `current()` (see [Traits and extensions](traits-and-extensions.md)).
   Declaring it also lets the type be used as an `Iterator<int>` value, and a
   `for` loop over such a value calls the methods through the trait. It also
-  gives the type the [adapters](#adapters) (`map`, `filter`, `enumerate`,
-  `zip`) and `to_array()`.
+  gives the type the [adapters and consumers](#adapters) (`map`, `filter`,
+  `fold`, `to_array()`, ...).
 - **Looping over an iterator uses it up.** When the source is itself an
   iterator stored in a variable, the loop drives that variable in place, so
   it is exhausted afterwards, and a loop left with `break` can be resumed by

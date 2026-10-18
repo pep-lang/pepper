@@ -110,6 +110,6 @@ one value make two boxes. Copying the trait value shares the box, as for
 any trait value.
 
 The runtime's iterators (`ArrayIterator`, `StringIterator`, the map and
-set iterators, `ChannelIterator`, and the `map`, `filter`, `enumerate` and
-`zip` adapters) are value structs, so a `for` loop over an `Array`, a
+set iterators, `ChannelIterator`, and the `map`, `filter`, `enumerate`,
+`zip`, `take`, `skip` and `chain` adapters) are value structs, so a `for` loop over an `Array`, a
 `String` or any map or set allocates no iterator.

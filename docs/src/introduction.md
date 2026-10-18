@@ -59,8 +59,8 @@ structs with constructors, destructors, methods and [properties](language/proper
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with `as?`), function types and
-closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with `map`,
-`filter`, `enumerate` and `zip` adapters),
+closures, modules (with `export * from` re-exports), `Result`-based error handling (`Result` is an enum, and `?` propagates errors), `Optional` values, iteration (with adapters such as `map`,
+`filter`, `take` and `chain`, and consumers such as `fold`, `any` and `sum`),
 `with` blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (`[Export]`ed functions in a static or shared library, with a generated header). The standard library covers strings (with a `StringBuilder`, `StringConstant` for literals' constant bytes,
 `to_string` and a `ToString` trait, `$"{a + b:>8}"` interpolation with format specifications, and `String.format`), a `Comparable` trait for ordered types, sortable, searchable arrays with read-only slices, hash
 maps and sets, sorted maps and sets (`Map`, `Set`) and an insertion-ordered `OrderedMap`, a `BitSet` of small integers, a double-ended `Deque` and a `PriorityQueue`, atomics, threads, channels and mutexes, tasks (green threads

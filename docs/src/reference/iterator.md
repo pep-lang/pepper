@@ -207,6 +207,74 @@ for (var (name, age) in names.iterate().zip(ages.iterate())) {
 }
 ```
 
+#### take
+
+```pepper
+take(count: ulong): TakeIterator<T>
+```
+
+Returns an iterator over at most the first `count` elements.
+
+Lazy, like `map`: it stops after `count` elements, or sooner when this
+iterator runs out, and never advances this iterator past them. Every
+type that declares `Iterator<T>` gets this method.
+
+**Parameters**
+- `count` — the most elements to yield
+
+**Returns**
+- a `TakeIterator<T>` over the first `count` elements
+
+**Example**
+```pepper
+var firsts = (1..>10).take(3).to_array();   # [1, 2, 3]
+```
+
+#### skip
+
+```pepper
+skip(count: ulong): SkipIterator<T>
+```
+
+Returns an iterator over the elements after the first `count`.
+
+Lazy, like `map`: the first `next()` of the result passes over `count`
+elements. When there are no more than `count`, it yields nothing.
+Every type that declares `Iterator<T>` gets this method.
+
+**Parameters**
+- `count` — how many elements to pass over
+
+**Returns**
+- a `SkipIterator<T>` over the rest of the elements
+
+**Example**
+```pepper
+var rest = (1..>5).skip(3).to_array();   # [4, 5]
+```
+
+#### chain
+
+```pepper
+chain(other: Iterator<T>): ChainIterator<T>
+```
+
+Returns an iterator over this iterator's elements, then `other`'s.
+
+Lazy, like `map`: `other` is not advanced until this iterator runs
+out. Every type that declares `Iterator<T>` gets this method.
+
+**Parameters**
+- `other` — the iterator whose elements follow
+
+**Returns**
+- a `ChainIterator<T>` over both iterators' elements
+
+**Example**
+```pepper
+var both = (1..>2).chain(7..>8).to_array();   # [1, 2, 7, 8]
+```
+
 #### to_array
 
 ```pepper
@@ -227,6 +295,355 @@ method.
 ```pepper
 var evens = (1..>10).filter((n) => n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
 ```
+
+#### count
+
+```pepper
+count(): ulong
+```
+
+Returns how many elements remain.
+
+Runs the iteration to the end, on a copy of the iterator, like
+`to_array`. Every type that declares `Iterator<T>` gets this method.
+
+**Returns**
+- the number of elements, possibly 0
+
+**Example**
+```pepper
+var evens = (1..>10).filter((n) => n % 2 == 0).count();   # 5
+```
+
+#### fold
+
+```pepper
+fold<U>(initial: U, combine: (U, T) => U): U
+```
+
+Combines the elements into one value: `combine(initial, first)`, then
+`combine` of that and the second element, and so on.
+
+Runs the iteration to the end, on a copy of the iterator, like
+`to_array`. Every type that declares `Iterator<T>` gets this method.
+
+**Type parameters**
+- `U` — the type of the combined value
+
+**Parameters**
+- `initial` — the value to start from, returned as is when there are no elements
+- `combine` — the function that folds one more element into the value so far
+
+**Returns**
+- the value after every element is folded in
+
+**Example**
+```pepper
+var product = (1..>5).fold(1, (total, n) => total * n);   # 120
+```
+
+#### any
+
+```pepper
+any(test: (T) => bool): bool
+```
+
+Returns whether `test` returns true for some element.
+
+Stops at the first element that passes, on a copy of the iterator,
+like `to_array`. Every type that declares `Iterator<T>` gets this
+method.
+
+**Parameters**
+- `test` — the test to apply
+
+**Returns**
+- true when an element passes, false when none does or there are none
+
+**Example**
+```pepper
+var has_even = [1, 3, 4].iterate().any((n) => n % 2 == 0);   # true
+```
+
+#### all
+
+```pepper
+all(test: (T) => bool): bool
+```
+
+Returns whether `test` returns true for every element.
+
+Stops at the first element that fails, on a copy of the iterator, like
+`to_array`. Every type that declares `Iterator<T>` gets this method.
+
+**Parameters**
+- `test` — the test to apply
+
+**Returns**
+- true when every element passes, including when there are none
+
+**Example**
+```pepper
+var all_small = [1, 3, 4].iterate().all((n) => n < 10);   # true
+```
+
+#### find
+
+```pepper
+find(test: (T) => bool): T?
+```
+
+Returns the first element for which `test` returns true.
+
+Stops at that element, on a copy of the iterator, like `to_array`.
+Every type that declares `Iterator<T>` gets this method.
+
+**Parameters**
+- `test` — the test an element must pass
+
+**Returns**
+- the first element that passes, or Empty when none does
+
+**Example**
+```pepper
+var first_even = [1, 3, 4, 6].iterate().find((n) => n % 2 == 0);   # Value(4)
+```
+
+#### sum
+
+```pepper
+sum<TSum=T>(): TSum
+```
+
+Returns the sum of the elements, with `+`.
+
+For element types that have `+`, such as the numbers. The sum is
+kept in `TSum`, the element type unless named: `sum<long>()` adds
+`int` elements without overflowing an `int`. Runs the iteration to
+the end, on a copy of the iterator, like `to_array`. Every type that
+declares `Iterator<T>` gets this method.
+
+**Type parameters**
+- `TSum` — the type the sum is kept in, `T` by default
+
+**Returns**
+- the sum, or `TSum`'s default value (0 for a number) when there are no elements
+
+**Example**
+```pepper
+var total = (1..>4).sum();   # 10
+var big = [2000000000, 2000000000].iterate().sum<long>();   # 4000000000
+```
+
+#### min
+
+```pepper
+min<TValue=T>(): TValue?
+```
+
+Returns the smallest element, by `Comparable`'s `compare`.
+
+For [`Comparable`](compare.md) element types, such as the numbers
+and `String`. When several elements sort together, returns the first.
+Runs the iteration to the end, on a copy of the iterator, like
+`to_array`. Every type that declares `Iterator<T>` gets this method.
+
+**Type parameters**
+- `TValue` — the `Comparable` type the elements are compared as, `T` by default
+
+**Returns**
+- the smallest element, or Empty when there are none
+
+**Example**
+```pepper
+var lowest = [3, 1, 2].iterate().min();   # Value(1)
+```
+
+#### max
+
+```pepper
+max<TValue=T>(): TValue?
+```
+
+Returns the largest element, by `Comparable`'s `compare`.
+
+For [`Comparable`](compare.md) element types, such as the numbers
+and `String`. When several elements sort together, returns the first.
+Runs the iteration to the end, on a copy of the iterator, like
+`to_array`. Every type that declares `Iterator<T>` gets this method.
+
+**Type parameters**
+- `TValue` — the `Comparable` type the elements are compared as, `T` by default
+
+**Returns**
+- the largest element, or Empty when there are none
+
+**Example**
+```pepper
+var highest = [3, 1, 2].iterate().max();   # Value(3)
+```
+
+## TakeIterator
+
+```pepper
+[Value] struct TakeIterator<T>
+```
+
+The iterator `Iterator.take` returns: at most the first `count` elements
+of the source iterator.
+
+**Type parameters**
+- `T` — the type of the elements
+
+**See also**
+- `Iterator.take`
+
+### Constructor
+
+#### TakeIterator()
+
+```pepper
+construct(source: Iterator<T>, count: ulong)
+```
+
+Makes an iterator over at most the first `count` elements of `source`.
+
+**Parameters**
+- `source` — the iterator to take from
+- `count` — the most elements to yield
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element, unless `count` elements were yielded.
+
+**Returns**
+- true if there is a current element, false after `count` elements or when the source is exhausted
+
+#### current
+
+```pepper
+current(): T
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
+
+## SkipIterator
+
+```pepper
+[Value] struct SkipIterator<T>
+```
+
+The iterator `Iterator.skip` returns: the elements of the source iterator
+after the first `count`.
+
+**Type parameters**
+- `T` — the type of the elements
+
+**See also**
+- `Iterator.skip`
+
+### Constructor
+
+#### SkipIterator()
+
+```pepper
+construct(source: Iterator<T>, count: ulong)
+```
+
+Makes an iterator over the elements of `source` after the first
+`count`.
+
+**Parameters**
+- `source` — the iterator to skip into
+- `count` — how many elements to pass over
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element, passing over the first `count` on the
+first call.
+
+**Returns**
+- true if there is a current element, false when the source is exhausted
+
+#### current
+
+```pepper
+current(): T
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
+
+## ChainIterator
+
+```pepper
+[Value] struct ChainIterator<T>
+```
+
+The iterator `Iterator.chain` returns: the elements of one iterator, then
+those of another.
+
+**Type parameters**
+- `T` — the type of the elements
+
+**See also**
+- `Iterator.chain`
+
+### Constructor
+
+#### ChainIterator()
+
+```pepper
+construct(first: Iterator<T>, second: Iterator<T>)
+```
+
+Makes an iterator over the elements of `first`, then `second`.
+
+**Parameters**
+- `first` — the iterator whose elements come first
+- `second` — the iterator whose elements follow
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element of the first iterator, or once it has
+run out, of the second.
+
+**Returns**
+- true if there is a current element, false when both are exhausted
+
+#### current
+
+```pepper
+current(): T
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
 
 ## MapIterator
 

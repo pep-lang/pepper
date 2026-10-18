@@ -151,6 +151,47 @@ export trait Iterator<T> {
         return ZipIterator<T, U>(this, other);
     }
 
+    ## Returns an iterator over at most the first `count` elements.
+    ##
+    ## Lazy, like `map`: it stops after `count` elements, or sooner when this
+    ## iterator runs out, and never advances this iterator past them. Every
+    ## type that declares `Iterator<T>` gets this method.
+    ##
+    ## @param count the most elements to yield
+    ## @returns a `TakeIterator<T>` over the first `count` elements
+    ## @example
+    ##     var firsts = (1..>10).take(3).to_array();   # [1, 2, 3]
+    take(count: ulong): TakeIterator<T> {
+        return TakeIterator<T>(this, count);
+    }
+
+    ## Returns an iterator over the elements after the first `count`.
+    ##
+    ## Lazy, like `map`: the first `next()` of the result passes over `count`
+    ## elements. When there are no more than `count`, it yields nothing.
+    ## Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @param count how many elements to pass over
+    ## @returns a `SkipIterator<T>` over the rest of the elements
+    ## @example
+    ##     var rest = (1..>5).skip(3).to_array();   # [4, 5]
+    skip(count: ulong): SkipIterator<T> {
+        return SkipIterator<T>(this, count);
+    }
+
+    ## Returns an iterator over this iterator's elements, then `other`'s.
+    ##
+    ## Lazy, like `map`: `other` is not advanced until this iterator runs
+    ## out. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @param other the iterator whose elements follow
+    ## @returns a `ChainIterator<T>` over both iterators' elements
+    ## @example
+    ##     var both = (1..>2).chain(7..>8).to_array();   # [1, 2, 7, 8]
+    chain(other: Iterator<T>): ChainIterator<T> {
+        return ChainIterator<T>(this, other);
+    }
+
     ## Returns a new `Array` holding the remaining elements, in order.
     ##
     ## Runs the iteration to the end. Like the adapters, it works on a copy
@@ -170,7 +211,311 @@ export trait Iterator<T> {
         }
         return result;
     }
+
+    ## Returns how many elements remain.
+    ##
+    ## Runs the iteration to the end, on a copy of the iterator, like
+    ## `to_array`. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @returns the number of elements, possibly 0
+    ## @example
+    ##     var evens = (1..>10).filter((n) => n % 2 == 0).count();   # 5
+    count(): ulong {
+        Iterator<T> source = this;
+        ulong result = 0;
+        while (source.next()) {
+            result += 1;
+        }
+        return result;
+    }
+
+    ## Combines the elements into one value: `combine(initial, first)`, then
+    ## `combine` of that and the second element, and so on.
+    ##
+    ## Runs the iteration to the end, on a copy of the iterator, like
+    ## `to_array`. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @typeParam U the type of the combined value
+    ## @param initial the value to start from, returned as is when there are no elements
+    ## @param combine the function that folds one more element into the value so far
+    ## @returns the value after every element is folded in
+    ## @example
+    ##     var product = (1..>5).fold(1, (total, n) => total * n);   # 120
+    fold<U>(initial: U, combine: (U, T) => U): U {
+        Iterator<T> source = this;
+        var result = initial;
+        while (source.next()) {
+            result = combine(result, source.current());
+        }
+        return result;
+    }
+
+    ## Returns whether `test` returns true for some element.
+    ##
+    ## Stops at the first element that passes, on a copy of the iterator,
+    ## like `to_array`. Every type that declares `Iterator<T>` gets this
+    ## method.
+    ##
+    ## @param test the test to apply
+    ## @returns true when an element passes, false when none does or there are none
+    ## @example
+    ##     var has_even = [1, 3, 4].iterate().any((n) => n % 2 == 0);   # true
+    any(test: (T) => bool): bool {
+        Iterator<T> source = this;
+        while (source.next()) {
+            if (test(source.current())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    ## Returns whether `test` returns true for every element.
+    ##
+    ## Stops at the first element that fails, on a copy of the iterator, like
+    ## `to_array`. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @param test the test to apply
+    ## @returns true when every element passes, including when there are none
+    ## @example
+    ##     var all_small = [1, 3, 4].iterate().all((n) => n < 10);   # true
+    all(test: (T) => bool): bool {
+        Iterator<T> source = this;
+        while (source.next()) {
+            if (!test(source.current())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    ## Returns the first element for which `test` returns true.
+    ##
+    ## Stops at that element, on a copy of the iterator, like `to_array`.
+    ## Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @param test the test an element must pass
+    ## @returns the first element that passes, or Empty when none does
+    ## @example
+    ##     var first_even = [1, 3, 4, 6].iterate().find((n) => n % 2 == 0);   # Value(4)
+    find(test: (T) => bool): T? {
+        Iterator<T> source = this;
+        while (source.next()) {
+            var element = source.current();
+            if (test(element)) {
+                return Optional<T>.Value(element);
+            }
+        }
+        return Optional<T>.Empty;
+    }
+
+    ## Returns the sum of the elements, with `+`.
+    ##
+    ## For element types that have `+`, such as the numbers. The sum is
+    ## kept in `TSum`, the element type unless named: `sum<long>()` adds
+    ## `int` elements without overflowing an `int`. Runs the iteration to
+    ## the end, on a copy of the iterator, like `to_array`. Every type that
+    ## declares `Iterator<T>` gets this method.
+    ##
+    ## @typeParam TSum the type the sum is kept in, `T` by default
+    ## @returns the sum, or `TSum`'s default value (0 for a number) when there are no elements
+    ## @example
+    ##     var total = (1..>4).sum();   # 10
+    ##     var big = [2000000000, 2000000000].iterate().sum<long>();   # 4000000000
+    sum<TSum=T>(): TSum {
+        Iterator<T> source = this;
+        var result: TSum;
+        while (source.next()) {
+            result = result + source.current();
+        }
+        return result;
+    }
+
+    ## Returns the smallest element, by `Comparable`'s `compare`.
+    ##
+    ## For [`Comparable`](compare.md) element types, such as the numbers
+    ## and `String`. When several elements sort together, returns the first.
+    ## Runs the iteration to the end, on a copy of the iterator, like
+    ## `to_array`. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @typeParam TValue the `Comparable` type the elements are compared as, `T` by default
+    ## @returns the smallest element, or Empty when there are none
+    ## @example
+    ##     var lowest = [3, 1, 2].iterate().min();   # Value(1)
+    min<TValue=T>(): TValue? {
+        Iterator<T> source = this;
+        if (!source.next()) {
+            return Optional<TValue>.Empty;
+        }
+        TValue best = source.current();
+        while (source.next()) {
+            TValue element = source.current();
+            if (element.compare(best) < 0) {
+                best = element;
+            }
+        }
+        return Optional<TValue>.Value(best);
+    }
+
+    ## Returns the largest element, by `Comparable`'s `compare`.
+    ##
+    ## For [`Comparable`](compare.md) element types, such as the numbers
+    ## and `String`. When several elements sort together, returns the first.
+    ## Runs the iteration to the end, on a copy of the iterator, like
+    ## `to_array`. Every type that declares `Iterator<T>` gets this method.
+    ##
+    ## @typeParam TValue the `Comparable` type the elements are compared as, `T` by default
+    ## @returns the largest element, or Empty when there are none
+    ## @example
+    ##     var highest = [3, 1, 2].iterate().max();   # Value(3)
+    max<TValue=T>(): TValue? {
+        Iterator<T> source = this;
+        if (!source.next()) {
+            return Optional<TValue>.Empty;
+        }
+        TValue best = source.current();
+        while (source.next()) {
+            TValue element = source.current();
+            if (element.compare(best) > 0) {
+                best = element;
+            }
+        }
+        return Optional<TValue>.Value(best);
+    }
 }
+
+## The iterator `Iterator.take` returns: at most the first `count` elements
+## of the source iterator.
+##
+## @typeParam T the type of the elements
+## @see Iterator.take
+[Value]
+export struct TakeIterator<T> {
+    ## The iterator whose first elements are yielded.
+    Iterator<T> _source;
+    ## How many more elements may be yielded.
+    ulong _remaining;
+
+    ## Makes an iterator over at most the first `count` elements of `source`.
+    ##
+    ## @param source the iterator to take from
+    ## @param count the most elements to yield
+    construct(source: Iterator<T>, count: ulong) {
+        _source = source;
+        _remaining = count;
+    }
+
+    ## Advances to the next element, unless `count` elements were yielded.
+    ##
+    ## @returns true if there is a current element, false after `count` elements or when the source is exhausted
+    next(): bool {
+        if (_remaining == 0) {
+            return false;
+        }
+        _remaining -= 1;
+        return _source.next();
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    current(): T {
+        return _source.current();
+    }
+}
+
+extend TakeIterator<T> with Iterator<T>;
+
+## The iterator `Iterator.skip` returns: the elements of the source iterator
+## after the first `count`.
+##
+## @typeParam T the type of the elements
+## @see Iterator.skip
+[Value]
+export struct SkipIterator<T> {
+    ## The iterator whose later elements are yielded.
+    Iterator<T> _source;
+    ## How many elements are still to be passed over.
+    ulong _skip;
+
+    ## Makes an iterator over the elements of `source` after the first
+    ## `count`.
+    ##
+    ## @param source the iterator to skip into
+    ## @param count how many elements to pass over
+    construct(source: Iterator<T>, count: ulong) {
+        _source = source;
+        _skip = count;
+    }
+
+    ## Advances to the next element, passing over the first `count` on the
+    ## first call.
+    ##
+    ## @returns true if there is a current element, false when the source is exhausted
+    next(): bool {
+        while (_skip > 0) {
+            _skip -= 1;
+            if (!_source.next()) {
+                return false;
+            }
+        }
+        return _source.next();
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    current(): T {
+        return _source.current();
+    }
+}
+
+extend SkipIterator<T> with Iterator<T>;
+
+## The iterator `Iterator.chain` returns: the elements of one iterator, then
+## those of another.
+##
+## @typeParam T the type of the elements
+## @see Iterator.chain
+[Value]
+export struct ChainIterator<T> {
+    ## The iterator whose elements come first.
+    Iterator<T> _first;
+    ## The iterator whose elements follow.
+    Iterator<T> _second;
+    ## Whether `_first` has run out, so the elements come from `_second`.
+    bool _on_second;
+
+    ## Makes an iterator over the elements of `first`, then `second`.
+    ##
+    ## @param first the iterator whose elements come first
+    ## @param second the iterator whose elements follow
+    construct(first: Iterator<T>, second: Iterator<T>) {
+        _first = first;
+        _second = second;
+    }
+
+    ## Advances to the next element of the first iterator, or once it has
+    ## run out, of the second.
+    ##
+    ## @returns true if there is a current element, false when both are exhausted
+    next(): bool {
+        if (!_on_second && _first.next()) {
+            return true;
+        }
+        _on_second = true;
+        return _second.next();
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    current(): T {
+        return _on_second ? _second.current() : _first.current();
+    }
+}
+
+extend ChainIterator<T> with Iterator<T>;
 
 ## The iterator `Iterator.map` returns: each element of the source iterator,
 ## passed through the transform function.

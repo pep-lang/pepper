@@ -75,3 +75,73 @@ mutating_after_the_loop_is_fine() {
     for (var x in nums) {}
     expect_equal(nums.count, 2);
 }
+
+[Test]
+take_and_skip_slice_an_iterator() {
+    var nums = [1, 2, 3, 4, 5];
+    var firsts = nums.iterate().take(2).to_array();
+    expect_equal(firsts.count, 2);
+    expect_equal(firsts[1], 2);
+    expect_equal(nums.iterate().take(9).count(), 5);
+    expect_equal(nums.iterate().take(0).count(), 0);
+    var rest = nums.iterate().skip(3).to_array();
+    expect_equal(rest.count, 2);
+    expect_equal(rest[0], 4);
+    expect_equal(nums.iterate().skip(9).count(), 0);
+    expect_equal((1..>10).skip(2).take(3).sum(), 3 + 4 + 5);
+}
+
+[Test]
+chain_yields_one_iterator_then_the_other() {
+    var both = (1..>2).chain(7..>8).to_array();
+    expect_equal(both.count, 4);
+    expect_equal(both[1], 2);
+    expect_equal(both[2], 7);
+    expect_equal((1..1).chain(3..>3).count(), 1);
+    var words = "";
+    for (var w in ["a", "b"].iterate().chain(Array<String>().iterate())) {
+        words += w;
+    }
+    expect_equal(words, "ab");
+}
+
+[Test]
+consumers_leave_the_iterator_where_it_was() {
+    var it = (1..>4);
+    expect_equal(it.count(), 4);
+    expect_equal(it.sum(), 10);
+    expect_equal(it.fold(1, (product, n) => product * n), 24);
+    expect_equal(it.to_array().count, 4);
+}
+
+[Test]
+any_all_and_find_test_each_element() {
+    var nums = [1, 3, 4, 6];
+    expect_true(nums.iterate().any((n) => n % 2 == 0));
+    expect_false(nums.iterate().any((n) => n > 10));
+    expect_true(nums.iterate().all((n) => n > 0));
+    expect_false(nums.iterate().all((n) => n % 2 == 1));
+    expect_true(Array<int>().iterate().all((n) => false));
+    expect_equal(nums.iterate().find((n) => n % 2 == 0).value(), 4);
+    expect_true(nums.iterate().find((n) => n > 10).is_empty());
+}
+
+[Test]
+fold_combines_into_another_type() {
+    var joined = ["a", "b", "c"].iterate().fold("", (text, s) => text + s);
+    expect_equal(joined, "abc");
+    expect_equal(Array<int>().iterate().fold(7, (total, n) => total + n), 7);
+}
+
+[Test]
+sum_min_and_max_of_numbers_and_strings() {
+    expect_equal([2.5, 1.5].iterate().sum(), 4.0);
+    expect_equal(Array<int>().iterate().sum(), 0);
+    long wide = [2000000000, 2000000000].iterate().sum<long>();
+    expect_equal(wide, 4000000000);
+    expect_equal([3, 1, 2].iterate().min().value(), 1);
+    expect_equal([3, 1, 2].iterate().max().value(), 3);
+    expect_equal(["pear", "apple"].iterate().min().value(), "apple");
+    expect_true(Array<int>().iterate().min().is_empty());
+    expect_true(Array<int>().iterate().max().is_empty());
+}

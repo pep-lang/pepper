@@ -43,5 +43,12 @@ main(): int {
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) => p.age).to_array();
     assert(ages.count == 3 && ages[2] == 40, "every age");
+
+    # Consumers run the iterator and return one value.
+    assert(people.iterate().any((p) => p.age < 18), "Bo is a child");
+    assert(people.iterate().map((p) => p.age).sum() == 88, "total age");
+    assert(people.iterate().map((p) => p.age).max().value() == 40, "oldest");
+    assert(people.iterate().find((p) => p.age > 36).value().name == "Cyd", "first over 36");
+    assert(people.iterate().skip(1).take(1).count() == 1, "just Bo");
     return 0;
 }
