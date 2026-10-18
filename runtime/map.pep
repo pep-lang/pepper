@@ -7,15 +7,18 @@
 ## equal, and a positive number when `a` sorts after `b`: the order `Map` and
 ## `Set` keep their keys in.
 ##
-## The generic version compares with `<`, so it works for every number type,
-## `char`, and any struct that declares a `<` operator. Two values neither of
-## which is `<` the other are equal keys. `String` compares by content through
-## the concrete `compare<String>` override.
+## The generic version compares with `<`, so it works for every
+## `Comparable` type (see `Comparable`), every integer type, `char`, and any
+## struct that declares a `<` operator. Two values neither of which is `<`
+## the other are equal keys. `String`, `float` and `double` go through
+## concrete overrides that call their `compare`, so a NaN key sorts after
+## every number instead of breaking the order.
 ##
-## A struct with no `<` operator overrides this function for itself to be a
-## `Map` key or `Set` element: `compare<Point>(a: Point, b: Point): int`. The
-## order must be a strict weak order (consistent across calls), or the tree
-## loses track of its keys.
+## A struct with no `<` operator declares `Comparable`, or overrides this
+## function for itself, to be a `Map` key or `Set` element:
+## `compare<Point>(a: Point, b: Point): int`. The order must be a strict
+## weak order (consistent across calls), or the tree loses track of its
+## keys.
 ##
 ## @typeParam T the type of the values to compare
 ## @param a the first value
@@ -46,6 +49,26 @@ export compare<T>(a: T, b: T): int {
 ## @example
 ##     assert(compare<String>("apple", "pear") < 0, "apple sorts first");
 export compare<String>(a: String, b: String): int {
+    return a.compare(b);
+}
+
+## Compares two `float`s in `float.compare`'s total order: by value, with
+## NaN after every number.
+##
+## @param a the first value
+## @param b the second value
+## @returns -1, 0 or 1 as `a` sorts before, with or after `b`
+export compare<float>(a: float, b: float): int {
+    return a.compare(b);
+}
+
+## Compares two `double`s in `double.compare`'s total order: by value, with
+## NaN after every number.
+##
+## @param a the first value
+## @param b the second value
+## @returns -1, 0 or 1 as `a` sorts before, with or after `b`
+export compare<double>(a: double, b: double): int {
     return a.compare(b);
 }
 

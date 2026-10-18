@@ -47,11 +47,13 @@ which returns a negative number, zero or a positive number as `a` sorts
 before, equal to or after `b`. Two keys that compare equal are the same key.
 
 - Numbers and `char` compare by value, and `String` by content (the same
-  order as `String.compare`).
-- A struct that declares a `<` [operator](structs.md#operators) sorts by it:
-  the generic `compare` asks `a < b` and `b < a`.
-- Any other struct overrides `compare<T>` for itself, as a hashed key
-  overrides `hash<T>` (see
+  order as `String.compare`). A NaN `float` or `double` key sorts after
+  every number (see [Ordering with Comparable](ordering.md)).
+- A [`Comparable`](ordering.md) struct, or one that declares a `<`
+  [operator](structs.md#operators), sorts by it: the generic `compare` asks
+  `a < b` and `b < a`.
+- Any other struct declares `Comparable`, or overrides `compare<T>` for
+  itself, as a hashed key overrides `hash<T>` (see
   [Overriding a generic function for one type](generics.md#overriding-a-generic-function-for-one-type)).
 
 ```pepper

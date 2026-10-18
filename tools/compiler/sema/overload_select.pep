@@ -532,6 +532,14 @@ export struct Overloads {
             sets_of[set] = Array<Member>();
             method_set_names.insert(set);
         }
+        # Two spellings of one type (`Array<int>`, `Array<i32>`) are two
+        # specializations filed under one key: each member once, or every
+        # call to the set is ambiguous with itself.
+        for (var filed in sets_of[set]) {
+            if (filed.name == member.name) {
+                return;
+            }
+        }
         sets_of[set].append(member);
     }
 

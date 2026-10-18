@@ -100,7 +100,9 @@ export is_value_type(state: PassState, ty: TypeName): bool {
 export lower_extensions(module: Module, state: PassState) {
     var added = Array<FunctionDef>();
     for (var ext in module.extensions) {
-        if (!is_value_type(state, ext.target)) {
+        # Lowered by an earlier run (a checked runtime): its methods are
+        # functions already, and checking its traits again would find none.
+        if (ext.resolved.is_value() or !is_value_type(state, ext.target)) {
             continue;
         }
         var key = value_type_key(state, ext.target.name).value();

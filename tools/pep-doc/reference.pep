@@ -40,6 +40,7 @@ export pages(): Array<(String, String)> {
         ("process.pep", "Arguments and exit (deprecated)"),
         ("string.pep", "String"),
         ("number.pep", "Numbers"),
+        ("compare.pep", "Comparable"),
         ("range.pep", "Ranges"),
         ("array.pep", "Array"),
         ("hash.pep", "HashMap and HashSet"),

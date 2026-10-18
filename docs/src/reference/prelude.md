@@ -11,6 +11,7 @@ The prelude is the part of the standard library every program gets without an im
 - [Arguments and exit (deprecated)](process.md): The running program's arguments and exit, kept for the deprecated prelude `arguments()` and `exit()`; the `process` module has them now.
 - [String](string.md): A mutable, reference-counted string of UTF-8 text.
 - [Numbers](number.md): Reading numbers from text, and arithmetic that says what to do on overflow.
+- [Comparable](compare.md): Ordering: `Comparable`, the trait of types whose values sort in one order, which every number type, `char` and `String` declare.
 - [Ranges](range.md): Ranges of numbers: `a..b` and `a..>b`.
 - [Array](array.md): A growable, contiguous, zero-indexed sequence of `T` values.
 - [HashMap and HashSet](hash.md): Hashing: `hash<T>(value)`, the 64-bit hash `HashMap` and `HashSet` use for their keys, and the hash maps and sets themselves.

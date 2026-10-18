@@ -2410,6 +2410,9 @@ extend String with Copyable<String>;
 
 extend String with ToString;
 
+## Strings sort by content, as `String.compare` orders them.
+extend String with Comparable;
+
 extend StringBuilder with ToString;
 
 # The String an `[Export]`ed function receives from C: a copy of the `size`

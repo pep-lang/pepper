@@ -256,6 +256,11 @@ export PEPPER_RUNTIME="$repo_root/runtime"
 # checkout, with its runtime: stage 0's own may predate a runtime fix it
 # needs (#804: on glibc before 2.29 it could not start git in a folder).
 # pep-build fetches only what is missing, so the builds below fetch nothing.
+# shortcut: a stage 0 older than 0.9.4 fails on the runtime's number
+# extensions that declare `Comparable` when it checks a compilation unit
+# again (#950), so it builds without compilation units. Drop the variable
+# once the published stage 0 is 0.9.4 or later.
+export PEPC_NO_COMPILATION_UNITS=1
 "$stage0/pep-build$exe" -O tools/pep-package/main.pep \
   -o "$pepc_build/pep-package$exe" --build "$pepc_build/pep-package-build"
 for project in tools/compiler tools/pep-lsp; do
@@ -264,6 +269,7 @@ done
 "$stage0/pep-build$exe" -O tools/compiler/main.pep \
   -o "$pepc_build/pepc-stage1$exe" --build "$pepc_build/stage1" "${llvm_link[@]}"
 [ "$target" = windows-x64 ] && cp "$stage/bin/LLVM-C.dll" "$pepc_build/"
+unset PEPC_NO_COMPILATION_UNITS
 "$pepc_build/pepc-stage1$exe" -O --lto=full tools/compiler/main.pep \
   -o "$stage/bin/pep-build$exe" --build "$pepc_build/stage2" --no-cache "${llvm_link[@]}"
 "$stage/bin/pep-build$exe" --version

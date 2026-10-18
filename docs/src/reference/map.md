@@ -17,15 +17,18 @@ Returns a negative number when `a` sorts before `b`, zero when they are
 equal, and a positive number when `a` sorts after `b`: the order `Map` and
 `Set` keep their keys in.
 
-The generic version compares with `<`, so it works for every number type,
-`char`, and any struct that declares a `<` operator. Two values neither of
-which is `<` the other are equal keys. `String` compares by content through
-the concrete `compare<String>` override.
+The generic version compares with `<`, so it works for every
+`Comparable` type (see `Comparable`), every integer type, `char`, and any
+struct that declares a `<` operator. Two values neither of which is `<`
+the other are equal keys. `String`, `float` and `double` go through
+concrete overrides that call their `compare`, so a NaN key sorts after
+every number instead of breaking the order.
 
-A struct with no `<` operator overrides this function for itself to be a
-`Map` key or `Set` element: `compare<Point>(a: Point, b: Point): int`. The
-order must be a strict weak order (consistent across calls), or the tree
-loses track of its keys.
+A struct with no `<` operator declares `Comparable`, or overrides this
+function for itself, to be a `Map` key or `Set` element:
+`compare<Point>(a: Point, b: Point): int`. The order must be a strict
+weak order (consistent across calls), or the tree loses track of its
+keys.
 
 **Type parameters**
 - `T` — the type of the values to compare
@@ -66,6 +69,38 @@ keys in: the same as `a.compare(b)`.
 ```pepper
 assert(compare<String>("apple", "pear") < 0, "apple sorts first");
 ```
+
+## compare
+
+```pepper
+compare<float>(a: float, b: float): int
+```
+
+Compares two `float`s in `float.compare`'s total order: by value, with
+NaN after every number.
+
+**Parameters**
+- `a` — the first value
+- `b` — the second value
+
+**Returns**
+- -1, 0 or 1 as `a` sorts before, with or after `b`
+
+## compare
+
+```pepper
+compare<double>(a: double, b: double): int
+```
+
+Compares two `double`s in `double.compare`'s total order: by value, with
+NaN after every number.
+
+**Parameters**
+- `a` — the first value
+- `b` — the second value
+
+**Returns**
+- -1, 0 or 1 as `a` sorts before, with or after `b`
 
 ## Map
 
