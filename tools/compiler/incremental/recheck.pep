@@ -36,15 +36,20 @@ export struct RecheckBase {
     }
 }
 
-## The hash of what compilation unit `unit` is checked on: the records of the
-## compilation units it reads, as they are. A record is a delta on them.
+## The hash of what compilation unit `unit` is checked on: the build's key
+## base (the compiler, the target and the build options) and the records of
+## the compilation units it reads, as they are. A record is a delta on them.
 ##
 ## @param records each compilation unit's record, by index: those `unit` reads set
 ## @param unit the compilation unit
 ## @returns the hash, as hex
 export inputs_digest(records: HashMap<ulong, u8[]>, unit: CompilationUnit): String {
     var hasher = digest.Blake3();
-    hasher.update("pepper recheck inputs 1\n");
+    hasher.update("pepper recheck inputs 2\n");
+    # A record checked for another target has that target's `[Target]`
+    # declarations filtered in, not this one's.
+    hasher.update(unit.base);
+    hasher.update("\n");
     for (var d in unit.reads) {
         var bytes = records.try_get(d);
         if (!bytes.is_value()) {

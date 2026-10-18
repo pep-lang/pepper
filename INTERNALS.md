@@ -3085,7 +3085,9 @@ the cache has one. Otherwise it checks the compilation unit:
 
 **Re-checking only the changed bodies.** Each record keeps beside it what
 it was checked on and its files' text (`<key>.rec.src`, `recheck_source`):
-a hash of the records of the compilation units it reads (`inputs_digest`),
+a hash of the build's key base (the compiler, the target and the build
+options, so a record never seeds a build for another target) and of the
+records of the compilation units it reads (`inputs_digest`),
 then each file's namespace, size and text. When a compilation unit has no
 record under its key, `check_unit` looks for its newest record with the
 same inputs, no warning, and files that differ from the text kept only

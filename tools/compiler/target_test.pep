@@ -5,6 +5,7 @@
 
 import compiler.codegen;
 import compiler.driver;
+import compiler.incremental;
 import [Directory, File, Path] from io;
 import compiler.link;
 import compiler.sema;
@@ -290,4 +291,33 @@ _attributes_of(ir: String, name: String): String {
         }
     }
     return " ".join(found);
+}
+
+# A build for another platform after a native one, in one cache, checks the
+# runtime again for its own target (#994): the native build's record of the
+# runtime has the other platform's `[Target(...)]` declarations filtered out
+# (`_debug_sys_symbolize` is defined once for each OS).
+[Test]
+checks_the_runtime_again_for_another_target_in_one_cache() {
+    var folder = TempFolder("target_cache");
+    var file = folder.path.join(Path("main.pep"));
+    File.write_text(file, "main(): int {\n    return 0;\n}\n");
+    var other = link.Target().os == "windows" ? "aarch64-unknown-linux-gnu" : "x86_64-pc-windows-msvc";
+    var build = (target: link.Target) => {
+        var setup = link.Setup();
+        setup.target = target;
+        var program = link.load_program(file, setup);
+        expect_true(program.is_ok());
+        var options = driver.BuildOptions(folder.path.join(Path("main")), folder.path.join(Path("build")));
+        options.cache = Optional<incremental.Cache>.Value(incremental.Cache(folder.path.join(Path("cache"))));
+        options.in_process = true;
+        return driver.build(program.value(), options);
+    };
+    expect_true(build(link.Target()).is_ok());
+    var built = build(_parse(other));
+    if (built.is_err()) {
+        print(built.error());
+        # Checked and compiled; only the link needs the target's system root.
+        expect_true(built.error().contains($"note: linking for '{other}'"));
+    }
 }

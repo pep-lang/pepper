@@ -38,6 +38,9 @@ export struct CompilationUnit {
     var files: ulong[] = Array<ulong>();
     ## Its files' hash: their names, namespaces and texts.
     var files_key: String = "";
+    ## What every key of the build starts from (`Keys`' base): the compiler,
+    ## the target and the build options.
+    var base: String = "";
     ## The compilation units it reads, directly or through others, as
     ## indices into the compilation units, in order: the runtime, its files'
     ## imports and the extensions they see.
@@ -257,6 +260,7 @@ export compilation_units(program: link.Program, base: String, root_last: bool = 
         out[k].reads.sort((a, b) => a < b ? -1 : (a > b ? 1 : 0));
     }
     for (var unit in out) {
+        unit.base = base;
         unit.files.sort((a, b) => _compare(program.files[a].namespace, program.files[b].namespace));
         var hasher = digest.Blake3();
         hasher.update(base);
