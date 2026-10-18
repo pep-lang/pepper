@@ -16,7 +16,7 @@ is a `u8[]`; `to_hex` writes it as text.
   key derivation and output of any length
 - [HMAC](digest-hmac.md): `Hmac`, `hmac_sha256`, `hmac_sha1`, and
   `equal_constant_time` to check a MAC
-- [Hexadecimal](digest-hex.md): `to_hex`
+- [Hexadecimal](digest-hex.md): `to_hex` and `from_hex`
 
 The implementations are portable Pepper with no link dependency, unless
 the program is built with `-D USE_LIBCRYPTO`: then SHA-256 and SHA-1 call

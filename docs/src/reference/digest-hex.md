@@ -2,7 +2,7 @@
 
 # Hexadecimal
 
-Hexadecimal text for digests.
+Hexadecimal text for digests, and back.
 
 Source: `runtime/digest/hex.pep`
 
@@ -26,4 +26,29 @@ way checksums and git object ids are usually written.
 import digest;
 
 assert(digest.to_hex([0, 15, 255]) == "000fff", "two digits per byte");
+```
+
+## from_hex
+
+```pepper
+from_hex(text: String): Result<u8[]>
+```
+
+Returns the bytes that hexadecimal `text` stands for, two digits per
+byte, the reverse of `to_hex`. Upper- and lowercase digits are both
+accepted.
+
+**Parameters**
+- `text` — hexadecimal text, such as a checksum
+
+**Returns**
+- the bytes, or an error when `text` has an odd length or a character that is not a hexadecimal digit
+
+**Example**
+```pepper
+import digest;
+
+var bytes = digest.from_hex("000fFF").value();
+assert(bytes.count == 3 && bytes[2] == 255, "two digits per byte");
+assert(digest.from_hex("abc").is_err(), "an odd length");
 ```

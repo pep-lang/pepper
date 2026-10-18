@@ -49,6 +49,7 @@
 # name (UTF-16, client only) at 96.
 
 import async;
+import base64;
 import io;
 
 # ── C functions (secur32, crypt32, ncrypt, kernel32) ─────────────────────────
@@ -158,9 +159,6 @@ extern int CertCreateCertificateChainEngine(void* config, void* engine);
 [Target(OS(Windows))]
 [Link("crypt32")]
 extern void CertFreeCertificateChainEngine(void* engine);
-[Target(OS(Windows))]
-[Link("crypt32")]
-extern int CryptStringToBinaryA(char* text, uint length, uint flags, void* binary, void* size, void* skip, void* used);
 
 [Target(OS(Windows))]
 [Link("ncrypt")]
@@ -373,19 +371,12 @@ _tls_pem_blocks(text: String, label: String): Array<u8[]> {
             return blocks;
         }
         var block_end = stop as ulong + end.size;
-        var block = text.substr_bytes(start as ulong, block_end - start as ulong);
-        __ptr<uint> size = _pep_malloc(4);
-        size[0] = 0;
-        # CRYPT_STRING_BASE64HEADER
-        if (CryptStringToBinaryA(block.c_str(), block.size as uint, 0, __null, size, __null, __null) != 0) {
-            var der = Array<u8>(size[0] as ulong);
-            der.reserve(size[0] as ulong);
-            if (CryptStringToBinaryA(block.c_str(), block.size as uint, 0, der._data, size, __null, __null) != 0) {
-                der._size = size[0] as ulong;
-                blocks.append(der);
-            }
+        var body_start = start as ulong + begin.size;
+        var body = text.substr_bytes(body_start, stop as ulong - body_start);
+        var der = base64.decode(body.replace("\r", "").replace("\n", "").replace(" ", "").replace("\t", ""));
+        if (der.is_ok()) {
+            blocks.append(der.value());
         }
-        _pep_free(size);
         from = block_end;
     }
     return blocks;

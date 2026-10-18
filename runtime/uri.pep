@@ -178,6 +178,74 @@ export struct Uri {
         return Result<String>.ok(String._from_bytes(decoded));
     }
 
+    ## Returns `text` with each byte outside RFC 3986's unreserved set
+    ## (`A-Z a-z 0-9 - . _ ~`) written as a percent-escape, so the result is
+    ## safe as one path segment or one query value: `/`, `?`, `&`, `=` and
+    ## `%` are escaped too. `decode` reverses it.
+    ##
+    ## @param text the component to escape, such as a file name or a search term
+    ## @returns the escaped text, with uppercase hexadecimal digits
+    ## @example
+    ##     assert(Uri.encode("a b/c&d") == "a%20b%2Fc%26d", "escaped");
+    ##     assert(Uri.encode("café") == "caf%C3%A9", "UTF-8 bytes");
+    static encode(text: String): String {
+        return _uri_escape(text, false);
+    }
+
+    ## Returns `pairs` as an `application/x-www-form-urlencoded` body or
+    ## query, the way an HTML form sends them: `name=value` joined with
+    ## `&`, each side escaped like `encode` except that a space is `+`.
+    ##
+    ## @param pairs the names and values, in order; a name may repeat
+    ## @returns the encoded text, such as `q=pepper+lang&page=2`
+    ## @example
+    ##     assert(Uri.encode_form([("q", "pepper lang"), ("page", "2")]) == "q=pepper+lang&page=2", "a query");
+    static encode_form(pairs: Array<(String, String)>): String {
+        var text = StringBuilder();
+        for (var pair in pairs) {
+            if (text.size > 0) {
+                text.append("&");
+            }
+            text.append(_uri_escape(pair.0, true));
+            text.append("=");
+            text.append(_uri_escape(pair.1, true));
+        }
+        return text.to_string();
+    }
+
+    ## Returns the names and values of an `application/x-www-form-urlencoded`
+    ## body or query, such as a request's `query`, in order. Each `+` is a
+    ## space and percent-escapes are decoded; a pair with no `=` has an empty
+    ## value, and empty pairs (`a=1&&b=2`) are skipped.
+    ##
+    ## @param text the encoded pairs, such as `q=pepper+lang&page=2`
+    ## @returns the decoded pairs, or an error when a `%` is not followed by
+    ##   two hexadecimal digits
+    ## @example
+    ##     var pairs = Uri.decode_form("q=pepper+lang&page=2").value();
+    ##     assert(pairs.count == 2 && pairs[0].1 == "pepper lang", "decoded");
+    static decode_form(text: String): Result<Array<(String, String)>> {
+        var pairs = Array<(String, String)>();
+        for (var piece in text.split("&")) {
+            if (piece.size == 0) {
+                continue;
+            }
+            var equals = piece.find("=");
+            var name = equals < 0 ? piece : piece.substr_bytes(0, equals as ulong);
+            var value = equals < 0 ? "" : piece.substr_bytes(equals as ulong + 1, piece.size - equals as ulong - 1);
+            var decoded_name = Uri.decode(name.replace("+", " "));
+            if (decoded_name.is_err()) {
+                return Result<Array<(String, String)>>.err(decoded_name.error());
+            }
+            var decoded_value = Uri.decode(value.replace("+", " "));
+            if (decoded_value.is_err()) {
+                return Result<Array<(String, String)>>.err(decoded_value.error());
+            }
+            pairs.append((decoded_name.value(), decoded_value.value()));
+        }
+        return Result<Array<(String, String)>>.ok(pairs);
+    }
+
     ## Returns whether this URI has a scheme (an absolute URI rather than a
     ## relative reference).
     ##
@@ -447,4 +515,44 @@ _uri_parse_authority(uri: Uri, authority: String): String {
         uri.port = Optional<u16>.Value(port as u16);
     }
     return "";
+}
+
+# `text` with each byte outside the unreserved set percent-escaped; a space
+# is `+` when `form` is true.
+_uri_escape(text: String, form: bool): String {
+    var data = text.bytes();
+    var out = Array<u8>(data.count);
+    for (var c in data) {
+        if (_uri_unreserved(c as int)) {
+            out.append(c);
+            continue;
+        }
+        if (form && c == ' ') {
+            out.append('+' as u8);
+            continue;
+        }
+        out.append('%' as u8);
+        out.append(_uri_upper_hex((c as uint) >> 4));
+        out.append(_uri_upper_hex((c as uint) & 15));
+    }
+    return String._from_bytes(out);
+}
+
+# Whether `c` is in RFC 3986's unreserved set: letters, digits, `-._~`.
+_uri_unreserved(c: int): bool {
+    return (c >= 'A' && c <= 'Z')
+        || (c >= 'a' && c <= 'z')
+        || (c >= '0' && c <= '9')
+        || c == '-'
+        || c == '.'
+        || c == '_'
+        || c == '~';
+}
+
+# The uppercase hexadecimal digit for `value` (0-15).
+_uri_upper_hex(value: uint): u8 {
+    if (value < 10) {
+        return ('0' + value) as u8;
+    }
+    return ('A' + value - 10) as u8;
 }

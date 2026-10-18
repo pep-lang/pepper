@@ -12,7 +12,7 @@
 ##   key derivation and output of any length
 ## - [HMAC](digest-hmac.md): `Hmac`, `hmac_sha256`, `hmac_sha1`, and
 ##   `equal_constant_time` to check a MAC
-## - [Hexadecimal](digest-hex.md): `to_hex`
+## - [Hexadecimal](digest-hex.md): `to_hex` and `from_hex`
 ##
 ## The implementations are portable Pepper with no link dependency, unless
 ## the program is built with `-D USE_LIBCRYPTO`: then SHA-256 and SHA-1 call
@@ -48,6 +48,7 @@ export sha1;
 export Blake3;
 export blake3;
 export to_hex;
+export from_hex;
 export Hmac;
 export hmac_sha256;
 export hmac_sha1;

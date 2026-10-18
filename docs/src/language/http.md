@@ -40,7 +40,10 @@ following RFC 3986: an absolute URI with any scheme (`https:`, `mailto:`,
 `file:`) or a relative reference such as a request target. It splits the
 text into `scheme`, `user_info`, `host`, `port`, `path`, `query` and
 `fragment`; the parts that can be missing are optionals. Components keep
-their percent-escapes, and `Uri.decode` turns one into text.
+their percent-escapes, and `Uri.decode` turns one into text; `Uri.encode`
+escapes text for a path segment or query value, and `Uri.encode_form` and
+`Uri.decode_form` write and read form data (see
+[Encodings and UUIDs](encodings.md)).
 `base.resolve(reference)` resolves a relative reference against a base URI,
 as a browser resolves a link (RFC 3986 section 5.2).
 

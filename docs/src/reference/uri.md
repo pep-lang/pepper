@@ -162,6 +162,73 @@ assert(Uri.decode("caf%C3%A9%21").value() == "café!", "decoded");
 assert(Uri.decode("100%").is_err(), "a lone '%'");
 ```
 
+#### encode
+
+```pepper
+static encode(text: String): String
+```
+
+Returns `text` with each byte outside RFC 3986's unreserved set
+(`A-Z a-z 0-9 - . _ ~`) written as a percent-escape, so the result is
+safe as one path segment or one query value: `/`, `?`, `&`, `=` and
+`%` are escaped too. `decode` reverses it.
+
+**Parameters**
+- `text` — the component to escape, such as a file name or a search term
+
+**Returns**
+- the escaped text, with uppercase hexadecimal digits
+
+**Example**
+```pepper
+assert(Uri.encode("a b/c&d") == "a%20b%2Fc%26d", "escaped");
+assert(Uri.encode("café") == "caf%C3%A9", "UTF-8 bytes");
+```
+
+#### encode_form
+
+```pepper
+static encode_form(pairs: Array<(String, String)>): String
+```
+
+Returns `pairs` as an `application/x-www-form-urlencoded` body or
+query, the way an HTML form sends them: `name=value` joined with
+`&`, each side escaped like `encode` except that a space is `+`.
+
+**Parameters**
+- `pairs` — the names and values, in order; a name may repeat
+
+**Returns**
+- the encoded text, such as `q=pepper+lang&page=2`
+
+**Example**
+```pepper
+assert(Uri.encode_form([("q", "pepper lang"), ("page", "2")]) == "q=pepper+lang&page=2", "a query");
+```
+
+#### decode_form
+
+```pepper
+static decode_form(text: String): Result<Array<(String, String)>>
+```
+
+Returns the names and values of an `application/x-www-form-urlencoded`
+body or query, such as a request's `query`, in order. Each `+` is a
+space and percent-escapes are decoded; a pair with no `=` has an empty
+value, and empty pairs (`a=1&&b=2`) are skipped.
+
+**Parameters**
+- `text` — the encoded pairs, such as `q=pepper+lang&page=2`
+
+**Returns**
+- the decoded pairs, or an error when a `%` is not followed by two hexadecimal digits
+
+**Example**
+```pepper
+var pairs = Uri.decode_form("q=pepper+lang&page=2").value();
+assert(pairs.count == 2 && pairs[0].1 == "pepper lang", "decoded");
+```
+
 ### Methods
 
 #### is_absolute

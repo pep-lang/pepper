@@ -29,7 +29,8 @@ Each hash has a one-shot function and a hasher type:
   input; `reset` discards the input so far.
 - A digest is a `u8[]`. `digest.to_hex(bytes)` writes it as lowercase
   hexadecimal, the way checksums are usually shown, and each hasher's
-  `finish_hex()` does both steps.
+  `finish_hex()` does both steps; `digest.from_hex(text)` reads hexadecimal
+  back into bytes.
 - An array literal passed straight to `update` is ambiguous between its
   `u8[]` and `String` overloads; give it a type first
   (`u8[] nul = [0]; hasher.update(nul);`).

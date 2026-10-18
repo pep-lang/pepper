@@ -450,3 +450,15 @@ blake3_modes_match_official_vectors() {
     hasher.update("abc");
     expect_equal(digest.to_hex(hasher.finish(5)), "6437b3ac38");
 }
+
+[Test]
+from_hex_reverses_to_hex() {
+    var bytes = digest.from_hex("00ff7Fa0").value();
+    expect_equal(bytes.count, 4 as ulong);
+    expect_equal(bytes[1], 255 as u8);
+    expect_equal(bytes[2], 0x7f as u8);
+    expect_equal(digest.to_hex(bytes), "00ff7fa0");
+    expect_equal(digest.from_hex("").value().count, 0 as ulong);
+    expect_true(digest.from_hex("abc").is_err());
+    expect_true(digest.from_hex("zz").is_err());
+}

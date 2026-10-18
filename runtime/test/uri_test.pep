@@ -98,6 +98,32 @@ decodes_percent_escapes() {
     expect_equal(Uri.decode("").value(), "");
 }
 
+[Test]
+encodes_components() {
+    expect_equal(Uri.encode("AZaz09-._~"), "AZaz09-._~");
+    expect_equal(Uri.encode("a b/c?d&e=f%g+h"), "a%20b%2Fc%3Fd%26e%3Df%25g%2Bh");
+    expect_equal(Uri.encode("caf\u{E9}"), "caf%C3%A9");
+    expect_equal(Uri.encode(""), "");
+    expect_equal(Uri.decode(Uri.encode("a b/\u{E9}%")).value(), "a b/\u{E9}%");
+}
+
+[Test]
+encodes_and_decodes_forms() {
+    expect_equal(Uri.encode_form([("q", "pepper lang"), ("a&b", "1+1=2")]), "q=pepper+lang&a%26b=1%2B1%3D2");
+    expect_equal(Uri.encode_form(Array<(String, String)>()), "");
+    var pairs = Uri.decode_form("q=pepper+lang&a%26b=1%2B1%3D2&&flag&empty=").value();
+    expect_equal(pairs.count, 4 as ulong);
+    expect_equal(pairs[0].0, "q");
+    expect_equal(pairs[0].1, "pepper lang");
+    expect_equal(pairs[1].0, "a&b");
+    expect_equal(pairs[1].1, "1+1=2");
+    expect_equal(pairs[2].0, "flag");
+    expect_equal(pairs[2].1, "");
+    expect_equal(pairs[3].0, "empty");
+    expect_equal(Uri.decode_form("").value().count, 0 as ulong);
+    expect_true(Uri.decode_form("a=%zz").is_err());
+}
+
 # RFC 3986 section 5.4: each reference resolved against the RFC's base.
 [Test]
 resolves_references_as_rfc_3986_does() {

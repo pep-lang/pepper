@@ -140,6 +140,8 @@ export pages(): Array<(String, String)> {
         ("random/module.pep", "The random module"),
         ("random/entropy.pep", "Entropy"),
         ("random/generator.pep", "Generators"),
+        ("base64/module.pep", "The base64 module"),
+        ("uuid/module.pep", "The uuid module"),
         ("cli/module.pep", "The cli module"),
         ("cli/parser.pep", "Parser"),
         ("cli/options.pep", "Options"),
