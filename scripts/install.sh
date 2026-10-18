@@ -6,24 +6,17 @@
 #                 [--yes] [--no-modify-path] [--no-prerequisites]
 #   sh install.sh --uninstall [--prefix <dir>]
 #
-# It downloads `pepper-<version>-<target>.tar.gz` for this machine (the
-# newest release that has one, or --version's), checks it against its
-# `.sha256`, unpacks it into ~/.pepper/toolchains/<version>, makes it the
-# default, puts the entry point `pepper` and `pep-install` in ~/.pepper/bin,
-# and adds ~/.pepper/bin to the PATH in the shell's startup files. Other
-# toolchains stay installed (`pepper install` manages them), and an install
-# from before toolchains (bin/ and runtime/ in ~/.pepper) moves into
-# toolchains/ first. A release from before toolchains, which has no
-# pep-install, installs into ~/.pepper itself as it used to, unless the
-# home already holds toolchains. --uninstall removes the home and the PATH
-# lines.
-#
-# Linking a program needs a clang and the C library's development files.
-# When there is no clang it offers to install one with the system's
-# package manager (apt, dnf, yum, pacman or zypper; on macOS, Xcode's
-# command line tools), asking first unless --yes is given. Last, it builds
-# and runs a small program to show the install works, and fails if it
-# cannot.
+# It only bootstraps: it downloads this machine's toolchain archive,
+# `pepper-<version>-<target>.tar.gz`, and the installer archive beside it,
+# `pepper-install-<version>-<target>.tar.gz`, from the newest release that
+# has both (or --version's), checks the installer against its `.sha256`,
+# unpacks its `pep-install` into a temporary folder and runs
+# `pep-install setup --archive <toolchain archive>` with the options given.
+# pep-install checks the toolchain archive, installs it into
+# ~/.pepper/toolchains/<version>, makes it the default, puts `pepper` and
+# `pep-install` in ~/.pepper/bin, adds that to the PATH, offers to install
+# what linking needs, and builds a program to check (see
+# docs/src/tools/pep-install.md). --uninstall runs `pep-install uninstall`.
 #
 # Environment:
 #   PEPPER_HOME             where to install (as --prefix); default ~/.pepper
@@ -35,7 +28,6 @@
 set -eu
 
 REPO="justinboswell/pepper"
-MARKER="# Added by the Pepper installer"
 
 say() { printf 'pepper-install: %s\n' "$*"; }
 warn() { printf 'pepper-install: warning: %s\n' "$*" >&2; }
@@ -51,8 +43,9 @@ usage: install.sh [--version <x.y.z> | --archive <file>] [--prefix <dir>]
 
 Options:
   --version <x.y.z>   install this release, or a prerelease such as 0.4.0-dev (default: the newest
-                      release with an archive for this machine)
-  --archive <file>    install this downloaded archive instead, checked against <file>.sha256
+                      release with archives for this machine)
+  --archive <file>    install this downloaded archive instead, checked against <file>.sha256, with
+                      the installer archive pepper-install-<version>-<target>.tar.gz beside it
   --prefix <dir>      install into <dir> (default: $PEPPER_HOME, else ~/.pepper)
   -y, --yes           install missing prerequisites without asking
   --no-modify-path    leave the shell startup files alone
@@ -60,32 +53,6 @@ Options:
   --uninstall         remove the install and the PATH lines it added
   -h, --help          show this help
 EOF
-}
-
-# Asks a yes/no question on the terminal (stdin is the script when piped
-# into sh). Yes with --yes; no when there is no terminal to ask on.
-ask() {
-  [ "$assume_yes" = 1 ] && return 0
-  if ! { : </dev/tty; } 2>/dev/null; then
-    return 1
-  fi
-  printf 'pepper-install: %s [Y/n] ' "$1" >/dev/tty
-  read -r answer </dev/tty || return 1
-  case "$answer" in
-    ''|y|Y|yes|Yes|YES) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-# Runs a command as root: directly when already root, else through sudo.
-as_root() {
-  if [ "$(id -u)" = 0 ]; then
-    "$@"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo "$@"
-  else
-    die "'$*' needs root, and there is no sudo"
-  fi
 }
 
 token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
@@ -137,66 +104,64 @@ detect_target() {
   echo "$os-$arch"
 }
 
-# Finds the release to install and its two assets. Lists the releases
-# (newest first; the repository also has `vsix-*` and `llvm-*` ones) and
-# takes the first `v<x.y.z>` one, or --version's, that has this target's
-# archive. A prerelease such as `v0.4.0-dev` is taken only when --version
-# names it. Sets tag, archive, archive_url and checksum_url.
-find_release() {
+# Lists the releases (newest first; the repository also has `vsix-*` and
+# `llvm-*` ones) as one line per asset in $work/assets.txt:
+# <tag> <API url> <download link>.
+list_assets() {
   releases="$work/releases.json"
   if ! fetch "https://api.github.com/repos/$REPO/releases?per_page=100" "$releases"; then
     [ -n "$token" ] || warn "while the repository is private, set GITHUB_TOKEN to a token that can read it"
     die "cannot list the releases of $REPO"
   fi
-  # One line per asset: <tag> <API url> <download link>.
   awk '
     /"tag_name":/ { gsub(/.*"tag_name": *"|".*/, ""); tag = $0 }
     /"url": *"[^"]*\/releases\/assets\// { gsub(/.*"url": *"|".*/, ""); api = $0 }
     /"browser_download_url":/ { gsub(/.*"browser_download_url": *"|".*/, ""); print tag, api, $0 }
   ' "$releases" > "$work/assets.txt"
-  tag=""
+}
+
+# Where to download the asset $2 of the release $1 from, or nothing when it
+# has none: its API url with a token (a private repository's download links
+# need one), else its download link.
+asset_url() {
   while read -r candidate api url; do
+    if [ "$candidate" = "$1" ] && [ "${url##*/}" = "$2" ]; then
+      if [ -n "$token" ]; then echo "$api"; else echo "$url"; fi
+      return
+    fi
+  done < "$work/assets.txt"
+}
+
+# Finds the release to install: the first `v<x.y.z>` one, or --version's,
+# with this target's toolchain and installer archives. A prerelease such
+# as `v0.4.0-dev` is taken only when --version names it. Sets tag.
+find_release() {
+  tag=""
+  for candidate in $(cut -d' ' -f1 "$work/assets.txt" | uniq); do
     case "$candidate" in
       v[0-9]*.[0-9]*.[0-9]*) ;;
       *) continue ;;
     esac
-    # A prerelease (`v0.4.0-dev`, the build of main) only when named.
     case "$candidate" in
       *-*) [ "$candidate" = "v$wanted_version" ] || continue ;;
     esac
     [ -z "$wanted_version" ] || [ "$candidate" = "v$wanted_version" ] || continue
-    case "$url" in
-      */"pepper-${candidate#v}-$target.tar.gz")
-        tag="$candidate"
-        archive="pepper-${candidate#v}-$target.tar.gz"
-        archive_url=$(asset_url "$api" "$url")
-        break
-        ;;
-    esac
-  done < "$work/assets.txt"
-  if [ -z "$tag" ]; then
-    [ -z "$wanted_version" ] || die "release v$wanted_version has no pepper-$wanted_version-$target.tar.gz"
-    die "no release of $REPO has a prebuilt Pepper for $target yet"
-  fi
-  checksum_url=""
-  while read -r candidate api url; do
-    if [ "$candidate" = "$tag" ] && [ "${url##*/}" = "$archive.sha256" ]; then
-      checksum_url=$(asset_url "$api" "$url")
-      break
-    fi
-  done < "$work/assets.txt"
-  [ -n "$checksum_url" ] || die "release $tag has no $archive.sha256 to check the download against"
+    [ -n "$(asset_url "$candidate" "pepper-${candidate#v}-$target.tar.gz")" ] || continue
+    [ -n "$(asset_url "$candidate" "pepper-install-${candidate#v}-$target.tar.gz")" ] || continue
+    tag="$candidate"
+    return
+  done
+  [ -z "$wanted_version" ] || die "release v$wanted_version has no pepper-$wanted_version-$target.tar.gz and pepper-install-$wanted_version-$target.tar.gz"
+  die "no release of $REPO has a prebuilt Pepper and its installer for $target yet"
 }
 
-# Where to download an asset from: its API url with a token (a private
-# repository's download links need one), else its download link.
-asset_url() {
-  if [ -n "$token" ]; then echo "$1"; else echo "$2"; fi
-}
-
-# Downloads a release asset from asset_url's url.
+# Downloads the asset $1 of release $tag, and its .sha256, into $work.
 fetch_asset() {
-  fetch "$1" "$2" application/octet-stream
+  for name in "$1" "$1.sha256"; do
+    url=$(asset_url "$tag" "$name")
+    [ -n "$url" ] || die "release $tag has no $name"
+    fetch "$url" "$work/$name" application/octet-stream || die "cannot download $name"
+  done
 }
 
 sha256_of() {
@@ -207,245 +172,46 @@ sha256_of() {
   fi
 }
 
-# A clang to link with, where pep-build looks for one (see
-# tools/compiler/driver/linker.pep): on the PATH, or in an LLVM install
-# folder off it.
-have_clang() {
-  command -v clang >/dev/null 2>&1 && return 0
-  for candidate in /usr/lib/llvm-*/bin/clang /opt/homebrew/opt/llvm/bin/clang /usr/local/opt/llvm/bin/clang; do
-    [ -x "$candidate" ] && return 0
-  done
-  for directory in $(echo "$PATH" | tr ':' ' '); do
-    for candidate in "$directory"/clang-[0-9]*; do
-      case "$candidate" in
-        */clang-[0-9]|*/clang-[0-9][0-9]) [ -x "$candidate" ] && return 0 ;;
-      esac
-    done
-  done
-  return 1
-}
-
-# The command that installs clang and the C library's development files
-# with this Linux's package manager, or nothing when it has none we know.
-linux_toolchain_command() {
-  if command -v apt-get >/dev/null 2>&1; then echo "apt-get install -y clang build-essential"
-  elif command -v dnf >/dev/null 2>&1; then echo "dnf install -y clang gcc glibc-devel"
-  elif command -v yum >/dev/null 2>&1; then echo "yum install -y clang gcc glibc-devel"
-  elif command -v pacman >/dev/null 2>&1; then echo "pacman -S --needed --noconfirm clang gcc"
-  elif command -v zypper >/dev/null 2>&1; then echo "zypper install -y clang gcc glibc-devel"
-  fi
-}
-
-# Makes sure programs can be linked: a clang, and on macOS Xcode's command
-# line tools (the SDK and linker). Offers to install what is missing.
-check_toolchain() {
-  case "$target" in
-    macos-*)
-      if xcode-select -p >/dev/null 2>&1; then
-        return 0
-      fi
-      say "Linking programs needs Xcode's command line tools, which are not installed."
-      if ask "Install them now (xcode-select --install opens an installer window)?"; then
-        xcode-select --install || true
-        warn "finish the command line tools' installer, then run 'pepper build' as usual"
-      else
-        warn "install them before building a program: xcode-select --install"
-      fi
-      ;;
-    linux-*)
-      if have_clang; then
-        return 0
-      fi
-      command=$(linux_toolchain_command)
-      say "Linking programs needs clang, which is not installed."
-      if [ -z "$command" ]; then
-        warn "install clang and your C library's development files with your package manager"
-      elif ask "Install it now with 'sudo $command'?"; then
-        # shellcheck disable=SC2086
-        as_root $command || warn "'$command' failed; install clang yourself"
-      else
-        warn "install it before building a program: sudo $command"
-      fi
-      ;;
-  esac
-}
-
-# OpenSSL 3, which the `tls` module loads when a program uses it. Only a
-# note: nothing else needs it.
-check_openssl() {
-  case "$target" in
-    linux-*)
-      if { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null; } | grep -q 'libssl\.so\.3'; then
-        return 0
-      fi
-      say "note: programs that use the 'tls' module need OpenSSL 3 (libssl.so.3), which was not found; install your distribution's OpenSSL 3 package to use it"
-      ;;
-    macos-*)
-      for candidate in /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib /usr/local/opt/openssl@3/lib/libssl.3.dylib /opt/local/lib/libssl.3.dylib; do
-        [ -f "$candidate" ] && return 0
-      done
-      if command -v brew >/dev/null 2>&1 && ask "Programs that use the 'tls' module need OpenSSL 3. Install it with 'brew install openssl@3'?"; then
-        brew install openssl@3 || warn "'brew install openssl@3' failed"
-      else
-        say "note: programs that use the 'tls' module need OpenSSL 3: brew install openssl@3"
-      fi
-      ;;
-  esac
-}
-
-# The startup files that set the PATH for this user's shells.
-profile_files() {
-  echo "$HOME/.profile"
-  [ -f "$HOME/.bashrc" ] && echo "$HOME/.bashrc"
-  [ -f "$HOME/.bash_profile" ] && echo "$HOME/.bash_profile"
-  if [ -f "$HOME/.zshrc" ] || [ "$(basename "${SHELL:-}")" = zsh ]; then
-    echo "$HOME/.zshrc"
-  fi
-}
-
-fish_file() {
-  echo "${XDG_CONFIG_HOME:-$HOME/.config}/fish/conf.d/pepper.fish"
-}
-
-add_to_path() {
-  for file in $(profile_files); do
-    if [ -f "$file" ] && grep -qF "$MARKER" "$file"; then
-      continue
-    fi
-    printf '\n%s\nexport PATH="%s/bin:$PATH"\n' "$MARKER" "$prefix" >> "$file"
-    say "added $prefix/bin to the PATH in $file"
-  done
-  if command -v fish >/dev/null 2>&1; then
-    file=$(fish_file)
-    mkdir -p "$(dirname "$file")"
-    printf '%s\nfish_add_path "%s/bin"\n' "$MARKER" "$prefix" > "$file"
-    say "added $prefix/bin to the PATH in $file"
-  fi
-}
-
-# Removes the marker line and the line after it from each startup file.
-remove_from_path() {
-  for file in $(profile_files); do
-    [ -f "$file" ] && grep -qF "$MARKER" "$file" || continue
-    awk -v marker="$MARKER" '
-      $0 == marker { skip = 1; next }
-      skip { skip = 0; next }
-      { print }
-    ' "$file" > "$file.pepper-tmp" && mv "$file.pepper-tmp" "$file"
-    say "removed the PATH line from $file"
-  done
-  file=$(fish_file)
-  if [ -f "$file" ] && grep -qF "$MARKER" "$file"; then
-    rm -f "$file"
-    say "removed $file"
-  fi
-}
-
-uninstall() {
-  if [ -d "$prefix" ]; then
-    [ -f "$prefix/bin/pep-build" ] || [ -d "$prefix/toolchains" ] ||
-      die "$prefix does not look like a Pepper install (no bin/pep-build or toolchains); remove it yourself"
-    rm -rf "$prefix"
-    say "removed $prefix"
-  else
-    say "nothing installed at $prefix"
-  fi
-  remove_from_path
-}
-
-# Installs the unpacked toolchain as $prefix/toolchains/$version, beside
-# any others, and makes it the default; the home's bin holds the entry
-# point and pep-install, which run the toolchains (see pep-install). A
-# flat install from before toolchains moves into toolchains/ first.
-install_toolchain() {
-  # An archive named for no release (a `dev` build) is installed under
-  # the version its compiler reports, which pep-install can read.
-  case "$version" in
-    [0-9]*.[0-9]*.[0-9]*) ;;
-    *)
-      version=$("$unpacked/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\(-[0-9A-Za-z.]*\)\{0,1\}\)$/\1/p')
-      [ -n "$version" ] || die "cannot tell the version of $unpacked/bin/pep-build"
-      ;;
-  esac
-  migrate_flat
-  mkdir -p "$prefix/toolchains" "$prefix/bin"
-  rm -rf "$prefix/toolchains/$version"
-  mv "$unpacked" "$prefix/toolchains/$version"
-  # A release from before toolchains has no entry point that runs them;
-  # the home keeps its own.
-  if [ -f "$prefix/toolchains/$version/bin/pep-install" ]; then
-    for tool in pepper pep-install; do
-      cp "$prefix/toolchains/$version/bin/$tool" "$prefix/bin/$tool.new"
-      mv -f "$prefix/bin/$tool.new" "$prefix/bin/$tool"
-    done
-  fi
-  printf '%s\n' "$version" > "$prefix/default-toolchain"
-}
-
-# Moves an install from before toolchains (bin/pep-build and runtime/ in
-# $prefix itself) into toolchains/<its version>, so it stays installed.
-migrate_flat() {
-  [ -f "$prefix/bin/pep-build" ] || return 0
-  old_version=$("$prefix/bin/pep-build" --version 2>/dev/null | sed -n 's/^pep-build \([0-9][0-9.]*\(-[0-9A-Za-z.]*\)\{0,1\}\)$/\1/p')
-  if [ -z "$old_version" ] || [ -e "$prefix/toolchains/$old_version" ]; then
-    rm -rf "$prefix/bin" "$prefix/runtime" "$prefix/LICENSE.md"
-    return 0
-  fi
-  mkdir -p "$prefix/toolchains/$old_version"
-  for entry in bin runtime LICENSE.md; do
-    [ -e "$prefix/$entry" ] && mv "$prefix/$entry" "$prefix/toolchains/$old_version/"
-  done
-  say "moved the earlier install, Pepper $old_version, into $prefix/toolchains/$old_version"
-}
-
-# Installs a release from before toolchains, which has no pep-install, as
-# releases did then: bin/ and runtime/ in $prefix itself, replacing it.
-install_flat() {
-  rm -rf "$prefix/bin" "$prefix/runtime"
-  for entry in "$unpacked"/*; do
-    rm -rf "$prefix/$(basename "$entry")"
-    mv "$entry" "$prefix/"
-  done
-}
-
-# Builds and runs a program with the new install, from an empty folder.
-verify() {
-  mkdir -p "$work/hello"
-  printf 'main(): int {\n    print("Pepper is installed.");\n    return 0;\n}\n' > "$work/hello/hello.pep"
-  if (cd "$work/hello" && "$prefix/bin/pepper" build hello.pep -o hello && ./hello); then
-    return 0
-  fi
-  die "Pepper is installed in $prefix, but could not build a program; see the error above"
+# Checks the installer archive $1 against its .sha256 and unpacks its
+# pep-install into $work/installer.
+unpack_installer() {
+  [ -f "$1.sha256" ] || die "no $1.sha256 to check the installer against"
+  expected=$(cut -d' ' -f1 < "$1.sha256")
+  actual=$(sha256_of "$1")
+  [ "$expected" = "$actual" ] || die "$(basename "$1") does not match its checksum (expected $expected, got $actual)"
+  mkdir -p "$work/installer"
+  tar -xzf "$1" -C "$work/installer" pep-install
+  installer="$work/installer/pep-install"
 }
 
 main() {
   wanted_version=""
   prefix="${PEPPER_HOME:-$HOME/.pepper}"
-  assume_yes=0
-  modify_path=1
-  prerequisites=1
   local_archive=""
   action=install
+  setup_options=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --version) [ $# -ge 2 ] || die "--version needs a version"; wanted_version="${2#v}"; shift ;;
       --version=*) wanted_version="${1#--version=}"; wanted_version="${wanted_version#v}" ;;
       --prefix) [ $# -ge 2 ] || die "--prefix needs a folder"; prefix="$2"; shift ;;
       --prefix=*) prefix="${1#--prefix=}" ;;
-      -y|--yes) assume_yes=1 ;;
-      --no-modify-path) modify_path=0 ;;
+      -y|--yes) setup_options="$setup_options --yes" ;;
+      --no-modify-path) setup_options="$setup_options --no-modify-path" ;;
       --archive) [ $# -ge 2 ] || die "--archive needs a file"; local_archive="$2"; shift ;;
       --archive=*) local_archive="${1#--archive=}" ;;
-      --no-prerequisites) prerequisites=0 ;;
+      --no-prerequisites) setup_options="$setup_options --no-prerequisites" ;;
       --uninstall) action=uninstall ;;
       -h|--help) usage; exit 0 ;;
       *) usage >&2; die "unknown option '$1'" ;;
     esac
     shift
   done
+  export PEPPER_HOME="$prefix"
 
-  if [ "$action" = uninstall ]; then
-    uninstall
+  # A home set up by pep-install uninstalls itself.
+  if [ "$action" = uninstall ] && "$prefix/bin/pep-install" uninstall --help >/dev/null 2>&1; then
+    "$prefix/bin/pep-install" uninstall
     return
   fi
 
@@ -455,57 +221,29 @@ main() {
 
   if [ -n "$local_archive" ]; then
     [ -f "$local_archive" ] || die "no archive at $local_archive"
-    [ -f "$local_archive.sha256" ] || die "no $local_archive.sha256 to check the archive against"
-    archive=$(basename "$local_archive")
-    cp "$local_archive" "$work/$archive"
-    cp "$local_archive.sha256" "$work/$archive.sha256"
-    version=${archive#pepper-}
-    version=${version%-"$target".tar.gz}
-    say "installing Pepper $version ($target) into $prefix"
+    archive=$(cd "$(dirname "$local_archive")" && pwd)/$(basename "$local_archive")
+    installer_archive="$(dirname "$archive")/pepper-install-$(basename "$archive" | sed 's/^pepper-//')"
+    [ -f "$installer_archive" ] || die "no installer archive $installer_archive beside $archive"
   else
+    list_assets
     find_release
-    version=${tag#v}
-    say "installing Pepper $version ($target) into $prefix"
-    fetch_asset "$archive_url" "$work/$archive" || die "cannot download $archive"
-    fetch_asset "$checksum_url" "$work/$archive.sha256" || die "cannot download $archive.sha256"
+    say "downloading Pepper ${tag#v} ($target)"
+    installer_archive="$work/pepper-install-${tag#v}-$target.tar.gz"
+    fetch_asset "$(basename "$installer_archive")"
+    archive=""
+    if [ "$action" = install ]; then
+      archive="$work/pepper-${tag#v}-$target.tar.gz"
+      fetch_asset "$(basename "$archive")"
+    fi
   fi
-  expected=$(cut -d' ' -f1 < "$work/$archive.sha256")
-  actual=$(sha256_of "$work/$archive")
-  [ "$expected" = "$actual" ] || die "$archive does not match its checksum (expected $expected, got $actual)"
+  unpack_installer "$installer_archive"
 
-  tar -xzf "$work/$archive" -C "$work"
-  unpacked="$work/${archive%.tar.gz}"
-  [ -f "$unpacked/bin/pep-build" ] || die "$archive does not hold bin/pep-build"
-  mkdir -p "$prefix"
-  if [ -f "$unpacked/bin/pep-install" ] || [ -f "$prefix/bin/pep-install" ]; then
-    install_toolchain
-  else
-    install_flat
+  if [ "$action" = uninstall ]; then
+    "$installer" uninstall
+    return
   fi
-  if [ "$target" != "${target#macos}" ]; then
-    # Unsigned binaries: a download's quarantine flag makes Gatekeeper
-    # refuse to run them. curl sets none, but a copy made elsewhere may.
-    xattr -dr com.apple.quarantine "$prefix" 2>/dev/null || true
-  fi
-  say "installed $("$prefix/bin/pepper" --version)"
-
-  case ":$PATH:" in
-    *":$prefix/bin:"*) ;;
-    *)
-      if [ "$modify_path" = 1 ]; then
-        add_to_path
-        say "open a new terminal, or run: export PATH=\"$prefix/bin:\$PATH\""
-      else
-        say "add $prefix/bin to your PATH to run pepper"
-      fi
-      ;;
-  esac
-
-  if [ "$prerequisites" = 1 ]; then
-    check_toolchain
-    check_openssl
-  fi
-  verify
+  # shellcheck disable=SC2086
+  "$installer" setup --archive "$archive" $setup_options
 }
 
 main "$@"

@@ -17,22 +17,31 @@ irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.
 
 Each release also carries both scripts as assets, beside its archives.
 
-The script:
+The script only bootstraps. It picks this machine's archives
+(`linux-x64`, `macos-arm64`, `macos-x64` or `windows-x64`) from the newest
+release that has them: the toolchain, `pepper-<version>-<target>.tar.gz`
+(`.zip` on Windows), and the installer, `pepper-install-<version>-<target>.tar.gz`,
+which holds only `pep-install`. It downloads both, checks the installer
+against its `.sha256`, unpacks `pep-install` into a temporary folder and
+runs [`pep-install setup --archive <toolchain>`](pep-install.md#setting-a-machine-up),
+which:
 
-1. picks this machine's archive (`linux-x64`, `macos-arm64`, `macos-x64` or
-   `windows-x64`) from the newest release that has one;
-2. downloads it and checks it against its `.sha256`;
-3. unpacks it into `~/.pepper/toolchains/<version>` (`%LOCALAPPDATA%\pepper`
+1. checks the toolchain archive against its `.sha256`;
+2. unpacks it into `~/.pepper/toolchains/<version>` (`%LOCALAPPDATA%\pepper`
    on Windows), makes it the default toolchain, and puts the entry point
    `pepper` and `pep-install` in `~/.pepper/bin`; toolchains installed
    before stay (see [Toolchains: pep-install](pep-install.md));
-4. adds that folder's `bin` to the `PATH`: in `~/.profile`, `~/.bashrc`,
+3. adds that folder's `bin` to the `PATH`: in `~/.profile`, `~/.bashrc`,
    `~/.bash_profile` and `~/.zshrc` and fish's `conf.d`, or in the Windows
-   user's `PATH`, which it asks about first;
-5. checks that programs can be linked (below), offering to install what is
+   user's `PATH`;
+4. checks that programs can be linked (below), offering to install what is
    missing;
-6. builds and runs a small program with the new install, and fails if it
+5. builds and runs a small program with the new install, and fails if it
    cannot.
+
+The script downloads the toolchain itself, rather than leaving it to
+`pep-install`, because `pep-install` downloads with OpenSSL 3, which a fresh
+Mac and RHEL 8 do not have.
 
 Open a new terminal afterwards so the `PATH` change takes effect, then
 `pepper build hello.pep -o hello` works as in [Getting started](../tutorial/getting-started.md).
@@ -61,18 +70,18 @@ another (see [Toolchains](pepper.md#toolchains)). `pepper install add`,
 updates `pepper` and `pep-install` themselves.
 
 Running the script again installs the newest release beside the others
-and makes it the default. An install from before toolchains, with `bin`
-and `runtime` straight in `~/.pepper`, moves into `toolchains/<its
-version>` first, so it stays installed. A release from before toolchains
-(0.3.0 and earlier, which have no `pep-install`) installs the old way, into
-`~/.pepper` itself, unless the home already holds toolchains; then it goes
-into `toolchains/` like any other.
+and makes it the default. Only releases that carry the installer archive
+can be installed this way; `pepper install add` installs older ones into a
+home that is set up. A release from before toolchains (0.3.0 and earlier)
+cannot be set up at all, and neither is an install from before toolchains,
+with `bin` and `runtime` straight in `~/.pepper`, moved: uninstall it
+first.
 
 On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
 18.10 and later); systems that use musl, such as Alpine, are not supported.
 There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
-binaries are not signed: the script clears the quarantine flag, but an
-archive downloaded with a browser makes Gatekeeper warn before it runs.
+binaries are not signed: an archive downloaded with a browser makes
+Gatekeeper warn before it runs; one the script downloads does not.
 
 ## What linking needs
 
@@ -83,7 +92,7 @@ archive downloaded with a browser makes Gatekeeper warn before it runs.
 | --- | --- | --- |
 | Linux | `clang` and the C library's development files | `apt-get install clang build-essential`, `dnf`/`yum install clang gcc glibc-devel`, `pacman -S clang gcc` or `zypper install clang gcc glibc-devel`, whichever manager is present |
 | macOS | Xcode's command line tools | `xcode-select --install` |
-| Windows | LLVM (`clang`) and the MSVC libraries and Windows SDK | LLVM with `scoop install llvm`, `winget install LLVM.LLVM` or `choco install llvm` (the first present), else LLVM's own installer from its GitHub release; the Visual Studio Build Tools' C++ workload with `winget` |
+| Windows | LLVM (`clang`) and the MSVC libraries and Windows SDK | LLVM with `winget install LLVM.LLVM`, else `scoop install llvm`; the Visual Studio Build Tools' C++ workload with `winget` |
 
 It asks before installing anything, unless given `--yes` (`-Yes`). With no
 terminal to ask on it installs nothing and says what to install.
@@ -117,12 +126,12 @@ install.sh --uninstall [--prefix <dir>]
 | `install.sh` | `install.ps1` | What it does |
 | --- | --- | --- |
 | `--version <x.y.z>` | `-Version <x.y.z>` | Installs that release instead of the newest, or a prerelease such as `0.4.0-dev`, the build of main (see below), which installing again refreshes |
-| `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it. One not named for a release, such as a `dev` build, installs as the version its `pep-build --version` reports |
+| `--archive <file>` | `-Archive <file>` | Installs an archive already downloaded, checked against `<file>.sha256` beside it, with the installer archive `pepper-install-<version>-<target>` (and its `.sha256`) beside it too. One not named for a release, such as a `dev` build, installs as the version its `pep-build --version` reports |
 | `--prefix <dir>` | `-Prefix <dir>` | Installs into `<dir>` instead of `~/.pepper` (`%LOCALAPPDATA%\pepper`) |
-| `-y`, `--yes` | `-Yes` | Installs missing prerequisites, and on Windows changes the `PATH`, without asking |
+| `-y`, `--yes` | `-Yes` | Installs missing prerequisites without asking |
 | `--no-modify-path` | `-NoModifyPath` | Leaves the `PATH` alone |
 | `--no-prerequisites` | `-NoPrerequisites` | Neither checks for nor installs what linking needs |
-| `--uninstall` | `-Uninstall` | Removes the install, every toolchain in it, and the `PATH` entries the script added |
+| `--uninstall` | `-Uninstall` | Removes the install, every toolchain in it, and the `PATH` entries the script added, with the home's own `pep-install uninstall`, else with the newest release's installer |
 | `-h`, `--help` | `Get-Help .\install.ps1` | Shows the usage |
 
 Piped into a shell, the script still takes options: `curl ... | sh -s -- --version 0.4.0`.

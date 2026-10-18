@@ -73,9 +73,9 @@ The Pepper home holds them:
 ~/.pepper/default-toolchain          the default toolchain's version
 ```
 
-The [install scripts](install.md) set up the home: they install the newest
-release this way, put its `pepper` and `pep-install` in `bin`, and move an
-install from before toolchains into `toolchains/`.
+The [install scripts](install.md) set up the home by running `setup` (see
+[Setting a machine up](#setting-a-machine-up)): it installs the newest
+release this way and puts its `pepper` and `pep-install` in `bin`.
 
 `update` replaces the home's `pepper` and `pep-install` with the new
 toolchain's when they differ. Each is written beside the old one and
