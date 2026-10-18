@@ -34,9 +34,11 @@ elements.
 
 An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 order. Every mutating operation (an element store through `[]`, `append`,
-`insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`, and
-`reverse` of two or more elements) invalidates running iterators, and the
-next step of such a loop panics with "Array modified during iteration".
+`insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`,
+`fill`, `retain`, `resize`, `split_off`, and `reverse`, `sort` or `dedup`
+of two or more elements) invalidates running iterators and slices
+(`slice`), and the next step of such a loop panics with "Array modified
+during iteration".
 
 **Type parameters**
 - `T` — the element type
@@ -531,6 +533,186 @@ Runs in O(count).
 **Returns**
 - true when `find(item)` finds a match
 
+#### slice
+
+```pepper
+[__Reads] slice(start: ulong, end: ulong): ArraySlice<T>
+```
+
+Returns a read-only view of the elements from `start` up to but not
+including `end`, without copying them.
+
+The slice holds a reference to this Array, so it cannot outlive it,
+and it is fail-fast like an iterator: once the Array is modified (see
+`Array` for which operations count), every later use of the slice
+panics, so it never reads elements that moved or were freed.
+
+**Parameters**
+- `start` — the position of the first element in the slice
+- `end` — the position one past the last element; from `start` through `count`
+
+**Returns**
+- a view of `end - start` elements
+
+**Panics**
+- if `start <= end` and `end <= count` do not both hold ("Array slice out of bounds")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4, 5];
+var middle = a.slice(1, 4);   # views [2, 3, 4]
+var second = middle[1];       # 3
+```
+
+#### binary_search_by
+
+```pepper
+[__Reads] binary_search_by(order: (T) => int): ulong?
+```
+
+Returns the position of the element that `order` reports equal to the
+target, searching an Array sorted in the order `order` follows, or
+none when there is none.
+
+Runs in O(log count) calls to `order`, which must not modify the
+Array. When several elements match, the first of them is found.
+
+**Parameters**
+- `order` — returns a negative number when its argument sorts before the target, 0 when it matches, and a positive number when it sorts after
+
+**Returns**
+- the index of the first matching element, or none
+
+**Panics**
+- if `order` modifies the Array ("Array modified while a slice of it is in use")
+
+**Example**
+```pepper
+var a = [10, 20, 30];
+var i = a.binary_search_by((x) => x.compare(20));   # i.value() == 1
+```
+
+#### fill
+
+```pepper
+fill(value: T)
+```
+
+Replaces every element with `value`.
+
+Runs in O(count). For a struct `T` every slot acquires `value` and
+releases its previous occupant. Invalidates running iterators.
+
+**Parameters**
+- `value` — the value each element becomes
+
+**Example**
+```pepper
+var a = [1, 2, 3];
+a.fill(0);   # [0, 0, 0]
+```
+
+#### retain
+
+```pepper
+retain(keep: (T) => bool)
+```
+
+Removes every element for which `keep` returns false, keeping the
+order of the rest.
+
+Runs in O(count) calls to `keep`, which sees each element once, in
+index order, and must not modify the Array. For a struct `T` each
+removed element is released and kept elements keep their counts. The
+capacity is unchanged. Invalidates running iterators.
+
+**Parameters**
+- `keep` — returns true for an element to keep
+
+**Panics**
+- if `keep` modifies the Array ("Array modified during retain")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4];
+a.retain((x) => x % 2 == 0);   # [2, 4]
+```
+
+#### dedup
+
+```pepper
+dedup()
+```
+
+Removes each element equal (`==`) to the one before it, so a run of
+equal elements keeps only its first. On a sorted Array this removes
+every duplicate.
+
+Runs in O(count). Elements are compared as `find` does. For a struct
+`T` each removed element is released. Invalidates running iterators
+when there are two or more elements.
+
+**Example**
+```pepper
+var a = [1, 1, 2, 3, 3, 3, 1];
+a.dedup();   # [1, 2, 3, 1]
+```
+
+#### resize
+
+```pepper
+resize(count: ulong, value: T)
+```
+
+Changes the count to `count`: removes elements past it, as
+`truncate` does, or appends copies of `value` until there are
+`count` elements.
+
+Runs in O(difference in count), plus at most one reallocation.
+Invalidates running iterators when the count changes.
+
+**Parameters**
+- `count` — the number of elements the Array will hold
+- `value` — the element to append when the Array grows
+
+**Panics**
+- if the buffer must grow while an I/O operation in a task is using it
+
+**Example**
+```pepper
+var a = [1, 2];
+a.resize(4, 0);   # [1, 2, 0, 0]
+a.resize(1, 0);   # [1]
+```
+
+#### split_off
+
+```pepper
+split_off(index: ulong): Array<T>
+```
+
+Removes the elements from `index` on and returns them as a new Array,
+leaving this Array with its first `index` elements.
+
+Runs in O(count - index). The elements move without changing their
+reference counts. This Array's capacity is unchanged. Invalidates
+running iterators when any element moves.
+
+**Parameters**
+- `index` — the position of the first element to move; from 0 through `count`
+
+**Returns**
+- a new Array holding the elements that were at `index` and after
+
+**Panics**
+- if `index <= count` does not hold ("Array split_off index out of bounds")
+
+**Example**
+```pepper
+var a = [1, 2, 3, 4];
+var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
+```
+
 #### append_all
 
 ```pepper
@@ -683,6 +865,110 @@ Runs in O(count + count of `rhs`). Neither operand is modified; like
 var c = a + b;
 ```
 
+## extend Array<T>
+
+```pepper
+extend Array<T: Comparable>
+```
+
+The searches of a sorted Array, for an element type with an order
+(see `Comparable`).
+
+**Type parameters**
+- `T` — the element type, `Comparable`
+
+### Methods
+
+#### binary_search
+
+```pepper
+[__Reads] binary_search(item: T): ulong?
+```
+
+Returns the position of an element equal to `item` in this Array,
+which must be sorted in `compare` order, or none when there is
+none.
+
+Runs in O(log count). When several elements equal `item`, the first
+of them is found. On an Array that is not sorted the result is
+unspecified (but never out of bounds).
+
+**Parameters**
+- `item` — the value to look for
+
+**Returns**
+- the index of the first element equal to `item`, or none
+
+**Example**
+```pepper
+var a = [1, 3, 5, 7];
+var i = a.binary_search(5);   # i.value() == 2
+```
+
+#### lower_bound
+
+```pepper
+[__Reads] lower_bound(item: T): ulong
+```
+
+Returns the first position at which `item` could be inserted while
+keeping this sorted Array sorted: the index of the first element that
+does not sort before `item` (in `compare` order), or `count` when
+every element does.
+
+Runs in O(log count).
+
+**Parameters**
+- `item` — the value to place
+
+**Returns**
+- the index of the first element at or after `item`
+
+**Example**
+```pepper
+var a = [1, 3, 3, 5];
+var i = a.lower_bound(3);   # 1
+```
+
+#### upper_bound
+
+```pepper
+[__Reads] upper_bound(item: T): ulong
+```
+
+Returns the last position at which `item` could be inserted while
+keeping this sorted Array sorted: the index of the first element that
+sorts after `item` (in `compare` order), or `count` when none does.
+
+Runs in O(log count). `upper_bound(x) - lower_bound(x)` is the number
+of elements equal to `x`.
+
+**Parameters**
+- `item` — the value to place
+
+**Returns**
+- the index of the first element after `item`
+
+**Example**
+```pepper
+var a = [1, 3, 3, 5];
+var i = a.upper_bound(3);   # 3
+```
+
+#### is_sorted
+
+```pepper
+[__Reads] is_sorted(): bool
+```
+
+Reports whether the elements are in `compare` order: no element
+sorts after the one that follows it.
+
+Runs in O(count). An Array of fewer than two elements is sorted.
+
+**Returns**
+- true when the Array is sorted
+
 ## ArrayIterator
 
 ```pepper
@@ -746,3 +1032,315 @@ Returns the element the last successful `next()` moved to.
 - if the Array was modified since the iterator was created ("Array modified during iteration")
 - if `next()` was never called ("ArrayIterator.current() before next()")
 - if `next()` already returned false ("ArrayIterator.current() past the end")
+
+## ArraySlice
+
+```pepper
+[Value] struct ArraySlice<T>
+```
+
+A read-only view of a run of an Array's elements, made by `Array.slice`,
+that lets a function take "some of the elements" without copying them.
+
+A slice holds a reference to its Array, so the Array lives at least as
+long as the slice. It is fail-fast like `ArrayIterator`: once the Array
+is modified (see `Array` for which operations count), every later use of
+the slice panics with "Array modified while a slice of it is in use"
+instead of reading elements that moved or were freed. Make a new slice
+after changing the Array.
+
+A slice is `Iterable<T>`: `for (var x in slice)` visits its elements in
+order.
+
+**Type parameters**
+- `T` — the element type of the Array
+
+**See also**
+- `Array.slice`
+
+**Example**
+```pepper
+total(values: ArraySlice<int>): int {
+    var sum = 0;
+    for (var x in values) {
+        sum = sum + x;
+    }
+    return sum;
+}
+
+var a = [1, 2, 3, 4];
+var tail_sum = total(a.slice(2, 4));   # 7
+```
+
+### Properties
+
+#### count
+
+```pepper
+var count: ulong { get; }
+```
+
+The number of elements in the slice.
+
+#### is_empty
+
+```pepper
+var is_empty: bool { get; }
+```
+
+Whether the slice has no elements.
+
+### Methods
+
+#### operator []
+
+```pepper
+[](index: ulong): T
+```
+
+Returns the element at `index` in the slice, `index` 0 being the
+slice's first element; this is the indexer read `slice[index]`.
+
+**Parameters**
+- `index` — the zero-based position in the slice
+
+**Returns**
+- the element at `index`
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+- if `index < count` does not hold ("ArraySlice index out of bounds")
+
+#### slice
+
+```pepper
+slice(start: ulong, end: ulong): ArraySlice<T>
+```
+
+Returns a view of this slice's elements from `start` up to but not
+including `end`, positions counted within this slice.
+
+**Parameters**
+- `start` — the position of the first element
+- `end` — the position one past the last element; from `start` through `count`
+
+**Returns**
+- a view of `end - start` elements of the same Array
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+- if `start <= end` and `end <= count` do not both hold ("ArraySlice slice out of bounds")
+
+#### iterate
+
+```pepper
+iterate(): ArraySliceIterator<T>
+```
+
+Returns an iterator over the slice's elements in order; this is what
+`for (var x in slice)` calls.
+
+**Returns**
+- a new iterator positioned before the first element
+
+#### to_array
+
+```pepper
+to_array(): Array<T>
+```
+
+Returns a new Array holding a copy of the slice's elements, in order.
+
+The copy is shallow, as `Array.clone` is: for a struct `T` the new
+Array shares the element objects.
+
+**Returns**
+- an independent Array with the slice's elements
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### find
+
+```pepper
+find(item: T): ulong?
+```
+
+Returns the position in the slice of the first element equal (`==`)
+to `item`, or none, compared as `Array.find` does.
+
+**Parameters**
+- `item` — the value to look for
+
+**Returns**
+- the index of the first match, or none when no element matches
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### contains
+
+```pepper
+contains(item: T): bool
+```
+
+Reports whether any element equals `item`, compared as `find` does.
+
+**Parameters**
+- `item` — the value to look for
+
+**Returns**
+- true when `find(item)` finds a match
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### binary_search_by
+
+```pepper
+binary_search_by(order: (T) => int): ulong?
+```
+
+Returns the position of the first element that `order` reports equal
+to the target, in a slice sorted in the order `order` follows, or
+none; see `Array.binary_search_by`.
+
+**Parameters**
+- `order` — returns a negative number when its argument sorts before the target, 0 when it matches, and a positive number when it sorts after
+
+**Returns**
+- the index of the first matching element, or none
+
+**Panics**
+- if the Array was modified since the slice was made, `order` included ("Array modified while a slice of it is in use")
+
+## extend ArraySlice<T>
+
+```pepper
+extend ArraySlice<T: Comparable>
+```
+
+The searches of a sorted ArraySlice, for an element type with an order
+(see `Comparable`).
+
+**Type parameters**
+- `T` — the element type, `Comparable`
+
+### Methods
+
+#### binary_search
+
+```pepper
+binary_search(item: T): ulong?
+```
+
+Returns the position of the first element equal to `item` in this
+slice, which must be sorted in `compare` order, or none; see
+`Array.binary_search`.
+
+**Parameters**
+- `item` — the value to look for
+
+**Returns**
+- the index of the first element equal to `item`, or none
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### lower_bound
+
+```pepper
+lower_bound(item: T): ulong
+```
+
+Returns the index of the first element of this sorted slice that
+does not sort before `item`, or `count`; see `Array.lower_bound`.
+
+**Parameters**
+- `item` — the value to place
+
+**Returns**
+- the index of the first element at or after `item`
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### upper_bound
+
+```pepper
+upper_bound(item: T): ulong
+```
+
+Returns the index of the first element of this sorted slice that
+sorts after `item`, or `count`; see `Array.upper_bound`.
+
+**Parameters**
+- `item` — the value to place
+
+**Returns**
+- the index of the first element after `item`
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### is_sorted
+
+```pepper
+is_sorted(): bool
+```
+
+Reports whether the elements are in `compare` order; see
+`Array.is_sorted`.
+
+**Returns**
+- true when no element sorts after the one that follows it
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+## ArraySliceIterator
+
+```pepper
+[Value] struct ArraySliceIterator<T>
+```
+
+An `Iterator<T>` over the elements of an `ArraySlice`, in order; returned
+by `ArraySlice.iterate()` and driven by `for (var x in slice)`.
+
+**Type parameters**
+- `T` — the element type of the slice
+
+**See also**
+- `ArraySlice.iterate`
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element.
+
+**Returns**
+- true when there is a current element, false once past the end
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+
+#### current
+
+```pepper
+current(): T
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
+
+**Panics**
+- if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+- if `next()` was never called ("ArraySliceIterator.current() before next()")
+- if `next()` already returned false ("ArraySlice index out of bounds")

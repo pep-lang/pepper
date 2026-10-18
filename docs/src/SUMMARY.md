@@ -22,6 +22,7 @@
 - [Functions](language/functions.md)
 - [Tuples and multiple return values](language/tuples.md)
 - [Collection literals](language/collection-literals.md)
+- [Arrays and slices](language/arrays.md)
 - [Function types and closures](language/function-types.md)
 - [Overloading](language/overloading.md)
 - [Structs](language/structs.md)

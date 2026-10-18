@@ -53,9 +53,11 @@ import "internals";
 ##
 ## An Array is `Iterable<T>`: `for (var x in a)` visits each element in index
 ## order. Every mutating operation (an element store through `[]`, `append`,
-## `insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`, and
-## `reverse` of two or more elements) invalidates running iterators, and the
-## next step of such a loop panics with "Array modified during iteration".
+## `insert`, `remove_at`, `pop`, `clear`, a shrinking `truncate`, `swap`,
+## `fill`, `retain`, `resize`, `split_off`, and `reverse`, `sort` or `dedup`
+## of two or more elements) invalidates running iterators and slices
+## (`slice`), and the next step of such a loop panics with "Array modified
+## during iteration".
 ##
 ## @typeParam T the element type
 ## @example
@@ -654,6 +656,196 @@ export struct Array<T> {
         return find(item).is_value();
     }
 
+    ## Returns a read-only view of the elements from `start` up to but not
+    ## including `end`, without copying them.
+    ##
+    ## The slice holds a reference to this Array, so it cannot outlive it,
+    ## and it is fail-fast like an iterator: once the Array is modified (see
+    ## `Array` for which operations count), every later use of the slice
+    ## panics, so it never reads elements that moved or were freed.
+    ##
+    ## @param start the position of the first element in the slice
+    ## @param end the position one past the last element; from `start` through `count`
+    ## @returns a view of `end - start` elements
+    ## @panics if `start <= end` and `end <= count` do not both hold ("Array slice out of bounds")
+    ## @example
+    ##     var a = [1, 2, 3, 4, 5];
+    ##     var middle = a.slice(1, 4);   # views [2, 3, 4]
+    ##     var second = middle[1];       # 3
+    [__Reads]
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArraySlice<T> {
+        _pep_check_bounds(start <= end && end <= _size, "Array slice out of bounds", location);
+        var view = ArraySlice<T>();
+        view._source = this;
+        view._start = start;
+        view._end = end;
+        view._version = _version;
+        return view;
+    }
+
+    ## Returns the position of the element that `order` reports equal to the
+    ## target, searching an Array sorted in the order `order` follows, or
+    ## none when there is none.
+    ##
+    ## Runs in O(log count) calls to `order`, which must not modify the
+    ## Array. When several elements match, the first of them is found.
+    ##
+    ## @param order returns a negative number when its argument sorts before
+    ##   the target, 0 when it matches, and a positive number when it sorts after
+    ## @returns the index of the first matching element, or none
+    ## @panics if `order` modifies the Array ("Array modified while a slice of it is in use")
+    ## @example
+    ##     var a = [10, 20, 30];
+    ##     var i = a.binary_search_by((x) => x.compare(20));   # i.value() == 1
+    [__Reads]
+    binary_search_by(order: (T) => int): ulong? {
+        return slice(0, _size).binary_search_by(order);
+    }
+
+    ## Replaces every element with `value`.
+    ##
+    ## Runs in O(count). For a struct `T` every slot acquires `value` and
+    ## releases its previous occupant. Invalidates running iterators.
+    ##
+    ## @param value the value each element becomes
+    ## @example
+    ##     var a = [1, 2, 3];
+    ##     a.fill(0);   # [0, 0, 0]
+    fill(value: T) {
+        _version = _version + 1;
+        ulong index = 0;
+        while (index < _size) {
+            _data[index] = value;
+            index = index + 1;
+        }
+    }
+
+    ## Removes every element for which `keep` returns false, keeping the
+    ## order of the rest.
+    ##
+    ## Runs in O(count) calls to `keep`, which sees each element once, in
+    ## index order, and must not modify the Array. For a struct `T` each
+    ## removed element is released and kept elements keep their counts. The
+    ## capacity is unchanged. Invalidates running iterators.
+    ##
+    ## @param keep returns true for an element to keep
+    ## @panics if `keep` modifies the Array ("Array modified during retain")
+    ## @example
+    ##     var a = [1, 2, 3, 4];
+    ##     a.retain((x) => x % 2 == 0);   # [2, 4]
+    retain(keep: (T) => bool) {
+        _version = _version + 1;
+        var version = _version;
+        ulong kept = 0;
+        ulong index = 0;
+        while (index < _size) {
+            var keeping = keep(_data[index]);
+            assert(_version == version, "Array modified during retain");
+            if (keeping) {
+                _keep_at(kept, index);
+                kept = kept + 1;
+            }
+            index = index + 1;
+        }
+        _release_range(kept, _size);
+        _size = kept;
+    }
+
+    ## Removes each element equal (`==`) to the one before it, so a run of
+    ## equal elements keeps only its first. On a sorted Array this removes
+    ## every duplicate.
+    ##
+    ## Runs in O(count). Elements are compared as `find` does. For a struct
+    ## `T` each removed element is released. Invalidates running iterators
+    ## when there are two or more elements.
+    ##
+    ## @example
+    ##     var a = [1, 1, 2, 3, 3, 3, 1];
+    ##     a.dedup();   # [1, 2, 3, 1]
+    dedup() {
+        if (_size < 2) {
+            return;
+        }
+        _version = _version + 1;
+        ulong kept = 1;
+        ulong index = 1;
+        while (index < _size) {
+            if (!(_data[index] == _data[kept - 1])) {
+                _keep_at(kept, index);
+                kept = kept + 1;
+            }
+            index = index + 1;
+        }
+        _release_range(kept, _size);
+        _size = kept;
+    }
+
+    # Moves the element at `index` down to slot `kept` (at or before it) for
+    # `retain` and `dedup`: the store releases the dropped element there, and
+    # `move` nulls `index`'s slot, so the reference keeps its count.
+    _keep_at(kept: ulong, index: ulong) {
+        if (kept != index) {
+            _data[kept] = move(_data[index]);
+        }
+    }
+
+    ## Changes the count to `count`: removes elements past it, as
+    ## `truncate` does, or appends copies of `value` until there are
+    ## `count` elements.
+    ##
+    ## Runs in O(difference in count), plus at most one reallocation.
+    ## Invalidates running iterators when the count changes.
+    ##
+    ## @param count the number of elements the Array will hold
+    ## @param value the element to append when the Array grows
+    ## @panics if the buffer must grow while an I/O operation in a task is using it
+    ## @example
+    ##     var a = [1, 2];
+    ##     a.resize(4, 0);   # [1, 2, 0, 0]
+    ##     a.resize(1, 0);   # [1]
+    resize(count: ulong, value: T) {
+        if (count <= _size) {
+            truncate(count);
+            return;
+        }
+        reserve(count);
+        while (_size < count) {
+            append(value);
+        }
+    }
+
+    ## Removes the elements from `index` on and returns them as a new Array,
+    ## leaving this Array with its first `index` elements.
+    ##
+    ## Runs in O(count - index). The elements move without changing their
+    ## reference counts. This Array's capacity is unchanged. Invalidates
+    ## running iterators when any element moves.
+    ##
+    ## @param index the position of the first element to move; from 0 through `count`
+    ## @returns a new Array holding the elements that were at `index` and after
+    ## @panics if `index <= count` does not hold ("Array split_off index out of bounds")
+    ## @example
+    ##     var a = [1, 2, 3, 4];
+    ##     var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
+    split_off(index: ulong, location: __ptr<char> = __caller_location()): Array<T> {
+        assert(index <= _size, "Array split_off index out of bounds", location);
+        ulong moved = _size - index;
+        if (moved == 0) {
+            return Array<T>();
+        }
+        _version = _version + 1;
+        Array<T> tail = Array<T>(moved);
+        # The references move to `tail` as raw bytes, so no count changes,
+        # and their old slots are zeroed to stay empty.
+        _array_copy(tail._data, _slot(index), moved * sizeof<T>());
+        if (!__is_pod<T>()) {
+            _array_zero(_slot(index), moved * sizeof<T>());
+        }
+        tail._size = moved;
+        _size = index;
+        return tail;
+    }
+
     ## Appends every element of `rhs`, in order, to the end of this Array.
     ##
     ## Runs in O(count of `rhs`), growing the buffer at most once and copying
@@ -803,6 +995,75 @@ export struct Array<T> {
     }
 }
 
+## The searches of a sorted Array, for an element type with an order
+## (see `Comparable`).
+##
+## @typeParam T the element type, `Comparable`
+export extend Array<T: Comparable> {
+    ## Returns the position of an element equal to `item` in this Array,
+    ## which must be sorted in `compare` order, or none when there is
+    ## none.
+    ##
+    ## Runs in O(log count). When several elements equal `item`, the first
+    ## of them is found. On an Array that is not sorted the result is
+    ## unspecified (but never out of bounds).
+    ##
+    ## @param item the value to look for
+    ## @returns the index of the first element equal to `item`, or none
+    ## @example
+    ##     var a = [1, 3, 5, 7];
+    ##     var i = a.binary_search(5);   # i.value() == 2
+    [__Reads]
+    binary_search(item: T): ulong? {
+        return slice(0, _size).binary_search(item);
+    }
+
+    ## Returns the first position at which `item` could be inserted while
+    ## keeping this sorted Array sorted: the index of the first element that
+    ## does not sort before `item` (in `compare` order), or `count` when
+    ## every element does.
+    ##
+    ## Runs in O(log count).
+    ##
+    ## @param item the value to place
+    ## @returns the index of the first element at or after `item`
+    ## @example
+    ##     var a = [1, 3, 3, 5];
+    ##     var i = a.lower_bound(3);   # 1
+    [__Reads]
+    lower_bound(item: T): ulong {
+        return slice(0, _size).lower_bound(item);
+    }
+
+    ## Returns the last position at which `item` could be inserted while
+    ## keeping this sorted Array sorted: the index of the first element that
+    ## sorts after `item` (in `compare` order), or `count` when none does.
+    ##
+    ## Runs in O(log count). `upper_bound(x) - lower_bound(x)` is the number
+    ## of elements equal to `x`.
+    ##
+    ## @param item the value to place
+    ## @returns the index of the first element after `item`
+    ## @example
+    ##     var a = [1, 3, 3, 5];
+    ##     var i = a.upper_bound(3);   # 3
+    [__Reads]
+    upper_bound(item: T): ulong {
+        return slice(0, _size).upper_bound(item);
+    }
+
+    ## Reports whether the elements are in `compare` order: no element
+    ## sorts after the one that follows it.
+    ##
+    ## Runs in O(count). An Array of fewer than two elements is sorted.
+    ##
+    ## @returns true when the Array is sorted
+    [__Reads]
+    is_sorted(): bool {
+        return slice(0, _size).is_sorted();
+    }
+}
+
 ## An `Iterator<T>` over the elements of an Array, in index order; returned by
 ## `Array.iterate()` and driven by `for (var x in array)`.
 ##
@@ -863,6 +1124,285 @@ export struct ArrayIterator<T> {
         return _source._data[_index];
     }
 }
+
+## A read-only view of a run of an Array's elements, made by `Array.slice`,
+## that lets a function take "some of the elements" without copying them.
+##
+## A slice holds a reference to its Array, so the Array lives at least as
+## long as the slice. It is fail-fast like `ArrayIterator`: once the Array
+## is modified (see `Array` for which operations count), every later use of
+## the slice panics with "Array modified while a slice of it is in use"
+## instead of reading elements that moved or were freed. Make a new slice
+## after changing the Array.
+##
+## A slice is `Iterable<T>`: `for (var x in slice)` visits its elements in
+## order.
+##
+## @typeParam T the element type of the Array
+## @example
+##     total(values: ArraySlice<int>): int {
+##         var sum = 0;
+##         for (var x in values) {
+##             sum = sum + x;
+##         }
+##         return sum;
+##     }
+##
+##     var a = [1, 2, 3, 4];
+##     var tail_sum = total(a.slice(2, 4));   # 7
+## @see Array.slice
+[Value]
+export struct ArraySlice<T> {
+    ## The Array viewed; the slice holds a reference to it.
+    Array<T> _source;
+    ## The position in `_source` of the slice's first element.
+    ulong _start;
+    ## The position in `_source` one past the slice's last element.
+    ulong _end;
+    ## The `_source._version` when the slice was made; a mismatch means the Array was modified.
+    ulong _version;
+
+    # Panics when the Array changed since the slice was made.
+    _check(location: __ptr<char>) {
+        assert(_source._version == _version, "Array modified while a slice of it is in use", location);
+    }
+
+    # The element at `index` in the slice, already bounds-checked.
+    _at(index: ulong): T {
+        _check(__caller_location());
+        return _source._data[_start + index];
+    }
+
+    ## The number of elements in the slice.
+    var count: ulong {
+        get {
+            return _end - _start;
+        }
+    }
+
+    ## Whether the slice has no elements.
+    var is_empty: bool {
+        get {
+            return _end == _start;
+        }
+    }
+
+    ## Returns the element at `index` in the slice, `index` 0 being the
+    ## slice's first element; this is the indexer read `slice[index]`.
+    ##
+    ## @param index the zero-based position in the slice
+    ## @returns the element at `index`
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    ## @panics if `index < count` does not hold ("ArraySlice index out of bounds")
+    [](index: ulong, location: __ptr<char> = __caller_location()): T {
+        _check(location);
+        _pep_check_bounds(index < _end - _start, "ArraySlice index out of bounds", location);
+        return _source._data[_start + index];
+    }
+
+    ## Returns a view of this slice's elements from `start` up to but not
+    ## including `end`, positions counted within this slice.
+    ##
+    ## @param start the position of the first element
+    ## @param end the position one past the last element; from `start` through `count`
+    ## @returns a view of `end - start` elements of the same Array
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    ## @panics if `start <= end` and `end <= count` do not both hold ("ArraySlice slice out of bounds")
+    slice(start: ulong, end: ulong, location: __ptr<char> = __caller_location()): ArraySlice<T> {
+        _check(location);
+        _pep_check_bounds(start <= end && end <= _end - _start, "ArraySlice slice out of bounds", location);
+        var view = this;
+        view._start = _start + start;
+        view._end = _start + end;
+        return view;
+    }
+
+    ## Returns an iterator over the slice's elements in order; this is what
+    ## `for (var x in slice)` calls.
+    ##
+    ## @returns a new iterator positioned before the first element
+    iterate(): ArraySliceIterator<T> {
+        var it = ArraySliceIterator<T>();
+        it._slice = this;
+        return it;
+    }
+
+    ## Returns a new Array holding a copy of the slice's elements, in order.
+    ##
+    ## The copy is shallow, as `Array.clone` is: for a struct `T` the new
+    ## Array shares the element objects.
+    ##
+    ## @returns an independent Array with the slice's elements
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    to_array(): Array<T> {
+        _check(__caller_location());
+        Array<T> result = Array<T>(count);
+        ulong index = 0;
+        while (index < count) {
+            result.append(_at(index));
+            index = index + 1;
+        }
+        return result;
+    }
+
+    ## Returns the position in the slice of the first element equal (`==`)
+    ## to `item`, or none, compared as `Array.find` does.
+    ##
+    ## @param item the value to look for
+    ## @returns the index of the first match, or none when no element matches
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    find(item: T): ulong? {
+        ulong index = 0;
+        while (index < count) {
+            if (_at(index) == item) {
+                return Optional<ulong>.Value(index);
+            }
+            index = index + 1;
+        }
+        return Optional<ulong>.Empty;
+    }
+
+    ## Reports whether any element equals `item`, compared as `find` does.
+    ##
+    ## @param item the value to look for
+    ## @returns true when `find(item)` finds a match
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    contains(item: T): bool {
+        return find(item).is_value();
+    }
+
+    ## Returns the position of the first element that `order` reports equal
+    ## to the target, in a slice sorted in the order `order` follows, or
+    ## none; see `Array.binary_search_by`.
+    ##
+    ## @param order returns a negative number when its argument sorts before
+    ##   the target, 0 when it matches, and a positive number when it sorts after
+    ## @returns the index of the first matching element, or none
+    ## @panics if the Array was modified since the slice was made, `order` included ("Array modified while a slice of it is in use")
+    binary_search_by(order: (T) => int): ulong? {
+        var index = _partition(order, true);
+        if (index == count || order(_at(index)) != 0) {
+            return Optional<ulong>.Empty;
+        }
+        return Optional<ulong>.Value(index);
+    }
+
+    # The first index whose element `order` places at or after the target
+    # (`at_equal`), or strictly after it, by binary search. `_at` checks the
+    # version before each read, so an `order` that changes the Array panics.
+    _partition(order: (T) => int, at_equal: bool): ulong {
+        ulong low = 0;
+        ulong high = count;
+        while (low < high) {
+            ulong middle = low + (high - low) / 2;
+            var side = order(_at(middle));
+            if (side < 0 || (side == 0 && !at_equal)) {
+                low = middle + 1;
+                continue;
+            }
+            high = middle;
+        }
+        _check(__caller_location());
+        return low;
+    }
+}
+
+## The searches of a sorted ArraySlice, for an element type with an order
+## (see `Comparable`).
+##
+## @typeParam T the element type, `Comparable`
+export extend ArraySlice<T: Comparable> {
+    ## Returns the position of the first element equal to `item` in this
+    ## slice, which must be sorted in `compare` order, or none; see
+    ## `Array.binary_search`.
+    ##
+    ## @param item the value to look for
+    ## @returns the index of the first element equal to `item`, or none
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    binary_search(item: T): ulong? {
+        return binary_search_by((x) => x.compare(item));
+    }
+
+    ## Returns the index of the first element of this sorted slice that
+    ## does not sort before `item`, or `count`; see `Array.lower_bound`.
+    ##
+    ## @param item the value to place
+    ## @returns the index of the first element at or after `item`
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    lower_bound(item: T): ulong {
+        return _partition((x) => x.compare(item), true);
+    }
+
+    ## Returns the index of the first element of this sorted slice that
+    ## sorts after `item`, or `count`; see `Array.upper_bound`.
+    ##
+    ## @param item the value to place
+    ## @returns the index of the first element after `item`
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    upper_bound(item: T): ulong {
+        return _partition((x) => x.compare(item), false);
+    }
+
+    ## Reports whether the elements are in `compare` order; see
+    ## `Array.is_sorted`.
+    ##
+    ## @returns true when no element sorts after the one that follows it
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    is_sorted(): bool {
+        ulong index = 1;
+        while (index < count) {
+            if (_at(index - 1).compare(_at(index)) > 0) {
+                return false;
+            }
+            index = index + 1;
+        }
+        return true;
+    }
+}
+
+## An `Iterator<T>` over the elements of an `ArraySlice`, in order; returned
+## by `ArraySlice.iterate()` and driven by `for (var x in slice)`.
+##
+## @typeParam T the element type of the slice
+## @see ArraySlice.iterate
+[Value]
+export struct ArraySliceIterator<T> {
+    ## The slice being iterated.
+    ArraySlice<T> _slice;
+    ## The position of the current element in `_slice`; meaningful once `_started` is set.
+    ulong _index;
+    ## Whether `next()` has been called at least once.
+    bool _started;
+
+    ## Advances to the next element.
+    ##
+    ## @returns true when there is a current element, false once past the end
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    next(): bool {
+        _slice._check(__caller_location());
+        if (!_started) {
+            _started = true;
+            return _index < _slice.count;
+        }
+        if (_index < _slice.count) {
+            _index = _index + 1;
+        }
+        return _index < _slice.count;
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    ## @panics if the Array was modified since the slice was made ("Array modified while a slice of it is in use")
+    ## @panics if `next()` was never called ("ArraySliceIterator.current() before next()")
+    ## @panics if `next()` already returned false ("ArraySlice index out of bounds")
+    current(): T {
+        assert(_started, "ArraySliceIterator.current() before next()");
+        return _slice[_index];
+    }
+}
+
+extend ArraySliceIterator<T> with Iterator<T>;
 
 # The start of an array literal: a new Array holding `first`, whose type
 # gives the literal's element type (see `_literal_append`).
