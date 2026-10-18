@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-832056db.js";
+            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2d913a78.js"></script>
+        <script src="../toc-8b7d02da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -400,8 +400,11 @@ main(): int {
 <code>b.map&lt;long&gt;(f)</code>. With a space, <code>a.b &lt; c</code> is a comparison.</li>
 <li>A generic method cannot be called through a <a href="traits-and-extensions.html#traits-as-types">trait value</a>,
 since each of its uses is compiled separately. Call it on the concrete type.</li>
-<li>The iterator adapters <code>map</code>, <code>filter</code>, <code>enumerate</code> and <code>zip</code> are generic
-default methods of <code>Iterator&lt;T&gt;</code>; see <a href="iteration.html#adapters">Iteration</a>.</li>
+<li>Many iterator adapters (<code>map</code>, <code>zip</code>, <code>chunks</code>, <code>peekable</code>, …) and
+consumers (<code>fold</code>, <code>sum</code>, <code>min</code>, <code>to_set</code>, …) are generic default methods
+of <code>Iterator&lt;T&gt;</code>, some with a type parameter that defaults to <code>T</code>, so each
+is compiled only for the iterators that call it; see
+<a href="iteration.html#adapters">Iteration</a>.</li>
 </ul>
 <h2 id="default-type-arguments"><a class="header" href="#default-type-arguments">Default type arguments</a></h2>
 <p>A type parameter can have a default, written <code>Name=Type</code>. When a use leaves
@@ -431,7 +434,9 @@ main(): int {
 }
 </code></pre>
 <p>Arguments are matched to parameters in order, so put the parameters that have
-defaults last. The standard library declares <code>enum Result&lt;TValue, TError=Error&gt;</code>, so
+defaults last. A generic method’s default may name a type parameter of the
+struct or trait around it: <code>Iterator&lt;T&gt;</code> declares <code>sum&lt;TSum=T&gt;()</code>, so
+<code>sum()</code> adds in the element type and <code>sum&lt;long&gt;()</code> in <code>long</code>. The standard library declares <code>enum Result&lt;TValue, TError=Error&gt;</code>, so
 <code>Result&lt;int&gt;</code> means <code>Result&lt;int, Error&gt;</code>. See
 <a href="results.html">Error handling with Result</a>.</p>
 <h2 id="constraints"><a class="header" href="#constraints">Constraints</a></h2>

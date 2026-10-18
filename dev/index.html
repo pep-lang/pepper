@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-832056db.js";
+            window.path_to_searchindex_js = "searchindex-b60fc668.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2d913a78.js"></script>
+        <script src="toc-8b7d02da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -235,8 +235,8 @@ structs with constructors, destructors, methods and <a href="language/properties
 and multiple return values, array and map literals, generics (with type
 arguments inferred at calls, and generic methods), type aliases,
 traits (with default methods, and usable as types that convert back with <code>as?</code>), function types and
-closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with <code>map</code>,
-<code>filter</code>, <code>enumerate</code> and <code>zip</code> adapters),
+closures, modules (with <code>export * from</code> re-exports), <code>Result</code>-based error handling (<code>Result</code> is an enum, and <code>?</code> propagates errors), <code>Optional</code> values, iteration (with adapters such as <code>map</code>,
+<code>filter</code>, <code>take</code> and <code>chain</code>, and consumers such as <code>fold</code>, <code>any</code> and <code>sum</code>),
 <code>with</code> blocks, weak references (to structs and trait values), and calling C (including C callbacks), and being called from C (<code>[Export]</code>ed functions in a static or shared library, with a generated header). The standard library covers strings (with a <code>StringBuilder</code>, <code>StringConstant</code> for literals’ constant bytes,
 <code>to_string</code> and a <code>ToString</code> trait, <code>$"{a + b:&gt;8}"</code> interpolation with format specifications, and <code>String.format</code>), a <code>Comparable</code> trait for ordered types, sortable, searchable arrays with read-only slices, hash
 maps and sets, sorted maps and sets (<code>Map</code>, <code>Set</code>) and an insertion-ordered <code>OrderedMap</code>, a <code>BitSet</code> of small integers, a double-ended <code>Deque</code> and a <code>PriorityQueue</code>, atomics, threads, channels and mutexes, tasks (green threads

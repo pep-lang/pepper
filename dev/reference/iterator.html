@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-832056db.js";
+            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2d913a78.js"></script>
+        <script src="../toc-8b7d02da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -354,6 +354,215 @@ for (var (name, age) in names.iterate().zip(ages.iterate())) {
     print($"{name} is {age}");
 }
 </code></pre>
+<h4 id="take"><a class="header" href="#take">take</a></h4>
+<pre><code class="language-pepper">take&lt;TElement=T&gt;(count: ulong): TakeIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over at most the first <code>count</code> elements.</p>
+<p>Lazy, like <code>map</code>: it stops after <code>count</code> elements, or sooner when this
+iterator runs out, and never advances this iterator past them. Every
+type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the most elements to yield</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>TakeIterator&lt;T&gt;</code> over the first <code>count</code> elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var firsts = (1..&gt;10).take(3).to_array();   # [1, 2, 3]
+</code></pre>
+<h4 id="skip"><a class="header" href="#skip">skip</a></h4>
+<pre><code class="language-pepper">skip&lt;TElement=T&gt;(count: ulong): SkipIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the elements after the first <code>count</code>.</p>
+<p>Lazy, like <code>map</code>: the first <code>next()</code> of the result passes over <code>count</code>
+elements. When there are no more than <code>count</code>, it yields nothing.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — how many elements to pass over</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>SkipIterator&lt;T&gt;</code> over the rest of the elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var rest = (1..&gt;5).skip(3).to_array();   # [4, 5]
+</code></pre>
+<h4 id="chain"><a class="header" href="#chain">chain</a></h4>
+<pre><code class="language-pepper">chain&lt;TElement=T&gt;(other: Iterator&lt;T&gt;): ChainIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over this iterator’s elements, then <code>other</code>’s.</p>
+<p>Lazy, like <code>map</code>: <code>other</code> is not advanced until this iterator runs
+out. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the iterator whose elements follow</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>ChainIterator&lt;T&gt;</code> over both iterators’ elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var both = (1..&gt;2).chain(7..&gt;8).to_array();   # [1, 2, 7, 8]
+</code></pre>
+<h4 id="take_while"><a class="header" href="#take_while">take_while</a></h4>
+<pre><code class="language-pepper">take_while&lt;TElement=T&gt;(keep: (T) =&gt; bool): TakeWhileIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the leading elements for which <code>keep</code>
+returns true. It stops at the first element that fails.</p>
+<p>Lazy, like <code>map</code>: the failing element is read from this iterator but
+not yielded. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>keep</code> — the test the leading elements pass</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>TakeWhileIterator&lt;T&gt;</code> over the leading elements that pass</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var small = [1, 2, 7, 3].iterate().take_while((n) =&gt; n &lt; 5).to_array();   # [1, 2]
+</code></pre>
+<h4 id="skip_while"><a class="header" href="#skip_while">skip_while</a></h4>
+<pre><code class="language-pepper">skip_while&lt;TElement=T&gt;(skip: (T) =&gt; bool): SkipWhileIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the elements from the first one for which
+<code>skip</code> returns false.</p>
+<p>Lazy, like <code>map</code>: the first <code>next()</code> of the result passes over the
+leading elements that <code>skip</code> accepts, and later elements are not
+tested. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>skip</code> — the test the leading elements to pass over meet</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>SkipWhileIterator&lt;T&gt;</code> over the rest of the elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var rest = [1, 2, 7, 3].iterate().skip_while((n) =&gt; n &lt; 5).to_array();   # [7, 3]
+</code></pre>
+<h4 id="step_by"><a class="header" href="#step_by">step_by</a></h4>
+<pre><code class="language-pepper">step_by&lt;TElement=T&gt;(step: ulong): StepByIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the first element, then every <code>step</code>th one
+after it.</p>
+<p>Lazy, like <code>map</code>. <code>step_by(1)</code> yields every element. Every type that
+declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>step</code> — how far apart the yielded elements are</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>StepByIterator&lt;T&gt;</code> over every <code>step</code>th element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>step</code> is 0 (“step_by step must be positive”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var evens = (0..10).step_by(2).to_array();   # [0, 2, 4, 6, 8]
+</code></pre>
+<h4 id="peekable"><a class="header" href="#peekable">peekable</a></h4>
+<pre><code class="language-pepper">peekable&lt;TElement=T&gt;(): PeekableIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the same elements that can also look at the
+next one without moving to it, with <code>peek()</code>.</p>
+<p>Lazy, like <code>map</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>PeekableIterator&lt;T&gt;</code> over the elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var it = [1, 2].iterate().peekable();
+var ahead = it.peek();   # Value(1); `it` has not moved
+</code></pre>
+<h4 id="chunks"><a class="header" href="#chunks">chunks</a></h4>
+<pre><code class="language-pepper">chunks&lt;TElement=T&gt;(size: ulong): ChunksIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over the elements in arrays of <code>size</code>, in order.
+The last array is shorter when the elements do not divide evenly.</p>
+<p>Lazy, like <code>map</code>: each array is filled as the result is advanced. Each
+is a new <code>Array</code>, so keeping one is safe. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — the most elements each array holds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>ChunksIterator&lt;T&gt;</code> over arrays of up to <code>size</code> elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 (“chunks size must be positive”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var rows = (1..&gt;5).chunks(2).to_array();   # [[1, 2], [3, 4], [5]]
+</code></pre>
+<h4 id="windows"><a class="header" href="#windows">windows</a></h4>
+<pre><code class="language-pepper">windows&lt;TElement=T&gt;(size: ulong): WindowsIterator&lt;TElement&gt;
+</code></pre>
+<p>Returns an iterator over every run of <code>size</code> consecutive elements:
+the first <code>size</code>, then the run starting one later, and so on. With
+fewer than <code>size</code> elements it yields nothing.</p>
+<p>Lazy, like <code>map</code>. Each run is a new <code>Array</code>, so keeping one is safe.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>size</code> — how many elements each run holds</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>WindowsIterator&lt;T&gt;</code> over arrays of <code>size</code> elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 (“windows size must be positive”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var pairs = (1..&gt;4).windows(2).to_array();   # [[1, 2], [2, 3], [3, 4]]
+</code></pre>
 <h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
 <pre><code class="language-pepper">to_array(): Array&lt;T&gt;
 </code></pre>
@@ -369,6 +578,756 @@ method.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).to_array();   # [2, 4, 6, 8, 10]
 </code></pre>
+<h4 id="count"><a class="header" href="#count">count</a></h4>
+<pre><code class="language-pepper">count&lt;TElement=T&gt;(): ulong
+</code></pre>
+<p>Returns how many elements remain.</p>
+<p>Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the number of elements, possibly 0</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var evens = (1..&gt;10).filter((n) =&gt; n % 2 == 0).count();   # 5
+</code></pre>
+<h4 id="fold"><a class="header" href="#fold">fold</a></h4>
+<pre><code class="language-pepper">fold&lt;U&gt;(initial: U, combine: (U, T) =&gt; U): U
+</code></pre>
+<p>Combines the elements into one value: <code>combine(initial, first)</code>, then
+<code>combine</code> of that and the second element, and so on.</p>
+<p>Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type of the combined value</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>initial</code> — the value to start from, returned as is when there are no elements</li>
+<li><code>combine</code> — the function that folds one more element into the value so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the value after every element is folded in</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var product = (1..&gt;5).fold(1, (total, n) =&gt; total * n);   # 120
+</code></pre>
+<h4 id="any"><a class="header" href="#any">any</a></h4>
+<pre><code class="language-pepper">any&lt;TElement=T&gt;(test: (T) =&gt; bool): bool
+</code></pre>
+<p>Returns whether <code>test</code> returns true for some element.</p>
+<p>Stops at the first element that passes, on a copy of the iterator,
+like <code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this
+method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>test</code> — the test to apply</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when an element passes, false when none does or there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var has_even = [1, 3, 4].iterate().any((n) =&gt; n % 2 == 0);   # true
+</code></pre>
+<h4 id="all"><a class="header" href="#all">all</a></h4>
+<pre><code class="language-pepper">all&lt;TElement=T&gt;(test: (T) =&gt; bool): bool
+</code></pre>
+<p>Returns whether <code>test</code> returns true for every element.</p>
+<p>Stops at the first element that fails, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>test</code> — the test to apply</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when every element passes, including when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var all_small = [1, 3, 4].iterate().all((n) =&gt; n &lt; 10);   # true
+</code></pre>
+<h4 id="find"><a class="header" href="#find">find</a></h4>
+<pre><code class="language-pepper">find&lt;TElement=T&gt;(test: (T) =&gt; bool): T?
+</code></pre>
+<p>Returns the first element for which <code>test</code> returns true.</p>
+<p>Stops at that element, on a copy of the iterator, like <code>to_array</code>.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>test</code> — the test an element must pass</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the first element that passes, or Empty when none does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var first_even = [1, 3, 4, 6].iterate().find((n) =&gt; n % 2 == 0);   # Value(4)
+</code></pre>
+<h4 id="sum"><a class="header" href="#sum">sum</a></h4>
+<pre><code class="language-pepper">sum&lt;TSum=T&gt;(): TSum
+</code></pre>
+<p>Returns the sum of the elements, with <code>+</code>.</p>
+<p>For element types that have <code>+</code>, such as the numbers. The sum is
+kept in <code>TSum</code>, the element type unless named: <code>sum&lt;long&gt;()</code> adds
+<code>int</code> elements without overflowing an <code>int</code>. Runs the iteration to
+the end, on a copy of the iterator, like <code>to_array</code>. Every type that
+declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TSum</code> — the type the sum is kept in, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sum, or <code>TSum</code>’s default value (0 for a number) when there are no elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var total = (1..&gt;4).sum();   # 10
+var big = [2000000000, 2000000000].iterate().sum&lt;long&gt;();   # 4000000000
+</code></pre>
+<h4 id="min"><a class="header" href="#min">min</a></h4>
+<pre><code class="language-pepper">min&lt;TValue=T&gt;(): TValue?
+</code></pre>
+<p>Returns the smallest element, by <code>Comparable</code>’s <code>compare</code>.</p>
+<p>For <a href="compare.html"><code>Comparable</code></a> element types, such as the numbers
+and <code>String</code>. When several elements sort together, returns the first.
+Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TValue</code> — the <code>Comparable</code> type the elements are compared as, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the smallest element, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var lowest = [3, 1, 2].iterate().min();   # Value(1)
+</code></pre>
+<h4 id="max"><a class="header" href="#max">max</a></h4>
+<pre><code class="language-pepper">max&lt;TValue=T&gt;(): TValue?
+</code></pre>
+<p>Returns the largest element, by <code>Comparable</code>’s <code>compare</code>.</p>
+<p>For <a href="compare.html"><code>Comparable</code></a> element types, such as the numbers
+and <code>String</code>. When several elements sort together, returns the first.
+Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TValue</code> — the <code>Comparable</code> type the elements are compared as, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the largest element, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var highest = [3, 1, 2].iterate().max();   # Value(3)
+</code></pre>
+<h4 id="reduce"><a class="header" href="#reduce">reduce</a></h4>
+<pre><code class="language-pepper">reduce&lt;TElement=T&gt;(combine: (T, T) =&gt; T): T?
+</code></pre>
+<p>Combines the elements with <code>combine</code>, starting from the first:
+<code>combine(first, second)</code>, then <code>combine</code> of that and the third, and so
+on. It is <code>fold</code> with the first element as the initial value.</p>
+<p>Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>combine</code> — the function that folds one more element into the value so far</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the combined value, the only element when there is one, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var longest = ["a", "abc", "ab"].iterate().reduce((a, b) =&gt; b.size &gt; a.size ? b : a);   # Value("abc")
+</code></pre>
+<h4 id="position"><a class="header" href="#position">position</a></h4>
+<pre><code class="language-pepper">position&lt;TElement=T&gt;(test: (T) =&gt; bool): ulong?
+</code></pre>
+<p>Returns the position of the first element for which <code>test</code> returns
+true, counting from 0.</p>
+<p>Stops at that element, on a copy of the iterator, like <code>to_array</code>.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>test</code> — the test an element must pass</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the position of the first element that passes, or Empty when none does</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var at = [1, 3, 4].iterate().position((n) =&gt; n % 2 == 0);   # Value(2)
+</code></pre>
+<h4 id="last"><a class="header" href="#last">last</a></h4>
+<pre><code class="language-pepper">last&lt;TElement=T&gt;(): T?
+</code></pre>
+<p>Returns the last element.</p>
+<p>Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the last element, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var final = (1..&gt;4).last();   # Value(4)
+</code></pre>
+<h4 id="for_each"><a class="header" href="#for_each">for_each</a></h4>
+<pre><code class="language-pepper">for_each&lt;TElement=T&gt;(action: (T) =&gt; void)
+</code></pre>
+<p>Calls <code>action</code> with each element, in order.</p>
+<p>Runs the iteration to the end, on a copy of the iterator, like
+<code>to_array</code>; use a <code>for</code> loop where <code>break</code> or <code>return</code> is needed.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>action</code> — the function called with each element</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var names = Array&lt;String&gt;();
+var people = ["Ada", "Bo"];
+people.iterate().for_each((name) =&gt; names.append(name));
+</code></pre>
+<h4 id="min_by"><a class="header" href="#min_by">min_by</a></h4>
+<pre><code class="language-pepper">min_by&lt;TElement=T&gt;(compare: (T, T) =&gt; int): T?
+</code></pre>
+<p>Returns the smallest element by <code>compare</code>, which returns a negative
+number, zero or a positive number as its first argument sorts before,
+with or after its second, as <code>Array.sort</code>’s does.</p>
+<p>When several elements sort together, returns the first. Runs the
+iteration to the end, on a copy of the iterator, like <code>to_array</code>.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — the order of two elements</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the smallest element, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var shortest = ["abc", "a"].iterate().min_by((a, b) =&gt; a.size.compare(b.size));   # Value("a")
+</code></pre>
+<h4 id="max_by"><a class="header" href="#max_by">max_by</a></h4>
+<pre><code class="language-pepper">max_by&lt;TElement=T&gt;(compare: (T, T) =&gt; int): T?
+</code></pre>
+<p>Returns the largest element by <code>compare</code>, which returns a negative
+number, zero or a positive number as its first argument sorts before,
+with or after its second, as <code>Array.sort</code>’s does.</p>
+<p>When several elements sort together, returns the first. Runs the
+iteration to the end, on a copy of the iterator, like <code>to_array</code>.
+Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TElement</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>compare</code> — the order of two elements</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the largest element, or Empty when there are none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var longest = ["abc", "a"].iterate().max_by((a, b) =&gt; a.size.compare(b.size));   # Value("abc")
+</code></pre>
+<h4 id="to_set"><a class="header" href="#to_set">to_set</a></h4>
+<pre><code class="language-pepper">to_set&lt;K=T&gt;(): HashSet&lt;K&gt;
+</code></pre>
+<p>Returns a new <code>HashSet</code> holding the remaining elements, each once.</p>
+<p>For element types a <code>HashSet</code> can hold. Runs the iteration to the end,
+on a copy of the iterator, like <code>to_array</code>. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the type the set holds, <code>T</code> by default</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the distinct elements, possibly none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var distinct = [1, 2, 1].iterate().to_set();   # holds 1 and 2
+</code></pre>
+<h4 id="to_map"><a class="header" href="#to_map">to_map</a></h4>
+<pre><code class="language-pepper">to_map&lt;K, V&gt;(): HashMap&lt;K, V&gt;
+</code></pre>
+<p>Returns a new <code>HashMap</code> from the remaining elements, which are
+<code>(key, value)</code> tuples. A later element with a key already present
+replaces its value.</p>
+<p>For tuple elements; name the key and value types. Runs the iteration
+to the end, on a copy of the iterator, like <code>to_array</code>. Every type that
+declares <code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>K</code> — the type of the keys</li>
+<li><code>V</code> — the type of the values</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the map, possibly empty</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var ages = [("Ada", 36), ("Bo", 12)].iterate().to_map&lt;String, int&gt;();   # ages["Bo"] == 12
+</code></pre>
+<h4 id="join"><a class="header" href="#join">join</a></h4>
+<pre><code class="language-pepper">join&lt;TText=T&gt;(separator: String): String
+</code></pre>
+<p>Returns the remaining elements, which are <code>String</code>s, with <code>separator</code>
+between each two, as <code>String.join</code> does for an array.</p>
+<p>For <code>String</code> elements. Runs the iteration to the end, on a copy of the
+iterator, like <code>to_array</code>. Every type that declares <code>Iterator&lt;T&gt;</code> gets
+this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>TText</code> — the element type, <code>T</code> by default</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>separator</code> — the text put between each two elements</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the joined text, or <code>""</code> when there are no elements</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var ages = [36, 12].iterate().map((n) =&gt; $"{n}").join(", ");   # "36, 12"
+</code></pre>
+<h2 id="takeiterator"><a class="header" href="#takeiterator">TakeIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct TakeIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.take</code> returns: at most the first <code>count</code> elements
+of the source iterator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.take</code></li>
+</ul>
+<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h4 id="takeiterator-1"><a class="header" href="#takeiterator-1">TakeIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, count: ulong)
+</code></pre>
+<p>Makes an iterator over at most the first <code>count</code> elements of <code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to take from</li>
+<li><code>count</code> — the most elements to yield</li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element, unless <code>count</code> elements were yielded.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false after <code>count</code> elements or when the source is exhausted</li>
+</ul>
+<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="skipiterator"><a class="header" href="#skipiterator">SkipIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct SkipIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.skip</code> returns: the elements of the source iterator
+after the first <code>count</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.skip</code></li>
+</ul>
+<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h4 id="skipiterator-1"><a class="header" href="#skipiterator-1">SkipIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, count: ulong)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> after the first
+<code>count</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to skip into</li>
+<li><code>count</code> — how many elements to pass over</li>
+</ul>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
+<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element, passing over the first <code>count</code> on the
+first call.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="chainiterator"><a class="header" href="#chainiterator">ChainIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ChainIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.chain</code> returns: the elements of one iterator, then
+those of another.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.chain</code></li>
+</ul>
+<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h4 id="chainiterator-1"><a class="header" href="#chainiterator-1">ChainIterator()</a></h4>
+<pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;T&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>first</code>, then <code>second</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>first</code> — the iterator whose elements come first</li>
+<li><code>second</code> — the iterator whose elements follow</li>
+</ul>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element of the first iterator, or once it has
+run out, of the second.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when both are exhausted</li>
+</ul>
+<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="takewhileiterator"><a class="header" href="#takewhileiterator">TakeWhileIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct TakeWhileIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.take_while</code> returns: the leading elements of the
+source iterator that the test function accepts.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.take_while</code></li>
+</ul>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="takewhileiterator-1"><a class="header" href="#takewhileiterator-1">TakeWhileIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
+</code></pre>
+<p>Makes an iterator over the leading elements of <code>source</code> that <code>keep</code>
+accepts.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to take from</li>
+<li><code>keep</code> — the test the leading elements pass</li>
+</ul>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element, unless it or an earlier one failed the
+test.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false once an element fails or the source is exhausted</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="skipwhileiterator"><a class="header" href="#skipwhileiterator">SkipWhileIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct SkipWhileIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.skip_while</code> returns: the elements of the source
+iterator from the first one the test function rejects.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.skip_while</code></li>
+</ul>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h4 id="skipwhileiterator-1"><a class="header" href="#skipwhileiterator-1">SkipWhileIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, skip: (T) =&gt; bool)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> from the first one
+<code>skip</code> rejects.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to skip into</li>
+<li><code>skip</code> — the test the leading elements to pass over meet</li>
+</ul>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element, passing over the leading elements the
+test accepts on the first call.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="stepbyiterator"><a class="header" href="#stepbyiterator">StepByIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct StepByIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.step_by</code> returns: the first element of the source
+iterator, then every <code>step</code>th one after it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.step_by</code></li>
+</ul>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h4 id="stepbyiterator-1"><a class="header" href="#stepbyiterator-1">StepByIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, step: ulong)
+</code></pre>
+<p>Makes an iterator over the first element of <code>source</code> and every
+<code>step</code>th one after it.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to step through</li>
+<li><code>step</code> — how far apart the yielded elements are</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>step</code> is 0 (“step_by step must be positive”)</li>
+</ul>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the first element, then <code>step</code> elements at a time.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h2 id="peekableiterator"><a class="header" href="#peekableiterator">PeekableIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct PeekableIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.peekable</code> returns: the elements of the source
+iterator, with <code>peek()</code> to look at the next one without moving to it.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.peekable</code></li>
+</ul>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h4 id="peekableiterator-1"><a class="header" href="#peekableiterator-1">PeekableIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> that can peek.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to yield from</li>
+</ul>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element: the one <code>peek()</code> returned, if any.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<h4 id="peek"><a class="header" href="#peek">peek</a></h4>
+<pre><code class="language-pepper">peek(): T?
+</code></pre>
+<p>Returns the element the next <code>next()</code> will move to, without moving.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the next element, or Empty when there are no more</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var it = [1, 2].iterate().peekable();
+it.next();               # at 1
+var ahead = it.peek();   # Value(2), still at 1
+</code></pre>
+<h2 id="chunksiterator"><a class="header" href="#chunksiterator">ChunksIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ChunksIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.chunks</code> returns: the elements of the source
+iterator in arrays of up to <code>size</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.chunks</code></li>
+</ul>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h4 id="chunksiterator-1"><a class="header" href="#chunksiterator-1">ChunksIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
+</code></pre>
+<p>Makes an iterator over the elements of <code>source</code> in arrays of up to
+<code>size</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to group</li>
+<li><code>size</code> — the most elements each array holds</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 (“chunks size must be positive”)</li>
+</ul>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Fills a new array with up to <code>size</code> more elements.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current array, false when the source is exhausted</li>
+</ul>
+<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
+<pre><code class="language-pepper">current(): Array&lt;T&gt;
+</code></pre>
+<p>Returns the array the last successful <code>next()</code> filled.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current array</li>
+</ul>
+<h2 id="windowsiterator"><a class="header" href="#windowsiterator">WindowsIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct WindowsIterator&lt;T&gt;
+</code></pre>
+<p>The iterator <code>Iterator.windows</code> returns: every run of <code>size</code> consecutive
+elements of the source iterator.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the elements</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.windows</code></li>
+</ul>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h4 id="windowsiterator-1"><a class="header" href="#windowsiterator-1">WindowsIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
+</code></pre>
+<p>Makes an iterator over every run of <code>size</code> consecutive elements of
+<code>source</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the iterator to group</li>
+<li><code>size</code> — how many elements each run holds</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>size</code> is 0 (“windows size must be positive”)</li>
+</ul>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Makes a new run: the last one’s elements after its first, then
+enough more to fill it.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current run, false when the source is exhausted</li>
+</ul>
+<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
+<pre><code class="language-pepper">current(): Array&lt;T&gt;
+</code></pre>
+<p>Returns the run the last successful <code>next()</code> made.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current run</li>
+</ul>
 <h2 id="mapiterator"><a class="header" href="#mapiterator">MapIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct MapIterator&lt;T, U&gt;
 </code></pre>
@@ -383,7 +1342,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor"><a class="header" href="#constructor">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
@@ -393,8 +1352,8 @@ passed through the transform function.</p>
 <li><code>source</code> — the iterator to transform</li>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
-<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -402,7 +1361,7 @@ passed through the transform function.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
 <pre><code class="language-pepper">current(): U
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
@@ -423,7 +1382,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="constructor-1"><a class="header" href="#constructor-1">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -433,8 +1392,8 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
-<h4 id="next-2"><a class="header" href="#next-2">next</a></h4>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element that the test function accepts.</p>
@@ -442,7 +1401,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-2"><a class="header" href="#current-2">current</a></h4>
+<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -464,7 +1423,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>Iterator.enumerate</code></li>
 </ul>
-<h3 id="constructor-2"><a class="header" href="#constructor-2">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -473,8 +1432,8 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>source</code> — the iterator to number</li>
 </ul>
-<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
-<h4 id="next-3"><a class="header" href="#next-3">next</a></h4>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -482,7 +1441,7 @@ iterator, paired with its position.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-3"><a class="header" href="#current-3">current</a></h4>
+<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
 <pre><code class="language-pepper">current(): (TIndex, T)
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to, with its
@@ -505,7 +1464,7 @@ paired in step, until either runs out.</p>
 <ul>
 <li><code>Iterator.zip</code></li>
 </ul>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="zipiterator-1"><a class="header" href="#zipiterator-1">ZipIterator()</a></h4>
 <pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;U&gt;)
 </code></pre>
@@ -515,8 +1474,8 @@ paired in step, until either runs out.</p>
 <li><code>first</code> — the iterator giving the first half of each pair</li>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
-<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
@@ -525,7 +1484,7 @@ run out.</p>
 <ul>
 <li>true if both have a current element, false when either is exhausted</li>
 </ul>
-<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
 <pre><code class="language-pepper">current(): (T, U)
 </code></pre>
 <p>Returns the pair the last successful <code>next()</code> moved to.</p>
@@ -559,7 +1518,7 @@ for (var x in nums) {
     total = total + x;
 }
 </code></pre>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>

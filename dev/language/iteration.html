@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-832056db.js";
+            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2d913a78.js"></script>
+        <script src="../toc-8b7d02da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -383,8 +383,8 @@ there without overflowing.</p>
 <li>
 <p><strong>A range is a value</strong>, a <a href="../reference/range.html"><code>Range&lt;T&gt;</code></a>. It has
 <code>contains(x)</code> and the <code>is_empty</code> property, and it is an <code>Iterator&lt;T&gt;</code>, so it has the
-<a href="#adapters">adapters</a> (<code>map</code>, <code>filter</code>, <code>enumerate</code>, <code>zip</code>) and
-<code>to_array()</code>. Looping over one allocates
+<a href="#adapters">adapters and consumers</a> (<code>map</code>, <code>filter</code>, <code>take</code>, <code>sum</code>,
+…). Looping over one allocates
 nothing; the optimizer turns it into a plain counting loop.</p>
 </li>
 </ul>
@@ -445,10 +445,48 @@ type is whatever <code>transform</code> returns.</li>
 <code>ulong</code>; <code>enumerate&lt;int&gt;()</code> counts in <code>int</code> instead.</li>
 <li><code>zip(other)</code> yields <code>(x, y)</code> pairs, one element from each iterator in
 step, and stops when either runs out.</li>
+<li><code>take(n)</code> yields at most the first <code>n</code> elements; <code>skip(n)</code> yields the
+elements after the first <code>n</code>.</li>
+<li><code>chain(other)</code> yields this iterator’s elements, then <code>other</code>’s.</li>
+<li><code>take_while(keep)</code> yields the leading elements that pass; <code>skip_while(skip)</code>
+yields the elements from the first one that fails.</li>
+<li><code>step_by(n)</code> yields the first element, then every <code>n</code>th one after it.</li>
+<li><code>chunks(n)</code> yields the elements in arrays of <code>n</code> (the last may be
+shorter); <code>windows(n)</code> yields every run of <code>n</code> consecutive elements. Each
+array is new, so keeping one is safe.</li>
+<li><code>peekable()</code> yields the same elements and adds <code>peek()</code>, which returns the
+next element as an optional without moving to it.</li>
 </ul>
 <p>They return iterators, so they chain, and a <code>for</code> loop can use the result
-directly; destructure a tuple to name its parts. <code>to_array()</code> runs an
-iterator to the end and collects what is left into a new <code>Array</code>:</p>
+directly; destructure a tuple to name its parts.</p>
+<p>The consumers run an iterator (as far as they need to) and return a value:</p>
+<ul>
+<li><code>to_array()</code> collects what is left into a new <code>Array</code>.</li>
+<li><code>count()</code> returns how many elements are left, as a <code>ulong</code>.</li>
+<li><code>last()</code> returns the last element as an <a href="optionals.html">optional</a>.</li>
+<li><code>for_each(action)</code> calls <code>action</code> with each element.</li>
+<li><code>fold(initial, combine)</code> folds each element into a value:
+<code>(1..&gt;5).fold(1, (product, n) =&gt; product * n)</code> is 120.</li>
+<li><code>any(test)</code> and <code>all(test)</code> return whether some or every element passes;
+they stop at the first element that settles the answer. <code>all</code> is <code>true</code>
+for no elements.</li>
+<li><code>reduce(combine)</code> is <code>fold</code> starting from the first element, as an
+optional that is Empty for none.</li>
+<li><code>find(test)</code> returns the first element that passes as an
+optional, Empty when none does; <code>position(test)</code> returns its position.</li>
+<li><code>sum()</code> adds the elements with <code>+</code> and returns 0 (the type’s default
+value) for none; <code>sum&lt;long&gt;()</code> adds them as <code>long</code>s. <code>min()</code> and <code>max()</code> return the smallest and largest by
+<a href="ordering.html"><code>compare</code></a>, as an optional that is Empty for none; among
+equal elements they return the first. They need element types that have
+<code>+</code> or are <code>Comparable</code>, such as the numbers and <code>String</code>. <code>min_by(compare)</code>
+and <code>max_by(compare)</code> order by a function instead, as <code>Array.sort</code> does.</li>
+<li><code>to_set()</code> collects into a <code>HashSet</code>, <code>to_map&lt;K, V&gt;()</code> collects
+<code>(key, value)</code> tuples into a <code>HashMap</code> (a later key replaces an earlier
+one), and <code>join(separator)</code> joins <code>String</code> elements.</li>
+</ul>
+<p>The adapters do not allocate per element: an optimized build of a chain
+such as <code>(0..n).filter(f).map(g).take(k).sum()</code> runs as fast as the loop
+written out by hand.</p>
 <pre><code class="language-pepper">struct Person {
     String name;
     int age;
@@ -494,6 +532,13 @@ main(): int {
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) =&gt; p.age).to_array();
     assert(ages.count == 3 &amp;&amp; ages[2] == 40, "every age");
+
+    # Consumers run the iterator and return one value.
+    assert(people.iterate().any((p) =&gt; p.age &lt; 18), "Bo is a child");
+    assert(people.iterate().map((p) =&gt; p.age).sum() == 88, "total age");
+    assert(people.iterate().map((p) =&gt; p.age).max().value() == 40, "oldest");
+    assert(people.iterate().find((p) =&gt; p.age &gt; 36).value().name == "Cyd", "first over 36");
+    assert(people.iterate().skip(1).take(1).count() == 1, "just Bo");
     return 0;
 }
 </code></pre>
@@ -503,9 +548,10 @@ your own iterators once you write <code>extend YourType with Iterator&lt;T&gt;;<
 the iterator it wraps (the runtime’s iterators are
 <a href="value-structs.html">value structs</a>, boxed when they become an <code>Iterator&lt;T&gt;</code>),
 so a chain built from a temporary stays alive while the loop runs, and
-<code>it.map(f)</code> and <code>it.to_array()</code> leave <code>it</code> where it was. They are generic methods (see
-<a href="generics.html#generic-methods">Generics</a>), so they are not callable through an
-<code>Iterator&lt;T&gt;</code> trait value.</p>
+<code>it.map(f)</code>, <code>it.to_array()</code> and the other consumers leave <code>it</code> where it was. All of them but <code>filter</code> and <code>to_array</code> are
+generic methods (see <a href="generics.html#generic-methods">Generics</a>), so they are
+not callable through an <code>Iterator&lt;T&gt;</code> trait value; being generic also means
+each one is compiled only for the iterators that call it.</p>
 <h2 id="reading-files-and-directories"><a class="header" href="#reading-files-and-directories">Reading files and directories</a></h2>
 <p>Input that can fail partway, such as a directory listing or a file read line
 by line, yields a <a href="results.html"><code>Result</code></a> per element: an <code>IoResult&lt;T&gt;</code> from
@@ -679,8 +725,8 @@ intent, and the compiler then checks that <code>Countdown</code> has both <code>
 <code>current()</code> (see <a href="traits-and-extensions.html">Traits and extensions</a>).
 Declaring it also lets the type be used as an <code>Iterator&lt;int&gt;</code> value, and a
 <code>for</code> loop over such a value calls the methods through the trait. It also
-gives the type the <a href="#adapters">adapters</a> (<code>map</code>, <code>filter</code>, <code>enumerate</code>,
-<code>zip</code>) and <code>to_array()</code>.</li>
+gives the type the <a href="#adapters">adapters and consumers</a> (<code>map</code>, <code>filter</code>,
+<code>fold</code>, <code>to_array()</code>, …).</li>
 <li><strong>Looping over an iterator uses it up.</strong> When the source is itself an
 iterator stored in a variable, the loop drives that variable in place, so
 it is exhausted afterwards, and a loop left with <code>break</code> can be resumed by

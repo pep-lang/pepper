@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-832056db.js";
+            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2d913a78.js"></script>
+        <script src="../toc-8b7d02da.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -203,6 +203,10 @@ one entry at a time with <code>for</code>.</li>
 <li><code>Metadata</code> is a snapshot of a path’s kind, size, permission bits and
 timestamps, from <code>Path.metadata()</code> (which follows symlinks),
 <code>Path.symlink_metadata()</code> (which does not) or <code>File.metadata()</code>.</li>
+<li><code>glob</code> finds the paths that match a pattern such as <code>src/**/*.pep</code>, and
+<code>Watcher</code> reports changes in a directory tree (see
+<a href="#finding-files-by-pattern">Finding files by pattern</a> and
+<a href="#watching-for-changes">Watching for changes</a>).</li>
 </ul>
 <pre><code class="language-pepper"># Write, read, list and remove files with io.
 import io;
@@ -389,6 +393,112 @@ main(): int {
     return 0;
 }
 </code></pre>
+<h2 id="finding-files-by-pattern"><a class="header" href="#finding-files-by-pattern">Finding files by pattern</a></h2>
+<p><code>io.glob(pattern)</code> returns the existing paths that match a shell-style
+pattern, sorted, and <code>io.glob_matches(pattern, path)</code> tests a path’s text
+against one without touching the file system:</p>
+<ul>
+<li><code>*</code> matches any run of characters within one path component, and <code>?</code>
+one character; neither matches <code>/</code>.</li>
+<li><code>**</code> as a whole component matches any number of directories, none
+included: <code>src/**/*.pep</code> matches <code>src/main.pep</code> and <code>src/net/http.pep</code>.</li>
+<li><code>[abc]</code>, <code>[a-z]</code> and <code>[!abc]</code> (or <code>[^abc]</code>) match one character listed,
+in the range, or not listed.</li>
+<li><code>{pep,md}</code> matches either alternative; alternatives may hold any
+pattern, braces included.</li>
+</ul>
+<p>Patterns separate components with <code>/</code> on every system; on Windows a <code>\</code> in
+the path being matched counts as <code>/</code> too. There is no escape character, so
+that Windows paths stay as they are: <code>[*]</code> matches a literal <code>*</code>. An
+unclosed <code>[</code> or <code>{</code> matches itself, so every pattern is valid. Matching is
+case-sensitive, and <code>*</code> matches a leading <code>.</code> like any other character.</p>
+<p><code>glob</code> starts at the longest leading part of the pattern without
+wildcards, so <code>src/**/*.pep</code> lists only under <code>src</code>, and a relative pattern
+gives relative paths. <code>**</code> does not descend into symlinked directories, so
+a link cycle cannot loop. Directories it cannot read are skipped, and a
+pattern whose start does not exist matches nothing.</p>
+<pre><code class="language-pepper"># Find files by pattern with io.glob, and test a path with io.glob_matches.
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-files-glob-example");
+    io.Directory.remove_all(folder);
+    io.Directory.create_all(folder.join("src").join("net")).value();
+    io.File.write_text(folder.join("README.md"), "").value();
+    io.File.write_text(folder.join("src").join("main.pep"), "").value();
+    io.File.write_text(folder.join("src").join("net").join("http.pep"), "").value();
+
+    # `**` crosses directories; `*` stays within one name. Patterns use `/`
+    # on every system, and the paths come back sorted.
+    var base = folder.to_string().replace("\\", "/");
+    var sources = io.glob(base + "/src/**/*.pep");
+    assert(sources.count == 2, "main.pep and net/http.pep");
+    assert(io.glob(base + "/*.{md,txt}").count == 1, "README.md");
+
+    # Matching text alone touches no files.
+    assert(io.glob_matches("src/**/*.pep", "src/net/http.pep"), "matches");
+    assert(!io.glob_matches("*.pep", "src/main.pep"), "`*` stops at `/`");
+    assert(io.glob_matches("file[0-9].txt", "file7.txt"), "a class");
+
+    io.Directory.remove_all(folder).value();
+    return 0;
+}
+</code></pre>
+<h2 id="watching-for-changes"><a class="header" href="#watching-for-changes">Watching for changes</a></h2>
+<p><code>io.Watcher.open(directory)</code> watches a directory and everything below it.
+Each <code>wait()</code> returns the changes recorded since the last one, or waits for
+the next: a list of <code>FileChange</code>s, each a <code>ChangeKind</code> (<code>Created</code>,
+<code>Removed</code>, <code>Modified</code>) and the <code>path</code> it happened to. A rename reports the
+old path removed and the new one created. When the system drops changes
+because they came too fast, <code>wait</code> reports one <code>Overflow</code> change for the
+directory: list it again to catch up. <code>close()</code> stops watching, and a
+<code>wait</code> running in another task then fails.</p>
+<p>In a task (see <a href="tasks.html">Tasks</a>) <code>wait</code> parks only the task, so others run
+while it waits, and the task’s cancel or <code>async.timeout</code> ends it. Outside a
+task it blocks the thread.</p>
+<pre><code class="language-pepper"># Watch a directory tree for changes with io.Watcher, inside a task.
+import async;
+import io;
+
+main(): int {
+    var folder = io.Directory.temp().join("pepper-files-watch-example");
+    io.Directory.remove_all(folder);
+    io.Directory.create_all(folder).value();
+    var watcher = io.Watcher.open(folder).value();
+    async.run(
+        () =&gt; {
+            var path = folder.join("hello.txt");
+            io.File.write_text(path, "hi").value();
+            # In a task the wait parks only the task, and a timeout ends it.
+            with (async.timeout(5000)) {
+                var changes = watcher.wait().value();
+                for (var change in changes) {
+                    if (change.kind == io.ChangeKind.Created &amp;&amp; change.path.to_string() == path.to_string()) {
+                        print($"created {change.path.file_name().value()}");
+                    }
+                }
+            }
+        }
+    );
+    watcher.close();
+    io.Directory.remove_all(folder).value();
+    return 0;
+}
+</code></pre>
+<p>Each system watches its own way, and that shows in a few places:</p>
+<ul>
+<li>Linux uses inotify, with a watch on every directory of the tree. A new
+directory gets one as its creation is read, and what it already holds by
+then is reported created. The number of watches is limited
+(<code>/proc/sys/fs/inotify/max_user_watches</code>), and <code>open</code> fails past it.</li>
+<li>macOS uses kqueue, which holds an open descriptor for every directory and
+file of the tree, so a large tree may need a higher <code>ulimit -n</code>. A
+directory that changed is listed again to tell what came and went.</li>
+<li>Windows uses <code>ReadDirectoryChangesW</code>, which watches the whole tree with
+one handle. One write often reports <code>Modified</code> twice; repeats next to
+each other in one batch are dropped.</li>
+<li>WASI cannot watch: <code>open</code> fails.</li>
+</ul>
 <h2 id="archives"><a class="header" href="#archives">Archives</a></h2>
 <p><code>archive.TarReader.extract</code> uses all of the above: it restores each file’s
 mode and modification time and makes the archive’s symlinks, as long as
