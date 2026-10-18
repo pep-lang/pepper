@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
+            window.path_to_searchindex_js = "../searchindex-cc6a32e9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8b7d02da.js"></script>
@@ -418,6 +418,30 @@ out. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</
 </ul>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var both = (1..&gt;2).chain(7..&gt;8).to_array();   # [1, 2, 7, 8]
+</code></pre>
+<h4 id="flat_map"><a class="header" href="#flat_map">flat_map</a></h4>
+<pre><code class="language-pepper">flat_map&lt;U&gt;(transform: (T) =&gt; Iterator&lt;U&gt;): FlatMapIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over the elements of the iterators <code>transform</code>
+returns, one source element after another.</p>
+<p>Lazy, like <code>map</code>: <code>transform</code> runs on a source element only once the
+iterator from the one before it has run out. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type of the elements of the iterators <code>transform</code> returns</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transform</code> — the function that turns each element into an iterator</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>FlatMapIterator&lt;T, U&gt;</code> over the elements of those iterators</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var words = ["ab", "cd"];
+var letters = words.iterate().flat_map((w) =&gt; w.iterate()).to_array();   # a, b, c, d
 </code></pre>
 <h4 id="take_while"><a class="header" href="#take_while">take_while</a></h4>
 <pre><code class="language-pepper">take_while&lt;TElement=T&gt;(keep: (T) =&gt; bool): TakeWhileIterator&lt;TElement&gt;
@@ -1056,6 +1080,51 @@ run out, of the second.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h2 id="flatmapiterator"><a class="header" href="#flatmapiterator">FlatMapIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct FlatMapIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.flat_map</code> returns: the elements of the iterators
+the transform function returns for each source element, in order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>U</code> — the type of the elements produced</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.flat_map</code></li>
+</ul>
+<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h4 id="flatmapiterator-1"><a class="header" href="#flatmapiterator-1">FlatMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: MapIterator&lt;T, Iterator&lt;U&gt;&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of the iterators <code>source</code> yields.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the source iterator, mapped to an iterator per element</li>
+</ul>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element of the current inner iterator, moving to
+the next source element’s iterator each time one runs out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<pre><code class="language-pepper">current(): U
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> has not moved to an element</li>
+</ul>
 <h2 id="takewhileiterator"><a class="header" href="#takewhileiterator">TakeWhileIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct TakeWhileIterator&lt;T&gt;
 </code></pre>
@@ -1069,7 +1138,7 @@ source iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.take_while</code></li>
 </ul>
-<h3 id="constructor-3"><a class="header" href="#constructor-3">Constructor</a></h3>
+<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
 <h4 id="takewhileiterator-1"><a class="header" href="#takewhileiterator-1">TakeWhileIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -1080,8 +1149,8 @@ accepts.</p>
 <li><code>source</code> — the iterator to take from</li>
 <li><code>keep</code> — the test the leading elements pass</li>
 </ul>
-<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
-<h4 id="next-4"><a class="header" href="#next-4">next</a></h4>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, unless it or an earlier one failed the
@@ -1090,7 +1159,7 @@ test.</p>
 <ul>
 <li>true if there is a current element, false once an element fails or the source is exhausted</li>
 </ul>
-<h4 id="current-4"><a class="header" href="#current-4">current</a></h4>
+<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -1111,7 +1180,7 @@ iterator from the first one the test function rejects.</p>
 <ul>
 <li><code>Iterator.skip_while</code></li>
 </ul>
-<h3 id="constructor-4"><a class="header" href="#constructor-4">Constructor</a></h3>
+<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
 <h4 id="skipwhileiterator-1"><a class="header" href="#skipwhileiterator-1">SkipWhileIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, skip: (T) =&gt; bool)
 </code></pre>
@@ -1122,8 +1191,8 @@ iterator from the first one the test function rejects.</p>
 <li><code>source</code> — the iterator to skip into</li>
 <li><code>skip</code> — the test the leading elements to pass over meet</li>
 </ul>
-<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
-<h4 id="next-5"><a class="header" href="#next-5">next</a></h4>
+<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
+<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, passing over the leading elements the
@@ -1132,7 +1201,7 @@ test accepts on the first call.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-5"><a class="header" href="#current-5">current</a></h4>
+<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -1153,7 +1222,7 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li><code>Iterator.step_by</code></li>
 </ul>
-<h3 id="constructor-5"><a class="header" href="#constructor-5">Constructor</a></h3>
+<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
 <h4 id="stepbyiterator-1"><a class="header" href="#stepbyiterator-1">StepByIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, step: ulong)
 </code></pre>
@@ -1168,8 +1237,8 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li>if <code>step</code> is 0 (“step_by step must be positive”)</li>
 </ul>
-<h3 id="methods-6"><a class="header" href="#methods-6">Methods</a></h3>
-<h4 id="next-6"><a class="header" href="#next-6">next</a></h4>
+<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
+<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the first element, then <code>step</code> elements at a time.</p>
@@ -1177,7 +1246,7 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-6"><a class="header" href="#current-6">current</a></h4>
+<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -1198,7 +1267,7 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li><code>Iterator.peekable</code></li>
 </ul>
-<h3 id="constructor-6"><a class="header" href="#constructor-6">Constructor</a></h3>
+<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
 <h4 id="peekableiterator-1"><a class="header" href="#peekableiterator-1">PeekableIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -1207,8 +1276,8 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li><code>source</code> — the iterator to yield from</li>
 </ul>
-<h3 id="methods-7"><a class="header" href="#methods-7">Methods</a></h3>
-<h4 id="next-7"><a class="header" href="#next-7">next</a></h4>
+<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
+<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element: the one <code>peek()</code> returned, if any.</p>
@@ -1216,7 +1285,7 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-7"><a class="header" href="#current-7">current</a></h4>
+<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -1250,7 +1319,7 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li><code>Iterator.chunks</code></li>
 </ul>
-<h3 id="constructor-7"><a class="header" href="#constructor-7">Constructor</a></h3>
+<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
 <h4 id="chunksiterator-1"><a class="header" href="#chunksiterator-1">ChunksIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
 </code></pre>
@@ -1265,8 +1334,8 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li>if <code>size</code> is 0 (“chunks size must be positive”)</li>
 </ul>
-<h3 id="methods-8"><a class="header" href="#methods-8">Methods</a></h3>
-<h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
+<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
+<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Fills a new array with up to <code>size</code> more elements.</p>
@@ -1274,7 +1343,7 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li>true if there is a current array, false when the source is exhausted</li>
 </ul>
-<h4 id="current-8"><a class="header" href="#current-8">current</a></h4>
+<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
 <pre><code class="language-pepper">current(): Array&lt;T&gt;
 </code></pre>
 <p>Returns the array the last successful <code>next()</code> filled.</p>
@@ -1295,7 +1364,7 @@ elements of the source iterator.</p>
 <ul>
 <li><code>Iterator.windows</code></li>
 </ul>
-<h3 id="constructor-8"><a class="header" href="#constructor-8">Constructor</a></h3>
+<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
 <h4 id="windowsiterator-1"><a class="header" href="#windowsiterator-1">WindowsIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
 </code></pre>
@@ -1310,8 +1379,8 @@ elements of the source iterator.</p>
 <ul>
 <li>if <code>size</code> is 0 (“windows size must be positive”)</li>
 </ul>
-<h3 id="methods-9"><a class="header" href="#methods-9">Methods</a></h3>
-<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
+<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Makes a new run: the last one’s elements after its first, then
@@ -1320,7 +1389,7 @@ enough more to fill it.</p>
 <ul>
 <li>true if there is a current run, false when the source is exhausted</li>
 </ul>
-<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
+<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
 <pre><code class="language-pepper">current(): Array&lt;T&gt;
 </code></pre>
 <p>Returns the run the last successful <code>next()</code> made.</p>
@@ -1342,7 +1411,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor-9"><a class="header" href="#constructor-9">Constructor</a></h3>
+<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
@@ -1352,8 +1421,8 @@ passed through the transform function.</p>
 <li><code>source</code> — the iterator to transform</li>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
-<h3 id="methods-10"><a class="header" href="#methods-10">Methods</a></h3>
-<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -1361,7 +1430,7 @@ passed through the transform function.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
+<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): U
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
@@ -1382,7 +1451,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="constructor-10"><a class="header" href="#constructor-10">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -1392,8 +1461,8 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
-<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element that the test function accepts.</p>
@@ -1401,7 +1470,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
+<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -1423,7 +1492,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>Iterator.enumerate</code></li>
 </ul>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -1432,8 +1501,8 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>source</code> — the iterator to number</li>
 </ul>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
-<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -1441,7 +1510,7 @@ iterator, paired with its position.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
+<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
 <pre><code class="language-pepper">current(): (TIndex, T)
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to, with its
@@ -1464,7 +1533,7 @@ paired in step, until either runs out.</p>
 <ul>
 <li><code>Iterator.zip</code></li>
 </ul>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="zipiterator-1"><a class="header" href="#zipiterator-1">ZipIterator()</a></h4>
 <pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;U&gt;)
 </code></pre>
@@ -1474,8 +1543,8 @@ paired in step, until either runs out.</p>
 <li><code>first</code> — the iterator giving the first half of each pair</li>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
-<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h4 id="next-14"><a class="header" href="#next-14">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
@@ -1484,7 +1553,7 @@ run out.</p>
 <ul>
 <li>true if both have a current element, false when either is exhausted</li>
 </ul>
-<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
+<h4 id="current-14"><a class="header" href="#current-14">current</a></h4>
 <pre><code class="language-pepper">current(): (T, U)
 </code></pre>
 <p>Returns the pair the last successful <code>next()</code> moved to.</p>
@@ -1518,7 +1587,7 @@ for (var x in nums) {
     total = total + x;
 }
 </code></pre>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="iterate"><a class="header" href="#iterate">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>

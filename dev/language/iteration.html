@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-b60fc668.js";
+            window.path_to_searchindex_js = "../searchindex-cc6a32e9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-8b7d02da.js"></script>
@@ -448,6 +448,8 @@ step, and stops when either runs out.</li>
 <li><code>take(n)</code> yields at most the first <code>n</code> elements; <code>skip(n)</code> yields the
 elements after the first <code>n</code>.</li>
 <li><code>chain(other)</code> yields this iterator’s elements, then <code>other</code>’s.</li>
+<li><code>flat_map(transform)</code> yields the elements of the iterator <code>transform(x)</code>
+returns for each element <code>x</code>, one after another: <code>["ab", "cd"].iterate() .flat_map((w) =&gt; w.iterate())</code> yields <code>a</code>, <code>b</code>, <code>c</code>, <code>d</code>.</li>
 <li><code>take_while(keep)</code> yields the leading elements that pass; <code>skip_while(skip)</code>
 yields the elements from the first one that fails.</li>
 <li><code>step_by(n)</code> yields the first element, then every <code>n</code>th one after it.</li>
@@ -528,6 +530,10 @@ main(): int {
         seated += 1;   # Cyd gets no seat: zip stops at the shorter
     }
     assert(seated == 2, "two pairs");
+
+    # flat_map yields the elements of the iterator it returns for each one.
+    var letters = people.iterate().flat_map((p) =&gt; p.name.iterate()).count();
+    assert(letters == 8, "Ada, Bo and Cyd");
 
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) =&gt; p.age).to_array();

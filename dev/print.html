@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b60fc668.js";
+            window.path_to_searchindex_js = "searchindex-cc6a32e9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-8b7d02da.js"></script>
@@ -11554,6 +11554,8 @@ step, and stops when either runs out.</li>
 <li><code>take(n)</code> yields at most the first <code>n</code> elements; <code>skip(n)</code> yields the
 elements after the first <code>n</code>.</li>
 <li><code>chain(other)</code> yields this iterator’s elements, then <code>other</code>’s.</li>
+<li><code>flat_map(transform)</code> yields the elements of the iterator <code>transform(x)</code>
+returns for each element <code>x</code>, one after another: <code>["ab", "cd"].iterate() .flat_map((w) =&gt; w.iterate())</code> yields <code>a</code>, <code>b</code>, <code>c</code>, <code>d</code>.</li>
 <li><code>take_while(keep)</code> yields the leading elements that pass; <code>skip_while(skip)</code>
 yields the elements from the first one that fails.</li>
 <li><code>step_by(n)</code> yields the first element, then every <code>n</code>th one after it.</li>
@@ -11634,6 +11636,10 @@ main(): int {
         seated += 1;   # Cyd gets no seat: zip stops at the shorter
     }
     assert(seated == 2, "two pairs");
+
+    # flat_map yields the elements of the iterator it returns for each one.
+    var letters = people.iterate().flat_map((p) =&gt; p.name.iterate()).count();
+    assert(letters == 8, "Ada, Bo and Cyd");
 
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) =&gt; p.age).to_array();
@@ -35831,6 +35837,30 @@ out. Every type that declares <code>Iterator&lt;T&gt;</code> gets this method.</
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var both = (1..&gt;2).chain(7..&gt;8).to_array();   # [1, 2, 7, 8]
 </code></pre>
+<h4 id="flat_map"><a class="header" href="#flat_map">flat_map</a></h4>
+<pre><code class="language-pepper">flat_map&lt;U&gt;(transform: (T) =&gt; Iterator&lt;U&gt;): FlatMapIterator&lt;T, U&gt;
+</code></pre>
+<p>Returns an iterator over the elements of the iterators <code>transform</code>
+returns, one source element after another.</p>
+<p>Lazy, like <code>map</code>: <code>transform</code> runs on a source element only once the
+iterator from the one before it has run out. Every type that declares
+<code>Iterator&lt;T&gt;</code> gets this method.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>U</code> — the type of the elements of the iterators <code>transform</code> returns</li>
+</ul>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>transform</code> — the function that turns each element into an iterator</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a <code>FlatMapIterator&lt;T, U&gt;</code> over the elements of those iterators</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var words = ["ab", "cd"];
+var letters = words.iterate().flat_map((w) =&gt; w.iterate()).to_array();   # a, b, c, d
+</code></pre>
 <h4 id="take_while"><a class="header" href="#take_while">take_while</a></h4>
 <pre><code class="language-pepper">take_while&lt;TElement=T&gt;(keep: (T) =&gt; bool): TakeWhileIterator&lt;TElement&gt;
 </code></pre>
@@ -36468,6 +36498,51 @@ run out, of the second.</p>
 <ul>
 <li>the current element</li>
 </ul>
+<h2 id="flatmapiterator"><a class="header" href="#flatmapiterator">FlatMapIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct FlatMapIterator&lt;T, U&gt;
+</code></pre>
+<p>The iterator <code>Iterator.flat_map</code> returns: the elements of the iterators
+the transform function returns for each source element, in order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the type of the source’s elements</li>
+<li><code>U</code> — the type of the elements produced</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Iterator.flat_map</code></li>
+</ul>
+<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h4 id="flatmapiterator-1"><a class="header" href="#flatmapiterator-1">FlatMapIterator()</a></h4>
+<pre><code class="language-pepper">construct(source: MapIterator&lt;T, Iterator&lt;U&gt;&gt;)
+</code></pre>
+<p>Makes an iterator over the elements of the iterators <code>source</code> yields.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>source</code> — the source iterator, mapped to an iterator per element</li>
+</ul>
+<h3 id="methods-4-5"><a class="header" href="#methods-4-5">Methods</a></h3>
+<h4 id="next-4-1"><a class="header" href="#next-4-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element of the current inner iterator, moving to
+the next source element’s iterator each time one runs out.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true if there is a current element, false when the source is exhausted</li>
+</ul>
+<h4 id="current-4-1"><a class="header" href="#current-4-1">current</a></h4>
+<pre><code class="language-pepper">current(): U
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>next()</code> has not moved to an element</li>
+</ul>
 <h2 id="takewhileiterator"><a class="header" href="#takewhileiterator">TakeWhileIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct TakeWhileIterator&lt;T&gt;
 </code></pre>
@@ -36481,7 +36556,7 @@ source iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.take_while</code></li>
 </ul>
-<h3 id="constructor-3-1"><a class="header" href="#constructor-3-1">Constructor</a></h3>
+<h3 id="constructor-4-1"><a class="header" href="#constructor-4-1">Constructor</a></h3>
 <h4 id="takewhileiterator-1"><a class="header" href="#takewhileiterator-1">TakeWhileIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -36492,8 +36567,8 @@ accepts.</p>
 <li><code>source</code> — the iterator to take from</li>
 <li><code>keep</code> — the test the leading elements pass</li>
 </ul>
-<h3 id="methods-4-5"><a class="header" href="#methods-4-5">Methods</a></h3>
-<h4 id="next-4-1"><a class="header" href="#next-4-1">next</a></h4>
+<h3 id="methods-5-4"><a class="header" href="#methods-5-4">Methods</a></h3>
+<h4 id="next-5-1"><a class="header" href="#next-5-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, unless it or an earlier one failed the
@@ -36502,7 +36577,7 @@ test.</p>
 <ul>
 <li>true if there is a current element, false once an element fails or the source is exhausted</li>
 </ul>
-<h4 id="current-4-1"><a class="header" href="#current-4-1">current</a></h4>
+<h4 id="current-5-1"><a class="header" href="#current-5-1">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -36523,7 +36598,7 @@ iterator from the first one the test function rejects.</p>
 <ul>
 <li><code>Iterator.skip_while</code></li>
 </ul>
-<h3 id="constructor-4-1"><a class="header" href="#constructor-4-1">Constructor</a></h3>
+<h3 id="constructor-5-1"><a class="header" href="#constructor-5-1">Constructor</a></h3>
 <h4 id="skipwhileiterator-1"><a class="header" href="#skipwhileiterator-1">SkipWhileIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, skip: (T) =&gt; bool)
 </code></pre>
@@ -36534,8 +36609,8 @@ iterator from the first one the test function rejects.</p>
 <li><code>source</code> — the iterator to skip into</li>
 <li><code>skip</code> — the test the leading elements to pass over meet</li>
 </ul>
-<h3 id="methods-5-4"><a class="header" href="#methods-5-4">Methods</a></h3>
-<h4 id="next-5-1"><a class="header" href="#next-5-1">next</a></h4>
+<h3 id="methods-6-3"><a class="header" href="#methods-6-3">Methods</a></h3>
+<h4 id="next-6-1"><a class="header" href="#next-6-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, passing over the leading elements the
@@ -36544,7 +36619,7 @@ test accepts on the first call.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-5-1"><a class="header" href="#current-5-1">current</a></h4>
+<h4 id="current-6-1"><a class="header" href="#current-6-1">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -36565,7 +36640,7 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li><code>Iterator.step_by</code></li>
 </ul>
-<h3 id="constructor-5-1"><a class="header" href="#constructor-5-1">Constructor</a></h3>
+<h3 id="constructor-6-1"><a class="header" href="#constructor-6-1">Constructor</a></h3>
 <h4 id="stepbyiterator-1"><a class="header" href="#stepbyiterator-1">StepByIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, step: ulong)
 </code></pre>
@@ -36580,8 +36655,8 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li>if <code>step</code> is 0 (“step_by step must be positive”)</li>
 </ul>
-<h3 id="methods-6-3"><a class="header" href="#methods-6-3">Methods</a></h3>
-<h4 id="next-6-1"><a class="header" href="#next-6-1">next</a></h4>
+<h3 id="methods-7-3"><a class="header" href="#methods-7-3">Methods</a></h3>
+<h4 id="next-7-1"><a class="header" href="#next-7-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the first element, then <code>step</code> elements at a time.</p>
@@ -36589,7 +36664,7 @@ iterator, then every <code>step</code>th one after it.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-6-1"><a class="header" href="#current-6-1">current</a></h4>
+<h4 id="current-7-1"><a class="header" href="#current-7-1">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -36610,7 +36685,7 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li><code>Iterator.peekable</code></li>
 </ul>
-<h3 id="constructor-6-1"><a class="header" href="#constructor-6-1">Constructor</a></h3>
+<h3 id="constructor-7-1"><a class="header" href="#constructor-7-1">Constructor</a></h3>
 <h4 id="peekableiterator-1"><a class="header" href="#peekableiterator-1">PeekableIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -36619,8 +36694,8 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li><code>source</code> — the iterator to yield from</li>
 </ul>
-<h3 id="methods-7-3"><a class="header" href="#methods-7-3">Methods</a></h3>
-<h4 id="next-7-1"><a class="header" href="#next-7-1">next</a></h4>
+<h3 id="methods-8-2"><a class="header" href="#methods-8-2">Methods</a></h3>
+<h4 id="next-8-1"><a class="header" href="#next-8-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element: the one <code>peek()</code> returned, if any.</p>
@@ -36628,7 +36703,7 @@ iterator, with <code>peek()</code> to look at the next one without moving to it.
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-7-1"><a class="header" href="#current-7-1">current</a></h4>
+<h4 id="current-8-1"><a class="header" href="#current-8-1">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -36662,7 +36737,7 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li><code>Iterator.chunks</code></li>
 </ul>
-<h3 id="constructor-7-1"><a class="header" href="#constructor-7-1">Constructor</a></h3>
+<h3 id="constructor-8-1"><a class="header" href="#constructor-8-1">Constructor</a></h3>
 <h4 id="chunksiterator-1"><a class="header" href="#chunksiterator-1">ChunksIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
 </code></pre>
@@ -36677,8 +36752,8 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li>if <code>size</code> is 0 (“chunks size must be positive”)</li>
 </ul>
-<h3 id="methods-8-2"><a class="header" href="#methods-8-2">Methods</a></h3>
-<h4 id="next-8-1"><a class="header" href="#next-8-1">next</a></h4>
+<h3 id="methods-9-2"><a class="header" href="#methods-9-2">Methods</a></h3>
+<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Fills a new array with up to <code>size</code> more elements.</p>
@@ -36686,7 +36761,7 @@ iterator in arrays of up to <code>size</code>.</p>
 <ul>
 <li>true if there is a current array, false when the source is exhausted</li>
 </ul>
-<h4 id="current-8-1"><a class="header" href="#current-8-1">current</a></h4>
+<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
 <pre><code class="language-pepper">current(): Array&lt;T&gt;
 </code></pre>
 <p>Returns the array the last successful <code>next()</code> filled.</p>
@@ -36707,7 +36782,7 @@ elements of the source iterator.</p>
 <ul>
 <li><code>Iterator.windows</code></li>
 </ul>
-<h3 id="constructor-8-1"><a class="header" href="#constructor-8-1">Constructor</a></h3>
+<h3 id="constructor-9-1"><a class="header" href="#constructor-9-1">Constructor</a></h3>
 <h4 id="windowsiterator-1"><a class="header" href="#windowsiterator-1">WindowsIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, size: ulong)
 </code></pre>
@@ -36722,8 +36797,8 @@ elements of the source iterator.</p>
 <ul>
 <li>if <code>size</code> is 0 (“windows size must be positive”)</li>
 </ul>
-<h3 id="methods-9-2"><a class="header" href="#methods-9-2">Methods</a></h3>
-<h4 id="next-9"><a class="header" href="#next-9">next</a></h4>
+<h3 id="methods-10-2"><a class="header" href="#methods-10-2">Methods</a></h3>
+<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Makes a new run: the last one’s elements after its first, then
@@ -36732,7 +36807,7 @@ enough more to fill it.</p>
 <ul>
 <li>true if there is a current run, false when the source is exhausted</li>
 </ul>
-<h4 id="current-9"><a class="header" href="#current-9">current</a></h4>
+<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
 <pre><code class="language-pepper">current(): Array&lt;T&gt;
 </code></pre>
 <p>Returns the run the last successful <code>next()</code> made.</p>
@@ -36754,7 +36829,7 @@ passed through the transform function.</p>
 <ul>
 <li><code>Iterator.map</code></li>
 </ul>
-<h3 id="constructor-9-1"><a class="header" href="#constructor-9-1">Constructor</a></h3>
+<h3 id="constructor-10-1"><a class="header" href="#constructor-10-1">Constructor</a></h3>
 <h4 id="mapiterator-1"><a class="header" href="#mapiterator-1">MapIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, transform: (T) =&gt; U)
 </code></pre>
@@ -36764,8 +36839,8 @@ passed through the transform function.</p>
 <li><code>source</code> — the iterator to transform</li>
 <li><code>transform</code> — the function applied to each element</li>
 </ul>
-<h3 id="methods-10-2"><a class="header" href="#methods-10-2">Methods</a></h3>
-<h4 id="next-10"><a class="header" href="#next-10">next</a></h4>
+<h3 id="methods-11-1"><a class="header" href="#methods-11-1">Methods</a></h3>
+<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element, and applies the transform function to it.</p>
@@ -36773,7 +36848,7 @@ passed through the transform function.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-10"><a class="header" href="#current-10">current</a></h4>
+<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
 <pre><code class="language-pepper">current(): U
 </code></pre>
 <p>Returns the transformed element the last successful <code>next()</code> produced.</p>
@@ -36794,7 +36869,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li><code>Iterator.filter</code></li>
 </ul>
-<h3 id="constructor-10-1"><a class="header" href="#constructor-10-1">Constructor</a></h3>
+<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
 <h4 id="filteriterator-1"><a class="header" href="#filteriterator-1">FilterIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;, keep: (T) =&gt; bool)
 </code></pre>
@@ -36804,8 +36879,8 @@ iterator that the test function accepts.</p>
 <li><code>source</code> — the iterator to filter</li>
 <li><code>keep</code> — the test an element must pass</li>
 </ul>
-<h3 id="methods-11-1"><a class="header" href="#methods-11-1">Methods</a></h3>
-<h4 id="next-11"><a class="header" href="#next-11">next</a></h4>
+<h3 id="methods-12-1"><a class="header" href="#methods-12-1">Methods</a></h3>
+<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element that the test function accepts.</p>
@@ -36813,7 +36888,7 @@ iterator that the test function accepts.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-11"><a class="header" href="#current-11">current</a></h4>
+<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -36835,7 +36910,7 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>Iterator.enumerate</code></li>
 </ul>
-<h3 id="constructor-11"><a class="header" href="#constructor-11">Constructor</a></h3>
+<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
 <h4 id="enumerateiterator-1"><a class="header" href="#enumerateiterator-1">EnumerateIterator()</a></h4>
 <pre><code class="language-pepper">construct(source: Iterator&lt;T&gt;)
 </code></pre>
@@ -36844,8 +36919,8 @@ iterator, paired with its position.</p>
 <ul>
 <li><code>source</code> — the iterator to number</li>
 </ul>
-<h3 id="methods-12-1"><a class="header" href="#methods-12-1">Methods</a></h3>
-<h4 id="next-12"><a class="header" href="#next-12">next</a></h4>
+<h3 id="methods-13-1"><a class="header" href="#methods-13-1">Methods</a></h3>
+<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next element.</p>
@@ -36853,7 +36928,7 @@ iterator, paired with its position.</p>
 <ul>
 <li>true if there is a current element, false when the source is exhausted</li>
 </ul>
-<h4 id="current-12"><a class="header" href="#current-12">current</a></h4>
+<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
 <pre><code class="language-pepper">current(): (TIndex, T)
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to, with its
@@ -36876,7 +36951,7 @@ paired in step, until either runs out.</p>
 <ul>
 <li><code>Iterator.zip</code></li>
 </ul>
-<h3 id="constructor-12"><a class="header" href="#constructor-12">Constructor</a></h3>
+<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
 <h4 id="zipiterator-1"><a class="header" href="#zipiterator-1">ZipIterator()</a></h4>
 <pre><code class="language-pepper">construct(first: Iterator&lt;T&gt;, second: Iterator&lt;U&gt;)
 </code></pre>
@@ -36886,8 +36961,8 @@ paired in step, until either runs out.</p>
 <li><code>first</code> — the iterator giving the first half of each pair</li>
 <li><code>second</code> — the iterator giving the second half of each pair</li>
 </ul>
-<h3 id="methods-13-1"><a class="header" href="#methods-13-1">Methods</a></h3>
-<h4 id="next-13"><a class="header" href="#next-13">next</a></h4>
+<h3 id="methods-14-1"><a class="header" href="#methods-14-1">Methods</a></h3>
+<h4 id="next-14"><a class="header" href="#next-14">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances both iterators. <code>second</code> is not advanced once <code>first</code> has
@@ -36896,7 +36971,7 @@ run out.</p>
 <ul>
 <li>true if both have a current element, false when either is exhausted</li>
 </ul>
-<h4 id="current-13"><a class="header" href="#current-13">current</a></h4>
+<h4 id="current-14"><a class="header" href="#current-14">current</a></h4>
 <pre><code class="language-pepper">current(): (T, U)
 </code></pre>
 <p>Returns the pair the last successful <code>next()</code> moved to.</p>
@@ -36930,7 +37005,7 @@ for (var x in nums) {
     total = total + x;
 }
 </code></pre>
-<h3 id="methods-14-1"><a class="header" href="#methods-14-1">Methods</a></h3>
+<h3 id="methods-15-1"><a class="header" href="#methods-15-1">Methods</a></h3>
 <h4 id="iterate-8"><a class="header" href="#iterate-8">iterate</a></h4>
 <pre><code class="language-pepper">iterate(): Iterator&lt;T&gt;
 </code></pre>
@@ -37056,7 +37131,7 @@ freely.</p>
     }
 }
 </code></pre>
-<h3 id="constructor-13"><a class="header" href="#constructor-13">Constructor</a></h3>
+<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
 <h4 id="weak-2"><a class="header" href="#weak-2">Weak()</a></h4>
 <pre><code class="language-pepper">construct(target: T)
 </code></pre>
@@ -37129,7 +37204,7 @@ main(): int {
 </code></pre>
 <p>The resource. It stays readable after the handle is released or
 detached, but it no longer refers to anything the handle owns.</p>
-<h3 id="constructor-14"><a class="header" href="#constructor-14">Constructor</a></h3>
+<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
 <h4 id="handle-2"><a class="header" href="#handle-2">Handle()</a></h4>
 <pre><code class="language-pepper">construct(value: T, release: (T) =&gt; void)
 </code></pre>
@@ -37182,7 +37257,7 @@ var n = r.error().message.length;   # 4
 <pre><code class="language-pepper">String message
 </code></pre>
 <p>The description of what went wrong; empty when none was given.</p>
-<h3 id="constructor-15"><a class="header" href="#constructor-15">Constructor</a></h3>
+<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
 <h4 id="error-1"><a class="header" href="#error-1">Error()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(message: String = "")
 </code></pre>
@@ -37747,7 +37822,7 @@ turns into the <code>fe80::1%eth0</code> that <code>io.IpAddress.parse</code> re
 <pre><code class="language-pepper">var fragment: String?
 </code></pre>
 <p>The fragment after <code>#</code>, without the <code>#</code>, if any.</p>
-<h3 id="constructor-16"><a class="header" href="#constructor-16">Constructor</a></h3>
+<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
 <h4 id="uri-2"><a class="header" href="#uri-2">Uri()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -38287,7 +38362,7 @@ if (r.is_err()) {
 (<code>strerror</code> on POSIX, <code>FormatMessageW</code> on Windows, without its
 trailing period and line break), or Pepper’s own text such as
 <code>"empty path"</code> for errors it detects itself.</p>
-<h3 id="constructor-17"><a class="header" href="#constructor-17">Constructor</a></h3>
+<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
 <h4 id="ioerror-1"><a class="header" href="#ioerror-1">IoError()</a></h4>
 <pre><code class="language-pepper">construct(code: ErrorCode = 0, message: String = "")
 </code></pre>
@@ -38732,7 +38807,7 @@ while (it.next()) {
     var line = it.current();
 }
 </code></pre>
-<h3 id="constructor-18"><a class="header" href="#constructor-18">Constructor</a></h3>
+<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
 <h4 id="lines-2-1"><a class="header" href="#lines-2-1">Lines()</a></h4>
 <pre><code class="language-pepper">construct(source: Reader)
 </code></pre>
@@ -38742,7 +38817,7 @@ while (it.next()) {
 <li><code>source</code> — the open stream to read</li>
 </ul>
 <h3 id="methods-2-9"><a class="header" href="#methods-2-9">Methods</a></h3>
-<h4 id="next-14"><a class="header" href="#next-14">next</a></h4>
+<h4 id="next-15"><a class="header" href="#next-15">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next line.</p>
@@ -38751,7 +38826,7 @@ while (it.next()) {
 <ul>
 <li>true if there is a current element (a line, or the error that ends the lines), false at the end of the stream</li>
 </ul>
-<h4 id="current-14"><a class="header" href="#current-14">current</a></h4>
+<h4 id="current-15"><a class="header" href="#current-15">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;String&gt;
 </code></pre>
 <p>Returns the element the last successful <code>next()</code> moved to.</p>
@@ -38845,7 +38920,7 @@ if (p.is_file()) {
 </code></pre>
 <p>Whether the path has no text at all. File-system operations
 on the empty path fail.</p>
-<h3 id="constructor-19"><a class="header" href="#constructor-19">Constructor</a></h3>
+<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
 <h4 id="path-2-1"><a class="header" href="#path-2-1">Path()</a></h4>
 <pre><code class="language-pepper">[Implicit] construct(value: String = "")
 </code></pre>
@@ -39439,7 +39514,7 @@ if (r.is_err()) {
 }
 var f = r.value();
 </code></pre>
-<h3 id="constructor-20"><a class="header" href="#constructor-20">Constructor</a></h3>
+<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
 <h4 id="openoptions-1"><a class="header" href="#openoptions-1">OpenOptions()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -39631,7 +39706,7 @@ var at = f.seek(SeekFrom.Current(-2)).value();    # 2
 <ul>
 <li><code>offset</code> — the new position; negative is an error</li>
 </ul>
-<h4 id="current-15"><a class="header" href="#current-15">Current</a></h4>
+<h4 id="current-16"><a class="header" href="#current-16">Current</a></h4>
 <pre><code class="language-pepper">Current(offset: Offset)
 </code></pre>
 <p><code>offset</code> bytes from the current position.</p>
@@ -40724,7 +40799,7 @@ on Windows also true for a symlink or junction to a directory.</p>
 </code></pre>
 <p>Whether the entry is a symlink (on Windows, any reparse point,
 junctions included), which is not followed.</p>
-<h3 id="constructor-21"><a class="header" href="#constructor-21">Constructor</a></h3>
+<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
 <h4 id="direntry-1"><a class="header" href="#direntry-1">DirEntry()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -40932,7 +41007,7 @@ if (r.is_err() &amp;&amp; !r.error().is_not_found()) {
     print(r.error().message);
 }
 </code></pre>
-<h4 id="current-16"><a class="header" href="#current-16">current</a></h4>
+<h4 id="current-17"><a class="header" href="#current-17">current</a></h4>
 <pre><code class="language-pepper">static current(): IoResult&lt;Path&gt;
 </code></pre>
 <p>Returns the process’s current directory, against which relative paths
@@ -41065,7 +41140,7 @@ is opened until the first <code>next()</code>.</p>
 <li><code>path</code> — the directory to list</li>
 </ul>
 <h3 id="methods-2-10"><a class="header" href="#methods-2-10">Methods</a></h3>
-<h4 id="next-15"><a class="header" href="#next-15">next</a></h4>
+<h4 id="next-16"><a class="header" href="#next-16">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Reads the next entry, opening the listing on the first call.</p>
@@ -41192,7 +41267,7 @@ read; the <code>path</code> is the watched directory. List it again to catch up.
 </code></pre>
 <p>The path that changed: the watched directory’s path, as given to
 <code>Watcher.open</code>, joined with the path inside it.</p>
-<h3 id="constructor-22"><a class="header" href="#constructor-22">Constructor</a></h3>
+<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
 <h4 id="filechange-1"><a class="header" href="#filechange-1">FileChange()</a></h4>
 <pre><code class="language-pepper">construct(kind: ChangeKind, path: Path)
 </code></pre>
@@ -41324,7 +41399,7 @@ var b = io.IpAddress.v6(8193, 3512, 0, 0, 0, 0, 0, 1);   # 2001:db8::1
 print(a.is_v4());         # true
 print(b.to_string());     # 2001:db8::1
 </code></pre>
-<h3 id="constructor-23"><a class="header" href="#constructor-23">Constructor</a></h3>
+<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
 <h4 id="ipaddress-1"><a class="header" href="#ipaddress-1">IpAddress()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -41740,7 +41815,7 @@ while (true) {
     stream.write_all("hello " + peer.to_string());
 }
 </code></pre>
-<h3 id="constructor-24"><a class="header" href="#constructor-24">Constructor</a></h3>
+<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
 <h4 id="tcplistener-1"><a class="header" href="#tcplistener-1">TcpListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -41839,7 +41914,7 @@ the listener stays open while the iterator lives.</p>
 <li><code>listener</code> — the listener to accept on</li>
 </ul>
 <h3 id="methods-1-16"><a class="header" href="#methods-1-16">Methods</a></h3>
-<h4 id="next-16"><a class="header" href="#next-16">next</a></h4>
+<h4 id="next-17"><a class="header" href="#next-17">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next connection.</p>
@@ -41847,7 +41922,7 @@ the listener stays open while the iterator lives.</p>
 <ul>
 <li>true with the connection or the accept error as the current item; false once the listener is closed</li>
 </ul>
-<h4 id="current-17"><a class="header" href="#current-17">current</a></h4>
+<h4 id="current-18"><a class="header" href="#current-18">current</a></h4>
 <pre><code class="language-pepper">current(): IoResult&lt;TcpStream&gt;
 </code></pre>
 <p>Returns the item the last successful <code>next()</code> moved to.</p>
@@ -42537,7 +42612,7 @@ while (true) {
     stream.write_all("hello");
 }
 </code></pre>
-<h3 id="constructor-25"><a class="header" href="#constructor-25">Constructor</a></h3>
+<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
 <h4 id="unixlistener-1"><a class="header" href="#unixlistener-1">UnixListener()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -43147,7 +43222,7 @@ assert(count == 2, "two lines");
 <pre><code class="language-pepper">var remaining: ulong { get; }
 </code></pre>
 <p>The number of bytes not read yet.</p>
-<h3 id="constructor-26"><a class="header" href="#constructor-26">Constructor</a></h3>
+<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
 <h4 id="bytereader-1"><a class="header" href="#bytereader-1">ByteReader()</a></h4>
 <pre><code class="language-pepper">construct(data: u8[])
 </code></pre>
@@ -43387,7 +43462,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
     return 0;
 }
 </code></pre>
-<h3 id="constructor-27"><a class="header" href="#constructor-27">Constructor</a></h3>
+<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
 <h4 id="atomic-2"><a class="header" href="#atomic-2">Atomic()</a></h4>
 <pre><code class="language-pepper">construct(value: T = __default&lt;T&gt;())
 </code></pre>
@@ -43626,7 +43701,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-28"><a class="header" href="#constructor-28">Constructor</a></h3>
+<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
 <h4 id="thread-2"><a class="header" href="#thread-2">Thread()</a></h4>
 <pre><code class="language-pepper">construct(name: String, body: ThreadBody)
 </code></pre>
@@ -43662,7 +43737,7 @@ directly is not attached to any thread and cannot be joined.</p>
 <pre><code class="language-pepper">var worker = Thread.spawn(do_work, "worker");
 worker.join();
 </code></pre>
-<h4 id="current-18"><a class="header" href="#current-18">current</a></h4>
+<h4 id="current-19"><a class="header" href="#current-19">current</a></h4>
 <pre><code class="language-pepper">static current(): Thread
 </code></pre>
 <p>Returns the <code>Thread</code> of the thread that calls it.</p>
@@ -43788,7 +43863,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-29"><a class="header" href="#constructor-29">Constructor</a></h3>
+<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
 <h4 id="threadlocal-2"><a class="header" href="#threadlocal-2">ThreadLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -43948,7 +44023,7 @@ save(long amount) {
     }
 }
 </code></pre>
-<h3 id="constructor-30"><a class="header" href="#constructor-30">Constructor</a></h3>
+<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
 <h4 id="mutex-1"><a class="header" href="#mutex-1">Mutex()</a></h4>
 <pre><code class="language-pepper">construct([Move] value: T)
 </code></pre>
@@ -44289,7 +44364,7 @@ download(url: String) {
     }
 }
 </code></pre>
-<h3 id="constructor-31"><a class="header" href="#constructor-31">Constructor</a></h3>
+<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
 <h4 id="semaphore-1"><a class="header" href="#semaphore-1">Semaphore()</a></h4>
 <pre><code class="language-pepper">construct(permits: ulong)
 </code></pre>
@@ -44542,7 +44617,7 @@ width(): long {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-32"><a class="header" href="#constructor-32">Constructor</a></h3>
+<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
 <h4 id="rwlock-2"><a class="header" href="#rwlock-2">RwLock()</a></h4>
 <pre><code class="language-pepper">construct(value: T)
 </code></pre>
@@ -44757,7 +44832,7 @@ work() {
     setup.call(initialize);   # only the first caller runs it
 }
 </code></pre>
-<h3 id="constructor-33"><a class="header" href="#constructor-33">Constructor</a></h3>
+<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
 <h4 id="once-1"><a class="header" href="#once-1">Once()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -44914,7 +44989,7 @@ main(): int {
 </code></pre>
 <p>The number of values waiting to be received. Other threads may
 change it as soon as it returns.</p>
-<h3 id="constructor-34"><a class="header" href="#constructor-34">Constructor</a></h3>
+<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
 <h4 id="channel-2"><a class="header" href="#channel-2">Channel()</a></h4>
 <pre><code class="language-pepper">construct(capacity: ulong = 0)
 </code></pre>
@@ -45060,7 +45135,7 @@ does the same.</p>
 <li><code>source</code> — the channel to receive from</li>
 </ul>
 <h3 id="methods-1-24"><a class="header" href="#methods-1-24">Methods</a></h3>
-<h4 id="next-17"><a class="header" href="#next-17">next</a></h4>
+<h4 id="next-18"><a class="header" href="#next-18">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Waits for the next value.</p>
@@ -45068,7 +45143,7 @@ does the same.</p>
 <ul>
 <li>true if a value arrived (read it with <code>current()</code>), false once the channel is closed and empty</li>
 </ul>
-<h4 id="current-19"><a class="header" href="#current-19">current</a></h4>
+<h4 id="current-20"><a class="header" href="#current-20">current</a></h4>
 <pre><code class="language-pepper">current(): T
 </code></pre>
 <p>Returns the value the last successful <code>next()</code> received.</p>
@@ -45138,7 +45213,7 @@ while (running) {
     }
 }
 </code></pre>
-<h3 id="constructor-35"><a class="header" href="#constructor-35">Constructor</a></h3>
+<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
 <h4 id="select-2"><a class="header" href="#select-2">Select()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -45294,7 +45369,7 @@ function called in a task can wait without being marked in any way.</p>
 <pre><code class="language-pepper">const message: String
 </code></pre>
 <p>A description of what went wrong.</p>
-<h3 id="constructor-36"><a class="header" href="#constructor-36">Constructor</a></h3>
+<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
 <h4 id="taskerror-1"><a class="header" href="#taskerror-1">TaskError()</a></h4>
 <pre><code class="language-pepper">construct(message: String)
 </code></pre>
@@ -45859,7 +45934,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-37"><a class="header" href="#constructor-37">Constructor</a></h3>
+<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
 <h4 id="tasklocal-2"><a class="header" href="#tasklocal-2">TaskLocal()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -46088,7 +46163,7 @@ when standard output was not piped.</p>
 </code></pre>
 <p>Everything the program wrote to standard error, decoded the same
 way; empty when standard error was not piped.</p>
-<h3 id="constructor-38"><a class="header" href="#constructor-38">Constructor</a></h3>
+<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
 <h4 id="output-1-1"><a class="header" href="#output-1-1">Output()</a></h4>
 <pre><code class="language-pepper">construct(status: ExitStatus, stdout: String, stderr: String)
 </code></pre>
@@ -46353,7 +46428,7 @@ signal.</p>
 assert(!status.success(), "false fails");
 assert(status.code().value() == 1, "with code 1");
 </code></pre>
-<h3 id="constructor-39"><a class="header" href="#constructor-39">Constructor</a></h3>
+<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
 <h4 id="exitstatus-1"><a class="header" href="#exitstatus-1">ExitStatus()</a></h4>
 <pre><code class="language-pepper">construct(code: int = 0, signal: int = 0)
 </code></pre>
@@ -46898,7 +46973,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-40"><a class="header" href="#constructor-40">Constructor</a></h3>
+<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
 <h4 id="duration-1"><a class="header" href="#duration-1">Duration()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -47873,7 +47948,7 @@ main(): int {
 <pre><code class="language-pepper">var day: int { get; }
 </code></pre>
 <p>The day of the month, 1 to 31.</p>
-<h3 id="constructor-41"><a class="header" href="#constructor-41">Constructor</a></h3>
+<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
 <h4 id="date-1"><a class="header" href="#date-1">Date()</a></h4>
 <pre><code class="language-pepper">construct(year: int = 1970, month: int = 1, day: int = 1)
 </code></pre>
@@ -48637,7 +48712,7 @@ main(): int {
 <pre><code class="language-pepper">var seconds: int { get; }
 </code></pre>
 <p>The offset in seconds, east of UTC positive.</p>
-<h3 id="constructor-42"><a class="header" href="#constructor-42">Constructor</a></h3>
+<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
 <h4 id="offset-1-1"><a class="header" href="#offset-1-1">Offset()</a></h4>
 <pre><code class="language-pepper">construct(seconds: int = 0)
 </code></pre>
@@ -49008,7 +49083,7 @@ main(): int {
 </code></pre>
 <p>The zone’s name: <code>UTC</code>, <code>Local</code>, the offset of a fixed zone
 (<code>+05:30</code>), or the database name of a named one (<code>Europe/Paris</code>).</p>
-<h3 id="constructor-43"><a class="header" href="#constructor-43">Constructor</a></h3>
+<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
 <h4 id="timezone-1"><a class="header" href="#timezone-1">TimeZone()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -50472,7 +50547,7 @@ info.</p>
 </code></pre>
 <p>Whether the optimizer inlined this call into its caller, the next
 frame: the function has no frame of its own on the stack.</p>
-<h3 id="constructor-44"><a class="header" href="#constructor-44">Constructor</a></h3>
+<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
 <h4 id="stackframe-1"><a class="header" href="#stackframe-1">StackFrame()</a></h4>
 <pre><code class="language-pepper">construct(address: ulong = 0)
 </code></pre>
@@ -50762,7 +50837,7 @@ each field.</p>
 <pre><code class="language-pepper">var value: String = ""
 </code></pre>
 <p>The value as JSON text: <code>200</code>, <code>"ann"</code>, <code>true</code>.</p>
-<h3 id="constructor-45"><a class="header" href="#constructor-45">Constructor</a></h3>
+<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
 <h4 id="field-1"><a class="header" href="#field-1">Field()</a></h4>
 <pre><code class="language-pepper">construct(key: String, value: String)
 </code></pre>
@@ -51605,7 +51680,7 @@ group matched.</p>
 <p>Positions are byte offsets into the searched text. Group 0 is the whole
 match; groups are numbered from 1 by their opening <code>(</code>, named ones
 included.</p>
-<h3 id="constructor-46"><a class="header" href="#constructor-46">Constructor</a></h3>
+<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
 <h4 id="match-1-1"><a class="header" href="#match-1-1">Match()</a></h4>
 <pre><code class="language-pepper">construct(text: String, slots: long[], program: _RegexProgram)
 </code></pre>
@@ -51726,7 +51801,7 @@ when it did not take part.</p>
 <li><code>text</code> — the text to search</li>
 </ul>
 <h3 id="methods-2-20"><a class="header" href="#methods-2-20">Methods</a></h3>
-<h4 id="next-18"><a class="header" href="#next-18">next</a></h4>
+<h4 id="next-19"><a class="header" href="#next-19">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
 <p>Advances to the next match.</p>
@@ -51734,7 +51809,7 @@ when it did not take part.</p>
 <ul>
 <li>true when there is another match, false once they are exhausted</li>
 </ul>
-<h4 id="current-20"><a class="header" href="#current-20">current</a></h4>
+<h4 id="current-21"><a class="header" href="#current-21">current</a></h4>
 <pre><code class="language-pepper">current(): Match
 </code></pre>
 <p>Returns the match the last successful <code>next()</code> moved to.</p>
@@ -52166,7 +52241,7 @@ when <code>line</code> is.</p>
 <p>Where in the document the value an error is about is, as a path from
 the root <code>$</code> (<code>$.server.port</code>); empty for an error in the text’s
 syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>message</code> with it.</p>
-<h3 id="constructor-47"><a class="header" href="#constructor-47">Constructor</a></h3>
+<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
 <h4 id="jsonerror-1"><a class="header" href="#jsonerror-1">JsonError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -52261,7 +52336,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <pre><code class="language-pepper">var root: JsonValue
 </code></pre>
 <p>The document’s value.</p>
-<h3 id="constructor-48"><a class="header" href="#constructor-48">Constructor</a></h3>
+<h3 id="constructor-49"><a class="header" href="#constructor-49">Constructor</a></h3>
 <h4 id="jsondocument-1"><a class="header" href="#jsondocument-1">JsonDocument()</a></h4>
 <pre><code class="language-pepper">construct(root: JsonValue = JsonValue.Null)
 </code></pre>
@@ -52734,7 +52809,7 @@ writes none.</p>
 <pre><code class="language-pepper">var has_offset: bool
 </code></pre>
 <p>Whether it has an offset from UTC, which only a date and time has.</p>
-<h3 id="constructor-49"><a class="header" href="#constructor-49">Constructor</a></h3>
+<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
 <h4 id="tomldatetime-1"><a class="header" href="#tomldatetime-1">TomlDateTime()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -53214,7 +53289,7 @@ when <code>line</code> is.</p>
 the root <code>$</code> (<code>$.package.version</code>, <code>$.bin[0].name</code>); empty for an
 error in the text’s syntax. <code>decode</code> and <code>from_toml</code> set it, and
 start <code>message</code> with it.</p>
-<h3 id="constructor-50"><a class="header" href="#constructor-50">Constructor</a></h3>
+<h3 id="constructor-51"><a class="header" href="#constructor-51">Constructor</a></h3>
 <h4 id="tomlerror-1"><a class="header" href="#tomlerror-1">TomlError()</a></h4>
 <pre><code class="language-pepper">construct(message: String = "", path: String = "", line: ulong = 1, column: ulong = 1, offset: ulong = 0)
 </code></pre>
@@ -53306,7 +53381,7 @@ assert(
     "only the edits change"
 );
 </code></pre>
-<h3 id="constructor-51"><a class="header" href="#constructor-51">Constructor</a></h3>
+<h3 id="constructor-52"><a class="header" href="#constructor-52">Constructor</a></h3>
 <h4 id="tomldocument-1"><a class="header" href="#tomldocument-1">TomlDocument()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -54029,7 +54104,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <pre><code class="language-pepper">var value: uint { get; }
 </code></pre>
 <p>The checksum of everything given to <code>update</code> so far.</p>
-<h3 id="constructor-52"><a class="header" href="#constructor-52">Constructor</a></h3>
+<h3 id="constructor-53"><a class="header" href="#constructor-53">Constructor</a></h3>
 <h4 id="crc32-1"><a class="header" href="#crc32-1">Crc32()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -54204,7 +54279,7 @@ directory’s may end with <code>/</code>).</p>
 <pre><code class="language-pepper">var link_target: String
 </code></pre>
 <p>The target of a symlink or hard link; empty otherwise.</p>
-<h3 id="constructor-53"><a class="header" href="#constructor-53">Constructor</a></h3>
+<h3 id="constructor-54"><a class="header" href="#constructor-54">Constructor</a></h3>
 <h4 id="tarentry-1"><a class="header" href="#tarentry-1">TarEntry()</a></h4>
 <pre><code class="language-pepper">construct(path: String = "", kind: EntryKind = EntryKind.File)
 </code></pre>
@@ -54550,7 +54625,7 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-54"><a class="header" href="#constructor-54">Constructor</a></h3>
+<h3 id="constructor-55"><a class="header" href="#constructor-55">Constructor</a></h3>
 <h4 id="sha256-1"><a class="header" href="#sha256-1">Sha256()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -54657,7 +54732,7 @@ hasher.update("blob 0");
 hasher.update(nul);
 assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git blob id");
 </code></pre>
-<h3 id="constructor-55"><a class="header" href="#constructor-55">Constructor</a></h3>
+<h3 id="constructor-56"><a class="header" href="#constructor-56">Constructor</a></h3>
 <h4 id="sha1-1"><a class="header" href="#sha1-1">Sha1()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -54759,7 +54834,7 @@ hasher.update("hello ");
 hasher.update("world");
 assert(hasher.finish_hex() == digest.to_hex(digest.blake3("hello world")), "same digest");
 </code></pre>
-<h3 id="constructor-56"><a class="header" href="#constructor-56">Constructor</a></h3>
+<h3 id="constructor-57"><a class="header" href="#constructor-57">Constructor</a></h3>
 <h4 id="blake3-2"><a class="header" href="#blake3-2">Blake3()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -55290,7 +55365,7 @@ assert(id.to_string() == "0190163d-8694-739b-aea5-966c26f8ad91", "lowercase");
 <pre><code class="language-pepper">var low: ulong
 </code></pre>
 <p>The last 8 bytes, the first of them in the top bits.</p>
-<h3 id="constructor-57"><a class="header" href="#constructor-57">Constructor</a></h3>
+<h3 id="constructor-58"><a class="header" href="#constructor-58">Constructor</a></h3>
 <h4 id="uuid-1"><a class="header" href="#uuid-1">Uuid()</a></h4>
 <pre><code class="language-pepper">construct(high: ulong, low: ulong)
 </code></pre>
@@ -55448,7 +55523,7 @@ main(args: String[]): int {
 <p>Whether the last <code>parse</code> reached this parser: whether this command
 was given. The top-level parser is selected whenever its arguments
 were parsed.</p>
-<h3 id="constructor-58"><a class="header" href="#constructor-58">Constructor</a></h3>
+<h3 id="constructor-59"><a class="header" href="#constructor-59">Constructor</a></h3>
 <h4 id="parser-2"><a class="header" href="#parser-2">Parser()</a></h4>
 <pre><code class="language-pepper">construct(name: String, about: String = "", version: String = "")
 </code></pre>
@@ -56147,7 +56222,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">var count: ulong { get; }
 </code></pre>
 <p>The number of field names.</p>
-<h3 id="constructor-59"><a class="header" href="#constructor-59">Constructor</a></h3>
+<h3 id="constructor-60"><a class="header" href="#constructor-60">Constructor</a></h3>
 <h4 id="headers-1"><a class="header" href="#headers-1">Headers()</a></h4>
 <pre><code class="language-pepper">construct()
 </code></pre>
@@ -56727,7 +56802,7 @@ unless changed. 0 keeps none, so every request uses a new connection.</p>
 <pre><code class="language-pepper">var idle_count: ulong { get; }
 </code></pre>
 <p>The number of idle connections the session holds, for every host.</p>
-<h3 id="constructor-60"><a class="header" href="#constructor-60">Constructor</a></h3>
+<h3 id="constructor-61"><a class="header" href="#constructor-61">Constructor</a></h3>
 <h4 id="session-2"><a class="header" href="#session-2">Session()</a></h4>
 <pre><code class="language-pepper">construct(client: Client)
 </code></pre>
@@ -56894,7 +56969,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="constructor-61"><a class="header" href="#constructor-61">Constructor</a></h3>
+<h3 id="constructor-62"><a class="header" href="#constructor-62">Constructor</a></h3>
 <h4 id="server-2"><a class="header" href="#server-2">Server()</a></h4>
 <pre><code class="language-pepper">construct(listener: io.SharedTcpListener, secure: bool, acceptor: tls.TlsAcceptor)
 </code></pre>
@@ -57027,7 +57102,7 @@ var connector = tls.TlsConnector.create().value();
 var stream = connector.connect_host("localhost", 8443).value();
 stream.write_all("ping");
 </code></pre>
-<h3 id="constructor-62"><a class="header" href="#constructor-62">Constructor</a></h3>
+<h3 id="constructor-63"><a class="header" href="#constructor-63">Constructor</a></h3>
 <h4 id="tlsconnector-1"><a class="header" href="#tlsconnector-1">TlsConnector()</a></h4>
 <pre><code class="language-pepper">construct(context: __ptr&lt;void&gt;)
 </code></pre>
@@ -57463,7 +57538,7 @@ status 124 and a message on standard error. However the program ends
 test started ends with it (a job object on Windows, a process group
 elsewhere), so none holds <code>pep-test</code>’s pipes to its output open.</li>
 </ul>
-<h3 id="constructor-63"><a class="header" href="#constructor-63">Constructor</a></h3>
+<h3 id="constructor-64"><a class="header" href="#constructor-64">Constructor</a></h3>
 <h4 id="testrunner-2"><a class="header" href="#testrunner-2">TestRunner()</a></h4>
 <pre><code class="language-pepper">construct(file: String)
 </code></pre>
@@ -57546,7 +57621,7 @@ writes_a_file() {
 <pre><code class="language-pepper">const path: io.Path
 </code></pre>
 <p>The folder’s path.</p>
-<h3 id="constructor-64"><a class="header" href="#constructor-64">Constructor</a></h3>
+<h3 id="constructor-65"><a class="header" href="#constructor-65">Constructor</a></h3>
 <h4 id="tempfolder-2"><a class="header" href="#tempfolder-2">TempFolder()</a></h4>
 <pre><code class="language-pepper">construct(name: String)
 </code></pre>
