@@ -144,6 +144,9 @@ Each works lazily, one element at a time as the loop asks for it:
 - `take(n)` yields at most the first `n` elements; `skip(n)` yields the
   elements after the first `n`.
 - `chain(other)` yields this iterator's elements, then `other`'s.
+- `flat_map(transform)` yields the elements of the iterator `transform(x)`
+  returns for each element `x`, one after another: `["ab", "cd"].iterate()
+  .flat_map((w) => w.iterate())` yields `a`, `b`, `c`, `d`.
 - `take_while(keep)` yields the leading elements that pass; `skip_while(skip)`
   yields the elements from the first one that fails.
 - `step_by(n)` yields the first element, then every `n`th one after it.

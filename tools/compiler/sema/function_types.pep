@@ -46,6 +46,11 @@ export synthesize_function_types(module: Module, state: PassState) {
     # A checked declaration's types got their structs when its unit was checked.
     var own = unit_decls(module);
     for (var st in own.structs) {
+        # A generic base's types name its parameters, as a generic
+        # function's do below: its specializations get the structs.
+        if (st.generic_params.count > 0) {
+            continue;
+        }
         for (var field in st.field_members) {
             found.add(field.ty);
         }

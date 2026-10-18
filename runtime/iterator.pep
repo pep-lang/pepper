@@ -202,6 +202,23 @@ export trait Iterator<T> {
         return ChainIterator<TElement>(this, other);
     }
 
+    ## Returns an iterator over the elements of the iterators `transform`
+    ## returns, one source element after another.
+    ##
+    ## Lazy, like `map`: `transform` runs on a source element only once the
+    ## iterator from the one before it has run out. Every type that declares
+    ## `Iterator<T>` gets this method.
+    ##
+    ## @typeParam U the type of the elements of the iterators `transform` returns
+    ## @param transform the function that turns each element into an iterator
+    ## @returns a `FlatMapIterator<T, U>` over the elements of those iterators
+    ## @example
+    ##     var words = ["ab", "cd"];
+    ##     var letters = words.iterate().flat_map((w) => w.iterate()).to_array();   # a, b, c, d
+    flat_map<U>(transform: (T) => Iterator<U>): FlatMapIterator<T, U> {
+        return FlatMapIterator<T, U>(this, transform);
+    }
+
     ## Returns an iterator over the leading elements for which `keep`
     ## returns true. It stops at the first element that fails.
     ##
@@ -830,6 +847,60 @@ export struct ChainIterator<T> {
 }
 
 extend ChainIterator<T> with Iterator<T>;
+
+## The iterator `Iterator.flat_map` returns: the elements of the iterators
+## the transform function returns for each source element, in order.
+##
+## @typeParam T the type of the source's elements
+## @typeParam U the type of the elements produced
+## @see Iterator.flat_map
+[Value]
+export struct FlatMapIterator<T, U> {
+    ## The iterator whose elements are transformed.
+    Iterator<T> _source;
+    ## The function that turns each source element into an iterator.
+    (T) => Iterator<U> _transform;
+    ## The iterator from the current source element, Empty before the first.
+    Iterator<U>? _inner;
+
+    ## Makes an iterator over the elements of the iterators `transform`
+    ## returns for the elements of `source`.
+    ##
+    ## @param source the iterator to transform
+    ## @param transform the function that turns each element into an iterator
+    construct(source: Iterator<T>, transform: (T) => Iterator<U>) {
+        _source = source;
+        _transform = transform;
+    }
+
+    ## Advances to the next element of the current inner iterator, moving to
+    ## the next source element's iterator each time one runs out.
+    ##
+    ## @returns true if there is a current element, false when the source is exhausted
+    next(): bool {
+        while (true) {
+            if (_inner is Value(inner)) {
+                if (inner.next()) {
+                    return true;
+                }
+            }
+            if (!_source.next()) {
+                return false;
+            }
+            _inner = Optional<Iterator<U>>.Value(_transform(_source.current()));
+        }
+    }
+
+    ## Returns the element the last successful `next()` moved to.
+    ##
+    ## @returns the current element
+    ## @panics if `next()` has not moved to an element
+    current(): U {
+        return _inner.value().current();
+    }
+}
+
+extend FlatMapIterator<T, U> with Iterator<U>;
 
 ## The iterator `Iterator.take_while` returns: the leading elements of the
 ## source iterator that the test function accepts.

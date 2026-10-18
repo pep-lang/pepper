@@ -40,6 +40,10 @@ main(): int {
     }
     assert(seated == 2, "two pairs");
 
+    # flat_map yields the elements of the iterator it returns for each one.
+    var letters = people.iterate().flat_map((p) => p.name.iterate()).count();
+    assert(letters == 8, "Ada, Bo and Cyd");
+
     # to_array collects what an iterator yields.
     var ages = people.iterate().map((p) => p.age).to_array();
     assert(ages.count == 3 && ages[2] == 40, "every age");

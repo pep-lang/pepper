@@ -106,6 +106,38 @@ chain_yields_one_iterator_then_the_other() {
 }
 
 [Test]
+flat_map_yields_each_returned_iterator_in_turn() {
+    var words = ["ab", "", "cd"];
+    var letters = "";
+    for (var c in words.iterate().flat_map((w) => w.iterate())) {
+        letters += c;
+    }
+    expect_equal(letters, "abcd");
+    var repeated = (1..>3).flat_map((n) => (1..>n).map((i) => n)).to_array();
+    expect_equal(repeated.count, 6);
+    expect_equal(repeated[0], 1);
+    expect_equal(repeated[1], 2);
+    expect_equal(repeated[5], 3);
+    expect_equal(Array<String>().iterate().flat_map((w) => w.iterate()).count(), 0);
+    expect_equal(words.iterate().flat_map((w) => Array<int>().iterate()).count(), 0);
+}
+
+[Test]
+flat_map_is_lazy() {
+    var calls = "";
+    var first = (1..>3)
+        .flat_map((n) => {
+            calls.append("x");
+            return (1..>2).map((i) => n * 10 + i);
+        })
+        .take(2)
+        .to_array();
+    expect_equal(first.count, 2);
+    expect_equal(first[1], 12);
+    expect_equal(calls, "x");
+}
+
+[Test]
 consumers_leave_the_iterator_where_it_was() {
     var it = (1..>4);
     expect_equal(it.count(), 4);

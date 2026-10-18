@@ -284,6 +284,34 @@ out. Every type that declares `Iterator<T>` gets this method.
 var both = (1..>2).chain(7..>8).to_array();   # [1, 2, 7, 8]
 ```
 
+#### flat_map
+
+```pepper
+flat_map<U>(transform: (T) => Iterator<U>): FlatMapIterator<T, U>
+```
+
+Returns an iterator over the elements of the iterators `transform`
+returns, one source element after another.
+
+Lazy, like `map`: `transform` runs on a source element only once the
+iterator from the one before it has run out. Every type that declares
+`Iterator<T>` gets this method.
+
+**Type parameters**
+- `U` — the type of the elements of the iterators `transform` returns
+
+**Parameters**
+- `transform` — the function that turns each element into an iterator
+
+**Returns**
+- a `FlatMapIterator<T, U>` over the elements of those iterators
+
+**Example**
+```pepper
+var words = ["ab", "cd"];
+var letters = words.iterate().flat_map((w) => w.iterate()).to_array();   # a, b, c, d
+```
+
 #### take_while
 
 ```pepper
@@ -1063,6 +1091,65 @@ Returns the element the last successful `next()` moved to.
 
 **Returns**
 - the current element
+
+## FlatMapIterator
+
+```pepper
+[Value] struct FlatMapIterator<T, U>
+```
+
+The iterator `Iterator.flat_map` returns: the elements of the iterators
+the transform function returns for each source element, in order.
+
+**Type parameters**
+- `T` — the type of the source's elements
+- `U` — the type of the elements produced
+
+**See also**
+- `Iterator.flat_map`
+
+### Constructor
+
+#### FlatMapIterator()
+
+```pepper
+construct(source: Iterator<T>, transform: (T) => Iterator<U>)
+```
+
+Makes an iterator over the elements of the iterators `transform`
+returns for the elements of `source`.
+
+**Parameters**
+- `source` — the iterator to transform
+- `transform` — the function that turns each element into an iterator
+
+### Methods
+
+#### next
+
+```pepper
+next(): bool
+```
+
+Advances to the next element of the current inner iterator, moving to
+the next source element's iterator each time one runs out.
+
+**Returns**
+- true if there is a current element, false when the source is exhausted
+
+#### current
+
+```pepper
+current(): U
+```
+
+Returns the element the last successful `next()` moved to.
+
+**Returns**
+- the current element
+
+**Panics**
+- if `next()` has not moved to an element
 
 ## TakeWhileIterator
 

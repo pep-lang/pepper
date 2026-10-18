@@ -1234,13 +1234,10 @@ _apply_learned(st: StructDef, learned: _Learned, state: PassState): bool {
     # The slot returns a trait whose arguments the body's struct binds
     # (`Iterator<U>` from `ArrayIterator<int>`): the body's type is
     # inferred first, and the closure returns the trait once it is known.
+    # A body that names no parameter (`(w) => items.iterate()`) may be
+    # typed already, before or after the trait is known.
     if (ret.value().contains_auto()) {
-        if (method.ty.is_auto()) {
-            state.trait_return_closures.insert(st.name);
-        }
-        return changed;
-    }
-    if (!state.trait_return_closures.contains(st.name)) {
+        state.trait_return_closures.insert(st.name);
         return changed;
     }
     state.trait_return_closures.remove(st.name);
