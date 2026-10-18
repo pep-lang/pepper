@@ -99,6 +99,7 @@
     - [HashMap and HashSet](reference/hash.md)
     - [Map and Set](reference/map.md)
     - [OrderedMap](reference/ordered_map.md)
+    - [BitSet](reference/bitset.md)
     - [Iterators](reference/iterator.md)
     - [Scoped](reference/scoped.md)
     - [Weak](reference/weak.md)

@@ -45,6 +45,7 @@ export pages(): Array<(String, String)> {
         ("hash.pep", "HashMap and HashSet"),
         ("map.pep", "Map and Set"),
         ("ordered_map.pep", "OrderedMap"),
+        ("bitset.pep", "BitSet"),
         ("iterator.pep", "Iterators"),
         ("scoped.pep", "Scoped"),
         ("weak.pep", "Weak"),

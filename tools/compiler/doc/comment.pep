@@ -555,8 +555,12 @@ export check_documented(module: Module, source: String, name: String): String[] 
 }
 
 # Whether the function `f`, declaration `position` of `module`, overrides
-# a generic function declared before it with as many generic parameters.
+# a generic function declared before it with as many generic parameters,
+# or names only structs `module` declares (`hash<BitSet>` beside `BitSet`).
 _overrides(module: Module, position: ulong, f: FunctionDecl): bool {
+    if (!f.generic_params.is_empty and _names_own_structs(module, f.generic_params)) {
+        return true;
+    }
     ulong index = 0;
     for (var d in module.declarations) {
         var other = index;
@@ -574,6 +578,25 @@ _overrides(module: Module, position: ulong, f: FunctionDecl): bool {
         }
     }
     return false;
+}
+
+# Whether each of `params` is the name of a struct `module` declares.
+_names_own_structs(module: Module, params: GenericParam[]): bool {
+    for (var p in params) {
+        bool found = false;
+        for (var d in module.declarations) {
+            if (d is Struct(s)) {
+                if (s.name == p.name) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            return false;
+        }
+    }
+    return true;
 }
 
 _is_extension(decl: Declaration): bool {

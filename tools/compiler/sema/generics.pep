@@ -230,6 +230,15 @@ export gather_generics(module: Module) {
                 }
             }
         }
+        # A constructor no one calls is still declared, so its parameter
+        # types are uses too (`construct(items: int[])`).
+        for (var constructor in st.constructors) {
+            for (var p in constructor.parameters) {
+                if (_is_requested(p.ty, params)) {
+                    structs.request(p.ty.to_string(), st.name, _written(p));
+                }
+            }
+        }
     }
     for (var function in decls.functions) {
         var params = _param_names(function.generic_params);

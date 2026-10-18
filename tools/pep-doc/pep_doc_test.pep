@@ -112,6 +112,12 @@ indexers_need_docs_and_overrides_name_no_generic_parameters() {
 }
 
 [Test]
+an_override_for_a_struct_of_the_file_names_no_generic_parameters() {
+    var source = "## A set.\nexport struct Bits {\n}\n## Hash a set.\n## @param v it\n## @returns h\nexport hash<Bits>(v: Bits): u64 { return 0; }\n";
+    expect_equal(errors(source).count, 0 as ulong);
+}
+
+[Test]
 requires_type_parameters() {
     var found = errors("## A box.\nexport struct Box<T> {\n}\n");
     expect_equal(found.count, 1 as ulong);

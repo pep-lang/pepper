@@ -16,6 +16,7 @@ The prelude is the part of the standard library every program gets without an im
 - [HashMap and HashSet](hash.md): Hashing: `hash<T>(value)`, the 64-bit hash `HashMap` and `HashSet` use for their keys, and the hash maps and sets themselves.
 - [Map and Set](map.md): Sorted collections: `Map<K, V>` and `Set<K>`, kept in key order on a red-black tree, and `compare<T>`, the ordering they sort keys by.
 - [OrderedMap](ordered_map.md): `OrderedMap<K, V>`: a hash map that keeps its keys in the order they were first inserted.
+- [BitSet](bitset.md): `BitSet`: a set of small non-negative integers, stored one bit each.
 - [Iterators](iterator.md): Something a `for` loop can step through, one element at a time.
 - [Scoped](scoped.md): The scope protocol behind `with (var x = scope) { ... } else { ... }`.
 - [Weak](weak.md): Weak references: `Weak<T>` points at an object without keeping it alive.

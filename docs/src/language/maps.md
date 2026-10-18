@@ -1,7 +1,8 @@
 # Maps and sets
 
 The standard library has three kinds of map, which differ in the order they
-keep their keys in:
+keep their keys in, and a compact set of small integers,
+[`BitSet`](#small-integers-bitset):
 
 | Type | Order | Lookup, insert, remove | Keys need |
 | --- | --- | --- | --- |
@@ -76,3 +77,31 @@ when one is removed.
 
 Use it where the order of the input matters, such as the keys of a
 configuration file that should be written back as they were read.
+
+## Small integers: `BitSet`
+
+`BitSet` is a set of non-negative `int`s that stores one bit per possible
+member, so a set whose largest member is `m` takes about `m / 8` bytes
+however many members it holds. It suits visited flags, masks, and sieve or
+liveness tables over small integers; for sparse or large integers, use a
+`HashSet<int>`.
+
+It has the set API above (`insert`, `contains`, `remove`, `count`,
+`is_empty`, `clear`) and iterates its members in ascending order. `insert`
+grows the set as needed and `reserve(n)` makes room for `0` to `n - 1`
+ahead of time; it never shrinks. Inserting a negative number panics, while
+`contains` and `remove` of one return false. Changing the set while a loop
+iterates it is allowed: the loop sees the members above its position as
+they are when it reaches them.
+
+The set operations come in two forms: `union`, `intersection`, `difference`
+and `symmetric_difference` return a new set, and `union_with`,
+`intersect_with`, `difference_with` and `symmetric_difference_with` change
+the set in place. `is_subset` and `is_disjoint` compare two sets. Two sets
+are `==`, and hash equally, when they hold the same members whatever their
+capacity, so a `BitSet` works as a `HashMap` or `HashSet` key. An array
+converts to a `BitSet`, so an array literal can initialize one.
+
+```pepper
+{{#include ../../examples/maps-bitset.pep}}
+```
