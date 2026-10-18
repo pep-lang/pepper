@@ -228,6 +228,16 @@ reports_check_errors_and_warnings() {
             "deps/keys/more.pep",
             "hash<Key>(v: Key): ulong { return 2; }\n"
         ],
+        # An extern and a function of one name in two files of a module,
+        # the extern's file first in path order, as process's `fork`.
+        [
+            "main.pep",
+            "# expect: accepted\nimport sys;\nmain(): int { return sys.go(); }\n",
+            "deps/sys/a_sys.pep",
+            "extern int go();\n",
+            "deps/sys/module.pep",
+            "import \"a_sys\";\nexport go(): int { return 1; }\n"
+        ],
         # Members of private extensions, through a trait default and generic
         # receivers, and private functions.
         [

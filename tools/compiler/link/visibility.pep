@@ -784,7 +784,7 @@ export check_visibility(
             var key = $"{root}\n{name}";
             var first = in_module.try_get(key);
             if (!first.is_value()) {
-                in_module[key] = _ModuleFirst(f, d.name_span(), function and !external);
+                in_module[key] = _ModuleFirst(f, d.name_span(), function);
             } else if (first.value().file != f and !(function and first.value().function) and !external) {
                 errors.append(
                     VisibilityError(
@@ -941,7 +941,7 @@ _compare_errors(a: VisibilityError, b: VisibilityError): int {
 struct _ModuleFirst {
     var file: ulong;
     var span: Span;
-    # A free function (not an extern), which another may join.
+    # A free function or an extern, which another may join.
     var function: bool;
 
     construct(file: ulong, span: Span, function: bool) {
