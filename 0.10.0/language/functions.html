@@ -1,0 +1,644 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Functions - The Pepper Programming Language</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A memory-safe language with an emphasis on clarity, simplicity, and concurrent safety.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../theme/version-switcher-eb59bffd.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-d1944eb7.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-2d913a78.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Pepper Programming Language</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/justinboswell/pepper/edit/main/docs/src/language/functions.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="functions"><a class="header" href="#functions">Functions</a></h1>
+<p>A function is a named block of code that takes parameters and can return a
+value. Functions declared at the top level of a file are free functions; functions
+declared inside a struct are methods, covered in <a href="structs.html">Structs</a>.</p>
+<h2 id="declaring-a-function"><a class="header" href="#declaring-a-function">Declaring a function</a></h2>
+<p>Write the name, the parameters in parentheses as <code>name: Type</code>, and the return
+type after a colon:</p>
+<pre><code class="language-pepper">area(width: int, height: int): int {
+    return width * height;
+}
+</code></pre>
+<p>Pepper also accepts a C-style form, with the return type first and each
+parameter’s type before its name:</p>
+<pre><code class="language-pepper">int perimeter(int width, int height) {
+    return 2 * (width + height);
+}
+</code></pre>
+<p>Both forms declare the same kind of function; pick one style and use it
+consistently. The first form is the one used throughout this book.</p>
+<pre><code class="language-pepper"># Declaring and calling functions.
+
+import async;
+
+# Parameters are written 'name: Type'; the return type follows the ')'.
+area(width: int, height: int): int {
+    return width * height;
+}
+
+# The C-style form puts the return type first and the type before each name.
+int perimeter(int width, int height) {
+    return 2 * (width + height);
+}
+
+# A function that returns nothing leaves out the return type
+# (or writes ': void', or 'void' in front).
+# A module-scope counter: const, and changed through an Atomic.
+const log_count = async.Atomic&lt;int&gt;(0);
+log(message: String) {
+    log_count.fetch_add(1);
+    print("log: " + message);
+}
+
+# Functions can call themselves, and can be declared in any order.
+factorial(n: int): long {
+    if (n &lt;= 1) { return 1; }
+    return n * factorial(n - 1);
+}
+
+main(): int {
+    assert(area(3, 4) == 12, "3 x 4");
+    assert(perimeter(3, 4) == 14, "2 x (3 + 4)");
+    assert(factorial(20) == 2432902008176640000, "20!");
+    assert(is_even(10), "declared after main, still callable");
+    # An argument converts to its parameter's type as assignment does:
+    # a double passed to an int parameter truncates toward zero.
+    assert(area(2.9, 3) == 6, "2.9 becomes 2");
+
+    log("starting");
+    log("done");
+    assert(log_count.load() == 2, "logged twice");
+    return 0;
+}
+
+is_even(n: int): bool {
+    return n % 2 == 0;
+}
+</code></pre>
+<ul>
+<li>
+<p><strong>Order does not matter.</strong> A function can call functions declared later in
+the file, and can call itself.</p>
+</li>
+<li>
+<p><strong>The program starts at <code>main</code>.</strong> <code>main(): int</code> returns the process’s exit
+code; return 0 for success. To receive the command-line arguments, declare
+it <code>main(args: String[]): int</code> instead. See
+<a href="#command-line-arguments-and-exit">Command-line arguments and exit</a>.</p>
+</li>
+<li>
+<p><strong>Calls must match the declaration.</strong> Passing the wrong number of arguments
+is a compile error:</p>
+<pre><code>main.pep:3:12: error: too many arguments to 'add': expected 2, have 3
+    3 |     return add(1, 2, 3);
+      |            ^~~
+</code></pre>
+</li>
+</ul>
+<h2 id="functions-that-return-nothing"><a class="header" href="#functions-that-return-nothing">Functions that return nothing</a></h2>
+<p>A function that returns no value leaves out the return type. You can also write
+<code>: void</code>, or <code>void</code> in front in the C-style form:</p>
+<pre><code class="language-pepper">log(message: String) { print(message); }
+log_line(message: String): void { print(message); }
+void log_c(String message) { print(message); }
+</code></pre>
+<p>Such a function ends when it reaches the closing brace, or earlier at a bare
+<code>return;</code>:</p>
+<pre><code class="language-pepper">log_positive(n: int) {
+    if n &lt;= 0 {
+        return;
+    }
+    print($"{n}");
+}
+</code></pre>
+<p>A call to such a function has no value, so it cannot be stored, passed,
+returned, or used as an operand or condition: <code>var x = log("hi");</code> reports
+<code>cannot use a value of type 'void' as variable 'x'</code>.</p>
+<p>In a function that returns a value, <code>return;</code> is an error:</p>
+<pre><code class="language-text">main.pep:2:5: error: non-void function 'f' should return a value
+    2 |     return;
+      |     ^~~~~~
+</code></pre>
+<h2 id="inferred-return-types"><a class="header" href="#inferred-return-types">Inferred return types</a></h2>
+<p>A function without a return type gets one from its <code>return</code> statements. It
+returns <code>void</code> when no <code>return</code> has a value, and otherwise the type of the first
+<code>return</code> that has one, so <code>half(x: double) { return x / 2; }</code> returns a
+<code>double</code>. A generic function’s return type is inferred for each
+specialization, so <code>first&lt;T&gt;(a: T, b: T) { return a; }</code> returns an <code>int</code> for
+<code>first&lt;int&gt;</code>. <code>main</code> with no return type returns an <code>int</code>, and reaching its
+closing brace exits with 0.</p>
+<p>Writing the return type is still clearer for a function that returns a value,
+and it lets the compiler check each <code>return</code> against it.</p>
+<h2 id="parameters"><a class="header" href="#parameters">Parameters</a></h2>
+<p>Parameters are passed by value. For numbers and <code>bool</code>, the function receives
+its own copy. For a <code>String</code>, an <code>Array</code> or any other struct, the value is a
+reference, so the function receives another reference to the same object: it
+can change the object’s contents, and the caller sees the change. Assigning a
+new object to the parameter does not affect the caller’s variable.
+<a href="memory.html">Memory and reference counting</a> describes exactly how references are
+counted when you pass them.</p>
+<p>Arguments convert to the parameter’s type the same way assignment does, so you
+can pass an <code>int</code> where a <code>long</code> or <code>double</code> is expected, a <code>double</code> where an
+<code>int</code> is expected (it truncates toward zero, like <code>int n = 2.7;</code>), and a
+<code>String</code> where a struct with an
+<a href="structs.html#implicit-conversions"><code>[Implicit]</code> constructor</a> from <code>String</code> (such
+as <code>io.Path</code>) is expected.</p>
+<h2 id="default-parameter-values"><a class="header" href="#default-parameter-values">Default parameter values</a></h2>
+<p>A parameter can have a default value, written <code>= value</code> after its type. A call
+that leaves the argument out gets the default. Put parameters with defaults at
+the end of the list, since arguments are matched from the left.</p>
+<pre><code class="language-pepper"># Default parameter values.
+
+# Parameters with defaults come last; a call may leave them out.
+greet(name: String, greeting: String = "Hello", punctuation: String = "!"): String {
+    return greeting + ", " + name + punctuation;
+}
+
+# Defaults work with the C-style form too.
+int clamp(int value, int low = 0, int high = 100) {
+    if (value &lt; low) { return low; }
+    if (value &gt; high) { return high; }
+    return value;
+}
+
+main(): int {
+    assert(greet("Ada") == "Hello, Ada!", "both defaults");
+    assert(greet("Ada", "Hi") == "Hi, Ada!", "one default");
+    assert(greet("Ada", "Hi", ".") == "Hi, Ada.", "no defaults");
+
+    assert(clamp(150) == 100, "clamped to the default high");
+    assert(clamp(-5) == 0, "clamped to the default low");
+    assert(clamp(-5, -10) == -5, "low given");
+    return 0;
+}
+</code></pre>
+<p>Defaults work the same way for methods and constructors. To give a later
+parameter a value without passing every parameter before it, name it (see
+<a href="#named-arguments">Named arguments</a>).</p>
+<h2 id="named-arguments"><a class="header" href="#named-arguments">Named arguments</a></h2>
+<p>A call can name its arguments, <code>name = value</code>, so it reads clearly and can
+set one defaulted parameter without passing the ones before it:</p>
+<pre><code class="language-pepper"># Named arguments: `name = value` after the positional arguments.
+window(title: String, width: int = 800, height: int = 600, resizable: bool = true): String {
+    return $"{title} {width}x{height} resizable={resizable}";
+}
+
+struct Point {
+    var x: int;
+    var y: int;
+
+    construct(this.x = 0, this.y = 0) {}
+
+    moved(dx: int = 0, dy: int = 0): Point {
+        return Point(x + dx, y + dy);
+    }
+}
+
+# 'size = ...' works as well as 'count = ...'; 'n = ...' still works, with a
+# deprecation warning.
+[Alias("size", "count")]
+[Rename("n", "count")]
+repeat(text: String, count: int = 1): String {
+    var result = "";
+    for (var i in 0..count) {
+        result = result + text;
+    }
+    return result;
+}
+
+main(): int {
+    assert(window("Editor") == "Editor 800x600 resizable=true", "all defaults");
+    # Skip width and height.
+    assert(window("Editor", resizable = false) == "Editor 800x600 resizable=false", "skip");
+    # Named arguments in any order.
+    assert(window("Editor", height = 400, width = 1200) == "Editor 1200x400 resizable=true", "any order");
+    # Every argument may be named.
+    assert(window(title = "Editor", width = 1024) == "Editor 1024x600 resizable=true", "all named");
+
+    # Constructors and methods take them too.
+    var p = Point(y = 5);
+    assert(p.moved(dy = 2).y == 7, "method");
+
+    assert(repeat("ab", size = 3) == "ababab", "alias");
+    return 0;
+}
+</code></pre>
+<ul>
+<li><strong>Positional first.</strong> Positional arguments come first and match parameters
+from the left; named arguments follow, in any order. A positional argument
+after a named one is an error: <code>positional argument cannot follow a named argument</code>.</li>
+<li><strong>Each parameter once.</strong> Naming a parameter that already has an argument is
+an error: <code>argument for 'width' given twice</code>.</li>
+<li><strong>Every required parameter.</strong> A parameter without a default must get an
+argument: <code>missing argument for parameter 'title' in call to 'window'</code>. A
+name the function does not have is an error, with a suggestion when one is
+close: <code>no parameter named 'widht' in 'window'; did you mean 'width'?</code>.</li>
+<li><strong>Order of evaluation.</strong> Arguments are evaluated in the order written, then
+passed to their parameters.</li>
+<li><strong>Everywhere a call is.</strong> Free functions, methods, static methods,
+constructors (a <code>this.x</code> parameter is named <code>x</code>), extension methods, enum
+methods, generic functions, and calls through a <a href="traits-and-extensions.html">trait</a>
+value, which use the trait’s parameter names. A method that implements a
+trait should use the trait’s names, so a call names the same arguments
+either way: a different name is a warning (<code>parameter 'factor' of 'area' is named 'scale' in trait 'Shape'</code>) whose fix renames the parameter.</li>
+<li><strong>Overloads.</strong> A member of an <a href="overloading.html">overload set</a> without a
+parameter of a given name is not a candidate, so names can pick between
+overloads.</li>
+<li><strong>Not through function values.</strong> A <a href="function-types.html">function type</a>
+carries no parameter names, so a call through a function value is
+positional only: <code>cannot name arguments in a call through a function value of type '(int, int) =&gt; int'</code>.</li>
+<li><strong>Not to <code>extern</code> functions.</strong> Their parameter names are copied from C
+headers and stay free to change: <code>cannot name arguments in a call to extern function 'CreateFileW'</code>. Wrap the C function in a Pepper function to give
+it named arguments.</li>
+</ul>
+<h3 id="other-names-for-a-parameter"><a class="header" href="#other-names-for-a-parameter">Other names for a parameter</a></h3>
+<p>Two attributes on a function give its parameters more names. In both, the
+declared parameter’s name comes second:</p>
+<ul>
+<li><code>[Alias("size", "count")]</code> lets a call name parameter <code>count</code> as <code>size</code>
+too, permanently.</li>
+<li><code>[Rename("n", "count")]</code> keeps the former name <code>n</code> working after the
+parameter was renamed to <code>count</code>. Each use warns, like a
+<a href="deprecation.html">deprecated</a> declaration, with a fix that renames it.</li>
+</ul>
+<p>The first name must not already be a parameter or another name, and the
+second must be a parameter of the function. A call that names one parameter
+by two of its names gets <code>argument for 'count' given twice</code>.</p>
+<h2 id="returning-several-values"><a class="header" href="#returning-several-values">Returning several values</a></h2>
+<p>A function returns several values as a <a href="tuples.html">tuple</a>, and the caller
+destructures it:</p>
+<pre><code class="language-pepper">divide(a: int, b: int): (int, int) {
+    return (a / b, a % b);
+}
+
+var (quotient, remainder) = divide(17, 5);
+</code></pre>
+<h2 id="overloading"><a class="header" href="#overloading">Overloading</a></h2>
+<p>Functions can share a name when their parameter lists differ, in one file,
+across a module’s files, or across the modules a file imports,
+and each call picks the best fit for its arguments. See
+<a href="overloading.html">Overloading</a>.</p>
+<h2 id="generic-functions"><a class="header" href="#generic-functions">Generic functions</a></h2>
+<p>A function can take type parameters in angle brackets after its name, such as
+<code>first&lt;T&gt;(items: T[]): T</code>. <a href="generics.html">Generics</a> covers them.</p>
+<h2 id="printing-with-print"><a class="header" href="#printing-with-print">Printing with <code>print</code></a></h2>
+<p><code>print(value)</code> writes a value’s text and a line break to standard output:
+what <a href="interpolation.html#which-values-can-be-interpolated">interpolating</a> it,
+<code>$"{value}"</code>, would make. That covers a <code>String</code>, numbers, <code>bool</code> (<code>true</code> or
+<code>false</code>), tuples, and any type with a <code>to_string()</code>. To print several values
+on one line, interpolate them (<code>print($"total: {n}")</code>), or pass a format
+string and its arguments, which prints what
+<a href="interpolation.html#formatting-by-position-stringformat"><code>String.format</code></a> makes
+of them (<code>print("{0} of {1}", done, total)</code>).</p>
+<pre><code class="language-pepper"># print writes a value's text and a line break.
+main(): int {
+    print("Hello, world!");
+    print(42);                            # any value with a text form
+    print((1.5, true));                   # (1.5, true)
+    var name = "Pepper";
+    var count = 42;
+    print($"{name} has {count} items");   # interpolate other values
+    print("{0} + {1} = {2}", 3, 4, 3 + 4); # or format them: "3 + 4 = 7"
+    print("{braces} alone print as written");
+    return 0;
+}
+</code></pre>
+<ul>
+<li>With a string literal and <strong>no other arguments</strong>, the text prints as
+written: its braces are not a format.</li>
+<li>A value with no text form is an error at the argument:</li>
+</ul>
+<pre><code class="language-text">main.pep:5:11: error: cannot print a value of type 'Foo': it has no 'to_string()' method and no 'to_string' overload
+    5 |     print(f);
+      |           ^
+</code></pre>
+<p><code>print</code> writes each line out as it prints it, like Rust’s <code>println!</code>, so the
+output appears as the program runs even when standard output is a pipe or a
+file. Text from <code>print</code> and from <code>io.File.stdout()</code> comes out in the order
+the program wrote it.</p>
+<p>A <code>float</code> or <code>double</code> prints its shortest exact text (<code>print(0.5)</code> prints
+<code>0.5</code>), and a tuple its elements in parentheses (<code>(1, two)</code>).</p>
+<h2 id="assertions-and-panics"><a class="header" href="#assertions-and-panics">Assertions and panics</a></h2>
+<p>For checks in your programs, the runtime provides <code>assert(condition, message)</code>, which stops the program with <code>message</code> when <code>condition</code> is false, and
+<code>panic(message)</code>, which always stops it. Each is
+<a href="overloading.html">overloaded</a>: the message may be a <code>String</code>, built at run time
+(<code>assert(n &gt; 0, name + " must be positive")</code>), or a C string, which a string
+literal picks, so a literal message builds nothing when the assertion holds. See
+<a href="../reference/internals.html">Built-in functions</a>.</p>
+<p>A panic flushes what the program printed, writes the location of the failing
+call and the message to standard error, and aborts:</p>
+<pre><code class="language-text">main.pep:12:5: panic: count must be positive
+</code></pre>
+<p>In a build without <code>-O</code>, a backtrace of the calls that led there follows the
+message. <code>PEPPER_BACKTRACE=1</code> turns it on in an optimized build and
+<code>PEPPER_BACKTRACE=0</code> turns it off (see
+<a href="debug.html#backtraces-on-panic">Backtraces and the debugger</a>).</p>
+<p>The checks the compiler adds report the same way, at the expression that
+failed: an <a href="types-and-variables.html#integer-overflow">overflowing operator</a>, a
+null function value, a <code>match</code> on a null reference enum. So do the runtime’s
+checking methods, which report their caller’s line, not their own: indexing an
+<code>Array</code> or <code>String</code> out of range, <code>Array.pop()</code> on an empty array,
+<code>Optional.value()</code> on an Empty optional, <code>Result.value()</code> on an error, and the like.</p>
+<p>They do it with an ordinary <a href="#default-parameter-values">default parameter</a>,
+<code>location: __ptr&lt;char&gt; = __caller_location()</code>. A call that leaves <code>location</code>
+out gets the place of that call, as <code>file:line:col</code>. Write the same parameter on
+a function of your own that checks its arguments, and pass <code>location</code> on to
+<code>assert</code> or <code>panic</code>, so a failure names the line that passed the bad value:</p>
+<pre><code class="language-pepper"># Reporting the caller's location with `__caller_location()`.
+
+# A check that names its caller's line when it fails, the way `assert`,
+# `panic`, `Array` indexing and `Optional.value()` do: the default is the
+# location of the call that leaves `location` out.
+check_positive(value: int, location: __ptr&lt;char&gt; = __caller_location()): int {
+    assert(value &gt; 0, "expected a positive value", location);
+    return value;
+}
+
+# The location is a C string, `file:line:col`.
+here(location: __ptr&lt;char&gt; = __caller_location()): String {
+    return String(location);
+}
+
+main(): int {
+    assert(check_positive(3) == 3, "positive");
+    var at = here();
+    assert(at.ends_with("functions-caller-location.pep:18:14"), "this call");
+    return 0;
+}
+</code></pre>
+<p>Written anywhere else, <code>__caller_location()</code> is its own location. A
+compiler-generated check with no single place to report, such as a call through
+a null trait value, prints the message alone.</p>
+<h2 id="command-line-arguments-and-exit"><a class="header" href="#command-line-arguments-and-exit">Command-line arguments and exit</a></h2>
+<p><code>main</code> comes in two forms. <code>main(): int</code> takes nothing. <code>main(args: String[]): int</code> receives the program’s command-line arguments: element 0 is
+the program as it was started, and the arguments typed after it follow in
+order. Declare the parameter only when the program reads it, as a Windows
+console program declares <code>argc</code>/<code>argv</code> only when it needs them. Any other
+parameter list on <code>main</code> is an error, and so is declaring both forms.</p>
+<p><code>pepper build --entry &lt;name&gt;</code> (and <code>pepper run --entry &lt;name&gt;</code>) starts the
+program in the top-level function <code>name</code> instead, which takes either form
+of parameter list, as <code>main</code> does. Every <code>main</code> is then left out of the
+program, so a file can hold several entry points, such as a benchmark
+beside the tool it measures.</p>
+<p>Elsewhere, <code>process.arguments()</code> returns the same array, so code outside
+<code>main</code> can read the arguments without having them passed down.
+<code>process.exit(code)</code> ends the program at once with status <code>code</code>, from
+anywhere, after flushing what was printed. Both are in the
+<a href="processes.html"><code>process</code> module</a>, so the file needs <code>import process</code>.</p>
+<pre><code class="language-pepper">import process;
+
+# args holds the program name, then each command-line argument.
+main(args: String[]): int {
+    if (args.count &gt; 2) {
+        print("usage: greet [NAME]");
+        process.exit(2);  # ends the program here, with status 2
+    }
+    var name = "world";
+    if (args.count == 2) {
+        name = args[1];
+    }
+    print("Hello, " + name + "!");
+    return 0;
+}
+</code></pre>
+<p><code>exit</code> skips everything that would run on the way out of <code>main</code>: locals are
+not released and destructors do not run. Prefer returning from <code>main</code>, and
+keep <code>exit</code> for ending from deep inside a call. See
+<a href="processes.html">Processes</a>.</p>
+<h2 id="functions-as-values"><a class="header" href="#functions-as-values">Functions as values</a></h2>
+<p>A function’s name used without a call is a value that you can store in a
+variable, pass to another function, or return, and a closure such as
+<code>(x: int) =&gt; x * 2</code> is a function written where it is used. See
+<a href="function-types.html">Function types and closures</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../language/control-flow.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../language/tuples.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../language/control-flow.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../language/tuples.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-609e4cb8.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../theme/version-switcher-586b5853.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
