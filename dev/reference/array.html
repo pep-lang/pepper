@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,9 +207,11 @@ Sharing allocates first, so every name for an Array sees the same
 elements.</p>
 <p>An Array is <code>Iterable&lt;T&gt;</code>: <code>for (var x in a)</code> visits each element in index
 order. Every mutating operation (an element store through <code>[]</code>, <code>append</code>,
-<code>insert</code>, <code>remove_at</code>, <code>pop</code>, <code>clear</code>, a shrinking <code>truncate</code>, <code>swap</code>, and
-<code>reverse</code> of two or more elements) invalidates running iterators, and the
-next step of such a loop panics with “Array modified during iteration”.</p>
+<code>insert</code>, <code>remove_at</code>, <code>pop</code>, <code>clear</code>, a shrinking <code>truncate</code>, <code>swap</code>,
+<code>fill</code>, <code>retain</code>, <code>resize</code>, <code>split_off</code>, and <code>reverse</code>, <code>sort</code> or <code>dedup</code>
+of two or more elements) invalidates running iterators and slices
+(<code>slice</code>), and the next step of such a loop panics with “Array modified
+during iteration”.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the element type</li>
@@ -600,6 +602,151 @@ var missing = a.find(7);   # missing.is_empty() == true
 <ul>
 <li>true when <code>find(item)</code> finds a match</li>
 </ul>
+<h4 id="slice"><a class="header" href="#slice">slice</a></h4>
+<pre><code class="language-pepper">[__Reads] slice(start: ulong, end: ulong): ArraySlice&lt;T&gt;
+</code></pre>
+<p>Returns a read-only view of the elements from <code>start</code> up to but not
+including <code>end</code>, without copying them.</p>
+<p>The slice holds a reference to this Array, so it cannot outlive it,
+and it is fail-fast like an iterator: once the Array is modified (see
+<code>Array</code> for which operations count), every later use of the slice
+panics, so it never reads elements that moved or were freed.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the position of the first element in the slice</li>
+<li><code>end</code> — the position one past the last element; from <code>start</code> through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a view of <code>end - start</code> elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold (“Array slice out of bounds”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4, 5];
+var middle = a.slice(1, 4);   # views [2, 3, 4]
+var second = middle[1];       # 3
+</code></pre>
+<h4 id="binary_search_by"><a class="header" href="#binary_search_by">binary_search_by</a></h4>
+<pre><code class="language-pepper">[__Reads] binary_search_by(order: (T) =&gt; int): ulong?
+</code></pre>
+<p>Returns the position of the element that <code>order</code> reports equal to the
+target, searching an Array sorted in the order <code>order</code> follows, or
+none when there is none.</p>
+<p>Runs in O(log count) calls to <code>order</code>, which must not modify the
+Array. When several elements match, the first of them is found.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>order</code> — returns a negative number when its argument sorts before the target, 0 when it matches, and a positive number when it sorts after</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first matching element, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>order</code> modifies the Array (“Array modified while a slice of it is in use”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [10, 20, 30];
+var i = a.binary_search_by((x) =&gt; x.compare(20));   # i.value() == 1
+</code></pre>
+<h4 id="fill"><a class="header" href="#fill">fill</a></h4>
+<pre><code class="language-pepper">fill(value: T)
+</code></pre>
+<p>Replaces every element with <code>value</code>.</p>
+<p>Runs in O(count). For a struct <code>T</code> every slot acquires <code>value</code> and
+releases its previous occupant. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>value</code> — the value each element becomes</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3];
+a.fill(0);   # [0, 0, 0]
+</code></pre>
+<h4 id="retain"><a class="header" href="#retain">retain</a></h4>
+<pre><code class="language-pepper">retain(keep: (T) =&gt; bool)
+</code></pre>
+<p>Removes every element for which <code>keep</code> returns false, keeping the
+order of the rest.</p>
+<p>Runs in O(count) calls to <code>keep</code>, which sees each element once, in
+index order, and must not modify the Array. For a struct <code>T</code> each
+removed element is released and kept elements keep their counts. The
+capacity is unchanged. Invalidates running iterators.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>keep</code> — returns true for an element to keep</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>keep</code> modifies the Array (“Array modified during retain”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4];
+a.retain((x) =&gt; x % 2 == 0);   # [2, 4]
+</code></pre>
+<h4 id="dedup"><a class="header" href="#dedup">dedup</a></h4>
+<pre><code class="language-pepper">dedup()
+</code></pre>
+<p>Removes each element equal (<code>==</code>) to the one before it, so a run of
+equal elements keeps only its first. On a sorted Array this removes
+every duplicate.</p>
+<p>Runs in O(count). Elements are compared as <code>find</code> does. For a struct
+<code>T</code> each removed element is released. Invalidates running iterators
+when there are two or more elements.</p>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 1, 2, 3, 3, 3, 1];
+a.dedup();   # [1, 2, 3, 1]
+</code></pre>
+<h4 id="resize"><a class="header" href="#resize">resize</a></h4>
+<pre><code class="language-pepper">resize(count: ulong, value: T)
+</code></pre>
+<p>Changes the count to <code>count</code>: removes elements past it, as
+<code>truncate</code> does, or appends copies of <code>value</code> until there are
+<code>count</code> elements.</p>
+<p>Runs in O(difference in count), plus at most one reallocation.
+Invalidates running iterators when the count changes.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>count</code> — the number of elements the Array will hold</li>
+<li><code>value</code> — the element to append when the Array grows</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the buffer must grow while an I/O operation in a task is using it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2];
+a.resize(4, 0);   # [1, 2, 0, 0]
+a.resize(1, 0);   # [1]
+</code></pre>
+<h4 id="split_off"><a class="header" href="#split_off">split_off</a></h4>
+<pre><code class="language-pepper">split_off(index: ulong): Array&lt;T&gt;
+</code></pre>
+<p>Removes the elements from <code>index</code> on and returns them as a new Array,
+leaving this Array with its first <code>index</code> elements.</p>
+<p>Runs in O(count - index). The elements move without changing their
+reference counts. This Array’s capacity is unchanged. Invalidates
+running iterators when any element moves.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the position of the first element to move; from 0 through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new Array holding the elements that were at <code>index</code> and after</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if <code>index &lt;= count</code> does not hold (“Array split_off index out of bounds”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 2, 3, 4];
+var tail = a.split_off(1);   # a holds [1]; tail holds [2, 3, 4]
+</code></pre>
 <h4 id="append_all"><a class="header" href="#append_all">append_all</a></h4>
 <pre><code class="language-pepper">append_all(rhs: Array&lt;T&gt;)
 </code></pre>
@@ -724,6 +871,87 @@ same as <code>append_all</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var c = a + b;
 </code></pre>
+<h2 id="extend-array"><a class="header" href="#extend-array">extend Array<t></t></a></h2>
+<pre><code class="language-pepper">extend Array&lt;T: Comparable&gt;
+</code></pre>
+<p>The searches of a sorted Array, for an element type with an order
+(see <code>Comparable</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type, <code>Comparable</code></li>
+</ul>
+<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h4 id="binary_search"><a class="header" href="#binary_search">binary_search</a></h4>
+<pre><code class="language-pepper">[__Reads] binary_search(item: T): ulong?
+</code></pre>
+<p>Returns the position of an element equal to <code>item</code> in this Array,
+which must be sorted in <code>compare</code> order, or none when there is
+none.</p>
+<p>Runs in O(log count). When several elements equal <code>item</code>, the first
+of them is found. On an Array that is not sorted the result is
+unspecified (but never out of bounds).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element equal to <code>item</code>, or none</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 3, 5, 7];
+var i = a.binary_search(5);   # i.value() == 2
+</code></pre>
+<h4 id="lower_bound"><a class="header" href="#lower_bound">lower_bound</a></h4>
+<pre><code class="language-pepper">[__Reads] lower_bound(item: T): ulong
+</code></pre>
+<p>Returns the first position at which <code>item</code> could be inserted while
+keeping this sorted Array sorted: the index of the first element that
+does not sort before <code>item</code> (in <code>compare</code> order), or <code>count</code> when
+every element does.</p>
+<p>Runs in O(log count).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element at or after <code>item</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 3, 3, 5];
+var i = a.lower_bound(3);   # 1
+</code></pre>
+<h4 id="upper_bound"><a class="header" href="#upper_bound">upper_bound</a></h4>
+<pre><code class="language-pepper">[__Reads] upper_bound(item: T): ulong
+</code></pre>
+<p>Returns the last position at which <code>item</code> could be inserted while
+keeping this sorted Array sorted: the index of the first element that
+sorts after <code>item</code> (in <code>compare</code> order), or <code>count</code> when none does.</p>
+<p>Runs in O(log count). <code>upper_bound(x) - lower_bound(x)</code> is the number
+of elements equal to <code>x</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element after <code>item</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var a = [1, 3, 3, 5];
+var i = a.upper_bound(3);   # 3
+</code></pre>
+<h4 id="is_sorted"><a class="header" href="#is_sorted">is_sorted</a></h4>
+<pre><code class="language-pepper">[__Reads] is_sorted(): bool
+</code></pre>
+<p>Reports whether the elements are in <code>compare</code> order: no element
+sorts after the one that follows it.</p>
+<p>Runs in O(count). An Array of fewer than two elements is sorted.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the Array is sorted</li>
+</ul>
 <h2 id="arrayiterator"><a class="header" href="#arrayiterator">ArrayIterator</a></h2>
 <pre><code class="language-pepper">[Value] struct ArrayIterator&lt;T&gt;
 </code></pre>
@@ -748,7 +976,7 @@ while (it.next()) {
     var x = it.current();
 }
 </code></pre>
-<h3 id="methods-1"><a class="header" href="#methods-1">Methods</a></h3>
+<h3 id="methods-2"><a class="header" href="#methods-2">Methods</a></h3>
 <h4 id="next"><a class="header" href="#next">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -776,6 +1004,275 @@ returning false.</p>
 <li>if the Array was modified since the iterator was created (“Array modified during iteration”)</li>
 <li>if <code>next()</code> was never called (“ArrayIterator.current() before next()”)</li>
 <li>if <code>next()</code> already returned false (“ArrayIterator.current() past the end”)</li>
+</ul>
+<h2 id="arrayslice"><a class="header" href="#arrayslice">ArraySlice</a></h2>
+<pre><code class="language-pepper">[Value] struct ArraySlice&lt;T&gt;
+</code></pre>
+<p>A read-only view of a run of an Array’s elements, made by <code>Array.slice</code>,
+that lets a function take “some of the elements” without copying them.</p>
+<p>A slice holds a reference to its Array, so the Array lives at least as
+long as the slice. It is fail-fast like <code>ArrayIterator</code>: once the Array
+is modified (see <code>Array</code> for which operations count), every later use of
+the slice panics with “Array modified while a slice of it is in use”
+instead of reading elements that moved or were freed. Make a new slice
+after changing the Array.</p>
+<p>A slice is <code>Iterable&lt;T&gt;</code>: <code>for (var x in slice)</code> visits its elements in
+order.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the Array</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>Array.slice</code></li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">total(values: ArraySlice&lt;int&gt;): int {
+    var sum = 0;
+    for (var x in values) {
+        sum = sum + x;
+    }
+    return sum;
+}
+
+var a = [1, 2, 3, 4];
+var tail_sum = total(a.slice(2, 4));   # 7
+</code></pre>
+<h3 id="properties-1"><a class="header" href="#properties-1">Properties</a></h3>
+<h4 id="count-1"><a class="header" href="#count-1">count</a></h4>
+<pre><code class="language-pepper">var count: ulong { get; }
+</code></pre>
+<p>The number of elements in the slice.</p>
+<h4 id="is_empty-1"><a class="header" href="#is_empty-1">is_empty</a></h4>
+<pre><code class="language-pepper">var is_empty: bool { get; }
+</code></pre>
+<p>Whether the slice has no elements.</p>
+<h3 id="methods-3"><a class="header" href="#methods-3">Methods</a></h3>
+<h4 id="operator--6"><a class="header" href="#operator--6">operator []</a></h4>
+<pre><code class="language-pepper">[](index: ulong): T
+</code></pre>
+<p>Returns the element at <code>index</code> in the slice, <code>index</code> 0 being the
+slice’s first element; this is the indexer read <code>slice[index]</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>index</code> — the zero-based position in the slice</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the element at <code>index</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+<li>if <code>index &lt; count</code> does not hold (“ArraySlice index out of bounds”)</li>
+</ul>
+<h4 id="slice-1"><a class="header" href="#slice-1">slice</a></h4>
+<pre><code class="language-pepper">slice(start: ulong, end: ulong): ArraySlice&lt;T&gt;
+</code></pre>
+<p>Returns a view of this slice’s elements from <code>start</code> up to but not
+including <code>end</code>, positions counted within this slice.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>start</code> — the position of the first element</li>
+<li><code>end</code> — the position one past the last element; from <code>start</code> through <code>count</code></li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a view of <code>end - start</code> elements of the same Array</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+<li>if <code>start &lt;= end</code> and <code>end &lt;= count</code> do not both hold (“ArraySlice slice out of bounds”)</li>
+</ul>
+<h4 id="iterate-1"><a class="header" href="#iterate-1">iterate</a></h4>
+<pre><code class="language-pepper">iterate(): ArraySliceIterator&lt;T&gt;
+</code></pre>
+<p>Returns an iterator over the slice’s elements in order; this is what
+<code>for (var x in slice)</code> calls.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>a new iterator positioned before the first element</li>
+</ul>
+<h4 id="to_array"><a class="header" href="#to_array">to_array</a></h4>
+<pre><code class="language-pepper">to_array(): Array&lt;T&gt;
+</code></pre>
+<p>Returns a new Array holding a copy of the slice’s elements, in order.</p>
+<p>The copy is shallow, as <code>Array.clone</code> is: for a struct <code>T</code> the new
+Array shares the element objects.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>an independent Array with the slice’s elements</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="find-1"><a class="header" href="#find-1">find</a></h4>
+<pre><code class="language-pepper">find(item: T): ulong?
+</code></pre>
+<p>Returns the position in the slice of the first element equal (<code>==</code>)
+to <code>item</code>, or none, compared as <code>Array.find</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first match, or none when no element matches</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="contains-1"><a class="header" href="#contains-1">contains</a></h4>
+<pre><code class="language-pepper">contains(item: T): bool
+</code></pre>
+<p>Reports whether any element equals <code>item</code>, compared as <code>find</code> does.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when <code>find(item)</code> finds a match</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="binary_search_by-1"><a class="header" href="#binary_search_by-1">binary_search_by</a></h4>
+<pre><code class="language-pepper">binary_search_by(order: (T) =&gt; int): ulong?
+</code></pre>
+<p>Returns the position of the first element that <code>order</code> reports equal
+to the target, in a slice sorted in the order <code>order</code> follows, or
+none; see <code>Array.binary_search_by</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>order</code> — returns a negative number when its argument sorts before the target, 0 when it matches, and a positive number when it sorts after</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first matching element, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made, <code>order</code> included (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h2 id="extend-arrayslice"><a class="header" href="#extend-arrayslice">extend ArraySlice<t></t></a></h2>
+<pre><code class="language-pepper">extend ArraySlice&lt;T: Comparable&gt;
+</code></pre>
+<p>The searches of a sorted ArraySlice, for an element type with an order
+(see <code>Comparable</code>).</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type, <code>Comparable</code></li>
+</ul>
+<h3 id="methods-4"><a class="header" href="#methods-4">Methods</a></h3>
+<h4 id="binary_search-1"><a class="header" href="#binary_search-1">binary_search</a></h4>
+<pre><code class="language-pepper">binary_search(item: T): ulong?
+</code></pre>
+<p>Returns the position of the first element equal to <code>item</code> in this
+slice, which must be sorted in <code>compare</code> order, or none; see
+<code>Array.binary_search</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to look for</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element equal to <code>item</code>, or none</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="lower_bound-1"><a class="header" href="#lower_bound-1">lower_bound</a></h4>
+<pre><code class="language-pepper">lower_bound(item: T): ulong
+</code></pre>
+<p>Returns the index of the first element of this sorted slice that
+does not sort before <code>item</code>, or <code>count</code>; see <code>Array.lower_bound</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element at or after <code>item</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="upper_bound-1"><a class="header" href="#upper_bound-1">upper_bound</a></h4>
+<pre><code class="language-pepper">upper_bound(item: T): ulong
+</code></pre>
+<p>Returns the index of the first element of this sorted slice that
+sorts after <code>item</code>, or <code>count</code>; see <code>Array.upper_bound</code>.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>item</code> — the value to place</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the index of the first element after <code>item</code></li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="is_sorted-1"><a class="header" href="#is_sorted-1">is_sorted</a></h4>
+<pre><code class="language-pepper">is_sorted(): bool
+</code></pre>
+<p>Reports whether the elements are in <code>compare</code> order; see
+<code>Array.is_sorted</code>.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when no element sorts after the one that follows it</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h2 id="arraysliceiterator"><a class="header" href="#arraysliceiterator">ArraySliceIterator</a></h2>
+<pre><code class="language-pepper">[Value] struct ArraySliceIterator&lt;T&gt;
+</code></pre>
+<p>An <code>Iterator&lt;T&gt;</code> over the elements of an <code>ArraySlice</code>, in order; returned
+by <code>ArraySlice.iterate()</code> and driven by <code>for (var x in slice)</code>.</p>
+<p><strong>Type parameters</strong></p>
+<ul>
+<li><code>T</code> — the element type of the slice</li>
+</ul>
+<p><strong>See also</strong></p>
+<ul>
+<li><code>ArraySlice.iterate</code></li>
+</ul>
+<h3 id="methods-5"><a class="header" href="#methods-5">Methods</a></h3>
+<h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
+<pre><code class="language-pepper">next(): bool
+</code></pre>
+<p>Advances to the next element.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when there is a current element, false once past the end</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+</ul>
+<h4 id="current-1"><a class="header" href="#current-1">current</a></h4>
+<pre><code class="language-pepper">current(): T
+</code></pre>
+<p>Returns the element the last successful <code>next()</code> moved to.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the current element</li>
+</ul>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if the Array was modified since the slice was made (“Array modified while a slice of it is in use”)</li>
+<li>if <code>next()</code> was never called (“ArraySliceIterator.current() before next()”)</li>
+<li>if <code>next()</code> already returned false (“ArraySlice index out of bounds”)</li>
 </ul>
 
                     </main>

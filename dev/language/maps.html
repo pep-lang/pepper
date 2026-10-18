@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,8 @@
                     <main>
                         <h1 id="maps-and-sets"><a class="header" href="#maps-and-sets">Maps and sets</a></h1>
 <p>The standard library has three kinds of map, which differ in the order they
-keep their keys in:</p>
+keep their keys in, and a compact set of small integers,
+<a href="#small-integers-bitset"><code>BitSet</code></a>:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -260,11 +261,13 @@ which returns a negative number, zero or a positive number as <code>a</code> sor
 before, equal to or after <code>b</code>. Two keys that compare equal are the same key.</p>
 <ul>
 <li>Numbers and <code>char</code> compare by value, and <code>String</code> by content (the same
-order as <code>String.compare</code>).</li>
-<li>A struct that declares a <code>&lt;</code> <a href="structs.html#operators">operator</a> sorts by it:
-the generic <code>compare</code> asks <code>a &lt; b</code> and <code>b &lt; a</code>.</li>
-<li>Any other struct overrides <code>compare&lt;T&gt;</code> for itself, as a hashed key
-overrides <code>hash&lt;T&gt;</code> (see
+order as <code>String.compare</code>). A NaN <code>float</code> or <code>double</code> key sorts after
+every number (see <a href="ordering.html">Ordering with Comparable</a>).</li>
+<li>A <a href="ordering.html"><code>Comparable</code></a> struct, or one that declares a <code>&lt;</code>
+<a href="structs.html#operators">operator</a>, sorts by it: the generic <code>compare</code> asks
+<code>a &lt; b</code> and <code>b &lt; a</code>.</li>
+<li>Any other struct declares <code>Comparable</code>, or overrides <code>compare&lt;T&gt;</code> for
+itself, as a hashed key overrides <code>hash&lt;T&gt;</code> (see
 <a href="generics.html#overriding-a-generic-function-for-one-type">Overriding a generic function for one type</a>).</li>
 </ul>
 <pre><code class="language-pepper"># A struct with a `&lt;` operator sorts by it.
@@ -346,16 +349,73 @@ when one is removed.</p>
 </code></pre>
 <p>Use it where the order of the input matters, such as the keys of a
 configuration file that should be written back as they were read.</p>
+<h2 id="small-integers-bitset"><a class="header" href="#small-integers-bitset">Small integers: <code>BitSet</code></a></h2>
+<p><code>BitSet</code> is a set of non-negative <code>int</code>s that stores one bit per possible
+member, so a set whose largest member is <code>m</code> takes about <code>m / 8</code> bytes
+however many members it holds. It suits visited flags, masks, and sieve or
+liveness tables over small integers; for sparse or large integers, use a
+<code>HashSet&lt;int&gt;</code>.</p>
+<p>It has the set API above (<code>insert</code>, <code>contains</code>, <code>remove</code>, <code>count</code>,
+<code>is_empty</code>, <code>clear</code>) and iterates its members in ascending order. <code>insert</code>
+grows the set as needed and <code>reserve(n)</code> makes room for <code>0</code> to <code>n - 1</code>
+ahead of time; it never shrinks. Inserting a negative number panics, while
+<code>contains</code> and <code>remove</code> of one return false. Changing the set while a loop
+iterates it is allowed: the loop sees the members above its position as
+they are when it reaches them.</p>
+<p>The set operations come in two forms: <code>union</code>, <code>intersection</code>, <code>difference</code>
+and <code>symmetric_difference</code> return a new set, and <code>union_with</code>,
+<code>intersect_with</code>, <code>difference_with</code> and <code>symmetric_difference_with</code> change
+the set in place. <code>is_subset</code> and <code>is_disjoint</code> compare two sets. Two sets
+are <code>==</code>, and hash equally, when they hold the same members whatever their
+capacity, so a <code>BitSet</code> works as a <code>HashMap</code> or <code>HashSet</code> key. An array
+converts to a <code>BitSet</code>, so an array literal can initialize one.</p>
+<pre><code class="language-pepper">main(): int {
+    # A sieve: every number below 50 starts out as a candidate.
+    var composite = BitSet(50);
+    var primes = BitSet();
+    for (var n in 2..50) {
+        if (composite.contains(n)) {
+            continue;
+        }
+        primes.insert(n);
+        var multiple = n * n;
+        while (multiple &lt; 50) {
+            composite.insert(multiple);
+            multiple = multiple + n;
+        }
+    }
+    assert(primes.count == 15, "15 primes below 50");
+
+    # Members come out in ascending order.
+    var first = "";
+    for (var p in primes) {
+        if (p &gt; 11) {
+            break;
+        }
+        first = $"{first}{p} ";
+    }
+    assert(first == "2 3 5 7 11 ", "ascending");
+
+    # Set operations, by value or in place.
+    BitSet odd = [1, 3, 5, 7, 9, 11];
+    var odd_primes = primes.intersection(odd);
+    assert(odd_primes.count == 4, "3, 5, 7 and 11");
+    assert(odd_primes.is_subset(primes), "a subset");
+    odd.difference_with(primes);
+    assert(odd == BitSet([1, 9]), "1 and 9 are odd but not prime");
+    return 0;
+}
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../language/hashing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../language/ordering.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../language/enums.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../language/queues.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -365,11 +425,11 @@ configuration file that should be written back as they were read.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../language/hashing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../language/ordering.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../language/enums.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../language/queues.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

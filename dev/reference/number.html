@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -200,7 +200,12 @@ instruction on most CPUs (<code>leading_zeros</code>, <code>trailing_zeros</code
 <code>count_ones</code>, <code>count_zeros</code>, <code>swap_bytes</code>, <code>reverse_bits</code>, <code>rotate_left</code>,
 <code>rotate_right</code>), and <code>min</code>, <code>max</code> and, when signed, <code>abs</code>. <code>float</code> and
 <code>double</code> have <code>square_root</code>, <code>floor</code>, <code>ceiling</code>, <code>truncate</code>, <code>round</code>,
-<code>abs</code>, <code>copy_sign</code>, <code>multiply_add</code>, <code>min</code> and <code>max</code>.</p>
+<code>abs</code>, <code>copy_sign</code>, <code>multiply_add</code>, <code>min</code> and <code>max</code>, the trigonometric,
+hyperbolic, exponential and logarithmic functions of C’s <code>&lt;math.h&gt;</code> with
+their names spelled out (<code>sine</code>, <code>arc_tangent2</code>, <code>logarithm10</code>, …),
+<code>cube_root</code>, <code>hypotenuse</code>, <code>remainder</code>, and <code>is_nan</code>, <code>is_infinite</code>,
+<code>is_finite</code> and <code>sign_bit</code>. The <code>math</code> module has their constants
+(<code>math.PI</code>).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var port = int.parse("8080");
 assert(port.is_value() &amp;&amp; port.value() == 8080, "parsed");
@@ -3330,6 +3335,333 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert((1.5 as float).max(-2.0) == 1.5, "larger");
 </code></pre>
+<h4 id="sine"><a class="header" href="#sine">sine</a></h4>
+<pre><code class="language-pepper">sine(): float
+</code></pre>
+<p>Returns the sine of this angle, in radians (<code>llvm.sin</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sine, from -1 to 1; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).sine() == 0.0, "sine of zero");
+</code></pre>
+<h4 id="cosine"><a class="header" href="#cosine">cosine</a></h4>
+<pre><code class="language-pepper">cosine(): float
+</code></pre>
+<p>Returns the cosine of this angle, in radians (<code>llvm.cos</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the cosine, from -1 to 1; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).cosine() == 1.0, "cosine of zero");
+</code></pre>
+<h4 id="tangent"><a class="header" href="#tangent">tangent</a></h4>
+<pre><code class="language-pepper">tangent(): float
+</code></pre>
+<p>Returns the tangent of this angle, in radians (<code>llvm.tan</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the tangent; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).tangent() == 0.0, "tangent of zero");
+</code></pre>
+<h4 id="arc_sine"><a class="header" href="#arc_sine">arc_sine</a></h4>
+<pre><code class="language-pepper">arc_sine(): float
+</code></pre>
+<p>Returns the angle, in radians, whose sine is this value (<code>llvm.asin</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π/2 to π/2; NaN when this value is outside -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).arc_sine() == 0.0, "arc sine of zero");
+</code></pre>
+<h4 id="arc_cosine"><a class="header" href="#arc_cosine">arc_cosine</a></h4>
+<pre><code class="language-pepper">arc_cosine(): float
+</code></pre>
+<p>Returns the angle, in radians, whose cosine is this value (<code>llvm.acos</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from 0 to π; NaN when this value is outside -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as float).arc_cosine() == 0.0, "arc cosine of one");
+</code></pre>
+<h4 id="arc_tangent"><a class="header" href="#arc_tangent">arc_tangent</a></h4>
+<pre><code class="language-pepper">arc_tangent(): float
+</code></pre>
+<p>Returns the angle, in radians, whose tangent is this value (<code>llvm.atan</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π/2 to π/2</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).arc_tangent() == 0.0, "arc tangent of zero");
+</code></pre>
+<h4 id="arc_tangent2"><a class="header" href="#arc_tangent2">arc_tangent2</a></h4>
+<pre><code class="language-pepper">arc_tangent2(x: float): float
+</code></pre>
+<p>Returns the angle, in radians, from the positive x axis to the point
+(<code>x</code>, this value), using both signs to pick the quadrant: C’s
+<code>atan2(y, x)</code> with this value as <code>y</code> (<code>llvm.atan2</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>x</code> — the x coordinate of the point</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π to π</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).arc_tangent2(1.0) == 0.0, "along the positive x axis");
+assert((1.0 as float).arc_tangent2(0.0) == (1.0 as float).arc_sine(), "straight up is π/2");
+</code></pre>
+<h4 id="hyperbolic_sine"><a class="header" href="#hyperbolic_sine">hyperbolic_sine</a></h4>
+<pre><code class="language-pepper">hyperbolic_sine(): float
+</code></pre>
+<p>Returns the hyperbolic sine of this value (<code>llvm.sinh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic sine; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).hyperbolic_sine() == 0.0, "hyperbolic sine of zero");
+</code></pre>
+<h4 id="hyperbolic_cosine"><a class="header" href="#hyperbolic_cosine">hyperbolic_cosine</a></h4>
+<pre><code class="language-pepper">hyperbolic_cosine(): float
+</code></pre>
+<p>Returns the hyperbolic cosine of this value (<code>llvm.cosh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic cosine, at least 1; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).hyperbolic_cosine() == 1.0, "hyperbolic cosine of zero");
+</code></pre>
+<h4 id="hyperbolic_tangent"><a class="header" href="#hyperbolic_tangent">hyperbolic_tangent</a></h4>
+<pre><code class="language-pepper">hyperbolic_tangent(): float
+</code></pre>
+<p>Returns the hyperbolic tangent of this value (<code>llvm.tanh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic tangent, from -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).hyperbolic_tangent() == 0.0, "hyperbolic tangent of zero");
+</code></pre>
+<h4 id="arc_hyperbolic_sine"><a class="header" href="#arc_hyperbolic_sine">arc_hyperbolic_sine</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_sine(): float
+</code></pre>
+<p>Returns the value whose hyperbolic sine is this value (C’s <code>asinh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic sine</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).arc_hyperbolic_sine() == 0.0, "inverse of zero");
+</code></pre>
+<h4 id="arc_hyperbolic_cosine"><a class="header" href="#arc_hyperbolic_cosine">arc_hyperbolic_cosine</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_cosine(): float
+</code></pre>
+<p>Returns the non-negative value whose hyperbolic cosine is this value
+(C’s <code>acosh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic cosine; NaN when this value is less than 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as float).arc_hyperbolic_cosine() == 0.0, "inverse of one");
+</code></pre>
+<h4 id="arc_hyperbolic_tangent"><a class="header" href="#arc_hyperbolic_tangent">arc_hyperbolic_tangent</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_tangent(): float
+</code></pre>
+<p>Returns the value whose hyperbolic tangent is this value (C’s <code>atanh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic tangent; an infinity for -1 or 1, and NaN outside</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).arc_hyperbolic_tangent() == 0.0, "inverse of zero");
+</code></pre>
+<h4 id="exponential"><a class="header" href="#exponential">exponential</a></h4>
+<pre><code class="language-pepper">exponential(): float
+</code></pre>
+<p>Returns <em>e</em> raised to this value (<code>llvm.exp</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><em>e</em> to the power of this value; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).exponential() == 1.0, "e to the zero");
+</code></pre>
+<h4 id="exponential2"><a class="header" href="#exponential2">exponential2</a></h4>
+<pre><code class="language-pepper">exponential2(): float
+</code></pre>
+<p>Returns 2 raised to this value (<code>llvm.exp2</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>2 to the power of this value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((3.0 as float).exponential2() == 8.0, "2 cubed");
+</code></pre>
+<h4 id="exponential_minus_one"><a class="header" href="#exponential_minus_one">exponential_minus_one</a></h4>
+<pre><code class="language-pepper">exponential_minus_one(): float
+</code></pre>
+<p>Returns <em>e</em> raised to this value, minus 1 (C’s <code>expm1</code>): precise even
+when this value is near zero, where <code>exponential() - 1</code> loses its digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>exponential() - 1</code>, computed without the loss</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).exponential_minus_one() == 0.0, "e to the zero, minus one");
+</code></pre>
+<h4 id="logarithm"><a class="header" href="#logarithm">logarithm</a></h4>
+<pre><code class="language-pepper">logarithm(): float
+</code></pre>
+<p>Returns the natural logarithm (base <em>e</em>) of this value (<code>llvm.log</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as float).logarithm() == 0.0, "log of one");
+</code></pre>
+<h4 id="logarithm2"><a class="header" href="#logarithm2">logarithm2</a></h4>
+<pre><code class="language-pepper">logarithm2(): float
+</code></pre>
+<p>Returns the base-2 logarithm of this value (<code>llvm.log2</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((8.0 as float).logarithm2() == 3.0, "2 cubed is 8");
+</code></pre>
+<h4 id="logarithm10"><a class="header" href="#logarithm10">logarithm10</a></h4>
+<pre><code class="language-pepper">logarithm10(): float
+</code></pre>
+<p>Returns the base-10 logarithm of this value (<code>llvm.log10</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1000.0 as float).logarithm10() == 3.0, "10 cubed is 1000");
+</code></pre>
+<h4 id="logarithm_one_plus"><a class="header" href="#logarithm_one_plus">logarithm_one_plus</a></h4>
+<pre><code class="language-pepper">logarithm_one_plus(): float
+</code></pre>
+<p>Returns the natural logarithm of 1 plus this value (C’s <code>log1p</code>):
+precise even when this value is near zero, where <code>(1 + x).logarithm()</code>
+loses its digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm of <code>1 + this</code>; negative infinity for -1, and NaN below it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as float).logarithm_one_plus() == 0.0, "log of one");
+</code></pre>
+<h4 id="cube_root"><a class="header" href="#cube_root">cube_root</a></h4>
+<pre><code class="language-pepper">cube_root(): float
+</code></pre>
+<p>Returns the cube root (C’s <code>cbrt</code>), negative for a negative value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the cube root</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((-27.0 as float).cube_root() == -3.0, "a negative value has a cube root");
+</code></pre>
+<h4 id="hypotenuse"><a class="header" href="#hypotenuse">hypotenuse</a></h4>
+<pre><code class="language-pepper">hypotenuse(other: float): float
+</code></pre>
+<p>Returns <code>(this * this + other * other).square_root()</code>, the length of
+the hypotenuse of a right triangle with sides this value and <code>other</code>
+(C’s <code>hypot</code>), without overflowing or underflowing in between.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the length of the other side</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the distance from the origin to (this, <code>other</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((3.0 as float).hypotenuse(4.0) == 5.0, "a 3-4-5 triangle");
+</code></pre>
+<h4 id="remainder"><a class="header" href="#remainder">remainder</a></h4>
+<pre><code class="language-pepper">remainder(divisor: float): float
+</code></pre>
+<p>Returns the IEEE remainder of this value divided by <code>divisor</code> (C’s
+<code>remainder</code>): <code>this - n * divisor</code>, where <code>n</code> is the quotient rounded to
+the nearest whole number, ties to even. It is never larger than half of
+<code>divisor</code>, and may be negative. <code>%</code> gives the remainder of the quotient
+rounded toward zero instead, with the sign of this value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>divisor</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the remainder; NaN when <code>divisor</code> is zero or this value is infinite</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((7.0 as float).remainder(2.0) == -1.0, "7 / 2 = 3.5 rounds to 4");
+assert((7.0 as float) % 2.0 == 1.0, "% rounds toward zero");
+</code></pre>
+<h4 id="is_nan"><a class="header" href="#is_nan">is_nan</a></h4>
+<pre><code class="language-pepper">is_nan(): bool
+</code></pre>
+<p>Returns whether this value is NaN (not a number), the one value not
+equal to itself.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(!(1.0 as float).is_nan(), "a number");
+assert(((0.0 as float) / 0.0).is_nan(), "zero over zero");
+</code></pre>
+<h4 id="is_infinite"><a class="header" href="#is_infinite">is_infinite</a></h4>
+<pre><code class="language-pepper">is_infinite(): bool
+</code></pre>
+<p>Returns whether this value is positive or negative infinity.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(((1.0 as float) / 0.0).is_infinite(), "one over zero");
+</code></pre>
+<h4 id="is_finite"><a class="header" href="#is_finite">is_finite</a></h4>
+<pre><code class="language-pepper">is_finite(): bool
+</code></pre>
+<p>Returns whether this value is neither an infinity nor NaN.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for every other value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as float).is_finite() &amp;&amp; !((1.0 as float) / 0.0).is_finite(), "finite and infinite");
+</code></pre>
+<h4 id="sign_bit"><a class="header" href="#sign_bit">sign_bit</a></h4>
+<pre><code class="language-pepper">sign_bit(): bool
+</code></pre>
+<p>Returns whether this value’s sign bit is set: true for every negative
+value, <code>-0.0</code>, and a NaN with its sign bit set, which <code>&lt; 0</code> does not
+tell apart.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the sign bit is set</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((-0.0 as float).sign_bit() &amp;&amp; !(0.0 as float).sign_bit(), "negative zero");
+</code></pre>
 <h2 id="extend-double"><a class="header" href="#extend-double">extend double</a></h2>
 <pre><code class="language-pepper">extend double
 </code></pre>
@@ -3492,6 +3824,333 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert((1.5 as double).max(-2.0) == 1.5, "larger");
 </code></pre>
+<h4 id="sine-1"><a class="header" href="#sine-1">sine</a></h4>
+<pre><code class="language-pepper">sine(): double
+</code></pre>
+<p>Returns the sine of this angle, in radians (<code>llvm.sin</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the sine, from -1 to 1; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).sine() == 0.0, "sine of zero");
+</code></pre>
+<h4 id="cosine-1"><a class="header" href="#cosine-1">cosine</a></h4>
+<pre><code class="language-pepper">cosine(): double
+</code></pre>
+<p>Returns the cosine of this angle, in radians (<code>llvm.cos</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the cosine, from -1 to 1; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).cosine() == 1.0, "cosine of zero");
+</code></pre>
+<h4 id="tangent-1"><a class="header" href="#tangent-1">tangent</a></h4>
+<pre><code class="language-pepper">tangent(): double
+</code></pre>
+<p>Returns the tangent of this angle, in radians (<code>llvm.tan</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the tangent; NaN for an infinity or NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).tangent() == 0.0, "tangent of zero");
+</code></pre>
+<h4 id="arc_sine-1"><a class="header" href="#arc_sine-1">arc_sine</a></h4>
+<pre><code class="language-pepper">arc_sine(): double
+</code></pre>
+<p>Returns the angle, in radians, whose sine is this value (<code>llvm.asin</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π/2 to π/2; NaN when this value is outside -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).arc_sine() == 0.0, "arc sine of zero");
+</code></pre>
+<h4 id="arc_cosine-1"><a class="header" href="#arc_cosine-1">arc_cosine</a></h4>
+<pre><code class="language-pepper">arc_cosine(): double
+</code></pre>
+<p>Returns the angle, in radians, whose cosine is this value (<code>llvm.acos</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from 0 to π; NaN when this value is outside -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as double).arc_cosine() == 0.0, "arc cosine of one");
+</code></pre>
+<h4 id="arc_tangent-1"><a class="header" href="#arc_tangent-1">arc_tangent</a></h4>
+<pre><code class="language-pepper">arc_tangent(): double
+</code></pre>
+<p>Returns the angle, in radians, whose tangent is this value (<code>llvm.atan</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π/2 to π/2</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).arc_tangent() == 0.0, "arc tangent of zero");
+</code></pre>
+<h4 id="arc_tangent2-1"><a class="header" href="#arc_tangent2-1">arc_tangent2</a></h4>
+<pre><code class="language-pepper">arc_tangent2(x: double): double
+</code></pre>
+<p>Returns the angle, in radians, from the positive x axis to the point
+(<code>x</code>, this value), using both signs to pick the quadrant: C’s
+<code>atan2(y, x)</code> with this value as <code>y</code> (<code>llvm.atan2</code>).</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>x</code> — the x coordinate of the point</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the angle, from -π to π</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).arc_tangent2(1.0) == 0.0, "along the positive x axis");
+assert((1.0 as double).arc_tangent2(0.0) == (1.0 as double).arc_sine(), "straight up is π/2");
+</code></pre>
+<h4 id="hyperbolic_sine-1"><a class="header" href="#hyperbolic_sine-1">hyperbolic_sine</a></h4>
+<pre><code class="language-pepper">hyperbolic_sine(): double
+</code></pre>
+<p>Returns the hyperbolic sine of this value (<code>llvm.sinh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic sine; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).hyperbolic_sine() == 0.0, "hyperbolic sine of zero");
+</code></pre>
+<h4 id="hyperbolic_cosine-1"><a class="header" href="#hyperbolic_cosine-1">hyperbolic_cosine</a></h4>
+<pre><code class="language-pepper">hyperbolic_cosine(): double
+</code></pre>
+<p>Returns the hyperbolic cosine of this value (<code>llvm.cosh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic cosine, at least 1; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).hyperbolic_cosine() == 1.0, "hyperbolic cosine of zero");
+</code></pre>
+<h4 id="hyperbolic_tangent-1"><a class="header" href="#hyperbolic_tangent-1">hyperbolic_tangent</a></h4>
+<pre><code class="language-pepper">hyperbolic_tangent(): double
+</code></pre>
+<p>Returns the hyperbolic tangent of this value (<code>llvm.tanh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the hyperbolic tangent, from -1 to 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).hyperbolic_tangent() == 0.0, "hyperbolic tangent of zero");
+</code></pre>
+<h4 id="arc_hyperbolic_sine-1"><a class="header" href="#arc_hyperbolic_sine-1">arc_hyperbolic_sine</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_sine(): double
+</code></pre>
+<p>Returns the value whose hyperbolic sine is this value (C’s <code>asinh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic sine</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).arc_hyperbolic_sine() == 0.0, "inverse of zero");
+</code></pre>
+<h4 id="arc_hyperbolic_cosine-1"><a class="header" href="#arc_hyperbolic_cosine-1">arc_hyperbolic_cosine</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_cosine(): double
+</code></pre>
+<p>Returns the non-negative value whose hyperbolic cosine is this value
+(C’s <code>acosh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic cosine; NaN when this value is less than 1</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as double).arc_hyperbolic_cosine() == 0.0, "inverse of one");
+</code></pre>
+<h4 id="arc_hyperbolic_tangent-1"><a class="header" href="#arc_hyperbolic_tangent-1">arc_hyperbolic_tangent</a></h4>
+<pre><code class="language-pepper">arc_hyperbolic_tangent(): double
+</code></pre>
+<p>Returns the value whose hyperbolic tangent is this value (C’s <code>atanh</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the inverse hyperbolic tangent; an infinity for -1 or 1, and NaN outside</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).arc_hyperbolic_tangent() == 0.0, "inverse of zero");
+</code></pre>
+<h4 id="exponential-1"><a class="header" href="#exponential-1">exponential</a></h4>
+<pre><code class="language-pepper">exponential(): double
+</code></pre>
+<p>Returns <em>e</em> raised to this value (<code>llvm.exp</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><em>e</em> to the power of this value; an infinity when it is too large</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).exponential() == 1.0, "e to the zero");
+</code></pre>
+<h4 id="exponential2-1"><a class="header" href="#exponential2-1">exponential2</a></h4>
+<pre><code class="language-pepper">exponential2(): double
+</code></pre>
+<p>Returns 2 raised to this value (<code>llvm.exp2</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>2 to the power of this value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((3.0 as double).exponential2() == 8.0, "2 cubed");
+</code></pre>
+<h4 id="exponential_minus_one-1"><a class="header" href="#exponential_minus_one-1">exponential_minus_one</a></h4>
+<pre><code class="language-pepper">exponential_minus_one(): double
+</code></pre>
+<p>Returns <em>e</em> raised to this value, minus 1 (C’s <code>expm1</code>): precise even
+when this value is near zero, where <code>exponential() - 1</code> loses its digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li><code>exponential() - 1</code>, computed without the loss</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).exponential_minus_one() == 0.0, "e to the zero, minus one");
+</code></pre>
+<h4 id="logarithm-1"><a class="header" href="#logarithm-1">logarithm</a></h4>
+<pre><code class="language-pepper">logarithm(): double
+</code></pre>
+<p>Returns the natural logarithm (base <em>e</em>) of this value (<code>llvm.log</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as double).logarithm() == 0.0, "log of one");
+</code></pre>
+<h4 id="logarithm2-1"><a class="header" href="#logarithm2-1">logarithm2</a></h4>
+<pre><code class="language-pepper">logarithm2(): double
+</code></pre>
+<p>Returns the base-2 logarithm of this value (<code>llvm.log2</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((8.0 as double).logarithm2() == 3.0, "2 cubed is 8");
+</code></pre>
+<h4 id="logarithm10-1"><a class="header" href="#logarithm10-1">logarithm10</a></h4>
+<pre><code class="language-pepper">logarithm10(): double
+</code></pre>
+<p>Returns the base-10 logarithm of this value (<code>llvm.log10</code>).</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm; negative infinity for zero, and NaN for a negative value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1000.0 as double).logarithm10() == 3.0, "10 cubed is 1000");
+</code></pre>
+<h4 id="logarithm_one_plus-1"><a class="header" href="#logarithm_one_plus-1">logarithm_one_plus</a></h4>
+<pre><code class="language-pepper">logarithm_one_plus(): double
+</code></pre>
+<p>Returns the natural logarithm of 1 plus this value (C’s <code>log1p</code>):
+precise even when this value is near zero, where <code>(1 + x).logarithm()</code>
+loses its digits.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the logarithm of <code>1 + this</code>; negative infinity for -1, and NaN below it</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((0.0 as double).logarithm_one_plus() == 0.0, "log of one");
+</code></pre>
+<h4 id="cube_root-1"><a class="header" href="#cube_root-1">cube_root</a></h4>
+<pre><code class="language-pepper">cube_root(): double
+</code></pre>
+<p>Returns the cube root (C’s <code>cbrt</code>), negative for a negative value.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the cube root</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((-27.0 as double).cube_root() == -3.0, "a negative value has a cube root");
+</code></pre>
+<h4 id="hypotenuse-1"><a class="header" href="#hypotenuse-1">hypotenuse</a></h4>
+<pre><code class="language-pepper">hypotenuse(other: double): double
+</code></pre>
+<p>Returns <code>(this * this + other * other).square_root()</code>, the length of
+the hypotenuse of a right triangle with sides this value and <code>other</code>
+(C’s <code>hypot</code>), without overflowing or underflowing in between.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>other</code> — the length of the other side</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the distance from the origin to (this, <code>other</code>)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((3.0 as double).hypotenuse(4.0) == 5.0, "a 3-4-5 triangle");
+</code></pre>
+<h4 id="remainder-1"><a class="header" href="#remainder-1">remainder</a></h4>
+<pre><code class="language-pepper">remainder(divisor: double): double
+</code></pre>
+<p>Returns the IEEE remainder of this value divided by <code>divisor</code> (C’s
+<code>remainder</code>): <code>this - n * divisor</code>, where <code>n</code> is the quotient rounded to
+the nearest whole number, ties to even. It is never larger than half of
+<code>divisor</code>, and may be negative. <code>%</code> gives the remainder of the quotient
+rounded toward zero instead, with the sign of this value.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>divisor</code> — the value to divide by</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>the remainder; NaN when <code>divisor</code> is zero or this value is infinite</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((7.0 as double).remainder(2.0) == -1.0, "7 / 2 = 3.5 rounds to 4");
+assert((7.0 as double) % 2.0 == 1.0, "% rounds toward zero");
+</code></pre>
+<h4 id="is_nan-1"><a class="header" href="#is_nan-1">is_nan</a></h4>
+<pre><code class="language-pepper">is_nan(): bool
+</code></pre>
+<p>Returns whether this value is NaN (not a number), the one value not
+equal to itself.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for NaN</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(!(1.0 as double).is_nan(), "a number");
+assert(((0.0 as double) / 0.0).is_nan(), "zero over zero");
+</code></pre>
+<h4 id="is_infinite-1"><a class="header" href="#is_infinite-1">is_infinite</a></h4>
+<pre><code class="language-pepper">is_infinite(): bool
+</code></pre>
+<p>Returns whether this value is positive or negative infinity.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for an infinity</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert(((1.0 as double) / 0.0).is_infinite(), "one over zero");
+</code></pre>
+<h4 id="is_finite-1"><a class="header" href="#is_finite-1">is_finite</a></h4>
+<pre><code class="language-pepper">is_finite(): bool
+</code></pre>
+<p>Returns whether this value is neither an infinity nor NaN.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true for every other value</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((1.0 as double).is_finite() &amp;&amp; !((1.0 as double) / 0.0).is_finite(), "finite and infinite");
+</code></pre>
+<h4 id="sign_bit-1"><a class="header" href="#sign_bit-1">sign_bit</a></h4>
+<pre><code class="language-pepper">sign_bit(): bool
+</code></pre>
+<p>Returns whether this value’s sign bit is set: true for every negative
+value, <code>-0.0</code>, and a NaN with its sign bit set, which <code>&lt; 0</code> does not
+tell apart.</p>
+<p><strong>Returns</strong></p>
+<ul>
+<li>true when the sign bit is set</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">assert((-0.0 as double).sign_bit() &amp;&amp; !(0.0 as double).sign_bit(), "negative zero");
+</code></pre>
 
                     </main>
 
@@ -3501,7 +4160,7 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../reference/range.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../reference/compare.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -3515,7 +4174,7 @@ NaN, the other (<code>llvm.maxnum</code>).</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../reference/range.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../reference/compare.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

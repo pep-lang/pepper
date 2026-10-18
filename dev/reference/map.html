@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -192,14 +192,17 @@ red-black tree, and <code>compare&lt;T&gt;</code>, the ordering they sort keys b
 <p>Returns a negative number when <code>a</code> sorts before <code>b</code>, zero when they are
 equal, and a positive number when <code>a</code> sorts after <code>b</code>: the order <code>Map</code> and
 <code>Set</code> keep their keys in.</p>
-<p>The generic version compares with <code>&lt;</code>, so it works for every number type,
-<code>char</code>, and any struct that declares a <code>&lt;</code> operator. Two values neither of
-which is <code>&lt;</code> the other are equal keys. <code>String</code> compares by content through
-the concrete <code>compare&lt;String&gt;</code> override.</p>
-<p>A struct with no <code>&lt;</code> operator overrides this function for itself to be a
-<code>Map</code> key or <code>Set</code> element: <code>compare&lt;Point&gt;(a: Point, b: Point): int</code>. The
-order must be a strict weak order (consistent across calls), or the tree
-loses track of its keys.</p>
+<p>The generic version compares with <code>&lt;</code>, so it works for every
+<code>Comparable</code> type (see <code>Comparable</code>), every integer type, <code>char</code>, and any
+struct that declares a <code>&lt;</code> operator. Two values neither of which is <code>&lt;</code>
+the other are equal keys. <code>String</code>, <code>float</code> and <code>double</code> go through
+concrete overrides that call their <code>compare</code>, so a NaN key sorts after
+every number instead of breaking the order.</p>
+<p>A struct with no <code>&lt;</code> operator declares <code>Comparable</code>, or overrides this
+function for itself, to be a <code>Map</code> key or <code>Set</code> element:
+<code>compare&lt;Point&gt;(a: Point, b: Point): int</code>. The order must be a strict
+weak order (consistent across calls), or the tree loses track of its
+keys.</p>
 <p><strong>Type parameters</strong></p>
 <ul>
 <li><code>T</code> — the type of the values to compare</li>
@@ -238,6 +241,34 @@ keys in: the same as <code>a.compare(b)</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">assert(compare&lt;String&gt;("apple", "pear") &lt; 0, "apple sorts first");
 </code></pre>
+<h2 id="compare-2"><a class="header" href="#compare-2">compare</a></h2>
+<pre><code class="language-pepper">compare&lt;float&gt;(a: float, b: float): int
+</code></pre>
+<p>Compares two <code>float</code>s in <code>float.compare</code>’s total order: by value, with
+NaN after every number.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first value</li>
+<li><code>b</code> — the second value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>-1, 0 or 1 as <code>a</code> sorts before, with or after <code>b</code></li>
+</ul>
+<h2 id="compare-3"><a class="header" href="#compare-3">compare</a></h2>
+<pre><code class="language-pepper">compare&lt;double&gt;(a: double, b: double): int
+</code></pre>
+<p>Compares two <code>double</code>s in <code>double.compare</code>’s total order: by value, with
+NaN after every number.</p>
+<p><strong>Parameters</strong></p>
+<ul>
+<li><code>a</code> — the first value</li>
+<li><code>b</code> — the second value</li>
+</ul>
+<p><strong>Returns</strong></p>
+<ul>
+<li>-1, 0 or 1 as <code>a</code> sorts before, with or after <code>b</code></li>
+</ul>
 <h2 id="map"><a class="header" href="#map">Map</a></h2>
 <pre><code class="language-pepper">struct Map&lt;K, V&gt;
 </code></pre>

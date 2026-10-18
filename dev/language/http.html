@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -257,7 +257,10 @@ following RFC 3986: an absolute URI with any scheme (<code>https:</code>, <code>
 <code>file:</code>) or a relative reference such as a request target. It splits the
 text into <code>scheme</code>, <code>user_info</code>, <code>host</code>, <code>port</code>, <code>path</code>, <code>query</code> and
 <code>fragment</code>; the parts that can be missing are optionals. Components keep
-their percent-escapes, and <code>Uri.decode</code> turns one into text.
+their percent-escapes, and <code>Uri.decode</code> turns one into text; <code>Uri.encode</code>
+escapes text for a path segment or query value, and <code>Uri.encode_form</code> and
+<code>Uri.decode_form</code> write and read form data (see
+<a href="encodings.html">Encodings and UUIDs</a>).
 <code>base.resolve(reference)</code> resolves a relative reference against a base URI,
 as a browser resolves a link (RFC 3986 section 5.2).</p>
 <pre><code class="language-pepper">main(): int {

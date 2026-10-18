@@ -36,10 +36,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4d1581ab.js";
+            window.path_to_searchindex_js = "../searchindex-17220b46.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-430e4676.js"></script>
+        <script src="../toc-2d913a78.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -193,23 +193,31 @@ curl -fsSL https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/i
 irm https://raw.githubusercontent.com/justinboswell/pepper/main/scripts/install.ps1 | iex
 </code></pre>
 <p>Each release also carries both scripts as assets, beside its archives.</p>
-<p>The script:</p>
+<p>The script only bootstraps. It picks this machine’s archives
+(<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or <code>windows-x64</code>) from the newest
+release that has them: the toolchain, <code>pepper-&lt;version&gt;-&lt;target&gt;.tar.gz</code>
+(<code>.zip</code> on Windows), and the installer, <code>pepper-install-&lt;version&gt;-&lt;target&gt;.tar.gz</code>,
+which holds only <code>pep-install</code>. It downloads both, checks the installer
+against its <code>.sha256</code>, unpacks <code>pep-install</code> into a temporary folder and
+runs <a href="pep-install.html#setting-a-machine-up"><code>pep-install setup --archive &lt;toolchain&gt;</code></a>,
+which:</p>
 <ol>
-<li>picks this machine’s archive (<code>linux-x64</code>, <code>macos-arm64</code>, <code>macos-x64</code> or
-<code>windows-x64</code>) from the newest release that has one;</li>
-<li>downloads it and checks it against its <code>.sha256</code>;</li>
+<li>checks the toolchain archive against its <code>.sha256</code>;</li>
 <li>unpacks it into <code>~/.pepper/toolchains/&lt;version&gt;</code> (<code>%LOCALAPPDATA%\pepper</code>
 on Windows), makes it the default toolchain, and puts the entry point
 <code>pepper</code> and <code>pep-install</code> in <code>~/.pepper/bin</code>; toolchains installed
 before stay (see <a href="pep-install.html">Toolchains: pep-install</a>);</li>
 <li>adds that folder’s <code>bin</code> to the <code>PATH</code>: in <code>~/.profile</code>, <code>~/.bashrc</code>,
 <code>~/.bash_profile</code> and <code>~/.zshrc</code> and fish’s <code>conf.d</code>, or in the Windows
-user’s <code>PATH</code>, which it asks about first;</li>
+user’s <code>PATH</code>;</li>
 <li>checks that programs can be linked (below), offering to install what is
 missing;</li>
 <li>builds and runs a small program with the new install, and fails if it
 cannot.</li>
 </ol>
+<p>The script downloads the toolchain itself, rather than leaving it to
+<code>pep-install</code>, because <code>pep-install</code> downloads with OpenSSL 3, which a fresh
+Mac and RHEL 8 do not have.</p>
 <p>Open a new terminal afterwards so the <code>PATH</code> change takes effect, then
 <code>pepper build hello.pep -o hello</code> works as in <a href="../tutorial/getting-started.html">Getting started</a>.</p>
 <h2 id="what-it-installs"><a class="header" href="#what-it-installs">What it installs</a></h2>
@@ -232,16 +240,17 @@ another (see <a href="pepper.html#toolchains">Toolchains</a>). <code>pepper inst
 <code>use</code> and <code>update</code> install more and change the default; <code>update</code> also
 updates <code>pepper</code> and <code>pep-install</code> themselves.</p>
 <p>Running the script again installs the newest release beside the others
-and makes it the default. An install from before toolchains, with <code>bin</code>
-and <code>runtime</code> straight in <code>~/.pepper</code>, moves into <code>toolchains/&lt;its version&gt;</code> first, so it stays installed. A release from before toolchains
-(0.3.0 and earlier, which have no <code>pep-install</code>) installs the old way, into
-<code>~/.pepper</code> itself, unless the home already holds toolchains; then it goes
-into <code>toolchains/</code> like any other.</p>
+and makes it the default. Only releases that carry the installer archive
+can be installed this way; <code>pepper install add</code> installs older ones into a
+home that is set up. A release from before toolchains (0.3.0 and earlier)
+cannot be set up at all, and neither is an install from before toolchains,
+with <code>bin</code> and <code>runtime</code> straight in <code>~/.pepper</code>, moved: uninstall it
+first.</p>
 <p>On Linux the binaries need glibc 2.28 or newer (RHEL 8, Debian 10, Ubuntu
 18.10 and later); systems that use musl, such as Alpine, are not supported.
 There are no prebuilt binaries for Linux or Windows on arm64 yet. The macOS
-binaries are not signed: the script clears the quarantine flag, but an
-archive downloaded with a browser makes Gatekeeper warn before it runs.</p>
+binaries are not signed: an archive downloaded with a browser makes
+Gatekeeper warn before it runs; one the script downloads does not.</p>
 <h2 id="what-linking-needs"><a class="header" href="#what-linking-needs">What linking needs</a></h2>
 <p><code>pep-build</code> compiles with the LLVM inside it, but links each program with
 <code>clang</code>, which also needs the platform’s linker and C library:</p>
@@ -253,7 +262,7 @@ archive downloaded with a browser makes Gatekeeper warn before it runs.</p>
 <tbody>
 <tr><td>Linux</td><td><code>clang</code> and the C library’s development files</td><td><code>apt-get install clang build-essential</code>, <code>dnf</code>/<code>yum install clang gcc glibc-devel</code>, <code>pacman -S clang gcc</code> or <code>zypper install clang gcc glibc-devel</code>, whichever manager is present</td></tr>
 <tr><td>macOS</td><td>Xcode’s command line tools</td><td><code>xcode-select --install</code></td></tr>
-<tr><td>Windows</td><td>LLVM (<code>clang</code>) and the MSVC libraries and Windows SDK</td><td>LLVM with <code>scoop install llvm</code>, <code>winget install LLVM.LLVM</code> or <code>choco install llvm</code> (the first present), else LLVM’s own installer from its GitHub release; the Visual Studio Build Tools’ C++ workload with <code>winget</code></td></tr>
+<tr><td>Windows</td><td>LLVM (<code>clang</code>) and the MSVC libraries and Windows SDK</td><td>LLVM with <code>winget install LLVM.LLVM</code>, else <code>scoop install llvm</code>; the Visual Studio Build Tools’ C++ workload with <code>winget</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -287,12 +296,12 @@ install.sh --uninstall [--prefix &lt;dir&gt;]
 </thead>
 <tbody>
 <tr><td><code>--version &lt;x.y.z&gt;</code></td><td><code>-Version &lt;x.y.z&gt;</code></td><td>Installs that release instead of the newest, or a prerelease such as <code>0.4.0-dev</code>, the build of main (see below), which installing again refreshes</td></tr>
-<tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
+<tr><td><code>--archive &lt;file&gt;</code></td><td><code>-Archive &lt;file&gt;</code></td><td>Installs an archive already downloaded, checked against <code>&lt;file&gt;.sha256</code> beside it, with the installer archive <code>pepper-install-&lt;version&gt;-&lt;target&gt;</code> (and its <code>.sha256</code>) beside it too. One not named for a release, such as a <code>dev</code> build, installs as the version its <code>pep-build --version</code> reports</td></tr>
 <tr><td><code>--prefix &lt;dir&gt;</code></td><td><code>-Prefix &lt;dir&gt;</code></td><td>Installs into <code>&lt;dir&gt;</code> instead of <code>~/.pepper</code> (<code>%LOCALAPPDATA%\pepper</code>)</td></tr>
-<tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites, and on Windows changes the <code>PATH</code>, without asking</td></tr>
+<tr><td><code>-y</code>, <code>--yes</code></td><td><code>-Yes</code></td><td>Installs missing prerequisites without asking</td></tr>
 <tr><td><code>--no-modify-path</code></td><td><code>-NoModifyPath</code></td><td>Leaves the <code>PATH</code> alone</td></tr>
 <tr><td><code>--no-prerequisites</code></td><td><code>-NoPrerequisites</code></td><td>Neither checks for nor installs what linking needs</td></tr>
-<tr><td><code>--uninstall</code></td><td><code>-Uninstall</code></td><td>Removes the install, every toolchain in it, and the <code>PATH</code> entries the script added</td></tr>
+<tr><td><code>--uninstall</code></td><td><code>-Uninstall</code></td><td>Removes the install, every toolchain in it, and the <code>PATH</code> entries the script added, with the home’s own <code>pep-install uninstall</code>, else with the newest release’s installer</td></tr>
 <tr><td><code>-h</code>, <code>--help</code></td><td><code>Get-Help .\install.ps1</code></td><td>Shows the usage</td></tr>
 </tbody>
 </table>
@@ -333,11 +342,12 @@ stay.</p>
 the runtime or the tools: main holds the version being developed as a
 prerelease (<code>0.4.0-dev</code> in <code>VERSION</code> and each tool’s <code>version()</code>), and
 the workflow publishes it on the prerelease <code>v0.4.0-dev</code>, moving its tag
-to the merge and replacing its archives. CI and the workers install the
-newest such prerelease, whatever <code>VERSION</code> holds, instead of building the
-compiler. The newest release, the default, never picks a prerelease.</li>
+to the merge and replacing its archives. CI runs it on the merge before
+its tests, which then install that build. CI and the workers install the
+newest published toolchain, that prerelease or a release with a higher
+version, whatever <code>VERSION</code> holds, instead of building the compiler. The newest release, the default, never picks a prerelease.</li>
 <li><strong>a release</strong>, on a <code>vX.Y.Z</code> tag, made by hand. Its stage 0, the
-compiler that builds it, is the newest build of main too, so the release
+compiler that builds it, is the newest published toolchain too, so the release
 may take any version, not only the one main was developing:
 <ol>
 <li>A pull request runs <code>scripts/set-version.sh 0.9.0</code>, which sets the
