@@ -124,6 +124,8 @@
     - [Path](reference/io-path.md)
     - [File](reference/io-file.md)
     - [Directory](reference/io-directory.md)
+    - [Glob](reference/io-glob.md)
+    - [Watch](reference/io-watch.md)
     - [Network addresses](reference/io-address.md)
     - [Sockets](reference/io-socket.md)
     - [Unix domain sockets](reference/io-unix.md)

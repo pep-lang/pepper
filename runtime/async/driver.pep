@@ -93,6 +93,17 @@ trait _Driver {
         return 0;
     }
 
+    # Windows: starts a ReadDirectoryChangesW request on the directory
+    # `handle` into the `count` bytes at address `buffer`, for the task
+    # `task` (see `io._IoWaiter._directory_changes`). Returns a request
+    # number for `_cancel_transfer`, or 0 if this driver cannot (the task
+    # then blocks the thread instead). `_finished_files` reports it: the
+    # byte count, or `-1 - ECANCELED` when it was cancelled or the handle
+    # closed.
+    _start_directory_changes(handle: ulong, buffer: ulong, count: ulong, task: ulong): ulong {
+        return 0;
+    }
+
     # Asks the kernel to cancel the socket transfer `request`, which
     # still finishes through `_finished_files`: cancelled, or with the bytes
     # it moved first.

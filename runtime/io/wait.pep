@@ -7,6 +7,11 @@
 # task it is the runtime's `_IoWaiter`, which parks the task and lets the
 # others run until the handle is ready.
 #
+# A Watcher (watch.pep) waits the same way: on Linux and macOS its inotify
+# or kqueue descriptor is waited on for readability like a socket; on
+# Windows its ReadDirectoryChangesW request goes to the runtime whole
+# (`_IoWaiter._directory_changes`), like a socket transfer.
+#
 # Files have no readiness to wait for, so a file read or write in a task
 # goes to the runtime whole (`_IoWaiter._file_transfer`): it runs the
 # system call where it cannot block the worker (on io_uring, or on a pool
@@ -98,6 +103,15 @@ export trait _IoWaiter {
     # the task is cancelled. (The address is a ulong: a `__ptr` parameter in
     # a trait method does not compile yet.)
     _socket_transfer(handle: SocketHandle, buffer: ulong, count: ulong, write: bool, timeout: ulong): long;
+
+    # Windows: waits for changes in the tree under the directory `handle`
+    # (a HANDLE opened for overlapped I/O) with one ReadDirectoryChangesW
+    # request into the `count` bytes at address `buffer`, parking the task
+    # until it completes (see watch_windows.pep). Returns the byte count, -1
+    # minus the error code, or one of the `_IO_TRANSFER_*` results, as
+    # `_socket_transfer` does; `_IO_TRANSFER_CLOSED` when the watcher closed
+    # the handle.
+    _directory_changes(handle: ulong, buffer: ulong, count: ulong): long;
 }
 
 # What `_IoWaiter._socket_transfer` returns besides a count or an error

@@ -16,11 +16,19 @@
 # WSAPoll takes only sockets, a UDP socket bound to a loopback port that a
 # ring sends one byte to. The wait that sees it readable reads it empty.
 #
+# On Windows a Watcher's ReadDirectoryChangesW request
+# (`_start_directory_changes`) completes on an event of its own, which
+# WSAPoll cannot wait for: while one is in flight a wait lasts at most
+# `_POLL_DIRECTORY_INTERVAL` milliseconds, and each wait looks for finished
+# requests. The request block is the IOCP driver's (see driver_iocp.pep)
+# with the event's handle at 48.
+#
 # WASI has no pipe, and no task can run there (see fiber_wasi.pep): making
 # the doorbell panics.
 
 import io;
 import "driver";
+import "driver_iocp";
 import "sys_posix";
 import "sys_wasi";
 import "sys_windows";
@@ -68,6 +76,18 @@ extern int sendto(ulong s, void* buffer, int length, int flags, void* address, i
 [Link("ws2_32")]
 extern int ioctlsocket(ulong s, int command, uint* argument);
 
+[Target(OS(Windows))]
+extern void* CreateEventW(void* attributes, int manual_reset, int initial_state, ushort* name);
+[Target(OS(Windows))]
+extern int GetOverlappedResult(void* file, void* overlapped, uint* transferred, int wait);
+[Target(OS(Windows))]
+extern int CloseHandle(void* handle);
+
+# The longest wait, in milliseconds, while a directory request is in flight.
+const _POLL_DIRECTORY_INTERVAL: long = 10;
+# STATUS_PENDING: a request's status until it finishes.
+const _POLL_PENDING = 259;
+
 # The portable driver.
 struct _PollDriver {
     # The handle the doorbell makes readable: the pipe's read end, or the
@@ -77,8 +97,15 @@ struct _PollDriver {
     # address of `_bell`.
     var _ring_descriptor: long;
     var _ring_address: __ptr<u8>;
+    # Each directory request in flight: its block's address, and the
+    # directory.
+    var _directory_requests: HashMap<ulong, ulong>;
+    # The directory requests finished since `_finished_files` last ran.
+    var _finished: Array<(task: ulong, result: long)>;
 
     construct() {
+        this._directory_requests = HashMap<ulong, ulong>();
+        this._finished = Array<(task: ulong, result: long)>();
         __ptr<long> made = _pep_malloc(16);
         made[0] = -1;
         made[1] = -1;
@@ -87,6 +114,29 @@ struct _PollDriver {
         this._bell = made[0] as ulong;
         this._ring_descriptor = made[1];
         _pep_free(made);
+    }
+
+    # Moves the directory requests that finished to `_finished`; with
+    # `wait`, waits for each first.
+    _collect_directories(wait: bool) {
+        var done = Array<ulong>();
+        for (var (request, handle) in this._directory_requests) {
+            var block = unsafe_cast<__ptr<u8>>(_async_iocp_block(request));
+            if (wait) {
+                _async_poll_wait_directory(_async_iocp_block(handle) as __ptr<void>, block);
+            }
+            if (unsafe_cast<__ptr<int>>(block)[0] != _POLL_PENDING) {
+                done.append(request);
+            }
+        }
+        for (var request in done) {
+            this._directory_requests.remove(request);
+            var block = unsafe_cast<__ptr<u8>>(_async_iocp_block(request));
+            __ptr<ulong> words = block;
+            this._finished.append((words[4], _async_directory_result(block, words[1])));
+            _async_poll_close_event(words[6]);
+            _pep_free(block);
+        }
     }
 }
 
@@ -120,7 +170,11 @@ extend _PollDriver with _Driver {
             _async_poll_set(descriptors + i * size, handle, interest);
             i = i + 1;
         }
-        if (_async_poll_call(descriptors, count, timeout) > 0) {
+        var limit = timeout;
+        if (this._directory_requests.count > 0 && (limit < 0 || limit > _POLL_DIRECTORY_INTERVAL)) {
+            limit = _POLL_DIRECTORY_INTERVAL;
+        }
+        if (_async_poll_call(descriptors, count, limit) > 0) {
             i = 0;
             while (i < count) {
                 var ready = _async_poll_ready(descriptors + i * size);
@@ -134,6 +188,49 @@ extend _PollDriver with _Driver {
             }
         }
         _pep_free(descriptors);
+        this._collect_directories(false);
+    }
+
+    _start_directory_changes(handle: ulong, buffer: ulong, count: ulong, task: ulong): ulong {
+        var event = _async_poll_create_event();
+        if (event == 0) {
+            return 0;
+        }
+        __ptr<u8> block = _pep_malloc(56);
+        __ptr<ulong> words = block;
+        words[0] = 0;
+        words[1] = 0;
+        words[2] = 0;
+        # The low bit keeps the completion off any port the directory is
+        # tied to.
+        words[3] = event | 1;
+        words[4] = task;
+        words[5] = handle;
+        words[6] = event;
+        var directory = _async_iocp_block(handle) as __ptr<void>;
+        if (!_async_iocp_read_directory(directory, unsafe_cast<__ptr<u8>>(_async_iocp_block(buffer)), count, block)) {
+            _async_poll_close_event(event);
+            _pep_free(block);
+            return 0;
+        }
+        var request = unsafe_cast<ulong>(block);
+        this._directory_requests.insert(request, handle);
+        return request;
+    }
+
+    _cancel_transfer(request: ulong) {
+        if (!this._directory_requests.contains(request)) {
+            return;
+        }
+        var directory = _async_iocp_block(this._directory_requests.get(request)) as __ptr<void>;
+        _async_iocp_cancel_directory(directory, unsafe_cast<__ptr<u8>>(_async_iocp_block(request)));
+    }
+
+    _finished_files(finished: Array<(task: ulong, result: long)>) {
+        for (var item in this._finished) {
+            finished.append(item);
+        }
+        this._finished.clear();
     }
 
     _want(handle: io.SocketHandle, interest: int): bool {
@@ -149,9 +246,45 @@ extend _PollDriver with _Driver {
     }
 
     _close() {
+        # The system writes into a block until its request finishes.
+        for (var (request, handle) in this._directory_requests) {
+            this._cancel_transfer(request);
+        }
+        this._collect_directories(true);
         _async_poll_close_bell(this._bell, this._ring_descriptor, this._ring_address);
     }
 }
+
+# A new manual-reset event's handle, as a number; 0 where there are none.
+[Target(OS(Windows))]
+_async_poll_create_event(): ulong {
+    return unsafe_cast<ulong>(CreateEventW(__null, 1, 0, __null));
+}
+
+[Target(OS(Windows))]
+_async_poll_close_event(event: ulong) {
+    CloseHandle(_async_iocp_block(event) as __ptr<void>);
+}
+
+# Waits for the request whose OVERLAPPED is at `block` on `directory` to
+# finish.
+[Target(OS(Windows))]
+_async_poll_wait_directory(directory: __ptr<void>, block: __ptr<u8>) {
+    __ptr<uint> transferred = _pep_malloc(4);
+    GetOverlappedResult(directory, block, transferred, 1);
+    _pep_free(transferred);
+}
+
+[Target(!OS(Windows))]
+_async_poll_create_event(): ulong {
+    return 0;
+}
+
+[Target(!OS(Windows))]
+_async_poll_close_event(event: ulong) {}
+
+[Target(!OS(Windows))]
+_async_poll_wait_directory(directory: __ptr<void>, block: __ptr<u8>) {}
 
 # Makes a non-blocking self-pipe: stores the read end in `made[0]` and the
 # write end in `made[1]` (both stay -1 on failure). Returns the address a

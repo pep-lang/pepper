@@ -14,6 +14,8 @@ Unlike the rest of the standard library, `io` is a module: bring it in with
 - [Path](io-path.md): building, splitting, and inspecting paths
 - [File](io-file.md): opening, reading, writing, and locking files, whole-file helpers, and `FileTransfer`
 - [Directory](io-directory.md): listing, creating, and removing directories
+- [Glob](io-glob.md): `glob` and `glob_matches`, finding paths by pattern
+- [Watch](io-watch.md): `Watcher`, `FileChange`, and `ChangeKind`, changes in a directory tree
 - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, `UnixStream`, and `UnixDatagram`

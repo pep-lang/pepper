@@ -10,6 +10,8 @@
 ## - [Path](io-path.md): building, splitting, and inspecting paths
 ## - [File](io-file.md): opening, reading, writing, and locking files, whole-file helpers, and `FileTransfer`
 ## - [Directory](io-directory.md): listing, creating, and removing directories
+## - [Glob](io-glob.md): `glob` and `glob_matches`, finding paths by pattern
+## - [Watch](io-watch.md): `Watcher`, `FileChange`, and `ChangeKind`, changes in a directory tree
 ## - [Network addresses](io-address.md): `IpAddress`, `SocketAddress`, and `resolve`
 ## - [Sockets](io-socket.md): `TcpListener`, `Incoming`, `SharedTcpListener`, `TcpStream`, `SocketTransfer`, and `UdpSocket`
 ## - [Unix domain sockets](io-unix.md): `UnixListener`, `SharedUnixListener`, `UnixStream`, and `UnixDatagram`
@@ -36,6 +38,7 @@
 import "address";
 import "directory";
 import "file";
+import "glob";
 import "lock_posix";
 import "lock_wasi";
 import "lock_windows";
@@ -52,6 +55,10 @@ import "sys_windows";
 import "types";
 import "unix";
 import "wait";
+import "watch";
+import "watch_linux";
+import "watch_mac";
+import "watch_windows";
 
 export FileHandle;
 export ErrorCode;
@@ -82,6 +89,13 @@ export ByteWriter;
 export DirEntry;
 export DirectoryIterator;
 export Directory;
+
+export glob;
+export glob_matches;
+
+export ChangeKind;
+export FileChange;
+export Watcher;
 
 export IpAddress;
 export SocketAddress;
@@ -118,6 +132,10 @@ export _IO_TRANSFER_CLOSED;
 export _io_win_wide;
 [Target(OS(Windows))]
 export _io_win_wide_len;
+
+# For the async module's IOCP driver only: a Watcher's request.
+[Target(OS(Windows))]
+export _io_win_read_directory_changes;
 
 # For the tls module only: the socket calls its BIO makes.
 export _io_sys_socket_receive;

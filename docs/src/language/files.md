@@ -21,6 +21,10 @@ see [Error handling with Result](results.md)).
 - `Metadata` is a snapshot of a path's kind, size, permission bits and
   timestamps, from `Path.metadata()` (which follows symlinks),
   `Path.symlink_metadata()` (which does not) or `File.metadata()`.
+- `glob` finds the paths that match a pattern such as `src/**/*.pep`, and
+  `Watcher` reports changes in a directory tree (see
+  [Finding files by pattern](#finding-files-by-pattern) and
+  [Watching for changes](#watching-for-changes)).
 
 ```pepper
 {{#include ../../examples/files-basics.pep}}
@@ -112,6 +116,70 @@ A stream moves the same way, as a `SocketTransfer` (see
 ```pepper
 {{#include ../../examples/files-transfer.pep}}
 ```
+
+## Finding files by pattern
+
+`io.glob(pattern)` returns the existing paths that match a shell-style
+pattern, sorted, and `io.glob_matches(pattern, path)` tests a path's text
+against one without touching the file system:
+
+- `*` matches any run of characters within one path component, and `?`
+  one character; neither matches `/`.
+- `**` as a whole component matches any number of directories, none
+  included: `src/**/*.pep` matches `src/main.pep` and `src/net/http.pep`.
+- `[abc]`, `[a-z]` and `[!abc]` (or `[^abc]`) match one character listed,
+  in the range, or not listed.
+- `{pep,md}` matches either alternative; alternatives may hold any
+  pattern, braces included.
+
+Patterns separate components with `/` on every system; on Windows a `\` in
+the path being matched counts as `/` too. There is no escape character, so
+that Windows paths stay as they are: `[*]` matches a literal `*`. An
+unclosed `[` or `{` matches itself, so every pattern is valid. Matching is
+case-sensitive, and `*` matches a leading `.` like any other character.
+
+`glob` starts at the longest leading part of the pattern without
+wildcards, so `src/**/*.pep` lists only under `src`, and a relative pattern
+gives relative paths. `**` does not descend into symlinked directories, so
+a link cycle cannot loop. Directories it cannot read are skipped, and a
+pattern whose start does not exist matches nothing.
+
+```pepper
+{{#include ../../examples/files-glob.pep}}
+```
+
+## Watching for changes
+
+`io.Watcher.open(directory)` watches a directory and everything below it.
+Each `wait()` returns the changes recorded since the last one, or waits for
+the next: a list of `FileChange`s, each a `ChangeKind` (`Created`,
+`Removed`, `Modified`) and the `path` it happened to. A rename reports the
+old path removed and the new one created. When the system drops changes
+because they came too fast, `wait` reports one `Overflow` change for the
+directory: list it again to catch up. `close()` stops watching, and a
+`wait` running in another task then fails.
+
+In a task (see [Tasks](tasks.md)) `wait` parks only the task, so others run
+while it waits, and the task's cancel or `async.timeout` ends it. Outside a
+task it blocks the thread.
+
+```pepper
+{{#include ../../examples/files-watch.pep}}
+```
+
+Each system watches its own way, and that shows in a few places:
+
+- Linux uses inotify, with a watch on every directory of the tree. A new
+  directory gets one as its creation is read, and what it already holds by
+  then is reported created. The number of watches is limited
+  (`/proc/sys/fs/inotify/max_user_watches`), and `open` fails past it.
+- macOS uses kqueue, which holds an open descriptor for every directory and
+  file of the tree, so a large tree may need a higher `ulimit -n`. A
+  directory that changed is listed again to tell what came and went.
+- Windows uses `ReadDirectoryChangesW`, which watches the whole tree with
+  one handle. One write often reports `Modified` twice; repeats next to
+  each other in one batch are dropped.
+- WASI cannot watch: `open` fails.
 
 ## Archives
 

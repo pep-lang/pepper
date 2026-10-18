@@ -23,6 +23,16 @@
 # The doorbell posts a completion with no OVERLAPPED
 # (PostQueuedCompletionStatus), which `_poll` skips.
 #
+# A Watcher's ReadDirectoryChangesW request (`_start_directory_changes`)
+# completes on the same port: its directory is tied to the port with the
+# completion key 1 (the AFD handle and the doorbell use 0), and its block
+# is an OVERLAPPED followed by the task and the directory:
+#
+#     0   OVERLAPPED { Internal (the NTSTATUS), InternalHigh, Offset,
+#                      hEvent }
+#     32  the task waiting for it (u64)
+#     40  the directory's HANDLE (u64)
+#
 # The system calls are [Target(OS(Windows))]; elsewhere
 # `_async_iocp_create` fails, so the driver is unavailable.
 
@@ -75,6 +85,11 @@ extern int NtDeviceIoControlFile(
 [Link("ntdll")]
 extern int NtCancelIoFileEx(void* file, void* request, void* status);
 [Target(OS(Windows))]
+extern int CancelIoEx(void* file, void* overlapped);
+[Target(OS(Windows))]
+[Link("ntdll")]
+extern uint RtlNtStatusToDosError(int status);
+[Target(OS(Windows))]
 [Link("ws2_32")]
 extern int WSAIoctl(
     ulong s,
@@ -92,6 +107,10 @@ extern int WSAIoctl(
 const _IOCP_CAPACITY = 256;
 # The size of a request block (see above).
 const _IOCP_REQUEST_SIZE = 72;
+# The size of a directory request block (see above).
+const _IOCP_DIRECTORY_REQUEST_SIZE = 48;
+# The completion key of the directories tied to the port.
+const _IOCP_DIRECTORY_KEY: ulong = 1;
 
 # AFD_POLL_* events: what lets a reader continue (RECEIVE, DISCONNECT,
 # ACCEPT), what lets a writer (SEND), and what wakes both (ABORT,
@@ -113,6 +132,13 @@ struct _IocpDriver {
     var _polls: HashMap<ulong, __ptr<u8>>;
     # Every request block not yet dequeued.
     var _pending: HashSet<__ptr<u8>>;
+    # The directories tied to the port, which stay tied until closed.
+    var _directories: HashSet<ulong>;
+    # Each directory request in flight: its block's address, and the
+    # directory.
+    var _directory_requests: HashMap<ulong, ulong>;
+    # The directory requests finished since `_finished_files` last ran.
+    var _finished: Array<(task: ulong, result: long)>;
 
     construct(port: __ptr<void>, afd: __ptr<void>) {
         this._port = port;
@@ -120,6 +146,9 @@ struct _IocpDriver {
         this._entries = _pep_malloc((_IOCP_CAPACITY * 32) as ulong);
         this._polls = HashMap<ulong, __ptr<u8>>();
         this._pending = HashSet<__ptr<u8>>();
+        this._directories = HashSet<ulong>();
+        this._directory_requests = HashMap<ulong, ulong>();
+        this._finished = Array<(task: ulong, result: long)>();
     }
 
     # A new driver, or none when the system cannot make one.
@@ -177,6 +206,16 @@ struct _IocpDriver {
         }
         _pep_free(block);
     }
+
+    # Handles one dequeued directory request block, which moved `count`
+    # bytes.
+    _complete_directory(block: __ptr<u8>, count: ulong) {
+        this._pending.remove(block);
+        this._directory_requests.remove(unsafe_cast<ulong>(block));
+        __ptr<ulong> words = block;
+        this._finished.append((words[4], _async_directory_result(block, count)));
+        _pep_free(block);
+    }
 }
 
 extend _IocpDriver with _Driver {
@@ -223,8 +262,15 @@ extend _IocpDriver with _Driver {
         var count = _async_iocp_dequeue(this._port, this._entries, _IOCP_CAPACITY, timeout);
         var i: ulong = 0;
         while (i < count) {
-            __ptr<u8> block = unsafe_cast<__ptr<__ptr<u8>>>(this._entries + i * 32 + 8)[0];
-            if (block != __null) {
+            var entry = this._entries + i * 32;
+            __ptr<u8> block = unsafe_cast<__ptr<__ptr<u8>>>(entry + 8)[0];
+            if (block == __null) {
+                i = i + 1;
+                continue;
+            }
+            if (unsafe_cast<__ptr<ulong>>(entry)[0] == _IOCP_DIRECTORY_KEY) {
+                this._complete_directory(block, unsafe_cast<__ptr<uint>>(entry + 24)[0] as ulong);
+            } else {
                 this._complete(block, ready_sockets);
             }
             i = i + 1;
@@ -233,6 +279,9 @@ extend _IocpDriver with _Driver {
 
     _forget(handle: io.SocketHandle) {
         var key = handle as ulong;
+        # A Watcher's directory, about to close: a new handle with the same
+        # number is not tied to the port.
+        this._directories.remove(key);
         if (this._polls.contains(key)) {
             unsafe_cast<__ptr<ulong>>(this._polls.get(key))[8] = 1;
             this._polls.remove(key);
@@ -245,6 +294,48 @@ extend _IocpDriver with _Driver {
         this._forget(handle);
     }
 
+    _start_directory_changes(handle: ulong, buffer: ulong, count: ulong, task: ulong): ulong {
+        var directory = _async_iocp_block(handle) as __ptr<void>;
+        if (!this._directories.contains(handle)) {
+            # Tied to another port already: the task blocks the thread.
+            if (!_async_iocp_tie(directory, this._port, _IOCP_DIRECTORY_KEY)) {
+                return 0;
+            }
+            this._directories.insert(handle);
+        }
+        __ptr<u8> block = _pep_malloc(_IOCP_DIRECTORY_REQUEST_SIZE as ulong);
+        __ptr<ulong> words = block;
+        words[0] = 0;
+        words[1] = 0;
+        words[2] = 0;
+        words[3] = 0;
+        words[4] = task;
+        words[5] = handle;
+        if (!_async_iocp_read_directory(directory, unsafe_cast<__ptr<u8>>(_async_iocp_block(buffer)), count, block)) {
+            _pep_free(block);
+            return 0;
+        }
+        var request = unsafe_cast<ulong>(block);
+        this._pending.insert(block);
+        this._directory_requests.insert(request, handle);
+        return request;
+    }
+
+    _cancel_transfer(request: ulong) {
+        if (!this._directory_requests.contains(request)) {
+            return;
+        }
+        var directory = _async_iocp_block(this._directory_requests.get(request)) as __ptr<void>;
+        _async_iocp_cancel_directory(directory, unsafe_cast<__ptr<u8>>(_async_iocp_block(request)));
+    }
+
+    _finished_files(finished: Array<(task: ulong, result: long)>) {
+        for (var item in this._finished) {
+            finished.append(item);
+        }
+        this._finished.clear();
+    }
+
     _doorbell(): _Doorbell {
         return _Doorbell(this._port);
     }
@@ -253,6 +344,11 @@ extend _IocpDriver with _Driver {
         # Cancel what is still in flight and wait for the cancellations, so
         # the kernel is done with every block before it is freed.
         for (var block in this._pending) {
+            var address = unsafe_cast<ulong>(block);
+            if (this._directory_requests.contains(address)) {
+                this._cancel_transfer(address);
+                continue;
+            }
             _async_iocp_cancel(this._afd, block);
         }
         var drained = Array<(handle: ulong, interest: int)>();
@@ -362,6 +458,45 @@ _async_iocp_cancel(afd: __ptr<void>, block: __ptr<u8>) {
     _pep_free(status);
 }
 
+# The result `_finished_files` reports for the finished directory request
+# whose OVERLAPPED is at `block`, which moved `count` bytes: the count, or
+# `-1 - ECANCELED` for STATUS_CANCELLED and for STATUS_NOTIFY_CLEANUP (the
+# handle closed), or -1 minus the Win32 error.
+_async_directory_result(block: __ptr<u8>, count: ulong): long {
+    var status = unsafe_cast<__ptr<int>>(block)[0];
+    if (status == -1073741536 || status == 267) {
+        return _ASYNC_CANCELLED_RESULT;
+    }
+    if (status < 0) {
+        return -1 - (_async_iocp_error_of(status) as long);
+    }
+    return count as long;
+}
+
+# Ties `file` to `port`, completing with `key`; false if it cannot be (it is
+# tied to another port).
+[Target(OS(Windows))]
+_async_iocp_tie(file: __ptr<void>, port: __ptr<void>, key: ulong): bool {
+    return CreateIoCompletionPort(file, port, key, 0) != __null;
+}
+
+# Starts a Watcher's request on `directory` (see watch_windows.pep in io).
+[Target(OS(Windows))]
+_async_iocp_read_directory(directory: __ptr<void>, buffer: __ptr<u8>, count: ulong, block: __ptr<u8>): bool {
+    return io._io_win_read_directory_changes(directory, buffer, count, block);
+}
+
+[Target(OS(Windows))]
+_async_iocp_cancel_directory(directory: __ptr<void>, block: __ptr<u8>) {
+    CancelIoEx(directory, block);
+}
+
+# The Win32 error code for the NTSTATUS `status`.
+[Target(OS(Windows))]
+_async_iocp_error_of(status: int): uint {
+    return RtlNtStatusToDosError(status);
+}
+
 # Dequeues up to `capacity` completions, waiting up to `timeout`
 # milliseconds (forever when negative); how many it stored.
 [Target(OS(Windows))]
@@ -415,6 +550,24 @@ _async_iocp_submit(afd: __ptr<void>, block: __ptr<u8>, socket: ulong, events: ui
 
 [Target(!OS(Windows))]
 _async_iocp_cancel(afd: __ptr<void>, block: __ptr<u8>) {}
+
+[Target(!OS(Windows))]
+_async_iocp_tie(file: __ptr<void>, port: __ptr<void>, key: ulong): bool {
+    return false;
+}
+
+[Target(!OS(Windows))]
+_async_iocp_read_directory(directory: __ptr<void>, buffer: __ptr<u8>, count: ulong, block: __ptr<u8>): bool {
+    return false;
+}
+
+[Target(!OS(Windows))]
+_async_iocp_cancel_directory(directory: __ptr<void>, block: __ptr<u8>) {}
+
+[Target(!OS(Windows))]
+_async_iocp_error_of(status: int): uint {
+    return 0;
+}
 
 [Target(!OS(Windows))]
 _async_iocp_dequeue(port: __ptr<void>, entries: __ptr<u8>, capacity: int, timeout: long): ulong {

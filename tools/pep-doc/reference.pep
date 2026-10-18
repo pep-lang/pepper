@@ -64,6 +64,8 @@ export pages(): Array<(String, String)> {
         ("io/path.pep", "Path"),
         ("io/file.pep", "File"),
         ("io/directory.pep", "Directory"),
+        ("io/glob.pep", "Glob"),
+        ("io/watch.pep", "Watch"),
         ("io/address.pep", "Network addresses"),
         ("io/socket.pep", "Sockets"),
         ("io/unix.pep", "Unix domain sockets"),

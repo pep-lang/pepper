@@ -901,38 +901,62 @@ extend _Worker with io._IoWaiter {
         if (request == 0) {
             return io._IO_TRANSFER_DECLINED;
         }
-        me._deadline = deadline;
-        this._file_waits.insert(me._id, me);
-        this._io_waiting = this._io_waiting + 1;
-        # A cancel or a deadline asks the kernel to stop, then waits for
-        # the request to finish: the kernel is using `buffer` until then.
-        long stopped = 0;
-        while (!this._file_results.contains(me._id)) {
-            if (stopped == 0) {
-                if (me._is_cancelled()) {
-                    stopped = io._IO_TRANSFER_CANCELLED;
-                } else if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
-                    stopped = io._IO_TRANSFER_TIMED_OUT;
-                }
-                if (stopped != 0) {
-                    this._driver._cancel_transfer(request);
-                    me._deadline = 0;
-                }
-            }
-            this._park();
-        }
-        this._io_waiting = this._io_waiting - 1;
-        this._file_waits.remove(me._id);
-        var result = this._file_results.get(me._id);
-        this._file_results.remove(me._id);
-        me._deadline = saved;
-        # Cancelled before it moved any bytes: by the task, or because the
-        # socket is closing (`_forget`).
-        if (result == _ASYNC_CANCELLED_RESULT) {
-            return stopped != 0 ? stopped : io._IO_TRANSFER_CLOSED;
-        }
-        return result;
+        return _async_await_request(this, request, deadline);
     }
+
+    _directory_changes(handle: ulong, buffer: ulong, count: ulong): long {
+        var me = this._current;
+        if (me._is_cancelled()) {
+            return io._IO_TRANSFER_CANCELLED;
+        }
+        var deadline = me._deadline;
+        if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
+            return io._IO_TRANSFER_TIMED_OUT;
+        }
+        var request = this._driver._start_directory_changes(handle, buffer, count, me._id);
+        if (request == 0) {
+            return io._IO_TRANSFER_DECLINED;
+        }
+        return _async_await_request(this, request, deadline);
+    }
+}
+
+# Parks the running task until the driver's request `request` finishes,
+# with `deadline` (monotonic milliseconds, 0 for none) as the task's for the
+# wait, and returns its result. A cancel or the deadline asks the kernel to
+# stop, then still waits for the request to finish: the kernel is using the
+# request's buffer until then. Cancelled before it moved any bytes, the
+# result says why: the task, or the handle closing.
+_async_await_request(worker: _Worker, request: ulong, deadline: ulong): long {
+    var me = worker._current;
+    var saved = me._deadline;
+    me._deadline = deadline;
+    worker._file_waits.insert(me._id, me);
+    worker._io_waiting = worker._io_waiting + 1;
+    long stopped = 0;
+    while (!worker._file_results.contains(me._id)) {
+        if (stopped == 0) {
+            if (me._is_cancelled()) {
+                stopped = io._IO_TRANSFER_CANCELLED;
+            } else if (deadline != 0 && _async_sys_monotonic_milliseconds() >= deadline) {
+                stopped = io._IO_TRANSFER_TIMED_OUT;
+            }
+            if (stopped != 0) {
+                worker._driver._cancel_transfer(request);
+                me._deadline = 0;
+            }
+        }
+        worker._park();
+    }
+    worker._io_waiting = worker._io_waiting - 1;
+    worker._file_waits.remove(me._id);
+    var result = worker._file_results.get(me._id);
+    worker._file_results.remove(me._id);
+    me._deadline = saved;
+    if (result == _ASYNC_CANCELLED_RESULT) {
+        return stopped != 0 ? stopped : io._IO_TRANSFER_CLOSED;
+    }
+    return result;
 }
 
 # A transfer's result when the kernel cancelled it: -1 minus ECANCELED.

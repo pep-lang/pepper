@@ -64,11 +64,16 @@ struct _KqueueDriver {
 
 extend _KqueueDriver with _Driver {
     _watch(handle: io.SocketHandle): bool {
-        __ptr<u8> changes = _pep_malloc(64);
-        _async_kqueue_change(changes, 0, handle, _KQUEUE_FILTER_READ);
-        _async_kqueue_change(changes, 1, handle, _KQUEUE_FILTER_WRITE);
-        var added = _async_kqueue_call(this._queue, changes, 2, __null, 0, -1) == 0;
-        _pep_free(changes);
+        __ptr<u8> change = _pep_malloc(32);
+        _async_kqueue_change(change, 0, handle, _KQUEUE_FILTER_READ);
+        var added = _async_kqueue_call(this._queue, change, 1, __null, 0, -1) == 0;
+        if (added) {
+            # A descriptor that is never writable, such as a Watcher's
+            # kqueue, refuses the write filter; it only waits for reading.
+            _async_kqueue_change(change, 0, handle, _KQUEUE_FILTER_WRITE);
+            _async_kqueue_call(this._queue, change, 1, __null, 0, -1);
+        }
+        _pep_free(change);
         return added;
     }
 
