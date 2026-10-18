@@ -268,9 +268,13 @@ jobs:
         env:
           PEPPER_LLVM_DEPLOY_KEY: ${{ secrets.PEPPER_LLVM_DEPLOY_KEY }}
           PEPPER_LSP_DEPLOY_KEY: ${{ secrets.PEPPER_LSP_DEPLOY_KEY }}
+          # The macOS runner has 16 GB. Uncapped, 8 tests at once each
+          # checking 8 compilation units at once ran it out of memory and
+          # kernel-panicked it (214 pep-build processes).
+          PEPC_COMPILATION_UNIT_JOBS: 2
         run: |
           source scripts/ci-package-auth.sh
-          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR"
+          bash scripts/pepper-tests.sh "$PEPPER_COMPILER_DIR" -j 4
 
   # The suite on Linux. Required: `test` gates on it.
   test-linux:
