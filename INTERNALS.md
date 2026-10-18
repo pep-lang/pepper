@@ -3543,7 +3543,9 @@ compiler and pep-lsp depend on are cloned with deploy keys
   `main`. There is no arm64 Windows or Linux runner, so those platforms get
   no bundled server.
 - **`release.yml`**: on each merge into main that changes `runtime/`,
-  `tools/`, `VERSION` or the release scripts, publishes the build of main:
+  `tools/`, `VERSION` or the release scripts (run by `ci.yml`'s `release`
+  job, which every job that installs the toolchain waits for, so CI tests
+  the build of this merge), publishes the build of main:
   the version main holds (`0.4.0-dev` in `VERSION`, set with each tool's
   `version()` by `scripts/set-version.sh`) on that prerelease, whose tag
   moves to the merge and whose assets are replaced (#713); CI installs it.
@@ -3563,7 +3565,8 @@ compiler and pep-lsp depend on are cloned with deploy keys
   scripts to the tag's release. A dispatch or a PR touching the release
   files builds and tests without publishing.
 - **`docs.yml`**: builds the mdBook site to `gh-pages` (`dev/` on `main`,
-  `X.Y.Z/` on tags), with `pep-doc` built by the build of main.
+  run by `ci.yml`'s `docs` job after its `release` job; `X.Y.Z/` on tags),
+  with `pep-doc` built by the build of main.
 - **`llvm-package.yml`**: runs on dispatch and publishes the stripped
   Windows LLVM 20 package that CI installs.
 

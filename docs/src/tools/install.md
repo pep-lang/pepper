@@ -175,7 +175,8 @@ The `Release` workflow (`.github/workflows/release.yml`) publishes:
   the runtime or the tools: main holds the version being developed as a
   prerelease (`0.4.0-dev` in `VERSION` and each tool's `version()`), and
   the workflow publishes it on the prerelease `v0.4.0-dev`, moving its tag
-  to the merge and replacing its archives. CI and the workers install the
+  to the merge and replacing its archives. CI runs it on the merge before
+  its tests, which then install that build. CI and the workers install the
   newest published toolchain, that prerelease or a release with a higher
   version, whatever `VERSION` holds, instead of building the compiler. The newest release, the default, never picks a prerelease.
 - **a release**, on a `vX.Y.Z` tag, made by hand. Its stage 0, the

@@ -23,7 +23,8 @@
 # What publishes:
 #
 #   a merge into main that changes the compiler, the runtime or the tools
-#                 (the `paths` below) publishes the build of main (#713):
+#                 (CI's `changes` job decides, and CI runs this workflow
+#                 before its tests) publishes the build of main (#713):
 #                 the version main holds, a prerelease such as 0.4.0-dev,
 #                 on the prerelease v0.4.0-dev, whose tag moves to the merge
 #                 and whose assets are replaced. CI and the workers install
@@ -44,16 +45,12 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    # Paths do not filter tag pushes: every vX.Y.Z tag publishes.
     tags: ['v*.*.*']
-    paths:
-      - VERSION
-      - runtime/**
-      - tools/**
-      - scripts/release-build.sh
-      - scripts/release-smoke-test.sh
-      - .github/workflows/release.yml
+  # A merge into main runs this from CI (ci.yml's `release` job), when it
+  # changes VERSION, runtime/, tools/, the release scripts or this file, so
+  # CI's tests and Docs install the build this publishes, not the one
+  # before it.
+  workflow_call:
   workflow_dispatch:
     inputs:
       publish:

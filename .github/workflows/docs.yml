@@ -1,7 +1,8 @@
 # Publishes the documentation site (docs/, rendered by `pep-doc build`)
 # to the gh-pages branch, one folder per version:
 #
-#   push to main       -> dev/      (the unreleased docs, replaced each time)
+#   merge into main    -> dev/      (the unreleased docs, replaced each time;
+#                                  run from CI after its release job)
 #   push a tag vX.Y.Z  -> X.Y.Z/    (a release; the tag must match VERSION)
 #
 # Only the folder being built is replaced; every other version already on
@@ -14,8 +15,10 @@ name: Docs
 
 on:
   push:
-    branches: [main]
     tags: ['v*.*.*']
+  # A merge into main runs this from CI (ci.yml's `docs` job), after CI's
+  # `release` job has published the build of main that builds pep-doc.
+  workflow_call:
   workflow_dispatch:
 
 # Publishes must not cancel each other: a cancelled release build would leave

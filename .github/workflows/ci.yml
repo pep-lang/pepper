@@ -8,7 +8,12 @@
 #
 # Every job tests with the published build of main (#713): the toolchain
 # release.yml builds on each merge, installed with the install scripts as a
-# user installs it (scripts/ci-install-toolchain.sh). A commit that changes
+# user installs it (scripts/ci-install-toolchain.sh). On a push, this
+# workflow runs Release itself (`release`) and the jobs that install the
+# toolchain wait for it, so they install this merge's build, not the one
+# before it; Docs (`docs`) waits the same way. A failed release does not
+# stop them: they test with the newest build that did publish, and the run
+# shows the release's failure beside their results. A commit that changes
 # the compiler (tools/compiler/), or a dispatch on a branch other than main,
 # is tested with its own compiler instead: each job
 # builds it with the installed pep-build (scripts/ci-build-compiler.sh, the
@@ -61,6 +66,7 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       compiler: ${{ steps.classify.outputs.compiler }}
+      release: ${{ steps.classify.outputs.release }}
     steps:
       # Merges into main are squashed, so the commit's parent is the base;
       # depth 2 is enough to diff the two.
@@ -88,6 +94,7 @@ jobs:
           fi
           code=false
           compiler=false
+          release=false
           # The runner's checkout persists between runs, and a shallow one
           # can lack the parent: fetch it. Without the paths, everything is
           # tested; classifying no paths would pass the change untested.
@@ -99,6 +106,7 @@ jobs:
             paths=""
             code=true
             compiler=true
+            release=true
           fi
           while IFS= read -r path; do
             [ -n "$path" ] || continue
@@ -108,16 +116,43 @@ jobs:
               .agents/*|.claude/*|*.md) ;;
               *) code=true ;;
             esac
+            # What the build of main is made from (release.yml).
+            case "$path" in
+              VERSION|runtime/*|tools/*|scripts/release-build.sh|scripts/release-smoke-test.sh|.github/workflows/release.yml) release=true ;;
+            esac
             echo "$path"
           done <<< "$paths"
-          echo "code=$code compiler=$compiler"
+          echo "code=$code compiler=$compiler release=$release"
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "compiler=$compiler" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+  # A merge that changes what the toolchain is built from publishes the
+  # build of main (release.yml) before any job below installs it. A skipped
+  # or failed release lets them go on with the newest published build.
+  release:
+    needs: changes
+    if: github.event_name == 'push' && needs.changes.outputs.release == 'true'
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/release.yml
+    secrets: inherit
+
+  # The docs of main, built with pep-doc from the build just published.
+  docs:
+    needs: release
+    if: ${{ !cancelled() && github.event_name == 'push' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/docs.yml
 
   test-windows:
     runs-on: pepper-windows
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, release]
+    # Runs after `release` whether it published, failed or was skipped.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     # Provisioning LLVM costs ~5 minutes on a cold cache. 45 leaves room for
     # a slow download without hanging forever.
     timeout-minutes: 45
@@ -203,8 +238,9 @@ jobs:
   # through `test` (see the top of this file).
   test-macos:
     runs-on: pepper-macos
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, release]
+    # Runs after `release` whether it published, failed or was skipped.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     # 10 more for building a changed compiler.
     timeout-minutes: 40
 
@@ -279,8 +315,9 @@ jobs:
   # The suite on Linux. Required: `test` gates on it.
   test-linux:
     runs-on: pepper-linux
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, release]
+    # Runs after `release` whether it published, failed or was skipped.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
     # 10 more for building a changed compiler.
     timeout-minutes: 35
     # build_cache_tests verify the cache (`--verify-cache`) on every
@@ -412,8 +449,8 @@ jobs:
           retention-days: 1
 
   cross-link:
-    needs: [changes, cross-sysroots]
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, release, cross-sysroots]
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.cross-sysroots.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -505,7 +542,9 @@ jobs:
 
   cross-run:
     needs: [changes, cross-link]
-    if: needs.changes.outputs.code == 'true'
+    # A skipped `release` upstream would skip this job without the explicit
+    # result check.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.cross-link.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
