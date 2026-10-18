@@ -17,6 +17,9 @@ export struct StructInfo {
     ## The unary operators declared: `-`, `~`, `!`, `!!` as instance
     ## methods without parameters.
     var unary_operators: HashSet<String> = HashSet<String>();
+    ## A generic base's own type parameters, which its fields' and
+    ## methods' types are written in.
+    var params: Array<String> = Array<String>();
 
     construct() {}
 

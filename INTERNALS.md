@@ -788,7 +788,11 @@ The output defaults to `<cwd>/<entry stem>` with no extension.
   `VOID`, and `FUNCTION` (`__function`), and `replace_map` (generic
   substitution); `arithmetic.result_type` gives the type two numbers
   promote to. `static_type_of` gives a best-effort static type for
-  operator resolution and print conversion.
+  operator resolution and print conversion. A method's result on a
+  generic instance with no specialization yet comes from the base, its
+  parameters replaced by the instance's (`StructTable.method_return`),
+  and a call to a generic function whose result names its own parameters
+  has no static type until its type arguments are inferred.
 - `merge` (`sema/program.pep`, through `_join`) concatenates vectors into
   one namespace. Modules exist only up to `link.link`, which has already
   made every private name unique by mangling it. `sort_globals`

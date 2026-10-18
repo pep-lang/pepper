@@ -6,13 +6,13 @@
 import [binary_result, conditional_result, int_literal_type, is_numeric_type] from "arithmetic";
 import "closures";
 import [case_value_type, FieldTypes] from "enums";
-import [BinaryOp, Expression, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
+import [BinaryOp, Expression, FunctionDef, Module, StructDef, TraitType, TypeName, UnaryOp] from "model";
 import [is_comparison, is_overflow_test, op_name, weak_result] from "operators";
 import [PassMemo, PassState, TraitTypeMemo] from "state";
 import [StructInfo] from "struct_info";
 import [instance, trait_def, trait_types_of] from "traits";
 import [labeled_tuple_literal_type, tuple_constructor_labels] from "tuple_literals";
-import [parse_type_string] from "type_name";
+import [parse_type_string, replace_map] from "type_name";
 
 _struct_info(st: StructDef): StructInfo {
     var info = StructInfo();
@@ -20,6 +20,9 @@ _struct_info(st: StructDef): StructInfo {
         info.fields.append((f.name, f.ty));
     }
     info._add_methods(st.method_members);
+    for (var p in st.generic_params) {
+        info.params.append(p.name);
+    }
     return info;
 }
 
@@ -120,7 +123,7 @@ export struct StructTable {
             }
         }
         for (var f in module.functions) {
-            if (shared and module.checked.functions.contains(f.name)) {
+            if ((shared and module.checked.functions.contains(f.name)) or _returns_own_parameter(f)) {
                 continue;
             }
             functions[f.name] = f.ty;
@@ -139,7 +142,7 @@ export struct StructTable {
             }
         }
         for (var f in module.functions) {
-            if (module.checked.functions.contains(f.name)) {
+            if (module.checked.functions.contains(f.name) and !_returns_own_parameter(f)) {
                 out.functions[f.name] = f.ty;
             }
         }
@@ -196,6 +199,33 @@ export struct StructTable {
         var at = text.find("<");
         return get(at < 0 ? text : text.substr_bytes(0, at as ulong));
     }
+
+    ## Returns the return type of method `name` of type `ty`. When only the
+    ## generic base is filed, its own parameters are replaced by `ty`'s type
+    ## arguments: `_literal_append` of `Array<int>` returns `Array<int>`,
+    ## not the base's `Array<T>` (#996).
+    ##
+    ## @param ty the receiver's type
+    ## @param name the method's name
+    ## @returns the return type, or none
+    method_return(ty: TypeName, name: String): TypeName? {
+        var info = lookup(ty);
+        if (!info.is_value()) {
+            return Optional<TypeName>.Empty;
+        }
+        var ret = info.value().returns.try_get(name);
+        var params = info.value().params;
+        if (!ret.is_value() or params.count == 0 or params.count != ty.sub_types.count) {
+            return ret;
+        }
+        var type_map = Array<(String, TypeName)>();
+        for (var i in 0..params.count) {
+            type_map.append((params[i], ty.sub_types[i]));
+        }
+        var out = ret.value().copy();
+        replace_map(out, type_map);
+        return Optional<TypeName>.Value(out);
+    }
 }
 
 extend StructTable with PassMemo;
@@ -214,6 +244,19 @@ struct _TableFields {
 }
 
 extend _TableFields with FieldTypes;
+
+# Whether `f` is generic and its return type names one of its own type
+# parameters (`_array_literal<T>(first: T): Array<T>`). A call to it has no
+# static type until its type arguments are inferred: that `T` is not the
+# caller's (#996).
+_returns_own_parameter(f: FunctionDef): bool {
+    for (var p in f.generic_params) {
+        if (f.ty.mentions(p.name)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 _known(ty: TypeName): TypeName? {
     return Optional<TypeName>.Value(ty);
@@ -332,8 +375,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (!this_type.is_value()) {
                 return none;
             }
-            var info = table.lookup(this_type.value());
-            return info.is_value() ? info.value().returns.try_get(node.method) : none;
+            return table.method_return(this_type.value(), node.method);
         }
         Weak(op, ty, _) => {
             return _known(weak_result(op, ty));
@@ -352,11 +394,10 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (!source_type.is_value()) {
                 return none;
             }
-            var info = table.lookup(source_type.value());
-            if (!info.is_value()) {
+            if (!table.lookup(source_type.value()).is_value()) {
                 return none;
             }
-            var iterator = info.value().returns.try_get("iterate");
+            var iterator = table.method_return(source_type.value(), "iterate");
             return iterator.is_value() ? iterator : source_type;
         }
         Index(node) => {
@@ -369,8 +410,7 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (pointee.is_value()) {
                 return _known(pointee.value().copy());
             }
-            var info = table.lookup(lhs.value());
-            return info.is_value() ? info.value().returns.try_get("__index_get") : none;
+            return table.method_return(lhs.value(), "__index_get");
         }
         ArrayIndex(node) => {
             if (!node.ty.is_auto()) {
@@ -432,12 +472,9 @@ export static_type_of(e: Expression, table: StructTable, current: TypeName?, sta
             if (!lhs.is_value()) {
                 return none;
             }
-            var info = table.lookup(lhs.value());
-            if (info.is_value()) {
-                var ret = info.value().returns.try_get(op_name(node.op));
-                if (ret.is_value()) {
-                    return ret;
-                }
+            var ret = table.method_return(lhs.value(), op_name(node.op));
+            if (ret.is_value()) {
+                return ret;
             }
             var rhs = static_type_of(node.rhs, table, current, state);
             var promoted = binary_result(
