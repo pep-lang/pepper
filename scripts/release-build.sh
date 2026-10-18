@@ -5,7 +5,7 @@
 #   scripts/release-build.sh <target> <version> <output-dir> [<stage0-dir>]
 #
 # <stage0-dir> holds the stage 0 pep-build (default: $PEPPER_COMPILER_DIR,
-# else, with PEPPER_STAGE0_INSTALL=1, the newest build of main, installed,
+# else, with PEPPER_STAGE0_INSTALL=1, the newest published toolchain, installed,
 # else the installed toolchain's, the one `pepper install which` names).
 #
 # <target> is one of:
@@ -169,8 +169,9 @@ fi
 
 # Stage 0, the compiler that builds pepc: the previously published
 # toolchain's pep-build, from <stage0-dir>, else $PEPPER_COMPILER_DIR; else,
-# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest build of main
-# (the newest vX.Y.Z-dev prerelease, whatever VERSION holds) installed here
+# with PEPPER_STAGE0_INSTALL=1 (release.yml), the newest published
+# toolchain (the build of main, or a newer release, whatever VERSION
+# holds) installed here
 # by scripts/ci-install-toolchain.sh, now that the provisioning above has
 # put clang on the PATH (the install builds a program to check itself);
 # else the installed toolchain's.
@@ -256,10 +257,11 @@ export PEPPER_RUNTIME="$repo_root/runtime"
 # checkout, with its runtime: stage 0's own may predate a runtime fix it
 # needs (#804: on glibc before 2.29 it could not start git in a folder).
 # pep-build fetches only what is missing, so the builds below fetch nothing.
-# shortcut: a stage 0 older than 0.9.4 fails on the runtime's number
-# extensions that declare `Comparable` when it checks a compilation unit
-# again (#950), so it builds without compilation units. Drop the variable
-# once the published stage 0 is 0.9.4 or later.
+# shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
+# runtime's number extensions that declare `Comparable` when it checks
+# a compilation unit again (#950), so it builds without compilation
+# units. Drop the variable once the published stage 0 is 0.10.0-dev or
+# later.
 export PEPC_NO_COMPILATION_UNITS=1
 "$stage0/pep-build$exe" -O tools/pep-package/main.pep \
   -o "$pepc_build/pep-package$exe" --build "$pepc_build/pep-package-build"

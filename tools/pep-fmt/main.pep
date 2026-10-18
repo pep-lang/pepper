@@ -25,7 +25,7 @@ import "format";
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.9.4";
+    return "0.10.0-dev";
 }
 
 main(args: String[]): int {

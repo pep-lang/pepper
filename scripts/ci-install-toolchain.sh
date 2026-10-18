@@ -7,12 +7,14 @@
 #
 # It installs a published toolchain with the install scripts, as a user
 # would: install.sh, or install.ps1 on Windows, into a fresh home under
-# $RUNNER_TEMP. By default that is the build of main: the newest published
-# `vX.Y.Z-dev` prerelease (release.yml publishes it on every merge that
-# changes the compiler, the runtime or the tools), whatever version this
-# checkout's VERSION file holds, so a change of VERSION (a release, or the
-# next -dev) never asks for a build that is not published yet; --version
-# names a release instead. No job builds the compiler except the release
+# $RUNNER_TEMP. By default that is the newest published toolchain: the
+# build of main, the `vX.Y.Z-dev` prerelease release.yml publishes on every
+# merge that changes the compiler, the runtime or the tools, or a release
+# with a higher version (while main holds a release's version, nothing
+# moves the -dev tag). That is whatever version this checkout's VERSION
+# file holds, so a change of VERSION (a release, or the next -dev) never
+# asks for a build that is not published yet; --version names a release
+# instead. No job builds the compiler except the release
 # build, which builds it with the toolchain this installs.
 #
 # Environment: GH_TOKEN or GITHUB_TOKEN, to list and download the releases
@@ -48,8 +50,12 @@ if [ -z "$version" ]; then
   else
     releases="$(curl -fsSL "$url")"
   fi
-  version="$(sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*-dev\)".*/\1/p' <<< "$releases" | sed -n 1p)"
-  [ -n "$version" ] || { echo "error: no build of main (vX.Y.Z-dev prerelease) is published" >&2; exit 1; }
+  # The highest version, a release sorting after its own -dev: the -dev tag
+  # goes stale whenever main holds a release's version (#950).
+  version="$(sed -n 's/^ *"tag_name": *"v\([0-9]*\.[0-9]*\.[0-9]*\(-dev\)\{0,1\}\)".*/\1/p' <<< "$releases" \
+    | awk -F'[.-]' '{ print $1, $2, $3, ($4 == "dev" ? 0 : 1), $0 }' \
+    | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -d' ' -f5)"
+  [ -n "$version" ] || { echo "error: no toolchain (vX.Y.Z release or vX.Y.Z-dev prerelease) is published" >&2; exit 1; }
 fi
 home="${RUNNER_TEMP:-$target}/pepper-home"
 rm -rf "$home"

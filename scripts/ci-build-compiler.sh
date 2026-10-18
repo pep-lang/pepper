@@ -43,10 +43,11 @@ export PEPPER_RUNTIME="$root/runtime"
 echo "=== building tools/compiler with $("$stage0/pep-build$exe" --version)"
 # Fetched up front, so a failed fetch shows pep-package's own error.
 "$stage0/pep-package$exe" -C tools/compiler fetch
-# shortcut: a stage 0 older than 0.9.4 fails on the runtime's number
-# extensions that declare `Comparable` when it checks a compilation unit
-# again (#950), so it builds without compilation units. Drop the variable
-# once the published stage 0 is 0.9.4 or later.
+# shortcut: a stage 0 older than 0.10.0-dev (v0.9.4 too) fails on the
+# runtime's number extensions that declare `Comparable` when it checks
+# a compilation unit again (#950), so it builds without compilation
+# units. Drop the variable once the published stage 0 is 0.10.0-dev or
+# later.
 PEPC_NO_COMPILATION_UNITS=1 "$stage0/pep-build$exe" -O tools/compiler/main.pep \
   -o "$out/pep-build$exe" --build "$out/build" "${llvm[@]+"${llvm[@]}"}"
 # pepc loads LLVM-C.dll from its own folder.

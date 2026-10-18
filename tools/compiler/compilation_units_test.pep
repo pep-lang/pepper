@@ -351,3 +351,20 @@ a_root_another_file_reads_has_units_only_when_it_need_not_be_last() {
     expect_true(units.count > 1);
     expect_true(units[0].files.contains(0));
 }
+
+# A number type's trait extension with a required method, in a compilation
+# unit below: checking that unit again found its methods lowered to
+# functions already and reported "'char' does not implement 'rank'" (#950).
+[Test]
+keeps_a_number_extension_a_unit_below_lowered() {
+    _builds_and_runs(
+        "number_trait_extension",
+        [
+            (
+                "ranks.pep",
+                "export trait Ranked {\n    rank(): int;\n    doubled(): int {\n        return rank() * 2;\n    }\n}\nexport extend char with Ranked {\n    rank(): int {\n        return this as int;\n    }\n}\n"
+            ),
+            ("main.pep", "import \"ranks\";\nmain(): int {\n    return ('a' as char).doubled() - 194;\n}\n")
+        ]
+    );
+}

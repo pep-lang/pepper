@@ -3,7 +3,7 @@
 # to download.
 #
 # Each leg runs scripts/release-build.sh, which provisions LLVM and clang,
-# installs stage 0, the newest published build of main
+# installs stage 0, the newest published toolchain
 # (scripts/ci-install-toolchain.sh), builds `pep-build` (pepc,
 # tools/compiler) with it, then with itself, builds
 # the other tools with the result, lays them out as an install (bin/,
@@ -89,7 +89,7 @@ env:
 jobs:
   # The version to build and whether to publish it, as a release or as the
   # prerelease build of main. Stage 0, the published toolchain that builds
-  # it, is always the newest build of main (release-build.sh with
+  # it, is always the newest published toolchain (release-build.sh with
   # PEPPER_STAGE0_INSTALL), whatever VERSION holds: v0.9.0 was tagged on a
   # commit that moved VERSION from 0.4.0-dev, and stage 0 named from VERSION
   # (0.9.0-dev) had never been published.
@@ -183,7 +183,7 @@ jobs:
           # releases on Windows.
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ matrix.target }}
-          # Stage 0: the newest build of main, which release-build.sh
+          # Stage 0: the newest published toolchain, which release-build.sh
           # installs with the install scripts (as CI does) once it has
           # provisioned clang.
           PEPPER_STAGE0_INSTALL: "1"

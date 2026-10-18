@@ -28,7 +28,7 @@ import process;
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.9.4";
+    return "0.10.0-dev";
 }
 
 # How long a test may run, in seconds, when `--timeout` is not given.

@@ -3507,9 +3507,9 @@ compiler and pep-lsp depend on are cloned with deploy keys
     is prose only. It fails on a cancelled run.
   - `test-windows` (**`pepper-windows`**): provision LLVM 20
     (`ci-provision-llvm.sh`, cached; the compiler's tests link it through
-    pepper-llvm), install the build of main (the newest `x.y.z-dev`
-    prerelease `release.yml` publishes on each merge, through `install.sh` /
-    `install.ps1`), build `tools/compiler` with it when it changed
+    pepper-llvm), install the newest published toolchain (the `x.y.z-dev`
+    prerelease `release.yml` publishes on each merge, or a release with a
+    higher version, through `install.sh` / `install.ps1`), build `tools/compiler` with it when it changed
     (`ci-build-compiler.sh`), run `scripts/pepper-tests.sh`, and `pep-doc
     check`.
   - `test-macos` (**`pepper-macos`**) and `test-linux` (**`pepper-linux`**)
@@ -3554,7 +3554,7 @@ compiler and pep-lsp depend on are cloned with deploy keys
   `pepper-linux`, for glibc 2.28, with LLVM 20 built from source and
   cached), macos-arm64 (`pepper-macos`) and windows-x64 (`pepper-windows`)
   with `scripts/release-build.sh`: it provisions LLVM and clang, installs
-  stage 0 (the newest published build of main, whatever `VERSION` holds,
+  stage 0 (the newest published toolchain, whatever `VERSION` holds,
   as CI installs it), builds pepc with
   stage 0, then with itself, builds every tool with that, archives an
   install layout (`bin/`, `runtime/`) and smoke-tests it
