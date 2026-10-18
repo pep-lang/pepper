@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-17220b46.js";
+            window.path_to_searchindex_js = "../searchindex-832056db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2d913a78.js"></script>
@@ -199,11 +199,12 @@ generic function asks for an order with <code>T: Comparable</code>.</p>
 <code>other</code>, zero when the two sort together, and a positive number when it
 sorts after. The order must be total and consistent: two calls with the
 same values give the same answer, and <code>a.compare(b)</code> has the opposite
-sign of <code>b.compare(a)</code>. <code>Map</code>, <code>Set</code> and sorting rely on that.</p>
+sign of <code>b.compare(a)</code>. <code>Array.sort()</code>, <code>Map</code> and <code>Set</code> rely on that.</p>
 <p><code>float</code> and <code>double</code> are <code>Comparable</code> with a total order: NaN sorts
 after every number and with every other NaN, and <code>-0.0</code> with <code>0.0</code>.
 Their <code>&lt;</code> and <code>&gt;</code> keep IEEE behavior (false whenever NaN takes part),
-while <code>compare</code>, <code>clamp</code> and <code>Map</code> keys follow the total order.</p>
+while <code>compare</code>, <code>clamp</code>, <code>Array.sort()</code> and <code>Map</code> keys follow the total
+order.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">struct Version {
     var major: int;
@@ -529,6 +530,25 @@ value, with NaN after every number and equal to every NaN, and
 <pre><code class="language-pepper">var nan = 0.0 / 0.0;
 assert((1.0).compare(nan) &lt; 0, "NaN sorts last");
 assert(nan.compare(nan) == 0, "NaNs sort together");
+</code></pre>
+<h2 id="extend-array"><a class="header" href="#extend-array">extend Array<t></t></a></h2>
+<pre><code class="language-pepper">extend Array&lt;T: Comparable&gt;
+</code></pre>
+<p>Arrays of <code>Comparable</code> elements sort in the elements’ own order.</p>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h4 id="sort"><a class="header" href="#sort">sort</a></h4>
+<pre><code class="language-pepper">sort()
+</code></pre>
+<p>Sorts the elements in place into their own order, <code>compare</code>: by value
+for numbers (NaN last), by content for <code>String</code>. The sort is stable
+and otherwise behaves like <code>sort(compare)</code>.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if comparing modifies the Array (“Array modified during sort”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var numbers = [3, 1, 2];
+numbers.sort();   # [1, 2, 3]
 </code></pre>
 
                     </main>

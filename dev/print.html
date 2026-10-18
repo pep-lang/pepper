@@ -37,7 +37,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-17220b46.js";
+            window.path_to_searchindex_js = "searchindex-832056db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-2d913a78.js"></script>
@@ -4618,9 +4618,8 @@ changing the array.</li>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
 array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code>.</li>
-<li><code>sort</code> takes a comparer (<code>a.sort((x, y) =&gt; x.compare(y))</code>); a <code>sort()</code>
-with none, <code>sort_unstable</code>, <code>rotate</code>, <code>drain</code>, <code>chunks</code> and <code>windows</code> are
-not there yet.</li>
+<li><code>sort_unstable</code>, <code>rotate</code>, <code>drain</code>, <code>chunks</code> and <code>windows</code> are not
+there yet.</li>
 <li><code>String</code> has no slice type; <code>substr</code> copies.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
@@ -7317,10 +7316,13 @@ main(): int {
     releases[Version(1, 5)] = "first";
     assert(releases.first().value().1 == "first", "sorted by compare");
 
-    # Sorting takes the order as a comparer.
+    # An array of a Comparable type sorts in its order; a comparer gives
+    # any other.
     var versions = [Version(2, 1), Version(1, 5)];
-    versions.sort((a, b) =&gt; a.compare(b));
+    versions.sort();
     assert(versions[0].major == 1, "sorted");
+    versions.sort((a, b) =&gt; b.compare(a));
+    assert(versions[0].major == 2, "sorted in reverse");
     return 0;
 }
 </code></pre>
@@ -7330,6 +7332,11 @@ the trait’s version fills in only what the type leaves out.</p>
 compare the same way, <code>a.compare(b)</code> has the opposite sign of
 <code>b.compare(a)</code>, and if <code>a</code> sorts before <code>b</code> and <code>b</code> before <code>c</code>, <code>a</code> sorts
 before <code>c</code>. <code>Map</code>, <code>Set</code> and sorting depend on it.</p>
+<h2 id="sorting"><a class="header" href="#sorting">Sorting</a></h2>
+<p>An array of <code>Comparable</code> elements sorts in their own order with <code>sort()</code>,
+stably, as <code>sort((a, b) =&gt; a.compare(b))</code> would. Floats sort in the total
+order, NaN last. Any other order still takes a comparer:
+<code>items.sort((a, b) =&gt; b.compare(a))</code> sorts in reverse.</p>
 <h2 id="numbers-char-and-string"><a class="header" href="#numbers-char-and-string">Numbers, <code>char</code> and <code>String</code></a></h2>
 <p>Every number type and <code>char</code> is <code>Comparable</code> by value, and <code>String</code> by
 content, the order of <code>String.compare</code>. Their <code>compare</code> returns -1, 0 or 1
@@ -7341,10 +7348,6 @@ and <code>&gt;=</code> keep IEEE behavior, false whenever a NaN takes part, whil
 cannot break a map.</p>
 <h2 id="not-yet-1"><a class="header" href="#not-yet-1">Not yet</a></h2>
 <ul>
-<li><code>Array.sort()</code> takes a comparer: <code>items.sort((a, b) =&gt; a.compare(b))</code>
-sorts in the elements’ own order. A <code>sort()</code> with no comparer comes once
-the published toolchain that builds Pepper has the compiler fix this
-needs.</li>
 <li>Tuples and <code>Optional</code> are not <code>Comparable</code>, and <code>Comparable</code> is not
 derived from a struct’s fields: a struct writes its <code>compare</code>, as
 <code>Version</code> does above.</li>
@@ -31654,11 +31657,12 @@ generic function asks for an order with <code>T: Comparable</code>.</p>
 <code>other</code>, zero when the two sort together, and a positive number when it
 sorts after. The order must be total and consistent: two calls with the
 same values give the same answer, and <code>a.compare(b)</code> has the opposite
-sign of <code>b.compare(a)</code>. <code>Map</code>, <code>Set</code> and sorting rely on that.</p>
+sign of <code>b.compare(a)</code>. <code>Array.sort()</code>, <code>Map</code> and <code>Set</code> rely on that.</p>
 <p><code>float</code> and <code>double</code> are <code>Comparable</code> with a total order: NaN sorts
 after every number and with every other NaN, and <code>-0.0</code> with <code>0.0</code>.
 Their <code>&lt;</code> and <code>&gt;</code> keep IEEE behavior (false whenever NaN takes part),
-while <code>compare</code>, <code>clamp</code> and <code>Map</code> keys follow the total order.</p>
+while <code>compare</code>, <code>clamp</code>, <code>Array.sort()</code> and <code>Map</code> keys follow the total
+order.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">struct Version {
     var major: int;
@@ -31985,6 +31989,25 @@ value, with NaN after every number and equal to every NaN, and
 assert((1.0).compare(nan) &lt; 0, "NaN sorts last");
 assert(nan.compare(nan) == 0, "NaNs sort together");
 </code></pre>
+<h2 id="extend-array"><a class="header" href="#extend-array">extend Array<t></t></a></h2>
+<pre><code class="language-pepper">extend Array&lt;T: Comparable&gt;
+</code></pre>
+<p>Arrays of <code>Comparable</code> elements sort in the elements’ own order.</p>
+<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h4 id="sort"><a class="header" href="#sort">sort</a></h4>
+<pre><code class="language-pepper">sort()
+</code></pre>
+<p>Sorts the elements in place into their own order, <code>compare</code>: by value
+for numbers (NaN last), by content for <code>String</code>. The sort is stable
+and otherwise behaves like <code>sort(compare)</code>.</p>
+<p><strong>Panics</strong></p>
+<ul>
+<li>if comparing modifies the Array (“Array modified during sort”)</li>
+</ul>
+<p><strong>Example</strong></p>
+<pre><code class="language-pepper">var numbers = [3, 1, 2];
+numbers.sort();   # [1, 2, 3]
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><!-- Generated from runtime/range.pep by `pep-doc reference`. Do not edit. -->
 <h1 id="ranges"><a class="header" href="#ranges">Ranges</a></h1>
 <p>Ranges of numbers: <code>a..b</code> and <code>a..&gt;b</code>.</p>
@@ -32050,7 +32073,7 @@ reached.</p>
 <li><code>end</code> — the bound: one past the last number, or the last number when <code>inclusive</code></li>
 <li><code>inclusive</code> — whether <code>end</code> is part of the range</li>
 </ul>
-<h3 id="methods-11"><a class="header" href="#methods-11">Methods</a></h3>
+<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
 <h4 id="next-1"><a class="header" href="#next-1">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -32170,7 +32193,7 @@ would otherwise perform while the Array grows to a known size.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var a = Array&lt;int&gt;(16);   # a.count == 0, a.capacity == 16
 </code></pre>
-<h3 id="methods-12"><a class="header" href="#methods-12">Methods</a></h3>
+<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
 <h4 id="iterate-2"><a class="header" href="#iterate-2">iterate</a></h4>
 <pre><code class="language-pepper">[__Reads] iterate(): ArrayIterator&lt;T&gt;
 </code></pre>
@@ -32437,7 +32460,7 @@ invalidated.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">a.reverse();   # [1, 2, 3] becomes [3, 2, 1]
 </code></pre>
-<h4 id="sort"><a class="header" href="#sort">sort</a></h4>
+<h4 id="sort-1"><a class="header" href="#sort-1">sort</a></h4>
 <pre><code class="language-pepper">sort(compare: (T, T) =&gt; int)
 </code></pre>
 <p>Sorts the elements in place into the order <code>compare</code> defines. The
@@ -32777,7 +32800,7 @@ same as <code>append_all</code>.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var c = a + b;
 </code></pre>
-<h2 id="extend-array"><a class="header" href="#extend-array">extend Array<t></t></a></h2>
+<h2 id="extend-array-1"><a class="header" href="#extend-array-1">extend Array<t></t></a></h2>
 <pre><code class="language-pepper">extend Array&lt;T: Comparable&gt;
 </code></pre>
 <p>The searches of a sorted Array, for an element type with an order
@@ -33331,7 +33354,7 @@ three arrays of that many slots.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var m = HashMap&lt;int, int&gt;(64);   # 64 slots, 32 entries before growing
 </code></pre>
-<h3 id="methods-13"><a class="header" href="#methods-13">Methods</a></h3>
+<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
 <h4 id="grow-2"><a class="header" href="#grow-2">grow</a></h4>
 <pre><code class="language-pepper">grow()
 </code></pre>
@@ -33946,7 +33969,7 @@ for (var (name, score) in scores) {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty map.</p>
-<h3 id="methods-14"><a class="header" href="#methods-14">Methods</a></h3>
+<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
 <h4 id="clear-3"><a class="header" href="#clear-3">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
@@ -34503,7 +34526,7 @@ for (var (key, value) in config) {
 <ul>
 <li><code>initial_capacity</code> — the minimum number of slots in the table</li>
 </ul>
-<h3 id="methods-15"><a class="header" href="#methods-15">Methods</a></h3>
+<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
 <h4 id="clear-4"><a class="header" href="#clear-4">clear</a></h4>
 <pre><code class="language-pepper">clear()
 </code></pre>
@@ -34757,7 +34780,7 @@ a set is expected, so an array literal can initialize one.</p>
 <pre><code class="language-pepper">BitSet flags = [1, 4, 4];
 assert(flags.count == 2, "4 is kept once");
 </code></pre>
-<h3 id="methods-16"><a class="header" href="#methods-16">Methods</a></h3>
+<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
 <h4 id="reserve-1"><a class="header" href="#reserve-1">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: int)
 </code></pre>
@@ -35097,7 +35120,7 @@ wherever a deque is expected, so an array literal can initialize one.</p>
 <pre><code class="language-pepper">Deque&lt;String&gt; names = ["ada", "grace"];
 assert(names.front() == "ada", "the first element is the front");
 </code></pre>
-<h3 id="methods-17"><a class="header" href="#methods-17">Methods</a></h3>
+<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
 <h4 id="reserve-2"><a class="header" href="#reserve-2">reserve</a></h4>
 <pre><code class="language-pepper">reserve(capacity: ulong)
 </code></pre>
@@ -35358,7 +35381,7 @@ wherever a queue is expected, so an array literal can initialize one.</p>
 <li><code>items</code> — the elements, in any order</li>
 <li><code>compare</code> — returns a negative number, zero or a positive number as its first argument sorts before, with or after its second</li>
 </ul>
-<h3 id="methods-18"><a class="header" href="#methods-18">Methods</a></h3>
+<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
 <h4 id="push"><a class="header" href="#push">push</a></h4>
 <pre><code class="language-pepper">push(item: T)
 </code></pre>
@@ -35464,7 +35487,7 @@ main(): int {
     return total;
 }
 </code></pre>
-<h3 id="methods-19"><a class="header" href="#methods-19">Methods</a></h3>
+<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
 <h4 id="next-8"><a class="header" href="#next-8">next</a></h4>
 <pre><code class="language-pepper">next(): bool
 </code></pre>
@@ -35855,7 +35878,7 @@ main(): int {
     return open;   # 0: the session was destroyed at the end of the block
 }
 </code></pre>
-<h3 id="methods-20"><a class="header" href="#methods-20">Methods</a></h3>
+<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
 <h4 id="enter"><a class="header" href="#enter">enter</a></h4>
 <pre><code class="language-pepper">enter(): T
 </code></pre>
@@ -35922,7 +35945,7 @@ freely.</p>
 <ul>
 <li><code>target</code> — the object to point at; a null reference makes a weak reference that is always expired</li>
 </ul>
-<h3 id="methods-21"><a class="header" href="#methods-21">Methods</a></h3>
+<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
 <h4 id="expired"><a class="header" href="#expired">expired</a></h4>
 <pre><code class="language-pepper">expired(): bool
 </code></pre>
@@ -35997,7 +36020,7 @@ it is destroyed.</p>
 <li><code>value</code> — the resource to own</li>
 <li><code>release</code> — the function that frees <code>value</code>; it is called at most once</li>
 </ul>
-<h3 id="methods-22"><a class="header" href="#methods-22">Methods</a></h3>
+<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
 <h4 id="is_owned"><a class="header" href="#is_owned">is_owned</a></h4>
 <pre><code class="language-pepper">is_owned(): bool
 </code></pre>
@@ -36133,7 +36156,7 @@ var done = Result&lt;void&gt;.ok();
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">var r = Result&lt;int&gt;.err(Error("boom"));
 </code></pre>
-<h3 id="methods-23"><a class="header" href="#methods-23">Methods</a></h3>
+<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
 <h4 id="is_ok"><a class="header" href="#is_ok">is_ok</a></h4>
 <pre><code class="language-pepper">is_ok(): bool
 </code></pre>
@@ -36283,7 +36306,7 @@ instead.</p>
 <ul>
 <li>an Empty optional</li>
 </ul>
-<h3 id="methods-24"><a class="header" href="#methods-24">Methods</a></h3>
+<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
 <h4 id="is_value"><a class="header" href="#is_value">is_value</a></h4>
 <pre><code class="language-pepper">is_value(): bool
 </code></pre>
@@ -36521,7 +36544,7 @@ shared.</p>
 
 extend Buffer with Copyable&lt;Buffer&gt;;
 </code></pre>
-<h3 id="methods-25"><a class="header" href="#methods-25">Methods</a></h3>
+<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
 <h4 id="copy-1-3"><a class="header" href="#copy-1-3">copy</a></h4>
 <pre><code class="language-pepper">copy(): T
 </code></pre>
@@ -36706,7 +36729,7 @@ value, and empty pairs (<code>a=1&amp;&amp;b=2</code>) are skipped.</p>
 <pre><code class="language-pepper">var pairs = Uri.decode_form("q=pepper+lang&amp;page=2").value();
 assert(pairs.count == 2 &amp;&amp; pairs[0].1 == "pepper lang", "decoded");
 </code></pre>
-<h3 id="methods-26"><a class="header" href="#methods-26">Methods</a></h3>
+<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
 <h4 id="is_absolute"><a class="header" href="#is_absolute">is_absolute</a></h4>
 <pre><code class="language-pepper">is_absolute(): bool
 </code></pre>
@@ -37187,7 +37210,7 @@ input, so <code>is_invalid_input()</code> holds.</p>
 var error = io.IoError.invalid_input("data.bin: bad header");
 assert(error.is_invalid_input(), "the kind");
 </code></pre>
-<h3 id="methods-27"><a class="header" href="#methods-27">Methods</a></h3>
+<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
 <h4 id="kind"><a class="header" href="#kind">kind</a></h4>
 <pre><code class="language-pepper">kind(): ErrorKind
 </code></pre>
@@ -37416,7 +37439,7 @@ count_lines(source: io.Reader): int {
     return count;
 }
 </code></pre>
-<h3 id="methods-28"><a class="header" href="#methods-28">Methods</a></h3>
+<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
 <h4 id="read"><a class="header" href="#read">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -37745,7 +37768,7 @@ extension”; it now returns none.</p>
 <ul>
 <li>the index of the extension’s dot, or none when the name has no such dot (<code>noext</code>, <code>.bashrc</code>, the empty name)</li>
 </ul>
-<h3 id="methods-29"><a class="header" href="#methods-29">Methods</a></h3>
+<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
 <h4 id="to_string-24"><a class="header" href="#to_string-24">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -38300,7 +38323,7 @@ var f = r.value();
 </code></pre>
 <p>Creates an <code>OpenOptions</code> with every option off. Set at least one of
 <code>read</code>, <code>write</code> or <code>append</code> before opening.</p>
-<h3 id="methods-30"><a class="header" href="#methods-30">Methods</a></h3>
+<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
 <h4 id="read-1"><a class="header" href="#read-1">read</a></h4>
 <pre><code class="language-pepper">read(v: bool): OpenOptions
 </code></pre>
@@ -39586,7 +39609,7 @@ junctions included), which is not followed.</p>
 <p>Creates an empty entry: empty <code>path</code> and <code>name</code>, all kind flags
 false and <code>file_type</code> <code>Other</code>. Entries are normally obtained from
 <code>Directory.entries()</code>.</p>
-<h3 id="methods-31"><a class="header" href="#methods-31">Methods</a></h3>
+<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
 <h4 id="metadata-3"><a class="header" href="#metadata-3">metadata</a></h4>
 <pre><code class="language-pepper">metadata(): IoResult&lt;Metadata&gt;
 </code></pre>
@@ -40082,7 +40105,7 @@ print(r.is_err());   # true: 300 is out of range
 var scoped = IpAddress.parse("fe80::1%7").value();
 print(scoped.scope_id());   # 7
 </code></pre>
-<h3 id="methods-32"><a class="header" href="#methods-32">Methods</a></h3>
+<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
 <h4 id="is_v4"><a class="header" href="#is_v4">is_v4</a></h4>
 <pre><code class="language-pepper">is_v4(): bool
 </code></pre>
@@ -40409,7 +40432,7 @@ fails. Use <code>TcpListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when another socket has the port, <code>is_address_not_available()</code> when the address is not one of this machine’s, <code>is_permission_denied()</code> for a privileged port, or another platform error</li>
 </ul>
-<h3 id="methods-33"><a class="header" href="#methods-33">Methods</a></h3>
+<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
 <h4 id="is_open-1"><a class="header" href="#is_open-1">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -41206,7 +41229,7 @@ fails. Use <code>UnixListener.bind</code> to get an open one.</p>
 <ul>
 <li>the listening socket; an error with <code>is_address_in_use()</code> when a file already exists at <code>path</code>, <code>is_invalid_input()</code> when the path is empty or too long, <code>is_not_found()</code> when its directory does not exist, <code>is_permission_denied()</code> when the directory cannot be written, or another platform error</li>
 </ul>
-<h3 id="methods-34"><a class="header" href="#methods-34">Methods</a></h3>
+<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
 <h4 id="is_open-3"><a class="header" href="#is_open-3">is_open</a></h4>
 <pre><code class="language-pepper">is_open(): bool
 </code></pre>
@@ -41806,7 +41829,7 @@ assert(count == 2, "two lines");
 <ul>
 <li><code>data</code> — the bytes to read</li>
 </ul>
-<h3 id="methods-35"><a class="header" href="#methods-35">Methods</a></h3>
+<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
 <h4 id="read-4"><a class="header" href="#read-4">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): IoResult&lt;ulong&gt;
 </code></pre>
@@ -41896,7 +41919,7 @@ main(): int {
     return 0;
 }
 </code></pre>
-<h3 id="methods-36"><a class="header" href="#methods-36">Methods</a></h3>
+<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
 <h4 id="write_all-5"><a class="header" href="#write_all-5">write_all</a></h4>
 <pre><code class="language-pepper">write_all(data: u8[]): IoResult&lt;void&gt;
 </code></pre>
@@ -42051,7 +42074,7 @@ another thread-safe type. <code>async.Atomic&lt;String&gt;</code> is a compile e
 <pre><code class="language-pepper">var a = async.Atomic&lt;int&gt;(41);
 var p = async.Atomic&lt;Point&gt;();   # holds null until a store
 </code></pre>
-<h3 id="methods-37"><a class="header" href="#methods-37">Methods</a></h3>
+<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
 <h4 id="load"><a class="header" href="#load">load</a></h4>
 <pre><code class="language-pepper">load(): T
 </code></pre>
@@ -42341,7 +42364,7 @@ early.</p>
 <ul>
 <li><code>milliseconds</code> — how long to sleep; 0 returns right away</li>
 </ul>
-<h3 id="methods-38"><a class="header" href="#methods-38">Methods</a></h3>
+<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
 <h4 id="id"><a class="header" href="#id">id</a></h4>
 <pre><code class="language-pepper">id(): ThreadId
 </code></pre>
@@ -42443,7 +42466,7 @@ main(): int {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a thread-local variable. No thread has a value yet.</p>
-<h3 id="methods-39"><a class="header" href="#methods-39">Methods</a></h3>
+<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
 <h4 id="get-5"><a class="header" href="#get-5">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -42613,7 +42636,7 @@ its reference over, so nothing is copied.</p>
 <p><strong>Example</strong></p>
 <pre><code class="language-pepper">const names = async.Mutex&lt;Array&lt;String&gt;&gt;(Array&lt;String&gt;());
 </code></pre>
-<h3 id="methods-40"><a class="header" href="#methods-40">Methods</a></h3>
+<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
 <h4 id="lock-1"><a class="header" href="#lock-1">lock</a></h4>
 <pre><code class="language-pepper">lock(): MutexGuard&lt;T&gt;
 </code></pre>
@@ -42948,7 +42971,7 @@ download(url: String) {
 <ul>
 <li><code>permits</code> — how many permits are free at first; 0 makes every <code>acquire()</code> wait for a <code>release()</code></li>
 </ul>
-<h3 id="methods-41"><a class="header" href="#methods-41">Methods</a></h3>
+<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
 <h4 id="acquire"><a class="header" href="#acquire">acquire</a></h4>
 <pre><code class="language-pepper">acquire()
 </code></pre>
@@ -43201,7 +43224,7 @@ width(): long {
 <ul>
 <li><code>value</code> — the value to protect</li>
 </ul>
-<h3 id="methods-42"><a class="header" href="#methods-42">Methods</a></h3>
+<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
 <h4 id="read-5"><a class="header" href="#read-5">read</a></h4>
 <pre><code class="language-pepper">read(): RwLockReadGuard&lt;T&gt;
 </code></pre>
@@ -43412,7 +43435,7 @@ work() {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a Once whose body has not run.</p>
-<h3 id="methods-43"><a class="header" href="#methods-43">Methods</a></h3>
+<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
 <h4 id="call-1"><a class="header" href="#call-1">call</a></h4>
 <pre><code class="language-pepper">call(body: ThreadBody)
 </code></pre>
@@ -43577,7 +43600,7 @@ change it as soon as it returns.</p>
 <pre><code class="language-pepper">var bounded = async.Channel&lt;long&gt;(16);
 var unbounded = async.Channel&lt;long&gt;();
 </code></pre>
-<h3 id="methods-44"><a class="header" href="#methods-44">Methods</a></h3>
+<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
 <h4 id="send-2"><a class="header" href="#send-2">send</a></h4>
 <pre><code class="language-pepper">send([Move] value: T): bool
 </code></pre>
@@ -43793,7 +43816,7 @@ while (running) {
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a select with no channels yet.</p>
-<h3 id="methods-45"><a class="header" href="#methods-45">Methods</a></h3>
+<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
 <h4 id="receive-3"><a class="header" href="#receive-3">receive</a></h4>
 <pre><code class="language-pepper">receive&lt;T&gt;(channel: Channel&lt;T&gt;, wrap: (T) =&gt; E)
 </code></pre>
@@ -43953,7 +43976,7 @@ function called in a task can wait without being marked in any way.</p>
 <ul>
 <li><code>message</code> — a description of what went wrong</li>
 </ul>
-<h3 id="methods-46"><a class="header" href="#methods-46">Methods</a></h3>
+<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
 <h4 id="is_cancelled-1"><a class="header" href="#is_cancelled-1">is_cancelled</a></h4>
 <pre><code class="language-pepper">is_cancelled(): bool
 </code></pre>
@@ -44518,7 +44541,7 @@ main(): int {
 <ul>
 <li>if the operating system has no thread-local keys left</li>
 </ul>
-<h3 id="methods-47"><a class="header" href="#methods-47">Methods</a></h3>
+<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
 <h4 id="get-7"><a class="header" href="#get-7">get</a></h4>
 <pre><code class="language-pepper">get(): T
 </code></pre>
@@ -44794,7 +44817,7 @@ parent’s environment and current directory, and inherited streams.</p>
 <ul>
 <li><code>program</code> — the program: a name to search for on the <code>PATH</code>, or a path</li>
 </ul>
-<h3 id="methods-48"><a class="header" href="#methods-48">Methods</a></h3>
+<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
 <h4 id="argument"><a class="header" href="#argument">argument</a></h4>
 <pre><code class="language-pepper">argument(value: String): Command
 </code></pre>
@@ -45013,7 +45036,7 @@ assert(status.code().value() == 1, "with code 1");
 <li><code>code</code> — the exit code, when the process exited</li>
 <li><code>signal</code> — the signal that ended the process, or 0 when it exited</li>
 </ul>
-<h3 id="methods-49"><a class="header" href="#methods-49">Methods</a></h3>
+<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
 <h4 id="success"><a class="header" href="#success">success</a></h4>
 <pre><code class="language-pepper">success(): bool
 </code></pre>
@@ -45614,7 +45637,7 @@ main(): int {
 <ul>
 <li>if the duration does not fit in a <code>ulong</code> of nanoseconds (about 584 years)</li>
 </ul>
-<h3 id="methods-50"><a class="header" href="#methods-50">Methods</a></h3>
+<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
 <h4 id="nanoseconds"><a class="header" href="#nanoseconds">nanoseconds</a></h4>
 <pre><code class="language-pepper">nanoseconds(): ulong
 </code></pre>
@@ -46482,7 +46505,7 @@ name.</p>
 <pre><code class="language-pepper">Sunday
 </code></pre>
 <p>The seventh and last day of the ISO week.</p>
-<h3 id="methods-51"><a class="header" href="#methods-51">Methods</a></h3>
+<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
 <h4 id="to_string-28"><a class="header" href="#to_string-28">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -47342,7 +47365,7 @@ or an error when <code>text</code> is not one.</p>
 <ul>
 <li>the offset, or an error saying what is wrong with <code>text</code></li>
 </ul>
-<h3 id="methods-52"><a class="header" href="#methods-52">Methods</a></h3>
+<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
 <h4 id="is_utc"><a class="header" href="#is_utc">is_utc</a></h4>
 <pre><code class="language-pepper">is_utc(): bool
 </code></pre>
@@ -47709,7 +47732,7 @@ when the system does not know it. <code>UTC</code> is always known.</p>
 <ul>
 <li>the zone, or an error saying it was not found</li>
 </ul>
-<h3 id="methods-53"><a class="header" href="#methods-53">Methods</a></h3>
+<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
 <h4 id="offset_at"><a class="header" href="#offset_at">offset_at</a></h4>
 <pre><code class="language-pepper">offset_at(time: os.SystemTime): Offset
 </code></pre>
@@ -48118,7 +48141,7 @@ vector’s size (<code>N</code> times the size of <code>T</code>).</p>
 <ul>
 <li>if <code>array</code> has fewer than <code>index + N</code> elements</li>
 </ul>
-<h3 id="methods-54"><a class="header" href="#methods-54">Methods</a></h3>
+<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
 <h4 id="store-1"><a class="header" href="#store-1">store</a></h4>
 <pre><code class="language-pepper">store(pointer: __ptr&lt;T&gt;)
 </code></pre>
@@ -49132,7 +49155,7 @@ position yet.</p>
 <ul>
 <li><code>address</code> — the return address</li>
 </ul>
-<h3 id="methods-55"><a class="header" href="#methods-55">Methods</a></h3>
+<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
 <h4 id="to_string-30"><a class="header" href="#to_string-30">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -50075,7 +50098,7 @@ escaped, so the result matches <code>text</code> literally.</p>
 
 assert(regex.Regex.escape("1+1=2?") == "1\\+1=2\\?", "escaped");
 </code></pre>
-<h3 id="methods-56"><a class="header" href="#methods-56">Methods</a></h3>
+<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
 <h4 id="pattern"><a class="header" href="#pattern">pattern</a></h4>
 <pre><code class="language-pepper">pattern(): String
 </code></pre>
@@ -50553,7 +50576,7 @@ var list = json.JsonValue.array([json.JsonValue.Integer(1)]);
 list.append(json.JsonValue.Integer(2));
 assert(list.to_string() == "[1,2]", "two elements");
 </code></pre>
-<h3 id="methods-57"><a class="header" href="#methods-57">Methods</a></h3>
+<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
 <h4 id="operator--43"><a class="header" href="#operator--43">operator []</a></h4>
 <pre><code class="language-pepper">[](key: String): JsonValue
 </code></pre>
@@ -50829,7 +50852,7 @@ syntax. <code>decode</code> and <code>from_json</code> set it, and start <code>m
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-58"><a class="header" href="#methods-58">Methods</a></h3>
+<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
 <h4 id="to_string-33"><a class="header" href="#to_string-33">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -50920,7 +50943,7 @@ assert(document.comments("$.tab_size")[0] == "// The editor.", "by path");
 <ul>
 <li><code>root</code> — the document’s value</li>
 </ul>
-<h3 id="methods-59"><a class="header" href="#methods-59">Methods</a></h3>
+<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
 <h4 id="comments-1"><a class="header" href="#comments-1">comments</a></h4>
 <pre><code class="language-pepper">comments(path: String): Array&lt;String&gt;
 </code></pre>
@@ -51456,7 +51479,7 @@ writes none.</p>
 <ul>
 <li>the date-time</li>
 </ul>
-<h3 id="methods-60"><a class="header" href="#methods-60">Methods</a></h3>
+<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
 <h4 id="to_string-35"><a class="header" href="#to_string-35">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -51877,7 +51900,7 @@ start <code>message</code> with it.</p>
 <li><code>column</code> — the column of the error, from 1</li>
 <li><code>offset</code> — the byte offset of the error, from 0</li>
 </ul>
-<h3 id="methods-61"><a class="header" href="#methods-61">Methods</a></h3>
+<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
 <h4 id="to_string-36"><a class="header" href="#to_string-36">to_string</a></h4>
 <pre><code class="language-pepper">to_string(): String
 </code></pre>
@@ -51961,7 +51984,7 @@ assert(
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty document.</p>
-<h3 id="methods-62"><a class="header" href="#methods-62">Methods</a></h3>
+<h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
 <h4 id="root-1"><a class="header" href="#root-1">root</a></h4>
 <pre><code class="language-pepper">root(): TomlValue
 </code></pre>
@@ -52540,7 +52563,7 @@ starts from it.</p>
 <ul>
 <li>if <code>format</code> is <code>Format.Gzip</code> (“gzip data has no preset dictionary”)</li>
 </ul>
-<h3 id="methods-63"><a class="header" href="#methods-63">Methods</a></h3>
+<h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
 <h4 id="read-6"><a class="header" href="#read-6">read</a></h4>
 <pre><code class="language-pepper">read(buffer: u8[], max: ulong): io.IoResult&lt;ulong&gt;
 </code></pre>
@@ -52697,7 +52720,7 @@ assert(compress.Crc32.of("123456789".bytes()) == 0xCBF43926, "the check value");
 <ul>
 <li>the checksum</li>
 </ul>
-<h3 id="methods-64"><a class="header" href="#methods-64">Methods</a></h3>
+<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
 <h4 id="update"><a class="header" href="#update">update</a></h4>
 <pre><code class="language-pepper">update(data: u8[])
 </code></pre>
@@ -52900,7 +52923,7 @@ while (true) {
 <ul>
 <li><code>source</code> — the stream of the archive</li>
 </ul>
-<h3 id="methods-65"><a class="header" href="#methods-65">Methods</a></h3>
+<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
 <h4 id="next_entry"><a class="header" href="#next_entry">next_entry</a></h4>
 <pre><code class="language-pepper">next_entry(): io.IoResult&lt;TarEntry?&gt;
 </code></pre>
@@ -53205,7 +53228,7 @@ assert(hasher.finish_hex() == digest.to_hex(digest.sha256("hello world")), "same
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-66"><a class="header" href="#methods-66">Methods</a></h3>
+<h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
 <h4 id="reset-2"><a class="header" href="#reset-2">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -53312,7 +53335,7 @@ assert(hasher.finish_hex() == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", "git b
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates a hasher in the initial state, with no input.</p>
-<h3 id="methods-67"><a class="header" href="#methods-67">Methods</a></h3>
+<h3 id="methods-68"><a class="header" href="#methods-68">Methods</a></h3>
 <h4 id="reset-3"><a class="header" href="#reset-3">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -53466,7 +53489,7 @@ var hasher = digest.Blake3.derive_key("example.com 2026-10-16 session tokens v1"
 hasher.update("the shared secret");
 var key = hasher.finish();
 </code></pre>
-<h3 id="methods-68"><a class="header" href="#methods-68">Methods</a></h3>
+<h3 id="methods-69"><a class="header" href="#methods-69">Methods</a></h3>
 <h4 id="reset-4"><a class="header" href="#reset-4">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -53621,7 +53644,7 @@ input.</p>
 <ul>
 <li><code>key</code> — the secret key</li>
 </ul>
-<h3 id="methods-69"><a class="header" href="#methods-69">Methods</a></h3>
+<h3 id="methods-70"><a class="header" href="#methods-70">Methods</a></h3>
 <h4 id="reset-5"><a class="header" href="#reset-5">reset</a></h4>
 <pre><code class="language-pepper">reset()
 </code></pre>
@@ -53991,7 +54014,7 @@ case, in groups of 8, 4, 4, 4 and 12 separated by <code>-</code>.</p>
 <ul>
 <li>the UUID, or an error when <code>text</code> is not in that form</li>
 </ul>
-<h3 id="methods-70"><a class="header" href="#methods-70">Methods</a></h3>
+<h3 id="methods-71"><a class="header" href="#methods-71">Methods</a></h3>
 <h4 id="version"><a class="header" href="#version">version</a></h4>
 <pre><code class="language-pepper">version(): int
 </code></pre>
@@ -54109,7 +54132,7 @@ were parsed.</p>
 <li><code>about</code> — a sentence on what the program does, the help’s first line</li>
 <li><code>version</code> — the program’s version; when not empty, <code>--version</code> and <code>-V</code> print <code>name version</code></li>
 </ul>
-<h3 id="methods-71"><a class="header" href="#methods-71">Methods</a></h3>
+<h3 id="methods-72"><a class="header" href="#methods-72">Methods</a></h3>
 <h4 id="flag"><a class="header" href="#flag">flag</a></h4>
 <pre><code class="language-pepper">flag(name: String, short_name: String = "", help: String = "", global: bool = false): Flag
 </code></pre>
@@ -54802,7 +54825,7 @@ assert(headers["ACCEPT"] == "application/json", "one value");
 <pre><code class="language-pepper">construct()
 </code></pre>
 <p>Creates an empty set of fields.</p>
-<h3 id="methods-72"><a class="header" href="#methods-72">Methods</a></h3>
+<h3 id="methods-73"><a class="header" href="#methods-73">Methods</a></h3>
 <h4 id="names"><a class="header" href="#names">names</a></h4>
 <pre><code class="language-pepper">names(): String[]
 </code></pre>
@@ -55246,7 +55269,7 @@ sets the connector’s ALPN protocols to <code>h2</code> and <code>http/1.1</cod
 <li><code>connector</code> — the TLS connector to open <code>https://</code> connections with</li>
 <li><code>max_redirects</code> — the most redirects one request follows; 0 returns every redirect as it is</li>
 </ul>
-<h3 id="methods-73"><a class="header" href="#methods-73">Methods</a></h3>
+<h3 id="methods-74"><a class="header" href="#methods-74">Methods</a></h3>
 <h4 id="get-10"><a class="header" href="#get-10">get</a></h4>
 <pre><code class="language-pepper">get(url: String): io.IoResult&lt;Response&gt;
 </code></pre>
@@ -55583,7 +55606,7 @@ certificate. It sets the acceptor’s ALPN protocols to <code>h2</code> and
 <ul>
 <li>the server; the errors of <code>io.TcpListener.bind</code></li>
 </ul>
-<h3 id="methods-74"><a class="header" href="#methods-74">Methods</a></h3>
+<h3 id="methods-75"><a class="header" href="#methods-75">Methods</a></h3>
 <h4 id="local_address-4"><a class="header" href="#local_address-4">local_address</a></h4>
 <pre><code class="language-pepper">local_address(): io.IoResult&lt;io.SocketAddress&gt;
 </code></pre>
@@ -55695,7 +55718,7 @@ stream.write_all("ping");
 <ul>
 <li>the connector; an error when no TLS library is available (on Linux and macOS, OpenSSL 3: <code>libssl.so.3</code>, or Homebrew’s or MacPorts’ <code>libssl.3.dylib</code>)</li>
 </ul>
-<h3 id="methods-75"><a class="header" href="#methods-75">Methods</a></h3>
+<h3 id="methods-76"><a class="header" href="#methods-76">Methods</a></h3>
 <h4 id="add_root_certificate"><a class="header" href="#add_root_certificate">add_root_certificate</a></h4>
 <pre><code class="language-pepper">add_root_certificate(path: io.Path): io.IoResult&lt;void&gt;
 </code></pre>
@@ -56122,7 +56145,7 @@ elsewhere), so none holds <code>pep-test</code>’s pipes to its output open.</l
 <ul>
 <li><code>file</code> — the entry file’s path, as <code>pep-build</code> was given it, or the folder of the files of a test program built from several</li>
 </ul>
-<h3 id="methods-76"><a class="header" href="#methods-76">Methods</a></h3>
+<h3 id="methods-77"><a class="header" href="#methods-77">Methods</a></h3>
 <h4 id="from_file"><a class="header" href="#from_file">from_file</a></h4>
 <pre><code class="language-pepper">from_file(file: String)
 </code></pre>

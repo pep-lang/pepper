@@ -36,7 +36,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-17220b46.js";
+            window.path_to_searchindex_js = "../searchindex-832056db.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-2d913a78.js"></script>
@@ -268,9 +268,8 @@ changing the array.</li>
 <ul>
 <li>Slices are read-only; there is no slice that writes through to its
 array, and no <code>a[1..4]</code> syntax: write <code>a.slice(1, 4)</code>.</li>
-<li><code>sort</code> takes a comparer (<code>a.sort((x, y) =&gt; x.compare(y))</code>); a <code>sort()</code>
-with none, <code>sort_unstable</code>, <code>rotate</code>, <code>drain</code>, <code>chunks</code> and <code>windows</code> are
-not there yet.</li>
+<li><code>sort_unstable</code>, <code>rotate</code>, <code>drain</code>, <code>chunks</code> and <code>windows</code> are not
+there yet.</li>
 <li><code>String</code> has no slice type; <code>substr</code> copies.</li>
 </ul>
 
