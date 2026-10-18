@@ -1,14 +1,21 @@
 # process.signals: a signal the process gets arrives on every open channel
 # that names it, and not on one that does not.
 
+import async;
 import process;
 import [Signal] from process;
 import "../signals";
 
-# Sends the process Ctrl-C the way the system would.
+# Sends the process Ctrl-C the way the system would, and waits until the
+# runtime's watcher thread is done with it: it frees what it used after the
+# channels have the signal, and the leak check would count that otherwise.
 [Target(OS(Linux) || OS(Mac))]
 interrupt() {
+    var handled = _process_signals_handled.load();
     raise(2);  # SIGINT
+    while (_process_signals_handled.load() == handled) {
+        async.Thread.sleep(1);
+    }
 }
 
 # Windows has no way to send Ctrl-C to only this process, so call the

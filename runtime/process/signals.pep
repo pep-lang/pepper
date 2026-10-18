@@ -130,6 +130,12 @@ extern int raise(int number);
 [Target(OS(Linux) || OS(Mac))]
 const _process_signal_write_end = async.Atomic<int>(-1);
 
+# How many signals the watcher has finished with: it is done with the
+# memory it used for each once this counts it. A test waits on it before
+# counting allocations.
+[Target(OS(Linux) || OS(Mac))]
+const _process_signals_handled = async.Atomic<int>(0);
+
 # One byte per signal number, each holding its own number: what the handler
 # writes, since it cannot allocate.
 [Target(OS(Linux) || OS(Mac))]
@@ -206,7 +212,9 @@ _process_signal_watch(read_end: int) {
         }
         var number = byte[0] as int;
         var which = number == 2 ? Signal.Interrupt : (number == 15 ? Signal.Terminate : Signal.Hangup);
-        if (_process_deliver_signal(which)) {
+        var delivered = _process_deliver_signal(which);
+        _process_signals_handled.fetch_add(1);
+        if (delivered) {
             continue;
         }
         signal(number, __null);  # SIG_DFL
