@@ -59,7 +59,47 @@ builds_and_runs_the_examples_part_8() {
     builds_and_runs(7);
 }
 
-const PARTS = 8;
+[Test]
+builds_and_runs_the_examples_part_9() {
+    builds_and_runs(8);
+}
+
+[Test]
+builds_and_runs_the_examples_part_10() {
+    builds_and_runs(9);
+}
+
+[Test]
+builds_and_runs_the_examples_part_11() {
+    builds_and_runs(10);
+}
+
+[Test]
+builds_and_runs_the_examples_part_12() {
+    builds_and_runs(11);
+}
+
+[Test]
+builds_and_runs_the_examples_part_13() {
+    builds_and_runs(12);
+}
+
+[Test]
+builds_and_runs_the_examples_part_14() {
+    builds_and_runs(13);
+}
+
+[Test]
+builds_and_runs_the_examples_part_15() {
+    builds_and_runs(14);
+}
+
+[Test]
+builds_and_runs_the_examples_part_16() {
+    builds_and_runs(15);
+}
+
+const PARTS = 16;
 
 [Test]
 builds_and_runs_the_sample_optimized_with_debug_info_part_1() {
