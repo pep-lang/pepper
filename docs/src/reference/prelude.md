@@ -18,6 +18,8 @@ The prelude is the part of the standard library every program gets without an im
 - [Map and Set](map.md): Sorted collections: `Map<K, V>` and `Set<K>`, kept in key order on a red-black tree, and `compare<T>`, the ordering they sort keys by.
 - [OrderedMap](ordered_map.md): `OrderedMap<K, V>`: a hash map that keeps its keys in the order they were first inserted.
 - [BitSet](bitset.md): `BitSet`: a set of small non-negative integers, stored one bit each.
+- [Deque](deque.md): `Deque`: a double-ended queue over a growable ring buffer.
+- [PriorityQueue](priority_queue.md): `PriorityQueue`: a binary heap that hands out its greatest element first.
 - [Iterators](iterator.md): Something a `for` loop can step through, one element at a time.
 - [Scoped](scoped.md): The scope protocol behind `with (var x = scope) { ... } else { ... }`.
 - [Weak](weak.md): Weak references: `Weak<T>` points at an object without keeping it alive.

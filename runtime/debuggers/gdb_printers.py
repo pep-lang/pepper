@@ -74,6 +74,34 @@ class ArrayPrinter:
             yield "[%d]" % index, data[index]
 
 
+class DequePrinter:
+    """A Deque as its count and elements, front to back. Its ring
+    `_slots` is an Array of Optionals: element `i` is the value of slot
+    `(_head + i) % capacity`."""
+
+    def __init__(self, value, name):
+        self.object = _object(value)
+        self.name = name
+
+    def to_string(self):
+        if self.object is None:
+            return "null"
+        return "%s of count %d" % (self.name, int(self.object["_count"]))
+
+    def children(self):
+        if self.object is None:
+            return
+        yield from _counts(self.object)
+        slots = _object(self.object["_slots"])
+        if slots is None:
+            return
+        data = slots["_data"]
+        capacity = int(slots["_size"])
+        head = int(self.object["_head"])
+        for index in range(int(self.object["_count"])):
+            yield "[%d]" % index, data[(head + index) % capacity]["Value__value"]
+
+
 class OptionalPrinter:
     """An Optional as its case, `Empty` or `Value`, and a Value's value.
     An Optional is a value enum, held inline: its `__tag` is the case's
@@ -136,6 +164,7 @@ def _is_enum(type_):
 _PRINTERS = [
     (re.compile(r"^String$"), StringPrinter),
     (re.compile(r"^Array<.*>$"), ArrayPrinter),
+    (re.compile(r"^Deque<.*>$"), DequePrinter),
     (re.compile(r"^Optional<.*>$"), OptionalPrinter),
 ]
 

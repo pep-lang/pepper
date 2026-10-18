@@ -132,6 +132,52 @@ def array_summary(value, internal_dict):
     return "count=%d" % array.GetChildMemberWithName("_size").GetValueAsUnsigned()
 
 
+class DequeChildren(_Children):
+    """A Deque's reference counts, then its elements front to back. Its
+    ring `_slots` is an Array of Optionals: element `i` is the value of
+    slot `(_head + i) % capacity`."""
+
+    def update(self):
+        super().update()
+        self.count = 0
+        if self.object is None:
+            return False
+        slots = _object(self.object.GetChildMemberWithName("_slots"))
+        if slots is None:
+            return False
+        self.count = self.object.GetChildMemberWithName("_count").GetValueAsUnsigned()
+        self.head = self.object.GetChildMemberWithName("_head").GetValueAsUnsigned()
+        self.capacity = slots.GetChildMemberWithName("_size").GetValueAsUnsigned()
+        self.data = slots.GetChildMemberWithName("_data")
+        self.slot = self.data.GetType().GetPointeeType()
+        return False
+
+    def extra_count(self):
+        return self.count
+
+    def extra_index(self, name):
+        try:
+            return int(name.lstrip("[").rstrip("]"))
+        except ValueError:
+            return -1
+
+    def extra_child(self, index):
+        if index >= self.count:
+            return None
+        slot = (self.head + index) % self.capacity
+        address = self.data.GetValueAsUnsigned() + slot * self.slot.GetByteSize()
+        optional = self.value.CreateValueFromAddress("slot", address, self.slot)
+        return _renamed(optional.GetChildMemberWithName("Value__value"), "[%d]" % index)
+
+
+def deque_summary(value, internal_dict):
+    """A Deque as its count."""
+    deque = _object(value)
+    if deque is None:
+        return "null"
+    return "count=%d" % deque.GetChildMemberWithName("_count").GetValueAsUnsigned()
+
+
 class OptionalChildren:
     """A Value optional's value. An Optional is a value enum, held inline:
     its `__tag` is the case's position, and `Value__value` holds a Value's
@@ -244,6 +290,7 @@ def __lldb_init_module(debugger, internal_dict):
     for pattern, summary, children in [
         ("^String$", "string_summary", "StringChildren"),
         ("^Array<.+>$", "array_summary", "ArrayChildren"),
+        ("^Deque<.+>$", "deque_summary", "DequeChildren"),
         ("^Optional<.+>$", "optional_summary", "OptionalChildren"),
     ]:
         # `--expand` shows the children beside the summary.

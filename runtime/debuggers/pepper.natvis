@@ -29,6 +29,24 @@
       </ArrayItems>
     </Expand>
   </Type>
+  <!-- The ring _slots is an Array of Optionals: element i is the value of
+       slot (_head + i) % capacity. -->
+  <Type Name="Deque&lt;*&gt;">
+    <DisplayString>{{ count={_count} }}</DisplayString>
+    <Expand>
+      <Item Name="[count]">_count</Item>
+      <Item Name="[ref count]">__refcount</Item>
+      <Item Name="[weak count]">__weakcount</Item>
+      <CustomListItems Condition="_count != 0">
+        <Variable Name="index" InitialValue="0" />
+        <Loop>
+          <Break Condition="index == _count" />
+          <Item Name="[{index}]">_slots-&gt;_data[(_head + index) % _slots-&gt;_size].Value__value</Item>
+          <Exec>index++</Exec>
+        </Loop>
+      </CustomListItems>
+    </Expand>
+  </Type>
   <!-- A value enum, held inline: __tag is the case's position. -->
   <Type Name="Optional&lt;*&gt;">
     <DisplayString Condition="__tag == 0">Empty</DisplayString>

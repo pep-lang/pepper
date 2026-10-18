@@ -47,6 +47,8 @@ export pages(): Array<(String, String)> {
         ("map.pep", "Map and Set"),
         ("ordered_map.pep", "OrderedMap"),
         ("bitset.pep", "BitSet"),
+        ("deque.pep", "Deque"),
+        ("priority_queue.pep", "PriorityQueue"),
         ("iterator.pep", "Iterators"),
         ("scoped.pep", "Scoped"),
         ("weak.pep", "Weak"),
