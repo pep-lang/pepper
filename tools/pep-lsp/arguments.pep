@@ -9,7 +9,7 @@ import "analysis";
 ##
 ## @returns the version, such as `0.4.0-dev`
 export version(): String {
-    return "0.10.0";
+    return "0.11.0-dev";
 }
 
 # What `pep-lsp --help` prints.

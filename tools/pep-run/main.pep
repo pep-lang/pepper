@@ -34,7 +34,7 @@ import toolchain;
 # The release this tool belongs to. `pep-doc check` keeps it equal to the
 # version in VERSION.
 version(): String {
-    return "0.10.0";
+    return "0.11.0-dev";
 }
 
 const HELP = "Builds a Pepper program and runs it.\n\nUsage: pep-run [BUILD OPTIONS] [<entry.pep>] [ARGUMENTS]...\n       pep-run [BUILD OPTIONS] -- [ARGUMENTS]...\n\nThe arguments before the entry file (the first ending in .pep) are pep-build's\noptions, such as -O2, -D NAME and -I DIR; those after it, or after --, go to\nthe program. With no file, runs the project whose pep.toml is in the current\nfolder or above. --entry NAME starts the program in the function NAME instead\nof main. The options that choose what pep-build writes (-o, --lib,\n--test, --target and the --emit options) are not taken.\n\nOptions:\n      --entry <NAME>  Start the program in the function NAME instead of main\n  -h, --help          Print help\n  -V, --version       Print version\n";
