@@ -12,6 +12,7 @@ export [
     conditional_result, is_float_type, is_numeric_type, is_unsigned_int_type, result_type, stored_as
 ] from "arithmetic";
 export [check_cast] from "casts";
+export [canonical_type] from "common";
 export [constraint_spelled] from "common";
 export [error_at] from "common";
 export [returns_fresh, takes_over] from "confinement";

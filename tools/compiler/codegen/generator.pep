@@ -484,7 +484,8 @@ export struct Generator {
             if (!is_value_struct(st) or (st.ty.is_generic() and st.name == st.ty.name)) {
                 continue;
             }
-            var filled = st.ty.copy();
+            # `Range<int>` and the `Range<i32>` a literal makes are one type.
+            var filled = sema.canonical_type(st.ty);
             sema.fill_defaults(filled, defaulted);
             var name = filled.to_string();
             if (name != st.name) {

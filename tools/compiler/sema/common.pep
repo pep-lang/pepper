@@ -187,6 +187,15 @@ _canonical(ty: TypeName): TypeName {
     return TypeName.with_args(name, args);
 }
 
+## `ty` spelled one way, its integer and float types by their sized names
+## (`Range<i32>` for `Range<int>`), so every spelling of a type is one name.
+##
+## @param ty the type
+## @returns its canonical spelling
+export canonical_type(ty: TypeName): TypeName {
+    return _canonical(ty);
+}
+
 ## Compares two strings byte by byte: negative, 0 or positive.
 _compare_bytes(a: String, b: String): long {
     ulong i = 0;
