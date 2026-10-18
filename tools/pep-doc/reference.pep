@@ -96,6 +96,8 @@ export pages(): Array<(String, String)> {
         ("time/offset.pep", "Offsets"),
         ("time/zone.pep", "Time zones"),
         ("math/module.pep", "The math module"),
+        ("math/constants.pep", "Constants"),
+        ("math/integers.pep", "Integers"),
         ("math/parse.pep", "Parsing integers"),
         ("hint/module.pep", "The hint module"),
         ("simd/module.pep", "The simd module"),

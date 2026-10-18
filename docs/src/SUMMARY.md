@@ -150,6 +150,8 @@
     - [Offsets](reference/time-offset.md)
     - [Time zones](reference/time-zone.md)
   - [The math module](reference/math-module.md)
+    - [Constants](reference/math-constants.md)
+    - [Integers](reference/math-integers.md)
     - [Parsing integers](reference/math-parse.md)
   - [The hint module](reference/hint-module.md)
   - [The simd module](reference/simd-module.md)

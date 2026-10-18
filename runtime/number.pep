@@ -18,7 +18,12 @@
 ## `count_ones`, `count_zeros`, `swap_bytes`, `reverse_bits`, `rotate_left`,
 ## `rotate_right`), and `min`, `max` and, when signed, `abs`. `float` and
 ## `double` have `square_root`, `floor`, `ceiling`, `truncate`, `round`,
-## `abs`, `copy_sign`, `multiply_add`, `min` and `max`.
+## `abs`, `copy_sign`, `multiply_add`, `min` and `max`, the trigonometric,
+## hyperbolic, exponential and logarithmic functions of C's `<math.h>` with
+## their names spelled out (`sine`, `arc_tangent2`, `logarithm10`, ...),
+## `cube_root`, `hypotenuse`, `remainder`, and `is_nan`, `is_infinite`,
+## `is_finite` and `sign_bit`. The `math` module has their constants
+## (`math.PI`).
 ##
 ## @example
 ##     var port = int.parse("8080");
@@ -147,6 +152,75 @@ extern float _min_32(float a, float b);
 [Link(name = "llvm.maxnum")]
 extern float _max_32(float a, float b);
 
+[Link(name = "llvm.sin")]
+extern float _sine_32(float value);
+
+[Link(name = "llvm.cos")]
+extern float _cosine_32(float value);
+
+[Link(name = "llvm.tan")]
+extern float _tangent_32(float value);
+
+[Link(name = "llvm.asin")]
+extern float _arc_sine_32(float value);
+
+[Link(name = "llvm.acos")]
+extern float _arc_cosine_32(float value);
+
+[Link(name = "llvm.atan")]
+extern float _arc_tangent_32(float value);
+
+[Link(name = "llvm.atan2")]
+extern float _arc_tangent2_32(float value, float x);
+
+[Link(name = "llvm.sinh")]
+extern float _hyperbolic_sine_32(float value);
+
+[Link(name = "llvm.cosh")]
+extern float _hyperbolic_cosine_32(float value);
+
+[Link(name = "llvm.tanh")]
+extern float _hyperbolic_tangent_32(float value);
+
+[Link(name = "asinhf")]
+extern float _arc_hyperbolic_sine_32(float value);
+
+[Link(name = "acoshf")]
+extern float _arc_hyperbolic_cosine_32(float value);
+
+[Link(name = "atanhf")]
+extern float _arc_hyperbolic_tangent_32(float value);
+
+[Link(name = "llvm.exp")]
+extern float _exponential_32(float value);
+
+[Link(name = "llvm.exp2")]
+extern float _exponential2_32(float value);
+
+[Link(name = "expm1f")]
+extern float _exponential_minus_one_32(float value);
+
+[Link(name = "llvm.log")]
+extern float _logarithm_32(float value);
+
+[Link(name = "llvm.log2")]
+extern float _logarithm2_32(float value);
+
+[Link(name = "llvm.log10")]
+extern float _logarithm10_32(float value);
+
+[Link(name = "log1pf")]
+extern float _logarithm_one_plus_32(float value);
+
+[Link(name = "cbrtf")]
+extern float _cube_root_32(float value);
+
+[Link(name = "hypotf")]
+extern float _hypotenuse_32(float value, float other);
+
+[Link(name = "remainderf")]
+extern float _remainder_32(float value, float divisor);
+
 [Link(name = "llvm.sqrt")]
 extern double _square_root_64(double value);
 
@@ -176,6 +250,75 @@ extern double _min_64(double a, double b);
 
 [Link(name = "llvm.maxnum")]
 extern double _max_64(double a, double b);
+
+[Link(name = "llvm.sin")]
+extern double _sine_64(double value);
+
+[Link(name = "llvm.cos")]
+extern double _cosine_64(double value);
+
+[Link(name = "llvm.tan")]
+extern double _tangent_64(double value);
+
+[Link(name = "llvm.asin")]
+extern double _arc_sine_64(double value);
+
+[Link(name = "llvm.acos")]
+extern double _arc_cosine_64(double value);
+
+[Link(name = "llvm.atan")]
+extern double _arc_tangent_64(double value);
+
+[Link(name = "llvm.atan2")]
+extern double _arc_tangent2_64(double value, double x);
+
+[Link(name = "llvm.sinh")]
+extern double _hyperbolic_sine_64(double value);
+
+[Link(name = "llvm.cosh")]
+extern double _hyperbolic_cosine_64(double value);
+
+[Link(name = "llvm.tanh")]
+extern double _hyperbolic_tangent_64(double value);
+
+[Link(name = "asinh")]
+extern double _arc_hyperbolic_sine_64(double value);
+
+[Link(name = "acosh")]
+extern double _arc_hyperbolic_cosine_64(double value);
+
+[Link(name = "atanh")]
+extern double _arc_hyperbolic_tangent_64(double value);
+
+[Link(name = "llvm.exp")]
+extern double _exponential_64(double value);
+
+[Link(name = "llvm.exp2")]
+extern double _exponential2_64(double value);
+
+[Link(name = "expm1")]
+extern double _exponential_minus_one_64(double value);
+
+[Link(name = "llvm.log")]
+extern double _logarithm_64(double value);
+
+[Link(name = "llvm.log2")]
+extern double _logarithm2_64(double value);
+
+[Link(name = "llvm.log10")]
+extern double _logarithm10_64(double value);
+
+[Link(name = "log1p")]
+extern double _logarithm_one_plus_64(double value);
+
+[Link(name = "cbrt")]
+extern double _cube_root_64(double value);
+
+[Link(name = "hypot")]
+extern double _hypotenuse_64(double value, double other);
+
+[Link(name = "remainder")]
+extern double _remainder_64(double value, double divisor);
 
 # Reads the digits of `text` from `index` to the end in `base`, failing on a
 # non-digit, on no digits, or on a value above `limit`.
@@ -2816,6 +2959,271 @@ export extend float {
     max(other: float): float {
         return _max_32(this, other);
     }
+
+    ## Returns the sine of this angle, in radians (`llvm.sin`).
+    ##
+    ## @returns the sine, from -1 to 1; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as float).sine() == 0.0, "sine of zero");
+    sine(): float {
+        return _sine_32(this);
+    }
+
+    ## Returns the cosine of this angle, in radians (`llvm.cos`).
+    ##
+    ## @returns the cosine, from -1 to 1; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as float).cosine() == 1.0, "cosine of zero");
+    cosine(): float {
+        return _cosine_32(this);
+    }
+
+    ## Returns the tangent of this angle, in radians (`llvm.tan`).
+    ##
+    ## @returns the tangent; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as float).tangent() == 0.0, "tangent of zero");
+    tangent(): float {
+        return _tangent_32(this);
+    }
+
+    ## Returns the angle, in radians, whose sine is this value (`llvm.asin`).
+    ##
+    ## @returns the angle, from -π/2 to π/2; NaN when this value is outside -1 to 1
+    ## @example
+    ##     assert((0.0 as float).arc_sine() == 0.0, "arc sine of zero");
+    arc_sine(): float {
+        return _arc_sine_32(this);
+    }
+
+    ## Returns the angle, in radians, whose cosine is this value (`llvm.acos`).
+    ##
+    ## @returns the angle, from 0 to π; NaN when this value is outside -1 to 1
+    ## @example
+    ##     assert((1.0 as float).arc_cosine() == 0.0, "arc cosine of one");
+    arc_cosine(): float {
+        return _arc_cosine_32(this);
+    }
+
+    ## Returns the angle, in radians, whose tangent is this value (`llvm.atan`).
+    ##
+    ## @returns the angle, from -π/2 to π/2
+    ## @example
+    ##     assert((0.0 as float).arc_tangent() == 0.0, "arc tangent of zero");
+    arc_tangent(): float {
+        return _arc_tangent_32(this);
+    }
+
+    ## Returns the angle, in radians, from the positive x axis to the point
+    ## (`x`, this value), using both signs to pick the quadrant: C's
+    ## `atan2(y, x)` with this value as `y` (`llvm.atan2`).
+    ##
+    ## @param x the x coordinate of the point
+    ## @returns the angle, from -π to π
+    ## @example
+    ##     assert((0.0 as float).arc_tangent2(1.0) == 0.0, "along the positive x axis");
+    ##     assert((1.0 as float).arc_tangent2(0.0) == (1.0 as float).arc_sine(), "straight up is π/2");
+    arc_tangent2(x: float): float {
+        return _arc_tangent2_32(this, x);
+    }
+
+    ## Returns the hyperbolic sine of this value (`llvm.sinh`).
+    ##
+    ## @returns the hyperbolic sine; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as float).hyperbolic_sine() == 0.0, "hyperbolic sine of zero");
+    hyperbolic_sine(): float {
+        return _hyperbolic_sine_32(this);
+    }
+
+    ## Returns the hyperbolic cosine of this value (`llvm.cosh`).
+    ##
+    ## @returns the hyperbolic cosine, at least 1; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as float).hyperbolic_cosine() == 1.0, "hyperbolic cosine of zero");
+    hyperbolic_cosine(): float {
+        return _hyperbolic_cosine_32(this);
+    }
+
+    ## Returns the hyperbolic tangent of this value (`llvm.tanh`).
+    ##
+    ## @returns the hyperbolic tangent, from -1 to 1
+    ## @example
+    ##     assert((0.0 as float).hyperbolic_tangent() == 0.0, "hyperbolic tangent of zero");
+    hyperbolic_tangent(): float {
+        return _hyperbolic_tangent_32(this);
+    }
+
+    ## Returns the value whose hyperbolic sine is this value (C's `asinh`).
+    ##
+    ## @returns the inverse hyperbolic sine
+    ## @example
+    ##     assert((0.0 as float).arc_hyperbolic_sine() == 0.0, "inverse of zero");
+    arc_hyperbolic_sine(): float {
+        return _arc_hyperbolic_sine_32(this);
+    }
+
+    ## Returns the non-negative value whose hyperbolic cosine is this value
+    ## (C's `acosh`).
+    ##
+    ## @returns the inverse hyperbolic cosine; NaN when this value is less than 1
+    ## @example
+    ##     assert((1.0 as float).arc_hyperbolic_cosine() == 0.0, "inverse of one");
+    arc_hyperbolic_cosine(): float {
+        return _arc_hyperbolic_cosine_32(this);
+    }
+
+    ## Returns the value whose hyperbolic tangent is this value (C's `atanh`).
+    ##
+    ## @returns the inverse hyperbolic tangent; an infinity for -1 or 1, and NaN outside
+    ## @example
+    ##     assert((0.0 as float).arc_hyperbolic_tangent() == 0.0, "inverse of zero");
+    arc_hyperbolic_tangent(): float {
+        return _arc_hyperbolic_tangent_32(this);
+    }
+
+    ## Returns *e* raised to this value (`llvm.exp`).
+    ##
+    ## @returns *e* to the power of this value; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as float).exponential() == 1.0, "e to the zero");
+    exponential(): float {
+        return _exponential_32(this);
+    }
+
+    ## Returns 2 raised to this value (`llvm.exp2`).
+    ##
+    ## @returns 2 to the power of this value
+    ## @example
+    ##     assert((3.0 as float).exponential2() == 8.0, "2 cubed");
+    exponential2(): float {
+        return _exponential2_32(this);
+    }
+
+    ## Returns *e* raised to this value, minus 1 (C's `expm1`): precise even
+    ## when this value is near zero, where `exponential() - 1` loses its digits.
+    ##
+    ## @returns `exponential() - 1`, computed without the loss
+    ## @example
+    ##     assert((0.0 as float).exponential_minus_one() == 0.0, "e to the zero, minus one");
+    exponential_minus_one(): float {
+        return _exponential_minus_one_32(this);
+    }
+
+    ## Returns the natural logarithm (base *e*) of this value (`llvm.log`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((1.0 as float).logarithm() == 0.0, "log of one");
+    logarithm(): float {
+        return _logarithm_32(this);
+    }
+
+    ## Returns the base-2 logarithm of this value (`llvm.log2`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((8.0 as float).logarithm2() == 3.0, "2 cubed is 8");
+    logarithm2(): float {
+        return _logarithm2_32(this);
+    }
+
+    ## Returns the base-10 logarithm of this value (`llvm.log10`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((1000.0 as float).logarithm10() == 3.0, "10 cubed is 1000");
+    logarithm10(): float {
+        return _logarithm10_32(this);
+    }
+
+    ## Returns the natural logarithm of 1 plus this value (C's `log1p`):
+    ## precise even when this value is near zero, where `(1 + x).logarithm()`
+    ## loses its digits.
+    ##
+    ## @returns the logarithm of `1 + this`; negative infinity for -1, and NaN below it
+    ## @example
+    ##     assert((0.0 as float).logarithm_one_plus() == 0.0, "log of one");
+    logarithm_one_plus(): float {
+        return _logarithm_one_plus_32(this);
+    }
+
+    ## Returns the cube root (C's `cbrt`), negative for a negative value.
+    ##
+    ## @returns the cube root
+    ## @example
+    ##     assert((-27.0 as float).cube_root() == -3.0, "a negative value has a cube root");
+    cube_root(): float {
+        return _cube_root_32(this);
+    }
+
+    ## Returns `(this * this + other * other).square_root()`, the length of
+    ## the hypotenuse of a right triangle with sides this value and `other`
+    ## (C's `hypot`), without overflowing or underflowing in between.
+    ##
+    ## @param other the length of the other side
+    ## @returns the distance from the origin to (this, `other`)
+    ## @example
+    ##     assert((3.0 as float).hypotenuse(4.0) == 5.0, "a 3-4-5 triangle");
+    hypotenuse(other: float): float {
+        return _hypotenuse_32(this, other);
+    }
+
+    ## Returns the IEEE remainder of this value divided by `divisor` (C's
+    ## `remainder`): `this - n * divisor`, where `n` is the quotient rounded to
+    ## the nearest whole number, ties to even. It is never larger than half of
+    ## `divisor`, and may be negative. `%` gives the remainder of the quotient
+    ## rounded toward zero instead, with the sign of this value.
+    ##
+    ## @param divisor the value to divide by
+    ## @returns the remainder; NaN when `divisor` is zero or this value is infinite
+    ## @example
+    ##     assert((7.0 as float).remainder(2.0) == -1.0, "7 / 2 = 3.5 rounds to 4");
+    ##     assert((7.0 as float) % 2.0 == 1.0, "% rounds toward zero");
+    remainder(divisor: float): float {
+        return _remainder_32(this, divisor);
+    }
+
+    ## Returns whether this value is NaN (not a number), the one value not
+    ## equal to itself.
+    ##
+    ## @returns true for NaN
+    ## @example
+    ##     assert(!(1.0 as float).is_nan(), "a number");
+    ##     assert(((0.0 as float) / 0.0).is_nan(), "zero over zero");
+    is_nan(): bool {
+        return this != this;
+    }
+
+    ## Returns whether this value is positive or negative infinity.
+    ##
+    ## @returns true for an infinity
+    ## @example
+    ##     assert(((1.0 as float) / 0.0).is_infinite(), "one over zero");
+    is_infinite(): bool {
+        return !is_nan() && !is_finite();
+    }
+
+    ## Returns whether this value is neither an infinity nor NaN.
+    ##
+    ## @returns true for every other value
+    ## @example
+    ##     assert((1.0 as float).is_finite() && !((1.0 as float) / 0.0).is_finite(), "finite and infinite");
+    is_finite(): bool {
+        # An infinity or NaN minus itself is NaN, not zero.
+        return this - this == 0;
+    }
+
+    ## Returns whether this value's sign bit is set: true for every negative
+    ## value, `-0.0`, and a NaN with its sign bit set, which `< 0` does not
+    ## tell apart.
+    ##
+    ## @returns true when the sign bit is set
+    ## @example
+    ##     assert((-0.0 as float).sign_bit() && !(0.0 as float).sign_bit(), "negative zero");
+    sign_bit(): bool {
+        return _copy_sign_32(1.0, this) < 0;
+    }
 }
 
 export extend double {
@@ -2946,5 +3354,270 @@ export extend double {
     ##     assert((1.5 as double).max(-2.0) == 1.5, "larger");
     max(other: double): double {
         return _max_64(this, other);
+    }
+
+    ## Returns the sine of this angle, in radians (`llvm.sin`).
+    ##
+    ## @returns the sine, from -1 to 1; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as double).sine() == 0.0, "sine of zero");
+    sine(): double {
+        return _sine_64(this);
+    }
+
+    ## Returns the cosine of this angle, in radians (`llvm.cos`).
+    ##
+    ## @returns the cosine, from -1 to 1; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as double).cosine() == 1.0, "cosine of zero");
+    cosine(): double {
+        return _cosine_64(this);
+    }
+
+    ## Returns the tangent of this angle, in radians (`llvm.tan`).
+    ##
+    ## @returns the tangent; NaN for an infinity or NaN
+    ## @example
+    ##     assert((0.0 as double).tangent() == 0.0, "tangent of zero");
+    tangent(): double {
+        return _tangent_64(this);
+    }
+
+    ## Returns the angle, in radians, whose sine is this value (`llvm.asin`).
+    ##
+    ## @returns the angle, from -π/2 to π/2; NaN when this value is outside -1 to 1
+    ## @example
+    ##     assert((0.0 as double).arc_sine() == 0.0, "arc sine of zero");
+    arc_sine(): double {
+        return _arc_sine_64(this);
+    }
+
+    ## Returns the angle, in radians, whose cosine is this value (`llvm.acos`).
+    ##
+    ## @returns the angle, from 0 to π; NaN when this value is outside -1 to 1
+    ## @example
+    ##     assert((1.0 as double).arc_cosine() == 0.0, "arc cosine of one");
+    arc_cosine(): double {
+        return _arc_cosine_64(this);
+    }
+
+    ## Returns the angle, in radians, whose tangent is this value (`llvm.atan`).
+    ##
+    ## @returns the angle, from -π/2 to π/2
+    ## @example
+    ##     assert((0.0 as double).arc_tangent() == 0.0, "arc tangent of zero");
+    arc_tangent(): double {
+        return _arc_tangent_64(this);
+    }
+
+    ## Returns the angle, in radians, from the positive x axis to the point
+    ## (`x`, this value), using both signs to pick the quadrant: C's
+    ## `atan2(y, x)` with this value as `y` (`llvm.atan2`).
+    ##
+    ## @param x the x coordinate of the point
+    ## @returns the angle, from -π to π
+    ## @example
+    ##     assert((0.0 as double).arc_tangent2(1.0) == 0.0, "along the positive x axis");
+    ##     assert((1.0 as double).arc_tangent2(0.0) == (1.0 as double).arc_sine(), "straight up is π/2");
+    arc_tangent2(x: double): double {
+        return _arc_tangent2_64(this, x);
+    }
+
+    ## Returns the hyperbolic sine of this value (`llvm.sinh`).
+    ##
+    ## @returns the hyperbolic sine; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as double).hyperbolic_sine() == 0.0, "hyperbolic sine of zero");
+    hyperbolic_sine(): double {
+        return _hyperbolic_sine_64(this);
+    }
+
+    ## Returns the hyperbolic cosine of this value (`llvm.cosh`).
+    ##
+    ## @returns the hyperbolic cosine, at least 1; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as double).hyperbolic_cosine() == 1.0, "hyperbolic cosine of zero");
+    hyperbolic_cosine(): double {
+        return _hyperbolic_cosine_64(this);
+    }
+
+    ## Returns the hyperbolic tangent of this value (`llvm.tanh`).
+    ##
+    ## @returns the hyperbolic tangent, from -1 to 1
+    ## @example
+    ##     assert((0.0 as double).hyperbolic_tangent() == 0.0, "hyperbolic tangent of zero");
+    hyperbolic_tangent(): double {
+        return _hyperbolic_tangent_64(this);
+    }
+
+    ## Returns the value whose hyperbolic sine is this value (C's `asinh`).
+    ##
+    ## @returns the inverse hyperbolic sine
+    ## @example
+    ##     assert((0.0 as double).arc_hyperbolic_sine() == 0.0, "inverse of zero");
+    arc_hyperbolic_sine(): double {
+        return _arc_hyperbolic_sine_64(this);
+    }
+
+    ## Returns the non-negative value whose hyperbolic cosine is this value
+    ## (C's `acosh`).
+    ##
+    ## @returns the inverse hyperbolic cosine; NaN when this value is less than 1
+    ## @example
+    ##     assert((1.0 as double).arc_hyperbolic_cosine() == 0.0, "inverse of one");
+    arc_hyperbolic_cosine(): double {
+        return _arc_hyperbolic_cosine_64(this);
+    }
+
+    ## Returns the value whose hyperbolic tangent is this value (C's `atanh`).
+    ##
+    ## @returns the inverse hyperbolic tangent; an infinity for -1 or 1, and NaN outside
+    ## @example
+    ##     assert((0.0 as double).arc_hyperbolic_tangent() == 0.0, "inverse of zero");
+    arc_hyperbolic_tangent(): double {
+        return _arc_hyperbolic_tangent_64(this);
+    }
+
+    ## Returns *e* raised to this value (`llvm.exp`).
+    ##
+    ## @returns *e* to the power of this value; an infinity when it is too large
+    ## @example
+    ##     assert((0.0 as double).exponential() == 1.0, "e to the zero");
+    exponential(): double {
+        return _exponential_64(this);
+    }
+
+    ## Returns 2 raised to this value (`llvm.exp2`).
+    ##
+    ## @returns 2 to the power of this value
+    ## @example
+    ##     assert((3.0 as double).exponential2() == 8.0, "2 cubed");
+    exponential2(): double {
+        return _exponential2_64(this);
+    }
+
+    ## Returns *e* raised to this value, minus 1 (C's `expm1`): precise even
+    ## when this value is near zero, where `exponential() - 1` loses its digits.
+    ##
+    ## @returns `exponential() - 1`, computed without the loss
+    ## @example
+    ##     assert((0.0 as double).exponential_minus_one() == 0.0, "e to the zero, minus one");
+    exponential_minus_one(): double {
+        return _exponential_minus_one_64(this);
+    }
+
+    ## Returns the natural logarithm (base *e*) of this value (`llvm.log`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((1.0 as double).logarithm() == 0.0, "log of one");
+    logarithm(): double {
+        return _logarithm_64(this);
+    }
+
+    ## Returns the base-2 logarithm of this value (`llvm.log2`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((8.0 as double).logarithm2() == 3.0, "2 cubed is 8");
+    logarithm2(): double {
+        return _logarithm2_64(this);
+    }
+
+    ## Returns the base-10 logarithm of this value (`llvm.log10`).
+    ##
+    ## @returns the logarithm; negative infinity for zero, and NaN for a negative value
+    ## @example
+    ##     assert((1000.0 as double).logarithm10() == 3.0, "10 cubed is 1000");
+    logarithm10(): double {
+        return _logarithm10_64(this);
+    }
+
+    ## Returns the natural logarithm of 1 plus this value (C's `log1p`):
+    ## precise even when this value is near zero, where `(1 + x).logarithm()`
+    ## loses its digits.
+    ##
+    ## @returns the logarithm of `1 + this`; negative infinity for -1, and NaN below it
+    ## @example
+    ##     assert((0.0 as double).logarithm_one_plus() == 0.0, "log of one");
+    logarithm_one_plus(): double {
+        return _logarithm_one_plus_64(this);
+    }
+
+    ## Returns the cube root (C's `cbrt`), negative for a negative value.
+    ##
+    ## @returns the cube root
+    ## @example
+    ##     assert((-27.0 as double).cube_root() == -3.0, "a negative value has a cube root");
+    cube_root(): double {
+        return _cube_root_64(this);
+    }
+
+    ## Returns `(this * this + other * other).square_root()`, the length of
+    ## the hypotenuse of a right triangle with sides this value and `other`
+    ## (C's `hypot`), without overflowing or underflowing in between.
+    ##
+    ## @param other the length of the other side
+    ## @returns the distance from the origin to (this, `other`)
+    ## @example
+    ##     assert((3.0 as double).hypotenuse(4.0) == 5.0, "a 3-4-5 triangle");
+    hypotenuse(other: double): double {
+        return _hypotenuse_64(this, other);
+    }
+
+    ## Returns the IEEE remainder of this value divided by `divisor` (C's
+    ## `remainder`): `this - n * divisor`, where `n` is the quotient rounded to
+    ## the nearest whole number, ties to even. It is never larger than half of
+    ## `divisor`, and may be negative. `%` gives the remainder of the quotient
+    ## rounded toward zero instead, with the sign of this value.
+    ##
+    ## @param divisor the value to divide by
+    ## @returns the remainder; NaN when `divisor` is zero or this value is infinite
+    ## @example
+    ##     assert((7.0 as double).remainder(2.0) == -1.0, "7 / 2 = 3.5 rounds to 4");
+    ##     assert((7.0 as double) % 2.0 == 1.0, "% rounds toward zero");
+    remainder(divisor: double): double {
+        return _remainder_64(this, divisor);
+    }
+
+    ## Returns whether this value is NaN (not a number), the one value not
+    ## equal to itself.
+    ##
+    ## @returns true for NaN
+    ## @example
+    ##     assert(!(1.0 as double).is_nan(), "a number");
+    ##     assert(((0.0 as double) / 0.0).is_nan(), "zero over zero");
+    is_nan(): bool {
+        return this != this;
+    }
+
+    ## Returns whether this value is positive or negative infinity.
+    ##
+    ## @returns true for an infinity
+    ## @example
+    ##     assert(((1.0 as double) / 0.0).is_infinite(), "one over zero");
+    is_infinite(): bool {
+        return !is_nan() && !is_finite();
+    }
+
+    ## Returns whether this value is neither an infinity nor NaN.
+    ##
+    ## @returns true for every other value
+    ## @example
+    ##     assert((1.0 as double).is_finite() && !((1.0 as double) / 0.0).is_finite(), "finite and infinite");
+    is_finite(): bool {
+        # An infinity or NaN minus itself is NaN, not zero.
+        return this - this == 0;
+    }
+
+    ## Returns whether this value's sign bit is set: true for every negative
+    ## value, `-0.0`, and a NaN with its sign bit set, which `< 0` does not
+    ## tell apart.
+    ##
+    ## @returns true when the sign bit is set
+    ## @example
+    ##     assert((-0.0 as double).sign_bit() && !(0.0 as double).sign_bit(), "negative zero");
+    sign_bit(): bool {
+        return _copy_sign_64(1.0, this) < 0;
     }
 }

@@ -583,6 +583,32 @@ rounded once) and `min(x)` and `max(x)` (which ignore a NaN argument):
 {{#include ../../examples/types-float-functions.pep}}
 ```
 
+They also have the functions of C's `<math.h>`, with their names spelled
+out. Angles are in radians. LLVM's intrinsics compute the ones it has, and
+the C math library the rest:
+
+| Methods | C's names |
+|---|---|
+| `sine()`, `cosine()`, `tangent()` | `sin`, `cos`, `tan` |
+| `arc_sine()`, `arc_cosine()`, `arc_tangent()`, `y.arc_tangent2(x)` | `asin`, `acos`, `atan`, `atan2(y, x)` |
+| `hyperbolic_sine()`, `hyperbolic_cosine()`, `hyperbolic_tangent()` | `sinh`, `cosh`, `tanh` |
+| `arc_hyperbolic_sine()`, `arc_hyperbolic_cosine()`, `arc_hyperbolic_tangent()` | `asinh`, `acosh`, `atanh` |
+| `exponential()`, `exponential2()`, `exponential_minus_one()` | `exp`, `exp2`, `expm1` |
+| `logarithm()`, `logarithm2()`, `logarithm10()`, `logarithm_one_plus()` | `log`, `log2`, `log10`, `log1p` |
+| `cube_root()`, `hypotenuse(other)` | `cbrt`, `hypot` |
+| `remainder(divisor)` | `remainder` (the quotient rounded to nearest; `%` is `fmod`, rounded toward zero) |
+| `is_nan()`, `is_infinite()`, `is_finite()`, `sign_bit()` | `isnan`, `isinf`, `isfinite`, `signbit` |
+
+Powers are the `**` operator: `x ** 0.5`, or `x ** 3` with an integer
+exponent. The [`math` module](../reference/math-module.md) has the
+constants (`math.PI`, `math.TAU`, `math.E`, `math.INFINITY`, `math.NAN`,
+and the epsilon and limits of `float` and `double`) and `math.gcd` and
+`math.lcm` for integers:
+
+```pepper
+{{#include ../../examples/types-float-math.pep}}
+```
+
 Hints for the optimizer are [`[Likely]` and
 `[Unlikely]`](control-flow.md#branch-hints-likely-and-unlikely) on a
 branch and the prefetches of the [`hint` module](hints.md). Any other LLVM intrinsic can be declared as an
