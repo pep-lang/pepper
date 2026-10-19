@@ -148,7 +148,7 @@ rebuilds_only_the_unit_whose_body_changed() {
 # How many records the cache holds of the compilation unit named `unit`
 # (after its first file): one for each key it was stored under.
 _records_of(root: Path, unit: String): ulong {
-    return _count_records(root.join(Path("cache")), "", unit.replace(":", "_").replace("#", "_"));
+    return _count_records(root.join(Path("cache")), "", unit.replace("/", ".").replace(":", "_"));
 }
 
 _count_records(dir: Path, name: String, folder: String): ulong {
@@ -434,6 +434,54 @@ prunes_no_other_units_keys() {
     expect_true(kept.value().join(Path("0.o")).is_file());
 }
 
+# The most characters a path in the cache adds to the cache's own.
+const _LONGEST_CACHE_PATH: ulong = 72;
+
+# Every path in `dir`, folders and files.
+_paths_in(dir: Path, out: Path[]) {
+    for (var entry in Directory.open(dir).value().entries().value()) {
+        out.append(entry.path);
+        if (entry.is_directory) {
+            _paths_in(entry.path, out);
+        }
+    }
+}
+
+# No path in the cache adds more than `_LONGEST_CACHE_PATH` characters to
+# the cache's folder, however long a unit's name: the cache sits in
+# the project's folder, and Windows tools fail on a path over 260
+# characters.
+[Test]
+keeps_every_path_in_the_cache_short() {
+    var folder = TempFolder("short_paths");
+    var root = folder.path;
+    _write_program(root);
+    _build(root);
+    var cache = incremental.Cache(root.join(Path("cache")));
+    var paths = Array<Path>();
+    _paths_in(root.join(Path("cache")), paths);
+    expect_false(paths.is_empty);
+    # The longest each kind of path can be: a long name, a whole key, and
+    # the longest file beside a key's objects or a record.
+    var name = "a_package/with_a_namespace/as_long_as/any_project_has";
+    var key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    paths.append(cache.part($"+{name}", 999, key).join(Path("interfaces")));
+    paths.append(cache.objects(name, key).parent().value().join(Path($".removing.{process.id()}.999")));
+    var unit = incremental.CompilationUnit(name);
+    unit.key = key;
+    paths.append(Path($"{incremental.record_path(cache, unit)}.fields.{process.id()}"));
+    var base = root.join(Path("cache")).to_string().size;
+    for (var path in paths) {
+        if (path.to_string().size - base > _LONGEST_CACHE_PATH) {
+            print($"too long: {path}");
+        }
+        expect_true(path.to_string().size - base <= _LONGEST_CACHE_PATH);
+    }
+    # Two long names that start alike keep folders of their own.
+    var first = cache.objects($"{name}/one", key).to_string();
+    expect_true(first != cache.objects($"{name}/two", key).to_string());
+}
+
 # A build with debug info whose every unit is a hit still defines `main`,
 # which only the entry part, compiled every build, holds; and the
 # hits' parts count as just reused, so a build storing newer keys of them
@@ -453,7 +501,7 @@ builds_with_debug_info_from_every_unit_in_the_cache() {
     expect_true(first.hits.is_empty);
 
     var parts = Array<Path>();
-    var units = root.join(Path("cache")).join(Path("v2")).join(Path("units"));
+    var units = incremental.Cache(root.join(Path("cache"))).dir.join(Path("u"));
     var hours_ago = os.SystemTime.now().unix_nanoseconds() - 10 * 3600000000000;
     for (var entry in Directory.open(units).value().entries().value()) {
         if (!entry.name.contains("#")) {

@@ -56,7 +56,7 @@ export verify_cache(program: link.Program, options: BuildOptions): Result<void, 
         );
     }
     var differ = Array<String>();
-    _compare(fresh.dir.join(Path("units")), options.cache.value().dir.join(Path("units")), "", differ);
+    _compare(fresh.dir.join(Path("u")), options.cache.value().dir.join(Path("u")), "", differ);
     Directory.remove_all(dir);
     if (!differ.is_empty) {
         return Result<void, String>.err(

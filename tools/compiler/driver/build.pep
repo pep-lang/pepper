@@ -364,7 +364,7 @@ _defines(partition: codegen.Partition, objects: Path[]): Result<String, String> 
 # which the cache keeps, in `dir` as `<k>.defines`, for the workers of the
 # compilation units that read it.
 _copy_defines(cache: Cache, unit: CompilationUnit, dir: Path, k: ulong) {
-    var text = File.read_to_string(cache.objects($"compilation unit {unit.name}", unit.key).join(Path("defines")));
+    var text = File.read_to_string(cache.objects($"+{unit.name}", unit.key).join(Path("defines")));
     var partial = worker_file(dir, k, $"defines.{process.id()}");
     File.write_text(partial, text.is_ok() ? text.value() : "");
     File.rename(partial, worker_file(dir, k, "defines"));
@@ -377,7 +377,7 @@ _defined_by(cache: Cache, units: CompilationUnit[], ks: ulong[], dir: Path?): Ha
     for (var k in ks) {
         var path = dir.is_value() ?
             worker_file(dir.value(), k, "defines") :
-            cache.objects($"compilation unit {units[k].name}", units[k].key).join(Path("defines"));
+            cache.objects($"+{units[k].name}", units[k].key).join(Path("defines"));
         var text = File.read_to_string(path);
         if (text.is_err()) {
             continue;
@@ -413,7 +413,7 @@ _object_extension(options: BuildOptions, triple: String): String {
 # The first object of `unit` in the build cache, under its key: its files'
 # code and what it instantiated, as a compilation unit worker compiles it.
 _compilation_unit_object(cache: Cache, unit: CompilationUnit, extension: String): Path {
-    return cache.objects($"compilation unit {unit.name}", unit.key).join(Path($"0.{extension}"));
+    return cache.objects($"+{unit.name}", unit.key).join(Path($"0.{extension}"));
 }
 
 # Keeps the last compilation unit's objects, `folder`'s parts' (`0.<ext>` and
@@ -429,7 +429,7 @@ _store_last(
         or File.write_text(folder.join(Path("warn")), warned).is_err()) {
         return Result<Path, String>.err($"cannot write to {folder}");
     }
-    return cache.store(folder, $"compilation unit {last.name}", last.key);
+    return cache.store(folder, $"+{last.name}", last.key);
 }
 
 # Compiles `module`, the compilation unit `unit` just checked, into its object
@@ -503,7 +503,7 @@ _compile_unit(
         false,
         options.lto and options.opt_level > 0,
         false,
-        Optional<PartCache>.Value(PartCache(cache, $"part of compilation unit {unit.name}"))
+        Optional<PartCache>.Value(PartCache(cache, $"+{unit.name}"))
     );
     if (compiled.is_err()) {
         return Optional<String>.Value(compiled.error());
@@ -515,7 +515,7 @@ _compile_unit(
     if (File.write_text(folder.join(Path("defines")), defines.value()).is_err()) {
         return Optional<String>.Value($"cannot write to {folder}");
     }
-    var kept = cache.store(folder, $"compilation unit {unit.name}", unit.key);
+    var kept = cache.store(folder, $"+{unit.name}", unit.key);
     if (kept.is_err()) {
         return Optional<String>.Value(kept.error());
     }
@@ -625,7 +625,7 @@ _check_in_workers(
             # Reused now, so no build pruning the cache removes it before this
             # one links it. A compilation unit's object goes with its record:
             # one without it (pruned, say) is checked again, which compiles it.
-            if (!cache.used(cache.objects($"compilation unit {units[k].name}", units[k].key))
+            if (!cache.used(cache.objects($"+{units[k].name}", units[k].key))
                 or !_compilation_unit_object(cache, units[k], extension).is_file()) {
                 return false;
             }
@@ -1015,7 +1015,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
                 true,
                 lto,
                 false,
-                Optional<PartCache>.Value(PartCache(options.cache.value(), $"part of compilation unit {last.name}"))
+                Optional<PartCache>.Value(PartCache(options.cache.value(), $"+{last.name}"))
             );
             if (compiled.is_err()) {
                 return Result<Built, String>.err($"{compiled.error()}\n  (kept {work})");
@@ -1034,7 +1034,7 @@ export build(program: link.Program, options: BuildOptions): Result<Built, String
         # Only the compilation units the program's own reads: others, files of
         # the entry's module it never reaches, are not linked.
         for (var k in last.reads) {
-            var folder = options.cache.value().objects($"compilation unit {units[k].name}", units[k].key);
+            var folder = options.cache.value().objects($"+{units[k].name}", units[k].key);
             options.cache.value().used(folder);
             objects.append_all(_unit_objects(folder, extension));
         }
